@@ -136,5 +136,14 @@ git pull origin main
 
 # 开发进度
 
-2025-4-17：发射度测量界面增加了simply VM按钮，可根据所选取的Q铁和FLAG简化lattice，加速虚拟加速器运行速度，而full VM按钮可将lattice恢复到原始状态
+2024-3-11-Libiaobin
+
+- 以 lattice_ini.lte => lattice.json 作为输入文件，自动生成 quad.template, bpm.template 等 IOC 文件。后面如果需要修改元件名称和PV命名规则，直接修改`lattice_ini.lte` 文件即可。见`gen_substitution_file()`
+- 以 `lattice.json`文件作为中间媒介：
+  - 当epics修改了 quad 的K1值时，IOC监测到PV值发生了改变，将自动更新 `lattice.json` 文件。当前只添加了 QUAD。
+  - Elegant 每次循环运行时，都会重新读取 `lattice.json` 文件，生成 `lattice.lte`，然后运行。注意，lattice_ini.lte 文件没有改变。
+
+2025-4-17-Zhanghaoran
+
+- 发射度测量界面增加了simply VM按钮，可根据所选取的Q铁和FLAG简化lattice，加速虚拟加速器运行速度，而full VM按钮可将lattice恢复到原始状态
 
