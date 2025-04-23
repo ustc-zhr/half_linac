@@ -1,0 +1,35 @@
+file db/quad.template {
+  pattern {QUAD}
+  { "CQ1" }
+  { "CQ2" }
+  { "CQ3" }
+  { "CQ4" }
+  { "MQ1" }
+  { "MQ2" }
+}
+file db/bend.template {
+  pattern {BEND}
+}
+file db/bpm.template {
+  pattern {BPM}
+  { "BPM02" }
+  { "BPM03" }
+  { "BPM07" }
+  { "BPM08" }
+}
+file db/flag.template {
+  pattern {FLAG}
+  { "W0" }
+  { "WMID" }
+  { "W1" }
+  { "FLAG4" }
+}
+file db/corr.template {
+  pattern {COR}
+  { "HC01" }
+  { "VC01" }
+  { "HC02" }
+  { "VC02" }
+  { "HC05" }
+  { "VC05" }
+}

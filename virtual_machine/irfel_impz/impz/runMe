@@ -1,0 +1,8 @@
+#!/bin/bash
+
+#./cleanUp
+#genimpactzin lte.impz flag4line
+ImpactZ.exe ImpactZ.in
+
+#mpirun -np 4 ImpactZ.exe 
+

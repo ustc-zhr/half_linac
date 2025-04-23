@@ -1,0 +1,9 @@
+*.cen 
+*.fin
+*.mag
+*.out
+*.param
+*.sig
+*.twi
+*.bpmcen
+lattice.lte

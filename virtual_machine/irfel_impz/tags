@@ -1,0 +1,107 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+__default_beam	impactz_parser.py	/^    def __default_beam(self):$/;"	m	class:impactz_parser	file:
+__default_control	impactz_parser.py	/^    def __default_control(self):    $/;"	m	class:impactz_parser	file:
+__default_lattice	impactz_parser.py	/^    def __default_lattice(self):$/;"	m	class:impactz_parser	file:
+__init__	elegant_parser.py	/^    def __init__(self):$/;"	m	class:elegant
+__init__	elegant_parser.py	/^    def __init__(self, fileName):$/;"	m	class:ele_parser
+__init__	elegant_parser.py	/^    def __init__(self, fileName, lineName="ALL"):$/;"	m	class:lattice_parser
+__init__	impactz_parser.py	/^    def __init__(self, fileName, lineName):$/;"	m	class:impactz_parser
+__init__	pv_server.py	/^    def __init__(self):$/;"	m	class:pv_server
+_combine_lines	elegant_parser.py	/^    def _combine_lines(self,lines):$/;"	m	class:lattice_parser
+_delete_backslashn	elegant_parser.py	/^    def _delete_backslashn(self, lines):$/;"	m	class:lattice_parser
+_delete_comment_blank_lines	elegant_parser.py	/^    def _delete_comment_blank_lines(self, lines):$/;"	m	class:lattice_parser
+_delete_redundant_comma	elegant_parser.py	/^    def _delete_redundant_comma(self, lines):$/;"	m	class:lattice_parser
+_expandline	elegant_parser.py	/^    def _expandline(self, line, lines):$/;"	m	class:lattice_parser
+_get_bendmap_flag	impactz_parser.py	/^    def _get_bendmap_flag(self, elem :dict):$/;"	m	class:impactz_parser
+_get_driftmap_flag	impactz_parser.py	/^    def _get_driftmap_flag(self, elem :dict):$/;"	m	class:impactz_parser
+_get_index	impactz_parser.py	/^    def _get_index(self, pattern1, pattern2, lines):$/;"	m	class:impactz_parser
+_get_lattice	elegant_parser.py	/^    def _get_lattice(self, lines):$/;"	m	class:lattice_parser
+_get_quadmap_flag	impactz_parser.py	/^    def _get_quadmap_flag(self, elem :dict):$/;"	m	class:impactz_parser
+_get_rfcwmap_flag	impactz_parser.py	/^    def _get_rfcwmap_flag(self, elem :dict):$/;"	m	class:impactz_parser
+_get_sc_flag	impactz_parser.py	/^    def _get_sc_flag(self):$/;"	m	class:impactz_parser
+_get_trackline	elegant_parser.py	/^    def _get_trackline(self):$/;"	m	class:lattice_parser
+_get_wakefield_flag	impactz_parser.py	/^    def _get_wakefield_flag(self, elem :dict):$/;"	m	class:impactz_parser
+_is_number	elegant_parser.py	/^    def _is_number(self, s:str):$/;"	m	class:lattice_parser
+_readfile	elegant_parser.py	/^    def _readfile(self):$/;"	m	class:lattice_parser
+_set_steps_maps_radius	impactz_parser.py	/^    def _set_steps_maps_radius(self, elem :dict):$/;"	m	class:impactz_parser
+add_channel	elegant_parser.py	/^    def add_channel(self):$/;"	m	class:elegant
+c_light	const.py	/^c_light = 2.99792458e8$/;"	v
+const	impactz_parser.py	/^import const$/;"	i
+control2ele	elegant_parser.py	/^    def control2ele(self):$/;"	m	class:ele_parser
+deepcopy	impactz_parser.py	/^from copy import deepcopy$/;"	i
+defaultdict	elegant_parser.py	/^from collections import defaultdict$/;"	i
+defaultdict	impactz_parser.py	/^from collections import defaultdict$/;"	i
+dump2json	impactz_parser.py	/^    def dump2json(self):$/;"	m	class:impactz_parser
+dumpLattice	elegant_parser.py	/^    def dumpLattice(self):$/;"	m	class:elegant
+ele	elegant_parser.py	/^    ele = elegant()$/;"	v	class:elegant
+ele	main.py	/^    ele = elepar.elegant()$/;"	v
+ele_parser	elegant_parser.py	/^class ele_parser(lattice_parser):$/;"	c
+electron_mass	const.py	/^electron_mass = 0.51099895000e6  #eV$/;"	v
+elegant	elegant_parser.py	/^class elegant:$/;"	c
+elegant2impz_lattice	impactz_parser.py	/^    def elegant2impz_lattice(self,trackline):$/;"	m	class:impactz_parser
+elegant_path	elegant_parser.py	/^    elegant_path = ".\/elegant"$/;"	v	class:elegant
+elepar	main.py	/^import elegant_parser as elepar$/;"	i
+epics	elegant_parser.py	/^import epics $/;"	i
+epics	pv_server.py	/^import epics $/;"	i
+file_name	impactz_parser.py	/^    file_name = '.\/impz\/lte.impz'   $/;"	v	class:impactz_parser
+gen_substitution_file	pv_server.py	/^    def gen_substitution_file(self):$/;"	m	class:pv_server
+get_beam_section	impactz_parser.py	/^    def get_beam_section(self):$/;"	m	class:impactz_parser
+get_bpmdata	elegant_parser.py	/^    def get_bpmdata(self):$/;"	m	class:elegant
+get_brieflines	elegant_parser.py	/^    def get_brieflines(self):$/;"	m	class:lattice_parser
+get_control	elegant_parser.py	/^    def get_control(self):$/;"	m	class:ele_parser
+get_control_section	impactz_parser.py	/^    def get_control_section(self):$/;"	m	class:impactz_parser
+get_lattice	elegant_parser.py	/^    def get_lattice(self):$/;"	m	class:lattice_parser
+get_lattice_section	impactz_parser.py	/^    def get_lattice_section(self):$/;"	m	class:impactz_parser
+impactz_parser	impactz_parser.py	/^class impactz_parser(lattice_parser):$/;"	c
+impactzin_control	impactz_parser.py	/^    def impactzin_control(self):$/;"	m	class:impactz_parser
+impactzin_lattice	impactz_parser.py	/^    def impactzin_lattice(self):$/;"	m	class:impactz_parser
+init_lattice_pv	pv_server.py	/^    def init_lattice_pv(self):$/;"	m	class:pv_server
+json	elegant_parser.py	/^import json$/;"	i
+json	impactz_parser.py	/^import json$/;"	i
+json	pv_server.py	/^import json$/;"	i
+json2impzin	impactz_parser.py	/^    def json2impzin(self):$/;"	m	class:impactz_parser
+lattice_parser	elegant_parser.py	/^class lattice_parser:$/;"	c
+lattice_parser	impactz_parser.py	/^from half_linac.virtual_machine.lattice_parser import lattice_parser$/;"	i
+line_name	impactz_parser.py	/^    line_name = 'flag4line'$/;"	v	class:impactz_parser
+lte	impactz_parser.py	/^    lte = impactz_parser(file_name,line_name)$/;"	v	class:impactz_parser
+math	impactz_parser.py	/^import math$/;"	i
+myserver	main.py	/^    myserver = pv_server.pv_server()$/;"	v
+myserver	pv_server.py	/^    myserver = pv_server()$/;"	v	class:pv_server
+nest_dict	elegant_parser.py	/^nest_dict = lambda: defaultdict(nest_dict)$/;"	v
+nest_dict	impactz_parser.py	/^nest_dict = lambda: defaultdict(nest_dict) # to define a['key1']['key2'] = value$/;"	v
+onChanges	pv_server.py	/^        def onChanges(pvname=None, value=None, char_value=None,**kw):$/;"	f	function:pv_server.update_lattice_json
+os	elegant_parser.py	/^import sys, os$/;"	i
+os	main.py	/^import os$/;"	i
+os	pv_server.py	/^import os$/;"	i
+period	main.py	/^    period = 3  #1s $/;"	v
+pi	impactz_parser.py	/^from math import sqrt, pi$/;"	i
+proton_mass	const.py	/^proton_mass = 938.27208816e6     #eV$/;"	v
+pv_server	main.py	/^import pv_server$/;"	i
+pv_server	pv_server.py	/^class pv_server:$/;"	c
+randn	elegant_parser.py	/^    def randn(self,sigma,cutat):$/;"	m	class:lattice_parser
+random	elegant_parser.py	/^import random$/;"	i
+re	elegant_parser.py	/^import re$/;"	i
+re	impactz_parser.py	/^import re$/;"	i
+rpn_cal	elegant_parser.py	/^    def rpn_cal(self, rpn_str:str):$/;"	m	class:lattice_parser
+sdds	elegant_parser.py	/^import sdds$/;"	i
+set_bpmPV	elegant_parser.py	/^    def set_bpmPV(self):$/;"	m	class:elegant
+sqrt	impactz_parser.py	/^from math import sqrt, pi$/;"	i
+sys	elegant_parser.py	/^import sys, os$/;"	i
+sys	impactz_parser.py	/^import sys$/;"	i
+t0	pv_server.py	/^    t0 = time.time()$/;"	v	class:pv_server
+time	main.py	/^import time$/;"	i
+time	pv_server.py	/^import time$/;"	i
+top_path	elegant_parser.py	/^    top_path = os.getcwd()$/;"	v	class:elegant
+top_path	main.py	/^    top_path = os.getcwd()    $/;"	v
+update_beam	impactz_parser.py	/^    def update_beam(self):$/;"	m	class:impactz_parser
+update_control	impactz_parser.py	/^    def update_control(self):$/;"	m	class:impactz_parser
+update_inputfile	elegant_parser.py	/^    def update_inputfile(self):$/;"	m	class:elegant
+update_lattice_json	pv_server.py	/^    def update_lattice_json(self):$/;"	m	class:pv_server
+update_paras	impactz_parser.py	/^    def update_paras(self):  $/;"	m	class:impactz_parser
+update_trackline	impactz_parser.py	/^    def update_trackline(self):$/;"	m	class:impactz_parser
+write_impactzin	impactz_parser.py	/^    def write_impactzin(self):$/;"	m	class:impactz_parser

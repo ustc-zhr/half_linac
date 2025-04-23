@@ -1,0 +1,82 @@
+&run_setup
+  lattice                  = lattice_ini.lte ,  
+!  use_beamline             = ALL,
+  use_beamline             = USEDLINE
+  combine_bunch_statistics = 0,
+  default_order            = 3,
+  random_number_seed       = 9876543210,
+  p_central                = 223.4028,         !E=114.16MeV
+  always_change_p0         = 1,
+  tracking_updates         = 1
+
+! print_statistics         = 1,
+! output                   = %s.out,
+  centroid                = %s.cen,
+! sigma                    = %s.sig,
+! final                    = %s.fin,
+!  parameters              = %s.param,
+! magnets                  = %s.mag,
+  bpm_centroid             = %s.bpmcen
+
+&end
+
+&run_control
+  n_steps                   = 1,
+  reset_rf_for_each_step    = 1,
+  restrict_fiducialization =1,
+&end
+
+&twiss_output
+  filename                 = %s.twi,
+  matched                  = 0,
+  beta_x                   = 39,    
+  beta_y                   = 39,
+  alpha_x                  = 0.73,
+  alpha_y                  = 0.73,
+  concat_order             = 1,
+  statistics               = 1
+&end
+
+&matrix_output
+   SDDS_output = %s.mat,
+   individual_matrices = 0,
+   full_matrix_only = 1
+&end
+
+!use less particles for test
+!---------------------------
+!&sdds_beam
+!  input                     ="injector.sdds"
+!  input_type                = "elegant",
+!  sample_interval           = 1,
+!  p_lower                   = 219,
+!  p_upper                   = 1e10,
+!  center_arrival_time       = 1,
+!  reuse_bunch               = 1
+!&end
+
+&bunched_beam
+   !bunch = %s.bun,
+   n_particles_per_bunch = 10000
+
+   emit_nx = 10e-6
+   emit_ny = 10e-6
+   use_twiss_command_values = 10000
+
+   distribution_type[0] = "gaussian",
+   distribution_type[1] = "gaussian",
+   distribution_type[2] = "gaussian",
+
+   distribution_cutoff[0] = 5,     ! 3 times sigma_x
+   distribution_cutoff[1] = 5,     ! 3 times sigma_y
+   distribution_cutoff[2] = 5,     ! 3 times sigma_y
+   !enforce_rms_values[0] = 1,1,1,  ! enforce to have the rms value, higher class than dis_cutoff
+
+   sigma_s = 1.11e-3
+   sigma_dp = 4E-3
+
+&end
+
+&track 
+&end
+

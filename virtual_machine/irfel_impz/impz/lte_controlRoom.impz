@@ -1,0 +1,244 @@
+!control section
+!===============
+&control
+default_order = 1;
+steps=0;
+
+lsc   =0;
+zwake =0;
+csr   =0;
+tsc   =0;
+trwake=0;
+
+core_num_T = 1;
+core_num_L = 1;
+meshx = 32;
+meshy = 32;
+meshz = 64;
+kinetic_energy = 30.6e6;
+freq_rf_scale = 2856e6;
+
+slice_bin=100;
+sample_out=1e6;
+
+pipe_radius=35e-3/2
+!pipe_radius=1.0
+
+error=1
+
+&end
+
+!beam section
+!==============
+&beam
+mass = 0.511001e6;
+charge = -1.0;
+
+!distribution_type = 19;
+!Np = 61429;
+
+distribution_type = 2;
+Np = 1e4;
+
+total_charge = 0.9e-9;
+
+! MQ2-Flag4 Only Line
+! -------------------
+!emit_nx=182.61e-6, beta_x=11.11, alpha_x=-9.48;
+!emit_ny=1257e-6,   beta_y=4.8,   alpha_y=10;
+
+! whole Line
+! -------------------
+emit_nx=50e-6, beta_x=13, alpha_x=-2.26;
+emit_ny=50e-6, beta_y=13, alpha_y=-2.26;
+
+sigz=1.11e-3, sigE=116e3;
+
+&end
+
+&lattice
+!==============
+
+HVC01: thinlens, k0=0
+HVC02: thinlens, k0=0
+HVC05: thinlens, k0=0
+
+BPM02: MONI, filename_id=2, DX=0.1e-3 
+BPM03: MONI, filename_id=3, DX=0.1e-3 
+BPM07: MONI, filename_id=7, DX=0.1e-3 
+
+!match section before chicane
+!----------------------------
+CQ1:QUAD,  L=0.05,  K1=-28.7 
+CQ2:QUAD,  L=0.05,  K1=37.7 
+LD1:DRIFT, L=0.3
+LD2:DRIFT, L=0.1
+LD3:DRIFT, L=0.1
+
+matchA: LINE=(LD1,BPM02,HVC01,CQ1,LD2,CQ2,LD3)
+
+!chicane 
+!----------------------------
+theta = 0.267
+Cleng  = 0.1
+!CBM1:BEND, L=Cleng, ANGLE=theta, E1=0,E2=theta,HGAP=0.02, steps=10, fint=0.5
+!CBM2:BEND, L=Cleng, ANGLE=-theta,E1=-theta,E2=0,HGAP=0.02,steps=10, fint=0.5
+!CBM3:BEND, L=Cleng, ANGLE=-theta,E1=0,E2=-theta,HGAP=0.02,steps=10, fint=0.5
+!CBM4:BEND, L=Cleng, ANGLE=theta, E1=theta,E2=0,HGAP=0.02 ,steps=10, fint=0.5
+
+! fint=0, this is not right
+!CBM1:BEND, L=Cleng, ANGLE=theta, E1=0,E2=theta,HGAP=0.02, steps=10, fint=0
+!CBM2:BEND, L=Cleng, ANGLE=-theta,E1=-theta,E2=0,HGAP=0.02,steps=10, fint=0
+!CBM3:BEND, L=Cleng, ANGLE=-theta,E1=0,E2=-theta,HGAP=0.02,steps=10, fint=0
+!CBM4:BEND, L=Cleng, ANGLE=theta, E1=theta,E2=0,HGAP=0.02 ,steps=10, fint=0
+
+!chicane off, replace dipole with drift
+CBM1:drift, L=Cleng
+CBM2:drift, L=Cleng
+CBM3:drift, L=Cleng
+CBM4:drift, L=Cleng
+
+LD4_1:DRIFT, L=0.15
+LD4_2:DRIFT, L=0.15
+LD5_1:DRIFT, L=0.1/2
+LD5_2:DRIFT, L=0.1/2
+
+!ES01: RCOL, X_MAX=3e-3,Y_MAX=17.5e-3
+ES01: RCOL, X_MAX=1.0,Y_MAX=1.0
+
+chicane:LINE=(CBM1,LD4_1,CBM2,LD5_1,ES01,wmid,LD5_2,CBM3,LD4_2,CBM4)
+
+!match section after chicane
+!----------------------------
+CQ3:QUAD,  L=0.05,  K1= 53.89
+CQ4:QUAD,  L=0.05,  K1=-52.5 
+LD6:DRIFT, L=0.1
+LD7:DRIFT, L=0.1
+LD8:DRIFT, L=0.75
+
+matchB: LINE=(LD6,CQ3,LD7,CQ4,BPM03,HVC02,LD8)
+
+!cavity for mir line
+!----------------------------
+!LDA:  lcavity, L=2.1736, deltae=30, freq=2856, phi0=0
+LDA:   drift, L=2.1736
+!LDA: RFCW, L=2.1736,volt=30e6,phase=90,freq=2856e6,a=12.35e-3,g=29.99e-3,cell_len=34.99e-3
+
+!matach sec before dogleg
+!----------------------------
+MQ1 :QUAD,  L=0.05,  K1=-18, dx=0.1e-3
+MQ2 :QUAD,  L=0.05,  K1= 29, dx=0.1e-3  
+
+DRF0:DRIFT, L=0.2
+DRF1:DRIFT, L=0.15
+DRF2:DRIFT, L=0.15
+
+matchdog: LINE=(DRF0,MQ1,HVC05,DRF1,BPM07,MQ2,DRF2)
+matchdog_2: LINE=(DRF0,MQ1,DRF1)
+
+! ESA
+!----------------------------
+!----------------------------
+BME: BEND, L=0.133333, ANGLE=PI/6, E1=PI/12, E2=PI/12, HGAP=0.02, FINT=0.5
+Q19: QUAD, L=0.05, K1= 20
+Q20: QUAD, L=0.05, K1=-20  
+LDQB: drift, L=0.71-0.15
+LDBQ: drift, L=0.5
+LQ19: drift, L=0.4
+LQ20: drift, L=1.4
+wesa: watch, filename_id=1020
+
+lineESA: line=(LDQB,BME,LDBQ,Q19,LQ19,Q20,LQ20,wesa)
+
+! Flag4 Line
+!----------------------------
+!----------------------------
+LDFG4: drift, L=1.815-0.15 
+flag4: watch, filename_id=1021
+
+linefg4: line=(LDFG4,flag4)
+
+!dogleg
+!----------------------------
+!----------------------------
+BM  : BEND,  L=0.2,ANGLE=PI/4,E1=PI/8,E2=PI/8,HGAP=0.02,FINT=0.5,steps=40
+Q3  : QUAD,  L=0.05,  K1=-2.800414E+01 
+Q4  : QUAD,  L=0.05,  K1= 3.351196E+01 
+DRF3: DRIFT, L=0.6/2, steps=10
+DRF4: DRIFT, L=0.2
+DRF5: DRIFT, L=0.2/2
+
+ES02: RCOL, X_MAX=1.0,Y_MAX=1.0
+dogleg: LINE=(BM,w22,DRF3,ES02,wmid2,DRF3,Q3,DRF4,Q4,DRF5,DRF5,Q4,DRF4,Q3,DRF3,DRF3,BM)
+
+!match sec befor undulator
+!----------------------------
+Q5  : QUAD,  L=0.05,  K1= 1.656177E+00 
+Q6  : QUAD,  L=0.05,  K1= 5.954326E+01 
+DRF6: DRIFT, L=0.15
+DRF7: DRIFT, L=0.15
+DRF8: DRIFT, L=0.25
+
+matchund: LINE=(DRF6,Q5,DRF7,Q6,DRF8)
+
+!undulator section
+!----------------------------
+L=2.3
+KK=0.8  !0.8-2.4
+lambdau=46e-3
+gam0=60/0.511
+
+k=sqrt(2)*pi*KK/gam0/lambdau
+K1=2*(pi*KK/gam0/lambdau)**2
+
+! EMATRIX in impactz has no so many Rij elements now
+!und: ematrix, R11=1,R12=L,R22=1,R33=cos(k*L),R34=sin(k*L)/k,R43=-sin(k*L)*k,R44=cos(k*L),R55=1,R56=L/gam0/gam0,R66=1 
+
+und: quad, L=L,steps=10,order=3,K1=K1
+
+!lines to dump
+!----------------------------
+DRF9: DRIFT, L=0.4717
+BME:  BEND, L=0.133333, ANGLE=0.5236,E1=0.2618,E2=0.2618,HGAP=0.02,FINT=0.5
+DRF10: DRIFT, L=3.3236
+
+!lines
+!----------------------------
+line0: LINE=(w0,matchA,chicane,w1,matchB,LDA)
+line1: LINE=(matchdog,w2,dogleg,w3,matchund,und,w4)
+line2: LINE=(DRF9,BME,DRF10,w5)
+
+w0:    watch, filename_id=1000, coord_info=0, slice_info=0
+w1:    watch, filename_id=1001, coord_info=0, slice_info=0
+w2:    watch, filename_id=1002, coord_info=0, slice_info=0
+w3:    watch, filename_id=1003, coord_info=0, slice_info=0
+w4:    watch, filename_id=1004, coord_info=0, slice_info=0
+w5:    watch, filename_id=1005, coord_info=0, slice_info=0
+                                           
+wmid:  watch, filename_id=1010, coord_info=0, slice_info=0
+wmid2: watch, filename_id=1011, coord_info=0, slice_info=0
+w22:   watch, filename_id=1012, coord_info=0, slice_info=0
+
+!shift the initial beam to lay the beam-core section at the origin point,
+!so the beam center sees the exact design phase and energy gain
+!offE: offset, dE=-1+0.22, dz=-0.002
+offE: offset, dE=0, dz=0
+
+! branch lines
+! ==========================
+
+
+! flag4 line
+!---------------------
+MQ2FlagLine: line=(MQ2,DRF2,LDFG4,flag4)
+!flag4line: line=(MQ2,DRF2,LDFG4,flag4)
+flag4line: line=(offE,line0,matchdog,linefg4)
+
+! energy analysis line
+!---------------------
+esaline: line=(offE,line0,matchdog,lineESA)
+
+! mir fel line
+mirline: line=(offE,line0,line1,line2)
+
+&end

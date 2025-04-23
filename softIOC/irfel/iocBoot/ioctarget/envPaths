@@ -1,0 +1,3 @@
+epicsEnvSet("IOC","ioctarget")
+epicsEnvSet("TOP","/home/biaobin/gitproj/half_linac/softIOC/irfel")
+epicsEnvSet("EPICS_BASE","/home/biaobin/EPICS/epics-base")

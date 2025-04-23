@@ -1,0 +1,41 @@
+package:
+  name: "pysdds"
+  version: {{ GIT_DESCRIBE_TAG }}
+
+#source:
+#  git_rev: v{{ version }}
+#  git_url: https://github.com/nikitakuklev/pysdds.git
+source:
+    path: ../..
+
+build:
+  number: {{ GIT_DESCRIBE_NUMBER }}
+  string: {{ GIT_BUILD_STR }}
+  skip: true  # [py<38]
+  noarch: python
+  script: {{ PYTHON }} -m pip install . --no-deps --ignore-installed --no-cache-dir --no-build-isolation -vvv
+
+requirements:
+  host:
+    - pip
+    - python
+    - setuptools
+    - wheel
+  run:
+    - python
+    - numpy >=1.13.3
+    - pandas >=1.0
+
+test:
+  requires:
+    - pip
+    - pytest
+  imports:
+    - pysdds
+
+about:
+  home: https://github.com/nikitakuklev/pysdds
+  license: MIT License
+  license_family: MIT
+  license_file:
+    - LICENSE

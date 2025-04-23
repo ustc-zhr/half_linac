@@ -1,0 +1,4 @@
+record(waveform, "IRFEL:BD:$(FLAG):image1:ArrayData:vm") {
+    #field(NELM,"97200")
+    field(NELM,"1555200")
+}
