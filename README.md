@@ -84,18 +84,18 @@ then you can try it~
 
 # 使用Git日常管理代码
 
-向远程仓库提交修改后的文件
+- 从远程仓库更新合并
+
+```zsh
+git pull origin main
+```
+
+- 向远程仓库提交修改后的文件
 
 ```zsh
 git add .
 git commit -m 'you can add some description about this commit'
 git push -uf origin main
-```
-
-从远程仓库更行合并
-
-```zsh
-git pull origin main
 ```
 
 
