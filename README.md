@@ -95,7 +95,7 @@ git pull origin main
 ```zsh
 git add .
 git commit -m 'you can add some description about this commit'
-git push -uf origin main
+git push origin main
 ```
 
 
