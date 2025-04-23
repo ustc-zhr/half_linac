@@ -1,24 +1,70 @@
-Author: Biaobin Li
-Date: 2024-01-16
+Date: 2024-04-23
 
 
 
-# usage
+# Quick start
 
-1. start the softIOC
+### 1. Install some packages in Linux system
 
-	go to `iocboot`, run `st.cmd`
+epics
 
-	
+python3
 
-2. run the elegant virtual machine
+pyqt
 
-	go to `virtual_machine` run `python main.py`. The elegant simulation results of all the BPM Cx and Cy are broadcasted into EPICS PV. The BPM PV name ranges from BPM01 to BPM43:
 
-	```
-	camonitor LN:TEST:BPM01:X:ai
-	camonitor LN:TEST:BPM01:Y:ai
-	```
+
+### 2. Git management for the 1st time
+
+#### a. install git
+
+```zsh
+sudo apt-get install git
+```
+
+#### b. configuration Git 
+
+```zsh
+git config --global user.name "zhanghaoran"
+git config --global user.email "zhrzhm@ustc.edu.cn"
+```
+
+#### c. create a local Git Repository
+
+```zsh
+mkdir PATH-TO-HERE/half_linac
+cd half_linac
+git init
+```
+
+#### d. clone from Remote Repository
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1. run the elegant virtual machine
+
+  go to `virtual_machine` run `python main.py`. The elegant simulation results of all the BPM Cx and Cy are broadcasted into EPICS PV. The BPM PV name ranges from BPM01 to BPM43:
+
+  ```
+  camonitor LN:TEST:BPM01:X:ai
+  camonitor LN:TEST:BPM01:Y:ai
+  ```
 
 
 
