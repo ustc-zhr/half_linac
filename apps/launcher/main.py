@@ -10,8 +10,8 @@ import half_linac.setup as st
 class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
+        self.setupUi(self)
         
-        print(st.rootpath)
         self.iocbtn.clicked.connect(self.start_ioc)
         self.vmbtn.clicked.connect(self.start_vm)
         self.pushButton.clicked.connect(self.start_orbit_display)

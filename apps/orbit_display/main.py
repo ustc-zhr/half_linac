@@ -1,12 +1,15 @@
-from gui import Ui_MainWindow 
+import time
 import sys
+from subprocess import Popen
+import numpy as np
 
+from gui import Ui_MainWindow 
 from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QHBoxLayout
 from PyQt5.QtCore import QTimer
 
 from epics import caget, caget_many
-import time
-import numpy as np
+
+import half_linac.setup as st
 
 class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
@@ -22,9 +25,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.cymax = None
 
         self.BPMxstart = None
-        self.BPMxend = None
+        self.BPMxend   = None
         self.BPMystart = None
-        self.BPMyend = None
+        self.BPMyend   = None
 
         self.start_1.clicked.connect(self.start1_btn)
         self.stop_1.clicked.connect(self.stop1_btn)
@@ -32,16 +35,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.start_2.clicked.connect(self.start2_btn)
         self.stop_2.clicked.connect(self.stop2_btn)
 
+        self.detail.clicked.connect(self.start_bpmvalue_btn)
+
     def init_pv(self):
         pvlx = []
         pvly = []
-        for j in range(41):
-            if j+3 < 10:
-                pvx = "HALF:IN:BPM:BPM0"+str(j+3)+":X:ao"
-                pvy = "HALF:IN:BPM:BPM0"+str(j+3)+":Y:ao"
+        for j in range(43):
+            if j+1 < 10:
+                pvx = "HALF:IN:BPM:BPM0"+str(j+1)+":X:ao"
+                pvy = "HALF:IN:BPM:BPM0"+str(j+1)+":Y:ao"
             else:
-                pvx = "HALF:IN:BPM:BPM"+str(j+3)+":X:ao"
-                pvy = "HALF:IN:BPM:BPM"+str(j+3)+":Y:ao"
+                pvx = "HALF:IN:BPM:BPM"+str(j+1)+":X:ao"
+                pvy = "HALF:IN:BPM:BPM"+str(j+1)+":Y:ao"
             #print(pvx,pvlx)
             pvlx.append(pvx)
             pvly.append(pvy)
@@ -165,6 +170,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.graphWidget_2.canvas.axes.set_xlabel("BPM #")
         self.graphWidget_2.canvas.axes.set_ylabel("Cy (mm)")
         self.graphWidget_2.canvas.draw()
+
+
+    def start_bpmvalue_btn(self):
+        Popen("python3 submain.py",cwd=st.rootpath+"/apps/orbit_display",shell=True) 
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
