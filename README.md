@@ -1,4 +1,4 @@
-# Date: 2024-04-23
+# Date: 2024-04-24
 
 
 
@@ -6,13 +6,28 @@
 
 ## 1. Install some packages in Linux system
 
-### 1）epics
+### 1）Linux environment
 
-### 2）python3
+#### windows下如何实现linux环境
 
-### 3）pyqt
+在Windows操作系统下创建和运行Linux环境通常有以下几种方法，推荐使用WSL：
 
-### 4）install python sdds
+##### 1. 使用Windows子系统（Windows Subsystem for Linux, WSL）
+
+WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直接运行Linux发行版，如Ubuntu、Debian等。
+
+##### 2. 使用虚拟机软件（如VirtualBox或VMware）
+
+通过虚拟机软件，你可以在Windows上运行一个完整的虚拟机，里面可以安装Linux操作系统。
+
+
+### 2）epics
+
+### 3）python3
+
+### 4）pyqt
+
+### 5）install python sdds
 
 For Ubuntu20.04, the link of the module is: https://ops.aps.anl.gov/downloads/SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
 
@@ -62,6 +77,8 @@ cd gitproj
 git clone https://git.ustc.edu.cn/zhanghaoran/half_linac.git
 ```
 
+
+
 ## 3. run this software
 
 ### a. add env variable
@@ -83,6 +100,8 @@ then you can try it~
 
 
 # 使用Git日常管理代码
+
+为方便多人同步开发，这里采用git管理代码。远程仓库使用科大的GItLab。
 
 - 从远程仓库更新合并
 
@@ -106,14 +125,15 @@ git push origin main
 
 # 程序主要功能
 
-- 虚拟加速器
+- ## 虚拟加速器
+	
 	- 第一次运行，根据lattice_ini.lte和one_ini.ele 生成 json 文件，之后根据 json 文件生成lattice.lte和one.ele
 	- 运行elegant one.ele 并向IOC发布相关pv value
 	- 进入监视状态，一旦json文件发生变化，运行elegant one.ele 并向IOC发布相关pv值
 
 
 
-- softIOC
+- ## softIOC
 
 	- 第一次运行，将生成 db 文件夹下的 substitutions 文件
 
@@ -123,12 +143,17 @@ git push origin main
 
 		
 
-- apps
+- ## apps
 	
 	- launcher 显示主界面，各按钮调用其他调束软件，单独开一个线程进行。
-	- 开发各种上层物理调束程序
+	- 各种上层物理调束程序
+	  - bba
+	  - beam_monitor
+	  - emit_measure
+	  - orbit_correct
+	  - orbit_display
 
-。。。。。。
+​					  。。。。。。
 
 
 
