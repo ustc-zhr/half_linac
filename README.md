@@ -174,4 +174,4 @@ git push origin main
 
 2025-4-24-Zhanghaoran
 
-- 鉴于BPM数量多，orbit_display界面增加了选择显示一定范围BPMs的选项
+- 鉴于BPM数量多，orbit_display界面增加了选择显示一定范围BPMs的选项，并添加按钮可查看所有BPM的实时读数。
