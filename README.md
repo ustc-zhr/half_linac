@@ -172,3 +172,6 @@ git push origin main
 
 - 发射度测量界面增加了simply VM按钮，可根据所选取的Q铁和FLAG简化lattice，加速虚拟加速器运行速度，而full VM按钮可将lattice恢复到原始状态
 
+2025-4-24-Zhanghaoran
+
+- 鉴于BPM数量多，orbit_display界面增加了选择显示一定范围BPMs的选项

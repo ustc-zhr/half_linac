@@ -10,8 +10,8 @@ import half_linac.setup as st
 class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
-        self.setupUi(self)
-
+        
+        print(st.rootpath)
         self.iocbtn.clicked.connect(self.start_ioc)
         self.vmbtn.clicked.connect(self.start_vm)
         self.pushButton.clicked.connect(self.start_orbit_display)
@@ -40,7 +40,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
 
     def start_orbit_display(self):
-        Popen("./runMe",cwd=st.rootpath+"/apps/orbit_display",shell=True)
+        # Popen("./runMe",cwd=st.rootpath+"/apps/orbit_display",shell=True)
+        Popen("python3 main.py",cwd=st.rootpath+"/apps/orbit_display",shell=True)
 
     def start_bba(self):
         Popen("python3 main.py",cwd=st.rootpath+"/apps/bba",shell=True) 

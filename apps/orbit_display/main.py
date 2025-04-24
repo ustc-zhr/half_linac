@@ -21,6 +21,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.cymin = None
         self.cymax = None
 
+        self.BPMxstart = None
+        self.BPMxend = None
+        self.BPMystart = None
+        self.BPMyend = None
+
         self.start_1.clicked.connect(self.start1_btn)
         self.stop_1.clicked.connect(self.stop1_btn)
 
@@ -79,12 +84,30 @@ class myWindow(QMainWindow, Ui_MainWindow):
             except:
                 pass
 
+        def setBPMxstart():
+            try:
+                self.BPMxstart = int(self.bPMSLineEdit.text())
+            except:
+                pass
+        def setBPMxend():
+            try:
+                self.BPMxend = int(self.bPMELineEdit.text())
+            except:
+                pass
+
         self.QL_cxmin.returnPressed.connect(setcxmin)
         self.QL_cxmax.returnPressed.connect(setcxmax)
         if self.cxmin != None:
             self.graphWidget_1.canvas.axes.set_ylim(bottom=self.cxmin)
         if self.cxmax != None:
             self.graphWidget_1.canvas.axes.set_ylim(top=self.cxmax)
+
+        self.bPMSLineEdit.returnPressed.connect(setBPMxstart)
+        self.bPMELineEdit.returnPressed.connect(setBPMxend)
+        if self.BPMxstart != None:
+            self.graphWidget_1.canvas.axes.set_xlim(left=self.BPMxstart)
+        if self.BPMxend != None:
+            self.graphWidget_1.canvas.axes.set_xlim(right=self.BPMxend)
 
         x = np.linspace(1,len(pvl_val),len(pvl_val))
         self.graphWidget_1.canvas.axes.plot(x, pvl_val,'-o')
@@ -112,12 +135,30 @@ class myWindow(QMainWindow, Ui_MainWindow):
             except:
                 pass
 
+        def setBPMystart():
+            try:
+                self.BPMystart = int(self.bPMSLineEdit_2.text())
+            except:
+                pass
+        def setBPMyend():
+            try:
+                self.BPMyend = int(self.bPMYLineEdit.text())
+            except:
+                pass
+                
         self.QL_cymin.returnPressed.connect(setcymin)
         self.QL_cymax.returnPressed.connect(setcymax)
         if self.cxmin != None:
             self.graphWidget_2.canvas.axes.set_ylim(bottom=self.cymin)
         if self.cxmax != None:
             self.graphWidget_2.canvas.axes.set_ylim(top=self.cymax)
+
+        self.bPMSLineEdit_2.returnPressed.connect(setBPMystart)
+        self.bPMYLineEdit.returnPressed.connect(setBPMyend)
+        if self.BPMystart != None:
+            self.graphWidget_1.canvas.axes.set_xlim(left=self.BPMystart)
+        if self.BPMyend != None:
+            self.graphWidget_1.canvas.axes.set_xlim(right=self.BPMyend)        
 
         x = np.linspace(1,len(pvl_val),len(pvl_val))
         self.graphWidget_2.canvas.axes.plot(x, pvl_val, '-o')

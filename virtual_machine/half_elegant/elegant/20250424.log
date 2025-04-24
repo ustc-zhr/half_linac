@@ -1,4 +1,4 @@
-Running elegant at Tue Apr 22 18:03:56 2025
+Running elegant at Thu Apr 24 12:09:07 2025
 
 This is elegant 2022.1.0, Jun 21 2023, by M. Borland, J. Calvey, M. Carla', N. Carmignani, AJ Dick, Z. Duan, M. Ehrlichman, L. Emery, W. Guo, R. Lindberg, V. Sajaev, R. Soliday, Y.-P. Sun, C.-X. Wang, Y. Wang, Y. Wu, and A. Xiao.
 =====================================================================================
@@ -458,7 +458,7 @@ computed value for WSEP1.DISABLE is 1
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 length of beamline USEDLINE per pass: 3.192640960000002e+02 m
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6389
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6388
 &run_control
     n_steps = 1,
     bunch_frequency = 0.000000000000000e+00,
@@ -471,7 +471,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6389
     restrict_fiducialization = 1,
     reset_scattering_seed = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6389
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6388
 &twiss_output
     filename = %s.twi,
     matched = 0,
@@ -519,7 +519,7 @@ min:  3.814603e-01 -8.668141e+01               -9.449645e-01 -4.433893e-01
 max:  8.182490e+01  4.256791e+01                9.445796e-01  4.129388e-01
 x acceptance limited to 9.276119e-07 by DHOTGUN2 ending at 3.225000e+00 m
 y acceptance limited to 1.951001e-06 by DA1 ending at 9.194962e+01 m
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
 &matrix_output
     printout = {NULL},
     printout_order = 1,
@@ -538,7 +538,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
     SDDS_output_match = {NULL},
 &end
 *** Warning: Some elements had no matrix. --- 33 elements had no matrix
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
 &bunched_beam
     bunch = {NULL},
     n_particles_per_bunch = 10000,
@@ -583,7 +583,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
         0.000000000000000e+00, 0.000000000000000e+00,
     first_is_fiducial = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7263
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7261
 &track
     center_on_orbit = 0,
     center_momentum_also = 1,
@@ -601,17 +601,17 @@ Updating floor coordinates
 tracking step 1
 generating bunch 1
 tracking 10000 particles
-22 Apr 25 18:03:56: This step establishes energy profile vs s (fiducial beam).
-22 Apr 25 18:03:56: Rf phases/references reset.
+24 Apr 25 12:09:07: This step establishes energy profile vs s (fiducial beam).
+24 Apr 25 12:09:07: Rf phases/references reset.
 Dumping centroid data...done.
 Dumping bpm_centroid data...done.
 Post-tracking output completed.
-Tracking step completed   ET:     00:00:04 CP:    4.51 BIO:0 DIO:0 PF:0 MEM:7786
+Tracking step completed   ET:     00:00:04 CP:    4.55 BIO:0 DIO:0 PF:0 MEM:7784
 
 
 Finished tracking.
 End of input data encountered.
-statistics:    ET:     00:00:04 CP:    4.51 BIO:0 DIO:0 PF:0 MEM:7786
+statistics:    ET:     00:00:04 CP:    4.55 BIO:0 DIO:0 PF:0 MEM:7784
 
 ************************** Summary of warnings ****************************
 2 types of warnings were recorded:
