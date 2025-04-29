@@ -175,3 +175,7 @@ git push origin main
 2025-4-24-Zhanghaoran
 
 - 鉴于BPM数量多，orbit_display界面增加了选择显示一定范围BPMs的选项，并添加按钮可查看所有BPM的实时读数。
+
+2025-4-29-Zhanghaoran
+
+- 重新调整了launcher和VM的gui布局以及静态误差添加功能，将与VM相关的功能（start VM;start IOC; add error）单独放在一个界面，且误差可自定义。
