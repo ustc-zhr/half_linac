@@ -15,7 +15,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-       
+
+
         # init pv
         self.init_pv()
 

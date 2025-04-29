@@ -177,54 +177,52 @@ class pv_server:
             mypv = epics.PV(pv)
             mypv.add_callback(onChanges)
 
-    def gen_random_Q_err(self):
-        seed = 123456789
-        # 设定高斯分布的参数
-        mu = 0  # 均值
-        sigma = 0.5e-4  # 标准差
+#     def gen_random_Q_err(self):
+#         seed = 123456789
+#         # 设定高斯分布的参数
+#         mu = 0  # 均值
+#         sigma = 0.5e-4  # 标准差
 
-        # 生成高斯分布的随机数
-#        datax = np.random.normal(mu, sigma, 1)[0]  # 假设生成10000个数据点
-#        datay = np.random.normal(mu, sigma, 1)[0]
-        # 3σ截断
-        lower_bound = mu - 3 * sigma
-        upper_bound = mu + 3 * sigma
+#         # 生成高斯分布的随机数
+# #        datax = np.random.normal(mu, sigma, 1)[0]  # 假设生成10000个数据点
+# #        datay = np.random.normal(mu, sigma, 1)[0]
+#         # 3σ截断
+#         lower_bound = mu - 3 * sigma
+#         upper_bound = mu + 3 * sigma
 
-        f = open(self.jsonpath, "r")
-        lte = json.load(f)
-        lattice = lte["lattice"]
-        f.close()
-        for key in lattice:
-            if lattice[key]["TYPE"] == "QUAD":
-                datax = np.random.normal(mu, sigma, 1)[0]
-                datay = np.random.normal(mu, sigma, 1)[0]
-                while not (lower_bound <= datax <= upper_bound):
-                    datax = np.random.normal(mu, sigma, 1)[0]
-                lattice[key]["DX"] = str(datax)
-                while not (lower_bound <= datay <= upper_bound):
-                    datay = np.random.normal(mu, sigma, 1)[0]
-                lattice[key]["DY"] = str(datay)
-        f = open(self.jsonpath, "w")
-        f.write(json.dumps(lte, indent=4))
-        f.close()
+#         f = open(self.jsonpath, "r")
+#         lte = json.load(f)
+#         lattice = lte["lattice"]
+#         f.close()
+#         for key in lattice:
+#             if lattice[key]["TYPE"] == "QUAD":
+#                 datax = np.random.normal(mu, sigma, 1)[0]
+#                 datay = np.random.normal(mu, sigma, 1)[0]
+#                 while not (lower_bound <= datax <= upper_bound):
+#                     datax = np.random.normal(mu, sigma, 1)[0]
+#                 lattice[key]["DX"] = str(datax)
+#                 while not (lower_bound <= datay <= upper_bound):
+#                     datay = np.random.normal(mu, sigma, 1)[0]
+#                 lattice[key]["DY"] = str(datay)
+#         f = open(self.jsonpath, "w")
+#         f.write(json.dumps(lte, indent=4))
+#         f.close()
 
-    def err_off(self):
+#     def err_off(self):
 
-        f = open(self.jsonpath, "r")
-        lte = json.load(f)
-        lattice = lte["lattice"]
-        f.close()
-        for key in lattice:
-            if lattice[key]["TYPE"] == "QUAD":
-                lattice[key]["DX"] = "0"
-                lattice[key]["DY"] = "0"
-        f = open(self.jsonpath, "w")
-        f.write(json.dumps(lte, indent=4))
-        f.close()        
+#         f = open(self.jsonpath, "r")
+#         lte = json.load(f)
+#         lattice = lte["lattice"]
+#         f.close()
+#         for key in lattice:
+#             if lattice[key]["TYPE"] == "QUAD":
+#                 lattice[key]["DX"] = "0"
+#                 lattice[key]["DY"] = "0"
+#         f = open(self.jsonpath, "w")
+#         f.write(json.dumps(lte, indent=4))
+#         f.close()        
 
-        # for pv in self.pvl:
-        #     mypv = epics.PV(pv)
-        #     mypv.add_callback(onChanges)
+
 
 from subprocess import Popen
 if __name__=='__main__':
