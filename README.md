@@ -19,7 +19,9 @@
 
 - 重新调整了launcher的gui布局，并将与VM相关的功能（start VM;start IOC; add error）单独放在一个用户界面，且静态误差可自定义。
 
+2025-5-8-Zhanghaoran
 
+- 给orbit corrrect添加的gui，可自定义相关参数，如采样间隔，校正精度。
 
 # Quick start
 
@@ -171,5 +173,4 @@ git push origin main
 	  - orbit_display
 
 ​					  。。。。。。
-
 
