@@ -874,163 +874,202 @@
         "XC04": {
             "NAME": "XC04",
             "TYPE": "HKICK",
-            "KICK": "1.407532963479221e-05"
+            "KICK": "0.0"
         },
         "XC05": {
             "NAME": "XC05",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC06": {
             "NAME": "XC06",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC07": {
             "NAME": "XC07",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC08": {
             "NAME": "XC08",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC09": {
             "NAME": "XC09",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC10": {
             "NAME": "XC10",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC11": {
             "NAME": "XC11",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC12": {
             "NAME": "XC12",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC13": {
             "NAME": "XC13",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC14": {
             "NAME": "XC14",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC15": {
             "NAME": "XC15",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC16": {
             "NAME": "XC16",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC17": {
             "NAME": "XC17",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC18": {
             "NAME": "XC18",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC19": {
             "NAME": "XC19",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC20": {
             "NAME": "XC20",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC21": {
             "NAME": "XC21",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC22": {
             "NAME": "XC22",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC23": {
             "NAME": "XC23",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC24": {
             "NAME": "XC24",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC25": {
             "NAME": "XC25",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC26": {
             "NAME": "XC26",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC27": {
             "NAME": "XC27",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC28": {
             "NAME": "XC28",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC29": {
             "NAME": "XC29",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC30": {
             "NAME": "XC30",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC31": {
             "NAME": "XC31",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC32": {
             "NAME": "XC32",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC33": {
             "NAME": "XC33",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC34": {
             "NAME": "XC34",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC35": {
             "NAME": "XC35",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC36": {
             "NAME": "XC36",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC37": {
             "NAME": "XC37",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC38": {
             "NAME": "XC38",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC39": {
             "NAME": "XC39",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC40": {
             "NAME": "XC40",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC41": {
             "NAME": "XC41",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC42": {
             "NAME": "XC42",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "XC43": {
             "NAME": "XC43",
-            "TYPE": "HKICK"
+            "TYPE": "HKICK",
+            "KICK": "0.0"
         },
         "YC03": {
             "NAME": "YC03",
@@ -1040,163 +1079,202 @@
         "YC04": {
             "NAME": "YC04",
             "TYPE": "VKICK",
-            "KICK": "-2.9600326587270127e-06"
+            "KICK": "0.0"
         },
         "YC05": {
             "NAME": "YC05",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC06": {
             "NAME": "YC06",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC07": {
             "NAME": "YC07",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC08": {
             "NAME": "YC08",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC09": {
             "NAME": "YC09",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC10": {
             "NAME": "YC10",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC11": {
             "NAME": "YC11",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC12": {
             "NAME": "YC12",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC13": {
             "NAME": "YC13",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC14": {
             "NAME": "YC14",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC15": {
             "NAME": "YC15",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC16": {
             "NAME": "YC16",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC17": {
             "NAME": "YC17",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC18": {
             "NAME": "YC18",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC19": {
             "NAME": "YC19",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC20": {
             "NAME": "YC20",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC21": {
             "NAME": "YC21",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC22": {
             "NAME": "YC22",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC23": {
             "NAME": "YC23",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC24": {
             "NAME": "YC24",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC25": {
             "NAME": "YC25",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC26": {
             "NAME": "YC26",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC27": {
             "NAME": "YC27",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC28": {
             "NAME": "YC28",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC29": {
             "NAME": "YC29",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC30": {
             "NAME": "YC30",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC31": {
             "NAME": "YC31",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC32": {
             "NAME": "YC32",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC33": {
             "NAME": "YC33",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC34": {
             "NAME": "YC34",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC35": {
             "NAME": "YC35",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC36": {
             "NAME": "YC36",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC37": {
             "NAME": "YC37",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC38": {
             "NAME": "YC38",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC39": {
             "NAME": "YC39",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC40": {
             "NAME": "YC40",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC41": {
             "NAME": "YC41",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC42": {
             "NAME": "YC42",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "YC43": {
             "NAME": "YC43",
-            "TYPE": "VKICK"
+            "TYPE": "VKICK",
+            "KICK": "0.0"
         },
         "BPM01": {
             "NAME": "BPM01",

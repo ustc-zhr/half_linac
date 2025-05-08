@@ -4,6 +4,7 @@ import sys
 from subprocess import Popen,run
 import os
 import time
+import signal
 
 from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.QtCore import QThread
@@ -18,40 +19,68 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.subprocesses=[]
 
-        # 按钮绑定
+        # connect button
         self.pushButton_4.clicked.connect(self.start_cor)
         self.pushButton_2.clicked.connect(self.cor_off)
         self.pushButton_3.clicked.connect(self.stop_cor)
 
-        # 初始化参数
+        # initial parameters
         self.samplingIntervalSLineEdit.setText('6') # s
         self.correctorAccuracyUmLineEdit.setText('10') # um
         self.sampPerStepLineEdit.setText('2') # 
         
     
     # start cor
+    # def start_cor(self):
+    #     proc1=Popen("python3 correct.py start_cor "+self.comboBox.currentText()+' '+self.samplingIntervalSLineEdit.text()+' '+self.correctorAccuracyUmLineEdit.text()+' '+self.sampPerStepLineEdit.text(),cwd=st.rootpath+"/apps/orbit_correct",shell=True) 
+    #     self.subprocesses.append(proc1)
     def start_cor(self):
-        proc1=Popen("python3 correct.py start_cor "+self.comboBox.currentText()+' '+self.samplingIntervalSLineEdit.text()+' '+self.correctorAccuracyUmLineEdit.text()+' '+self.sampPerStepLineEdit.text(),cwd=st.rootpath+"/apps/orbit_correct",shell=True) 
-        self.subprocesses.append(proc1)
+        cmd = [
+            "python3", "correct.py", "start_cor",
+            self.comboBox.currentText(),
+            self.samplingIntervalSLineEdit.text(),
+            self.correctorAccuracyUmLineEdit.text(),
+            self.sampPerStepLineEdit.text()
+        ]
+        # 跨平台启动进程（确保进程组独立）
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            kwargs["start_new_session"] = True  # Unix: 新会话组
 
+        proc = Popen(
+            cmd,
+            cwd=st.rootpath + "/apps/orbit_correct",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+        # print(f"启动子进程 PID: {proc.pid}")    
 
 
 
     # cor_off
+    # def cor_off(self):
+    #     Popen("python3 correct.py cor_off",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
     def cor_off(self):
-        Popen("python3 correct.py cor_off",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
-
-
+        Popen(
+            ["python3", "correct.py", "cor_off"],
+            cwd=st.rootpath + "/apps/orbit_correct",
+            shell=False
+        )
 
 
     # stop_cor
     def stop_cor(self):
-        print('proc:',self.subprocesses)
         for pro in self.subprocesses:
-            print(pro)
-            pro.kill()
+            pro.send_signal(signal.SIGTERM)
             pro.wait()
-
+    
+    # 窗口关闭事件
+    def closeEvent(self, event):
+        self.stop_cor()  # 调用停止函数
+        event.accept()
 
 
 
