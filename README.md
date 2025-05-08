@@ -1,27 +1,33 @@
 # 开发进度
 
-2024-3-11-Libiaobin
+###### 2025-5-8-Zhanghaoran
+
+- 给orbit corrrect添加独立gui，可自定义相关参数（如采样间隔，校正精度）；并增加校正停止和归零功能按钮。
+
+###### 2025-4-29-Zhanghaoran
+
+- 重新调整了launcher的gui布局，并将与VM相关的功能（start VM;start IOC; add error）单独放在一个用户界面，且静态误差可自定义。
+
+###### 2025-4-24-Zhanghaoran
+
+- 鉴于BPM数量多，`orbit_display`界面增加了选择显示一定范围BPMs的选项，并添加按钮可查看所有BPM的实时读数。
+
+###### 2025-4-17-Zhanghaoran
+
+- 发射度测量界面增加了`simply VM`按钮，可根据所选取的Q铁和FLAG简化lattice，加速虚拟加速器运行速度，而`full VM`按钮可将lattice恢复到原始状态
+
+###### 2024-3~2025-4 Zhangshancai
+
+- 内容较多，待补充。。。
+
+###### 2024-3-11-Libiaobin
 
 - 以 `lattice_ini.lte` =>` lattice.json` 作为输入文件，自动生成 quad.template, bpm.template 等 IOC 文件。后面如果需要修改元件名称和PV命名规则，直接修改`lattice_ini.lte` 文件即可。见`gen_substitution_file()`
 - 以 `lattice.json`文件作为中间媒介：
   - 当epics修改了 quad 的K1值时，IOC监测到PV值发生了改变，将自动更新 `lattice.json` 文件。当前只添加了 QUAD。
   - Elegant 每次循环运行时，都会重新读取 `lattice.json` 文件，生成 `lattice.lte`，然后运行。注意，lattice_ini.lte 文件没有改变。
 
-2025-4-17-Zhanghaoran
 
-- 发射度测量界面增加了`simply VM`按钮，可根据所选取的Q铁和FLAG简化lattice，加速虚拟加速器运行速度，而`full VM`按钮可将lattice恢复到原始状态
-
-2025-4-24-Zhanghaoran
-
-- 鉴于BPM数量多，`orbit_display`界面增加了选择显示一定范围BPMs的选项，并添加按钮可查看所有BPM的实时读数。
-
-2025-4-29-Zhanghaoran
-
-- 重新调整了launcher的gui布局，并将与VM相关的功能（start VM;start IOC; add error）单独放在一个用户界面，且静态误差可自定义。
-
-2025-5-8-Zhanghaoran
-
-- 给orbit corrrect添加的gui，可自定义相关参数，如采样间隔，校正精度。
 
 # Quick start
 
