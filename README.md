@@ -1,4 +1,23 @@
-# Date: 2024-04-24
+# 开发进度
+
+2024-3-11-Libiaobin
+
+- 以 `lattice_ini.lte` =>` lattice.json` 作为输入文件，自动生成 quad.template, bpm.template 等 IOC 文件。后面如果需要修改元件名称和PV命名规则，直接修改`lattice_ini.lte` 文件即可。见`gen_substitution_file()`
+- 以 `lattice.json`文件作为中间媒介：
+  - 当epics修改了 quad 的K1值时，IOC监测到PV值发生了改变，将自动更新 `lattice.json` 文件。当前只添加了 QUAD。
+  - Elegant 每次循环运行时，都会重新读取 `lattice.json` 文件，生成 `lattice.lte`，然后运行。注意，lattice_ini.lte 文件没有改变。
+
+2025-4-17-Zhanghaoran
+
+- 发射度测量界面增加了`simply VM`按钮，可根据所选取的Q铁和FLAG简化lattice，加速虚拟加速器运行速度，而`full VM`按钮可将lattice恢复到原始状态
+
+2025-4-24-Zhanghaoran
+
+- 鉴于BPM数量多，`orbit_display`界面增加了选择显示一定范围BPMs的选项，并添加按钮可查看所有BPM的实时读数。
+
+2025-4-29-Zhanghaoran
+
+- 重新调整了launcher的gui布局，并将与VM相关的功能（start VM;start IOC; add error）单独放在一个用户界面，且静态误差可自定义。
 
 
 
@@ -121,8 +140,6 @@ git push origin main
 
 
 
-
-
 # 程序主要功能
 
 - ## 虚拟加速器
@@ -137,7 +154,7 @@ git push origin main
 
 	- 第一次运行，将生成 db 文件夹下的 substitutions 文件
 
-	- 第一次运行，也将根据 json 文件初始化 epics 中所有四极铁等元件的初始pv值
+	- 建立起IOC，将根据 json 文件初始化 epics 中所有四极铁等元件的初始pv值
 
 	- 利用onChange函数监听元件的pv值，一旦改变，更新 json 文件
 
@@ -145,7 +162,7 @@ git push origin main
 
 - ## apps
 	
-	- launcher 显示主界面，各按钮调用其他调束软件，单独开一个线程进行。
+	- launcher 显示主界面，各按钮调用其他调束功能，单独开一个线程进行。
 	- 各种上层物理调束程序
 	  - bba
 	  - beam_monitor
@@ -156,26 +173,3 @@ git push origin main
 ​					  。。。。。。
 
 
-
-
-
-# 开发进度
-
-2024-3-11-Libiaobin
-
-- 以 lattice_ini.lte => lattice.json 作为输入文件，自动生成 quad.template, bpm.template 等 IOC 文件。后面如果需要修改元件名称和PV命名规则，直接修改`lattice_ini.lte` 文件即可。见`gen_substitution_file()`
-- 以 `lattice.json`文件作为中间媒介：
-  - 当epics修改了 quad 的K1值时，IOC监测到PV值发生了改变，将自动更新 `lattice.json` 文件。当前只添加了 QUAD。
-  - Elegant 每次循环运行时，都会重新读取 `lattice.json` 文件，生成 `lattice.lte`，然后运行。注意，lattice_ini.lte 文件没有改变。
-
-2025-4-17-Zhanghaoran
-
-- 发射度测量界面增加了simply VM按钮，可根据所选取的Q铁和FLAG简化lattice，加速虚拟加速器运行速度，而full VM按钮可将lattice恢复到原始状态
-
-2025-4-24-Zhanghaoran
-
-- 鉴于BPM数量多，orbit_display界面增加了选择显示一定范围BPMs的选项，并添加按钮可查看所有BPM的实时读数。
-
-2025-4-29-Zhanghaoran
-
-- 重新调整了launcher和VM的gui布局以及静态误差添加功能，将与VM相关的功能（start VM;start IOC; add error）单独放在一个界面，且误差可自定义。

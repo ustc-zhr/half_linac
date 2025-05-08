@@ -1,7 +1,7 @@
 
 import os
 import sys
-from subprocess import Popen
+from subprocess import Popen,run
 import os
 import time
 
@@ -16,6 +16,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        self.subprocesses = []
 
         self.start_ioc.clicked.connect(self.startioc)
         self.start_vm.clicked.connect(self.startvm)
@@ -24,24 +25,26 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.QDXDYvalue.setText('0') # um
         
-        self.textEdit.append('zzz')
- 
+    
     # softIOC
     def startioc(self):
+        self.textEdit.append('start softIOC')
         Popen("python3 main.py",cwd=st.rootpath+"/softIOC",shell=True) 
+        
     # VM
     def startvm(self):
-        Popen("python3 start_VM.py",cwd=st.rootpath+"/virtual_machine/half_elegant",shell=True) 
+        self.textEdit.append('start vm')
+        Popen("python3 start_VM.py",cwd=st.rootpath+"/virtual_machine/half_elegant",shell=True)
 
     # add_err
     def staticerr(self): #generate QUAD xy random error
+        self.textEdit.append('add static error {\t Q:'+self.QDXDYvalue.text()+' um}')
         Popen("python3 err_gene_VM.py gene_err "+self.QDXDYvalue.text(),cwd=st.rootpath+"/virtual_machine/half_elegant",shell=True)
     #
     def erroff(self): #turn off QUAD xy random error
+        self.textEdit.append('err is off')
         self.QDXDYvalue.setText('0')
         Popen("python3 err_gene_VM.py err_off",cwd=st.rootpath+"/virtual_machine/half_elegant",shell=True)
-
-
 
 
 if __name__ == '__main__':

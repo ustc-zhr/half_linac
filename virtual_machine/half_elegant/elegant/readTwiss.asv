@@ -1,0 +1,81 @@
+ clear all;close all;clc
+
+
+
+%% twiss
+% data1 = importdata('twissx.DAT');
+% data2 = importdata('twissy.DAT');
+% figure
+% subplot(2,2,1)
+% plot(data1.data(:,1),data1.data(:,2),data2.data(:,1),data2.data(:,2),'linewidth',2);set(gca,'fontname','arial','fontsize',16,'linewidth',2);xlabel('s (m)');ylabel('\beta (m)');
+% latticeplot('one.mag',-2,1.5)
+% legend('\beta_x','\beta_y','','box','off')
+% subplot(2,2,2)
+% plot(data1.data(:,1),data1.data(:,3),data2.data(:,1),data2.data(:,3),'linewidth',2);set(gca,'fontname','arial','fontsize',16,'linewidth',2);xlabel('s (m)');ylabel('\alpha');
+% latticeplot('one.mag',0,1.5)
+% legend('\alpha_x','\alpha_y','','box','off')
+% subplot(2,2,3)
+% plot(data1.data(:,1),data1.data(:,4),data2.data(:,1),data2.data(:,4),'linewidth',2);set(gca,'fontname','arial','fontsize',16,'linewidth',2);xlabel('s (m)');ylabel('\eta');
+% latticeplot('one.mag',0,0.06)
+% legend('\eta_x','\eta_y','','box','off')
+% subplot(2,2,4)
+% plot(data1.data(:,1),data1.data(:,5),data2.data(:,1),data2.data(:,5),'linewidth',2);set(gca,'fontname','arial','fontsize',16,'linewidth',2);xlabel('s (m)');ylabel('\eta^{\prime}');
+% latticeplot('one.mag',0,0.1)
+% legend('\eta^{\prime}_x','\eta^{\prime}_y','','box','off')
+% 
+% set(gcf,'unit','centimeters','position',[10 2 28 20]);
+% 
+% % add lattice distribution
+% % latticeplot('one2.mag',-2,1)
+% % legend('\beta_x','\beta_y','','box','off')
+% % return
+%% cen
+databeamzie = importdata('Cen.DAT');
+figure
+plot(databeamzie.data(:,1),1e3*databeamzie.data(:,2),databeamzie.data(:,1),1e3*databeamzie.data(:,3),'linewidth',2);set(gca,'fontname','arial','fontsize',16,'linewidth',2);xlabel('s (m)');ylabel('<x>/<y> (mm)');
+legend('<x>','<y>','box','off')
+
+% add lattice distribution
+latticeplot('one.mag',-0.5,0.1)
+legend('\sigma_x','\sigma_y','','box','off')
+set(gcf,'unit','centimeters','position',[10 2 58 12]);
+%狭缝前后
+% data1 = importdata('W1.DAT');
+% sigmp1 = mean(data1.data(:,1));
+% sigmx1 = mean(data1.data(:,2));
+% number1 = length(data1.data(:,1));
+% data2 = importdata('W2.DAT');
+% sigmp2 = mean(data2.data(:,1));
+% sigmx2 = mean(data2.data(:,2));
+% number2 = length(data2.data(:,1));
+% %plot
+% figure;scatter(data1.data(:,2),data1.data(:,3),3);xlabel('x');ylabel('y');set(gca,'fontname','arial','fontsize',14,'linewidth',1.5)
+% figure;scatter(data2.data(:,2),data2.data(:,3),3);xlabel('x');ylabel('y');set(gca,'fontname','arial','fontsize',14,'linewidth',1.5)
+
+% 出口发射度
+% data_enx = importdata('enx.DAT');
+% data_eny = importdata('enY.DAT');
+% figure;
+% % subplot(1,2,1);
+% histogram(data_enx.data,30);title('enx')
+% % subplot(1,2,2);histogram(data_eny.data,30);title('eny')
+% set(gca,'fontname','arial','fontsize',14,'linewidth',1.5)
+
+%横向包络变化
+% data3 = importdata('cen-env.DAT');
+% cenenv=data3.data;
+% s = cenenv(:,1);
+% CxMin = cenenv(:,2);
+% CyMin = cenenv(:,3);
+% CxMax = cenenv(:,4);
+% CyMax = cenenv(:,5);
+% CxMean = cenenv(:,6);
+% CyMean = cenenv(:,7);
+% figure(1);plot(s,CxMin,s,CxMax,s,CxMean)
+% figure(2);plot(s,CyMin,s,CyMax,s,CyMean)
+
+
+
+
+
+

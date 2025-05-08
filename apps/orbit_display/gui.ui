@@ -42,7 +42,7 @@
              <x>20</x>
              <y>20</y>
              <width>121</width>
-             <height>291</height>
+             <height>243</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -78,7 +78,7 @@
              </layout>
             </item>
             <item>
-             <layout class="QFormLayout" name="formLayout_3">
+             <layout class="QGridLayout" name="gridLayout" columnstretch="1,1">
               <item row="0" column="0">
                <widget class="QLabel" name="label_5">
                 <property name="text">
@@ -102,7 +102,7 @@
              </layout>
             </item>
             <item>
-             <layout class="QFormLayout" name="formLayout_2">
+             <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1">
               <item row="0" column="0">
                <widget class="QLabel" name="bPMSLabel">
                 <property name="text">
@@ -156,7 +156,7 @@
              <x>20</x>
              <y>20</y>
              <width>121</width>
-             <height>291</height>
+             <height>243</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_9">
@@ -192,7 +192,7 @@
              </layout>
             </item>
             <item>
-             <layout class="QFormLayout" name="formLayout_4">
+             <layout class="QGridLayout" name="gridLayout_3" rowstretch="0,0" columnstretch="1,1">
               <item row="0" column="0">
                <widget class="QLabel" name="label_7">
                 <property name="text">
@@ -230,7 +230,7 @@
              </layout>
             </item>
             <item>
-             <layout class="QFormLayout" name="formLayout_5">
+             <layout class="QGridLayout" name="gridLayout_4" rowstretch="0,0" columnstretch="1,1">
               <item row="0" column="0">
                <widget class="QLabel" name="bPMSLabel_2">
                 <property name="text">
@@ -254,19 +254,6 @@
              </layout>
             </item>
            </layout>
-          </widget>
-          <widget class="QPushButton" name="pushButton">
-           <property name="geometry">
-            <rect>
-             <x>20</x>
-             <y>320</y>
-             <width>121</width>
-             <height>23</height>
-            </rect>
-           </property>
-           <property name="text">
-            <string>PushButton</string>
-           </property>
           </widget>
          </widget>
         </item>

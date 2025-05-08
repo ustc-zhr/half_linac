@@ -16,15 +16,15 @@ RESPM_FILE = st.rootpath+'/apps/orbit_correct/response.dat'
 filepath   = st.rootpath+"/apps/orbit_correct/clicked.txt"
 N_BPM = 41 #41
 N_COR = 41 #41
-d_value = 0.01*0.001
+d_value = 0.02*0.001
 max_value = 0.001
 timer_interval = 5
 cor_x_list = ['XC03', 'XC04', 'XC05', 'XC06', 'XC07', 'XC08', 'XC09', 'XC10', 'XC11', 'XC12', 'XC13', 'XC14', 'XC15', 'XC16', 'XC17', 'XC18', 'XC19', 'XC20', 'XC21', 'XC22', 'XC23', 'XC24', 'XC25', 'XC26', 'XC27', 'XC28', 'XC29', 'XC30', 'XC31', 'XC32', 'XC33', 'XC34', 'XC35', 'XC36', 'XC37', 'XC38', 'XC39', 'XC40', 'XC41', 'XC42', 'XC43']
 cor_y_list = ['YC03', 'YC04', 'YC05', 'YC06', 'YC07', 'YC08', 'YC09', 'YC10', 'YC11', 'YC12', 'YC13', 'YC14', 'YC15', 'YC16', 'YC17', 'YC18', 'YC19', 'YC20', 'YC21', 'YC22', 'YC23', 'YC24', 'YC25', 'YC26', 'YC27', 'YC28', 'YC29', 'YC30', 'YC31', 'YC32', 'YC33', 'YC34', 'YC35', 'YC36', 'YC37', 'YC38', 'YC39', 'YC40', 'YC41', 'YC42', 'YC43']
-bpm_y_list = ['BPM03', 'BPM04', 'BPM05', 'BPM06', 'BPM07', 'BPM08', 'BPM09', 'BPM10', 'BPM11', 'BPM12', 'BPM13', 'BPM14', 'BPM15', 'BPM16', 'BPM17', 'BPM18', 'BPM19', 'BPM20', 'BPM21', 'BPM22', 'BPM23', 'BPM24', 'BPM25', 'BPM26', 'BPM27', 'BPM28', 'BPM29', 'BPM30', 'BPM31', 'BPM32', 'BPM33', 'BPM34', 'BPM35', 'BPM36', 'BPM37', 'BPM38', 'BPM39', 'BPM40', 'BPM41', 'BPM42', 'BPM43']
+bpm_list = ['BPM03', 'BPM04', 'BPM05', 'BPM06', 'BPM07', 'BPM08', 'BPM09', 'BPM10', 'BPM11', 'BPM12', 'BPM13', 'BPM14', 'BPM15', 'BPM16', 'BPM17', 'BPM18', 'BPM19', 'BPM20', 'BPM21', 'BPM22', 'BPM23', 'BPM24', 'BPM25', 'BPM26', 'BPM27', 'BPM28', 'BPM29', 'BPM30', 'BPM31', 'BPM32', 'BPM33', 'BPM34', 'BPM35', 'BPM36', 'BPM37', 'BPM38', 'BPM39', 'BPM40', 'BPM41', 'BPM42', 'BPM43']
 
 class correct:
-    def __init__(self, timer_interval):
+    def __init__(self, timer_interval=None, cor_accuracy=None, samples_perstep=None):
         self.a = 0
         self.pvl = []
         self.pv_val = []
@@ -34,7 +34,9 @@ class correct:
         self.pvCORy = []
         self.ORMx_n,self.ORMy_n = self.load_response_matrix()
         self.timer_interval = timer_interval
-        self.current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.cor_accuracy = cor_accuracy
+        self.samples_perstep = samples_perstep
+        # self.current_dir = os.path.dirname(os.path.abspath(__file__))
 
     def load_response_matrix(self):  
         RM = np.loadtxt(RESPM_FILE)
@@ -46,11 +48,11 @@ class correct:
         return(ORMx_n,ORMy_n)
 
     def init_BPM_pv(self):  
-        for j in bpm_y_list:  
+        for j in bpm_list:  
             pv_BPMx = PV("HALF:IN:BPM:" + j + ":X:ao")  
             pv_BPMy = PV("HALF:IN:BPM:" + j + ":Y:ao")  
             self.pvBPMx.append(pv_BPMx)  
-            self.pvBPMy.append(pv_BPMy)  
+            self.pvBPMy.append(pv_BPMy) 
   
     def init_COR_pv(self):  
         for j in cor_x_list:  
@@ -256,44 +258,78 @@ class correct:
     def Corrector_one_to_one(self):
         #先测量校正铁的小量变化引入的相邻的下游bpm变化，再反算校正铁应该改变的数值
         #校正强度可以加一个修正系数，目前都没有加
-        n_averages=2
+        n_averages=self.samples_perstep # 每次采样个数
         for j in range(N_BPM):
-            xbpmVal = 0
-            ybpmVal = 0
-            xbpmVald = 0
-            ybpmVald = 0
-            hcorrVal = 0
-            vcorrVal = 0
+            print('begin correct:',bpm_list[j],'\n')
+
+            xbpmVal = 0.0
+            ybpmVal = 0.0
+            xbpmVald = 0.0
+            ybpmVald = 0.0
+            hcorrVal = 0.0
+            vcorrVal = 0.0
+
+            # 对校正子和BPM进行多次采样平均
             for i in range(n_averages):
-                time.sleep(4)
+                time.sleep(self.timer_interval)
                 # pvBPMx_valt = self.pvBPMx[j].get()
                 # pvBPMy_valt = self.pvBPMy[j].get()
                 # hcorrValt = self.pvCORx[j].get()
                 # vcorrValt = self.pvCORy[j].get()
+                # xbpmVal = caget('HALF:IN:BPM:BPM03:X:ao')
+                # ybpmVal = caget('HALF:IN:BPM:BPM03:Y:ao')
+                # hcorrVal = caget(self.pvCORx[j])
+                # vcorrVal = caget(self.pvCORy[j]) #校正铁要不要进行平均
                 xbpmVal += self.pvBPMx[j].get()
                 ybpmVal += self.pvBPMy[j].get()
                 hcorrVal += self.pvCORx[j].get()
-                vcorrVal += self.pvCORy[j].get() #校正铁要不要进行平均？
+                vcorrVal += self.pvCORy[j].get() #校正铁要不要进行平均
             xbpmVal = xbpmVal/n_averages
             ybpmVal = ybpmVal/n_averages
             hcorrVal = hcorrVal/n_averages
             vcorrVal = vcorrVal/n_averages
+
+            # 微调校正子后对BPM进行多次采样平均
             self.pvCORx[j].put(hcorrVal+d_value)
             self.pvCORy[j].put(vcorrVal+d_value)
             for i in range(n_averages):
-                time.sleep(4)
+                time.sleep(self.timer_interval)
                 xbpmVald += self.pvBPMx[j].get()
                 ybpmVald += self.pvBPMy[j].get()
             xbpmVald = xbpmVald/n_averages
             ybpmVald = ybpmVald/n_averages
-            delt_coh = xbpmVal /(xbpmVald-xbpmVal)*d_value
-            delt_cov = ybpmVal /(ybpmVald-ybpmVal)*d_value
-            hcorrVal = hcorrVal-delt_coh
-            vcorrVal = vcorrVal-delt_cov
+
+            # 获得响应函数
+            Rx = (xbpmVald-xbpmVal)/d_value
+            Ry = (ybpmVald-ybpmVal)/d_value
+            print('Rx=',Rx,' Ry=',Ry)
+
+            #根据响应函数调整上游校正子
+            hcorrVal = hcorrVal-xbpmVal / Rx
+            vcorrVal = vcorrVal-ybpmVal / Ry
             self.pvCORx[j].put(hcorrVal)
             self.pvCORy[j].put(vcorrVal)
-            time.sleep(2)
+            time.sleep(self.timer_interval)
 
+            # 根据BPM精度进一步判断调整校正子
+            xbpmVald = self.pvBPMx[j].get()
+            ybpmVald = self.pvBPMy[j].get()
+            loop = 0
+            while abs(xbpmVald)>self.cor_accuracy or abs(ybpmVald)>self.cor_accuracy:    
+                loop += 1
+                print('cor loop ',loop,'for',bpm_list[j],'\n')
+                hcorrVal = hcorrVal-xbpmVald /Rx
+                vcorrVal = vcorrVal-ybpmVald /Ry
+                self.pvCORx[j].put(hcorrVal)
+                self.pvCORy[j].put(vcorrVal)
+                time.sleep(self.timer_interval)
+                xbpmVald = self.pvBPMx[j].get()
+                ybpmVald = self.pvBPMy[j].get()
+            
+            print('finish correct:',bpm_list[j])
+            print(cor_x_list[j],'/',cor_y_list[j],': (',hcorrVal,',',vcorrVal,')')
+            print(bpm_list[j],':(',xbpmVald,',',ybpmVald,')\n')
+            
         #响应矩阵方法的
         # for j in range(N_BPM):
         #     xbpmVal = self.pvBPMx[j].get()
@@ -333,16 +369,30 @@ if __name__=='__main__':
 #    jsonpath  = st.rootpath+"/virtual_machine/half_elegant/halflinac.json" 
 #    iocpath   = st.rootpath+"/softIOC/halflinac"
 
-    f_res = correct(timer_interval=2)
-    #1. irfel.json => ./softIOC/db/half.substitutions 
-    f_res.init_BPM_pv()
-    f_res.init_COR_pv()
-    #print(f_res.ORMx_n)
-    #f_res.Corrector_h(1)
-    last_modified = os.path.getmtime(filepath)
-    current_modified =last_modified
+
+
     # f_res.start_timer_h()
     # f_res.start_timer_v()
     #same to f_res.start_timer()
-    f_res.Corrector_one_to_one()
+    
+    try:
+        if sys.argv[1] == "start_cor":
+            method = sys.argv[2]
+            samp_interval = float(sys.argv[3]) #s
+            cor_accuracy = float(sys.argv[4])*1e-6 #m
+            samples_perstep = int(sys.argv[5])
+            f_res = correct(samp_interval,cor_accuracy,samples_perstep) 
+            f_res.init_BPM_pv()
+            f_res.init_COR_pv()
+            last_modified = os.path.getmtime(filepath)
+            current_modified =last_modified
+            if  method == "one-to-one":
+                f_res.Corrector_one_to_one()
+        elif sys.argv[1] == "cor_off":
+            f_res = correct()
+            f_res.reset_cor()
 
+        
+    except:
+        print('correct error!')
+        pass

@@ -72,7 +72,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def plotorbit_x(self):
         self.init_pv()
-        pvl_val = self.pvlx_val
+        pvl_val = [num*1000 for num in self.pvlx_val]#mm
 
         if self.hold_1.isChecked()==True:
             pass
@@ -123,7 +123,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def plotorbit_y(self):
         self.init_pv()
-        pvl_val = self.pvly_val
+        pvl_val = [num*1000 for num in self.pvly_val]#mm
 
         if self.hold_2.isChecked() == True:
             pass
@@ -162,9 +162,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.bPMSLineEdit_2.returnPressed.connect(setBPMystart)
         self.bPMYLineEdit.returnPressed.connect(setBPMyend)
         if self.BPMystart != None:
-            self.graphWidget_1.canvas.axes.set_xlim(left=self.BPMystart)
+            self.graphWidget_2.canvas.axes.set_xlim(left=self.BPMystart)
         if self.BPMyend != None:
-            self.graphWidget_1.canvas.axes.set_xlim(right=self.BPMyend)        
+            self.graphWidget_2.canvas.axes.set_xlim(right=self.BPMyend)        
 
         x = np.linspace(1,len(pvl_val),len(pvl_val))
         self.graphWidget_2.canvas.axes.plot(x, pvl_val, '-o')

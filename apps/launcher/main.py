@@ -21,9 +21,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton.clicked.connect(self.start_orbit_display)
 
         self.pushButton_4.clicked.connect(self.start_bba)
-        
+
         self.measure_response.clicked.connect(self.measure_res)
-        self.orbit_correct.clicked.connect(self.correct_x)
+        self.orbit_correct.clicked.connect(self.orb_correct)
         self.cor_off.clicked.connect(self.coroff)
         self.cor_stop.clicked.connect(self.corstop)
     
@@ -62,13 +62,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
     # -------------
     def measure_res(self): #measure response matrix
         Popen("python3 findresponse.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
-    def correct_x(self):
-        Popen("python3 correct.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
+    # def correct_x(self):
+    #     Popen("python3 correct.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
     def coroff(self):
         Popen("python3 cor_off.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
     def corstop(self):
         with open(st.rootpath+"/apps/orbit_correct/clicked.txt", 'w') as f:  
-            f.write('clicked')            
+            f.write('clicked')
+
+    def orb_correct(self):
+        Popen("python3 mainOrbCor.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)    
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

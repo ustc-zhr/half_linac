@@ -27,8 +27,8 @@ class myWindow(QMainWindow, Ui_Form):
         # init pv
         self.init_pv()
 
-        self.pvlx_val = [round(num, 3) for num in self.pvlx_val]
-        self.pvly_val = [round(num, 3) for num in self.pvly_val]
+        self.pvlx_val = [round(num*1000, 3) for num in self.pvlx_val]
+        self.pvly_val = [round(num*1000, 3) for num in self.pvly_val]
         # BPMx 1-10
         self.bPMx01LineEdit.setText(str(self.pvlx_val[0]))
         self.bPMx02LineEdit.setText(str(self.pvlx_val[1]))

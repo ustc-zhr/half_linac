@@ -23,39 +23,44 @@ if __name__=='__main__':
     last_modified = os.path.getmtime(jsonpath) #ini time stamp of json file
     lte.json2lte_ele()
     # first run elegant
-    print("initial Elegant is running ...\n")
+    print("\ninitial Elegant is running ...")
     os.chdir("./elegant")
     os.system("./one")
     os.chdir(top_path)
     # first update bpm/flag PV data 
-    print("initial update bpm data ...\n")
     lte.broadcast_bpm()
+    print("initial bpm data is updated  ...")
     # lte.set_bpmPV()
-    print("initial update flag data ...\n")
-    lte.broadcast_flag()    
-    print("VM(Elegant) is waiting changes")
+    lte.broadcast_flag() 
+    print("initial flag data is updated  ...")
+    print("VM is waiting changes\n")
 
 
     period = 1  #1s    
     while True:
         time.sleep(period)
+        print('wait')
         current_modified = os.path.getmtime(jsonpath) #time stamp of json file
         
 
         if current_modified != last_modified:
-            print("json is changed")
+            print("\njson is changed")
             lte.json2lte_ele()
             last_modified = current_modified
             # run elegant
-            print("update the Elegant ...\n")
+            print("update the Elegant ...")
             os.chdir("./elegant")
             os.system("./one")
             os.chdir(top_path)
-            print("update bpm data ...\n")
             # update bpm/flag PV data
-            lte.broadcast_bpm()
-            print("update flag data ...\n")
-            lte.broadcast_flag()
-            print("VM(Elegant) is waiting changes")
+            try:
+                lte.broadcast_bpm()
+                print("update bpm data ...")
+                lte.broadcast_flag()
+                print("update flag data ...")
+                print("VM is waiting changes\n")
+            except:
+                print("error with update bpm/flag PV data")
+                pass
 
 

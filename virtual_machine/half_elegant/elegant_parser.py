@@ -7,7 +7,7 @@ from math import *
 import random
 from collections import defaultdict
 import sdds
-import epics 
+from epics import caput, caget, caput_many
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -231,13 +231,27 @@ class elegant_parser:
         broadcast the BPM values to epics PV
         '''
         bpm = self.get_bpmdata()
-         
+        
+        pvlx = []
+        pvly = []
+        pvlvalx = []
+        pvlvaly = []
         for key in bpm :
-            pvname = "HALF:IN:BPM:"+key+":X:ao"
-            epics.caput(pvname, bpm[key]['Cx'])
+            pvlx_temp = "HALF:IN:BPM:"+key+":X:ao"
+            pvlvalx_temp  = bpm[key]['Cx']
 
-            pvname = "HALF:IN:BPM:"+key+":Y:ao"
-            epics.caput(pvname, bpm[key]['Cy'])     
+            pvly_temp = "HALF:IN:BPM:"+key+":Y:ao"
+            pvlvaly_temp  = bpm[key]['Cy']
+
+            pvlx.append(pvlx_temp)
+            pvly.append(pvly_temp)
+            pvlvalx.append(pvlvalx_temp)
+            pvlvaly.append(pvlvaly_temp)
+        
+        # put the values
+        caput_many(pvlx,pvlvalx) 
+        caput_many(pvly,pvlvaly) 
+
 
     def broadcast_flag(self):
         # get watch channel
@@ -255,7 +269,7 @@ class elegant_parser:
                 tmp = self._get_watch_image(key)
                 
                 # print("broadcasting flag image data ...")
-                epics.caput(channel, tmp)
+                caput(channel, tmp)
                 # print("broadcasting flag image data finished.")
 
     def _get_watch_image(self, file_id):
