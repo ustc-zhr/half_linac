@@ -1,0 +1,13 @@
+record(ao, "HALF:IN:COR:$(COR):ao") {
+  field(VAL , "0.0")
+  field(DRVL, "-10.0")
+  field(DRVH, "10.0")
+  field(PINI, "YES")
+  field(FLNK, "HALF:IN:COR:$(COR):ai")
+}
+record(ai, "HALF:IN:COR:$(COR):ai") {
+  field(SCAN , "1 second")
+  field(INP , "HALF:IN:COR:$(COR):ao NPP NMS")
+  field(FLNK, "HALF:IN:COR:$(COR):ai")
+}
+
