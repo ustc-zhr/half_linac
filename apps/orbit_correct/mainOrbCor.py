@@ -2,12 +2,13 @@
 import os
 import sys
 from subprocess import Popen,run
+import subprocess
 import os
 import time
 import signal
 
 from PyQt5.QtWidgets import QMainWindow, QApplication
-from PyQt5.QtCore import QThread
+from PyQt5.QtCore import QThread, Qt
 from OrbCorgui import Ui_MainWindow
 
 
@@ -23,31 +24,37 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_4.clicked.connect(self.start_cor)
         self.pushButton_2.clicked.connect(self.cor_off)
         self.pushButton_3.clicked.connect(self.stop_cor)
+        # self.pushButton.clicked.connect(self.printzz)
 
         # initial parameters
         self.samplingIntervalSLineEdit.setText('6') # s
         self.correctorAccuracyUmLineEdit.setText('10') # um
         self.sampPerStepLineEdit.setText('2') # 
         
+    def target_BPMs(self):
+        checked_items = []
+        for index in range(self.listWidget.count()):
+            item = self.listWidget.item(index)
+            if item.checkState() == Qt.Checked:
+                checked_items.append(item.text())
+        return checked_items
+        
     
-    # start cor
-    # def start_cor(self):
-    #     proc1=Popen("python3 correct.py start_cor "+self.comboBox.currentText()+' '+self.samplingIntervalSLineEdit.text()+' '+self.correctorAccuracyUmLineEdit.text()+' '+self.sampPerStepLineEdit.text(),cwd=st.rootpath+"/apps/orbit_correct",shell=True) 
-    #     self.subprocesses.append(proc1)
+
     def start_cor(self):
+        target_BPMlist = self.target_BPMs()
         cmd = [
-            "python3", "correct.py", "start_cor",
-            self.comboBox.currentText(),
-            self.samplingIntervalSLineEdit.text(),
-            self.correctorAccuracyUmLineEdit.text(),
-            self.sampPerStepLineEdit.text()
+            "python3", "correct.py",                  #0
+            "start_cor",                              #1
+            self.comboBox.currentText(),              #2
+            self.samplingIntervalSLineEdit.text(),    #3
+            self.correctorAccuracyUmLineEdit.text(),  #4
+            self.sampPerStepLineEdit.text(),          #5
+            ",".join(target_BPMlist)                  #6
         ]
         # 跨平台启动进程（确保进程组独立）
         kwargs = {}
-        if sys.platform == "win32":
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        else:
-            kwargs["start_new_session"] = True  # Unix: 新会话组
+        kwargs["start_new_session"] = True  # Unix: 新会话组
 
         proc = Popen(
             cmd,
@@ -55,6 +62,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
             shell=False,  # 避免 shell 进程干扰
             **kwargs
         )
+        # 获取输出
+        # stdout, stderr = proc.communicate()
+        # print("输出:", stdout.decode())
         self.subprocesses.append(proc)
         # print(f"启动子进程 PID: {proc.pid}")    
 

@@ -106,13 +106,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def measure_res(self): #measure response matrix
         Popen("python3 findresponse.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
 
-    # def coroff(self):
-    #     Popen("python3 cor_off.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
-
-    # def corstop(self):
-    #     with open(st.rootpath+"/apps/orbit_correct/clicked.txt", 'w') as f:  
-    #         f.write('clicked')
-
     def orb_correct(self):
         # Popen("python3 mainOrbCor.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)    
         kwargs = {}
@@ -125,16 +118,17 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
         self.subprocesses.append(proc)  
 
-    # 窗口关闭事件
+
+
+    # windows close event
     def closeEvent(self, event):
         self.stop_subpro()  # 调用停止函数
         event.accept()
 
-    # 停止函数：关闭子进程
+    # stop function：close the subprocesses
     def stop_subpro(self):
         for pro in self.subprocesses:
             pro.send_signal(signal.SIGTERM)
-            # pro.kill()
             pro.wait()
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>567</width>
-    <height>477</height>
+    <height>744</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,14 +16,7 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_2">
     <item>
-     <layout class="QGridLayout" name="gridLayout" rowstretch="0,0,0,0,0" columnstretch="1,1,0">
-      <item row="0" column="0">
-       <widget class="QPushButton" name="pushButton_4">
-        <property name="text">
-         <string>start</string>
-        </property>
-       </widget>
-      </item>
+     <layout class="QGridLayout" name="gridLayout" rowstretch="0,0,0,0,0" columnstretch="1,1">
       <item row="3" column="0">
        <layout class="QFormLayout" name="formLayout_3">
         <item row="0" column="0">
@@ -67,15 +60,15 @@
         <item row="2" column="1">
          <widget class="QLineEdit" name="correctorAccuracyUmLineEdit"/>
         </item>
-        <item row="3" column="1">
-         <widget class="QLineEdit" name="sampPerStepLineEdit"/>
-        </item>
         <item row="3" column="0">
          <widget class="QLabel" name="sampPerStepLabel">
           <property name="text">
            <string>samp per step</string>
           </property>
          </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QLineEdit" name="sampPerStepLineEdit"/>
         </item>
        </layout>
       </item>
@@ -86,11 +79,356 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="1">
+      <item row="4" column="0">
        <widget class="QPushButton" name="pushButton_3">
         <property name="text">
          <string>stop</string>
         </property>
+       </widget>
+      </item>
+      <item row="0" column="0" colspan="2">
+       <widget class="QPushButton" name="pushButton_4">
+        <property name="text">
+         <string>start</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QListWidget" name="listWidget">
+        <property name="autoFillBackground">
+         <bool>false</bool>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::MultiSelection</enum>
+        </property>
+        <item>
+         <property name="text">
+          <string>BPM03</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM04</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM05</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM06</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM07</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM08</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM09</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM10</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM11</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM12</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM13</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM14</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM15</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM16</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM17</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM18</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM19</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM20</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM21</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM22</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM23</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM24</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM25</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM26</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM27</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM28</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM29</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM30</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM31</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM32</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM33</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM34</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM35</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM36</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM37</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM38</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM39</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM40</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM41</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM42</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>BPM43</string>
+         </property>
+         <property name="checkState">
+          <enum>Checked</enum>
+         </property>
+        </item>
        </widget>
       </item>
      </layout>

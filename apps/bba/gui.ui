@@ -608,7 +608,7 @@
              </rect>
             </property>
             <property name="text">
-             <string>BPM1</string>
+             <string>1st BPM</string>
             </property>
            </widget>
            <widget class="QLabel" name="label_11">
@@ -686,7 +686,7 @@
            <widget class="QComboBox" name="comboBox_6">
             <property name="geometry">
              <rect>
-              <x>240</x>
+              <x>250</x>
               <y>120</y>
               <width>79</width>
               <height>23</height>
@@ -694,22 +694,17 @@
             </property>
             <item>
              <property name="text">
-              <string>BPM03</string>
+              <string>BPM21</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>BPM07</string>
+              <string>BPM28</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>BPM08</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>BPM02</string>
+              <string>BPM29</string>
              </property>
             </item>
            </widget>
@@ -773,39 +768,19 @@
             </property>
             <item>
              <property name="text">
-              <string>CQ1</string>
+              <string>QT01</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>CQ2</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>CQ3</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>CQ4</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>MQ11</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>MQ12</string>
+              <string>QT18</string>
              </property>
             </item>
            </widget>
            <widget class="QComboBox" name="comboBox_8">
             <property name="geometry">
              <rect>
-              <x>60</x>
+              <x>90</x>
               <y>120</y>
               <width>79</width>
               <height>23</height>
@@ -813,31 +788,31 @@
             </property>
             <item>
              <property name="text">
-              <string>BPM02</string>
+              <string>BPM20</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>BPM03</string>
+              <string>BPM27</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>BPM07</string>
+              <string>BPM28</string>
              </property>
             </item>
            </widget>
            <widget class="QLabel" name="label_16">
             <property name="geometry">
              <rect>
-              <x>200</x>
+              <x>180</x>
               <y>120</y>
               <width>71</width>
               <height>16</height>
              </rect>
             </property>
             <property name="text">
-             <string>BPM2</string>
+             <string>2nd BPM</string>
             </property>
            </widget>
            <widget class="QLineEdit" name="lineEdit_16">
@@ -877,72 +852,22 @@
             </property>
             <item>
              <property name="text">
-              <string>HC01</string>
+              <string>XC21</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>VC01</string>
+              <string>YC21</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>HC02</string>
+              <string>XC29</string>
              </property>
             </item>
             <item>
              <property name="text">
-              <string>VC02</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>HC05</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>VC05</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>MS:HC</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>MS:VC</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>LS:HC</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>LS:VC</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>HIC01</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>VIC01</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>HIC02</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>VIC02</string>
+              <string>YC29</string>
              </property>
             </item>
            </widget>
