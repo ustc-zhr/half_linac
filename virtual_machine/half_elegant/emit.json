@@ -25,6 +25,18 @@
             "concat_order": "1",
             "statistics": "1"
         },
+        "error_control": {
+            "clear_error_settings": "1"
+        },
+        "error_element": {
+            "name": "*",
+            "element_type": "QUAD",
+            "item": "FSE",
+            "amplitude": "0e-5",
+            "type": "\"gaussian\"",
+            "cutoff": "3.0",
+            "bind": "0"
+        },
         "matrix_output": {
             "SDDS_output": "%s.mat",
             "individual_matrices": "0",
@@ -235,7 +247,7 @@
             "NAME": "QT02",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "1.402247",
+            "K1": "2.5",
             "AP": "HALF:IN:QUAD:QT02:K1"
         },
         "QT03": {
@@ -2478,6 +2490,7 @@
         }
     },
     "usedline": [
+        "QT02",
         "DMTC1",
         "PRF06",
         "DMTC2",

@@ -49,7 +49,7 @@
 
 ## 1. Install some packages in Linux system
 
-### 1）Linux environment
+### a. Linux environment
 
 #### windows下如何实现linux环境
 
@@ -66,15 +66,21 @@ WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直�
 ##### tips: 推荐使用shell命令行工具on-my-zsh！
 
 
-### 2）epics
+### b. epics
 
-### 3）python3
+### c. python3相关
 
-### 4）pyqt
+##### 1. anaconda+vscode（推荐）
 
-### 5）install python sdds
+##### 2. pyqt5+QTdesigner
 
-For Ubuntu20.04, the link of the module is: https://ops.aps.anl.gov/downloads/SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
+​	用于gui
+
+##### 3. pyepics
+
+##### 4. python sdds
+
+​	For Ubuntu20.04, the link of the module is: https://ops.aps.anl.gov/downloads/SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
 
 1. install
 
@@ -134,7 +140,11 @@ for my case, add the  env variable in my `.zshrc` file:
 export PYTHONPATH=$PYTHONPATH:~/gitproj
 ```
 
-### b. run it
+### b. 修改softIOC里的环境配置
+
+文件在.\half_linac\softIOC\halflinac\iocBoot\ioctarget\envPaths   根据个人情况修改
+
+### c. run it
 
 ```zsh
 python /home/user/gitproj/half_linac/apps/launcher/main.py
