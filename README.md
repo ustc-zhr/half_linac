@@ -1,4 +1,4 @@
-# 开发进度
+# 每周开发进度
 
 ##### 2025-5-22-Zhanghaoran
 
@@ -45,9 +45,45 @@
 
 
 
+# 程序功能总览
+
+- ## virtual machine
+
+  - 第一次运行，根据lattice_ini.lte和one_ini.ele 生成 json 文件，之后根据 json 文件生成lattice.lte和one.ele
+  - 运行elegant one.ele 并向IOC发布相关pv value
+  - 进入监视状态，一旦json文件发生变化，运行elegant one.ele 并向IOC发布相关pv值
+
+
+
+- ## softIOC
+
+  - 第一次运行，将生成 db 文件夹下的 substitutions 文件
+
+  - 建立起IOC，将根据 json 文件初始化 epics 中所有四极铁等元件的初始pv值
+
+  - 利用onChange函数监听元件的pv值，一旦改变，更新 json 文件
+
+    
+
+- ## apps
+
+  - launcher 显示主界面，各按钮调用其他调束功能，单独开一个线程进行。
+  - 各种上层物理调束程序，打开后分别会单独开一个线程进行。
+    - bba
+    - beam_monitor
+    - emit_measure
+    - orbit_correct
+    - orbit_display
+
+​					  。。。。。。
+
+
+
 # Quick start
 
 ## 1. Install some packages in Linux system
+
+
 
 ### a. Linux environment
 
@@ -66,7 +102,48 @@ WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直�
 ##### tips: 推荐使用shell命令行工具on-my-zsh！
 
 
+
 ### b. epics
+
+参考官方网站：https://docs.epics-controls.org/en/latest/getting-started/installation-linux.html
+
+#### install
+
+The recommended way to start working with EPICS is to download one of the release packages. The released versions of EPICS have been fully tested to work as documented. Choose the release that you want and download:
+
+```zsh
+mkdir $HOME/EPICS
+cd $HOME/EPICS
+wget https://epics-controls.org/download/base/base-7.0.8.1.tar.gz
+tar -xvf base-7.0.8.1.tar.gz
+cd base-7.0.8.1
+make
+```
+
+After compiling you should put the path into `$HOME/.profile` or into `$HOME/.bashrc` or into  `$HOME/.zshrc` by adding the following to either one of those files:
+
+```zsh
+export EPICS_BASE=${HOME}/EPICS/epics-base
+export EPICS_HOST_ARCH=$(${EPICS_BASE}/startup/EpicsHostArch)
+export PATH=${EPICS_BASE}/bin/${EPICS_HOST_ARCH}:${PATH}
+```
+
+EpicsHostArch is a program provided by EPICS that returns the architecture of your system. Thus the code above should be fine for every architecture.
+
+#### test
+
+Now log out and log in again, so that your new path is set correctly. Alternatively, you can execute the three lines above beginning with export directly from the terminal.
+
+Run `softIoc` and, if everything is ok, you should see an EPICS prompt.
+
+```zsh
+softIoc
+epics>
+```
+
+You can exit with ctrl-c or by typing exit.
+
+
 
 ### c. python3相关
 
@@ -84,7 +161,10 @@ WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直�
 
 1. install
 
-   `alien -iv SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm`
+   ```bash
+   wget https://ops.aps.anl.gov/downloads/SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
+   alien -iv SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
+   ```
 
    The `-v` parameter will show you where you are going to install the `sdds` module. 
 
@@ -175,36 +255,4 @@ git push origin main
 
 
 
-
-# 程序主要功能
-
-- ## 虚拟加速器
-	
-	- 第一次运行，根据lattice_ini.lte和one_ini.ele 生成 json 文件，之后根据 json 文件生成lattice.lte和one.ele
-	- 运行elegant one.ele 并向IOC发布相关pv value
-	- 进入监视状态，一旦json文件发生变化，运行elegant one.ele 并向IOC发布相关pv值
-
-
-
-- ## softIOC
-
-	- 第一次运行，将生成 db 文件夹下的 substitutions 文件
-
-	- 建立起IOC，将根据 json 文件初始化 epics 中所有四极铁等元件的初始pv值
-
-	- 利用onChange函数监听元件的pv值，一旦改变，更新 json 文件
-
-		
-
-- ## apps
-	
-	- launcher 显示主界面，各按钮调用其他调束功能，单独开一个线程进行。
-	- 各种上层物理调束程序
-	  - bba
-	  - beam_monitor
-	  - emit_measure
-	  - orbit_correct
-	  - orbit_display
-
-​					  。。。。。。
 
