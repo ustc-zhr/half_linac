@@ -21,7 +21,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_2.clicked.connect(self.start_emitMeasure)
         self.pushButton.clicked.connect(self.start_orbit_display)
         self.pushButton_4.clicked.connect(self.start_bba)
-        self.measure_response.clicked.connect(self.measure_res)
+        
         self.orbit_correct.clicked.connect(self.orb_correct)
 
     
@@ -40,6 +40,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             **kwargs
         )
         self.subprocesses.append(proc)
+
     # -----------
     # beammonitor
     # -----------
@@ -54,6 +55,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             **kwargs
         )
         self.subprocesses.append(proc)
+
     # -----------
     # emitMeasure
     # -----------
@@ -103,9 +105,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     # -------------
     # orbit correct
     # -------------
-    def measure_res(self): #measure response matrix
-        Popen("python3 findresponse.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
-
+    
     def orb_correct(self):
         # Popen("python3 mainOrbCor.py",cwd=st.rootpath+"/apps/orbit_correct",shell=True)    
         kwargs = {}
@@ -128,8 +128,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
     # stop function：close the subprocesses
     def stop_subpro(self):
         for pro in self.subprocesses:
-            pro.send_signal(signal.SIGTERM)
-            pro.wait()
+            try:
+                pro.send_signal(signal.SIGTERM)
+            except:
+                pro.kill()
+        self.subprocesses = []
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

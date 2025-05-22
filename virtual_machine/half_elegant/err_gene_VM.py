@@ -6,6 +6,7 @@
 import sys
 import json
 import numpy as np
+from scipy.stats import truncnorm
 
 import half_linac.setup as st
 
@@ -16,70 +17,71 @@ class errorVM():
         self.jsonpath = jsonpath
         # print('default',self.sigma_default)
 
-    def gen_random_Q_err(self,sigma=None):
+    def gen_static_err(self,sigma=None):
         if sigma is None:
             sigma = self.sigma_default
-        # 设定高斯分布的参数
-        
+
         mu = 0  # 均值
         sigma = sigma*1e-6  # 标准差 m
 
-        # 生成高斯分布的随机数
-#        datax = np.random.normal(mu, sigma, 1)[0]  # 假设生成10000个数据点
-#        datay = np.random.normal(mu, sigma, 1)[0]
-        # 3σ截断
-        lower_bound = mu - 3 * sigma
-        upper_bound = mu + 3 * sigma
-
-        f = open(self.jsonpath, "r")
-        lte = json.load(f)
+        with open(self.jsonpath,"r") as f:
+            lte = json.load(f)
         lattice = lte["lattice"]
-        f.close()
+
         for key in lattice:
             if lattice[key]["TYPE"] == "QUAD":
-                datax = np.random.normal(mu, sigma, 1)[0]
-                datay = np.random.normal(mu, sigma, 1)[0]
-                while not (lower_bound <= datax <= upper_bound):
-                    datax = np.random.normal(mu, sigma, 1)[0]
+                datax = truncnorm.rvs(-3, 3, loc=mu, scale=sigma)
+                datay = truncnorm.rvs(-3, 3, loc=mu, scale=sigma)
                 lattice[key]["DX"] = str(datax)
-                while not (lower_bound <= datay <= upper_bound):
-                    datay = np.random.normal(mu, sigma, 1)[0]
                 lattice[key]["DY"] = str(datay)
-        f = open(self.jsonpath, "w")
-        f.write(json.dumps(lte, indent=4))
-        f.close()
+        with open(self.jsonpath,"w") as f:
+            f.write(json.dumps(lte, indent=4))
 
         print('static error is added:   Q DX/DY-',sigma,' m')
 
+    def gen_jitter_err(self,sigma_ppm=None):
+        sigma = sigma_ppm*1e-6  # fraction
+
+        with open(self.jsonpath,"r") as f:
+            lte = json.load(f)
+        
+        # Q:K1 jitter
+        lte["control"]["error_element"]["amplitude"] = str(sigma)
+
+        with open(self.jsonpath,"w") as f:
+            f.write(json.dumps(lte, indent=4))
+
+        print('jitter is added:   Q K1-',sigma_ppm,' ppm')
+
     def err_off(self):
 
-        f = open(self.jsonpath, "r")
-        lte = json.load(f)
+        with open(self.jsonpath,"r") as f:
+            lte = json.load(f)
         lattice = lte["lattice"]
-        f.close()
         for key in lattice:
             if lattice[key]["TYPE"] == "QUAD":
                 lattice[key]["DX"] = "0"
                 lattice[key]["DY"] = "0"
-        f = open(self.jsonpath, "w")
-        f.write(json.dumps(lte, indent=4))
-        f.close()      
+        lte["control"]["error_element"]["amplitude"] = "0"
+        with open(self.jsonpath,"w") as f:
+            f.write(json.dumps(lte, indent=4))      
 
-        print('static error is off')
-
+        print('static/jitter error is off')
 
 
 sigma_default = 0
 jsonpath = st.rootpath+"/virtual_machine/half_elegant/halflinac.json"
+
 if __name__=='__main__':
     error_ele = errorVM(sigma_default,jsonpath)
-    # print(sys.argv[1])
+    print(sys.argv)
     try:
         if sys.argv[1] == "gene_err":
-            # print(sys.argv[2])
-            sigma = float(sys.argv[2])# 
-            # print(sigma)
-            error_ele.gen_random_Q_err(sigma)
+            sta_err_quad_sigma_DXDY = float(sys.argv[2])# 
+            jit_err_quad_sigma_K1 = float(sys.argv[3])#
+
+            error_ele.gen_static_err(sta_err_quad_sigma_DXDY)
+            error_ele.gen_jitter_err(jit_err_quad_sigma_K1)
         elif sys.argv[1] == "err_off":
             error_ele.err_off()
     except:

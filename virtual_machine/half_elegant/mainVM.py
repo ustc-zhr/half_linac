@@ -25,14 +25,26 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         # default value
         self.QDXDYvalue.setText('0') # um
-        
+        self.QK1JITTER.setText('0') # um
     # ---------------
     # softIOC
     # ---------------    
     def startioc(self):
         self.textEdit.append('start softIOC')
-        Popen("python3 main.py",cwd=st.rootpath+"/softIOC",shell=True) 
-        
+
+        # 启动进程（确保进程组独立）
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+        proc = Popen(
+            ["python3", "main.py"],
+            cwd=st.rootpath + "/softIOC",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+
+        time.sleep(2) # wait for ini softIOC before start VM
+
     # ---------------
     # VM
     # --------------- 
@@ -56,7 +68,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
     # add err
     def staticerr(self): #generate QUAD xy random error
         self.textEdit.append('add static error {\t Q:'+self.QDXDYvalue.text()+' um}')
-        Popen("python3 err_gene_VM.py gene_err "+self.QDXDYvalue.text(),cwd=st.rootpath+"/virtual_machine/half_elegant",shell=True)
+        # Popen("python3 err_gene_VM.py gene_err "+self.QDXDYvalue.text(),cwd=st.rootpath+"/virtual_machine/half_elegant",shell=True)
+        
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+        Popen(
+            ["python3", "err_gene_VM.py", "gene_err", self.QDXDYvalue.text(), self.QK1JITTER.text()],
+            cwd=st.rootpath + "/virtual_machine/half_elegant",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
     # err off
     def erroff(self): #turn off QUAD xy random error
         self.textEdit.append('err is off')
@@ -66,14 +87,17 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     # windows close event
     def closeEvent(self, event):
-        self.stop_subpro()  
+        self.stop_subpro()
         event.accept()
 
     # stop function：close the subprocesses
     def stop_subpro(self):
         for pro in self.subprocesses:
-            pro.send_signal(signal.SIGTERM)
-            pro.wait()
+            try:
+                pro.send_signal(signal.SIGTERM)
+            except:
+                pro.kill()
+        self.subprocesses = []
     
 
 

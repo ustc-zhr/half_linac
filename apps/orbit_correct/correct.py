@@ -2,11 +2,10 @@
 # Date: 2024-08-25
 
 import time
-#import mat4py
+
 import numpy as np
 from threading import Timer, activeCount
 import sys
-#sys.path.append('e:\half_linac')
 from epics import caget, caget_many,caput,caput_many,PV
 import os
 import half_linac.setup as st
@@ -18,13 +17,13 @@ N_BPM = 41 #41
 N_COR = 41 #41
 d_value = 0.02*0.001
 max_value = 0.001
-timer_interval = 5
+timer_interval = st.runtime_machine
 cor_x_list_all = ['XC03', 'XC04', 'XC05', 'XC06', 'XC07', 'XC08', 'XC09', 'XC10', 'XC11', 'XC12', 'XC13', 'XC14', 'XC15', 'XC16', 'XC17', 'XC18', 'XC19', 'XC20', 'XC21', 'XC22', 'XC23', 'XC24', 'XC25', 'XC26', 'XC27', 'XC28', 'XC29', 'XC30', 'XC31', 'XC32', 'XC33', 'XC34', 'XC35', 'XC36', 'XC37', 'XC38', 'XC39', 'XC40', 'XC41', 'XC42', 'XC43']
 cor_y_list_all = ['YC03', 'YC04', 'YC05', 'YC06', 'YC07', 'YC08', 'YC09', 'YC10', 'YC11', 'YC12', 'YC13', 'YC14', 'YC15', 'YC16', 'YC17', 'YC18', 'YC19', 'YC20', 'YC21', 'YC22', 'YC23', 'YC24', 'YC25', 'YC26', 'YC27', 'YC28', 'YC29', 'YC30', 'YC31', 'YC32', 'YC33', 'YC34', 'YC35', 'YC36', 'YC37', 'YC38', 'YC39', 'YC40', 'YC41', 'YC42', 'YC43']
 bpm_list_all = ['BPM03', 'BPM04', 'BPM05', 'BPM06', 'BPM07', 'BPM08', 'BPM09', 'BPM10', 'BPM11', 'BPM12', 'BPM13', 'BPM14', 'BPM15', 'BPM16', 'BPM17', 'BPM18', 'BPM19', 'BPM20', 'BPM21', 'BPM22', 'BPM23', 'BPM24', 'BPM25', 'BPM26', 'BPM27', 'BPM28', 'BPM29', 'BPM30', 'BPM31', 'BPM32', 'BPM33', 'BPM34', 'BPM35', 'BPM36', 'BPM37', 'BPM38', 'BPM39', 'BPM40', 'BPM41', 'BPM42', 'BPM43']
 
 class correct:
-    def __init__(self, timer_interval=None, cor_accuracy=None, samples_perstep=None, target_BPMlist=None):
+    def __init__(self, timer_interval_set=None, cor_accuracy=None, samples_perstep=None, target_BPMlist=None):
         self.a = 0
         self.pvl = []
         self.pv_val = []
@@ -35,10 +34,13 @@ class correct:
 
         self.ORMx_n,self.ORMy_n = self.load_response_matrix()
         
-        self.timer_interval = timer_interval
+        if timer_interval_set == None or timer_interval_set < timer_interval:
+            self.timer_interval = timer_interval
+        else:
+            self.timer_interval = timer_interval_set
         self.cor_accuracy = cor_accuracy
         self.samples_perstep = samples_perstep
-        print(target_BPMlist, bpm_list_all)
+
         index = self.find_positions(bpm_list_all, target_BPMlist)
         self.bpm_list_target = [bpm_list_all[i] for i in index]
         self.cor_x_list_target  = [cor_x_list_all[i] for i in index]
@@ -47,13 +49,12 @@ class correct:
         print(self.cor_x_list_target)
         print(self.cor_y_list_target)
 
-        # self.current_dir = os.path.dirname(os.path.abspath(__file__))
     def find_positions(self, main_list, sub_list):
         return [index for index, element in enumerate(main_list) if element in sub_list]
     
     def load_response_matrix(self):  
         RM = np.loadtxt(RESPM_FILE)
-        ORM = np.reshape(RM,(82,82),order='C')
+        # ORM = np.reshape(RM,(82,82),order='C')
         ORM_x = RM[0:N_BPM,0:N_COR]
         ORM_y = RM[N_BPM:82,N_COR:82]
         ORMx_n = np.linalg.inv(ORM_x)
@@ -80,14 +81,14 @@ class correct:
             pv_CORx = "HALF:IN:COR:" + j + ":ao"  
             self.pvCORx.append(pv_CORx)  
         for j in self.cor_y_list_target:  
-            pv_CORy ="HALF:IN:COR:" + j + ":ao" 
+            pv_CORy = "HALF:IN:COR:" + j + ":ao" 
             self.pvCORy.append(pv_CORy)
         values = [0] * len(self.pvCORx)
         caput_many(self.pvCORx,values)
         caput_many(self.pvCORy,values)
 
 #    timer_interval = 2
-#用于虚拟机的轨道校正
+#       用于虚拟机的轨道校正
 #响应矩阵方法进行轨道校正
     def Corrector_h(self):
         print(self.a)
@@ -255,20 +256,20 @@ class correct:
         
         vcorrVal = vcorrVal-delt_corrv
 
-        for idex, ctem in enumerate(self.pvCORy):
-            if vcorrVal[idex] > max_value:
-                vcorrVal[idex] = max_value
-            ctem.put(vcorrVal[idex])
+        # for idex, ctem in enumerate(self.pvCORy):
+        #     if vcorrVal[idex] > max_value:
+        #         vcorrVal[idex] = max_value
+        #     ctem.put(vcorrVal[idex])
 
-        time.sleep(2)
-        self.Tcor = Timer(self.timer_interval, self.Corrector_p)
-        current_modified = os.path.getmtime(filepath)
-        if current_modified != last_modified:
-            return
-        else:
-            self.Tcor.start()        
+        # time.sleep(2)
+        # self.Tcor = Timer(self.timer_interval, self.Corrector_p)
+        # current_modified = os.path.getmtime(filepath)
+        # if current_modified != last_modified:
+        #     return
+        # else:
+        #     self.Tcor.start()        
 
-    def Corrector_one_to_one(self):
+    def correct_one_to_one(self):
         #先测量校正铁的小量变化引入的相邻的下游bpm变化，再反算校正铁应该改变的数值
         #校正强度可以加一个修正系数，目前都没有加
         n_averages=self.samples_perstep # 每次采样个数
@@ -361,8 +362,71 @@ class correct:
         # if current_modified != last_modified:
         #     return
         # else:
-        #     self.Tcor.start()        
+        #     self.Tcor.start()     
+        #    
+    def correct_global(self):
+        #print(self.a)
+        #t1 = time.time()
+        # self.a += 1
+        xbpmVal = []
 
+        for idex, btem in enumerate(self.pvBPMx):
+            xbpmVal.append(btem.get())
+        delt_orbitx = np.array(xbpmVal)
+
+        hcorrVal = []
+        for idex, ctem in enumerate(self.pvCORx):
+            hcorrVal.append(ctem.get())
+
+        delt_corrh = np.dot(self.ORMx_n,delt_orbitx)
+        # norm = np.linalg.norm(delt_corrh)
+        
+        # if norm < 1e-8 :
+        #     print("满足精度要求，停止校正",norm)
+        #     return
+
+        hcorrVal = hcorrVal-delt_corrh
+
+        for idex, ctem in enumerate(self.pvCORx):
+            if hcorrVal[idex] > max_value:
+                hcorrVal[idex] = max_value
+            if hcorrVal[idex] < -max_value:
+                hcorrVal[idex] = -max_value
+            ctem.put(hcorrVal[idex])
+        time.sleep(2)
+
+        ybpmVal = []
+        for idex, btem in enumerate(self.pvBPMy):
+            ybpmVal.append(btem.get())
+        delt_orbity = np.array(ybpmVal)
+
+        vcorrVal = []
+        for idex, ctem in enumerate(self.pvCORy):
+            vcorrVal.append(ctem.get())
+
+        delt_corrv = np.dot(self.ORMy_n,delt_orbity)
+        # normv = np.linalg.norm(delt_corrv)
+        
+        # if normv < 1e-8 :
+        #     print("满足精度要求，停止校正",normv)
+        #     return
+        
+        vcorrVal = vcorrVal-delt_corrv
+
+        for idex, ctem in enumerate(self.pvCORy):
+            if vcorrVal[idex] > max_value:
+                vcorrVal[idex] = max_value
+            if vcorrVal[idex] < -max_value:
+                vcorrVal[idex] = -max_value
+            ctem.put(vcorrVal[idex])
+
+        time.sleep(2)
+        # self.Tcor = Timer(self.timer_interval, self.Corrector_p)
+        # current_modified = os.path.getmtime(filepath)
+        # if current_modified != last_modified:
+        #     return
+        # else:
+        #     self.Tcor.start()        
 
     def start_timer_h(self):
         self.T_h = Timer(self.timer_interval, self.Corrector_h_p)
@@ -379,25 +443,25 @@ class correct:
 if __name__=='__main__':
 
     # Half-linac
-#    jsonpath  = st.rootpath+"/virtual_machine/half_elegant/halflinac.json" 
-#    iocpath   = st.rootpath+"/softIOC/halflinac"
+    #    jsonpath  = st.rootpath+"/virtual_machine/half_elegant/halflinac.json" 
+    #    iocpath   = st.rootpath+"/softIOC/halflinac"
 
 
 
     # f_res.start_timer_h()
     # f_res.start_timer_v()
-    #same to f_res.start_timer()
+    # same to f_res.start_timer()
     # print("zzz")
-    try:
-        print("输入的参数:",sys.argv)
+    # try:
+        print("input para.:",sys.argv)
         if sys.argv[1] == "start_cor":
             method = sys.argv[2]
             samp_interval = float(sys.argv[3])     #s
             cor_accuracy = float(sys.argv[4])*1e-6 #m
             samples_perstep = int(sys.argv[5])     #
-            targe_BPMlist = sys.argv[6].split(',') #
+            target_BPMlist = sys.argv[6].split(',') #
 
-            f_res = correct(samp_interval,cor_accuracy,samples_perstep,targe_BPMlist) 
+            f_res = correct(samp_interval,cor_accuracy,samples_perstep,target_BPMlist) 
             f_res.init_BPM_pv()
             f_res.init_COR_pv()
 
@@ -405,12 +469,17 @@ if __name__=='__main__':
             current_modified =last_modified
 
             if  method == "one-to-one":
-                f_res.Corrector_one_to_one()
+                f_res.correct_one_to_one()
+            
+            if  method == "global":
+                f_res.correct_global()
+
         elif sys.argv[1] == "cor_off":
-            f_res = correct()
+            target_BPMlist = sys.argv[2].split(',') #
+            f_res = correct(None ,None ,None , target_BPMlist)
             f_res.reset_cor()
 
         
-    except:
-        print('correct error!')
-        pass
+    # except:
+    #     print('correct error!')
+    #     pass

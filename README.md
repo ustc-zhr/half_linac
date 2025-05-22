@@ -1,5 +1,21 @@
 # 开发进度
 
+##### 2025-5-22-Zhanghaoran
+
+- `Virtual Machine`
+
+  添加Q铁的强度jitter功能
+
+###### 2025-5-15-Zhanghaoran
+
+- `BBA`
+
+  BBA2经debug已可正确运行
+
+- `orbit correct`
+
+  添加了任意自选需校正的BPM功能，并测试了其在one-by-one校正方法下的正确性
+
 ###### 2025-5-8-Zhanghaoran
 
 - 给orbit corrrect添加独立gui，可自定义相关参数（如采样间隔，校正精度）；并增加校正停止和归零功能按钮。
@@ -46,6 +62,8 @@ WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直�
 ##### 2. 使用虚拟机软件（如VirtualBox或VMware）
 
 通过虚拟机软件，你可以在Windows上运行一个完整的虚拟机，里面可以安装Linux操作系统。
+
+##### tips: 推荐使用shell命令行工具on-my-zsh！
 
 
 ### 2）epics

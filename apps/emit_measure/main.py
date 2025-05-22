@@ -5,7 +5,6 @@ import sdds
 import time
 import numpy as np
 import json
-import copy
 import os
 import math
 

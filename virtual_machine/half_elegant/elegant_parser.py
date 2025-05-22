@@ -104,7 +104,18 @@ class ele_parser(lattice_parser):
         line = line +"&matrix_output\n"
         for key in self.control["matrix_output"]:
             line = line +"    " +key +" = " +self.control["matrix_output"][key] +",\n"            
-        line = line +"&end\n\n"      
+        line = line +"&end\n\n"  
+
+        # error_element section
+        line = line +"&error_control\n"
+        for key in self.control["error_control"]:
+            line = line +"    " +key +" = " +self.control["error_control"][key] +",\n"            
+        line = line +"&end\n\n" 
+
+        line = line +"&error_element\n"
+        for key in self.control["error_element"]:
+            line = line +"    " +key +" = " +self.control["error_element"][key] +",\n"            
+        line = line +"&end\n\n"     
 
         # beam section
         # sdds_beam section

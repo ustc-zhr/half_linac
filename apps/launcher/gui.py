@@ -32,41 +32,6 @@ class Ui_MainWindow(object):
         self.gridLayout = QtWidgets.QGridLayout()
         self.gridLayout.setVerticalSpacing(20)
         self.gridLayout.setObjectName("gridLayout")
-        self.pushButton = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton.setMinimumSize(QtCore.QSize(0, 40))
-        self.pushButton.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.pushButton.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 12pt;\n"
-"}")
-        self.pushButton.setDefault(False)
-        self.pushButton.setFlat(False)
-        self.pushButton.setObjectName("pushButton")
-        self.gridLayout.addWidget(self.pushButton, 0, 0, 1, 1)
-        self.measure_response = QtWidgets.QPushButton(self.centralwidget)
-        self.measure_response.setMinimumSize(QtCore.QSize(0, 40))
-        self.measure_response.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.measure_response.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 12pt;\n"
-"}")
-        self.measure_response.setObjectName("measure_response")
-        self.gridLayout.addWidget(self.measure_response, 4, 0, 1, 1)
-        self.pushButton_2 = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_2.setMinimumSize(QtCore.QSize(0, 40))
-        self.pushButton_2.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.pushButton_2.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 12pt;\n"
-"}")
-        self.pushButton_2.setObjectName("pushButton_2")
-        self.gridLayout.addWidget(self.pushButton_2, 2, 0, 1, 1)
         self.pushButton_4 = QtWidgets.QPushButton(self.centralwidget)
         self.pushButton_4.setMinimumSize(QtCore.QSize(0, 40))
         self.pushButton_4.setMaximumSize(QtCore.QSize(400, 16777215))
@@ -99,8 +64,31 @@ class Ui_MainWindow(object):
 "font: bold 12pt;\n"
 "}")
         self.orbit_correct.setObjectName("orbit_correct")
-        self.gridLayout.addWidget(self.orbit_correct, 5, 0, 1, 1)
-        self.gridLayout.setColumnStretch(0, 20)
+        self.gridLayout.addWidget(self.orbit_correct, 4, 0, 1, 1)
+        self.pushButton_2 = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton_2.setMinimumSize(QtCore.QSize(0, 40))
+        self.pushButton_2.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.pushButton_2.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 12pt;\n"
+"}")
+        self.pushButton_2.setObjectName("pushButton_2")
+        self.gridLayout.addWidget(self.pushButton_2, 2, 0, 1, 1)
+        self.pushButton = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton.setMinimumSize(QtCore.QSize(0, 40))
+        self.pushButton.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.pushButton.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 12pt;\n"
+"}")
+        self.pushButton.setDefault(False)
+        self.pushButton.setFlat(False)
+        self.pushButton.setObjectName("pushButton")
+        self.gridLayout.addWidget(self.pushButton, 0, 0, 1, 1)
         self.gridLayout_3.addLayout(self.gridLayout, 4, 0, 1, 1)
         spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.gridLayout_3.addItem(spacerItem, 1, 0, 1, 1)
@@ -139,12 +127,11 @@ class Ui_MainWindow(object):
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:10pt; font-weight:600; color:#ff0000;\">Pay Attention</span><span style=\" font-size:10pt; color:#ff0000;\">:</span></p>\n"
 "<p style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:10pt; color:#ff0000;\"><br /></p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:10pt; color:#ff0000;\">(1) [Virtual Machine] is for virtual machine development, where you need to click [start VM] &amp; [start IOC] and you can also add error. </span></p></body></html>"))
-        self.pushButton.setToolTip(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
-        self.pushButton.setWhatsThis(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
-        self.pushButton.setText(_translate("MainWindow", "orbit display"))
-        self.measure_response.setText(_translate("MainWindow", "measure response"))
-        self.pushButton_2.setText(_translate("MainWindow", "emit measure"))
         self.pushButton_4.setText(_translate("MainWindow", "BBA"))
         self.pushButton_3.setText(_translate("MainWindow", "beam monitor"))
         self.orbit_correct.setText(_translate("MainWindow", "orbit correct"))
+        self.pushButton_2.setText(_translate("MainWindow", "emit measure"))
+        self.pushButton.setToolTip(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
+        self.pushButton.setWhatsThis(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
+        self.pushButton.setText(_translate("MainWindow", "orbit display"))
         self.vmbtn.setText(_translate("MainWindow", "Virtual Machine"))
