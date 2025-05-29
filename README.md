@@ -5,6 +5,10 @@
 - `beam monitor`
 
   优化束斑分布拟合，提升拟合准确度
+  
+- `Virtual Machine`
+
+  添加关闭功能
 
 ##### 2025-5-22-Zhanghaoran
 
