@@ -119,7 +119,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.subprocesses.append(proc)  
 
 
-
     # windows close event
     def closeEvent(self, event):
         self.stop_subpro()  # 调用停止函数

@@ -1,5 +1,11 @@
 # 每周开发进度
 
+##### 2025-5-29-Zhanghaoran
+
+- `beam monitor`
+
+  优化束斑分布拟合，提升拟合准确度
+
 ##### 2025-5-22-Zhanghaoran
 
 - `Virtual Machine`

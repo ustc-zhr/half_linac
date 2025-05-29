@@ -15,21 +15,19 @@ from scipy.optimize import curve_fit
 import epics
 
 class myWindow(QWidget,Ui_Form):
+    """
+    a gui window for beam monitor
+    """
+
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+
+        # refreah the figure at 1 Hz
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.plot_beamprofile)
         self.is_timer_running = True  # 定时器状态
- 
-        self.flag_selec.setCurrentIndex(1)
-
         self.timer.start(1000)# 每过1s timer.timeout触发一次
-        self.pushButton.setEnabled(False) # 上来禁用start
-        # self.tmppv = self.flag_selec.currentText() 
-        # # init PV and pixel
-        # self.init_realOrVM()
-        # self.init_sigxy_pv()
         
         # the real size of flag st.flag_pixel_vm change to st.flag_pixel_machine
         self.width  = st.flag_pixel_vm[0]*st.flag_pixel_width # mm
@@ -40,11 +38,13 @@ class myWindow(QWidget,Ui_Form):
 
         # default setting
         # ----------------------------------
+        self.pushButton.setEnabled(False) # 上来禁用start
+        self.flag_selec.setCurrentIndex(1)
         self.lineEdit_7.setText(str(0))# set move xaxis to 0
         self.lineEdit_8.setText(str(0))# set move yaxis to 0
         self.lineEdit_4.setText(str(0))# set vmin to 0 by default
         self.lineEdit_9.setText("1")# default refresh rate=1s
-
+        
         #function in GUI
         self.pushButton.clicked.connect(self.start1_btn)
         self.pushButton_2.clicked.connect(self.stop1_btn)
@@ -172,10 +172,9 @@ class myWindow(QWidget,Ui_Form):
         tmp = tmppv1.get()
 
         data_ini = list(map(float, tmp))
+
         #data_ini = np.loadtxt("./0323_flag4.txt")
-
         data = np.reshape(data_ini,(self.pixel[1],self.pixel[0])) 
-
 
         if self.h != None: 
             self.xlim = self.h.axes.get_xlim()
@@ -210,7 +209,7 @@ class myWindow(QWidget,Ui_Form):
         self.widget.axes.set_xlim(self.xlim)
         self.widget.axes.set_ylim(self.ylim)
 
-        # add density profile 
+        #  density stat 
         #------------------------
         height = abs(self.ylim[1]-self.ylim[0])
         width  = abs(self.xlim[1]-self.xlim[0])
@@ -221,6 +220,7 @@ class myWindow(QWidget,Ui_Form):
         
         idx = np.logical_and(x>self.xlim[0], x<self.xlim[1])
         idy = np.logical_and(y>self.ylim[0], y<self.ylim[1])
+ 
     
         x = x[idx] #numpy布尔索引
         y = y[idy]
@@ -228,9 +228,11 @@ class myWindow(QWidget,Ui_Form):
         
         denx0 = np.sum(data,axis=0) #-2e4
         deny0 = np.sum(data,axis=1) #-6e4
+
+        # add density profile line
+        #------------------------
         denx = denx0/np.max(denx0) *height *0.3  +self.ylim[0]*0.98
         deny = deny0/np.max(deny0) *width  *0.3  +self.xlim[0]*0.98
-   
         self.widget.axes.plot(x,denx,'--c')
         self.widget.axes.plot(deny,y,'--c')
 
@@ -244,33 +246,24 @@ class myWindow(QWidget,Ui_Form):
             norm_denx = denx0/np.max(denx0)
             norm_deny = deny0/np.max(deny0)
 
-            ## only fit profile > 0.2
-            ## ----------------------
-            #idd =  norm_denx > 0.2*np.max(norm_denx)
-            #xx = x[idd]
-            #norm_denx = norm_denx[idd]
+            max_den = np.max(norm_denx)  # 最大值
+            max_index = np.argmax(norm_denx)  # 最大值对应的索引
+            x0_initial = x[max_index]  # 对应的x坐标作为x0初始值
+            initial_guess = [max_den, x0_initial, 1.0, np.min(norm_denx)] 
+            popt,pcov = curve_fit(Gauss, x, norm_denx, p0=initial_guess) 
 
-            #idd =  norm_deny > 0.2*np.max(norm_deny)
-            #yy = y[idd]
-            #norm_deny = norm_deny[idd]
-
-            # popt 是一个数组，包含了拟合得到的最佳参数值  
-            # 对于 Gauss 函数，popt[0] 是 a（振幅或高度），popt[1] 是 x0（均值或中心点），  
-            # popt[2] 是 sigma（标准差），popt[3] 是 c（垂直偏移量或基线）  
-              
-            # pcov 是一个协方差矩阵，它估计了 popt 中每个参数值的不确定性  
-            # 注意：pcov 的对角线上的元素是参数估计的方差 
-
-            popt,pcov = curve_fit(Gauss,x,norm_denx) 
-            #print("sigma=",popt[2])
             fit_denx = Gauss(x,popt[0],popt[1],popt[2],popt[3]) *height*0.3 +self.ylim[0]*0.98
             self.widget.axes.plot(x,fit_denx,'--r')
             #export the sigx to gui
             self.sigx =abs(round(popt[2],3)) 
             self.lineEdit_5.setText(str(abs(round(popt[2],3))))
 
-            popt,pcov = curve_fit(Gauss,y,norm_deny) 
-            #print("sigma=",popt[2])
+            max_den = np.max(norm_deny)  # 最大值
+            max_index = np.argmax(norm_deny)  # 最大值对应的索引
+            y0_initial = y[max_index]  # 对应的x坐标作为x0初始值
+            initial_guess = [max_den, y0_initial, 1.0, np.min(norm_deny)] 
+            popt,pcov = curve_fit(Gauss,y,norm_deny, p0=initial_guess)  
+
             fit_deny = Gauss(y,popt[0],popt[1],popt[2],popt[3]) *width*0.3 +self.xlim[0]*0.98
             self.widget.axes.plot(fit_deny,y,'--r',label="fitting curve")
 
