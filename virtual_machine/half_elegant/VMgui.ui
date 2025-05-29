@@ -47,14 +47,14 @@
         </item>
         <item row="0" column="1">
          <layout class="QGridLayout" name="gridLayout_3">
-          <item row="0" column="0">
+          <item row="0" column="1">
            <widget class="QPushButton" name="start_vm">
             <property name="text">
              <string>start VM</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="0" column="0">
            <widget class="QPushButton" name="start_ioc">
             <property name="text">
              <string>start IOC</string>
@@ -63,7 +63,7 @@
           </item>
          </layout>
         </item>
-        <item row="1" column="1">
+        <item row="2" column="1">
          <spacer name="verticalSpacer">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
@@ -76,14 +76,14 @@
           </property>
          </spacer>
         </item>
-        <item row="2" column="0">
+        <item row="3" column="0">
          <widget class="QLabel" name="label_2">
           <property name="text">
            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:10pt; font-weight:600; color:#aa0000;&quot;&gt;ADD ERROR&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
           </property>
          </widget>
         </item>
-        <item row="2" column="1">
+        <item row="3" column="1">
          <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,0,0">
           <item row="0" column="0">
            <widget class="QPushButton" name="static_err">
@@ -102,6 +102,24 @@
          </layout>
         </item>
         <item row="4" column="1">
+         <layout class="QGridLayout" name="gridLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_6">
+            <property name="text">
+             <string>static error</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLabel" name="label_7">
+            <property name="text">
+             <string>jitter</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="5" column="1">
          <layout class="QHBoxLayout" name="horizontalLayout">
           <item>
            <layout class="QGridLayout" name="gridLayout_4" columnstretch="1,1,1,1,1,1">
@@ -170,25 +188,7 @@
           </item>
          </layout>
         </item>
-        <item row="3" column="1">
-         <layout class="QGridLayout" name="gridLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_6">
-            <property name="text">
-             <string>static error</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QLabel" name="label_7">
-            <property name="text">
-             <string>jitter</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="5" column="1">
+        <item row="6" column="1">
          <spacer name="verticalSpacer_2">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
@@ -200,6 +200,24 @@
            </size>
           </property>
          </spacer>
+        </item>
+        <item row="1" column="1">
+         <layout class="QGridLayout" name="gridLayout_5">
+          <item row="0" column="1">
+           <widget class="QPushButton" name="shutdown_VM">
+            <property name="text">
+             <string>shutdown VM</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_11">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </item>
        </layout>
       </item>

@@ -94,7 +94,6 @@ class errorVM():
 
 if __name__=='__main__':
     error_ele = errorVM(sigma_default,jsonpath)
-    print(sys.argv)
     try:
         if sys.argv[1] == "gene_err":
             sta_err_quad_sigma_DXDY = float(sys.argv[2])# 

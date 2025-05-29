@@ -57,12 +57,15 @@ class errorVM():
 
         with open(self.jsonpath,"r") as f:
             lte = json.load(f)
+        
         lattice = lte["lattice"]
         for key in lattice:
             if lattice[key]["TYPE"] == "QUAD":
                 lattice[key]["DX"] = "0"
                 lattice[key]["DY"] = "0"
+
         lte["control"]["error_element"]["amplitude"] = "0"
+
         with open(self.jsonpath,"w") as f:
             f.write(json.dumps(lte, indent=4))      
 

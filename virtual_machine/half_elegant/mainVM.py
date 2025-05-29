@@ -20,18 +20,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
         # connect button
         self.start_ioc.clicked.connect(self.startioc)
         self.start_vm.clicked.connect(self.startvm)
+        self.shutdown_VM.clicked.connect(self.stopvm)
         self.static_err.clicked.connect(self.staticerr)
         self.err_off.clicked.connect(self.erroff)
 
         # default value
         self.QDXDYvalue.setText('0') # um
         self.QK1JITTER.setText('0') # um
+
+        self.start_vm.setEnabled(False) 
+        self.shutdown_VM.setEnabled(False)
     # ---------------
     # softIOC
     # ---------------    
     def startioc(self):
-        self.textEdit.append('start softIOC')
 
+        self.textEdit.append('start softIOC')
         # 启动进程（确保进程组独立）
         kwargs = {}
         kwargs["start_new_session"] = True  # Unix: 新会话组
@@ -42,8 +46,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
             **kwargs
         )
         self.subprocesses.append(proc)
-
+        
         time.sleep(2) # wait for ini softIOC before start VM
+        self.start_vm.setEnabled(True) 
 
     # ---------------
     # VM
@@ -62,6 +67,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
         self.subprocesses.append(proc)
 
+        self.shutdown_VM.setEnabled(True)
     # ---------------
     # err
     # --------------- 
@@ -82,8 +88,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def erroff(self): #turn off QUAD xy random error
         self.textEdit.append('err is off')
         self.QDXDYvalue.setText('0')
+        self.QK1JITTER.setText('0')
         Popen("python3 err_gene_VM.py err_off",cwd=st.rootpath+"/virtual_machine/half_elegant",shell=True)
 
+     # shutdown the vm
+    def stopvm(self):
+        self.textEdit.append('shutdown vm')
+        self.stop_subpro()
 
     # windows close event
     def closeEvent(self, event):
