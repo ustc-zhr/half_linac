@@ -1,3 +1,7 @@
+# half_linac 上层物理应用软件
+
+
+
 # 每周开发进度
 
 ##### 2025-5-29-Zhanghaoran
@@ -105,13 +109,41 @@
 
 WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直接运行Linux发行版，如Ubuntu、Debian等。
 
+- 在管理员权限下进入Powershell
+
+  ```powershell
+  wsl --install
+  ```
+
+- wsl成功启用后安装ubantu
+
+  ```powershell
+  wsl.exe --install Ubantu
+  ```
+
 ##### 2. 使用虚拟机软件（如VirtualBox或VMware）
 
 通过虚拟机软件，你可以在Windows上运行一个完整的虚拟机，里面可以安装Linux操作系统。
 
-##### tips: 推荐使用shell命令行工具on-my-zsh！
 
 
+#### Tips: 推荐使用shell命令行工具on-my-zsh！
+
+- 安装zsh
+
+  ```bash
+  sudo apt-get install zsh
+  sudo chsh -s $(which zsh)
+  sudo reboot
+  ```
+
+- 安装oh-my-zsh
+
+  ```bash
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  ```
+
+  
 
 ### b. epics
 

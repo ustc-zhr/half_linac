@@ -63,6 +63,24 @@
           </item>
          </layout>
         </item>
+        <item row="1" column="1">
+         <layout class="QGridLayout" name="gridLayout_5">
+          <item row="0" column="1">
+           <widget class="QPushButton" name="shutdown_VM">
+            <property name="text">
+             <string>shutdown VM</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_11">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
         <item row="2" column="1">
          <spacer name="verticalSpacer">
           <property name="orientation">
@@ -201,23 +219,12 @@
           </property>
          </spacer>
         </item>
-        <item row="1" column="1">
-         <layout class="QGridLayout" name="gridLayout_5">
-          <item row="0" column="1">
-           <widget class="QPushButton" name="shutdown_VM">
-            <property name="text">
-             <string>shutdown VM</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_11">
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-         </layout>
+        <item row="7" column="1">
+         <widget class="PyDMCheckbox" name="PyDMCheckbox">
+          <property name="toolTip">
+           <string/>
+          </property>
+         </widget>
         </item>
        </layout>
       </item>
@@ -237,6 +244,13 @@
    </property>
   </widget>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PyDMCheckbox</class>
+   <extends>QCheckBox</extends>
+   <header>pydm.widgets.checkbox</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

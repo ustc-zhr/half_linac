@@ -42,7 +42,7 @@
     name = *,
     element_type = QUAD,
     item = FSE,
-    amplitude = 0e-5,
+    amplitude = 0.0,
     type = "gaussian",
     cutoff = 3.0,
     bind = 0,
