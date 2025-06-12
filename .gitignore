@@ -1,2 +1,3 @@
 requirements.txt
-setup.sh
+.vscode/
+__pycache__/

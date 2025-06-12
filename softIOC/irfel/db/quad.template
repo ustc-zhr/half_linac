@@ -1,7 +1,0 @@
-record(ao, "IRFEL:AP:QUAD:$(QUAD):K1:ao") {
-  field(VAL, "0.0")
-  #field(DRVL, "-10.0")
-  #field(DRVH, "10.0")
-  #field(PINI, "YES")
-  ##field(FLNK, "IRFEL:AP:QUAD:$(QUAD):K1:ai")
-}

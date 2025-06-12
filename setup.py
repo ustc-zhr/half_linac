@@ -1,17 +1,7 @@
 from pathlib import Path
 
-#class myconst:
-#    def __init__(self):
-#        self.rootpath = str(Path(__file__).resolve().parent)
-#
-#
-#if __name__ == '__main__':
-#    tmp = myconst()
-#    print(tmp.rootpath)
-
+# path
 rootpath = str(Path(__file__).resolve().parent)
-
-
 
 # consts
 c_light         = 2.99792458e8     #[m/s]
@@ -25,3 +15,6 @@ flag_pixel_width    = 0.02 #[mm]
 
 # refreash time for machine
 runtime_machine      = 8           #[s]
+
+if __name__ == '__main__':
+   print(rootpath)

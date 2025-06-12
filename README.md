@@ -4,6 +4,12 @@
 
 # 每周开发进度
 
+##### 2025-6-12-Zhanghaoran
+
+- `orbit corrrect`
+
+  添加任意定义目标轨道功能
+
 ##### 2025-5-29-Zhanghaoran
 
 - `beam monitor`
