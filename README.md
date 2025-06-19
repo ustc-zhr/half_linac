@@ -4,6 +4,12 @@
 
 # 每周开发进度
 
+##### 2025-6-19-Zhanghaoran
+
+- `orbit corrrect`
+
+  完善global correction功能
+
 ##### 2025-6-12-Zhanghaoran
 
 - `orbit corrrect`
