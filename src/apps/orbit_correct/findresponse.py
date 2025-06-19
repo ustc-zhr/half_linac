@@ -70,17 +70,17 @@ class response:
             pvBPMy_val = caget_many(self.pvBPMy)
             BPMx = pvBPMx_val
             BPMy = pvBPMy_val
-            #print('BPMx1   ',BPMx)
+
             for j in range(n_averages-1):
                 time.sleep(self.timer_interval)
                 pvBPMx_val = caget_many(self.pvBPMx)
                 pvBPMy_val = caget_many(self.pvBPMy)
                 BPMx = np.vstack((BPMx,pvBPMx_val))
                 BPMy = np.vstack((BPMy,pvBPMy_val))
-            #print('BPMx   ',BPMx)
+
             mean_BPMx1 = np.mean(BPMx, axis=0)
             mean_BPMy1 = np.mean(BPMy, axis=0)
-            #print(mean_BPMx1)
+
 
             caput(i, va - d_value)
             time.sleep(self.timer_interval)
@@ -101,20 +101,11 @@ class response:
             time.sleep(self.timer_interval)
             mi11 = mean_BPMx1 - mean_BPMx2
             mi12 = mean_BPMy1 - mean_BPMy2
-            #print("mi11  ",mi11)
-            #print('mi12,  ',mi12)
+
             mij11 = np.append(mi11, mi12)
-            #print('mij11   ',mij11)
-            # if n == 0 :
-            #     mij = mij11
-            #     n = n+1
-            # else:
-            #     mij = np.vstack((mij, mij11))
+
             mij = np.vstack((mij, mij11))
-            #print('mij    ',mij)
-            #np.savetxt('mi11.txt', mij11)
-            #np.savetxt('mij11.txt', mij11)
-            #print('\n',n)
+
         for i in self.pvCORy:
             va = caget(i)
             caput(i, va + d_value)
@@ -155,7 +146,7 @@ class response:
             mi22 = mean_BPMy1 - mean_BPMy2
             mij21 = np.append(mi21, mi22)
             mij = np.vstack((mij, mij21))
-            #mij并不是真正的响应矩阵，实际上Mij=transpose（mij）/2d_value，所以使用时要先转置再求逆。
+
         mij = np.transpose(mij)/2/d_value
             #print(mij)
         np.savetxt('response.txt', mij)

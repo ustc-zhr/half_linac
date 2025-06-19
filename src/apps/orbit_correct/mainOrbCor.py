@@ -107,7 +107,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         
     def measure_res(self): #measure response matrix
         cmd = [
-            "python3", "findresponse.py",                  #0
+            "python3", "findresponse_optimized.py",                  #0
         ]
         kwargs = {}
         kwargs["start_new_session"] = True  # Unix: 新会话组
@@ -128,7 +128,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         bpmy_target_values = [str(i) for i in bpmy_target_values]
         
         cmd = [
-            "python3", "correct.py",                  #0
+            "python3", "correct_optimized.py",                  #0
             "start_cor",                              #1
             self.comboBox.currentText(),              #2   method
             self.samplingIntervalSLineEdit.text(),    #3   samp_interval
@@ -162,8 +162,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def cor_off(self):
         bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
         cmd = [
-            "python3", "correct.py",                  #0
-            "cor_off",                                #1
+            "python3", "correct_optimized.py",                  #0
+            "cor_off",                                 #1
             ",".join(bpm_target_list)                  #2
         ]
         # 跨平台启动进程（确保进程组独立）

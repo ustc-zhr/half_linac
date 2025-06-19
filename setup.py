@@ -14,7 +14,11 @@ flag_pixel_machine  = [1440,1080]
 flag_pixel_width    = 0.02 #[mm]
 
 # refreash time for machine
-runtime_machine      = 8           #[s]
+runtime_machine      = 8           #[s]  8 for VM
 
-if __name__ == '__main__':
-   print(rootpath)
+# upper limit of corrector
+corrector_upperlimit = 0.001 # rad
+
+
+# if __name__ == '__main__':
+#    print(rootpath)

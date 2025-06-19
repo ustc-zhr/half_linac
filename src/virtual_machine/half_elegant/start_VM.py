@@ -36,7 +36,7 @@ if __name__=='__main__':
     print("VM is waiting changes\n")
 
 
-    period = 1  #1s    
+    period = 2  #1s    
     while True:
         time.sleep(period)
         print('wait')
