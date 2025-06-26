@@ -25,7 +25,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_4.clicked.connect(self.start_cor)
         self.pushButton_2.clicked.connect(self.cor_off)
         self.pushButton_3.clicked.connect(self.stop_cor)
-        # self.pushButton.clicked.connect(self.printzz)
+        self.pushButton_7.clicked.connect(self.cor_recover)
 
         # other button
         self.pushButton_5.clicked.connect(self.selectall)
@@ -41,7 +41,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         # 提取字符串中的第一个连续数字并转为整数
         match = re.search(r'\d+', s)
         return int(match.group()) if match else 0
-
 
     def selectall(self):
         for cb in self.all_checkboxes:
@@ -165,6 +164,24 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "python3", "correct_optimized.py",                  #0
             "cor_off",                                 #1
             ",".join(bpm_target_list)                  #2
+        ]
+        # 跨平台启动进程（确保进程组独立）
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+
+        Popen(
+            cmd,
+            cwd=st.rootpath + "/src/apps/orbit_correct",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+
+    def cor_recover(self):
+        # bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
+        cmd = [
+            "python3", "correct_optimized.py",                  #0
+            "cor_off",                                 #1
+            # ",".join(bpm_target_list)                  #2
         ]
         # 跨平台启动进程（确保进程组独立）
         kwargs = {}

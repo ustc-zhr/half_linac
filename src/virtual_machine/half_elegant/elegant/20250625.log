@@ -1,4 +1,4 @@
-Running elegant at Tue Jun 17 22:05:03 2025
+Running elegant at Wed Jun 25 11:55:11 2025
 
 This is elegant 2022.1.0, Jun 21 2023, by M. Borland, J. Calvey, M. Carla', N. Carmignani, AJ Dick, Z. Duan, M. Ehrlichman, L. Emery, W. Guo, R. Lindberg, V. Sajaev, R. Soliday, Y.-P. Sun, C.-X. Wang, Y. Wang, Y. Wu, and A. Xiao.
 =====================================================================================
@@ -69,8 +69,8 @@ computed value for DHOTGUN0.L is 8.500000000000000e-01
 computed value for DHOTGUN1.L is 1.175000000000000e+00
 computed value for QL01.L is 1.500000000000000e-01
 computed value for QL01.K1 is 6.345664000000000e+00
-computed value for QL01.DX is -2.235914331166209e-05
-computed value for QL01.DY is 1.049121245677792e-05
+computed value for QL01.DX is 1.328135088513225e-05
+computed value for QL01.DY is -8.151454135394888e-05
 computed value for DHOTGUN2.L is 2.000000000000000e-01
 computed value for ES01.X_MAX is 4.000000000000000e-03
 computed value for ES01.Y_MAX is 1.600000000000000e-02
@@ -79,34 +79,34 @@ computed value for PRF02S.DISABLE is 1
 computed value for DHOTGUN2B.L is 4.000000000000000e-01
 computed value for QL02.L is 1.500000000000000e-01
 computed value for QL02.K1 is -1.088725000000000e+01
-computed value for QL02.DX is 6.645800229745947e-05
-computed value for QL02.DY is 5.001381025046939e-05
+computed value for QL02.DX is 2.684947150911088e-05
+computed value for QL02.DY is -6.526835248559308e-05
 computed value for XC04.KICK is 0.000000000000000e+00
 computed value for YC04.KICK is 0.000000000000000e+00
 computed value for DHOTGUN3.L is 3.500000000000000e-01
 computed value for QL03.L is 1.500000000000000e-01
 computed value for QL03.K1 is 1.013887000000000e+01
-computed value for QL03.DX is 4.882030901103816e-05
-computed value for QL03.DY is -2.631562440197488e-05
+computed value for QL03.DX is -1.741141286803053e-05
+computed value for QL03.DY is 4.732020880710296e-05
 computed value for DHOTGUN4.L is 8.750000000000000e-01
 computed value for XC05.KICK is 0.000000000000000e+00
 computed value for YC05.KICK is 0.000000000000000e+00
 computed value for QL04.L is 1.500000000000000e-01
 computed value for QL04.K1 is 1.013887000000000e+01
-computed value for QL04.DX is 7.785548089876311e-06
-computed value for QL04.DY is 1.187496497735488e-05
+computed value for QL04.DX is 1.792476698314358e-05
+computed value for QL04.DY is 5.353385472079137e-05
 computed value for QL05.L is 1.500000000000000e-01
 computed value for QL05.K1 is -1.088725000000000e+01
-computed value for QL05.DX is 5.664961755366888e-05
-computed value for QL05.DY is -9.121972239180758e-05
+computed value for QL05.DX is -1.590712418509557e-05
+computed value for QL05.DY is -1.043943181960272e-04
 computed value for ES02.X_MAX is 4.000000000000000e-03
 computed value for ES02.Y_MAX is 1.600000000000000e-02
-computed value for XC06.KICK is 0.000000000000000e+00
-computed value for YC06.KICK is 0.000000000000000e+00
+computed value for XC06.KICK is -4.074290476055418e-05
+computed value for YC06.KICK is 3.403864192841217e-04
 computed value for QL06.L is 1.500000000000000e-01
 computed value for QL06.K1 is 6.345664000000000e+00
-computed value for QL06.DX is 4.970725370926422e-05
-computed value for QL06.DY is 3.320370306167073e-05
+computed value for QL06.DX is -9.666108202597554e-06
+computed value for QL06.DY is -2.945536849604789e-05
 computed value for BL01B.L is 3.500000000000000e-01
 computed value for BL01B.ANGLE is 3.046436000000000e-01
 computed value for BL01B.E1 is 3.046436000000000e-01
@@ -116,27 +116,27 @@ computed value for BL01B.EDGE_ORDER is 2
 computed value for BL01B.INTEGRATION_ORDER is 2
 computed value for BL01B.FSE_CORRECTION is 1
 computed value for DTH4A.L is 1.025000000000000e+00
-computed value for XC07.KICK is 0.000000000000000e+00
-computed value for YC07.KICK is 0.000000000000000e+00
+computed value for XC07.KICK is -1.515411145053654e-05
+computed value for YC07.KICK is -1.813800798303107e-04
 computed value for QL07.L is 1.500000000000000e-01
 computed value for QL07.K1 is 3.889390000000000e+00
-computed value for QL07.DX is -2.618131672565118e-05
-computed value for QL07.DY is 4.285213756376354e-05
+computed value for QL07.DX is 5.816761704716022e-05
+computed value for QL07.DY is 2.864340673151634e-05
 computed value for DTH5.L is 2.500000000000000e-01
 computed value for QL08.L is 1.500000000000000e-01
 computed value for QL08.K1 is -2.046863000000000e+00
-computed value for QL08.DX is -5.546118101502783e-05
-computed value for QL08.DY is 5.085788352297182e-06
+computed value for QL08.DX is 1.031884011724187e-05
+computed value for QL08.DY is 6.895403891502708e-05
 computed value for DTH6.L is 1.050000000000000e+00
 computed value for QL09.L is 1.500000000000000e-01
 computed value for QL09.K1 is 4.677693000000000e-01
-computed value for QL09.DX is -2.972115273027461e-05
-computed value for QL09.DY is 8.489305955616353e-06
+computed value for QL09.DX is -4.170760104493530e-05
+computed value for QL09.DY is -4.356182691255968e-05
 computed value for DTH7.L is 3.500000000000000e-01
 computed value for QL10.L is 1.500000000000000e-01
 computed value for QL10.K1 is -2.753931000000000e+00
-computed value for QL10.DX is 8.506968517139732e-05
-computed value for QL10.DY is -1.054959324662203e-06
+computed value for QL10.DX is 1.865427089899698e-05
+computed value for QL10.DY is -6.537760863384331e-05
 computed value for DTH8.L is 5.250000000000000e-01
 computed value for FODO00.DISABLE is 1
 computed value for DL00A.L is 2.250000000000000e-01
@@ -144,15 +144,15 @@ computed value for PRF02.DISABLE is 1
 computed value for DL00A1.L is 3.000000000000000e-01
 computed value for QL11.L is 1.500000000000000e-01
 computed value for QL11.K1 is -1.069225000000000e+00
-computed value for QL11.DX is -5.330150530137978e-05
-computed value for QL11.DY is -1.780148008252084e-05
+computed value for QL11.DX is -4.009009916394872e-05
+computed value for QL11.DY is -3.214285949001916e-06
 computed value for DL00B.L is 5.500000000000000e-01
 computed value for QL12.L is 1.500000000000000e-01
 computed value for QL12.K1 is 1.214364000000000e+00
-computed value for QL12.DX is 1.343235977827363e-04
-computed value for QL12.DY is 3.436999746419407e-05
-computed value for XC08.KICK is 0.000000000000000e+00
-computed value for YC08.KICK is 0.000000000000000e+00
+computed value for QL12.DX is -5.392412750064470e-05
+computed value for QL12.DY is -2.027996483510608e-05
+computed value for XC08.KICK is 8.824214328529348e-06
+computed value for YC08.KICK is 1.635535228986455e-05
 computed value for DL00C.L is 5.250000000000000e-01
 computed value for DA1.L is 4.951500000000000e-02
 computed value for L1.L is 3.044100000000000e+00
@@ -174,15 +174,15 @@ computed value for L1X.L is 6.000000000000000e-01
 computed value for DLB1A.L is 4.000000000000000e-01
 computed value for QL13.L is 1.500000000000000e-01
 computed value for QL13.K1 is -4.968432000000000e+00
-computed value for QL13.DX is 5.611959439355900e-05
-computed value for QL13.DY is -2.192229552576538e-05
-computed value for XC09.KICK is 0.000000000000000e+00
-computed value for YC09.KICK is 0.000000000000000e+00
+computed value for QL13.DX is 4.848709663878591e-05
+computed value for QL13.DY is -1.162696563852075e-05
+computed value for XC09.KICK is -2.455025997764852e-05
+computed value for YC09.KICK is -2.416918635210726e-05
 computed value for DLB1B.L is 4.000000000000000e-01
 computed value for QL14.L is 1.500000000000000e-01
 computed value for QL14.K1 is 4.052411000000000e+00
-computed value for QL14.DX is -2.042464915191289e-05
-computed value for QL14.DY is 2.166568816182522e-05
+computed value for QL14.DX is 7.866732956886021e-05
+computed value for QL14.DY is -7.372325550804168e-05
 computed value for DLB1C.L is 4.000000000000000e-01
 computed value for BC11.L is 2.000000000000000e-01
 computed value for DB11.L is 1.600000000000000e+00
@@ -198,15 +198,15 @@ computed value for BC14.L is 2.000000000000000e-01
 computed value for DLB1D.L is 3.000000000000000e-01
 computed value for QL15.L is 1.500000000000000e-01
 computed value for QL15.K1 is 1.387017000000000e+00
-computed value for QL15.DX is 6.022989060402944e-05
-computed value for QL15.DY is 5.015832097407463e-05
-computed value for XC10.KICK is 0.000000000000000e+00
-computed value for YC10.KICK is 0.000000000000000e+00
+computed value for QL15.DX is -3.366969467252733e-05
+computed value for QL15.DY is 4.475036201946642e-05
+computed value for XC10.KICK is 8.020221303215465e-06
+computed value for YC10.KICK is 1.013143773013001e-05
 computed value for DLB1E.L is 6.000000000000000e-01
 computed value for QL16.L is 1.500000000000000e-01
 computed value for QL16.K1 is -2.739060000000000e+00
-computed value for QL16.DX is -2.491607393827141e-05
-computed value for QL16.DY is -3.097162323090107e-05
+computed value for QL16.DX is 2.114059531751244e-05
+computed value for QL16.DY is -8.461149816711575e-06
 computed value for DLB1F.L is 2.500000000000000e+00
 computed value for PRF04.DISABLE is 0
 computed value for DLB1F1.L is 5.000000000000000e-01
@@ -214,18 +214,18 @@ computed value for XC11.KICK is 0.000000000000000e+00
 computed value for YC11.KICK is 0.000000000000000e+00
 computed value for QL17.L is 1.500000000000000e-01
 computed value for QL17.K1 is 1.473873000000000e+00
-computed value for QL17.DX is 4.716666699687554e-05
-computed value for QL17.DY is 8.262673960849048e-05
+computed value for QL17.DX is -7.785199467178760e-05
+computed value for QL17.DY is 1.264700788883620e-05
 computed value for DLB1G.L is 5.000000000000000e-01
 computed value for QL18.L is 1.500000000000000e-01
 computed value for QL18.K1 is -5.071771000000000e-01
-computed value for QL18.DX is -4.204599111866529e-05
-computed value for QL18.DY is -3.599604486632000e-05
+computed value for QL18.DX is 8.383880991694372e-06
+computed value for QL18.DY is 2.890170617648208e-05
 computed value for DLB1H.L is 5.000000000000000e-01
 computed value for QL19.L is 1.500000000000000e-01
 computed value for QL19.K1 is -5.812314000000000e-01
-computed value for QL19.DX is -2.835877177760060e-05
-computed value for QL19.DY is -1.144544222469331e-05
+computed value for QL19.DX is -8.760009090094283e-05
+computed value for QL19.DY is 2.123274848456831e-05
 computed value for FODO02.DISABLE is 1
 computed value for XC12.KICK is 0.000000000000000e+00
 computed value for YC12.KICK is 0.000000000000000e+00
@@ -245,52 +245,52 @@ computed value for DA2.L is 5.000000000000000e-01
 computed value for FODO01.DISABLE is 1
 computed value for QL20.L is 1.500000000000000e-01
 computed value for QL20.K1 is 5.812314000000000e-01
-computed value for QL20.DX is -9.057118182617716e-05
-computed value for QL20.DY is 9.612627257944550e-05
+computed value for QL20.DX is 6.575374093834054e-06
+computed value for QL20.DY is -4.140300871714714e-05
 computed value for XC13.KICK is 0.000000000000000e+00
 computed value for YC13.KICK is 0.000000000000000e+00
 computed value for QL21.L is 1.500000000000000e-01
 computed value for QL21.K1 is -5.812314000000000e-01
-computed value for QL21.DX is 8.172035724959682e-06
-computed value for QL21.DY is -2.286684769745505e-05
+computed value for QL21.DX is -7.059113481677755e-05
+computed value for QL21.DY is -1.507569032982098e-05
 computed value for XC14.KICK is 0.000000000000000e+00
 computed value for YC14.KICK is 0.000000000000000e+00
 computed value for QL22.L is 1.500000000000000e-01
 computed value for QL22.K1 is 5.812314000000000e-01
-computed value for QL22.DX is 1.197324770385406e-05
-computed value for QL22.DY is -5.927934369333335e-05
+computed value for QL22.DX is -5.841755155940657e-05
+computed value for QL22.DY is 6.647388700127771e-05
 computed value for XC15.KICK is 0.000000000000000e+00
 computed value for YC15.KICK is 0.000000000000000e+00
 computed value for QL23.L is 1.500000000000000e-01
 computed value for QL23.K1 is -5.812314000000000e-01
-computed value for QL23.DX is 2.282582713862155e-05
-computed value for QL23.DY is 7.857856963404823e-06
+computed value for QL23.DX is -4.501866404373477e-05
+computed value for QL23.DY is 4.636547155778415e-05
 computed value for XC16.KICK is 0.000000000000000e+00
 computed value for YC16.KICK is 0.000000000000000e+00
 computed value for DA2A.L is 2.500000000000000e-01
 computed value for PRF05.DISABLE is 1
 computed value for QL24.L is 1.500000000000000e-01
 computed value for QL24.K1 is 5.812314000000000e-01
-computed value for QL24.DX is 1.619450654475213e-05
-computed value for QL24.DY is -7.199591704437527e-05
+computed value for QL24.DX is 3.100207390068514e-05
+computed value for QL24.DY is -4.056910859132246e-05
 computed value for XC17.KICK is 0.000000000000000e+00
 computed value for YC17.KICK is 0.000000000000000e+00
 computed value for QL25.L is 1.500000000000000e-01
 computed value for QL25.K1 is -5.812314000000000e-01
-computed value for QL25.DX is 7.109687621901928e-05
-computed value for QL25.DY is 7.654546749865840e-05
+computed value for QL25.DX is -2.525882697088382e-05
+computed value for QL25.DY is 7.594050501865051e-05
 computed value for XC18.KICK is 0.000000000000000e+00
 computed value for YC18.KICK is 0.000000000000000e+00
 computed value for QL26.L is 1.500000000000000e-01
 computed value for QL26.K1 is 5.812314000000000e-01
-computed value for QL26.DX is -1.112569496956955e-04
-computed value for QL26.DY is -2.028856403790411e-05
+computed value for QL26.DX is -4.067432117413705e-05
+computed value for QL26.DY is 6.025142319127044e-07
 computed value for XC19.KICK is 0.000000000000000e+00
 computed value for YC19.KICK is 0.000000000000000e+00
 computed value for QL27.L is 1.500000000000000e-01
 computed value for QL27.K1 is -5.812314000000000e-01
-computed value for QL27.DX is -8.162228465052282e-05
-computed value for QL27.DY is 1.897241713606775e-05
+computed value for QL27.DX is 2.722494060301768e-05
+computed value for QL27.DY is -7.149746285388843e-05
 computed value for FODO03.DISABLE is 1
 computed value for XC20.KICK is 0.000000000000000e+00
 computed value for YC20.KICK is 0.000000000000000e+00
@@ -308,15 +308,15 @@ computed value for FODO04.DISABLE is 1
 computed value for DMTA.L is 1.000000000000000e+00
 computed value for QT01.L is 1.500000000000000e-01
 computed value for QT01.K1 is -1.315043000000000e+00
-computed value for QT01.DX is -6.512360975917430e-07
-computed value for QT01.DY is -2.443994809819771e-05
+computed value for QT01.DX is -7.385532485501491e-05
+computed value for QT01.DY is -9.223399500101468e-05
 computed value for XC21.KICK is 0.000000000000000e+00
 computed value for YC21.KICK is 0.000000000000000e+00
 computed value for DMTB.L is 1.250000000000000e+00
 computed value for QT02.L is 1.500000000000000e-01
 computed value for QT02.K1 is 1.402247000000000e+00
-computed value for QT02.DX is 3.704062913358795e-05
-computed value for QT02.DY is 7.874523193520540e-05
+computed value for QT02.DX is 2.227612313727661e-05
+computed value for QT02.DY is -3.245615940895414e-05
 computed value for DMTC1.L is 5.500000000000000e-01
 computed value for PRF06.DISABLE is 0
 computed value for DMTC2.L is 5.500000000000000e+00
@@ -326,13 +326,13 @@ computed value for PRF08.DISABLE is 0
 computed value for DMTC4.L is 5.000000000000000e-01
 computed value for QT03.L is 1.500000000000000e-01
 computed value for QT03.K1 is -1.339706000000000e+00
-computed value for QT03.DX is -5.118376330797258e-05
-computed value for QT03.DY is 7.687899390003705e-06
+computed value for QT03.DX is -1.029063308516938e-05
+computed value for QT03.DY is -9.260282669096394e-05
 computed value for DMTD.L is 1.300000000000000e+00
 computed value for QT04.L is 1.500000000000000e-01
 computed value for QT04.K1 is 8.841496000000000e-01
-computed value for QT04.DX is -6.684325566652062e-06
-computed value for QT04.DY is -2.134467423748843e-05
+computed value for QT04.DX is 3.996231922732105e-05
+computed value for QT04.DY is -1.175780417855650e-04
 computed value for XC22.KICK is 0.000000000000000e+00
 computed value for YC22.KICK is 0.000000000000000e+00
 computed value for DMTE.L is 1.575000000000000e+00
@@ -342,13 +342,13 @@ computed value for DMTE2.L is 2.000000000000000e-01
 computed value for FODO05.DISABLE is 1
 computed value for QHL1.L is 3.000000000000000e-01
 computed value for QHL1.K1 is 2.308226000000000e+00
-computed value for QHL1.DX is 3.393452374315657e-06
-computed value for QHL1.DY is 7.303678640566244e-05
+computed value for QHL1.DX is -9.137723678874873e-05
+computed value for QHL1.DY is -5.399021199913865e-05
 computed value for DHL1.L is 3.000000000000000e-01
 computed value for QHL2.L is 3.000000000000000e-01
 computed value for QHL2.K1 is -1.975459000000000e+00
-computed value for QHL2.DX is -8.410032653807366e-05
-computed value for QHL2.DY is 1.077469620111523e-04
+computed value for QHL2.DX is -2.208015892893685e-05
+computed value for QHL2.DY is -3.149426280796766e-05
 computed value for XC23.KICK is 0.000000000000000e+00
 computed value for YC23.KICK is 0.000000000000000e+00
 computed value for DHL2.L is 4.500000000000000e-01
@@ -367,14 +367,14 @@ computed value for DHL3.L is 2.128000000000000e+00
 computed value for DHL3A.L is 3.000000000000000e-01
 computed value for QHL3.L is 3.000000000000000e-01
 computed value for QHL3.K1 is 2.832848000000000e+00
-computed value for QHL3.DX is 1.636040420529226e-05
-computed value for QHL3.DY is 4.901517778918197e-05
+computed value for QHL3.DX is -4.552688839316908e-05
+computed value for QHL3.DY is -8.951075600771945e-05
 computed value for DHL4.L is 2.000000000000000e-01
 computed value for DHL4A.L is 2.670000000000000e-01
 computed value for QHL4.L is 3.000000000000000e-01
 computed value for QHL4.K1 is -2.158739000000000e+00
-computed value for QHL4.DX is 1.384104522225281e-06
-computed value for QHL4.DY is -1.257916791065905e-06
+computed value for QHL4.DX is 7.455110119954870e-05
+computed value for QHL4.DY is 5.309412356687953e-05
 computed value for XC24.KICK is 0.000000000000000e+00
 computed value for YC24.KICK is 0.000000000000000e+00
 computed value for DHL5.L is 4.950000000000000e+00
@@ -411,96 +411,96 @@ computed value for WB1.DISABLE is 1
 computed value for DMF1.L is 4.750000000000000e-01
 computed value for QT13.L is 1.500000000000000e-01
 computed value for QT13.K1 is 9.463534000000000e-01
-computed value for QT13.DX is -3.073886678898248e-05
-computed value for QT13.DY is 2.290804854025865e-05
+computed value for QT13.DX is 2.905433899799856e-05
+computed value for QT13.DY is -6.525640720239347e-06
 computed value for DMF2.L is 1.050000000000000e+00
 computed value for QT14.L is 1.500000000000000e-01
 computed value for QT14.K1 is -1.247343000000000e+00
-computed value for QT14.DX is -2.491290199070709e-05
-computed value for QT14.DY is 1.295937922236922e-04
+computed value for QT14.DX is -2.400461528013699e-06
+computed value for QT14.DY is 4.335762751601461e-05
 computed value for XC27.KICK is 0.000000000000000e+00
 computed value for YC27.KICK is 0.000000000000000e+00
 computed value for DMF3.L is 1.050000000000000e+00
 computed value for QT15.L is 1.500000000000000e-01
 computed value for QT15.K1 is 1.774070000000000e-01
-computed value for QT15.DX is -7.145464005498827e-05
-computed value for QT15.DY is 2.577785986121812e-05
+computed value for QT15.DX is -4.389823171690035e-06
+computed value for QT15.DY is 6.107172426985464e-06
 computed value for DMF4.L is 5.500000000000000e-01
 computed value for DT1.L is 4.536000000000000e+00
 computed value for PRF11.DISABLE is 1
 computed value for DT1A.L is 2.000000000000000e-01
 computed value for QT16.L is 1.500000000000000e-01
 computed value for QT16.K1 is -3.573785000000000e-01
-computed value for QT16.DX is 1.134686020143406e-05
-computed value for QT16.DY is 3.640528825706053e-06
+computed value for QT16.DX is 3.770663231382152e-05
+computed value for QT16.DY is 8.963179480717823e-05
 computed value for DT1B.L is 8.500000000000000e-01
 computed value for QTR1.L is 7.500000000000000e-02
 computed value for QTR1.K1 is 6.594606000000000e-01
-computed value for QTR1.DX is 5.861174075808112e-06
-computed value for QTR1.DY is 1.359555928289903e-04
+computed value for QTR1.DX is -6.298914960946253e-05
+computed value for QTR1.DY is -2.485240315095268e-05
 computed value for W01.DISABLE is 1
 computed value for XC28.KICK is 0.000000000000000e+00
 computed value for YC28.KICK is 0.000000000000000e+00
 computed value for DT2.L is 1.205000000000000e+01
 computed value for QT18.L is 1.500000000000000e-01
 computed value for QT18.K1 is -6.594606000000000e-01
-computed value for QT18.DX is 2.348319810846203e-05
-computed value for QT18.DY is 6.475382850563020e-05
+computed value for QT18.DX is 5.193081548983819e-05
+computed value for QT18.DY is -2.206822395178169e-06
 computed value for XC29.KICK is 0.000000000000000e+00
 computed value for YC29.KICK is 0.000000000000000e+00
 computed value for DT3.L is 1.205000000000000e+01
 computed value for QT19.L is 1.500000000000000e-01
 computed value for QT19.K1 is 6.594606000000000e-01
-computed value for QT19.DX is 5.906461143365324e-05
-computed value for QT19.DY is 6.013769892475990e-05
+computed value for QT19.DX is 4.347305129580167e-05
+computed value for QT19.DY is 7.882246559684755e-05
 computed value for XC30.KICK is 0.000000000000000e+00
 computed value for YC30.KICK is 0.000000000000000e+00
 computed value for DT4.L is 1.205000000000000e+01
 computed value for QT20.L is 1.500000000000000e-01
 computed value for QT20.K1 is -6.594606000000000e-01
-computed value for QT20.DX is 6.003331620828695e-05
-computed value for QT20.DY is -3.158286336608459e-05
+computed value for QT20.DX is -9.429324396334623e-06
+computed value for QT20.DY is 2.883558933552435e-05
 computed value for XC31.KICK is 0.000000000000000e+00
 computed value for YC31.KICK is 0.000000000000000e+00
 computed value for DT5.L is 1.205000000000000e+01
 computed value for QT21.L is 1.500000000000000e-01
 computed value for QT21.K1 is 6.594606000000000e-01
-computed value for QT21.DX is 7.539711836006411e-06
-computed value for QT21.DY is -1.371655441621340e-05
+computed value for QT21.DX is -2.683736213355873e-05
+computed value for QT21.DY is 4.141235563705904e-05
 computed value for XC32.KICK is 0.000000000000000e+00
 computed value for YC32.KICK is 0.000000000000000e+00
 computed value for DT6.L is 1.205000000000000e+01
 computed value for QT22.L is 1.500000000000000e-01
 computed value for QT22.K1 is -6.594606000000000e-01
-computed value for QT22.DX is -1.058075775157652e-05
-computed value for QT22.DY is 2.212163515111735e-05
+computed value for QT22.DX is -9.752362790221976e-05
+computed value for QT22.DY is -2.461451163600111e-05
 computed value for XC33.KICK is 0.000000000000000e+00
 computed value for YC33.KICK is 0.000000000000000e+00
 computed value for DT7.L is 1.205000000000000e+01
 computed value for QT23.L is 1.500000000000000e-01
 computed value for QT23.K1 is 6.594606000000000e-01
-computed value for QT23.DX is -6.548251983336988e-05
-computed value for QT23.DY is -1.856565734169316e-05
+computed value for QT23.DX is -3.560552310734108e-06
+computed value for QT23.DY is 7.154174310279194e-05
 computed value for XC34.KICK is 0.000000000000000e+00
 computed value for YC34.KICK is 0.000000000000000e+00
 computed value for DT8.L is 2.762534000000000e+00
 computed value for DMO1.L is 2.750000000000000e-01
 computed value for QT24.L is 3.000000000000000e-01
 computed value for QT24.K1 is 1.557907000000000e+00
-computed value for QT24.DX is -1.933277245636101e-05
-computed value for QT24.DY is 5.978601997961029e-05
+computed value for QT24.DX is -4.179074279574363e-05
+computed value for QT24.DY is 8.176071302006811e-05
 computed value for DMO2.L is 3.000000000000000e-01
 computed value for QT25.L is 3.000000000000000e-01
 computed value for QT25.K1 is -2.509871000000000e+00
-computed value for QT25.DX is 1.155131446249128e-06
-computed value for QT25.DY is -1.263186504416081e-05
+computed value for QT25.DX is 9.167608674112909e-05
+computed value for QT25.DY is 6.619221865632149e-05
 computed value for XC35.KICK is 0.000000000000000e+00
 computed value for YC35.KICK is 0.000000000000000e+00
 computed value for DMO3.L is 1.775000000000000e+00
 computed value for QT26.L is 1.500000000000000e-01
 computed value for QT26.K1 is -5.559521000000000e-02
-computed value for QT26.DX is -6.936279275911586e-06
-computed value for QT26.DY is -3.969933222056630e-05
+computed value for QT26.DX is -5.027294423764350e-05
+computed value for QT26.DY is -1.279660606732144e-04
 computed value for XC36.KICK is 0.000000000000000e+00
 computed value for YC36.KICK is 0.000000000000000e+00
 computed value for DMO4.L is 6.250000000000000e-01
@@ -509,13 +509,13 @@ computed value for PRF12.DISABLE is 1
 computed value for DMO4B.L is 2.000000000000000e-01
 computed value for QT27.L is 3.000000000000000e-01
 computed value for QT27.K1 is 2.493402000000000e+00
-computed value for QT27.DX is -1.136079268583175e-04
-computed value for QT27.DY is 3.347833142595869e-05
+computed value for QT27.DX is 4.377991770802140e-05
+computed value for QT27.DY is -6.135449080476606e-05
 computed value for DMO5.L is 3.000000000000000e-01
 computed value for QT28.L is 3.000000000000000e-01
 computed value for QT28.K1 is -3.426730000000000e+00
-computed value for QT28.DX is -2.159565798636474e-05
-computed value for QT28.DY is 3.989256837110073e-06
+computed value for QT28.DX is -4.663110067171447e-05
+computed value for QT28.DY is -3.977727128765605e-05
 computed value for XC37.KICK is 0.000000000000000e+00
 computed value for YC37.KICK is 0.000000000000000e+00
 computed value for DMO6.L is 3.000000000000000e-01
@@ -535,8 +535,8 @@ computed value for DS1.DZ is 1.000000000000000e-02
 computed value for DS1.USE_STUPAKOV is 1
 computed value for QT29.L is 1.500000000000000e-01
 computed value for QT29.K1 is 1.127802000000000e+00
-computed value for QT29.DX is -3.132983301089559e-05
-computed value for QT29.DY is -1.845059306096955e-05
+computed value for QT29.DX is -2.533767993342529e-05
+computed value for QT29.DY is 1.936330889738762e-05
 computed value for XC38.KICK is 0.000000000000000e+00
 computed value for YC38.KICK is 0.000000000000000e+00
 computed value for DHR1.L is 4.250000000000000e-01
@@ -559,8 +559,8 @@ computed value for F5.DZ is 1.000000000000000e-02
 computed value for F5.USE_STUPAKOV is 1
 computed value for QT30.L is 3.000000000000000e-01
 computed value for QT30.K1 is -2.960617000000000e+00
-computed value for QT30.DX is 2.363897777994096e-05
-computed value for QT30.DY is -2.300861472192934e-06
+computed value for QT30.DX is -5.348378308925658e-05
+computed value for QT30.DY is -6.963366940866304e-05
 computed value for XC39.KICK is 0.000000000000000e+00
 computed value for YC39.KICK is 0.000000000000000e+00
 computed value for F2.L is 1.400000000000000e+00
@@ -568,15 +568,15 @@ computed value for F2.DZ is 1.000000000000000e-02
 computed value for F2.USE_STUPAKOV is 1
 computed value for QT31.L is 3.000000000000000e-01
 computed value for QT31.K1 is 3.334709000000000e+00
-computed value for QT31.DX is 2.955745911960836e-05
-computed value for QT31.DY is 1.373486073757885e-04
+computed value for QT31.DX is -3.493054606082413e-05
+computed value for QT31.DY is -8.689057431311652e-05
 computed value for F3.L is 5.000000000000000e-01
 computed value for F3.DZ is 1.000000000000000e-02
 computed value for F3.USE_STUPAKOV is 1
 computed value for QT32.L is 3.000000000000000e-01
 computed value for QT32.K1 is -3.457488000000000e+00
-computed value for QT32.DX is 9.252318977840005e-05
-computed value for QT32.DY is -9.208873189093237e-05
+computed value for QT32.DX is -2.779432223177869e-05
+computed value for QT32.DY is -2.483318860742922e-05
 computed value for XC40.KICK is 0.000000000000000e+00
 computed value for YC40.KICK is 0.000000000000000e+00
 computed value for F4.L is 5.749710000000000e-01
@@ -585,18 +585,18 @@ computed value for F4.USE_STUPAKOV is 1
 computed value for PRF13.DISABLE is 1
 computed value for QT33.L is 3.000000000000000e-01
 computed value for QT33.K1 is -3.457488000000000e+00
-computed value for QT33.DX is 4.278966374872303e-05
-computed value for QT33.DY is 7.359294631500889e-05
+computed value for QT33.DX is -9.790242938913033e-05
+computed value for QT33.DY is 4.312443349519357e-05
 computed value for XC41.KICK is 0.000000000000000e+00
 computed value for YC41.KICK is 0.000000000000000e+00
 computed value for QT34.L is 3.000000000000000e-01
 computed value for QT34.K1 is 3.334709000000000e+00
-computed value for QT34.DX is 9.208712375304167e-05
-computed value for QT34.DY is -4.815260239549368e-07
+computed value for QT34.DX is -6.214235549561002e-07
+computed value for QT34.DY is -2.322354233168839e-05
 computed value for QT35.L is 3.000000000000000e-01
 computed value for QT35.K1 is -2.960617000000000e+00
-computed value for QT35.DX is 9.381419525085325e-05
-computed value for QT35.DY is 2.145521190277618e-06
+computed value for QT35.DX is 1.138593483643672e-04
+computed value for QT35.DY is -7.561985325234859e-05
 computed value for XC42.KICK is 0.000000000000000e+00
 computed value for YC42.KICK is 0.000000000000000e+00
 computed value for BV02.L is 2.727100000000000e+00
@@ -613,8 +613,8 @@ computed value for BV02.SGDERIV_HALFWIDTH is 20
 computed value for BV02.ISR is 1
 computed value for QT36.L is 1.500000000000000e-01
 computed value for QT36.K1 is 1.127802000000000e+00
-computed value for QT36.DX is -2.926650991358650e-05
-computed value for QT36.DY is 2.946996126913515e-05
+computed value for QT36.DX is -4.936226053302659e-05
+computed value for QT36.DY is -1.437329831824764e-05
 computed value for XC43.KICK is 0.000000000000000e+00
 computed value for YC43.KICK is 0.000000000000000e+00
 computed value for DS1A.L is 5.000000000000000e-01
@@ -658,7 +658,7 @@ computed value for WSEP1.DISABLE is 1
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 length of beamline USEDLINE per pass: 3.192640960000002e+02 m
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6390
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6391
 &run_control
     n_steps = 1,
     bunch_frequency = 0.000000000000000e+00,
@@ -671,7 +671,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6390
     restrict_fiducialization = 1,
     reset_scattering_seed = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6390
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6391
 &twiss_output
     filename = %s.twi,
     matched = 0,
@@ -709,17 +709,17 @@ final Twiss parameters (chromaticity valid for fully second-order calculation on
          beta          alpha           nu           eta          eta'       dnu/d(dp/p)   dbeta/(dp/p)     accept.
           m                          1/2pi           m                         1/2pi            m          mm-mrad
 --------------------------------------------------------------------------------------------------------------------
-  x:  6.318641e+00  5.833190e-02  4.967032e+00  5.335512e-02  1.758320e-03 -5.519723e-01 -6.830197e+01  4.978889e-01
-ave:  2.502162e+01  5.076503e-02               -2.567346e-02  1.408862e-04
-min:  1.180260e-01 -3.480014e+01               -2.044667e+00 -1.238676e+00
-max:  9.066886e+01  3.673219e+01                7.957135e-01  1.266752e+00
-  y:  3.015459e+00  7.414007e-02  5.846417e+00 -6.990738e-02 -2.777069e-02 -3.937615e+00 -7.742585e+01  3.243786e-01
-ave:  2.292476e+01  6.129029e-02                4.513207e-03 -3.311060e-04
-min:  3.820898e-01 -8.668146e+01               -8.275105e-01 -4.774481e-01
-max:  8.182493e+01  4.256799e+01                1.105963e+00  5.257572e-01
-x acceptance limited to 4.978889e-07 by DHL4A ending at 2.002334e+02 m
-y acceptance limited to 3.243786e-07 by DA1 ending at 6.376090e+01 m
-statistics:    ET:     00:00:00 CP:    0.06 BIO:0 DIO:0 PF:0 MEM:6926
+  x:  6.316853e+00  5.913367e-02  4.966893e+00  1.333192e-02 -8.462099e-04 -5.532614e-01 -6.855487e+01  7.413100e-01
+ave:  2.502285e+01  5.076536e-02               -3.152659e-02  2.446464e-05
+min:  1.180265e-01 -3.481106e+01               -1.990437e+00 -1.225674e+00
+max:  9.066390e+01  3.672736e+01                7.641123e-01  1.230405e+00
+  y:  3.015558e+00  7.297265e-02  5.846529e+00 -1.044311e-02 -6.248614e-03 -3.932090e+00 -7.752417e+01  1.833006e+00
+ave:  2.292398e+01  6.125674e-02               -7.070382e-04 -1.746486e-04
+min:  3.816513e-01 -8.668151e+01               -9.118497e-01 -4.518123e-01
+max:  8.182502e+01  4.256805e+01                9.868257e-01  4.439657e-01
+x acceptance limited to 7.413100e-07 by DHL4A ending at 2.002334e+02 m
+y acceptance limited to 1.833006e-06 by DA1 ending at 1.483271e+02 m
+statistics:    ET:     00:00:00 CP:    0.06 BIO:0 DIO:0 PF:0 MEM:6922
 &matrix_output
     printout = {NULL},
     printout_order = 1,
@@ -738,7 +738,7 @@ statistics:    ET:     00:00:00 CP:    0.06 BIO:0 DIO:0 PF:0 MEM:6926
     SDDS_output_match = {NULL},
 &end
 *** Warning: Some elements had no matrix. --- 33 elements had no matrix
-statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:6926
+statistics:    ET:     00:00:00 CP:    0.06 BIO:0 DIO:0 PF:0 MEM:6922
 &error_control
     clear_error_settings = 1,
     summarize_error_settings = 0,
@@ -750,7 +750,7 @@ statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:6926
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 
 *** Cleared error settings
-statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:6926
+statistics:    ET:     00:00:00 CP:    0.06 BIO:0 DIO:0 PF:0 MEM:6922
 &error
     name = *,
     exclude = {NULL},
@@ -772,7 +772,7 @@ statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:6926
     sample_file_column = {NULL},
     sample_mode = {NULL},
 &end
-statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:6926
+statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:6922
 &bunched_beam
     bunch = {NULL},
     n_particles_per_bunch = 10000,
@@ -817,7 +817,7 @@ statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:6926
         0.000000000000000e+00, 0.000000000000000e+00,
     first_is_fiducial = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:7270
+statistics:    ET:     00:00:00 CP:    0.07 BIO:0 DIO:0 PF:0 MEM:7265
 &track
     center_on_orbit = 0,
     center_momentum_also = 1,
@@ -836,18 +836,18 @@ Updating floor coordinates
 tracking step 1
 generating bunch 1
 tracking 10000 particles
-17 Jun 25 22:05:03: This step establishes energy profile vs s (fiducial beam).
-17 Jun 25 22:05:03: Rf phases/references reset.
+25 Jun 25 11:55:11: This step establishes energy profile vs s (fiducial beam).
+25 Jun 25 11:55:11: Rf phases/references reset.
 Dumping centroid data...done.
 Dumping bpm_centroid data...done.
 Post-tracking output completed.
-Tracking step completed   ET:     00:00:05 CP:    4.67 BIO:0 DIO:0 PF:0 MEM:7797
+Tracking step completed   ET:     00:00:05 CP:    4.68 BIO:0 DIO:0 PF:0 MEM:7810
 
 
 Updating floor coordinates
 Finished tracking.
 End of input data encountered.
-statistics:    ET:     00:00:05 CP:    4.67 BIO:0 DIO:0 PF:0 MEM:7797
+statistics:    ET:     00:00:05 CP:    4.68 BIO:0 DIO:0 PF:0 MEM:7810
 
 ************************** Summary of warnings ****************************
 2 types of warnings were recorded:

@@ -72,9 +72,7 @@ class OrbitCorrector:
             self.target_BPMx_values = []
             self.target_BPMy_values = []
         
-        # 加载响应矩阵
-        self.ORMx_n, self.ORMy_n = self.load_response_matrix()
-        # self.compute_svd()
+        
         
         # PV连接
         self.pvBPMx: List[PV] = []
@@ -86,48 +84,6 @@ class OrbitCorrector:
         """在设备列表中查找目标设备的位置索引"""
         return [i for i, elem in enumerate(main_list) if elem in sub_list]
     
-    def load_response_matrix(self) -> Tuple[np.ndarray, np.ndarray]:
-        """加载并计算响应矩阵的逆矩阵"""
-        try:
-            RM = np.loadtxt(self.RESPM_FILE)
-            print(RM)
-            ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
-            ORM_y = RM[self.N_BPM:82, self.N_COR:82]
-            return np.linalg.inv(ORM_x), np.linalg.inv(ORM_y)
-        except Exception as e:
-            logger.error(f"加载响应矩阵失败: {e}")
-            raise
-
-    # def compute_svd(self, min_singular_value=0.01):
-    #     """计算响应矩阵的SVD分解"""
-    #     RM = np.loadtxt(self.RESPM_FILE)
-    #     ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
-    #     ORM_y = RM[self.N_BPM:82, self.N_COR:82]
-            
-    #     U_x, s_x, Vt_x = svd(ORM_x, full_matrices=False)
-    #     self.svd_components_x = (U_x, s_x, Vt_x)
-        
-    #     # 创建截断的伪逆矩阵
-    #     s_inv_x = np.zeros_like(s_x)
-    #     for i, val in enumerate(s_x):
-    #         if abs(val) > min_singular_value:
-    #             s_inv_x[i] = 1 / val
-        
-    #     self.pseudo_inverse_x = Vt_x.T @ np.diag(s_inv_x) @ U_x.T
-
-    #     U_y, s_y, Vt_y = svd(ORM_y, full_matrices=False)
-    #     self.svd_components_y = (U_y, s_y, Vt_y)
-        
-    #     # 创建截断的伪逆矩阵
-    #     s_inv_y = np.zeros_like(s_y)
-    #     for i, val in enumerate(s_y):
-    #         if abs(val) > min_singular_value:
-    #             s_inv_y[i] = 1 / val
-        
-    #     self.pseudo_inverse_y = Vt_y.T @ np.diag(s_inv_y) @ U_y.T
-
-    #     print('svd:', self.svd_components_x, self.svd_components_y)
-   
     
     def init_BPM_pv(self) -> None:
         """初始化BPM的PV连接"""
@@ -154,6 +110,24 @@ class OrbitCorrector:
         for cor in self.cor_y_list_target:
             self.pvCORy.append(PV(f"HALF:IN:COR:{cor}:ao"))
             self.pvnameCORy.append(f"HALF:IN:COR:{cor}:ao")
+    
+    def save_origin_cor(self) -> None:
+        pvnameCORx = []
+        pvnameCORy = []
+        for corx, cory in zip(self.cor_x_list_all, self.cor_y_list_all):
+            pvnameCORx.append(f"HALF:IN:COR:{corx}:ao")
+            pvnameCORy.append(f"HALF:IN:COR:{cory}:ao")
+
+        hcor_vals = caget_many(self.pvnameCORx)
+        vcor_vals = caget_many(self.pvnameCORy)
+        
+        with open('cor_temp.txt', 'w') as file:
+            for item1, item2 in zip(hcor_vals, vcor_vals):
+                file.write(f"{item1}\t{item2}\n")
+
+
+
+        
     
        
     # def _get_avg_readings(self, pv_groups: List[List[PV]]) -> List[float]:
@@ -272,7 +246,48 @@ class OrbitCorrector:
             logger.info(f"correction finished: {self.bpm_list_target[j]}")
             logger.info(f"corrector: ({hcorrVal:.3f}, {vcorrVal:.3f})")
             logger.info(f"BPM: ({xbpm_val1:.3e}, {ybpm_val1:.3e})")
- 
+
+
+    def _load_response_matrix(self) -> Tuple[np.ndarray, np.ndarray]:
+        """加载并计算响应矩阵的逆矩阵"""
+        try:
+            RM = np.loadtxt(self.RESPM_FILE)
+            print(RM)
+            ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
+            ORM_y = RM[self.N_BPM:82, self.N_COR:82]
+            return np.linalg.inv(ORM_x), np.linalg.inv(ORM_y)
+        except Exception as e:
+            logger.error(f"加载响应矩阵失败: {e}")
+            raise
+
+    def _compute_svd(self, min_singular_value=0.01):
+        """计算响应矩阵的SVD分解"""
+        RM = np.loadtxt(self.RESPM_FILE)
+        ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
+        ORM_y = RM[self.N_BPM:82, self.N_COR:82]
+            
+        U_x, s_x, Vt_x = svd(ORM_x, full_matrices=False)
+        # self.svd_components_x = (U_x, s_x, Vt_x)
+        
+        # 创建截断的伪逆矩阵
+        s_inv_x = np.zeros_like(s_x)
+        for i, val in enumerate(s_x):
+            if abs(val) > min_singular_value:
+                s_inv_x[i] = 1 / val
+        
+        self.pseudo_inverse_x = Vt_x.T @ np.diag(s_inv_x) @ U_x.T
+
+        U_y, s_y, Vt_y = svd(ORM_y, full_matrices=False)
+        # self.svd_components_y = (U_y, s_y, Vt_y)
+        
+        # 创建截断的伪逆矩阵
+        s_inv_y = np.zeros_like(s_y)
+        for i, val in enumerate(s_y):
+            if abs(val) > min_singular_value:
+                s_inv_y[i] = 1 / val
+        
+        self.pseudo_inverse_y = Vt_y.T @ np.diag(s_inv_y) @ U_y.T
+
     def _get_avg_readings2(self, pv_list: List[str]) -> List[float]:
         """同时获取多个PV的多次采样平均值"""
         if not pv_list or self.samples_perstep <= 0:
@@ -291,18 +306,24 @@ class OrbitCorrector:
      
     def correct_global(self, max_iter: int = 20) -> bool:
         """全局校正方法"""
+
+        # 加载响应矩阵
+        # self.ORMx_n, self.ORMy_n = self._load_response_matrix()
+        print('svd method')
+        self._compute_svd()
+
         for iteration in range(0, max_iter):
             # 获取当前轨道数据
             xy_vals = self._get_avg_readings2(self.pvnameBPMx + self.pvnameBPMy)
             length_half = len(xy_vals) // 2
             x_vals = xy_vals[:length_half]
             y_vals = xy_vals[length_half:]
-            print("获取当前x轨道数据", x_vals)
+            # print("获取当前x轨道数据", x_vals)
             
             # 计算误差
             x_err = [tx - x for tx, x in zip(self.target_BPMx_values, x_vals)]
             y_err = [ty - y for ty, y in zip(self.target_BPMy_values, y_vals)]
-            print("获取x目标轨道差距", x_err)
+            # print("获取x目标轨道差距", x_err)
             
             # 检查收敛
             max_x_err = max(abs(e) for e in x_err)
@@ -315,13 +336,15 @@ class OrbitCorrector:
                 return True
             
             # 计算校正量
+            # delt_corrh = np.dot(self.ORMx_n, np.array(x_err))
+            # delt_corrv = np.dot(self.ORMy_n, np.array(y_err))
+            delt_corrh = np.dot(self.pseudo_inverse_x, np.array(x_err))
+            delt_corrv = np.dot(self.pseudo_inverse_y, np.array(y_err))
+
+
+            # 应用校正
             hcor_vals = caget_many(self.pvnameCORx)
             vcor_vals = caget_many(self.pvnameCORy)
-            
-            delt_corrh = np.dot(self.ORMx_n, np.array(x_err))
-            delt_corrv = np.dot(self.ORMy_n, np.array(y_err))
-            
-            # 应用校正
             new_hcor = np.clip(
                 np.array(hcor_vals) + delt_corrh,
                 -1*self.max_value, 1*self.max_value
@@ -364,6 +387,22 @@ class OrbitCorrector:
         caput_many(self.pvCORx, values)
         caput_many(self.pvCORy, values) 
 
+    def cor_recover(self) -> None:
+        """recvoer all corrector to the value before cor"""
+        cor = np.loadtxt('cor_temp.txt')
+        corx = cor[:, 1]
+        cory = cor[:, 2]
+        print(corx, cory)
+                
+        for j in self.cor_x_list_all:  
+            pv_CORx = "HALF:IN:COR:" + j + ":ao"  
+            self.pvCORx.append(pv_CORx)  
+        for j in self.cor_y_list_all:  
+            pv_CORy = "HALF:IN:COR:" + j + ":ao" 
+            self.pvCORy.append(pv_CORy)
+        caput_many(self.pvCORx, corx)
+        caput_many(self.pvCORy, cory) 
+
 if __name__ == '__main__':
     try:
         logger.info(f"INPUT PARAMETERS: {sys.argv}")
@@ -383,6 +422,8 @@ if __name__ == '__main__':
             )
             corrector.init_BPM_pv()
             corrector.init_COR_pv()
+            corrector.save_origin_cor()
+
             
             if method == "one-to-one":
                 corrector.correct_one_to_one()
@@ -390,9 +431,14 @@ if __name__ == '__main__':
                 corrector.correct_global()
         
         elif sys.argv[1] == "cor_off":
-            target_BPMlist = sys.argv[2].split(',')
+            # target_BPMlist = sys.argv[2].split(',')
             corrector = OrbitCorrector()
             corrector.reset_cor()
+        
+        elif sys.argv[1] == "cor_recover":
+            # target_BPMlist = sys.argv[2].split(',')
+            corrector = OrbitCorrector()
+            corrector.cor_recover()
     
     except Exception as e:
         logger.error(f"校正错误: {e}", exc_info=True)

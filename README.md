@@ -109,8 +109,6 @@
 
 ## 1. Install some packages in Linux system
 
-
-
 ### a. Linux environment
 
 #### windows下如何实现linux环境
@@ -199,17 +197,23 @@ You can exit with ctrl-c or by typing exit.
 
 
 
-### c. python3相关
+### c. python3 and something
 
-##### 1. anaconda+vscode（推荐）
+##### 1. anaconda+vscode（recommend）
 
 ##### 2. pyqt5+QTdesigner
 
-​	用于gui
+​	for gui
 
 ##### 3. pyepics
 
-##### 4. python sdds
+##### 4. matplotlib、scipy、numpy
+
+```zsh
+conda install matplotlib scipy numpy
+```
+
+##### 5. python sdds
 
 ​	For Ubuntu20.04, the link of the module is: https://ops.aps.anl.gov/downloads/SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
 
@@ -236,6 +240,10 @@ You can exit with ctrl-c or by typing exit.
    ```
 
    to check whether you have set the right env variable.
+
+##### tips: virtual environment is recommended!
+
+
 
 
 
@@ -274,9 +282,15 @@ for my case, add the  env variable in my `.zshrc` file:
 export PYTHONPATH=$PYTHONPATH:~/gitproj
 ```
 
-### b. 修改softIOC里的环境配置
+### b. modify softIOC config
 
 文件在.\half_linac\softIOC\halflinac\iocBoot\ioctarget\envPaths   根据个人情况修改
+
+可通过下面命令测试是否可正常运行
+
+```zsh
+./st.cmd
+```
 
 ### c. run it
 
