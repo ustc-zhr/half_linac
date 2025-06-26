@@ -4,6 +4,12 @@
 
 # 每周开发进度
 
+##### 2025-6-26-Zhanghaoran
+
+- `orbit corrrect`
+
+  添加svd方法求解逆矩阵
+
 ##### 2025-6-19-Zhanghaoran
 
 - `orbit corrrect`
