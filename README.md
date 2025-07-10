@@ -9,6 +9,11 @@
 - 开展在线优化功能开发(half_linac\src\optimization)
 
   实现了非梯度依赖的基于方向集的优化算法，robust conjugate direction search (RCDS)  ，并通过Rosenbrock函数进行了测试
+  
+  Refs: 
+  
+  1. Nuclear Instruments and Methods in Physics Research A 726 (2013) 77–83  
+  1. W.H. Press, et al., Numerical Recipes, 3rd edition, Cambridge University Press, 2007  
 
 ##### 2025-6-26-Zhanghaoran
 
