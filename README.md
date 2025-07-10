@@ -4,6 +4,12 @@
 
 # 每周开发进度
 
+##### 2025-7-10-Zhanghaoran
+
+- 开展在线优化功能开发(half_linac\src\optimization)
+
+  实现了非梯度依赖的基于方向集的优化算法，robust conjugate direction search (RCDS)  ，并通过Rosenbrock函数进行了测试
+
 ##### 2025-6-26-Zhanghaoran
 
 - `orbit corrrect`
