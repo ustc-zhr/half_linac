@@ -2,7 +2,7 @@
 import sys
 import signal
 from subprocess import Popen,run
-import os
+import re
 import numpy as np
 
 from PyQt5.QtWidgets import QMainWindow, QApplication, QCheckBox, QDoubleSpinBox
@@ -17,8 +17,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
         self.subprocesses=[]
-        self.plot_timer = QTimer(self)
-        self.plot_timer.timeout.connect(self._update_plot)
+        # self.plot_timer = QTimer(self)
+        # self.plot_timer.timeout.connect(self._update_plot)
 
         # connect button
         self.pushButton_7.clicked.connect(self.start_opt)
@@ -43,9 +43,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
 
 
-
-    def test(self):
-        self.find_knobs()
         
     def selectall(self, state, indexstr):
         all_checkboxes = self.findChildren(QCheckBox)
@@ -146,13 +143,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.step_lineEdit.text(),                #5 
             self.iter_lineEdit.text(),                #6 
             self.noise_lineEdit.text(),               #7 
-            self.interval_lineEdit.text(),               #8
             ",".join(obj_pvname),                     #8  
             ",".join(obj_weight),                     #9 
             ",".join(obj_samples),                    #10 
             ",".join(obj_math)                        #11
         ]
-        print(cmd)
         # 跨平台启动进程（确保进程组独立）
         kwargs = {}
         kwargs["start_new_session"] = True  # Unix: 新会话组
@@ -164,29 +159,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
             **kwargs
         )
         self.subprocesses.append(proc)
-
-        os.remove("./RCDS/template.opt")
-        self.plot_timer.start(1000)  # 每秒更新一次图表
-        # proc.wait()
-        # self.plot_timer.stop()
-        # self._optplot()  # 最终绘制一次
+        proc.wait()  # 等待子进程完成
+        self._optplot()  # 子进程结束后再绘制
         
         
-    def _update_plot(self):
-        try:
-            with open("./RCDS/template.opt","r") as f:
-                data = np.loadtxt(f)
-            if len(data) > 0:
-                self._optplot(data)
-        except:
-            pass
-
-    def _optplot(self, data=None):
+    def _optplot(self):
         self.optplot.axes.clear()
-        if data is None:
-            with open("./RCDS/template.opt","r") as f:
-                data = np.loadtxt(f)
-        values = data[:, -1]
+        with open("./RCDS/template.opt","r") as f:
+            data = np.loadtxt(f)
+        values = data[:, -1]   
         min_values = np.minimum.accumulate(values)
 
         self.optplot.axes.plot(values, 'b-', linewidth=1.5, label='Current function value')

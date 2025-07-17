@@ -124,3 +124,77 @@ Traceback (most recent call last):
     optimizer.plot_optimization_process(optimizer.vrange)
 TypeError: PowellOptimizer.plot_optimization_process() takes 1 positional argument but 2 were given
 2025-07-17 14:34:08,486 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 17:57:13,051 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 19:29:21,813 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 19:35:54,257 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 19:44:25,759 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:15:27,792 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:19:03,507 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:30:32,458 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:30:32,458 - ERROR - 错误: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 541, in <module>
+    interval = float(sys.argv[8])
+               ^^^^^^^^^^^^^^^^^^
+ValueError: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+2025-07-17 20:32:00,120 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:32:00,120 - ERROR - 错误: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 541, in <module>
+    interval = float(sys.argv[8])
+               ^^^^^^^^^^^^^^^^^^
+ValueError: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+2025-07-17 20:33:38,431 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:33:38,431 - ERROR - 错误: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 541, in <module>
+    interval = float(sys.argv[8])
+               ^^^^^^^^^^^^^^^^^^
+ValueError: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+2025-07-17 20:34:02,621 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:34:02,621 - ERROR - 错误: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 541, in <module>
+    interval = float(sys.argv[8])
+               ^^^^^^^^^^^^^^^^^^
+ValueError: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+2025-07-17 20:38:08,895 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:38:08,895 - ERROR - 错误: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 541, in <module>
+    interval = float(sys.argv[8])
+               ^^^^^^^^^^^^^^^^^^
+ValueError: could not convert string to float: 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy'
+2025-07-17 20:39:36,211 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', '', '', '', '0.1', '1', '0', '0', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:39:36,211 - ERROR - 错误: could not convert string to float: ''
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 535, in <module>
+    knobs_minus = [float(x) for x in sys.argv[3].split(',')]
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 535, in <listcomp>
+    knobs_minus = [float(x) for x in sys.argv[3].split(',')]
+                   ^^^^^^^^
+ValueError: could not convert string to float: ''
+2025-07-17 20:40:48,149 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', '', '', '', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:40:48,149 - ERROR - 错误: could not convert string to float: ''
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 535, in <module>
+    knobs_minus = [float(x) for x in sys.argv[3].split(',')]
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 535, in <listcomp>
+    knobs_minus = [float(x) for x in sys.argv[3].split(',')]
+                   ^^^^^^^^
+ValueError: could not convert string to float: ''
+2025-07-17 20:41:50,759 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:45:55,942 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:49:15,577 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:52:08,718 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-17 20:52:32,681 - ERROR - 错误: [Errno 5] Input/output error
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 571, in <module>
+    x_norm_opt, f_opt = optimizer.powellmain()
+                        ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 170, in powellmain
+    print("zz2")
+OSError: [Errno 5] Input/output error
+2025-07-17 20:54:13,266 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']

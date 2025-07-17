@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class PowellOptimizer:
     def __init__(self, x0=None, vrange=None, knobs_list=None,
-                 step=0.1, Dmat0=None, noise=None, tol=1e-6, maxIt=100, maxEval=15000,
+                 step=0.1, Dmat0=None, noise=None, interval=None, tol=1e-6, maxIt=100, maxEval=15000,
                  obj_pvnames=None, obj_weights=None, obj_samples=None, obj_math=None):
         """
         参数:
@@ -43,6 +43,7 @@ class PowellOptimizer:
         self.step = step
         self.Dmat0 = Dmat0 
         self.noise = noise # 目标函数值的噪声
+        self.interval = interval
         self.tol = tol
         self.maxIt = maxIt
         self.maxEval = maxEval
@@ -84,13 +85,13 @@ class PowellOptimizer:
         """评估目标函数"""
         # 设置参数PV
         caput_many(self.knobs_pvnames, x)
-        time.sleep(8)
+        time.sleep(self.interval)
         
         # 获取目标函数值
         total = np.zeros((self.obj_samples, len(self.obj_pvnames)))
         for i in range(self.obj_samples):
             total[i, :] = caget_many(self.obj_pvnames)
-            time.sleep(1)
+            time.sleep(self.interval)
         
 
         results = []
@@ -109,8 +110,7 @@ class PowellOptimizer:
         # 将数据保存到文件
         np.savetxt('template.opt',
                   np.array(self.data),
-                  fmt='%.6f',
-                  delimiter=',')
+                  fmt='%.6f')
 
     def powellmain(self):
         """Direction Set (Powell's) Methods"""
@@ -132,8 +132,8 @@ class PowellOptimizer:
         Npmin = 6# 线性扫描时的点数
         
         while it < self.maxIt:
-            it += 1
             print('iteration:', it, 'fm:', fm)
+            it += 1
             self.step /= 1.2 # 每次迭代步长缩小
             
             k = 0
@@ -485,7 +485,7 @@ class PowellOptimizer:
         g_data_array = np.array(self.data)
         print(g_data_array)
         params = g_data_array[:, :-1]
-        values = g_data_array[:, 2]
+        values = g_data_array[:, -1]
 
         min_idx = np.argmin(values)
         fm = values[min_idx]
@@ -538,12 +538,13 @@ if __name__ == "__main__":
             step = float(sys.argv[5])
             maxIt = int(sys.argv[6])
             noise = float(sys.argv[7])
+            interval = float(sys.argv[8])
             # obj
-            obj_pvnames = sys.argv[8].split(',')
-            obj_weights = [float(x) for x in sys.argv[9].split(',')]
-            obj_samples = [int(x) for x in sys.argv[10].split(',')]
+            obj_pvnames = sys.argv[9].split(',')
+            obj_weights = [float(x) for x in sys.argv[10].split(',')]
+            obj_samples = [int(x) for x in sys.argv[11].split(',')]
             obj_samples = max(obj_samples)
-            obj_math = sys.argv[11].split(',')
+            obj_math = sys.argv[12].split(',')
             
 
             # 创建优化器实例
@@ -561,7 +562,7 @@ if __name__ == "__main__":
             
             optimizer = PowellOptimizer(
                 x0=x0, vrange=vrange, knobs_list=knobs_list,
-                step=step, Dmat0=Dmat0, noise = noise, tol=1e-8, maxIt=maxIt, maxEval=15000, 
+                step=step, Dmat0=Dmat0, noise = noise, interval = interval, tol=1e-8, maxIt=maxIt, maxEval=15000, 
                 obj_pvnames=obj_pvnames, obj_weights=obj_weights, obj_samples=obj_samples, obj_math=obj_math 
             )
 
@@ -575,7 +576,7 @@ if __name__ == "__main__":
             print(f'time: {time.time() - start_time:.2f} s')
 
             # 绘制优化过程
-            optimizer.plot_optimization_process()
+            # optimizer.plot_optimization_process()
 
         
         # elif sys.argv[1] == "cor_off":

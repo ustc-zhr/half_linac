@@ -1,4 +1,4 @@
-Running elegant at Thu Jul 17 14:36:34 2025
+Running elegant at Thu Jul 17 20:58:31 2025
 
 This is elegant 2022.1.0, Jun 21 2023, by M. Borland, J. Calvey, M. Carla', N. Carmignani, AJ Dick, Z. Duan, M. Ehrlichman, L. Emery, W. Guo, R. Lindberg, V. Sajaev, R. Soliday, Y.-P. Sun, C.-X. Wang, Y. Wang, Y. Wu, and A. Xiao.
 =====================================================================================
@@ -458,7 +458,7 @@ computed value for WSEP1.DISABLE is 1
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 length of beamline USEDLINE per pass: 3.192640960000002e+02 m
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6388
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6390
 &run_control
     n_steps = 1,
     bunch_frequency = 0.000000000000000e+00,
@@ -471,7 +471,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6388
     restrict_fiducialization = 1,
     reset_scattering_seed = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6388
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6390
 &twiss_output
     filename = %s.twi,
     matched = 0,
@@ -519,7 +519,7 @@ min:  3.320663e-01 -1.006414e+02               -9.449645e-01 -4.433893e-01
 max:  1.380766e+02  1.011253e+02                9.445796e-01  4.129388e-01
 x acceptance limited to 3.516939e-08 by DHL4A ending at 2.002334e+02 m
 y acceptance limited to 1.951001e-06 by DA1 ending at 9.194962e+01 m
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6926
 &matrix_output
     printout = {NULL},
     printout_order = 1,
@@ -538,7 +538,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
     SDDS_output_match = {NULL},
 &end
 *** Warning: Some elements had no matrix. --- 33 elements had no matrix
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6926
 &error_control
     clear_error_settings = 1,
     summarize_error_settings = 0,
@@ -550,7 +550,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 
 *** Cleared error settings
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6926
 &error
     name = *,
     exclude = {NULL},
@@ -572,7 +572,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
     sample_file_column = {NULL},
     sample_mode = {NULL},
 &end
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6926
 &bunched_beam
     bunch = {NULL},
     n_particles_per_bunch = 10000,
@@ -617,7 +617,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6924
         0.000000000000000e+00, 0.000000000000000e+00,
     first_is_fiducial = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7268
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7269
 &track
     center_on_orbit = 0,
     center_momentum_also = 1,
@@ -636,18 +636,18 @@ Updating floor coordinates
 tracking step 1
 generating bunch 1
 tracking 10000 particles
-17 Jul 25 14:36:34: This step establishes energy profile vs s (fiducial beam).
-17 Jul 25 14:36:34: Rf phases/references reset.
+17 Jul 25 20:58:31: This step establishes energy profile vs s (fiducial beam).
+17 Jul 25 20:58:31: Rf phases/references reset.
 Dumping centroid data...done.
 Dumping bpm_centroid data...done.
 Post-tracking output completed.
-Tracking step completed   ET:     00:00:05 CP:    4.55 BIO:0 DIO:0 PF:0 MEM:7793
+Tracking step completed   ET:     00:00:05 CP:    4.63 BIO:0 DIO:0 PF:0 MEM:7794
 
 
 Updating floor coordinates
 Finished tracking.
 End of input data encountered.
-statistics:    ET:     00:00:05 CP:    4.55 BIO:0 DIO:0 PF:0 MEM:7793
+statistics:    ET:     00:00:05 CP:    4.63 BIO:0 DIO:0 PF:0 MEM:7794
 
 ************************** Summary of warnings ****************************
 2 types of warnings were recorded:
