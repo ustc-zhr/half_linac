@@ -34,7 +34,7 @@
             "name": "*",
             "element_type": "QUAD",
             "item": "FSE",
-            "amplitude": "0.0",
+            "amplitude": "0e-5",
             "type": "\"gaussian\"",
             "cutoff": "3.0",
             "bind": "0"
@@ -65,531 +65,413 @@
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "6.345664",
-            "AP": "HALF:IN:QUAD:QL01:K1",
-            "DX": "1.3281350885132255e-05",
-            "DY": "-8.151454135394888e-05"
+            "AP": "HALF:IN:QUAD:QL01:K1"
         },
         "QL02": {
             "NAME": "QL02",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-10.88725",
-            "AP": "HALF:IN:QUAD:QL02:K1",
-            "DX": "2.6849471509110883e-05",
-            "DY": "-6.526835248559308e-05"
+            "AP": "HALF:IN:QUAD:QL02:K1"
         },
         "QL03": {
             "NAME": "QL03",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "10.13887",
-            "AP": "HALF:IN:QUAD:QL03:K1",
-            "DX": "-1.741141286803053e-05",
-            "DY": "4.7320208807102964e-05"
+            "AP": "HALF:IN:QUAD:QL03:K1"
         },
         "QL04": {
             "NAME": "QL04",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "10.13887",
-            "AP": "HALF:IN:QUAD:QL04:K1",
-            "DX": "1.792476698314358e-05",
-            "DY": "5.353385472079137e-05"
+            "AP": "HALF:IN:QUAD:QL04:K1"
         },
         "QL05": {
             "NAME": "QL05",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-10.88725",
-            "AP": "HALF:IN:QUAD:QL05:K1",
-            "DX": "-1.5907124185095565e-05",
-            "DY": "-0.00010439431819602722"
+            "AP": "HALF:IN:QUAD:QL05:K1"
         },
         "QL06": {
             "NAME": "QL06",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "6.345664",
-            "AP": "HALF:IN:QUAD:QL06:K1",
-            "DX": "-9.666108202597554e-06",
-            "DY": "-2.9455368496047886e-05"
+            "AP": "HALF:IN:QUAD:QL06:K1"
         },
         "QL07": {
             "NAME": "QL07",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "3.88939",
-            "AP": "HALF:IN:QUAD:QL07:K1",
-            "DX": "5.816761704716022e-05",
-            "DY": "2.864340673151634e-05"
+            "AP": "HALF:IN:QUAD:QL07:K1"
         },
         "QL08": {
             "NAME": "QL08",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-2.046863",
-            "AP": "HALF:IN:QUAD:QL08:K1",
-            "DX": "1.0318840117241865e-05",
-            "DY": "6.895403891502708e-05"
+            "AP": "HALF:IN:QUAD:QL08:K1"
         },
         "QL09": {
             "NAME": "QL09",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.4677693",
-            "AP": "HALF:IN:QUAD:QL09:K1",
-            "DX": "-4.17076010449353e-05",
-            "DY": "-4.356182691255968e-05"
+            "AP": "HALF:IN:QUAD:QL09:K1"
         },
         "QL10": {
             "NAME": "QL10",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-2.753931",
-            "AP": "HALF:IN:QUAD:QL10:K1",
-            "DX": "1.8654270898996975e-05",
-            "DY": "-6.537760863384331e-05"
+            "AP": "HALF:IN:QUAD:QL10:K1"
         },
         "QL11": {
             "NAME": "QL11",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-1.069225",
-            "AP": "HALF:IN:QUAD:QL11:K1",
-            "DX": "-4.009009916394872e-05",
-            "DY": "-3.2142859490019165e-06"
+            "AP": "HALF:IN:QUAD:QL11:K1"
         },
         "QL12": {
             "NAME": "QL12",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "1.214364",
-            "AP": "HALF:IN:QUAD:QL12:K1",
-            "DX": "-5.39241275006447e-05",
-            "DY": "-2.0279964835106077e-05"
+            "AP": "HALF:IN:QUAD:QL12:K1"
         },
         "QL13": {
             "NAME": "QL13",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-4.968432",
-            "AP": "HALF:IN:QUAD:QL13:K1",
-            "DX": "4.8487096638785914e-05",
-            "DY": "-1.162696563852075e-05"
+            "AP": "HALF:IN:QUAD:QL13:K1"
         },
         "QL14": {
             "NAME": "QL14",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "4.052411",
-            "AP": "HALF:IN:QUAD:QL14:K1",
-            "DX": "7.866732956886021e-05",
-            "DY": "-7.372325550804168e-05"
+            "AP": "HALF:IN:QUAD:QL14:K1"
         },
         "QL15": {
             "NAME": "QL15",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "1.387017",
-            "AP": "HALF:IN:QUAD:QL15:K1",
-            "DX": "-3.3669694672527325e-05",
-            "DY": "4.4750362019466423e-05"
+            "AP": "HALF:IN:QUAD:QL15:K1"
         },
         "QL16": {
             "NAME": "QL16",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-2.73906",
-            "AP": "HALF:IN:QUAD:QL16:K1",
-            "DX": "2.1140595317512443e-05",
-            "DY": "-8.461149816711575e-06"
+            "AP": "HALF:IN:QUAD:QL16:K1"
         },
         "QL17": {
             "NAME": "QL17",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "1.473873",
-            "AP": "HALF:IN:QUAD:QL17:K1",
-            "DX": "-7.78519946717876e-05",
-            "DY": "1.2647007888836197e-05"
+            "AP": "HALF:IN:QUAD:QL17:K1"
         },
         "QL18": {
             "NAME": "QL18",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.5071771",
-            "AP": "HALF:IN:QUAD:QL18:K1",
-            "DX": "8.383880991694372e-06",
-            "DY": "2.890170617648208e-05"
+            "AP": "HALF:IN:QUAD:QL18:K1"
         },
         "QL19": {
             "NAME": "QL19",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL19:K1",
-            "DX": "-8.760009090094283e-05",
-            "DY": "2.1232748484568307e-05"
+            "AP": "HALF:IN:QUAD:QL19:K1"
         },
         "QL20": {
             "NAME": "QL20",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.5812314",
-            "AP": "HALF:IN:QUAD:QL20:K1",
-            "DX": "6.575374093834054e-06",
-            "DY": "-4.140300871714714e-05"
+            "AP": "HALF:IN:QUAD:QL20:K1"
         },
         "QL21": {
             "NAME": "QL21",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL21:K1",
-            "DX": "-7.059113481677755e-05",
-            "DY": "-1.5075690329820977e-05"
+            "AP": "HALF:IN:QUAD:QL21:K1"
         },
         "QL22": {
             "NAME": "QL22",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.5812314",
-            "AP": "HALF:IN:QUAD:QL22:K1",
-            "DX": "-5.841755155940657e-05",
-            "DY": "6.647388700127771e-05"
+            "AP": "HALF:IN:QUAD:QL22:K1"
         },
         "QL23": {
             "NAME": "QL23",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL23:K1",
-            "DX": "-4.501866404373477e-05",
-            "DY": "4.636547155778415e-05"
+            "AP": "HALF:IN:QUAD:QL23:K1"
         },
         "QL24": {
             "NAME": "QL24",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.5812314",
-            "AP": "HALF:IN:QUAD:QL24:K1",
-            "DX": "3.100207390068514e-05",
-            "DY": "-4.056910859132246e-05"
+            "AP": "HALF:IN:QUAD:QL24:K1"
         },
         "QL25": {
             "NAME": "QL25",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL25:K1",
-            "DX": "-2.5258826970883822e-05",
-            "DY": "7.594050501865051e-05"
+            "AP": "HALF:IN:QUAD:QL25:K1"
         },
         "QL26": {
             "NAME": "QL26",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.5812314",
-            "AP": "HALF:IN:QUAD:QL26:K1",
-            "DX": "-4.067432117413705e-05",
-            "DY": "6.025142319127044e-07"
+            "AP": "HALF:IN:QUAD:QL26:K1"
         },
         "QL27": {
             "NAME": "QL27",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL27:K1",
-            "DX": "2.722494060301768e-05",
-            "DY": "-7.149746285388843e-05"
+            "AP": "HALF:IN:QUAD:QL27:K1"
         },
         "QT01": {
             "NAME": "QT01",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-1.315043",
-            "AP": "HALF:IN:QUAD:QT01:K1",
-            "DX": "-7.385532485501491e-05",
-            "DY": "-9.223399500101468e-05"
+            "K1": "-0.7931478583502543",
+            "AP": "HALF:IN:QUAD:QT01:K1"
         },
         "QT02": {
             "NAME": "QT02",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "1.402247",
-            "AP": "HALF:IN:QUAD:QT02:K1",
-            "DX": "2.2276123137276612e-05",
-            "DY": "-3.245615940895414e-05"
+            "K1": "1.924142141649746",
+            "AP": "HALF:IN:QUAD:QT02:K1"
         },
         "QT03": {
             "NAME": "QT03",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-1.339706",
-            "AP": "HALF:IN:QUAD:QT03:K1",
-            "DX": "-1.0290633085169376e-05",
-            "DY": "-9.260282669096394e-05"
+            "AP": "HALF:IN:QUAD:QT03:K1"
         },
         "QT04": {
             "NAME": "QT04",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.8841496",
-            "AP": "HALF:IN:QUAD:QT04:K1",
-            "DX": "3.996231922732105e-05",
-            "DY": "-0.00011757804178556503"
+            "AP": "HALF:IN:QUAD:QT04:K1"
         },
         "QHL1": {
             "NAME": "QHL1",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "2.308226",
-            "AP": "HALF:IN:QUAD:QHL1:K1",
-            "DX": "-9.137723678874873e-05",
-            "DY": "-5.3990211999138645e-05"
+            "AP": "HALF:IN:QUAD:QHL1:K1"
         },
         "QHL2": {
             "NAME": "QHL2",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "-1.975459",
-            "AP": "HALF:IN:QUAD:QHL2:K1",
-            "DX": "-2.2080158928936853e-05",
-            "DY": "-3.1494262807967656e-05"
+            "AP": "HALF:IN:QUAD:QHL2:K1"
         },
         "QHL3": {
             "NAME": "QHL3",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "2.832848",
-            "AP": "HALF:IN:QUAD:QHL3:K1",
-            "DX": "-4.552688839316908e-05",
-            "DY": "-8.951075600771945e-05"
+            "AP": "HALF:IN:QUAD:QHL3:K1"
         },
         "QHL4": {
             "NAME": "QHL4",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "-2.158739",
-            "AP": "HALF:IN:QUAD:QHL4:K1",
-            "DX": "7.45511011995487e-05",
-            "DY": "5.309412356687953e-05"
+            "AP": "HALF:IN:QUAD:QHL4:K1"
         },
         "QT13": {
             "NAME": "QT13",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.9463534",
-            "AP": "HALF:IN:QUAD:QT13:K1",
-            "DX": "2.905433899799856e-05",
-            "DY": "-6.525640720239347e-06"
+            "AP": "HALF:IN:QUAD:QT13:K1"
         },
         "QT14": {
             "NAME": "QT14",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-1.247343",
-            "AP": "HALF:IN:QUAD:QT14:K1",
-            "DX": "-2.400461528013699e-06",
-            "DY": "4.3357627516014606e-05"
+            "AP": "HALF:IN:QUAD:QT14:K1"
         },
         "QT15": {
             "NAME": "QT15",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.177407",
-            "AP": "HALF:IN:QUAD:QT15:K1",
-            "DX": "-4.389823171690035e-06",
-            "DY": "6.107172426985464e-06"
+            "AP": "HALF:IN:QUAD:QT15:K1"
         },
         "QT16": {
             "NAME": "QT16",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.3573785",
-            "AP": "HALF:IN:QUAD:QT16:K1",
-            "DX": "3.7706632313821516e-05",
-            "DY": "8.963179480717823e-05"
+            "AP": "HALF:IN:QUAD:QT16:K1"
         },
         "QTR1": {
             "NAME": "QTR1",
             "TYPE": "QUAD",
             "L": "0.075",
             "K1": "0.6594606",
-            "AP": "HALF:IN:QUAD:QTR1:K1",
-            "DX": "-6.298914960946253e-05",
-            "DY": "-2.485240315095268e-05"
+            "AP": "HALF:IN:QUAD:QTR1:K1"
         },
         "QT18": {
             "NAME": "QT18",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.6594606",
-            "AP": "HALF:IN:QUAD:QT18:K1",
-            "DX": "5.1930815489838186e-05",
-            "DY": "-2.2068223951781694e-06"
+            "AP": "HALF:IN:QUAD:QT18:K1"
         },
         "QT19": {
             "NAME": "QT19",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.6594606",
-            "AP": "HALF:IN:QUAD:QT19:K1",
-            "DX": "4.347305129580167e-05",
-            "DY": "7.882246559684755e-05"
+            "AP": "HALF:IN:QUAD:QT19:K1"
         },
         "QT20": {
             "NAME": "QT20",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.6594606",
-            "AP": "HALF:IN:QUAD:QT20:K1",
-            "DX": "-9.429324396334623e-06",
-            "DY": "2.8835589335524345e-05"
+            "AP": "HALF:IN:QUAD:QT20:K1"
         },
         "QT21": {
             "NAME": "QT21",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.6594606",
-            "AP": "HALF:IN:QUAD:QT21:K1",
-            "DX": "-2.6837362133558726e-05",
-            "DY": "4.1412355637059037e-05"
+            "AP": "HALF:IN:QUAD:QT21:K1"
         },
         "QT22": {
             "NAME": "QT22",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.6594606",
-            "AP": "HALF:IN:QUAD:QT22:K1",
-            "DX": "-9.752362790221976e-05",
-            "DY": "-2.4614511636001112e-05"
+            "AP": "HALF:IN:QUAD:QT22:K1"
         },
         "QT23": {
             "NAME": "QT23",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "0.6594606",
-            "AP": "HALF:IN:QUAD:QT23:K1",
-            "DX": "-3.5605523107341085e-06",
-            "DY": "7.154174310279194e-05"
+            "AP": "HALF:IN:QUAD:QT23:K1"
         },
         "QT24": {
             "NAME": "QT24",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "1.557907",
-            "AP": "HALF:IN:QUAD:QT24:K1",
-            "DX": "-4.1790742795743626e-05",
-            "DY": "8.176071302006811e-05"
+            "AP": "HALF:IN:QUAD:QT24:K1"
         },
         "QT25": {
             "NAME": "QT25",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "-2.509871",
-            "AP": "HALF:IN:QUAD:QT25:K1",
-            "DX": "9.167608674112909e-05",
-            "DY": "6.619221865632149e-05"
+            "AP": "HALF:IN:QUAD:QT25:K1"
         },
         "QT26": {
             "NAME": "QT26",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "-0.05559521",
-            "AP": "HALF:IN:QUAD:QT26:K1",
-            "DX": "-5.02729442376435e-05",
-            "DY": "-0.00012796606067321436"
+            "AP": "HALF:IN:QUAD:QT26:K1"
         },
         "QT27": {
             "NAME": "QT27",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "2.493402",
-            "AP": "HALF:IN:QUAD:QT27:K1",
-            "DX": "4.37799177080214e-05",
-            "DY": "-6.135449080476606e-05"
+            "AP": "HALF:IN:QUAD:QT27:K1"
         },
         "QT28": {
             "NAME": "QT28",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "-3.42673",
-            "AP": "HALF:IN:QUAD:QT28:K1",
-            "DX": "-4.663110067171447e-05",
-            "DY": "-3.977727128765605e-05"
+            "AP": "HALF:IN:QUAD:QT28:K1"
         },
         "QT29": {
             "NAME": "QT29",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "1.127802",
-            "AP": "HALF:IN:QUAD:QT29:K1",
-            "DX": "-2.5337679933425292e-05",
-            "DY": "1.9363308897387623e-05"
+            "AP": "HALF:IN:QUAD:QT29:K1"
         },
         "QT30": {
             "NAME": "QT30",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "-2.960617",
-            "AP": "HALF:IN:QUAD:QT30:K1",
-            "DX": "-5.348378308925658e-05",
-            "DY": "-6.963366940866304e-05"
+            "AP": "HALF:IN:QUAD:QT30:K1"
         },
         "QT31": {
             "NAME": "QT31",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "3.334709",
-            "AP": "HALF:IN:QUAD:QT31:K1",
-            "DX": "-3.493054606082413e-05",
-            "DY": "-8.689057431311652e-05"
+            "AP": "HALF:IN:QUAD:QT31:K1"
         },
         "QT32": {
             "NAME": "QT32",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "-3.457488",
-            "AP": "HALF:IN:QUAD:QT32:K1",
-            "DX": "-2.7794322231778687e-05",
-            "DY": "-2.483318860742922e-05"
+            "AP": "HALF:IN:QUAD:QT32:K1"
         },
         "QT33": {
             "NAME": "QT33",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "-3.457488",
-            "AP": "HALF:IN:QUAD:QT33:K1",
-            "DX": "-9.790242938913033e-05",
-            "DY": "4.312443349519357e-05"
+            "AP": "HALF:IN:QUAD:QT33:K1"
         },
         "QT34": {
             "NAME": "QT34",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "3.334709",
-            "AP": "HALF:IN:QUAD:QT34:K1",
-            "DX": "-6.214235549561002e-07",
-            "DY": "-2.3223542331688385e-05"
+            "AP": "HALF:IN:QUAD:QT34:K1"
         },
         "QT35": {
             "NAME": "QT35",
             "TYPE": "QUAD",
             "L": "0.3",
             "K1": "-2.960617",
-            "AP": "HALF:IN:QUAD:QT35:K1",
-            "DX": "0.00011385934836436716",
-            "DY": "-7.561985325234859e-05"
+            "AP": "HALF:IN:QUAD:QT35:K1"
         },
         "QT36": {
             "NAME": "QT36",
             "TYPE": "QUAD",
             "L": "0.15",
             "K1": "1.127802",
-            "AP": "HALF:IN:QUAD:QT36:K1",
-            "DX": "-4.936226053302659e-05",
-            "DY": "-1.4373298318247637e-05"
+            "AP": "HALF:IN:QUAD:QT36:K1"
         },
         "DHOTGUN0A": {
             "NAME": "DHOTGUN0A",
@@ -998,413 +880,331 @@
         },
         "XC03": {
             "NAME": "XC03",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC04": {
             "NAME": "XC04",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC05": {
             "NAME": "XC05",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC06": {
             "NAME": "XC06",
-            "TYPE": "HKICK",
-            "KICK": "-4.074290476055418e-05"
+            "TYPE": "HKICK"
         },
         "XC07": {
             "NAME": "XC07",
-            "TYPE": "HKICK",
-            "KICK": "-1.5154111450536543e-05"
+            "TYPE": "HKICK"
         },
         "XC08": {
             "NAME": "XC08",
-            "TYPE": "HKICK",
-            "KICK": "8.824214328529348e-06"
+            "TYPE": "HKICK"
         },
         "XC09": {
             "NAME": "XC09",
-            "TYPE": "HKICK",
-            "KICK": "-2.455025997764852e-05"
+            "TYPE": "HKICK"
         },
         "XC10": {
             "NAME": "XC10",
-            "TYPE": "HKICK",
-            "KICK": "8.020221303215465e-06"
+            "TYPE": "HKICK"
         },
         "XC11": {
             "NAME": "XC11",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC12": {
             "NAME": "XC12",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC13": {
             "NAME": "XC13",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC14": {
             "NAME": "XC14",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC15": {
             "NAME": "XC15",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC16": {
             "NAME": "XC16",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC17": {
             "NAME": "XC17",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC18": {
             "NAME": "XC18",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC19": {
             "NAME": "XC19",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC20": {
             "NAME": "XC20",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC21": {
             "NAME": "XC21",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC22": {
             "NAME": "XC22",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC23": {
             "NAME": "XC23",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC24": {
             "NAME": "XC24",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC25": {
             "NAME": "XC25",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC26": {
             "NAME": "XC26",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC27": {
             "NAME": "XC27",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC28": {
             "NAME": "XC28",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC29": {
             "NAME": "XC29",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC30": {
             "NAME": "XC30",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC31": {
             "NAME": "XC31",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC32": {
             "NAME": "XC32",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC33": {
             "NAME": "XC33",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC34": {
             "NAME": "XC34",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC35": {
             "NAME": "XC35",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC36": {
             "NAME": "XC36",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC37": {
             "NAME": "XC37",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC38": {
             "NAME": "XC38",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC39": {
             "NAME": "XC39",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC40": {
             "NAME": "XC40",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC41": {
             "NAME": "XC41",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC42": {
             "NAME": "XC42",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "XC43": {
             "NAME": "XC43",
-            "TYPE": "HKICK",
-            "KICK": "0.0"
+            "TYPE": "HKICK"
         },
         "YC03": {
             "NAME": "YC03",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC04": {
             "NAME": "YC04",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC05": {
             "NAME": "YC05",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC06": {
             "NAME": "YC06",
-            "TYPE": "VKICK",
-            "KICK": "0.0003403864192841217"
+            "TYPE": "VKICK"
         },
         "YC07": {
             "NAME": "YC07",
-            "TYPE": "VKICK",
-            "KICK": "-0.00018138007983031074"
+            "TYPE": "VKICK"
         },
         "YC08": {
             "NAME": "YC08",
-            "TYPE": "VKICK",
-            "KICK": "1.6355352289864546e-05"
+            "TYPE": "VKICK"
         },
         "YC09": {
             "NAME": "YC09",
-            "TYPE": "VKICK",
-            "KICK": "-2.4169186352107263e-05"
+            "TYPE": "VKICK"
         },
         "YC10": {
             "NAME": "YC10",
-            "TYPE": "VKICK",
-            "KICK": "1.0131437730130009e-05"
+            "TYPE": "VKICK"
         },
         "YC11": {
             "NAME": "YC11",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC12": {
             "NAME": "YC12",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC13": {
             "NAME": "YC13",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC14": {
             "NAME": "YC14",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC15": {
             "NAME": "YC15",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC16": {
             "NAME": "YC16",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC17": {
             "NAME": "YC17",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC18": {
             "NAME": "YC18",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC19": {
             "NAME": "YC19",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC20": {
             "NAME": "YC20",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC21": {
             "NAME": "YC21",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC22": {
             "NAME": "YC22",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC23": {
             "NAME": "YC23",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC24": {
             "NAME": "YC24",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC25": {
             "NAME": "YC25",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC26": {
             "NAME": "YC26",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC27": {
             "NAME": "YC27",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC28": {
             "NAME": "YC28",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC29": {
             "NAME": "YC29",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC30": {
             "NAME": "YC30",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC31": {
             "NAME": "YC31",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC32": {
             "NAME": "YC32",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC33": {
             "NAME": "YC33",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC34": {
             "NAME": "YC34",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC35": {
             "NAME": "YC35",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC36": {
             "NAME": "YC36",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC37": {
             "NAME": "YC37",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC38": {
             "NAME": "YC38",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC39": {
             "NAME": "YC39",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC40": {
             "NAME": "YC40",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC41": {
             "NAME": "YC41",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC42": {
             "NAME": "YC42",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "YC43": {
             "NAME": "YC43",
-            "TYPE": "VKICK",
-            "KICK": "0.0"
+            "TYPE": "VKICK"
         },
         "BPM01": {
             "NAME": "BPM01",

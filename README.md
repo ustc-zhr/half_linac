@@ -4,6 +4,13 @@
 
 # 每周开发进度
 
+##### 2025-7-17-Zhanghaoran
+
+- 继续在线优化功能开发`optimization`
+
+  实现了RCDS优化算法GUI界面，并通过虚拟加速器进行了初步测试
+
+
 ##### 2025-7-10-Zhanghaoran
 
 - 开展在线优化功能开发(half_linac\src\optimization)

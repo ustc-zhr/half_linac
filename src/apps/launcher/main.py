@@ -23,7 +23,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_4.clicked.connect(self.start_bba)
         self.orbit_correct.clicked.connect(self.orb_correct)
 
-    
+        self.online_opt.clicked.connect(self.online_optimization)
 
     def start_vm(self):
         '''
@@ -120,6 +120,24 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.subprocesses.append(proc)  
 
 
+    def online_optimization(self):
+        '''
+        multiple algorithms for online optimization
+        '''
+
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+        proc = Popen(
+            ["python3", "mainOPT.py"],
+            cwd=st.rootpath + "/src/optimization",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+
+    # -----------
+    # 
+    # -----------
     
     def closeEvent(self, event):
         '''

@@ -147,11 +147,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
             shell=False,  # 避免 shell 进程干扰
             **kwargs
         )
-        # 获取输出
-        # stdout, stderr = proc.communicate()
-        # print("输出:", stdout.decode())
         self.subprocesses.append(proc)
-        # print(f"启动子进程 PID: {proc.pid}")    
+ 
 
 
 

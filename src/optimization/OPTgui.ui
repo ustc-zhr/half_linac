@@ -1,0 +1,4332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1188</width>
+    <height>1032</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Online Optimization</string>
+  </property>
+  <property name="toolTipDuration">
+   <number>1</number>
+  </property>
+  <property name="statusTip">
+   <string/>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,3">
+     <property name="sizeConstraint">
+      <enum>QLayout::SetDefaultConstraint</enum>
+     </property>
+     <item>
+      <widget class="QTabWidget" name="tabWidget">
+       <property name="currentIndex">
+        <number>0</number>
+       </property>
+       <widget class="QWidget" name="tab">
+        <attribute name="title">
+         <string>QUAD</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <item>
+          <layout class="QGridLayout" name="gridLayout_5" rowstretch="0,0,0" columnstretch="1,1,1" rowminimumheight="0,0,0">
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_3">
+             <property name="text">
+              <string>index</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QLabel" name="label_5">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <layout class="QHBoxLayout" name="horizontalLayout_4">
+             <item>
+              <widget class="QPushButton" name="pushButton">
+               <property name="text">
+                <string>ALL</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLabel" name="label_4">
+             <property name="text">
+              <string>range</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <layout class="QHBoxLayout" name="horizontalLayout_6">
+             <item>
+              <widget class="QPushButton" name="pushButton_2">
+               <property name="text">
+                <string>all step</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="doubleSpinBox_119">
+               <property name="minimum">
+                <double>-99.989999999999995</double>
+               </property>
+               <property name="value">
+                <double>-5.000000000000000</double>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item row="2" column="2">
+            <layout class="QHBoxLayout" name="horizontalLayout_7">
+             <item>
+              <widget class="QPushButton" name="pushButton_3">
+               <property name="text">
+                <string>all step</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="doubleSpinBox_120">
+               <property name="minimum">
+                <double>-99.989999999999995</double>
+               </property>
+               <property name="value">
+                <double>5.000000000000000</double>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QScrollArea" name="scrollArea">
+           <property name="widgetResizable">
+            <bool>true</bool>
+           </property>
+           <widget class="QWidget" name="scrollAreaWidgetContents_2">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>388</width>
+              <height>1811</height>
+             </rect>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_3">
+             <item row="0" column="0">
+              <layout class="QGridLayout" name="gridLayout_2" columnstretch="2,2,2">
+               <item row="42" column="0">
+                <widget class="QCheckBox" name="quadindex_QT17">
+                 <property name="text">
+                  <string>QT17</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="29" column="1">
+                <widget class="QDoubleSpinBox" name="QT02_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="33" column="2">
+                <widget class="QDoubleSpinBox" name="QHL1_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="48" column="2">
+                <widget class="QDoubleSpinBox" name="QT23_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="20" column="0">
+                <widget class="QCheckBox" name="quadindex_QL21">
+                 <property name="text">
+                  <string>QL21</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="19" column="0">
+                <widget class="QCheckBox" name="quadindex_QL20">
+                 <property name="text">
+                  <string>QL20</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="14" column="0">
+                <widget class="QCheckBox" name="quadindex_QL15">
+                 <property name="text">
+                  <string>QL15</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="50" column="0">
+                <widget class="QCheckBox" name="quadindex_QT25">
+                 <property name="text">
+                  <string>QT25</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="44" column="1">
+                <widget class="QDoubleSpinBox" name="QT19_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="55" column="1">
+                <widget class="QDoubleSpinBox" name="QT30_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="38" column="2">
+                <widget class="QDoubleSpinBox" name="QT13_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="18" column="2">
+                <widget class="QDoubleSpinBox" name="QL19_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="2">
+                <widget class="QDoubleSpinBox" name="QL08_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="22" column="0">
+                <widget class="QCheckBox" name="quadindex_QL23">
+                 <property name="text">
+                  <string>QL23</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="58" column="0">
+                <widget class="QCheckBox" name="quadindex_QT33">
+                 <property name="text">
+                  <string>QT33</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="23" column="2">
+                <widget class="QDoubleSpinBox" name="QL24_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="9" column="2">
+                <widget class="QDoubleSpinBox" name="QL10_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="59" column="0">
+                <widget class="QCheckBox" name="quadindex_QT34">
+                 <property name="text">
+                  <string>QT34</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="11" column="1">
+                <widget class="QDoubleSpinBox" name="QL12_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="13" column="0">
+                <widget class="QCheckBox" name="quadindex_QL14">
+                 <property name="text">
+                  <string>QL14</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="30" column="2">
+                <widget class="QDoubleSpinBox" name="QT03_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="12" column="1">
+                <widget class="QDoubleSpinBox" name="QL13_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="26" column="2">
+                <widget class="QDoubleSpinBox" name="QL27_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="28" column="0">
+                <widget class="QCheckBox" name="quadindex_QT01">
+                 <property name="text">
+                  <string>QT01</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="0">
+                <widget class="QCheckBox" name="quadindex_QL09">
+                 <property name="text">
+                  <string>QL09</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="44" column="0">
+                <widget class="QCheckBox" name="quadindex_QT19">
+                 <property name="text">
+                  <string>QT19</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="39" column="2">
+                <widget class="QDoubleSpinBox" name="QT14_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QDoubleSpinBox" name="QL01_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="22" column="2">
+                <widget class="QDoubleSpinBox" name="QL23_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="17" column="0">
+                <widget class="QCheckBox" name="quadindex_QL18">
+                 <property name="text">
+                  <string>QL18</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="53" column="1">
+                <widget class="QDoubleSpinBox" name="QT28_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="57" column="1">
+                <widget class="QDoubleSpinBox" name="QT32_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="54" column="1">
+                <widget class="QDoubleSpinBox" name="QT29_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QDoubleSpinBox" name="QL05_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="55" column="2">
+                <widget class="QDoubleSpinBox" name="QT30_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="38" column="0">
+                <widget class="QCheckBox" name="quadindex_QT13">
+                 <property name="text">
+                  <string>QT13</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="33" column="0">
+                <widget class="QCheckBox" name="quadindex_QHL1">
+                 <property name="text">
+                  <string>QHL1</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="12" column="0">
+                <widget class="QCheckBox" name="quadindex_QL13">
+                 <property name="text">
+                  <string>QL13</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="2">
+                <widget class="QDoubleSpinBox" name="QL05_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="16" column="1">
+                <widget class="QDoubleSpinBox" name="QL17_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="45" column="2">
+                <widget class="QDoubleSpinBox" name="QT20_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="21" column="2">
+                <widget class="QDoubleSpinBox" name="QL22_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="24" column="1">
+                <widget class="QDoubleSpinBox" name="QL25_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="45" column="0">
+                <widget class="QCheckBox" name="quadindex_QT20">
+                 <property name="text">
+                  <string>QT20</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="56" column="1">
+                <widget class="QDoubleSpinBox" name="QT31_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="2">
+                <widget class="QDoubleSpinBox" name="QL02_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="31" column="2">
+                <widget class="QDoubleSpinBox" name="QT04_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="46" column="0">
+                <widget class="QCheckBox" name="quadindex_QT21">
+                 <property name="text">
+                  <string>QT21</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="54" column="2">
+                <widget class="QDoubleSpinBox" name="QT29_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="54" column="0">
+                <widget class="QCheckBox" name="quadindex_QT29">
+                 <property name="text">
+                  <string>QT29</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="42" column="2">
+                <widget class="QDoubleSpinBox" name="QT17_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="51" column="1">
+                <widget class="QDoubleSpinBox" name="QT26_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="13" column="2">
+                <widget class="QDoubleSpinBox" name="QL14_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QDoubleSpinBox" name="QL03_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QCheckBox" name="quadindex_QL01">
+                 <property name="text">
+                  <string>QL01</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="52" column="1">
+                <widget class="QDoubleSpinBox" name="QT27_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="50" column="2">
+                <widget class="QDoubleSpinBox" name="QT25_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="1">
+                <widget class="QDoubleSpinBox" name="QL08_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="35" column="0">
+                <widget class="QCheckBox" name="quadindex_QHL3">
+                 <property name="text">
+                  <string>QHL3</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="31" column="0">
+                <widget class="QCheckBox" name="quadindex_QT04">
+                 <property name="text">
+                  <string>QT04</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="52" column="2">
+                <widget class="QDoubleSpinBox" name="QT27_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="25" column="1">
+                <widget class="QDoubleSpinBox" name="QL26_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="36" column="1">
+                <widget class="QDoubleSpinBox" name="QHL4_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="50" column="1">
+                <widget class="QDoubleSpinBox" name="QT25_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="49" column="0">
+                <widget class="QCheckBox" name="quadindex_QT24">
+                 <property name="text">
+                  <string>QT24</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="61" column="0">
+                <widget class="QCheckBox" name="quadindex_QT36">
+                 <property name="text">
+                  <string>QT36</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="61" column="2">
+                <widget class="QDoubleSpinBox" name="QT36_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="33" column="1">
+                <widget class="QDoubleSpinBox" name="QHL1_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="28" column="1">
+                <widget class="QDoubleSpinBox" name="QT01_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="15" column="1">
+                <widget class="QDoubleSpinBox" name="QL16_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="56" column="2">
+                <widget class="QDoubleSpinBox" name="QT31_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="25" column="2">
+                <widget class="QDoubleSpinBox" name="QL26_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="2">
+                <widget class="QDoubleSpinBox" name="QL03_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="17" column="1">
+                <widget class="QDoubleSpinBox" name="QL18_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="47" column="0">
+                <widget class="QCheckBox" name="quadindex_QT22">
+                 <property name="text">
+                  <string>QT22</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="60" column="0">
+                <widget class="QCheckBox" name="quadindex_QT35">
+                 <property name="text">
+                  <string>QT35</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="46" column="2">
+                <widget class="QDoubleSpinBox" name="QT21_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="1">
+                <widget class="QDoubleSpinBox" name="QL09_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="14" column="1">
+                <widget class="QDoubleSpinBox" name="QL15_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="40" column="1">
+                <widget class="QDoubleSpinBox" name="QT15_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="53" column="2">
+                <widget class="QDoubleSpinBox" name="QT28_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="18" column="1">
+                <widget class="QDoubleSpinBox" name="QL19_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="11" column="2">
+                <widget class="QDoubleSpinBox" name="QL12_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="57" column="2">
+                <widget class="QDoubleSpinBox" name="QT32_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="1">
+                <widget class="QDoubleSpinBox" name="QL07_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="43" column="0">
+                <widget class="QCheckBox" name="quadindex_QT18">
+                 <property name="text">
+                  <string>QT18</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="53" column="0">
+                <widget class="QCheckBox" name="quadindex_QT28">
+                 <property name="text">
+                  <string>QT28</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="2">
+                <widget class="QDoubleSpinBox" name="QL09_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="19" column="2">
+                <widget class="QDoubleSpinBox" name="QL20_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="10" column="0">
+                <widget class="QCheckBox" name="quadindex_QL11">
+                 <property name="text">
+                  <string>QL11</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="11" column="0">
+                <widget class="QCheckBox" name="quadindex_QL12">
+                 <property name="text">
+                  <string>QL12</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="35" column="2">
+                <widget class="QDoubleSpinBox" name="QHL3_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="16" column="2">
+                <widget class="QDoubleSpinBox" name="QL17_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="23" column="1">
+                <widget class="QDoubleSpinBox" name="QL24_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="39" column="1">
+                <widget class="QDoubleSpinBox" name="QT14_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="21" column="0">
+                <widget class="QCheckBox" name="quadindex_QL22">
+                 <property name="text">
+                  <string>QL22</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="14" column="2">
+                <widget class="QDoubleSpinBox" name="QL15_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QDoubleSpinBox" name="QL04_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="47" column="2">
+                <widget class="QDoubleSpinBox" name="QT22_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="34" column="2">
+                <widget class="QDoubleSpinBox" name="QHL2_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="49" column="2">
+                <widget class="QDoubleSpinBox" name="QT24_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="26" column="0">
+                <widget class="QCheckBox" name="quadindex_QL27">
+                 <property name="text">
+                  <string>QL27</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="48" column="1">
+                <widget class="QDoubleSpinBox" name="QT23_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="41" column="1">
+                <widget class="QDoubleSpinBox" name="QT16_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="48" column="0">
+                <widget class="QCheckBox" name="quadindex_QT23">
+                 <property name="text">
+                  <string>QT23</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="9" column="0">
+                <widget class="QCheckBox" name="quadindex_QL10">
+                 <property name="text">
+                  <string>QL10</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="30" column="1">
+                <widget class="QDoubleSpinBox" name="QT03_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="42" column="1">
+                <widget class="QDoubleSpinBox" name="QT17_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="46" column="1">
+                <widget class="QDoubleSpinBox" name="QT21_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="2">
+                <widget class="QDoubleSpinBox" name="QL07_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="52" column="0">
+                <widget class="QCheckBox" name="quadindex_QT27">
+                 <property name="text">
+                  <string>QT27</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="51" column="0">
+                <widget class="QCheckBox" name="quadindex_QT26">
+                 <property name="text">
+                  <string>QT26</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="16" column="0">
+                <widget class="QCheckBox" name="quadindex_QL17">
+                 <property name="text">
+                  <string>QL17</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="60" column="1">
+                <widget class="QDoubleSpinBox" name="QT35_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="9" column="1">
+                <widget class="QDoubleSpinBox" name="QL10_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="0">
+                <widget class="QCheckBox" name="quadindex_QL07">
+                 <property name="text">
+                  <string>QL07</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="26" column="1">
+                <widget class="QDoubleSpinBox" name="QL27_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="0">
+                <widget class="QCheckBox" name="quadindex_QL06">
+                 <property name="text">
+                  <string>QL06</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="55" column="0">
+                <widget class="QCheckBox" name="quadindex_QT30">
+                 <property name="text">
+                  <string>QT30</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="10" column="1">
+                <widget class="QDoubleSpinBox" name="QL11_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="25" column="0">
+                <widget class="QCheckBox" name="quadindex_QL26">
+                 <property name="text">
+                  <string>QL26</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="23" column="0">
+                <widget class="QCheckBox" name="quadindex_QL24">
+                 <property name="text">
+                  <string>QL24</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="56" column="0">
+                <widget class="QCheckBox" name="quadindex_QT31">
+                 <property name="text">
+                  <string>QT31</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="49" column="1">
+                <widget class="QDoubleSpinBox" name="QT24_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="15" column="2">
+                <widget class="QDoubleSpinBox" name="QL16_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="19" column="1">
+                <widget class="QDoubleSpinBox" name="QL20_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="47" column="1">
+                <widget class="QDoubleSpinBox" name="QT22_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="29" column="0">
+                <widget class="QCheckBox" name="quadindex_QT02">
+                 <property name="text">
+                  <string>QT02</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="2">
+                <widget class="QDoubleSpinBox" name="QL06_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="20" column="1">
+                <widget class="QDoubleSpinBox" name="QL21_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="12" column="2">
+                <widget class="QDoubleSpinBox" name="QL13_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="51" column="2">
+                <widget class="QDoubleSpinBox" name="QT26_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="21" column="1">
+                <widget class="QDoubleSpinBox" name="QL22_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="28" column="2">
+                <widget class="QDoubleSpinBox" name="QT01_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="38" column="1">
+                <widget class="QDoubleSpinBox" name="QT13_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="40" column="2">
+                <widget class="QDoubleSpinBox" name="QT15_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="18" column="0">
+                <widget class="QCheckBox" name="quadindex_QL19">
+                 <property name="text">
+                  <string>QL19</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="39" column="0">
+                <widget class="QCheckBox" name="quadindex_QT14">
+                 <property name="text">
+                  <string>QT14</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="60" column="2">
+                <widget class="QDoubleSpinBox" name="QT35_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="22" column="1">
+                <widget class="QDoubleSpinBox" name="QL23_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="43" column="2">
+                <widget class="QDoubleSpinBox" name="QT18_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="34" column="1">
+                <widget class="QDoubleSpinBox" name="QHL2_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="0">
+                <widget class="QCheckBox" name="quadindex_QL04">
+                 <property name="text">
+                  <string>QL04</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QDoubleSpinBox" name="QL02_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="10" column="2">
+                <widget class="QDoubleSpinBox" name="QL11_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="30" column="0">
+                <widget class="QCheckBox" name="quadindex_QT03">
+                 <property name="text">
+                  <string>QT03</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QDoubleSpinBox" name="QL01_range_minus">
+                 <property name="accelerated">
+                  <bool>false</bool>
+                 </property>
+                 <property name="decimals">
+                  <number>2</number>
+                 </property>
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="43" column="1">
+                <widget class="QDoubleSpinBox" name="QT18_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="59" column="1">
+                <widget class="QDoubleSpinBox" name="QT34_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="35" column="1">
+                <widget class="QDoubleSpinBox" name="QHL3_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="44" column="2">
+                <widget class="QDoubleSpinBox" name="QT19_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="13" column="1">
+                <widget class="QDoubleSpinBox" name="QL14_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="29" column="2">
+                <widget class="QDoubleSpinBox" name="QT02_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="57" column="0">
+                <widget class="QCheckBox" name="quadindex_QT32">
+                 <property name="text">
+                  <string>QT32</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="58" column="2">
+                <widget class="QDoubleSpinBox" name="QT33_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="15" column="0">
+                <widget class="QCheckBox" name="quadindex_QL16">
+                 <property name="text">
+                  <string>QL16</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="20" column="2">
+                <widget class="QDoubleSpinBox" name="QL21_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="45" column="1">
+                <widget class="QDoubleSpinBox" name="QT20_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="36" column="2">
+                <widget class="QDoubleSpinBox" name="QHL4_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="31" column="1">
+                <widget class="QDoubleSpinBox" name="QT04_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="61" column="1">
+                <widget class="QDoubleSpinBox" name="QT36_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="41" column="2">
+                <widget class="QDoubleSpinBox" name="QT16_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QCheckBox" name="quadindex_QL03">
+                 <property name="enabled">
+                  <bool>true</bool>
+                 </property>
+                 <property name="mouseTracking">
+                  <bool>true</bool>
+                 </property>
+                 <property name="accessibleName">
+                  <string/>
+                 </property>
+                 <property name="text">
+                  <string>QL03</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="0">
+                <widget class="QCheckBox" name="quadindex_QL05">
+                 <property name="text">
+                  <string>QL05</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QCheckBox" name="quadindex_QL02">
+                 <property name="text">
+                  <string>QL02</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="34" column="0">
+                <widget class="QCheckBox" name="quadindex_QHL2">
+                 <property name="text">
+                  <string>QHL2</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="2">
+                <widget class="QDoubleSpinBox" name="QL04_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="58" column="1">
+                <widget class="QDoubleSpinBox" name="QT33_range_minus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="59" column="2">
+                <widget class="QDoubleSpinBox" name="QT34_range_plus">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="1">
+                <widget class="QDoubleSpinBox" name="QL06_range_minus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>-5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="0">
+                <widget class="QCheckBox" name="quadindex_QL08">
+                 <property name="text">
+                  <string>QL08</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="17" column="2">
+                <widget class="QDoubleSpinBox" name="QL18_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="40" column="0">
+                <widget class="QCheckBox" name="quadindex_QT15">
+                 <property name="text">
+                  <string>QT15</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="41" column="0">
+                <widget class="QCheckBox" name="quadindex_QT16">
+                 <property name="text">
+                  <string>QT16</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="24" column="2">
+                <widget class="QDoubleSpinBox" name="QL25_range_plus">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="24" column="0">
+                <widget class="QCheckBox" name="quadindex_QL25">
+                 <property name="text">
+                  <string>QL25</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="36" column="0">
+                <widget class="QCheckBox" name="quadindex_QHL4">
+                 <property name="text">
+                  <string>QHL4</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="27" column="0" colspan="3">
+                <widget class="Line" name="line">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="32" column="0" colspan="3">
+                <widget class="Line" name="line_2">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="37" column="0" colspan="3">
+                <widget class="Line" name="line_3">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tab_2">
+        <attribute name="title">
+         <string>KICK</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_5">
+         <item>
+          <layout class="QGridLayout" name="gridLayout_6">
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_6">
+             <property name="text">
+              <string>index</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLabel" name="label_7">
+             <property name="text">
+              <string>range</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QLabel" name="label_8">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QScrollArea" name="scrollArea_2">
+           <property name="widgetResizable">
+            <bool>true</bool>
+           </property>
+           <widget class="QWidget" name="scrollAreaWidgetContents_3">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>388</width>
+              <height>2603</height>
+             </rect>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_7">
+             <item row="1" column="0">
+              <layout class="QGridLayout" name="gridLayout_8" columnstretch="1,1,1">
+               <item row="13" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_76">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="28" column="0">
+                <widget class="QCheckBox" name="checkBox_94">
+                 <property name="text">
+                  <string>XC29</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="35" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_71">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="46" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_53"/>
+               </item>
+               <item row="31" column="0">
+                <widget class="QCheckBox" name="checkBox_65">
+                 <property name="text">
+                  <string>XC32</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="45" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_51"/>
+               </item>
+               <item row="26" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_66">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="11" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_46">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="68" column="0">
+                <widget class="QCheckBox" name="checkBox_118">
+                 <property name="text">
+                  <string>YC25</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="21" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_70">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="55" column="0">
+                <widget class="QCheckBox" name="checkBox_99">
+                 <property name="text">
+                  <string>YC12</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="25" column="0">
+                <widget class="QCheckBox" name="checkBox_91">
+                 <property name="text">
+                  <string>XC26</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="22" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_97">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="17" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_128">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="66" column="0">
+                <widget class="QCheckBox" name="checkBox_116">
+                 <property name="text">
+                  <string>YC23</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="47" column="0">
+                <widget class="QCheckBox" name="checkBox_73">
+                 <property name="text">
+                  <string>YC04</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="14" column="0">
+                <widget class="QCheckBox" name="checkBox_54">
+                 <property name="text">
+                  <string>XC15</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_106">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="73" column="0">
+                <widget class="QCheckBox" name="checkBox_123">
+                 <property name="text">
+                  <string>YC30</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="54" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_39"/>
+               </item>
+               <item row="1" column="0">
+                <widget class="QCheckBox" name="checkBox_103">
+                 <property name="text">
+                  <string>XC02</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="19" column="0">
+                <widget class="QCheckBox" name="checkBox_53">
+                 <property name="text">
+                  <string>XC20</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="9" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_65">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QCheckBox" name="checkBox_101">
+                 <property name="enabled">
+                  <bool>true</bool>
+                 </property>
+                 <property name="mouseTracking">
+                  <bool>true</bool>
+                 </property>
+                 <property name="accessibleName">
+                  <string/>
+                 </property>
+                 <property name="text">
+                  <string>XC03</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="41" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_45">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="34" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_51">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="30" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_78">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="37" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_119">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="18" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_59">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="56" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_61"/>
+               </item>
+               <item row="67" column="0">
+                <widget class="QCheckBox" name="checkBox_117">
+                 <property name="text">
+                  <string>YC24</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="29" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_63">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="40" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_74">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="49" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_41"/>
+               </item>
+               <item row="23" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_60">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="54" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_47"/>
+               </item>
+               <item row="6" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_8">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="20" column="0">
+                <widget class="QCheckBox" name="checkBox_52">
+                 <property name="text">
+                  <string>XC21</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="42" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_99">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="39" column="0">
+                <widget class="QCheckBox" name="checkBox_51">
+                 <property name="text">
+                  <string>XC40</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="52" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_40"/>
+               </item>
+               <item row="1" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_3">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="83" column="0">
+                <widget class="QCheckBox" name="checkBox_133">
+                 <property name="text">
+                  <string>YC40</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="0">
+                <widget class="QCheckBox" name="checkBox_102">
+                 <property name="text">
+                  <string>XC05</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="58" column="0">
+                <widget class="QCheckBox" name="checkBox_76">
+                 <property name="text">
+                  <string>YC15</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="25" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_105">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_116">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="17" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_55">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="38" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_62">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="58" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_59"/>
+               </item>
+               <item row="5" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_7">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="9" column="0">
+                <widget class="QCheckBox" name="checkBox_84">
+                 <property name="text">
+                  <string>XC10</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QCheckBox" name="checkBox_70">
+                 <property name="text">
+                  <string>XC01</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="61" column="0">
+                <widget class="QCheckBox" name="checkBox_110">
+                 <property name="text">
+                  <string>YC18</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="43" column="0" colspan="3">
+                <widget class="Line" name="line_4">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="19" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_68">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="48" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_43"/>
+               </item>
+               <item row="53" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_34"/>
+               </item>
+               <item row="30" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_102">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="46" column="0">
+                <widget class="QCheckBox" name="checkBox_83">
+                 <property name="text">
+                  <string>YC03</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="38" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_126">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="20" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_69">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="57" column="0">
+                <widget class="QCheckBox" name="checkBox_58">
+                 <property name="text">
+                  <string>YC14</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="63" column="0">
+                <widget class="QCheckBox" name="checkBox_113">
+                 <property name="text">
+                  <string>YC20</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="0">
+                <widget class="QCheckBox" name="checkBox_88">
+                 <property name="text">
+                  <string>XC07</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="11" column="0">
+                <widget class="QCheckBox" name="checkBox_80">
+                 <property name="text">
+                  <string>XC12</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_96">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="59" column="0">
+                <widget class="QCheckBox" name="checkBox_74">
+                 <property name="text">
+                  <string>YC16</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="13" column="0">
+                <widget class="QCheckBox" name="checkBox_59">
+                 <property name="text">
+                  <string>XC14</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="19" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_109">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="9" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_92">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="41" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_122">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_127">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="39" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_64">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="33" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_110">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="42" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_77">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="40" column="0">
+                <widget class="QCheckBox" name="checkBox_77">
+                 <property name="text">
+                  <string>XC41</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="24" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_49">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="52" column="0">
+                <widget class="QCheckBox" name="checkBox_69">
+                 <property name="text">
+                  <string>YC09</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="79" column="0">
+                <widget class="QCheckBox" name="checkBox_129">
+                 <property name="text">
+                  <string>YC36</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="24" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_129">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="35" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_88">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="33" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_75">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="10" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_67">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="36" column="0">
+                <widget class="QCheckBox" name="checkBox_96">
+                 <property name="text">
+                  <string>XC37</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="57" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_64"/>
+               </item>
+               <item row="77" column="0">
+                <widget class="QCheckBox" name="checkBox_127">
+                 <property name="text">
+                  <string>YC34</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="52" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_37"/>
+               </item>
+               <item row="30" column="0">
+                <widget class="QCheckBox" name="checkBox_72">
+                 <property name="text">
+                  <string>XC31</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="16" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_111">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="27" column="0">
+                <widget class="QCheckBox" name="checkBox_60">
+                 <property name="text">
+                  <string>XC28</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="48" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_45"/>
+               </item>
+               <item row="40" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_120">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="47" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_56"/>
+               </item>
+               <item row="27" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_53">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_98">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_101">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="12" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_47">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_5">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="17" column="0">
+                <widget class="QCheckBox" name="checkBox_63">
+                 <property name="text">
+                  <string>XC18</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="37" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_58">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="50" column="0">
+                <widget class="QCheckBox" name="checkBox_85">
+                 <property name="text">
+                  <string>YC07</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="18" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_89">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_4">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="28" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_123">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="18" column="0">
+                <widget class="QCheckBox" name="checkBox_95">
+                 <property name="text">
+                  <string>XC19</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_114">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_56">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="72" column="0">
+                <widget class="QCheckBox" name="checkBox_122">
+                 <property name="text">
+                  <string>YC29</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="45" column="0">
+                <widget class="QCheckBox" name="checkBox_75">
+                 <property name="text">
+                  <string>YC02</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="71" column="0">
+                <widget class="QCheckBox" name="checkBox_121">
+                 <property name="text">
+                  <string>YC28</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="41" column="0">
+                <widget class="QCheckBox" name="checkBox_62">
+                 <property name="text">
+                  <string>XC42</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="0">
+                <widget class="QCheckBox" name="checkBox_97">
+                 <property name="text">
+                  <string>XC04</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="39" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_103">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="23" column="0">
+                <widget class="QCheckBox" name="checkBox_92">
+                 <property name="text">
+                  <string>XC24</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="42" column="0">
+                <widget class="QCheckBox" name="checkBox_67">
+                 <property name="text">
+                  <string>XC43</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="36" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_95">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="35" column="0">
+                <widget class="QCheckBox" name="checkBox_64">
+                 <property name="text">
+                  <string>XC36</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="29" column="0">
+                <widget class="QCheckBox" name="checkBox_98">
+                 <property name="text">
+                  <string>XC30</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="48" column="0">
+                <widget class="QCheckBox" name="checkBox_55">
+                 <property name="text">
+                  <string>YC05</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="33" column="0">
+                <widget class="QCheckBox" name="checkBox_71">
+                 <property name="text">
+                  <string>XC34</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="60" column="0">
+                <widget class="QCheckBox" name="checkBox_111">
+                 <property name="text">
+                  <string>YC17</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="51" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_35"/>
+               </item>
+               <item row="21" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_100">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="70" column="0">
+                <widget class="QCheckBox" name="checkBox_120">
+                 <property name="text">
+                  <string>YC27</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="55" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_36"/>
+               </item>
+               <item row="28" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_44">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="64" column="0">
+                <widget class="QCheckBox" name="checkBox_114">
+                 <property name="text">
+                  <string>YC21</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="15" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_115">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="49" column="0">
+                <widget class="QCheckBox" name="checkBox_86">
+                 <property name="text">
+                  <string>YC06</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="62" column="0">
+                <widget class="QCheckBox" name="checkBox_112">
+                 <property name="text">
+                  <string>YC19</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="75" column="0">
+                <widget class="QCheckBox" name="checkBox_125">
+                 <property name="text">
+                  <string>YC32</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="51" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_49"/>
+               </item>
+               <item row="86" column="0">
+                <widget class="QCheckBox" name="checkBox_136">
+                 <property name="text">
+                  <string>YC43</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="69" column="0">
+                <widget class="QCheckBox" name="checkBox_119">
+                 <property name="text">
+                  <string>YC26</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="12" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_117">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="74" column="0">
+                <widget class="QCheckBox" name="checkBox_124">
+                 <property name="text">
+                  <string>YC31</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="25" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_50">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="57" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_60"/>
+               </item>
+               <item row="14" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_57">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="55" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_50"/>
+               </item>
+               <item row="11" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_107">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="31" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_87">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="26" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_94">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="22" column="0">
+                <widget class="QCheckBox" name="checkBox_56">
+                 <property name="text">
+                  <string>XC23</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_6">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="10" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_121">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="37" column="0">
+                <widget class="QCheckBox" name="checkBox_106">
+                 <property name="text">
+                  <string>XC38</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="22" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_72">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="16" column="0">
+                <widget class="QCheckBox" name="checkBox_87">
+                 <property name="text">
+                  <string>XC17</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="32" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_113">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="14" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_112">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="0">
+                <widget class="QCheckBox" name="checkBox_89">
+                 <property name="text">
+                  <string>XC06</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="50" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_42"/>
+               </item>
+               <item row="54" column="0">
+                <widget class="QCheckBox" name="checkBox_93">
+                 <property name="text">
+                  <string>YC11</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="24" column="0">
+                <widget class="QCheckBox" name="checkBox_108">
+                 <property name="text">
+                  <string>XC25</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="45" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_57"/>
+               </item>
+               <item row="7" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_90">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="58" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_55"/>
+               </item>
+               <item row="12" column="0">
+                <widget class="QCheckBox" name="checkBox_66">
+                 <property name="text">
+                  <string>XC13</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="50" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_44"/>
+               </item>
+               <item row="27" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_118">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="16" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_48">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="36" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_61">
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="20" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_124">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="56" column="0">
+                <widget class="QCheckBox" name="checkBox_57">
+                 <property name="text">
+                  <string>YC13</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="65" column="0">
+                <widget class="QCheckBox" name="checkBox_115">
+                 <property name="text">
+                  <string>YC22</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="0">
+                <widget class="QCheckBox" name="checkBox_61">
+                 <property name="text">
+                  <string>XC09</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_108">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="34" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_125">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="13" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_104">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="82" column="0">
+                <widget class="QCheckBox" name="checkBox_132">
+                 <property name="text">
+                  <string>YC39</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="32" column="0">
+                <widget class="QCheckBox" name="checkBox_104">
+                 <property name="text">
+                  <string>XC33</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="76" column="0">
+                <widget class="QCheckBox" name="checkBox_126">
+                 <property name="text">
+                  <string>YC33</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="21" column="0">
+                <widget class="QCheckBox" name="checkBox_81">
+                 <property name="text">
+                  <string>XC22</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_9">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="78" column="0">
+                <widget class="QCheckBox" name="checkBox_128">
+                 <property name="text">
+                  <string>YC35</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="47" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_52"/>
+               </item>
+               <item row="44" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_54"/>
+               </item>
+               <item row="31" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_52">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="26" column="0">
+                <widget class="QCheckBox" name="checkBox_82">
+                 <property name="text">
+                  <string>XC27</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="15" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_54">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="29" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_93">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="15" column="0">
+                <widget class="QCheckBox" name="checkBox_100">
+                 <property name="text">
+                  <string>XC16</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="44" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_48"/>
+               </item>
+               <item row="84" column="0">
+                <widget class="QCheckBox" name="checkBox_134">
+                 <property name="text">
+                  <string>YC41</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="85" column="0">
+                <widget class="QCheckBox" name="checkBox_135">
+                 <property name="text">
+                  <string>YC42</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="53" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_38"/>
+               </item>
+               <item row="32" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_73">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="38" column="0">
+                <widget class="QCheckBox" name="checkBox_107">
+                 <property name="text">
+                  <string>XC39</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="46" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_33"/>
+               </item>
+               <item row="0" column="1">
+                <widget class="QDoubleSpinBox" name="bpmx_doubleSpinBox_2">
+                 <property name="accelerated">
+                  <bool>false</bool>
+                 </property>
+                 <property name="decimals">
+                  <number>2</number>
+                 </property>
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="34" column="0">
+                <widget class="QCheckBox" name="checkBox_109">
+                 <property name="text">
+                  <string>XC35</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="81" column="0">
+                <widget class="QCheckBox" name="checkBox_131">
+                 <property name="text">
+                  <string>YC38</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="51" column="0">
+                <widget class="QCheckBox" name="checkBox_78">
+                 <property name="text">
+                  <string>YC08</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="59" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_46"/>
+               </item>
+               <item row="44" column="0">
+                <widget class="QCheckBox" name="checkBox_68">
+                 <property name="text">
+                  <string>YC01</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="53" column="0">
+                <widget class="QCheckBox" name="checkBox_90">
+                 <property name="text">
+                  <string>YC10</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="56" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_63"/>
+               </item>
+               <item row="7" column="0">
+                <widget class="QCheckBox" name="checkBox_105">
+                 <property name="text">
+                  <string>XC08</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="10" column="0">
+                <widget class="QCheckBox" name="checkBox_79">
+                 <property name="text">
+                  <string>XC11</string>
+                 </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="23" column="2">
+                <widget class="QDoubleSpinBox" name="bpmy_doubleSpinBox_91">
+                 <property name="minimum">
+                  <double>-99.900000000000006</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>0.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="80" column="0">
+                <widget class="QCheckBox" name="checkBox_130">
+                 <property name="text">
+                  <string>YC37</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="49" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_58"/>
+               </item>
+               <item row="59" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_62"/>
+               </item>
+               <item row="60" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_65"/>
+               </item>
+               <item row="60" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_66"/>
+               </item>
+               <item row="61" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_67"/>
+               </item>
+               <item row="61" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_68"/>
+               </item>
+               <item row="62" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_69"/>
+               </item>
+               <item row="62" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_70"/>
+               </item>
+               <item row="63" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_71"/>
+               </item>
+               <item row="63" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_72"/>
+               </item>
+               <item row="64" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_73"/>
+               </item>
+               <item row="64" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_74"/>
+               </item>
+               <item row="65" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_75"/>
+               </item>
+               <item row="65" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_76"/>
+               </item>
+               <item row="66" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_77"/>
+               </item>
+               <item row="66" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_78"/>
+               </item>
+               <item row="67" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_79"/>
+               </item>
+               <item row="67" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_80"/>
+               </item>
+               <item row="68" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_81"/>
+               </item>
+               <item row="68" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_82"/>
+               </item>
+               <item row="69" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_83"/>
+               </item>
+               <item row="69" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_84"/>
+               </item>
+               <item row="70" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_85"/>
+               </item>
+               <item row="70" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_86"/>
+               </item>
+               <item row="71" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_87"/>
+               </item>
+               <item row="71" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_88"/>
+               </item>
+               <item row="72" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_89"/>
+               </item>
+               <item row="72" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_90"/>
+               </item>
+               <item row="73" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_91"/>
+               </item>
+               <item row="73" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_92"/>
+               </item>
+               <item row="74" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_93"/>
+               </item>
+               <item row="74" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_94"/>
+               </item>
+               <item row="75" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_95"/>
+               </item>
+               <item row="75" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_96"/>
+               </item>
+               <item row="76" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_97"/>
+               </item>
+               <item row="76" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_98"/>
+               </item>
+               <item row="77" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_99"/>
+               </item>
+               <item row="77" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_100"/>
+               </item>
+               <item row="78" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_101"/>
+               </item>
+               <item row="78" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_102"/>
+               </item>
+               <item row="79" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_103"/>
+               </item>
+               <item row="79" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_104"/>
+               </item>
+               <item row="80" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_105"/>
+               </item>
+               <item row="80" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_106"/>
+               </item>
+               <item row="81" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_107"/>
+               </item>
+               <item row="81" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_108"/>
+               </item>
+               <item row="82" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_109"/>
+               </item>
+               <item row="82" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_110"/>
+               </item>
+               <item row="83" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_111"/>
+               </item>
+               <item row="83" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_112"/>
+               </item>
+               <item row="84" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_113"/>
+               </item>
+               <item row="84" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_114"/>
+               </item>
+               <item row="85" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_115"/>
+               </item>
+               <item row="85" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_116"/>
+               </item>
+               <item row="86" column="1">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_117"/>
+               </item>
+               <item row="86" column="2">
+                <widget class="QDoubleSpinBox" name="doubleSpinBox_118"/>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="verticalLayout_3" stretch="1,1">
+       <item>
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <item>
+          <widget class="QTabWidget" name="tabWidget_2">
+           <property name="currentIndex">
+            <number>0</number>
+           </property>
+           <widget class="QWidget" name="tab_7">
+            <attribute name="title">
+             <string>RCDS</string>
+            </attribute>
+            <layout class="QHBoxLayout" name="horizontalLayout_5">
+             <item>
+              <layout class="QGridLayout" name="gridLayout" columnstretch="0,0">
+               <item row="2" column="0">
+                <widget class="QLabel" name="label_46">
+                 <property name="text">
+                  <string>noise</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="label">
+                 <property name="text">
+                  <string>step</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLineEdit" name="lineEdit">
+                 <property name="text">
+                  <string>0.1</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QLineEdit" name="lineEdit_3">
+                 <property name="text">
+                  <string>1</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="label_2">
+                 <property name="text">
+                  <string>iter</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="lineEdit_2">
+                 <property name="text">
+                  <string>10</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="tab_8">
+            <attribute name="title">
+             <string>Tab 2</string>
+            </attribute>
+           </widget>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_4">
+           <property name="text">
+            <string>start</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="MplWidget" name="widget_2" native="true"/>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>MplWidget</class>
+   <extends>QWidget</extends>
+   <header>mplwidget.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
