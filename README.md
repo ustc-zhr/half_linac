@@ -4,6 +4,16 @@
 
 # 每周开发进度
 
+##### 2025-7-24-Zhanghaoran
+
+- 继续在线优化功能开发`optimization`
+
+  实现了Robust simplex算法，并针对Rosenbrock函数进行测试
+
+  Refs: 
+
+  1. PHYSICAL REVIEW ACCELERATORS AND BEAMS 21, 104601 (2018)  
+
 ##### 2025-7-17-Zhanghaoran
 
 - 继续在线优化功能开发`optimization`
