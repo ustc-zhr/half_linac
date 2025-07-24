@@ -198,3 +198,5 @@ Traceback (most recent call last):
     print("zz2")
 OSError: [Errno 5] Input/output error
 2025-07-17 20:54:13,266 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-20 23:15:40,245 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-20 23:18:13,414 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '2', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
