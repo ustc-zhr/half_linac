@@ -60,6 +60,9 @@ class PowellOptimizer:
         self.init_knob_pv()
 
     def init_knob_pv(self) -> None:
+        """
+        得到变量的pv名列表以及变量的绝对变化范围
+        """
         self.knobs_pvlist = []
         self.knobs_pvnames = []
         for knob in self.knobs_list:
@@ -108,7 +111,7 @@ class PowellOptimizer:
         self.data.append(np.concatenate((x, [obj_val])))
         self.cnt += 1
         # 将数据保存到文件
-        np.savetxt('template.opt',
+        np.savetxt('../template.opt',
                   np.array(self.data),
                   fmt='%.6f')
 
@@ -548,8 +551,8 @@ if __name__ == "__main__":
             
 
             # 创建优化器实例
-            x0 = 0.5*np.ones(len(knobs_list))
-            vrange = np.array([knobs_minus, knobs_plus]).T
+            x0 = 0.5*np.ones(len(knobs_list)) #归一化的初始点
+            vrange = np.array([knobs_minus, knobs_plus]).T #基于初始点的探索空间加减范围(未归一化的)
             Dmat0 = np.eye(len(knobs_list))
 
             print('paras. for RCDS:')

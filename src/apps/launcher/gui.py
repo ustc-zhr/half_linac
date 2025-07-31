@@ -14,7 +14,10 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(570, 673)
+        MainWindow.resize(962, 807)
+        icon = QtGui.QIcon()
+        icon.addPixmap(QtGui.QPixmap("../../../half.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        MainWindow.setWindowIcon(icon)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
@@ -41,39 +44,6 @@ class Ui_MainWindow(object):
         self.gridLayout = QtWidgets.QGridLayout()
         self.gridLayout.setVerticalSpacing(20)
         self.gridLayout.setObjectName("gridLayout")
-        self.orbit_correct = QtWidgets.QPushButton(self.centralwidget)
-        self.orbit_correct.setMinimumSize(QtCore.QSize(0, 40))
-        self.orbit_correct.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.orbit_correct.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 12pt;\n"
-"}")
-        self.orbit_correct.setObjectName("orbit_correct")
-        self.gridLayout.addWidget(self.orbit_correct, 4, 0, 1, 1)
-        self.pushButton_2 = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_2.setMinimumSize(QtCore.QSize(0, 40))
-        self.pushButton_2.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.pushButton_2.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 12pt;\n"
-"}")
-        self.pushButton_2.setObjectName("pushButton_2")
-        self.gridLayout.addWidget(self.pushButton_2, 2, 0, 1, 1)
-        self.pushButton_3 = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_3.setMinimumSize(QtCore.QSize(0, 40))
-        self.pushButton_3.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.pushButton_3.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 12pt;\n"
-"}")
-        self.pushButton_3.setObjectName("pushButton_3")
-        self.gridLayout.addWidget(self.pushButton_3, 1, 0, 1, 1)
         self.pushButton = QtWidgets.QPushButton(self.centralwidget)
         self.pushButton.setMinimumSize(QtCore.QSize(0, 40))
         self.pushButton.setMaximumSize(QtCore.QSize(400, 16777215))
@@ -87,6 +57,41 @@ class Ui_MainWindow(object):
         self.pushButton.setFlat(False)
         self.pushButton.setObjectName("pushButton")
         self.gridLayout.addWidget(self.pushButton, 0, 0, 1, 1)
+        self.orbit_correct = QtWidgets.QPushButton(self.centralwidget)
+        self.orbit_correct.setMinimumSize(QtCore.QSize(0, 40))
+        self.orbit_correct.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.orbit_correct.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 12pt;\n"
+"}")
+        self.orbit_correct.setObjectName("orbit_correct")
+        self.gridLayout.addWidget(self.orbit_correct, 4, 0, 1, 1)
+        self.pushButton_3 = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton_3.setMinimumSize(QtCore.QSize(0, 40))
+        self.pushButton_3.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.pushButton_3.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 12pt;\n"
+"}")
+        self.pushButton_3.setCheckable(False)
+        self.pushButton_3.setChecked(False)
+        self.pushButton_3.setObjectName("pushButton_3")
+        self.gridLayout.addWidget(self.pushButton_3, 1, 0, 1, 1)
+        self.pushButton_2 = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton_2.setMinimumSize(QtCore.QSize(0, 40))
+        self.pushButton_2.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.pushButton_2.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 12pt;\n"
+"}")
+        self.pushButton_2.setObjectName("pushButton_2")
+        self.gridLayout.addWidget(self.pushButton_2, 2, 0, 1, 1)
         self.pushButton_4 = QtWidgets.QPushButton(self.centralwidget)
         self.pushButton_4.setMinimumSize(QtCore.QSize(0, 40))
         self.pushButton_4.setMaximumSize(QtCore.QSize(400, 16777215))
@@ -109,16 +114,16 @@ class Ui_MainWindow(object):
         self.online_opt.setObjectName("online_opt")
         self.gridLayout.addWidget(self.online_opt, 5, 0, 1, 1)
         self.gridLayout_3.addLayout(self.gridLayout, 5, 0, 1, 1)
+        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.gridLayout_3.addItem(spacerItem1, 2, 0, 1, 1)
         self.textEdit = QtWidgets.QTextEdit(self.centralwidget)
         self.textEdit.setMaximumSize(QtCore.QSize(16777215, 200))
         self.textEdit.setObjectName("textEdit")
         self.gridLayout_3.addWidget(self.textEdit, 0, 0, 1, 1)
-        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.gridLayout_3.addItem(spacerItem1, 2, 0, 1, 1)
         self.verticalLayout_2.addLayout(self.gridLayout_3)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 570, 20))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 962, 20))
         self.menubar.setObjectName("menubar")
         MainWindow.setMenuBar(self.menubar)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
@@ -132,18 +137,16 @@ class Ui_MainWindow(object):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Launcher"))
         self.vmbtn.setText(_translate("MainWindow", "Virtual Machine"))
-        self.orbit_correct.setText(_translate("MainWindow", "orbit correct"))
-        self.pushButton_2.setText(_translate("MainWindow", "emit measure"))
-        self.pushButton_3.setText(_translate("MainWindow", "beam monitor"))
         self.pushButton.setToolTip(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
         self.pushButton.setWhatsThis(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
         self.pushButton.setText(_translate("MainWindow", "orbit display"))
+        self.orbit_correct.setText(_translate("MainWindow", "orbit correct"))
+        self.pushButton_3.setText(_translate("MainWindow", "beam monitor"))
+        self.pushButton_2.setText(_translate("MainWindow", "emit measure"))
         self.pushButton_4.setText(_translate("MainWindow", "BBA"))
         self.online_opt.setText(_translate("MainWindow", "optimization"))
         self.textEdit.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
 "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
 "p, li { white-space: pre-wrap; }\n"
 "</style></head><body style=\" font-family:\'Sans Serif\'; font-size:9pt; font-weight:400; font-style:normal;\">\n"
-"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:10pt; font-weight:600; color:#ff0000;\">Pay Attention</span><span style=\" font-size:10pt; color:#ff0000;\">:</span></p>\n"
-"<p style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px; font-size:10pt; color:#ff0000;\"><br /></p>\n"
-"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:10pt; color:#ff0000;\">(1) [Virtual Machine] is for virtual machine development, where you need to click [start VM] &amp; [start IOC] and you can also add error. </span></p></body></html>"))
+"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:10pt; font-weight:600; color:#ff0000;\">HALF linac HLAs</span><span style=\" font-size:10pt; color:#ff0000;\">: under developing</span></p></body></html>"))

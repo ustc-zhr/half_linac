@@ -21,8 +21,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.plot_timer.timeout.connect(self._update_plot)
 
         # connect button
-        self.pushButton_7.clicked.connect(self.start_opt)
-        # self.pushButton_7.clicked.connect(self.opt_plot)
+        self.pushButton_7.clicked.connect(self.start_RCDSopt)
+        self.pushButton.clicked.connect(self.start_Rsimplex)
 
         # knobs
         # quad
@@ -42,10 +42,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.interval_lineEdit.setText('8') # 
 
 
-
-
-    def test(self):
-        self.find_knobs()
         
     def selectall(self, state, indexstr):
         all_checkboxes = self.findChildren(QCheckBox)
@@ -89,6 +85,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         # print(knobs_list, knobs_minus, knobs_plus)
 
         return knobs_list, knobs_minus, knobs_plus
+    
     def get_obj(self):
         obj_pvname = [self.obj1_pvname.text(), self.obj2_pvname.text(), self.obj3_pvname.text()]
         obj_weight = [self.obj1_weight.text(), self.obj2_weight.text(), self.obj3_weight.text()]
@@ -129,7 +126,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         
      
 
-    def start_opt(self):
+    def start_RCDSopt(self):
         # prepare the knobs and obj. 
         knobs_list, knobs_minus, knobs_plus = self.find_knobs()
 
@@ -164,8 +161,54 @@ class myWindow(QMainWindow, Ui_MainWindow):
             **kwargs
         )
         self.subprocesses.append(proc)
+        try: 
+            os.remove("./template.opt")
+        except:
+            pass
+        self.plot_timer.start(1000)  # 每秒更新一次图表
+        # proc.wait()
+        # self.plot_timer.stop()
+        # self._optplot()  # 最终绘制一次
 
-        os.remove("./RCDS/template.opt")
+    def start_Rsimplex(self):
+        # prepare the knobs and obj. 
+        knobs_list, knobs_minus, knobs_plus = self.find_knobs()
+
+        knobs_minus = [str(i) for i in knobs_minus]
+        knobs_plus = [str(i) for i in knobs_plus]
+        obj_pvname, obj_weight, obj_samples, obj_math = self.get_obj()
+        
+        cmd = [
+            "python3", "Rsimplexopt.py",                  #0
+            "start_opt",                              #1
+            ",".join(knobs_list),                     #2         
+            ",".join(knobs_minus),               #3
+            ",".join(knobs_plus),                #4
+            self.step_lineEdit_2.text(),                #5 
+            self.iter_lineEdit_2.text(),                #6 
+            self.noise_lineEdit_2.text(),               #7 
+            self.interval_lineEdit_2.text(),               #8
+            ",".join(obj_pvname),                     #8  
+            ",".join(obj_weight),                     #9 
+            ",".join(obj_samples),                    #10 
+            ",".join(obj_math)                        #11
+        ]
+        print(cmd)
+        # 跨平台启动进程（确保进程组独立）
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+
+        proc = Popen(
+            cmd,
+            cwd=st.rootpath + "/src/optimization/Rsimplex",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+        try: 
+            os.remove("./template.opt")
+        except:
+            pass
         self.plot_timer.start(1000)  # 每秒更新一次图表
         # proc.wait()
         # self.plot_timer.stop()
@@ -174,7 +217,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         
     def _update_plot(self):
         try:
-            with open("./RCDS/template.opt","r") as f:
+            with open("./template.opt","r") as f:
                 data = np.loadtxt(f)
             if len(data) > 0:
                 self._optplot(data)
@@ -184,7 +227,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _optplot(self, data=None):
         self.optplot.axes.clear()
         if data is None:
-            with open("./RCDS/template.opt","r") as f:
+            with open("./template.opt","r") as f:
                 data = np.loadtxt(f)
         values = data[:, -1]
         min_values = np.minimum.accumulate(values)

@@ -200,3 +200,24 @@ OSError: [Errno 5] Input/output error
 2025-07-17 20:54:13,266 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
 2025-07-20 23:15:40,245 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
 2025-07-20 23:18:13,414 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '2', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-29 15:49:34,219 - INFO - INPUT PARAMETERS: ['/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py']
+2025-07-29 15:49:34,220 - ERROR - 错误: list index out of range
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 531, in <module>
+    if sys.argv[1] == "start_opt":
+       ~~~~~~~~^^^
+IndexError: list index out of range
+2025-07-31 11:27:44,358 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-31 11:32:36,136 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-07-31 11:35:39,882 - ERROR - 错误: [Errno 5] Input/output error
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 574, in <module>
+    x_norm_opt, f_opt = optimizer.powellmain()
+                        ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 154, in powellmain
+    x1, f1 = self._linescan(_wrapped_func, x1, f1, dv, a1, a2, Npmin, xflist) # 返回的是拟合的最小值
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 386, in _linescan
+    print(f"检测到 {len(outlier_indices)} 个异常值，重新拟合")
+OSError: [Errno 5] Input/output error
+2025-07-31 11:36:20,510 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']

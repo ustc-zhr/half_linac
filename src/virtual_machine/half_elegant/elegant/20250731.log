@@ -1,4 +1,4 @@
-Running elegant at Sun Jul 20 23:25:26 2025
+Running elegant at Thu Jul 31 13:02:43 2025
 
 This is elegant 2022.1.0, Jun 21 2023, by M. Borland, J. Calvey, M. Carla', N. Carmignani, AJ Dick, Z. Duan, M. Ehrlichman, L. Emery, W. Guo, R. Lindberg, V. Sajaev, R. Soliday, Y.-P. Sun, C.-X. Wang, Y. Wang, Y. Wu, and A. Xiao.
 =====================================================================================
@@ -217,10 +217,10 @@ computed value for L4.SMOOTHING is 1
 computed value for FODO04.DISABLE is 1
 computed value for DMTA.L is 1.000000000000000e+00
 computed value for QT01.L is 1.500000000000000e-01
-computed value for QT01.K1 is -1.019521796164375e+00
+computed value for QT01.K1 is -1.830755127685547e+00
 computed value for DMTB.L is 1.250000000000000e+00
 computed value for QT02.L is 1.500000000000000e-01
-computed value for QT02.K1 is 1.942212648280069e+00
+computed value for QT02.K1 is 2.584037924072269e+00
 computed value for DMTC1.L is 5.500000000000000e-01
 computed value for PRF06.DISABLE is 0
 computed value for DMTC2.L is 5.500000000000000e+00
@@ -509,15 +509,15 @@ final Twiss parameters (chromaticity valid for fully second-order calculation on
          beta          alpha           nu           eta          eta'       dnu/d(dp/p)   dbeta/(dp/p)     accept.
           m                          1/2pi           m                         1/2pi            m          mm-mrad
 --------------------------------------------------------------------------------------------------------------------
-  x:  3.878190e+02 -3.595129e+01  5.272979e+00  2.081925e-06  1.988923e-04 -4.105250e+00 -2.555922e+03  4.283454e-02
-ave:  3.276700e+02 -5.815937e-01               -3.281159e-02 -1.493119e-05
-min:  1.180251e-01 -1.102918e+03               -1.998239e+00 -1.234820e+00
-max:  2.564377e+03  6.250387e+02                7.641969e-01  1.232301e+00
-  y:  2.955602e+00  9.676352e-01  5.709856e+00 -5.172221e-05  3.548774e-05 -4.741860e+00  6.608533e+01  1.951001e+00
-ave:  2.453878e+01  6.108667e-02               -4.651196e-06 -1.173945e-04
-min:  4.312266e-01 -8.668141e+01               -9.449645e-01 -4.433893e-01
-max:  9.936474e+01  7.313730e+01                9.445796e-01  4.129388e-01
-x acceptance limited to 4.283454e-08 by DHL4A ending at 2.002334e+02 m
+  x:  8.099418e+02 -7.141402e+01  5.280017e+00  1.090096e-06  1.988152e-04 -4.055805e+00 -7.039793e+03  2.261307e-02
+ave:  6.478664e+02 -1.277504e+00               -3.281172e-02 -1.493406e-05
+min:  1.180251e-01 -2.123146e+03               -1.998238e+00 -1.234819e+00
+max:  5.065409e+03  1.226799e+03                7.641965e-01  1.232300e+00
+  y:  3.944492e+00  3.219316e-01  5.834713e+00 -5.172221e-05  3.548774e-05 -4.195443e+00 -9.000799e+01  1.951001e+00
+ave:  2.438143e+01  5.947669e-02               -4.651196e-06 -1.173945e-04
+min:  3.618016e-01 -8.668141e+01               -9.449645e-01 -4.433893e-01
+max:  8.182490e+01  4.256791e+01                9.445796e-01  4.129388e-01
+x acceptance limited to 2.261307e-08 by DHL4A ending at 2.002334e+02 m
 y acceptance limited to 1.951001e-06 by DA1 ending at 9.194962e+01 m
 statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
 &matrix_output
@@ -617,7 +617,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
         0.000000000000000e+00, 0.000000000000000e+00,
     first_is_fiducial = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7268
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7269
 &track
     center_on_orbit = 0,
     center_momentum_also = 1,
@@ -636,18 +636,18 @@ Updating floor coordinates
 tracking step 1
 generating bunch 1
 tracking 10000 particles
-20 Jul 25 23:25:26: This step establishes energy profile vs s (fiducial beam).
-20 Jul 25 23:25:26: Rf phases/references reset.
+31 Jul 25 13:02:43: This step establishes energy profile vs s (fiducial beam).
+31 Jul 25 13:02:43: Rf phases/references reset.
 Dumping centroid data...done.
 Dumping bpm_centroid data...done.
 Post-tracking output completed.
-Tracking step completed   ET:     00:00:05 CP:    4.60 BIO:0 DIO:0 PF:0 MEM:7793
+Tracking step completed   ET:     00:00:04 CP:    4.51 BIO:0 DIO:0 PF:0 MEM:7794
 
 
 Updating floor coordinates
 Finished tracking.
 End of input data encountered.
-statistics:    ET:     00:00:05 CP:    4.60 BIO:0 DIO:0 PF:0 MEM:7793
+statistics:    ET:     00:00:04 CP:    4.51 BIO:0 DIO:0 PF:0 MEM:7794
 
 ************************** Summary of warnings ****************************
 2 types of warnings were recorded:
