@@ -4,6 +4,12 @@
 
 # 每周开发进度
 
+##### 2025-8-28-Zhanghaoran
+
+- `optimization`
+
+  实现了贝叶斯优化算法及其GUI界面，并通过虚拟加速器进行了初步测试
+
 ##### 2025-7-31-Zhanghaoran
 
 - 继续在线优化功能开发`optimization`
@@ -239,7 +245,7 @@ You can exit with ctrl-c or by typing exit.
 
 ### c. python3 and something
 
-##### 1. anaconda+vscode（recommend）
+##### 1. anaconda（4 virtual environment）+vscode【recommended but not mandatory】
 
 ##### 2. pyqt5+QTdesigner
 
@@ -255,35 +261,13 @@ conda install matplotlib scipy numpy
 
 ##### 5. python sdds
 
-​	For Ubuntu20.04, the link of the module is: https://ops.aps.anl.gov/downloads/SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
+the link of the module is: https://anaconda.org/soliday/sdds
 
-1. install
+```bash
+conda install soliday::sdds
+```
 
-   ```bash
-   wget https://ops.aps.anl.gov/downloads/SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
-   alien -iv SDDSPython3-5.2.1-1.ubuntu.20.04.x86_64.rpm
-   ```
-
-   The `-v` parameter will show you where you are going to install the `sdds` module. 
-
-2. for my case, update the `PYTHONPATH` env variable in my `.zshrc` file:
-
-   ```bash
-   # sdds python module
-   export PYTHONPATH=/usr/lib/python3/dist-packages:$PYTHONPATH
-   ```
-
-3. go to any path, have a try, run ipython:
-
-   ```
-   import sdds
-   ```
-
-   to check whether you have set the right env variable.
-
-##### tips: virtual environment is recommended!
-
-
+##### 
 
 
 

@@ -23,7 +23,7 @@
       <item>
        <widget class="QTabWidget" name="tabWidget">
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
         <widget class="QWidget" name="tab_3">
          <attribute name="title">
@@ -5200,7 +5200,7 @@
              <bool>true</bool>
             </property>
             <property name="currentIndex">
-             <number>1</number>
+             <number>2</number>
             </property>
             <widget class="QWidget" name="tab_7">
              <attribute name="title">
@@ -5347,6 +5347,92 @@
               </item>
               <item>
                <widget class="QPushButton" name="pushButton">
+                <property name="text">
+                 <string>start</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="BO">
+             <attribute name="title">
+              <string>BO</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="verticalLayout_8">
+              <item>
+               <layout class="QGridLayout" name="gridLayout_3" columnstretch="0,0">
+                <item row="3" column="1">
+                 <widget class="QLineEdit" name="acq_para">
+                  <property name="text">
+                   <string>5</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QLineEdit" name="iter_lineEdit_3">
+                  <property name="text">
+                   <string>5</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_6">
+                  <property name="text">
+                   <string>iter</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="4" column="0">
+                 <widget class="QLabel" name="label_30">
+                  <property name="text">
+                   <string>interval (s)</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="init_points">
+                  <property name="text">
+                   <string>init points</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QComboBox" name="acq_fun">
+                  <item>
+                   <property name="text">
+                    <string>UCB</string>
+                   </property>
+                  </item>
+                  <item>
+                   <property name="text">
+                    <string>EI</string>
+                   </property>
+                  </item>
+                  <item>
+                   <property name="text">
+                    <string>PI</string>
+                   </property>
+                  </item>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QLineEdit" name="lineEdit">
+                  <property name="text">
+                   <string>5</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="4" column="1">
+                 <widget class="QLineEdit" name="interval_lineEdit_3">
+                  <property name="text">
+                   <string>8</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_2">
                 <property name="text">
                  <string>start</string>
                 </property>

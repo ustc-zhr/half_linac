@@ -23,6 +23,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         # connect button
         self.pushButton_7.clicked.connect(self.start_RCDSopt)
         self.pushButton.clicked.connect(self.start_Rsimplex)
+        self.pushButton_2.clicked.connect(self.start_BO)
 
         # knobs
         # quad
@@ -213,7 +214,52 @@ class myWindow(QMainWindow, Ui_MainWindow):
         # proc.wait()
         # self.plot_timer.stop()
         # self._optplot()  # 最终绘制一次
+
+    def start_BO(self):
+        # prepare the knobs and obj. 
+        knobs_list, knobs_minus, knobs_plus = self.find_knobs()
+
+        knobs_minus = [str(i) for i in knobs_minus]
+        knobs_plus = [str(i) for i in knobs_plus]
+        obj_pvname, obj_weight, obj_samples, obj_math = self.get_obj()
         
+        cmd = [
+            "python3", "BOopt.py",             #0
+            "start_opt",                              #1
+            ",".join(knobs_list),                     #2         
+            ",".join(knobs_minus),                    #3
+            ",".join(knobs_plus),                     #4
+            self.lineEdit.text(),                   #5
+            self.iter_lineEdit_3.text(),              #6
+            self.acq_fun.currentText(),                #7
+            self.acq_para.text(),                      #8
+            self.interval_lineEdit_3.text(),          #9
+            ",".join(obj_pvname),                     #10  
+            ",".join(obj_weight),                     #11 
+            ",".join(obj_samples),                    #12
+            ",".join(obj_math)                        #13
+        ]
+        print(cmd)
+        # 跨平台启动进程（确保进程组独立）
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+
+        proc = Popen(
+            cmd,
+            cwd=st.rootpath + "/src/optimization/BO",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+        try: 
+            os.remove("./template.opt")
+        except:
+            pass
+        self.plot_timer.start(1000)  # 每秒更新一次图表
+        # proc.wait()
+        # self.plot_timer.stop()
+        # self._optplot()  # 最终绘制一次
+
         
     def _update_plot(self):
         try:
