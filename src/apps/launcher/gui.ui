@@ -15,7 +15,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>../../../half.png</normaloff>../../../half.png</iconset>
+    <normaloff>../../../HALF_logo.png</normaloff>../../../HALF_logo.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
    <property name="sizePolicy">
