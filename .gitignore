@@ -2,3 +2,4 @@ requirements.txt
 .vscode/
 __pycache__/
 *.py[cod]
+scripts/export_env.sh
