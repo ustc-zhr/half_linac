@@ -4,17 +4,35 @@
 
 # 每周开发进度
 
+##### 2025-9-18-Zhanghaoran
+
+- `optimization`
+
+  实现了多目标贝叶斯优化算法，并利用ZDT1函数进行测试
+
+##### 2025-9-11-Zhanghaoran
+
+- `jitter`
+
+  开展能量反馈功能开发：添加自定义抖动统计功能
+
 ##### 2025-8-28-Zhanghaoran
 
 - `optimization`
 
-  实现了贝叶斯优化算法及其GUI界面，并通过虚拟加速器进行了初步测试
+  实现了贝叶斯优化算法`BO`及其GUI界面，并通过虚拟加速器进行了初步测试
+
+##### 2025-8-21-Zhanghaoran
+
+- `optimization`
+
+  实现了贝叶斯优化算法，并针对Rosenbrock函数进行测试
 
 ##### 2025-7-31-Zhanghaoran
 
 - 继续在线优化功能开发`optimization`
 
-  实现了Rsimplex优化算法及其GUI界面，并通过虚拟加速器进行了初步测试
+  实现了`Rsimplex`优化算法及其GUI界面，并通过虚拟加速器进行了初步测试
 
 ##### 2025-7-24-Zhanghaoran
 
@@ -106,7 +124,7 @@
 
 ###### 2024-3~2025-4 Zhangshancai
 
-- 内容较多，待补充。。。
+- 内容待补充。。。
 
 ###### 2024-3-11-Libiaobin
 
@@ -245,13 +263,34 @@ You can exit with ctrl-c or by typing exit.
 
 ### c. python3 and something
 
-##### 1. anaconda（4 virtual environment）+vscode【recommended but not mandatory】
+##### 1. anaconda（for virtual environment）+vscode【recommended but not mandatory】
+
+create a virtual environment and activate it~
+
+```zsh
+# 创建新环境
+conda create -n myenv python=x.x
+# 激活环境
+conda activate myenv
+```
 
 ##### 2. pyqt5+QTdesigner
 
-​	for gui
+```zsh
+conda install pyqt
+```
+
+or
+
+```zsh
+pip install PyQt5 PyQt5-tools
+```
 
 ##### 3. pyepics
+
+```zsh
+pip install pyepics
+```
 
 ##### 4. matplotlib、scipy、numpy
 
