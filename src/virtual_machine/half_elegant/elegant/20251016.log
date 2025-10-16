@@ -1,4 +1,4 @@
-Running elegant at Thu Aug 28 14:56:36 2025
+Running elegant at Thu Oct 16 22:43:06 2025
 
 This is elegant 2022.1.0, Jun 21 2023, by M. Borland, J. Calvey, M. Carla', N. Carmignani, AJ Dick, Z. Duan, M. Ehrlichman, L. Emery, W. Guo, R. Lindberg, V. Sajaev, R. Soliday, Y.-P. Sun, C.-X. Wang, Y. Wang, Y. Wu, and A. Xiao.
 =====================================================================================
@@ -217,10 +217,10 @@ computed value for L4.SMOOTHING is 1
 computed value for FODO04.DISABLE is 1
 computed value for DMTA.L is 1.000000000000000e+00
 computed value for QT01.L is 1.500000000000000e-01
-computed value for QT01.K1 is -3.286812049673064e+00
+computed value for QT01.K1 is -3.278962332972288e+00
 computed value for DMTB.L is 1.250000000000000e+00
 computed value for QT02.L is 1.500000000000000e-01
-computed value for QT02.K1 is 3.088835548137565e+00
+computed value for QT02.K1 is 5.284303954839706e-01
 computed value for DMTC1.L is 5.500000000000000e-01
 computed value for PRF06.DISABLE is 0
 computed value for DMTC2.L is 5.500000000000000e+00
@@ -509,17 +509,17 @@ final Twiss parameters (chromaticity valid for fully second-order calculation on
          beta          alpha           nu           eta          eta'       dnu/d(dp/p)   dbeta/(dp/p)     accept.
           m                          1/2pi           m                         1/2pi            m          mm-mrad
 --------------------------------------------------------------------------------------------------------------------
-  x:  9.596900e+02 -8.652971e+01  5.282311e+00  8.027476e-07  1.987831e-04 -4.036801e+00 -9.060735e+03  1.827730e-02
-ave:  7.770444e+02 -1.526551e+00               -3.281177e-02 -1.493488e-05
-min:  1.180251e-01 -2.608011e+03               -1.998238e+00 -1.234819e+00
-max:  6.151388e+03  1.494028e+03                7.641966e-01  1.232299e+00
-  y:  2.586405e+01  2.751612e+00  5.950884e+00 -5.172221e-05  3.548774e-05 -7.908745e-01 -4.929013e+02  1.388800e+00
-ave:  7.706940e+01  2.107129e-02               -4.651196e-06 -1.173945e-04
-min:  5.571398e-01 -1.721316e+02               -9.449645e-01 -4.433893e-01
-max:  4.925452e+02  1.650896e+02                9.445796e-01  4.129388e-01
-x acceptance limited to 1.827730e-08 by DHL4A ending at 2.002334e+02 m
-y acceptance limited to 1.388800e-06 by DHL4A ending at 2.002334e+02 m
-statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+  x:  4.970891e+03 -3.128023e+02  4.794918e+00  1.217440e-05  1.995933e-04 -3.904325e+00 -6.262223e+04  7.053058e-03
+ave:  3.326343e+03 -8.044113e+00               -3.281027e-02 -1.490198e-05
+min:  1.180251e-01 -7.711397e+03               -1.998246e+00 -1.234823e+00
+max:  2.661124e+04  5.123073e+03                7.642042e-01  1.232310e+00
+  y:  3.710067e+01  3.965857e+00  5.977972e+00 -5.172221e-05  3.548774e-05 -3.229964e-01 -3.812741e+02  9.678672e-01
+ave:  1.050377e+02  1.495570e-03               -4.651196e-06 -1.173945e-04
+min:  4.311872e-01 -2.469552e+02               -9.449645e-01 -4.433893e-01
+max:  7.067655e+02  2.367822e+02                9.445796e-01  4.129388e-01
+x acceptance limited to 7.053058e-09 by DHL4A ending at 2.002334e+02 m
+y acceptance limited to 9.678672e-07 by DHL4A ending at 2.002334e+02 m
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
 &matrix_output
     printout = {NULL},
     printout_order = 1,
@@ -538,7 +538,7 @@ statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
     SDDS_output_match = {NULL},
 &end
 *** Warning: Some elements had no matrix. --- 33 elements had no matrix
-statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
 &error_control
     clear_error_settings = 1,
     summarize_error_settings = 0,
@@ -550,7 +550,7 @@ statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 
 *** Cleared error settings
-statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
 &error
     name = *,
     exclude = {NULL},
@@ -572,7 +572,7 @@ statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
     sample_file_column = {NULL},
     sample_mode = {NULL},
 &end
-statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
 &bunched_beam
     bunch = {NULL},
     n_particles_per_bunch = 10000,
@@ -617,7 +617,7 @@ statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
         0.000000000000000e+00, 0.000000000000000e+00,
     first_is_fiducial = 0,
 &end
-statistics:    ET:     00:00:01 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7268
+statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7268
 &track
     center_on_orbit = 0,
     center_momentum_also = 1,
@@ -636,18 +636,18 @@ Updating floor coordinates
 tracking step 1
 generating bunch 1
 tracking 10000 particles
-28 Aug 25 14:56:37: This step establishes energy profile vs s (fiducial beam).
-28 Aug 25 14:56:37: Rf phases/references reset.
+16 Oct 25 22:43:06: This step establishes energy profile vs s (fiducial beam).
+16 Oct 25 22:43:06: Rf phases/references reset.
 Dumping centroid data...done.
 Dumping bpm_centroid data...done.
 Post-tracking output completed.
-Tracking step completed   ET:     00:00:05 CP:    4.57 BIO:0 DIO:0 PF:0 MEM:7793
+Tracking step completed   ET:     00:00:05 CP:    4.40 BIO:0 DIO:0 PF:0 MEM:7793
 
 
 Updating floor coordinates
 Finished tracking.
 End of input data encountered.
-statistics:    ET:     00:00:05 CP:    4.57 BIO:0 DIO:0 PF:0 MEM:7793
+statistics:    ET:     00:00:05 CP:    4.40 BIO:0 DIO:0 PF:0 MEM:7793
 
 ************************** Summary of warnings ****************************
 2 types of warnings were recorded:

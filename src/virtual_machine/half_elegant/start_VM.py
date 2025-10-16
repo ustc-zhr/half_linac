@@ -4,14 +4,14 @@
 
 import os
 import time
-from elegant_parser import elegant_parser
+from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 import half_linac.setup as st
 #import pv_server
 
 if __name__=='__main__':
-    lattice_file = './elegant/lattice_ini.lte'
+    lattice_file = st.rootpath+"/src/virtual_machine/half_elegant/elegant/lattice_ini.lte"
+    ele_file     = st.rootpath+"/src/virtual_machine/half_elegant/elegant/one_ini.ele"
     line_name    = 'ALL'
-    ele_file     = './elegant/one_ini.ele'  
     jsonpath     = st.rootpath+"/src/virtual_machine/half_elegant/halflinac.json"
     top_path     = os.getcwd()
 

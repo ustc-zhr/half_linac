@@ -174,7 +174,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
 
     def start_bpmvalue_btn(self):
-        Popen("python3 submain.py",cwd=st.rootpath+"/apps/orbit_display",shell=True) 
+        Popen("python3 submain.py",cwd=st.rootpath+"/src/apps/orbit_display",shell=True) 
 
 
 if __name__ == '__main__':

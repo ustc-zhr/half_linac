@@ -339,17 +339,27 @@ class elegant_parser:
 
 
 if __name__=='__main__':
-
-    lattice_file = './elegant/lattice_ini.lte'
+    # print("test elegant parser")
+    # tmp = sdds.SDDS(0)
+        
+    # tmp.load('./elegant/one.bpmcen')
+    # colname = tmp.columnName
+    # data    = tmp.columnData
+    
+    # lattice_file = './elegant/lattice_ini.lte'
+    # line_name    = 'ALL'
+    # ele_file     = './elegant/one_ini.ele'  
+    lattice_file = st.rootpath+"/src/virtual_machine/half_elegant/elegant/lattice_ini.lte"
+    ele_file     = st.rootpath+"/src/virtual_machine/half_elegant/elegant/one_ini.ele"
     line_name    = 'ALL'
-    ele_file     = './elegant/one_ini.ele'  
 
     lte = elegant_parser(lattice_file, ele_file, line_name)
-    # lte.dump2json()
+    lte.dump2json()
 
     # lte.json2lte_ele()   
 
-    lte.broadcast_flag()     
+    # lte.broadcast_flag()     
+
     
     # # run elegant
     # elegant_path = "./elegant"

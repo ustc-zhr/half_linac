@@ -14,9 +14,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(962, 807)
+        MainWindow.resize(1189, 769)
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("../../../half.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap("../../../HALF_logo.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainWindow.setWindowIcon(icon)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
@@ -29,45 +29,15 @@ class Ui_MainWindow(object):
         self.verticalLayout_2.setObjectName("verticalLayout_2")
         self.gridLayout_3 = QtWidgets.QGridLayout()
         self.gridLayout_3.setObjectName("gridLayout_3")
-        spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.gridLayout_3.addItem(spacerItem, 4, 0, 1, 1)
-        self.vmbtn = QtWidgets.QPushButton(self.centralwidget)
-        self.vmbtn.setMinimumSize(QtCore.QSize(0, 40))
-        self.vmbtn.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 14pt;\n"
-"}")
-        self.vmbtn.setObjectName("vmbtn")
-        self.gridLayout_3.addWidget(self.vmbtn, 3, 0, 1, 1)
+        self.textEdit = QtWidgets.QTextEdit(self.centralwidget)
+        self.textEdit.setMaximumSize(QtCore.QSize(16777215, 200))
+        self.textEdit.setObjectName("textEdit")
+        self.gridLayout_3.addWidget(self.textEdit, 0, 0, 1, 1)
         self.gridLayout = QtWidgets.QGridLayout()
+        self.gridLayout.setSizeConstraint(QtWidgets.QLayout.SetMinAndMaxSize)
+        self.gridLayout.setHorizontalSpacing(6)
         self.gridLayout.setVerticalSpacing(20)
         self.gridLayout.setObjectName("gridLayout")
-        self.pushButton = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton.setMinimumSize(QtCore.QSize(0, 40))
-        self.pushButton.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.pushButton.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 12pt;\n"
-"}")
-        self.pushButton.setDefault(False)
-        self.pushButton.setFlat(False)
-        self.pushButton.setObjectName("pushButton")
-        self.gridLayout.addWidget(self.pushButton, 0, 0, 1, 1)
-        self.orbit_correct = QtWidgets.QPushButton(self.centralwidget)
-        self.orbit_correct.setMinimumSize(QtCore.QSize(0, 40))
-        self.orbit_correct.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.orbit_correct.setStyleSheet("QPushButton{\n"
-"\n"
-"color: rgb(170, 0, 0);\n"
-"\n"
-"font: bold 12pt;\n"
-"}")
-        self.orbit_correct.setObjectName("orbit_correct")
-        self.gridLayout.addWidget(self.orbit_correct, 4, 0, 1, 1)
         self.pushButton_3 = QtWidgets.QPushButton(self.centralwidget)
         self.pushButton_3.setMinimumSize(QtCore.QSize(0, 40))
         self.pushButton_3.setMaximumSize(QtCore.QSize(400, 16777215))
@@ -80,18 +50,40 @@ class Ui_MainWindow(object):
         self.pushButton_3.setCheckable(False)
         self.pushButton_3.setChecked(False)
         self.pushButton_3.setObjectName("pushButton_3")
-        self.gridLayout.addWidget(self.pushButton_3, 1, 0, 1, 1)
-        self.pushButton_2 = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_2.setMinimumSize(QtCore.QSize(0, 40))
-        self.pushButton_2.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.pushButton_2.setStyleSheet("QPushButton{\n"
+        self.gridLayout.addWidget(self.pushButton_3, 2, 0, 1, 1)
+        self.online_opt = QtWidgets.QPushButton(self.centralwidget)
+        self.online_opt.setMinimumSize(QtCore.QSize(0, 40))
+        self.online_opt.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.online_opt.setStyleSheet("QPushButton{\n"
 "\n"
 "color: rgb(170, 0, 0);\n"
 "\n"
 "font: bold 12pt;\n"
 "}")
-        self.pushButton_2.setObjectName("pushButton_2")
-        self.gridLayout.addWidget(self.pushButton_2, 2, 0, 1, 1)
+        self.online_opt.setObjectName("online_opt")
+        self.gridLayout.addWidget(self.online_opt, 2, 1, 1, 1)
+        self.orbit_correct = QtWidgets.QPushButton(self.centralwidget)
+        self.orbit_correct.setMinimumSize(QtCore.QSize(0, 40))
+        self.orbit_correct.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.orbit_correct.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 12pt;\n"
+"}")
+        self.orbit_correct.setObjectName("orbit_correct")
+        self.gridLayout.addWidget(self.orbit_correct, 5, 0, 1, 1)
+        self.jitter_plot = QtWidgets.QPushButton(self.centralwidget)
+        self.jitter_plot.setMinimumSize(QtCore.QSize(0, 40))
+        self.jitter_plot.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.jitter_plot.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 12pt;\n"
+"}")
+        self.jitter_plot.setObjectName("jitter_plot")
+        self.gridLayout.addWidget(self.jitter_plot, 1, 1, 1, 1)
         self.pushButton_4 = QtWidgets.QPushButton(self.centralwidget)
         self.pushButton_4.setMinimumSize(QtCore.QSize(0, 40))
         self.pushButton_4.setMaximumSize(QtCore.QSize(400, 16777215))
@@ -102,28 +94,54 @@ class Ui_MainWindow(object):
 "font: bold 12pt;\n"
 "}")
         self.pushButton_4.setObjectName("pushButton_4")
-        self.gridLayout.addWidget(self.pushButton_4, 3, 0, 1, 1)
-        self.online_opt = QtWidgets.QPushButton(self.centralwidget)
-        self.online_opt.setMinimumSize(QtCore.QSize(0, 40))
-        self.online_opt.setStyleSheet("QPushButton{\n"
+        self.gridLayout.addWidget(self.pushButton_4, 4, 0, 1, 1)
+        self.pushButton = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton.setMinimumSize(QtCore.QSize(0, 40))
+        self.pushButton.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.pushButton.setStyleSheet("QPushButton{\n"
 "\n"
 "color: rgb(170, 0, 0);\n"
 "\n"
 "font: bold 12pt;\n"
 "}")
-        self.online_opt.setObjectName("online_opt")
-        self.gridLayout.addWidget(self.online_opt, 5, 0, 1, 1)
-        self.gridLayout_3.addLayout(self.gridLayout, 5, 0, 1, 1)
-        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.gridLayout_3.addItem(spacerItem1, 2, 0, 1, 1)
-        self.textEdit = QtWidgets.QTextEdit(self.centralwidget)
-        self.textEdit.setMaximumSize(QtCore.QSize(16777215, 200))
-        self.textEdit.setObjectName("textEdit")
-        self.gridLayout_3.addWidget(self.textEdit, 0, 0, 1, 1)
+        self.pushButton.setDefault(False)
+        self.pushButton.setFlat(False)
+        self.pushButton.setObjectName("pushButton")
+        self.gridLayout.addWidget(self.pushButton, 1, 0, 1, 1)
+        self.pushButton_2 = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton_2.setMinimumSize(QtCore.QSize(0, 40))
+        self.pushButton_2.setMaximumSize(QtCore.QSize(400, 16777215))
+        self.pushButton_2.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 12pt;\n"
+"}")
+        self.pushButton_2.setObjectName("pushButton_2")
+        self.gridLayout.addWidget(self.pushButton_2, 3, 0, 1, 1)
+        self.vmbtn = QtWidgets.QPushButton(self.centralwidget)
+        self.vmbtn.setMinimumSize(QtCore.QSize(0, 40))
+        self.vmbtn.setStyleSheet("QPushButton{\n"
+"\n"
+"color: rgb(170, 0, 0);\n"
+"\n"
+"font: bold 14pt;\n"
+"}")
+        self.vmbtn.setObjectName("vmbtn")
+        self.gridLayout.addWidget(self.vmbtn, 0, 0, 1, 1)
+        self.gridLayout.setColumnMinimumWidth(0, 1)
+        self.gridLayout.setColumnMinimumWidth(1, 1)
+        self.gridLayout.setColumnStretch(0, 2)
+        self.gridLayout.setColumnStretch(1, 1)
+        self.gridLayout_3.addLayout(self.gridLayout, 4, 0, 1, 1)
+        spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.gridLayout_3.addItem(spacerItem, 2, 0, 1, 1)
         self.verticalLayout_2.addLayout(self.gridLayout_3)
+        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.verticalLayout_2.addItem(spacerItem1)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 962, 20))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 1189, 20))
         self.menubar.setObjectName("menubar")
         MainWindow.setMenuBar(self.menubar)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
@@ -136,17 +154,18 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Launcher"))
-        self.vmbtn.setText(_translate("MainWindow", "Virtual Machine"))
-        self.pushButton.setToolTip(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
-        self.pushButton.setWhatsThis(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
-        self.pushButton.setText(_translate("MainWindow", "orbit display"))
-        self.orbit_correct.setText(_translate("MainWindow", "orbit correct"))
-        self.pushButton_3.setText(_translate("MainWindow", "beam monitor"))
-        self.pushButton_2.setText(_translate("MainWindow", "emit measure"))
-        self.pushButton_4.setText(_translate("MainWindow", "BBA"))
-        self.online_opt.setText(_translate("MainWindow", "optimization"))
         self.textEdit.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
 "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
 "p, li { white-space: pre-wrap; }\n"
 "</style></head><body style=\" font-family:\'Sans Serif\'; font-size:9pt; font-weight:400; font-style:normal;\">\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:10pt; font-weight:600; color:#ff0000;\">HALF linac HLAs</span><span style=\" font-size:10pt; color:#ff0000;\">: under developing</span></p></body></html>"))
+        self.pushButton_3.setText(_translate("MainWindow", "beam monitor"))
+        self.online_opt.setText(_translate("MainWindow", "optimization"))
+        self.orbit_correct.setText(_translate("MainWindow", "orbit correct"))
+        self.jitter_plot.setText(_translate("MainWindow", "jitter"))
+        self.pushButton_4.setText(_translate("MainWindow", "BBA"))
+        self.pushButton.setToolTip(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
+        self.pushButton.setWhatsThis(_translate("MainWindow", "<html><head/><body><p><br/></p></body></html>"))
+        self.pushButton.setText(_translate("MainWindow", "orbit display"))
+        self.pushButton_2.setText(_translate("MainWindow", "emit measure"))
+        self.vmbtn.setText(_translate("MainWindow", "Virtual Machine"))

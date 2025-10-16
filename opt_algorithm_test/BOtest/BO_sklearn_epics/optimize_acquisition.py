@@ -5,35 +5,38 @@ import cma
 
 from acquisition_function import *
 
+# 各种寻找采集函数最大值的优化器
+# 这些函数都返回 shape (1,d) 的二维数组
 
-def optimize_acq_local(gpr, x0, bounds, acq_fn, minimize=True):
+# ----- 局部优化器 -----
+def optimize_acq_local(gpr, x0, bounds, acq_fn):
     # x0: 1D seed, bounds: array shape (d,2)
     d = x0.size
     lb = bounds[:,0]
     ub = bounds[:,1]
 
     def obj(x):
-        # objective for scipy.minimize (we keep argmin convention in your acquisition)
-        return acq_fn(gpr, x.reshape(1,-1))
+        # objective for scipy.minimize (-1 for maximization)
+        return -acq_fn(gpr, x.reshape(1,-1))
 
     # use L-BFGS-B with numeric grad (scipy will approximate jacobian)
     res = optimize.minimize(obj, x0, bounds=optimize.Bounds(lb, ub),
                             method='L-BFGS-B', options={'maxiter':200})
-    return res.x, res.fun
+    return res.x, -res.fun
 
 # ----- 随机采样优化器  -----
-def optimize_acquisition_random(gpr, bounds, acq, beta, xi, minimize, Y_best,
+def optimize_acquisition_random(gpr, bounds, acq, beta, xi, Y_best,
                                 n_candidates=1000):
     dim = bounds.shape[0]
     lb, ub = bounds[:,0], bounds[:,1]
     Xcand = np.random.uniform(lb, ub, size=(n_candidates, dim))
     vals = acquisition(gpr, Xcand, acq=acq, beta=beta, xi=xi,
-                       minimize=minimize, Y_best=Y_best)
-    best_idx = np.argmin(vals)
+                       Y_best=Y_best)
+    best_idx = np.argmax(vals)
     return Xcand[best_idx].reshape(1, -1)
 
 # ----- Sobol采样优化器  -----[低差异序列（Quasi-Monte Carlo）的一种]
-def optimize_acquisition_sobol(gpr, bounds, acq, beta, xi, minimize, Y_best,
+def optimize_acquisition_sobol(gpr, bounds, acq, beta, xi, Y_best,
                                 n_candidates=1000):
     dim = bounds.shape[0]
     lb, ub = bounds[:,0], bounds[:,1]
@@ -51,15 +54,15 @@ def optimize_acquisition_sobol(gpr, bounds, acq, beta, xi, minimize, Y_best,
     
     # 计算采集函数值
     vals = acquisition(gpr, Xcand, acq=acq, beta=beta, xi=xi,
-                       minimize=minimize, Y_best=Y_best)
+                       Y_best=Y_best)
     
     # 找到最优点
-    best_idx = np.argmin(vals)
+    best_idx = np.argmax(vals)
     return Xcand[best_idx].reshape(1, -1)
 
 
 # ----- Sobol+局部优化采样优化器  -----
-def optimize_acquisition_sobol_local(gpr, bounds, acq, beta, xi, minimize, Y_best,
+def optimize_acquisition_sobol_local(gpr, bounds, acq, beta, xi, Y_best,
                                 n_candidates=1000, k=5):
     dim = bounds.shape[0]
     lb, ub = bounds[:,0], bounds[:,1]
@@ -74,20 +77,19 @@ def optimize_acquisition_sobol_local(gpr, bounds, acq, beta, xi, minimize, Y_bes
     Xcand_unit = sampler.random(n_candidates)
     Xcand = qmc.scale(Xcand_unit, bounds[:,0], bounds[:,1])
     vals = acquisition(gpr, Xcand, acq=acq, beta=beta, xi=xi,
-                       minimize=minimize, Y_best=Y_best)
-    best_idx = np.argmin(vals)
+                       Y_best=Y_best)
 
     # 选取前 k 个最优点作为局部优化的起点
     # k = 5
-    seed_idx = np.argsort(vals)[:k]  # argmin convention
+    seed_idx = np.argsort(vals)[-k:]  # argmin convention
     seeds = Xcand[seed_idx]
     #
-    best_val = np.inf
+    best_val = -np.inf
     best_x = None
     for s in seeds:
         x_opt, val = optimize_acq_local(gpr, s, bounds, 
-                                        acq_fn=lambda model, xx: acquisition(model, xx, acq=acq, beta=beta, xi=xi, minimize=True, Y_best=Y_best))
-        if val < best_val:
+                                        acq_fn=lambda model, xx: acquisition(model, xx, acq=acq, beta=beta, xi=xi, Y_best=Y_best))
+        if val > best_val:
             best_val = val
             best_x = x_opt
 
@@ -95,7 +97,7 @@ def optimize_acquisition_sobol_local(gpr, bounds, acq, beta, xi, minimize, Y_bes
 
 
 # ----- CMA-ES 优化器 -----
-def optimize_acquisition_cma(gpr, bounds, acq, beta, xi, minimize, Y_best,
+def optimize_acquisition_cma(gpr, bounds, acq, beta, xi, Y_best,
                              popsize=20, max_iter=100):
     dim = bounds.shape[0]
     lb, ub = bounds[:,0], bounds[:,1]
@@ -104,20 +106,20 @@ def optimize_acquisition_cma(gpr, bounds, acq, beta, xi, minimize, Y_best,
 
     def obj(xx):
         xx = np.clip(xx, lb, ub)
-        return float(acquisition(gpr, xx.reshape(1,-1),
+        return -float(acquisition(gpr, xx.reshape(1,-1),
                                  acq=acq, beta=beta, xi=xi,
-                                 minimize=minimize, Y_best=Y_best))
+                                 Y_best=Y_best))
 
     es = cma.CMAEvolutionStrategy(x0.tolist(), sigma0,
                                   {'popsize': popsize, 'bounds': [lb.tolist(), ub.tolist()]})
-    best_x, best_val = None, np.inf
+    best_x, best_val = None, -np.inf
     for _ in range(max_iter):
         Xs = es.ask()
         vals = [obj(np.array(xx)) for xx in Xs]
         es.tell(Xs, vals)
         es.disp()
         idx = int(np.argmin(vals))
-        if vals[idx] < best_val:
+        if -vals[idx] < best_val:
             best_val = vals[idx]
             best_x = np.array(Xs[idx])
     return best_x.reshape(1,-1)
@@ -139,7 +141,7 @@ def optimize_acquisition_ga(gpr, bounds, acq, beta, xi, minimize, Y_best,
         fit = fitness(pop)
         # 选择（锦标赛）
         idx = np.random.randint(0, popsize, size=(popsize, 2))
-        winners = np.where(fit[idx[:,0]] < fit[idx[:,1]], idx[:,0], idx[:,1])
+        winners = np.where(fit[idx[:,0]] > fit[idx[:,1]], idx[:,0], idx[:,1])
         parents = pop[winners]
 
         # 交叉
@@ -157,5 +159,5 @@ def optimize_acquisition_ga(gpr, bounds, acq, beta, xi, minimize, Y_best,
         pop = offspring
 
     final_fit = fitness(pop)
-    best_idx = np.argmin(final_fit)
+    best_idx = np.argmax(final_fit)
     return pop[best_idx].reshape(1,-1)

@@ -221,3 +221,27 @@ Traceback (most recent call last):
     print(f"检测到 {len(outlier_indices)} 个异常值，重新拟合")
 OSError: [Errno 5] Input/output error
 2025-07-31 11:36:20,510 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-10-16 18:12:27,170 - INFO - INPUT PARAMETERS: ['/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py']
+2025-10-16 18:12:27,170 - ERROR - 错误: list index out of range
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 534, in <module>
+    if sys.argv[1] == "start_opt":
+       ~~~~~~~~^^^
+IndexError: list index out of range
+2025-10-16 19:45:31,280 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-10-16 19:48:13,910 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']
+2025-10-16 20:14:03,806 - INFO - INPUT PARAMETERS: ['/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py']
+2025-10-16 20:14:03,807 - ERROR - 错误: list index out of range
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 534, in <module>
+    if sys.argv[1] == "start_opt":
+       ~~~~~~~~^^^
+IndexError: list index out of range
+2025-10-16 20:42:46,653 - INFO - INPUT PARAMETERS: ['/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py']
+2025-10-16 20:42:46,653 - ERROR - 错误: list index out of range
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/src/optimization/RCDS/RCDSopt.py", line 534, in <module>
+    if sys.argv[1] == "start_opt":
+       ~~~~~~~~^^^
+IndexError: list index out of range
+2025-10-16 21:50:51,707 - INFO - INPUT PARAMETERS: ['RCDSopt.py', 'start_opt', 'QT01,QT02', '-2.0,-2.0', '2.0,2.0', '0.1', '1', '0', '8', 'HALF:IN:FLAG:PRF07:sigx,HALF:IN:FLAG:PRF07:sigy', '1,1', '1,1', 'mean,mean']

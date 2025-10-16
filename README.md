@@ -4,6 +4,12 @@
 
 # 每周开发进度
 
+##### 2025-9-25-Zhanghaoran
+
+- `optimization`
+
+  继续开发贝叶斯优化算法，针对高维情况下添加多种采集函数优化器以提高收敛性。(@opt_algorithm_test)
+
 ##### 2025-9-18-Zhanghaoran
 
 - `optimization`
@@ -181,6 +187,8 @@
 
 ##### 1. 使用Windows子系统（Windows Subsystem for Linux, WSL）
 
+参考：https://learn.microsoft.com/zh-cn/windows/wsl/install
+
 WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直接运行Linux发行版，如Ubuntu、Debian等。
 
 - 在管理员权限下进入Powershell
@@ -189,7 +197,7 @@ WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直�
   wsl --install
   ```
 
-- wsl成功启用后安装ubantu
+- wsl成功启用后安装ubantu（也可安装其它发行版）
 
   ```powershell
   wsl.exe --install Ubantu
@@ -201,9 +209,11 @@ WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直�
 
 
 
-#### Tips: 推荐使用shell命令行工具on-my-zsh！
+#### Tips: 推荐使用shell命令行工具on-my-zsh！【推荐但不必须】
 
-- 安装zsh
+参考：https://www.cnblogs.com/misakivv/p/18183219
+
+- 安装zsh，替换，重启
 
   ```bash
   sudo apt-get install zsh
@@ -222,6 +232,17 @@ WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直�
 ### b. epics
 
 参考官方网站：https://docs.epics-controls.org/en/latest/getting-started/installation-linux.html
+
+
+
+#### prepare 
+
+need `make`, `c++` and `libreadline` to compile from source
+
+```zsh
+sudo apt install build-essential
+sudo apt install libreadline-dev
+```
 
 #### install
 
@@ -263,16 +284,31 @@ You can exit with ctrl-c or by typing exit.
 
 ### c. python3 and something
 
-##### 1. anaconda（for virtual environment）+vscode【recommended but not mandatory】
+##### 1. anaconda（for virtual environment）+vscode【推荐但不必须】
 
-create a virtual environment and activate it~
+- install
 
-```zsh
-# 创建新环境
-conda create -n myenv python=x.x
-# 激活环境
-conda activate myenv
-```
+  ```zsh
+  # 下载最新版本的安装脚本
+  wget https://repo.anaconda.com/archive/Anaconda3-2023.09-0-Linux-x86_64.sh
+  # 运行安装脚本
+  bash Anaconda3-2023.09-0-Linux-x86_64.sh
+  # 重启shell
+  source ~/.zshrc
+  # 验证
+  conda --version
+  ```
+
+- create a virtual environment and activate it~
+
+  ```zsh
+  # 创建新环境
+  conda create -n myenv python=x.x
+  # 激活环境
+  conda activate myenv
+  ```
+
+- 后续安装建议在虚拟环境`myenv`中进行
 
 ##### 2. pyqt5+QTdesigner
 

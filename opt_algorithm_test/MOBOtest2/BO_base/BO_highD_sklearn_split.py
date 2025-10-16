@@ -6,38 +6,19 @@ import time
 import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, Matern, ConstantKernel as C
-from scipy.stats import norm
-from scipy import optimize
-from scipy.stats import qmc  
-import cma
-
+# from scipy.stats import norm
+# from scipy import optimize
+# from scipy.stats import qmc  
+# import cma
 
 from optimize_acquisition import *
-# from acquisition_function import acquisition
+from acquisition_function import *
+from test_function import *
 
-np.random.seed(0)
-
-# ----- 目标函数 -----
-def sphere(X):
-    # 全局极小值在原点
-    return np.sum(X**2, axis=1).reshape(-1, 1)
-
-def rosenbrock(X):
-    # 全局极小值在(1,1,...,1)
-    return np.sum(100.0 * (X[:,1:] - X[:,:-1]**2.0)**2.0 + (1 - X[:,:-1])**2.0,
-                  axis=1).reshape(-1, 1)
-
-def ackley(X):
-    # 全局极小值在原点
-    dim = X.shape[1]
-    sum_sq = np.sum(X**2, axis=1)
-    cos_sum = np.sum(np.cos(2 * np.pi * X), axis=1)
-    return (-20 * np.exp(-0.2 * np.sqrt(sum_sq / dim))
-            - np.exp(cos_sum / dim)
-            + 20 + np.e).reshape(-1, 1)
+np.random.seed(100)
 
 # ----- 主函数 -----
-def run_highdim_bo(func="sphere", acq="ucb", kernel_type="rbf", acq_optimizer="ga", dim=25, n_init=20, n_iter=10):
+def run_bo(func="sphere", acq="ucb", kernel_type="rbf", acq_optimizer="ga", dim=25, n_init=20, n_iter=10):
     
     print(f"\n=== Running BO ({func}, acq={acq}) in {dim}-D space ===")
 
@@ -51,6 +32,9 @@ def run_highdim_bo(func="sphere", acq="ucb", kernel_type="rbf", acq_optimizer="g
     elif func == "ackley":
         objective = ackley
         bounds = np.array([[-32.768, 32.768]] * dim)
+    elif func == "test1":
+        objective = ackley
+        bounds = np.array([[-2, 2]] * dim)
     else:
         raise ValueError(f"Unknown func={func}")
 
@@ -62,17 +46,14 @@ def run_highdim_bo(func="sphere", acq="ucb", kernel_type="rbf", acq_optimizer="g
     # 核函数
     if kernel_type == "rbf":
         kernel = C(1.0, (1e-3, 1e3)) * RBF(length_scale=np.ones(dim),
-                                           length_scale_bounds=(1e-2, 1e2))
+                                           length_scale_bounds=(1e-2, 1e6))
     elif kernel_type == "matern":
         kernel = C(1.0, (1e-3, 1e3)) * Matern(length_scale=np.ones(dim),
-                                             length_scale_bounds=(1e-2, 1e2),
+                                             length_scale_bounds=(1e-2, 1e6),
                                              nu=2.5)   # nu=2.5 常用，平滑但不过于僵硬
     else:
-        raise ValueError(f"Unknown kernel_type={kernel_type}")
-    
+        raise ValueError(f"Unknown kernel_type={kernel_type}") 
     # GPR
-    kernel = C(1.0, (1e-3, 1e3)) * RBF(length_scale=np.ones(dim), length_scale_bounds=(1e-2, 1e2))# 给定合理的 length_scale_bounds，避免搜索过大范围：
-    # kernel = C(0.5) * RBF(length_scale=np.ones(dim))
     gpr = GaussianProcessRegressor(kernel=kernel, alpha=1e-6, normalize_y=True, n_restarts_optimizer=5)
 
     # 初始拟合
@@ -83,33 +64,37 @@ def run_highdim_bo(func="sphere", acq="ucb", kernel_type="rbf", acq_optimizer="g
 
     # ---------- BO 主循环 ----------
     for it in range(n_iter):
+        t0 = time.time()
         Y_best = np.min(Y) if acq in ["ei", "pi"] else None
+        
+        beta0 = 3.0
+        beta = beta_schedule(it, beta0=beta0, strategy="inv_decay", lam=0.05)
 
         if acq_optimizer == "random":
             x_next = optimize_acquisition_random(gpr, bounds, acq=acq,
-                                                beta=1, xi=0.01,
+                                                beta=beta, xi=0.01,
                                                 minimize=True, Y_best=Y_best,
-                                                n_candidates=10000)
+                                                n_candidates=3000)
         elif acq_optimizer == "sobol":
             x_next = optimize_acquisition_sobol(gpr, bounds, acq=acq,
-                                                beta=1, xi=0.01,
+                                                beta=beta, xi=0.01,
                                                 minimize=True, Y_best=Y_best,
-                                                n_candidates=10000)
+                                                n_candidates=3000)
         elif acq_optimizer == "sobol_local":
             x_next = optimize_acquisition_sobol(gpr, bounds, acq=acq,
-                                                beta=1, xi=0.01,
+                                                beta=beta, xi=0.01,
                                                 minimize=True, Y_best=Y_best,
-                                                n_candidates=10000)
+                                                n_candidates=3000, k=5)
         elif acq_optimizer == "cmaes":
             x_next = optimize_acquisition_cma(gpr, bounds, acq=acq,
-                                            beta=1, xi=0.01,
+                                            beta=beta, xi=0.01,
                                             minimize=True, Y_best=Y_best,
-                                            popsize=200, max_iter=100)
+                                            popsize=min(100, 10*dim), max_iter=200)
         elif acq_optimizer == "ga":
             x_next = optimize_acquisition_ga(gpr, bounds, acq=acq,
-                                            beta=1, xi=0.01, 
+                                            beta=beta, xi=0.01, 
                                             minimize=True, Y_best=Y_best,
-                                            popsize=200, generations=100)
+                                            popsize=min(100, 10*dim), generations=200)
         else:
             raise ValueError(f"Unknown acq_optimizer={acq_optimizer}")
 
@@ -125,23 +110,55 @@ def run_highdim_bo(func="sphere", acq="ucb", kernel_type="rbf", acq_optimizer="g
 
         # 拟合
         gpr.fit(X, Y.ravel())
+
+        t1 = time.time()
+        print(f"time: {t1-t0:.2f} seconds")
+    
+    
+    plot_optimization_process(history_X, history_Y)
+
+
+def plot_optimization_process(history_X, history_Y):
+    plt.figure(figsize=(12, 4))
     
     # 收敛曲线
-    fig2, ax = plt.subplots(figsize=(8, 4))
-    ax.semilogy(np.arange(len(history_Y)), history_Y, 'o-', label='Objective Value')
-    # ax.axhline(y=0, color='r', linestyle='--', label='True Minimum (0)')
-    ax.set_xlabel('Iteration')
-    ax.set_ylabel('Objective Value')
-    ax.set_title('Convergence Curve')
-    ax.legend()
+    plt.subplot(121)
+    min_values = np.minimum.accumulate(history_Y)
+    plt.plot(history_Y, 'o-', label='Objective Value')
+    plt.plot(min_values, 'r--', label='Best Value')
+    plt.xlabel('Iteration')
+    plt.ylabel('Value')
+    plt.legend()
+    
+    # 参数空间投影（适用于2D）
+    if history_X.shape[1] == 2:
+        plt.subplot(122)
+        plt.scatter(history_X[:,0], history_X[:,1], c=range(len(history_X)))
+        plt.colorbar(label='Iteration')
+        plt.xlabel('Dim 1')
+        plt.ylabel('Dim 2')
+    
     plt.tight_layout()
     plt.show()
 
-if __name__ == "__main__":
-    # 可以自由组合：目标函数 × 采集函数
-    # for func in ["sphere", "rosenbrock", "ackley"]:
-        # for acq in ["ucb", "ei", "pi"]:
 
-    run_highdim_bo(func="sphere", dim=12,
-                    acq="ucb", kernel_type="rbf", acq_optimizer="cmaes",
-                    n_init=50, n_iter=80)
+if __name__ == "__main__":
+    # 目标测试函数 ["sphere", "rosenbrock", "ackley"]
+    # 采集函数 ["ucb", "ei", "pi"]
+    # 采集函数优化器 ["random", "sobol", "cmaes", "ga"]
+    # 核函数 ["rbf", "matern"]
+    # 维度 dim
+    # 初始点数 n_init
+    # 迭代次数 n_iter
+    t0 = time.time()
+
+    dim = 2
+    run_bo(func="rosenbrock", dim=dim,
+                    acq="ucb", kernel_type="rbf", acq_optimizer="sobol",
+                    n_init=min(1, 5*dim), n_iter=5)
+    
+    t1 = time.time()
+    print(f"Total time: {t1-t0:.2f} seconds")
+
+    # z=rosenbrock(np.array([[1,]*4]))
+    # print(z)

@@ -25,6 +25,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.online_opt.clicked.connect(self.online_optimization)
 
+        self.jitter_plot.clicked.connect(self.jitter_custom)
+
     def start_vm(self):
         '''
         virtual machine
@@ -130,6 +132,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
         proc = Popen(
             ["python3", "mainOPT.py"],
             cwd=st.rootpath + "/src/optimization",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+
+    
+    def jitter_custom(self):
+        '''
+        jitter of custom PV
+        '''
+
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+        proc = Popen(
+            ["python3", "main.py"],
+            cwd=st.rootpath + "/src/apps/jitter",
             shell=False,  # 避免 shell 进程干扰
             **kwargs
         )

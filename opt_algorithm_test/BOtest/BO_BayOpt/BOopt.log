@@ -1,0 +1,115 @@
+2025-10-09 20:30:29,783 - ERROR - 错误: unsupported operand type(s) for +: 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 39, in <module>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 39, in <listcomp>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                        ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'
+2025-10-09 20:31:06,994 - ERROR - 错误: unsupported operand type(s) for +: 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 40, in <module>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 40, in <listcomp>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                        ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'
+2025-10-09 22:21:29,383 - ERROR - 错误: unsupported operand type(s) for +: 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 39, in <module>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 39, in <listcomp>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                        ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'
+2025-10-09 22:22:43,102 - ERROR - 错误: unsupported operand type(s) for +: 'NoneType' and 'int'
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 39, in <module>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 39, in <listcomp>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                        ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'
+2025-10-10 10:25:43,979 - ERROR - 错误: list index out of range
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 39, in <module>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 39, in <listcomp>
+    vrange = np.array([[ini_values[i] + knobs_bounds[i][0], ini_values[i] + knobs_bounds[i][1]] for i in range(len(ini_values))])
+                                        ~~~~~~~~~~~~^^^
+IndexError: list index out of range
+2025-10-10 10:26:49,317 - ERROR - 错误: shapes (1,) and (2,) not aligned: 1 (dim 0) != 2 (dim 0)
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 51, in <module>
+    best = optimizer.maximize(n_iter=maxIt, init_points=init_points, save_path="bo_state.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/BOoptimizer.py", line 68, in maximize
+    self.opt.maximize(
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/bayesian_optimization.py", line 322, in maximize
+    self.probe(x_probe, lazy=False)
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/bayesian_optimization.py", line 239, in probe
+    self._space.probe(params)
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/target_space.py", line 555, in probe
+    target = self.target_func(**dict_params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/EpicsIOC.py", line 66, in evaluate_func
+    obj_val = np.dot(results, self.obj_weights)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: shapes (1,) and (2,) not aligned: 1 (dim 0) != 2 (dim 0)
+2025-10-10 16:30:49,452 - ERROR - 错误: knob初始值pv读取失败
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 38, in <module>
+    ini_values = objhub.init_knob_value()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/EpicsIOC.py", line 39, in init_knob_value
+    raise RuntimeError("knob初始值pv读取失败")
+RuntimeError: knob初始值pv读取失败
+2025-10-10 16:32:10,522 - ERROR - 错误: knob初始值pv读取失败
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 38, in <module>
+    ini_values = objhub.init_knob_value()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/EpicsIOC.py", line 39, in init_knob_value
+    raise RuntimeError("knob初始值pv读取失败")
+RuntimeError: knob初始值pv读取失败
+2025-10-10 16:35:16,064 - ERROR - 错误: shapes (1,) and (2,) not aligned: 1 (dim 0) != 2 (dim 0)
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 51, in <module>
+    best = optimizer.maximize(n_iter=maxIt, init_points=init_points, save_path="bo_state.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/BOoptimizer.py", line 68, in maximize
+    self.opt.maximize(
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/bayesian_optimization.py", line 322, in maximize
+    self.probe(x_probe, lazy=False)
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/bayesian_optimization.py", line 239, in probe
+    self._space.probe(params)
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/target_space.py", line 555, in probe
+    target = self.target_func(**dict_params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/EpicsIOC.py", line 67, in evaluate_func
+    obj_val = np.dot(results, self.obj_weights)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: shapes (1,) and (2,) not aligned: 1 (dim 0) != 2 (dim 0)
+2025-10-10 16:40:46,838 - ERROR - 错误: shapes (1,) and (2,) not aligned: 1 (dim 0) != 2 (dim 0)
+Traceback (most recent call last):
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/runOpt.py", line 51, in <module>
+    best = optimizer.maximize(n_iter=maxIt, init_points=init_points, save_path="bo_state.json")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/BOoptimizer.py", line 68, in maximize
+    self.opt.maximize(
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/bayesian_optimization.py", line 322, in maximize
+    self.probe(x_probe, lazy=False)
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/bayesian_optimization.py", line 239, in probe
+    self._space.probe(params)
+  File "/home/zhanghaoran/anaconda3/envs/half/lib/python3.11/site-packages/bayes_opt/target_space.py", line 555, in probe
+    target = self.target_func(**dict_params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zhanghaoran/gitproj/half_linac/opt_algorithm_test/BOtest/BO_BayOpt/EpicsIOC.py", line 70, in evaluate_func
+    obj_val = np.dot(results, self.obj_weights)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: shapes (1,) and (2,) not aligned: 1 (dim 0) != 2 (dim 0)
