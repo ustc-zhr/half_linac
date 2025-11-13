@@ -1,4 +1,4 @@
-Running elegant at Thu Oct 16 22:43:06 2025
+Running elegant at Thu Nov 13 16:52:47 2025
 
 This is elegant 2022.1.0, Jun 21 2023, by M. Borland, J. Calvey, M. Carla', N. Carmignani, AJ Dick, Z. Duan, M. Ehrlichman, L. Emery, W. Guo, R. Lindberg, V. Sajaev, R. Soliday, Y.-P. Sun, C.-X. Wang, Y. Wang, Y. Wu, and A. Xiao.
 =====================================================================================
@@ -216,11 +216,12 @@ computed value for L4.INTERPOLATE is 1
 computed value for L4.SMOOTHING is 1
 computed value for FODO04.DISABLE is 1
 computed value for DMTA.L is 1.000000000000000e+00
+computed value for PRFLO.DISABLE is 0
 computed value for QT01.L is 1.500000000000000e-01
-computed value for QT01.K1 is -3.278962332972288e+00
+computed value for QT01.K1 is -1.315043000000000e+00
 computed value for DMTB.L is 1.250000000000000e+00
 computed value for QT02.L is 1.500000000000000e-01
-computed value for QT02.K1 is 5.284303954839706e-01
+computed value for QT02.K1 is 1.402247000000000e+00
 computed value for DMTC1.L is 5.500000000000000e-01
 computed value for PRF06.DISABLE is 0
 computed value for DMTC2.L is 5.500000000000000e+00
@@ -244,221 +245,34 @@ computed value for DHL1.L is 3.000000000000000e-01
 computed value for QHL2.L is 3.000000000000000e-01
 computed value for QHL2.K1 is -1.975459000000000e+00
 computed value for DHL2.L is 4.500000000000000e-01
-computed value for BH01.L is 2.000000000000000e+00
-computed value for BH01.ANGLE is 2.225417052526151e-01
-computed value for BH01.E1 is 1.112708526263075e-01
-computed value for BH01.E2 is 1.112708526263075e-01
-computed value for BH01.HGAP is 2.000000000000000e-02
-computed value for BH01.N_SLICES is 100
-computed value for BH01.SYNCH_RAD is 1
-computed value for BH01.BINS is 500
-computed value for BH01.SG_HALFWIDTH is 20
-computed value for BH01.SGDERIV_HALFWIDTH is 20
-computed value for BH01.ISR is 1
-computed value for DHL3.L is 2.128000000000000e+00
-computed value for DHL3A.L is 3.000000000000000e-01
-computed value for QHL3.L is 3.000000000000000e-01
-computed value for QHL3.K1 is 2.832848000000000e+00
-computed value for DHL4.L is 2.000000000000000e-01
-computed value for DHL4A.L is 2.670000000000000e-01
-computed value for QHL4.L is 3.000000000000000e-01
-computed value for QHL4.K1 is -2.158739000000000e+00
-computed value for DHL5.L is 4.950000000000000e+00
-computed value for BH02.L is 2.000000000000000e+00
-computed value for BH02.ANGLE is 2.225417052526151e-01
-computed value for BH02.E1 is 1.112708526263075e-01
-computed value for BH02.E2 is 1.112708526263075e-01
-computed value for BH02.HGAP is 2.000000000000000e-02
-computed value for BH02.N_SLICES is 100
-computed value for BH02.SYNCH_RAD is 1
-computed value for BH02.BINS is 500
-computed value for BH02.SG_HALFWIDTH is 20
-computed value for BH02.SGDERIV_HALFWIDTH is 20
-computed value for BH02.ISR is 1
-computed value for ES04.X_MAX is 6.000000000000000e-03
-computed value for ES04.Y_MAX is 1.600000000000000e-02
-computed value for PRF10.DISABLE is 1
-computed value for BH03.L is 2.000000000000000e+00
-computed value for BH03.ANGLE is 2.225417052526151e-01
-computed value for BH03.E1 is 1.112708526263075e-01
-computed value for BH03.E2 is 1.112708526263075e-01
-computed value for BH03.HGAP is 2.000000000000000e-02
-computed value for BH03.N_SLICES is 100
-computed value for BH03.SYNCH_RAD is 1
-computed value for BH03.BINS is 500
-computed value for BH03.SG_HALFWIDTH is 20
-computed value for BH03.SGDERIV_HALFWIDTH is 20
-computed value for BH03.ISR is 1
-computed value for WB1.DISABLE is 1
-computed value for DMF1.L is 4.750000000000000e-01
-computed value for QT13.L is 1.500000000000000e-01
-computed value for QT13.K1 is 9.463534000000000e-01
-computed value for DMF2.L is 1.050000000000000e+00
-computed value for QT14.L is 1.500000000000000e-01
-computed value for QT14.K1 is -1.247343000000000e+00
-computed value for DMF3.L is 1.050000000000000e+00
-computed value for QT15.L is 1.500000000000000e-01
-computed value for QT15.K1 is 1.774070000000000e-01
-computed value for DMF4.L is 5.500000000000000e-01
-computed value for DT1.L is 4.536000000000000e+00
-computed value for PRF11.DISABLE is 1
-computed value for DT1A.L is 2.000000000000000e-01
-computed value for QT16.L is 1.500000000000000e-01
-computed value for QT16.K1 is -3.573785000000000e-01
-computed value for DT1B.L is 8.500000000000000e-01
-computed value for QTR1.L is 7.500000000000000e-02
-computed value for QTR1.K1 is 6.594606000000000e-01
-computed value for W01.DISABLE is 1
-computed value for DT2.L is 1.205000000000000e+01
-computed value for QT18.L is 1.500000000000000e-01
-computed value for QT18.K1 is -6.594606000000000e-01
-computed value for DT3.L is 1.205000000000000e+01
-computed value for QT19.L is 1.500000000000000e-01
-computed value for QT19.K1 is 6.594606000000000e-01
-computed value for DT4.L is 1.205000000000000e+01
-computed value for QT20.L is 1.500000000000000e-01
-computed value for QT20.K1 is -6.594606000000000e-01
-computed value for DT5.L is 1.205000000000000e+01
-computed value for QT21.L is 1.500000000000000e-01
-computed value for QT21.K1 is 6.594606000000000e-01
-computed value for DT6.L is 1.205000000000000e+01
-computed value for QT22.L is 1.500000000000000e-01
-computed value for QT22.K1 is -6.594606000000000e-01
-computed value for DT7.L is 1.205000000000000e+01
-computed value for QT23.L is 1.500000000000000e-01
-computed value for QT23.K1 is 6.594606000000000e-01
-computed value for DT8.L is 2.762534000000000e+00
-computed value for DMO1.L is 2.750000000000000e-01
-computed value for QT24.L is 3.000000000000000e-01
-computed value for QT24.K1 is 1.557907000000000e+00
-computed value for DMO2.L is 3.000000000000000e-01
-computed value for QT25.L is 3.000000000000000e-01
-computed value for QT25.K1 is -2.509871000000000e+00
-computed value for DMO3.L is 1.775000000000000e+00
-computed value for QT26.L is 1.500000000000000e-01
-computed value for QT26.K1 is -5.559521000000000e-02
-computed value for DMO4.L is 6.250000000000000e-01
-computed value for DMO4A.L is 2.000000000000000e-01
-computed value for PRF12.DISABLE is 1
-computed value for DMO4B.L is 2.000000000000000e-01
-computed value for QT27.L is 3.000000000000000e-01
-computed value for QT27.K1 is 2.493402000000000e+00
-computed value for DMO5.L is 3.000000000000000e-01
-computed value for QT28.L is 3.000000000000000e-01
-computed value for QT28.K1 is -3.426730000000000e+00
-computed value for DMO6.L is 3.000000000000000e-01
-computed value for WB2.DISABLE is 1
-computed value for BH04.L is 1.500000000000000e+00
-computed value for BH04.ANGLE is -1.745329251994329e-01
-computed value for BH04.E2 is -1.745329251994329e-01
-computed value for BH04.HGAP is 1.500000000000000e-02
-computed value for BH04.N_SLICES is 100
-computed value for BH04.SYNCH_RAD is 1
-computed value for BH04.BINS is 500
-computed value for BH04.SG_HALFWIDTH is 20
-computed value for BH04.SGDERIV_HALFWIDTH is 20
-computed value for BH04.ISR is 1
-computed value for DS1.L is 2.025000000000000e+00
-computed value for DS1.DZ is 1.000000000000000e-02
-computed value for DS1.USE_STUPAKOV is 1
-computed value for QT29.L is 1.500000000000000e-01
-computed value for QT29.K1 is 1.127802000000000e+00
-computed value for DHR1.L is 4.250000000000000e-01
-computed value for DHR1.DZ is 1.000000000000000e-02
-computed value for DHR1.USE_STUPAKOV is 1
-computed value for BV01.L is 2.727100000000000e+00
-computed value for BV01.ANGLE is 4.363323129985824e-01
-computed value for BV01.E1 is 2.181661564992912e-01
-computed value for BV01.E2 is 2.181661564992912e-01
-computed value for BV01.TILT is -1.570796326794897e+00
-computed value for BV01.HGAP is 1.500000000000000e-02
-computed value for BV01.N_SLICES is 100
-computed value for BV01.SYNCH_RAD is 1
-computed value for BV01.BINS is 500
-computed value for BV01.SG_HALFWIDTH is 20
-computed value for BV01.SGDERIV_HALFWIDTH is 20
-computed value for BV01.ISR is 1
-computed value for F5.L is 8.000000000000000e-01
-computed value for F5.DZ is 1.000000000000000e-02
-computed value for F5.USE_STUPAKOV is 1
-computed value for QT30.L is 3.000000000000000e-01
-computed value for QT30.K1 is -2.960617000000000e+00
-computed value for F2.L is 1.400000000000000e+00
-computed value for F2.DZ is 1.000000000000000e-02
-computed value for F2.USE_STUPAKOV is 1
-computed value for QT31.L is 3.000000000000000e-01
-computed value for QT31.K1 is 3.334709000000000e+00
-computed value for F3.L is 5.000000000000000e-01
-computed value for F3.DZ is 1.000000000000000e-02
-computed value for F3.USE_STUPAKOV is 1
-computed value for QT32.L is 3.000000000000000e-01
-computed value for QT32.K1 is -3.457488000000000e+00
-computed value for F4.L is 5.749710000000000e-01
-computed value for F4.DZ is 1.000000000000000e-02
-computed value for F4.USE_STUPAKOV is 1
-computed value for PRF13.DISABLE is 1
-computed value for QT33.L is 3.000000000000000e-01
-computed value for QT33.K1 is -3.457488000000000e+00
-computed value for QT34.L is 3.000000000000000e-01
-computed value for QT34.K1 is 3.334709000000000e+00
-computed value for QT35.L is 3.000000000000000e-01
-computed value for QT35.K1 is -2.960617000000000e+00
-computed value for BV02.L is 2.727100000000000e+00
-computed value for BV02.ANGLE is -4.363323129985824e-01
-computed value for BV02.E1 is -2.181661564992912e-01
-computed value for BV02.E2 is -2.181661564992912e-01
-computed value for BV02.TILT is -1.570796326794897e+00
-computed value for BV02.HGAP is 1.500000000000000e-02
-computed value for BV02.N_SLICES is 100
-computed value for BV02.SYNCH_RAD is 1
-computed value for BV02.BINS is 500
-computed value for BV02.SG_HALFWIDTH is 20
-computed value for BV02.SGDERIV_HALFWIDTH is 20
-computed value for BV02.ISR is 1
-computed value for QT36.L is 1.500000000000000e-01
-computed value for QT36.K1 is 1.127802000000000e+00
-computed value for DS1A.L is 5.000000000000000e-01
-computed value for DS1A.DZ is 1.000000000000000e-02
-computed value for DS1A.USE_STUPAKOV is 1
-computed value for DS1B.L is 1.225000000000000e+00
-computed value for DS1B.DZ is 1.000000000000000e-02
-computed value for DS1B.USE_STUPAKOV is 1
-computed value for PRF14.DISABLE is 1
-computed value for DS1C.L is 3.000000000000000e-01
-computed value for DS1C.DZ is 1.000000000000000e-02
-computed value for DS1C.USE_STUPAKOV is 1
-computed value for DSEP1.L is 1.000000000000000e-01
-computed value for DSEP1.DZ is 1.000000000000000e-02
-computed value for DSEP1.USE_STUPAKOV is 1
-computed value for SEP2.L is 6.580000000000000e-01
-computed value for SEP2.ANGLE is -8.726646259971647e-02
-computed value for SEP2.E1 is -1.745329251994329e-01
-computed value for SEP2.E2 is 8.726646259971647e-02
-computed value for SEP2.HGAP is 4.000000000000000e-03
-computed value for SEP2.N_SLICES is 100
-computed value for SEP2.SYNCH_RAD is 1
-computed value for SEP2.BINS is 500
-computed value for SEP2.SG_HALFWIDTH is 20
-computed value for SEP2.SGDERIV_HALFWIDTH is 20
-computed value for SEP2.ISR is 1
-computed value for DSEP.L is 8.400000000000001e-02
-computed value for DSEP.DZ is 1.000000000000000e-02
-computed value for DSEP.USE_STUPAKOV is 1
-computed value for SEP1.L is 6.580000000000000e-01
-computed value for SEP1.ANGLE is -8.726646259971647e-02
-computed value for SEP1.E1 is -8.726646259971647e-02
-computed value for SEP1.HGAP is 4.000000000000000e-03
-computed value for SEP1.N_SLICES is 100
-computed value for SEP1.SYNCH_RAD is 1
-computed value for SEP1.BINS is 500
-computed value for SEP1.SG_HALFWIDTH is 20
-computed value for SEP1.SGDERIV_HALFWIDTH is 20
-computed value for SEP1.ISR is 1
-computed value for WSEP1.DISABLE is 1
+computed value for DQ0.L is 4.000000000000000e+00
+computed value for SM.L is 2.727100000000000e+00
+computed value for SM.ANGLE is 4.363323129985824e-01
+computed value for SM.E1 is 2.181661564992912e-01
+computed value for SM.E2 is 2.181661564992912e-01
+computed value for SM.TILT is 0.000000000000000e+00
+computed value for SM.HGAP is 1.500000000000000e-02
+computed value for SM.N_SLICES is 100
+computed value for SM.SYNCH_RAD is 1
+computed value for SM.BINS is 500
+computed value for SM.SG_HALFWIDTH is 20
+computed value for SM.SGDERIV_HALFWIDTH is 20
+computed value for SM.ISR is 1
+computed value for DQ1.L is 5.000000000000000e-01
+computed value for QE01.L is 3.000000000000000e-01
+computed value for QE01.K1 is -2.330012000000000e+00
+computed value for DQ2.L is 5.000000000000000e-01
+computed value for QE02.L is 3.000000000000000e-01
+computed value for QE02.K1 is 2.530042000000000e+00
+computed value for DQ3.L is 5.000000000000000e-01
+computed value for QE03.L is 3.000000000000000e-01
+computed value for QE03.K1 is 0.000000000000000e+00
+computed value for DQ4.L is 4.200000000000000e+00
+computed value for PRFESA.DISABLE is 0
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
-length of beamline USEDLINE per pass: 3.192640960000002e+02 m
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6389
+length of beamline USEDLINE per pass: 1.955985200000001e+02 m
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6331
 &run_control
     n_steps = 1,
     bunch_frequency = 0.000000000000000e+00,
@@ -471,7 +285,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6389
     restrict_fiducialization = 1,
     reset_scattering_seed = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6389
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6331
 &twiss_output
     filename = %s.twi,
     matched = 0,
@@ -509,17 +323,17 @@ final Twiss parameters (chromaticity valid for fully second-order calculation on
          beta          alpha           nu           eta          eta'       dnu/d(dp/p)   dbeta/(dp/p)     accept.
           m                          1/2pi           m                         1/2pi            m          mm-mrad
 --------------------------------------------------------------------------------------------------------------------
-  x:  4.970891e+03 -3.128023e+02  4.794918e+00  1.217440e-05  1.995933e-04 -3.904325e+00 -6.262223e+04  7.053058e-03
-ave:  3.326343e+03 -8.044113e+00               -3.281027e-02 -1.490198e-05
-min:  1.180251e-01 -7.711397e+03               -1.998246e+00 -1.234823e+00
-max:  2.661124e+04  5.123073e+03                7.642042e-01  1.232310e+00
-  y:  3.710067e+01  3.965857e+00  5.977972e+00 -5.172221e-05  3.548774e-05 -3.229964e-01 -3.812741e+02  9.678672e-01
-ave:  1.050377e+02  1.495570e-03               -4.651196e-06 -1.173945e-04
-min:  4.311872e-01 -2.469552e+02               -9.449645e-01 -4.433893e-01
-max:  7.067655e+02  2.367822e+02                9.445796e-01  4.129388e-01
-x acceptance limited to 7.053058e-09 by DHL4A ending at 2.002334e+02 m
-y acceptance limited to 9.678672e-07 by DHL4A ending at 2.002334e+02 m
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+  x:  3.936276e+00 -9.994724e+00  3.301372e+00  7.484209e-01 -1.910631e-01 -3.833379e+00 -5.541826e+01  9.276119e-01
+ave:  3.583136e+01  7.747325e-02                4.444609e-02  3.907631e-03
+min:  1.180251e-01 -2.786394e+02               -6.896255e-01 -3.144315e-01
+max:  5.447882e+02  1.181651e+02                1.703736e+00  1.074917e+00
+  y:  8.195699e+01 -1.671946e+01  3.340696e+00  0.000000e+00  0.000000e+00 -3.932139e+00 -2.151297e+03  1.951001e+00
+ave:  2.285385e+01 -1.046520e-01                0.000000e+00  0.000000e+00
+min:  3.378682e-01 -8.668141e+01                0.000000e+00  0.000000e+00
+max:  8.195699e+01  4.256791e+01                0.000000e+00  0.000000e+00
+x acceptance limited to 9.276119e-07 by DHOTGUN2 ending at 3.225000e+00 m
+y acceptance limited to 1.951001e-06 by DA1 ending at 9.194962e+01 m
+statistics:    ET:     00:00:00 CP:    0.02 BIO:0 DIO:0 PF:0 MEM:6715
 &matrix_output
     printout = {NULL},
     printout_order = 1,
@@ -537,8 +351,8 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
     start_from_occurence = 1,
     SDDS_output_match = {NULL},
 &end
-*** Warning: Some elements had no matrix. --- 33 elements had no matrix
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+*** Warning: Some elements had no matrix. --- 23 elements had no matrix
+statistics:    ET:     00:00:00 CP:    0.02 BIO:0 DIO:0 PF:0 MEM:6715
 &error_control
     clear_error_settings = 1,
     summarize_error_settings = 0,
@@ -550,7 +364,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
 *** Warning: CSBEND edge settings may be non-optimal if symplecticity is important --- EDGE1_EFFECTS and EDGE2_EFFECTS should be 3 or 4 for symplectic tracking with nonlinear effects.
 
 *** Cleared error settings
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+statistics:    ET:     00:00:00 CP:    0.02 BIO:0 DIO:0 PF:0 MEM:6715
 &error
     name = *,
     exclude = {NULL},
@@ -572,7 +386,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
     sample_file_column = {NULL},
     sample_mode = {NULL},
 &end
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
+statistics:    ET:     00:00:00 CP:    0.02 BIO:0 DIO:0 PF:0 MEM:6715
 &bunched_beam
     bunch = {NULL},
     n_particles_per_bunch = 10000,
@@ -617,7 +431,7 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:6925
         0.000000000000000e+00, 0.000000000000000e+00,
     first_is_fiducial = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7268
+statistics:    ET:     00:00:00 CP:    0.02 BIO:0 DIO:0 PF:0 MEM:7064
 &track
     center_on_orbit = 0,
     center_momentum_also = 1,
@@ -631,23 +445,23 @@ statistics:    ET:     00:00:00 CP:    0.03 BIO:0 DIO:0 PF:0 MEM:7268
     check_beam_structure = 0,
     interrupt_file = %s.interrupt,
 &end
-64 matrices (re)computed
+36 matrices (re)computed
 Updating floor coordinates
 tracking step 1
 generating bunch 1
 tracking 10000 particles
-16 Oct 25 22:43:06: This step establishes energy profile vs s (fiducial beam).
-16 Oct 25 22:43:06: Rf phases/references reset.
+13 Nov 25 16:52:47: This step establishes energy profile vs s (fiducial beam).
+13 Nov 25 16:52:47: Rf phases/references reset.
 Dumping centroid data...done.
 Dumping bpm_centroid data...done.
 Post-tracking output completed.
-Tracking step completed   ET:     00:00:05 CP:    4.40 BIO:0 DIO:0 PF:0 MEM:7793
+Tracking step completed   ET:     00:00:02 CP:    1.89 BIO:0 DIO:0 PF:0 MEM:7714
 
 
 Updating floor coordinates
 Finished tracking.
 End of input data encountered.
-statistics:    ET:     00:00:05 CP:    4.40 BIO:0 DIO:0 PF:0 MEM:7793
+statistics:    ET:     00:00:02 CP:    1.89 BIO:0 DIO:0 PF:0 MEM:7714
 
 ************************** Summary of warnings ****************************
 2 types of warnings were recorded:

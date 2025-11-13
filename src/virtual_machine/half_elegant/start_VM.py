@@ -58,7 +58,7 @@ if __name__=='__main__':
                 print("update bpm data ...")
                 lte.broadcast_flag()
                 print("update flag data ...")
-                print("VM is waiting changes\n")
+                print("VM is waiting changes")
             except:
                 print("error with update bpm/flag PV data")
                 pass

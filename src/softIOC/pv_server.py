@@ -18,60 +18,59 @@ class pv_server:
         
         self.jsonpath = jsonpath    #st.rootpath+"/virtual_machine/half_elegant/halflinac.json"
         self.iocpath = iocpath     
-        self.substitutions_name = jsonpath.split("/")[-1].split(".")[0]
+        self.substitutions_name = jsonpath.split("/")[-1].split(".")[0] # keep the same name with .json file
     
     def gen_substitution_file(self):
         '''
         generate db/half.substitutions file
         '''
         # read lattice from json
-        f = open(self.jsonpath,"r")
-        lte = json.load(f)
-        f.close()
+        with open(self.jsonpath,"r") as f:
+            lte = json.load(f)
+
         lattice = lte["lattice"]
         
-        f = open(self.iocpath+"/db/"+self.substitutions_name+'.substitutions','w')
-        # for QUAD
-        f.write("file db/quad.template {\n")
-        f.write("  pattern {QUAD}\n")
-        for key in lattice:
-            if lattice[key]["TYPE"] == "QUAD":   
-                f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
-        f.write("}\n")
+        with open(self.iocpath + "/db/" + self.substitutions_name + '.substitutions', 'w') as f:
+            # for QUAD
+            f.write("file db/quad.template {\n")
+            f.write("  pattern {QUAD}\n")
+            for key in lattice:
+                if lattice[key]["TYPE"] == "QUAD":   
+                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+            f.write("}\n")
+                
+            # for BEND
+            f.write("file db/bend.template {\n")
+            f.write("  pattern {BEND}\n")
+            for key in lattice:
+                if lattice[key]["TYPE"] in ["BEND", "CSRCSBEND", "SBEND", "SBEN"]:   
+                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+            f.write("}\n")
             
-        # for BEND
-        f.write("file db/bend.template {\n")
-        f.write("  pattern {BEND}\n")
-        for key in lattice:
-            if lattice[key]["TYPE"] in ["BEND", "CSRCSBEND", "SBEND", "SBEN"]:   
-                f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
-        f.write("}\n")
+            # for BPM
+            f.write("file db/bpm.template {\n")
+            f.write("  pattern {BPM}\n")
+            for key in lattice:
+                if lattice[key]["TYPE"] == "MONI":   
+                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+            f.write("}\n")
+            
+            # for FLAG
+            f.write("file db/flag.template {\n")
+            f.write("  pattern {FLAG}\n")
+            for key in lattice:
+                if lattice[key]["TYPE"] == "WATCH":   
+                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+            f.write("}\n")
+    
+            # for COR
+            f.write("file db/corr.template {\n")
+            f.write("  pattern {COR}\n")
+            for key in lattice:
+                if lattice[key]["TYPE"] in ["HKICK", "VKICK"] :   
+                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+            f.write("}\n")
         
-        # for BPM
-        f.write("file db/bpm.template {\n")
-        f.write("  pattern {BPM}\n")
-        for key in lattice:
-            if lattice[key]["TYPE"] == "MONI":   
-                f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
-        f.write("}\n")
-        
-        # for FLAG
-        f.write("file db/flag.template {\n")
-        f.write("  pattern {FLAG}\n")
-        for key in lattice:
-            if lattice[key]["TYPE"] == "WATCH":   
-                f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
-        f.write("}\n")
- 
-        # for COR
-        f.write("file db/corr.template {\n")
-        f.write("  pattern {COR}\n")
-        for key in lattice:
-            if lattice[key]["TYPE"] in ["HKICK", "VKICK"] :   
-                f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
-        f.write("}\n")
-        
-        f.close()
                     
         # and so on 
         # ...
@@ -84,6 +83,7 @@ class pv_server:
             lte = json.load(f)
         
         lattice = lte["lattice"]
+        print(lattice["SM"])
  
         ##1. add channel to json file
         ##---------------------------
@@ -117,11 +117,11 @@ class pv_server:
                 pv_val.append(lattice[key]["ANGLE"])
 
             # KICK pv value isn't set in *_ini.ele  AND pv is n't set in initial json file
-            elif lattice[key]["TYPE"] in ["HKICK","VKICK"]:    
-                lattice[key]["AP"] = "HALF:IN:COR:"+key+":ao" 
-                lattice[key]["KICK"] = "0" 
-                pvl.append(lattice[key]["AP"])
-                pv_val.append(lattice[key]["KICK"])
+            # elif lattice[key]["TYPE"] in ["HKICK","VKICK"]:    
+            #     lattice[key]["AP"] = "HALF:IN:COR:"+key+":ao" 
+            #     lattice[key]["KICK"] = "0" 
+            #     pvl.append(lattice[key]["AP"])
+            #     pv_val.append(lattice[key]["KICK"])
 
 
             # to be finished 

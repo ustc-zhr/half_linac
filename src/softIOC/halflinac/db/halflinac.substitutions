@@ -59,6 +59,9 @@ file db/quad.template {
   { "QT34" }
   { "QT35" }
   { "QT36" }
+  { "QE01" }
+  { "QE02" }
+  { "QE03" }
 }
 file db/bend.template {
   pattern {BEND}
@@ -66,6 +69,7 @@ file db/bend.template {
   { "BH02" }
   { "BH03" }
   { "BH04" }
+  { "SM" }
   { "BV01" }
   { "BV02" }
   { "SEP2" }
@@ -144,6 +148,8 @@ file db/flag.template {
   { "PRF13" }
   { "PRF14" }
   { "WSEP1" }
+  { "PRFLO" }
+  { "PRFESA" }
 }
 file db/corr.template {
   pattern {COR}

@@ -27,6 +27,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.jitter_plot.clicked.connect(self.jitter_custom)
 
+        self.energy_spectrum.clicked.connect(self.start_energy_spectrum)
+
     def start_vm(self):
         '''
         virtual machine
@@ -148,6 +150,24 @@ class myWindow(QMainWindow, Ui_MainWindow):
         proc = Popen(
             ["python3", "main.py"],
             cwd=st.rootpath + "/src/apps/jitter",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+
+    
+    # -----------
+    # 
+    # -----------
+    def start_energy_spectrum(self):
+        '''
+        energy_spectrum
+        '''
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+        proc = Popen(
+            ["python3", "main.py", "vm"],
+            cwd=st.rootpath + "/src/apps/energy_spectrum",
             shell=False,  # 避免 shell 进程干扰
             **kwargs
         )

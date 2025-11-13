@@ -22,7 +22,7 @@ class ele_parser(lattice_parser):
     '''
     
     def __init__(self, fileName):
-        lattice_parser.__init__(self,fileName)
+        super().__init__(self,fileName) # 继承lattice_parser是为了调用相关的一些子函数 如get_brieflines 这里不需要输入lineName 因为这里不调用相关函数
         
         self.fileName = fileName
         self.control  = self.get_control()
@@ -72,69 +72,68 @@ class ele_parser(lattice_parser):
         '''
         back to one.ele file
         '''
-        f =  open(ele_f,"w")
+        with open(ele_f,"w") as f:
         
-        # run_setup section
-        line = "&run_setup\n"
+            # run_setup section
+            line = "&run_setup\n"
 
-        #change: lattice = .lte according input 'lat_f'
-        # self.control["run_setup"]["lattice"] = "lattice.lte"
-        self.control["run_setup"]["lattice"] = lat_f.split('/')[-1]
-        
-        
-        for key in self.control["run_setup"]:
-            line = line +"    " +key +" = " +self.control["run_setup"][key] +",\n"            
-        line = line +"&end\n\n"
-        
-        # run_control section
-        line = line +"&run_control\n"
-        for key in self.control["run_control"]:
-            line = line +"    " +key +" = " +self.control["run_control"][key] +",\n"            
-        line = line +"&end\n\n"
-        
-        # twiss_output section
-        line = line +"&twiss_output\n"
-        for key in self.control["twiss_output"]:
-            line = line +"    " +key +" = " +self.control["twiss_output"][key] +",\n"            
-        line = line +"&end\n\n"
-
-        # matrix_output section
-        line = line +"&matrix_output\n"
-        for key in self.control["matrix_output"]:
-            line = line +"    " +key +" = " +self.control["matrix_output"][key] +",\n"            
-        line = line +"&end\n\n"  
-
-        # error_element section
-        line = line +"&error_control\n"
-        for key in self.control["error_control"]:
-            line = line +"    " +key +" = " +self.control["error_control"][key] +",\n"            
-        line = line +"&end\n\n" 
-
-        line = line +"&error_element\n"
-        for key in self.control["error_element"]:
-            line = line +"    " +key +" = " +self.control["error_element"][key] +",\n"            
-        line = line +"&end\n\n"     
-
-        # beam section
-        # sdds_beam section
-        if 'sdds_beam' in self.control:
-            line = line +"&sdds_beam\n"
-            for key in self.control["sdds_beam"]:
-                line = line +"    " +key +" = " +self.control["sdds_beam"][key] +",\n"            
+            #change: lattice = .lte according input 'lat_f'
+            # self.control["run_setup"]["lattice"] = "lattice.lte"
+            self.control["run_setup"]["lattice"] = lat_f.split('/')[-1]
+            
+            
+            for key in self.control["run_setup"]:
+                line = line +"    " +key +" = " +self.control["run_setup"][key] +",\n"            
+            line = line +"&end\n\n"
+            
+            # run_control section
+            line = line +"&run_control\n"
+            for key in self.control["run_control"]:
+                line = line +"    " +key +" = " +self.control["run_control"][key] +",\n"            
+            line = line +"&end\n\n"
+            
+            # twiss_output section
+            line = line +"&twiss_output\n"
+            for key in self.control["twiss_output"]:
+                line = line +"    " +key +" = " +self.control["twiss_output"][key] +",\n"            
             line = line +"&end\n\n"
 
-        # bunched_beam section
-        if 'bunched_beam' in self.control:
-            line = line +"&bunched_beam\n"
-            for key in self.control["bunched_beam"]:
-                line = line +"    " +key +" = " +self.control["bunched_beam"][key] +",\n"            
-            line = line +"&end\n\n"
-        
-        # track end
-        line = line+"&track &end"
-        
-        f.write(line)
-        f.close()
+            # matrix_output section
+            line = line +"&matrix_output\n"
+            for key in self.control["matrix_output"]:
+                line = line +"    " +key +" = " +self.control["matrix_output"][key] +",\n"            
+            line = line +"&end\n\n"  
+
+            # error_element section
+            line = line +"&error_control\n"
+            for key in self.control["error_control"]:
+                line = line +"    " +key +" = " +self.control["error_control"][key] +",\n"            
+            line = line +"&end\n\n" 
+
+            line = line +"&error_element\n"
+            for key in self.control["error_element"]:
+                line = line +"    " +key +" = " +self.control["error_element"][key] +",\n"            
+            line = line +"&end\n\n"     
+
+            # beam section
+            # sdds_beam section
+            if 'sdds_beam' in self.control:
+                line = line +"&sdds_beam\n"
+                for key in self.control["sdds_beam"]:
+                    line = line +"    " +key +" = " +self.control["sdds_beam"][key] +",\n"            
+                line = line +"&end\n\n"
+
+            # bunched_beam section
+            if 'bunched_beam' in self.control:
+                line = line +"&bunched_beam\n"
+                for key in self.control["bunched_beam"]:
+                    line = line +"    " +key +" = " +self.control["bunched_beam"][key] +",\n"            
+                line = line +"&end\n\n"
+            
+            # track end
+            line = line+"&track &end"
+            
+            f.write(line)
     
 
 class elegant_parser:
@@ -163,7 +162,7 @@ class elegant_parser:
         jsonfile = nest_dict()
         
         # add epics channel/PV
-        self._add_channel()
+        self._add_channel()   
 
         # control in dict
         jsonfile["control"] = self.control
@@ -173,38 +172,51 @@ class elegant_parser:
         with open(j_file,"w") as f:
            f.write(json.dumps(jsonfile, indent=4))
 
+    def _add_channel(self):
+        for key in self.lattice:
+            if self.lattice[key]["TYPE"] == "QUAD":
+                # add PV attibute
+                self.lattice[key]["AP"] = st.pv_prefix_quad + key + st.pv_suffix_quad
+                
+            elif self.lattice[key]["TYPE"] in ["CSRCSBEND", "CSBEND", "BEND", "SBEN", "SBEND"]:
+                self.lattice[key]["AP"] = st.pv_prefix_bend + key + st.pv_suffix_bend
+
+            elif self.lattice[key]["TYPE"] in ["HKICK","VKICK"]:
+                self.lattice[key]["AP"] = st.pv_prefix_cor + key + st.pv_suffix_cor
+            
+            # RFCW, COR,... and so on
+
+    
+    # json2lte_ele broadcast_bpm broadcast_flag cycle
+    # ===============================================
     def json2lte_ele(self,lat_f = "./elegant/lattice.lte", ele_f = "./elegant/one.ele",j_file="halflinac.json"):
-        
-        # update lattice.lte with halflinac.json 
+        # update lattice.lte with halflinac.json (according to "usedline")
         #============================
-        f = open(j_file,"r")
-        lte = json.load(f)
-        f.close()
+        with open(j_file,"r") as f:
+            lte  = json.load(f)
     
         #halflinac.json => lattice.lte 
-        f = open(lat_f,"w") 
-        
-        lattice = lte["lattice"]
-        tmpnamelist = []
-        for elem_name in lte["usedline"]: 
-            tmpnamelist.append(lattice[elem_name]["NAME"])
-            
-            if tmpnamelist.count(lattice[elem_name]["NAME"]) >1:
-                continue    
-            
-            tmp = lattice[elem_name]["NAME"]+": "+lattice[elem_name]["TYPE"]
-            for key in lattice[elem_name].keys():
-                # AP/channel should not appear in lattice.lte
-                if key not in ["NAME","TYPE","AP"]:
-                    tmp = tmp +"," +key +"=\"" +lattice[elem_name][key] + "\""
-
-            tmp = tmp+"\n"                  
-            f.write(tmp)        
+        with open(lat_f, "w") as f:
+            lattice = lte["lattice"]
+            tmpnamelist = []
+            for elem_name in lte["usedline"]: 
+                tmpnamelist.append(lattice[elem_name]["NAME"])
                 
-        # line2 = "\nALL: LINE = (" +','.join(lte["usedline"]) +")"
-        line2 = "\nUSEDLINE: LINE = (" +','.join(lte["usedline"]) +")"
-        f.write(line2)
-        f.close()        
+                if tmpnamelist.count(lattice[elem_name]["NAME"]) >1:
+                    continue    
+                
+                tmp = lattice[elem_name]["NAME"]+": "+lattice[elem_name]["TYPE"]
+                for key in lattice[elem_name].keys():
+                    # AP/channel should not appear in lattice.lte
+                    if key not in ["NAME","TYPE","AP"]:
+                        tmp = tmp +"," +key +"=\"" +lattice[elem_name][key] + "\""
+
+                tmp = tmp+"\n"                  
+                f.write(tmp)        
+                    
+            line2 = "\nUSEDLINE: LINE = (" +','.join(lte["usedline"]) +")"
+            f.write(line2)
+    
       
         # update one.ele with json file
         #==============================
@@ -213,33 +225,11 @@ class elegant_parser:
     
     # sub-funcs for simulation results
     #----------------------------------------------
-    def get_bpmdata(self):
-        tmp = sdds.SDDS(0)
-        
-        tmp.load('./elegant/one.bpmcen')
-        colname = tmp.columnName
-        data    = tmp.columnData
-
-        out = {}
-        cnt=0
-        for j in colname:
-            out[j]=data[cnt][0]
-            cnt = cnt+1
-        
-        bpm = nest_dict()
-        cnt = 0
-        for elem in out['ElementName']:
-            bpm[elem.upper()]['Cx'] = out['Cx'][cnt]
-            bpm[elem.upper()]['Cy'] = out['Cy'][cnt]
-            cnt = cnt+1
-        
-        return bpm
-    
     def broadcast_bpm(self):
         '''
         broadcast the BPM values to epics PV
         '''
-        bpm = self.get_bpmdata()
+        bpm = self._get_bpmdata()
         
         pvlx = []
         pvly = []
@@ -261,27 +251,65 @@ class elegant_parser:
         caput_many(pvlx,pvlvalx) 
         caput_many(pvly,pvlvaly) 
 
-
     def broadcast_flag(self):
         # get watch channel
-        #with open("./halflinac.json","r") as f:
-        #    lte = json.load(f)
-        #lattice = lte["lattice"]
-        #print("ffshflkshglhlshgl")
+        with open("./halflinac.json","r") as f:
+           lte = json.load(f)
+        usedline = lte["usedline"] # 保证只有usedline里面的PRF才会被发布到ioc
+
         for key in self.lattice:
             #print(key)
-            if (self.lattice[key]["TYPE"] == "WATCH") and (self.lattice[key]["MODE"].lower() == "coord")  and (self.lattice[key]["DISABLE"] == '0') and ("PRF" in self.lattice[key]["NAME"]):
+            if (self.lattice[key]["TYPE"] == "WATCH") and (self.lattice[key]["MODE"].lower() == "coord")  and (self.lattice[key]["DISABLE"] == '0') \
+                and ("PRF" in self.lattice[key]["NAME"]) and (key in usedline):
+
                 self.lattice[key]["AP"] = "HALF:IN:FLAG:"+key+":image1:ArrayData:vm"
                 channel = self.lattice[key]["AP"]
                 #file_id =  lattice[key]["NAME"]
-
-                tmp = self._get_watch_image(key)
                 
-                # print("broadcasting flag image data ...")
-                caput(channel, tmp)
-                # print("broadcasting flag image data finished.")
+                if "ESA" in key:
+                    tmp = self._get_watch_image(key,"ESA")
+                else:
+                    tmp = self._get_watch_image(key)
 
-    def _get_watch_image(self, file_id):
+                caput(channel, tmp)
+
+
+    def _get_bpmdata(self):
+        tmp = sdds.SDDS(0)
+        
+        tmp.load('./elegant/one.bpmcen')
+        colname = tmp.columnName
+        data    = tmp.columnData
+
+        out = {}
+        cnt=0
+        for j in colname:
+            out[j]=data[cnt][0]
+            cnt = cnt+1
+        
+        bpm = nest_dict()
+        cnt = 0
+        for elem in out['ElementName']:
+            bpm[elem.upper()]['Cx'] = out['Cx'][cnt]
+            bpm[elem.upper()]['Cy'] = out['Cy'][cnt]
+            cnt = cnt+1
+        
+        return bpm
+
+    def _get_watch_image(self, file_id, index="normal"):
+        # the size of different flag 
+        if index == "normal": 
+            flag_pixel_vm = st.flag_pixel_vm
+            flag_pixel_width = st.flag_pixel_width
+        elif index == "ESA":
+            flag_pixel_vm = st.ESAflag_pixel_vm
+            flag_pixel_width = st.ESAflag_pixel_width
+        x1=-0.5*flag_pixel_vm[0]*flag_pixel_width*1e-3 #[m]
+        x2= 0.5*flag_pixel_vm[0]*flag_pixel_width*1e-3 #[m]
+        y1=-0.5*flag_pixel_vm[1]*flag_pixel_width*1e-3 #[m]
+        y2= 0.5*flag_pixel_vm[1]*flag_pixel_width*1e-3 #[m]                 
+        
+        # get the data
         #pha = np.loadtxt("./impz/fort."+file_id, skiprows=1)
         tmp = sdds.SDDS(0)
         # print(file_id)
@@ -290,52 +318,42 @@ class elegant_parser:
         tmpy = tmp.columnData[2][0]
         
 
-        # the real size of flag
-        # x1=-0.5*st.flag_pixel_machine[0]*st.flag_pixel_width*1e-3 #[m]
-        # x2= 0.5*st.flag_pixel_machine[0]*st.flag_pixel_width*1e-3 #[m]
-        # y1=-0.5*st.flag_pixel_machine[1]*st.flag_pixel_width*1e-3 #[m]
-        # y2= 0.5*st.flag_pixel_machine[1]*st.flag_pixel_width*1e-3 #[m]        
-        x1=-0.5*st.flag_pixel_vm[0]*st.flag_pixel_width*1e-3 #[m]
-        x2= 0.5*st.flag_pixel_vm[0]*st.flag_pixel_width*1e-3 #[m]
-        y1=-0.5*st.flag_pixel_vm[1]*st.flag_pixel_width*1e-3 #[m]
-        y2= 0.5*st.flag_pixel_vm[1]*st.flag_pixel_width*1e-3 #[m]
+        # 直接计算2D直方图
+        hist, xedges, yedges = np.histogram2d(
+            tmpx, tmpy, 
+            bins=[flag_pixel_vm[0], flag_pixel_vm[1]], 
+            range=[[x1, x2], [y1, y2]]
+        )
+        # 将结果转为一维数组
+        tmp = np.reshape(hist.transpose(), (np.size(hist),))
         
-        plt.figure()
-        pixel_vm = st.flag_pixel_vm
-        h = plt.hist2d(tmpx ,tmpy, bins=[pixel_vm[0],pixel_vm[1]],cmap=plt.cm.jet,range=[[x1,x2],[y1,y2]])
-        # plt.show(block=False)
-        # plt.pause(2)
-        tmp = np.reshape(h[0].transpose(),(np.size(h[0]),))  #change to 1d array
-        plt.close()  # 关闭图表，释放资源
-        #plt.figure()
-        #plt.subplot(1,2,1)
-        #h = plt.hist2d(pha[:,1],pha[:,3], bins=[pixel_vm[0],pixel_vm[1]],cmap=plt.cm.jet)
-        #plt.colorbar()
-        #plt.show()
-        #
-        ## extract the pixel data from the plot
-        #tmp = np.reshape(h[0].transpose(),(np.size(h[0]),))  #change to 1d array
-        #
-        ## reprode the pixel image
-        #imag = np.reshape(tmp,(pixel_vm[1],pixel_vm[0]))
-        #data_max = np.max(imag)
-        #vnorm = mpl.colors.Normalize(vmin=0, vmax=data_max)        
-        #plt.subplot(1,2,2)
-        #plt.imshow(imag, norm=vnorm, cmap="jet", origin="lower")
-        #plt.colorbar()
-        #plt.show()
+        # plt.figure()
+        
+        # h = plt.hist2d(tmpx ,tmpy, bins=[flag_pixel_vm[0],flag_pixel_vm[1]],cmap=plt.cm.jet,range=[[x1,x2],[y1,y2]])
+        # # plt.show(block=False)
+        # # plt.pause(2)
+        # tmp = np.reshape(h[0].transpose(),(np.size(h[0]),))  #change to 1d array
+        # plt.close()  # 关闭图表，释放资源
+        # #plt.figure()
+        # #plt.subplot(1,2,1)
+        # #h = plt.hist2d(pha[:,1],pha[:,3], bins=[pixel_vm[0],pixel_vm[1]],cmap=plt.cm.jet)
+        # #plt.colorbar()
+        # #plt.show()
+        # #
+        # ## extract the pixel data from the plot
+        # #tmp = np.reshape(h[0].transpose(),(np.size(h[0]),))  #change to 1d array
+        # #
+        # ## reprode the pixel image
+        # #imag = np.reshape(tmp,(pixel_vm[1],pixel_vm[0]))
+        # #data_max = np.max(imag)
+        # #vnorm = mpl.colors.Normalize(vmin=0, vmax=data_max)        
+        # #plt.subplot(1,2,2)
+        # #plt.imshow(imag, norm=vnorm, cmap="jet", origin="lower")
+        # #plt.colorbar()
+        # #plt.show()
         
         return tmp
-    def _add_channel(self):
-        for key in self.lattice:
-            if self.lattice[key]["TYPE"] == "QUAD":
-                # add PV attibute
-                self.lattice[key]["AP"] = "HALF:IN:QUAD:"+key+":K1"
-                
-            elif self.lattice[key]["TYPE"] in ["CSRCSBEND", "CSBEND", "BEND", "SBEN", "SBEND"]:
-                self.lattice[key]["AP"] = "HALF:IN:BEND:"+key+":ANGLE"
-            
-            # RFCW, COR,... and so on
+
 
 
 if __name__=='__main__':

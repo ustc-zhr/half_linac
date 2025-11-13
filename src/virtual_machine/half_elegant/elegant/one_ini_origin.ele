@@ -1,7 +1,6 @@
 &run_setup
   lattice                  = lattice_ini.lte ,  
 !  use_beamline             = ALL,
-!  use_beamline             = ESA,
   use_beamline             = USEDLINE
   combine_bunch_statistics = 0,
   default_order            = 3,

@@ -369,7 +369,7 @@ p, li { white-space: pre-wrap; }
   <customwidget>
    <class>MplWidget</class>
    <extends>QWidget</extends>
-   <header>mplwidget.h</header>
+   <header location="global">mplwidget.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

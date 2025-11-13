@@ -1,17 +1,17 @@
 &run_setup
-  lattice                  = lattice_ini.lte ,  
+  lattice                  = lattice.lte ,  
 !  use_beamline             = ALL,
-!  use_beamline             = ESA,
-  use_beamline             = USEDLINE
+  use_beamline             = ESAlocal,
+!  use_beamline             = USEDLINE
   combine_bunch_statistics = 0,
   default_order            = 3,
   random_number_seed       = 9876543210,
-  p_central                = 223.4028,         !E=114.16MeV
+  p_central                = 11223.4028,         !E=114.16MeV
   always_change_p0         = 1,
   tracking_updates         = 1
 
 ! print_statistics         = 1,
-! output                   = %s.out,
+ output                   = %s.out,
   centroid                = %s.cen,
 ! sigma                    = %s.sig,
 ! final                    = %s.fin,
@@ -53,9 +53,10 @@
 &end
 
 &matrix_output
-   SDDS_output = %s.mat,
+!   SDDS_output = %s.mat,
+   printout = %s.mpr
    individual_matrices = 0,
-   full_matrix_only = 1
+!   full_matrix_only = 1
 &end
 
 !use less particles for test
@@ -72,7 +73,7 @@
 
 &bunched_beam
    !bunch = %s.bun,
-   n_particles_per_bunch = 10000
+   n_particles_per_bunch = 1
 
    emit_nx = 10e-6
    emit_ny = 10e-6

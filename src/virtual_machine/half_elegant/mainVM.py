@@ -22,6 +22,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.shutdown_VM.clicked.connect(self.stopvm)
         self.static_err.clicked.connect(self.staticerr)
         self.err_off.clicked.connect(self.erroff)
+        self.pushButton_ESAline.clicked.connect(self.ESAline)
 
         # default value
         self.QDXDYvalue.setText('0') # um
@@ -29,6 +30,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.start_vm.setEnabled(False) 
         self.shutdown_VM.setEnabled(False)
+        self.pushButton_ESAline.setEnabled(False)
     # ---------------
     # softIOC
     # ---------------    
@@ -66,7 +68,26 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
         self.subprocesses.append(proc)
 
+        self.pushButton_ESAline.setEnabled(True)
         self.shutdown_VM.setEnabled(True)
+
+    # ---------------
+    # ESA line
+    # --------------- 
+    def ESAline(self):
+        self.textEdit.append('transfer to ESA line')
+
+        # 跨平台启动进程（确保进程组独立）
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+        proc = Popen(
+            ["python3", "transfer_ESAline.py"],
+            cwd=st.rootpath + "/src/virtual_machine/half_elegant",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+
     # ---------------
     # err
     # --------------- 
@@ -91,18 +112,20 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.QK1JITTER.setText('0')
         Popen("python3 err_gene_VM.py err_off",cwd=st.rootpath+"/src/virtual_machine/half_elegant",shell=True)
 
-     # shutdown the vm
+    # --------------- 
+    # shutdown the vm
+    # --------------- 
     def stopvm(self):
         self.textEdit.append('shutdown vm')
-        self.stop_subpro()
+        self._stop_subpro()
 
     # windows close event
     def closeEvent(self, event):
-        self.stop_subpro()
+        self._stop_subpro()
         event.accept()
 
     # stop function：close the subprocesses
-    def stop_subpro(self):
+    def _stop_subpro(self):
         for pro in self.subprocesses:
             try:
                 pro.send_signal(signal.SIGTERM)

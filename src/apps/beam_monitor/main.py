@@ -95,7 +95,7 @@ class myWindow(QWidget,Ui_Form):
 
         if sys.argv[1] == "real":
             self.pv = pv
-            self.pixel=st.flag_pixel_machine
+            self.pixel=st.flag_pixel
 
             expoTime = caget(self.expoTimePV)
             self.lineEdit.setText(str(expoTime))

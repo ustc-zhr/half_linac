@@ -65,13 +65,6 @@
         </item>
         <item row="1" column="1">
          <layout class="QGridLayout" name="gridLayout_5">
-          <item row="0" column="1">
-           <widget class="QPushButton" name="shutdown_VM">
-            <property name="text">
-             <string>shutdown VM</string>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="0">
            <widget class="QLabel" name="label_11">
             <property name="text">
@@ -79,9 +72,23 @@
             </property>
            </widget>
           </item>
+          <item row="0" column="1">
+           <widget class="QPushButton" name="shutdown_VM">
+            <property name="text">
+             <string>shutdown VM</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QPushButton" name="pushButton_ESAline">
+            <property name="text">
+             <string>transfer to ESA</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
-        <item row="2" column="1">
+        <item row="3" column="1">
          <spacer name="verticalSpacer">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
@@ -94,14 +101,14 @@
           </property>
          </spacer>
         </item>
-        <item row="3" column="0">
+        <item row="4" column="0">
          <widget class="QLabel" name="label_2">
           <property name="text">
            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:10pt; font-weight:600; color:#aa0000;&quot;&gt;ADD ERROR&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
           </property>
          </widget>
         </item>
-        <item row="3" column="1">
+        <item row="4" column="1">
          <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,0,0">
           <item row="0" column="0">
            <widget class="QPushButton" name="static_err">
@@ -119,7 +126,7 @@
           </item>
          </layout>
         </item>
-        <item row="4" column="1">
+        <item row="5" column="1">
          <layout class="QGridLayout" name="gridLayout">
           <item row="0" column="0">
            <widget class="QLabel" name="label_6">
@@ -137,7 +144,7 @@
           </item>
          </layout>
         </item>
-        <item row="5" column="1">
+        <item row="6" column="1">
          <layout class="QHBoxLayout" name="horizontalLayout">
           <item>
            <layout class="QGridLayout" name="gridLayout_4" columnstretch="1,1,1,1,1,1">
@@ -206,7 +213,7 @@
           </item>
          </layout>
         </item>
-        <item row="6" column="1">
+        <item row="7" column="1">
          <spacer name="verticalSpacer_2">
           <property name="orientation">
            <enum>Qt::Vertical</enum>

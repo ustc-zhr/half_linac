@@ -70,13 +70,10 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_7.clicked.connect(self.full_VM)
 
     def simply_VM(self):
-        # self.paras = self.get_setting()
+        """to simplify the lattice in VM for accelerate the testing process (only considering from Q to flag )"""
         
         quad = self.comboBox.currentText()
         flag = self.comboBox_4.currentText()
-
-        # quad = self.paras.quad_name
-        # flag = self.paras.flag_name
 
         with open(jsonpath,"r") as f:
             lte  = json.load(f)
@@ -86,6 +83,8 @@ class myWindow(QWidget,Ui_Form):
         usedline = lte["lattice"]["ALL"]["LINE"]
 
         # pre the input beam before entrance of quad
+        # ------------------------------------------
+        # add a watch
         prewatch = {}
         prewatch["NAME"] = "PREW"
         prewatch["TYPE"] = "WATCH"
@@ -107,7 +106,8 @@ class myWindow(QWidget,Ui_Form):
         with open(jsonpath,"w") as f:
             f.write(json.dumps(ltepre,indent=4))
         
-        time.sleep(st.runtime_machine)
+        # wait the vm run
+        time.sleep(st.runtime_vmmachine)
         print("pre.bun before ",quad," is ready")
 
         # get the energy before quad
@@ -116,7 +116,7 @@ class myWindow(QWidget,Ui_Form):
         tmppCentral = tmp.columnData[11][0][-1]
 
         # simply VM
-        # ================
+        # ---------
         contl    = lte  ["control"]
         lattice  = lte  ["lattice"]
         usedline = lte  ["usedline"]
@@ -142,7 +142,7 @@ class myWindow(QWidget,Ui_Form):
             f.write(json.dumps(lte,indent=4))
         
         time.sleep(5)
-        print("simply VM (",quad,"-to-",flag,") is ready")
+        print("simply VM: (",quad,"-to-",flag,") is ready")
 
         return
     
@@ -829,7 +829,7 @@ class transfer:
         return twiss1
 
     def get_map(self, elem1, elem2, k1=None, seq="exit2exit"):
-        # generate ImpactZ.in with chosen lattice 
+        # 
         # ==========================
         # get the lattice element line within (elem1,elem2)
 
