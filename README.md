@@ -4,6 +4,10 @@
 
 # 每周开发进度
 
+##### 2025-11-13-Zhanghaoran
+
+- 增加了新功能：`energy spectrum`
+
 ##### 2025-9-25-Zhanghaoran
 
 - `optimization`
