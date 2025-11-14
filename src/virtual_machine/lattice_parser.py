@@ -40,10 +40,11 @@ class lattice_parser:
         # get the tracking line names in: ALL: line=(elem1, ... )
         trackline_names_list = lattice[self.lineName]['LINE'].split(',')
 
-        # expand it
+        # expand it  -> list
         # lattice["ALL"]["LINE"] =  self._expandline(trackline_names_list, lines) 
-        lattice[self.lineName]["LINE"] =  self._expandline(trackline_names_list, lines)
-        trackline_names_list = lattice[self.lineName]["LINE"] 
+        # lattice[self.lineName]["LINE"] =  self._expandline(trackline_names_list, lines)
+        # trackline_names_list = lattice[self.lineName]["LINE"] 
+        trackline_names_list = self._expandline(trackline_names_list, lines)
         
         return lattice, trackline_names_list
                 

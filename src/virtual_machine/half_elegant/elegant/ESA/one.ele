@@ -1,12 +1,12 @@
 &run_setup
   lattice                  = lattice.lte ,  
 !  use_beamline             = ALL,
-  use_beamline             = ESAlocal,
+  use_beamline             = ESA,
 !  use_beamline             = USEDLINE
   combine_bunch_statistics = 0,
   default_order            = 3,
   random_number_seed       = 9876543210,
-  p_central                = 11223.4028,         !E=114.16MeV
+  p_central                = 223.4028,         !E=114.16MeV
   always_change_p0         = 1,
   tracking_updates         = 1
 
@@ -14,7 +14,7 @@
  output                   = %s.out,
   centroid                = %s.cen,
 ! sigma                    = %s.sig,
-! final                    = %s.fin,
+ final                    = %s.fin,
 !  parameters              = %s.param,
 ! magnets                  = %s.mag,
   bpm_centroid             = %s.bpmcen
@@ -31,7 +31,7 @@
   filename                 = %s.twi,
   matched                  = 0,
   beta_x                   = 39,    
-  beta_y                   = 39,
+  beta_y                   = 9,
   alpha_x                  = 0.73,
   alpha_y                  = 0.73,
   concat_order             = 1,
@@ -73,7 +73,7 @@
 
 &bunched_beam
    !bunch = %s.bun,
-   n_particles_per_bunch = 1
+   n_particles_per_bunch = 10000
 
    emit_nx = 10e-6
    emit_ny = 10e-6

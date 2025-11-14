@@ -7,7 +7,7 @@ clear all;close all;clc
 %        x              xp             y              yp             t              p       
 %        m                             m                             s           m$be$nc  
 
-data1 = importdata('beam6D_start.DAT');
+% data1 = importdata('beam6D_start.DAT');
 % sigmx1 = mean(data1.data(:,1));
 % sigmxp1 = mean(data1.data(:,2));
 % number1 = length(data1.data(:,1));
@@ -19,34 +19,34 @@ data2 = importdata('beam6D_middle.DAT');
 % data3(find(data3(:,1)>6e-3),:)=[];
 %% plot
 %before
-emittancex = sqrt(mean(data1(:,1).^2)*mean(data1(:,2).^2)-(mean(data1(:,1).*data1(:,2)))^2);
-emittancey = sqrt(mean(data1(:,3).^2)*mean(data1(:,4).^2)-(mean(data1(:,3).*data1(:,4)))^2);
-emittancex_nor = emittancex*(mean(data1(:,6)))*sqrt(1-1/(mean(data1(:,6)))^2);
-emittancey_nor = emittancey*(mean(data1(:,6)))*sqrt(1-1/(mean(data1(:,6)))^2); 
-figure;
-subplot(2,2,1)
-binscater_projection(data1(:,1)*1000,data1(:,2)*1000,250,250,'\sigma_x','\sigma_{x^{\prime}}')
-colorbar off
-set(gca,'fontname','arial','fontsize',14,'linewidth',2)
-xlabel('x (mm)');ylabel('x^{\prime} (mrad)');
-text(min(data1(:,1)*1000)+0.05*(max(data1(:,1)*1000)-min(data1(:,1)*1000)),max(data1(:,2)*1000)-0.05*(max(data1(:,2)*1000)-min(data1(:,2)*1000)),['\epsilon_{xn}=',num2str(emittancex_nor*1e6)],'fontname','arial','fontsize',12)
-subplot(2,2,2)
-binscater_projection(data1(:,3)*1000,data1(:,4)*1000,250,250,'\sigma_y','\sigma_{y^{\prime}}')
-colorbar off
-set(gca,'fontname','arial','fontsize',14,'linewidth',2)
-xlabel('y (mm)');ylabel('y^{\prime} (mrad)');
-text(min(data1(:,3)*1000)+0.05*(max(data1(:,3)*1000)-min(data1(:,3)*1000)),max(data1(:,4)*1000)-0.05*(max(data1(:,4)*1000)-min(data1(:,4)*1000)),['\epsilon_{yn}=',num2str(emittancey_nor*1e6)],'fontname','arial','fontsize',12)
-subplot(2,2,3)
-binscater_projection(data1(:,1)*1000,data1(:,3)*1000,250,250,'\sigma_x','\sigma_y')
-colorbar off
-set(gca,'fontname','arial','fontsize',14,'linewidth',2)
-xlabel('x (mm)');ylabel('y (mm)');
-subplot(2,2,4);
-binscater_projection(data1(:,5)*1e12,data1(:,6),150,150,'\sigma_t','\sigma_{\beta\gamma}')
-colorbar off
-set(gca,'fontname','arial','fontsize',14,'linewidth',2)
-xlabel('t (ps)');ylabel('\beta\gamma');
-set(gcf,'unit','centimeters','position',[10 2 28 20]);
+% emittancex = sqrt(mean(data1(:,1).^2)*mean(data1(:,2).^2)-(mean(data1(:,1).*data1(:,2)))^2);
+% emittancey = sqrt(mean(data1(:,3).^2)*mean(data1(:,4).^2)-(mean(data1(:,3).*data1(:,4)))^2);
+% emittancex_nor = emittancex*(mean(data1(:,6)))*sqrt(1-1/(mean(data1(:,6)))^2);
+% emittancey_nor = emittancey*(mean(data1(:,6)))*sqrt(1-1/(mean(data1(:,6)))^2); 
+% figure;
+% subplot(2,2,1)
+% binscater_projection(data1(:,1)*1000,data1(:,2)*1000,250,250,'\sigma_x','\sigma_{x^{\prime}}')
+% colorbar off
+% set(gca,'fontname','arial','fontsize',14,'linewidth',2)
+% xlabel('x (mm)');ylabel('x^{\prime} (mrad)');
+% text(min(data1(:,1)*1000)+0.05*(max(data1(:,1)*1000)-min(data1(:,1)*1000)),max(data1(:,2)*1000)-0.05*(max(data1(:,2)*1000)-min(data1(:,2)*1000)),['\epsilon_{xn}=',num2str(emittancex_nor*1e6)],'fontname','arial','fontsize',12)
+% subplot(2,2,2)
+% binscater_projection(data1(:,3)*1000,data1(:,4)*1000,250,250,'\sigma_y','\sigma_{y^{\prime}}')
+% colorbar off
+% set(gca,'fontname','arial','fontsize',14,'linewidth',2)
+% xlabel('y (mm)');ylabel('y^{\prime} (mrad)');
+% text(min(data1(:,3)*1000)+0.05*(max(data1(:,3)*1000)-min(data1(:,3)*1000)),max(data1(:,4)*1000)-0.05*(max(data1(:,4)*1000)-min(data1(:,4)*1000)),['\epsilon_{yn}=',num2str(emittancey_nor*1e6)],'fontname','arial','fontsize',12)
+% subplot(2,2,3)
+% binscater_projection(data1(:,1)*1000,data1(:,3)*1000,250,250,'\sigma_x','\sigma_y')
+% colorbar off
+% set(gca,'fontname','arial','fontsize',14,'linewidth',2)
+% xlabel('x (mm)');ylabel('y (mm)');
+% subplot(2,2,4);
+% binscater_projection(data1(:,5)*1e12,data1(:,6),150,150,'\sigma_t','\sigma_{\beta\gamma}')
+% colorbar off
+% set(gca,'fontname','arial','fontsize',14,'linewidth',2)
+% xlabel('t (ps)');ylabel('\beta\gamma');
+% set(gcf,'unit','centimeters','position',[10 2 28 20]);
 
 
 %middle

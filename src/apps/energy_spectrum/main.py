@@ -1,23 +1,27 @@
-from gui import Ui_MainWindow
+
 import sys
-from subprocess import Popen
-from half_linac import setup as st
-from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QHBoxLayout, QWidget
-from PyQt5.QtCore import QTimer
-from epics import caget, caget_many, caput, caput_many, PV
 import time
 import numpy as np
-from PyQt5.QtCore import QThread
+import os
+import sdds
+import math
+import json
+
+from subprocess import Popen
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
-import epics
-import math
 from scipy.interpolate import UnivariateSpline
+from scipy.optimize import curve_fit
+from epics import caget, caget_many, caput, caput_many, PV
 
+from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QHBoxLayout, QWidget
+from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QThread
+
+from gui import Ui_MainWindow
 import half_linac.setup as st
-
 from half_linac.src.apps.energy_spectrum.get_energy0 import get_energy0
+from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 
 
 class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
@@ -217,7 +221,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # current_ES_Bend = caget("HALF:IN:ESA:PRF01:CurrentSet") # A
         # current_ES_Bend = 100
         # energy0 = get_energy0(current_ES_Bend) # MeV
-        energy0 = 2200 # MeV  若提供了相关的物理量在ioc中 可以直接更改
+        if self.machine_type == "vm":
+            energy0 = 2200 # MeV  
+        else:
+            # 若提供了相关的物理量在ioc中 可以直接caget获取
+            pass
 
         # dispersion calculation and display 
         # self.cal_disp()
@@ -249,23 +257,62 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def cal_disp(self):
         # 根据ESA的弯铁SM(L, angle)和Q铁QE01 QE02 QE03(k,L) 漂移段(L)参数计算eta    变量仅为Q_k
-        # 可以用模型计算 or elegant计算
-        # QE01_k = caget(st.pv_prefix_bend + "QE01" + st.pv_suffix_bend)
-        # QE02_k = caget(st.pv_prefix_bend + "QE02" + st.pv_suffix_bend)
-        # QE03_k = caget(st.pv_prefix_bend + "QE03" + st.pv_suffix_bend)
-        QE01_k = 0
-        QE02_k = 0
-        QE03_k = 0
-        self.eta_flag = self._disp_model(QE01_k, QE01_k, QE01_k)
+        # 采用elegant计算
 
-        self.lineEdit_eta_ESAflag.setText(str(self.eta_flag))
+        # 获取当前ESA三块Q铁强度
+        QE01_k = caget(st.pv_prefix_quad + "QE01" + st.pv_suffix_quad)
+        QE02_k = caget(st.pv_prefix_quad + "QE02" + st.pv_suffix_quad)
+        QE03_k = caget(st.pv_prefix_quad + "QE03" + st.pv_suffix_quad)
 
+        #
+        lattice_file = st.rootpath+'/src/virtual_machine/half_elegant/elegant/lattice_ini.lte'
+        esa_ini_ele_file    = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa_ini.ele' 
+        line_name    = 'ESAlocal' #'use_beamline'
 
-    def _disp_model(self, Q1, Q2, Q3):
+        esajson_path        = st.rootpath+"/src/virtual_machine/half_elegant/esa.json"
 
-        eta = 0.74842
-        return eta
+        esa_lte_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.lte'
+        esa_ele_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.ele'  
         
+
+        lte1 = elegant_parser(lattice_file, esa_ini_ele_file, line_name)
+        lte1.dump2json(esajson_path)
+        with open(esajson_path,"r") as f:
+            lte = json.load(f)
+        contl = lte["control"]
+        lattice  = lte["lattice"]
+
+        contl['run_setup']['lattice'] = 'esa.lte'
+        lattice['QE01']['K1'] = str(QE01_k)
+        lattice['QE02']['K1'] = str(QE02_k)
+        lattice['QE03']['K1'] = str(QE03_k)
+
+
+        lte["control"]  = contl
+        lte["lattice"]  = lattice
+
+        with open(esajson_path,"w") as f:
+            f.write(json.dumps(lte,indent=4))
+          
+        lte1.json2lte_ele(esa_lte_file,esa_ele_file,esajson_path)   
+
+        # run elegant 
+        # ==========================
+        cupath = os.getcwd()
+        os.chdir(st.rootpath+"/src/virtual_machine/half_elegant/elegant")
+        os.system("elegant esa.ele > esa.log")
+        os.chdir(cupath)
+        time.sleep(1)
+        
+        tmp = sdds.SDDS(0)
+        tmp.load(st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.mat')
+        list_R = [tmp.columnData[i][0][0] for i in range(12, 48)]
+        Rj = np.array(list_R).reshape(6,6)
+
+        self.eta_flag = Rj[0, -1] 
+        print('dispersion of ESA updates: ',self.eta_flag, 'm')
+
+        self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag,5)))
 
     def cal_twiss_disp(self):
         """calculate the twiss @ ESA flag according the twiss @ in"""
@@ -273,22 +320,84 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         alpha_in = self.doubleSpinBox_alpha_in.value() # 
         beta_in = self.doubleSpinBox_beta_in.value() # m
         emi_in = self.doubleSpinBox_emi_in.value()*1e-9 # m
+        start_element = self.comboBox_start_element.currentText() 
 
+        QE01_k = caget(st.pv_prefix_quad + "QE01" + st.pv_suffix_quad)
+        QE02_k = caget(st.pv_prefix_quad + "QE02" + st.pv_suffix_quad)
+        QE03_k = caget(st.pv_prefix_quad + "QE03" + st.pv_suffix_quad)
 
-        # pre the input @ in
+        if beta_in <= 0:
+            print("wrong beta in")
+            return
 
         # run ESA lattice 
+        #
+        lattice_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/lattice_ini.lte'
+        esa_ini_ele_file    = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa_ini.ele' 
+        line_name           = 'ESA' #'use_beamline'
+
+        esajson_path        = st.rootpath+"/src/virtual_machine/half_elegant/esa.json"
+
+        esa_lte_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.lte'
+        esa_ele_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.ele'
+
+        lte1 = elegant_parser(lattice_file, esa_ini_ele_file, line_name)
+        lte1.dump2json(esajson_path)
+        with open(esajson_path,"r") as f:
+            lte = json.load(f)
+        contl = lte["control"]
+        lattice  = lte["lattice"]
+        usedline = lte["usedline"]
+
+        lattice['QE01']['K1'] = str(QE01_k)
+        lattice['QE02']['K1'] = str(QE02_k)
+        lattice['QE03']['K1'] = str(QE03_k)
+
+        contl['run_setup']['lattice'] = 'esa.lte'
+        contl['twiss_output']['beta_x'] = str(beta_in)
+        contl['twiss_output']['alpha_x'] = str(alpha_in)
+
+        # map of entrance of elem1 => end
+        id1 = usedline.index(start_element)
+        scanline = usedline[id1:-1]
+
+        # update json with new lte and new control
+        lte["control"]  = contl
+        lte["lattice"]  = lattice
+        lte["usedline"] = scanline
+
+        with open(esajson_path,"w") as f:
+            f.write(json.dumps(lte,indent=4))
+        
+        lte1.json2lte_ele(esa_lte_file,esa_ele_file,esajson_path)   
+
+        # run elegant 
+        # ==========================
+        cupath = os.getcwd()
+        os.chdir(st.rootpath+"/src/virtual_machine/half_elegant/elegant")
+        os.system("elegant esa.ele > esa.log")
+        os.chdir(cupath)
+        time.sleep(1)
+        
+        tmp = sdds.SDDS(0)
+        tmp.load(st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.twi')
+        betax   = tmp.columnData[1][0][-1]
+        alphax  = tmp.columnData[2][0][-1]
+        eta     = tmp.columnData[4][0][-1]
 
         # results
-        self.alpha_flag = 0
-        self.beta_flag = 3.93628
-        self.emi_flag = 10e-6/(2200/0.511) # m
-        self.eta_flag = 0.74842 # m.
+        self.alpha_flag = alphax
+        self.beta_flag = betax
+        self.emi_flag = emi_in # m
 
-        self.lineEdit_alpha_ESAflag.setText(str(self.alpha_flag))
-        self.lineEdit_beta_ESAflag.setText(str(self.beta_flag))
+        self.eta_flag = eta # m.
+
+        print('cal results: beta=',self.beta_flag, 'm, alpha=',self.alpha_flag, 'eta=',self.eta_flag, ' m')
+
+        self.lineEdit_alpha_ESAflag.setText(str(round(self.alpha_flag,5)))
+        self.lineEdit_beta_ESAflag.setText(str(round(self.beta_flag,5)))
         # self.lineEdit_emi_ESAflag.setText(str(self.emi_flag*1e9))
-        self.lineEdit_eta_ESAflag.setText(str(self.eta_flag))
+        self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag)))
 
     def emit_withornot(self, state):
         if state:

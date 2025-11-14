@@ -377,7 +377,7 @@
                    </widget>
                   </item>
                   <item row="0" column="1">
-                   <widget class="QComboBox" name="comboBox">
+                   <widget class="QComboBox" name="comboBox_start_element">
                     <item>
                      <property name="text">
                       <string>QT02</string>
