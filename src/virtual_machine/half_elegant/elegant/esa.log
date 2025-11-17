@@ -1,4 +1,4 @@
-Running elegant at Fri Nov 14 20:53:11 2025
+Running elegant at Mon Nov 17 15:39:42 2025
 
 This is elegant 2022.1.0, Jun 21 2023, by M. Borland, J. Calvey, M. Carla', N. Carmignani, AJ Dick, Z. Duan, M. Ehrlichman, L. Emery, W. Guo, R. Lindberg, V. Sajaev, R. Soliday, Y.-P. Sun, C.-X. Wang, Y. Wang, Y. Wu, and A. Xiao.
 =====================================================================================
@@ -50,32 +50,6 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6150
     back_tracking = 0,
 &end
 Seeding random number generators
-computed value for QT02.L is 1.500000000000000e-01
-computed value for QT02.K1 is 1.402247000000000e+00
-computed value for DMTC1.L is 5.500000000000000e-01
-computed value for PRF06.DISABLE is 0
-computed value for DMTC2.L is 5.500000000000000e+00
-computed value for PRF07.DISABLE is 0
-computed value for DMTC3.L is 5.500000000000000e+00
-computed value for PRF08.DISABLE is 0
-computed value for DMTC4.L is 5.000000000000000e-01
-computed value for QT03.L is 1.500000000000000e-01
-computed value for QT03.K1 is -1.339706000000000e+00
-computed value for DMTD.L is 1.300000000000000e+00
-computed value for QT04.L is 1.500000000000000e-01
-computed value for QT04.K1 is 8.841496000000000e-01
-computed value for DMTE.L is 1.575000000000000e+00
-computed value for DMTE1.L is 2.000000000000000e-01
-computed value for PRF09.DISABLE is 1
-computed value for DMTE2.L is 2.000000000000000e-01
-computed value for FODO05.DISABLE is 1
-computed value for QHL1.L is 3.000000000000000e-01
-computed value for QHL1.K1 is 2.308226000000000e+00
-computed value for DHL1.L is 3.000000000000000e-01
-computed value for QHL2.L is 3.000000000000000e-01
-computed value for QHL2.K1 is -1.975459000000000e+00
-computed value for DHL2.L is 4.500000000000000e-01
-computed value for DQ0.L is 4.000000000000000e+00
 computed value for SM.L is 2.727100000000000e+00
 computed value for SM.ANGLE is 4.363323129985824e-01
 computed value for SM.E1 is 2.181661564992912e-01
@@ -98,8 +72,8 @@ computed value for DQ3.L is 5.000000000000000e-01
 computed value for QE03.L is 3.000000000000000e-01
 computed value for QE03.K1 is 0.000000000000000e+00
 computed value for DQ4.L is 4.200000000000000e+00
-length of beamline USEDLINE per pass: 3.045210000000000e+01 m
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6184
+length of beamline USEDLINE per pass: 9.327100000000000e+00 m
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6199
 &run_control
     n_steps = 1,
     bunch_frequency = 0.000000000000000e+00,
@@ -112,7 +86,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6184
     restrict_fiducialization = 1,
     reset_scattering_seed = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6184
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6199
 &twiss_output
     filename = %s.twi,
     matched = 0,
@@ -121,8 +95,8 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6184
     final_values_only = 0,
     statistics = 1,
     radiation_integrals = 0,
-    beta_x = 8.859999999999999e+01,
-    alpha_x = -1.620000000000000e+01,
+    beta_x = 3.900000000000000e+01,
+    alpha_x = 7.300000000000000e-01,
     eta_x = 0.000000000000000e+00,
     etap_x = 0.000000000000000e+00,
     beta_y = 3.900000000000000e+01,
@@ -150,15 +124,15 @@ final Twiss parameters (chromaticity valid for fully second-order calculation on
          beta          alpha           nu           eta          eta'       dnu/d(dp/p)   dbeta/(dp/p)     accept.
           m                          1/2pi           m                         1/2pi            m          mm-mrad
 --------------------------------------------------------------------------------------------------------------------
-  x:  3.932329e+00 -9.976982e+00  1.009660e+00  7.484211e-01 -1.910625e-01 -5.976473e-01 -2.207588e+02  0.000000e+00
-ave:  9.924628e+01  1.350542e+00                2.854845e-01  2.524447e-02
-min:  3.932329e+00 -2.778998e+02                0.000000e+00 -1.910625e-01
-max:  5.433522e+02  1.178609e+02                1.703734e+00  1.074916e+00
-  y:  7.603137e+02 -1.434028e+02  5.183105e-01  0.000000e+00  0.000000e+00  6.130002e-03 -1.176681e+03  0.000000e+00
-ave:  2.298383e+02 -1.200626e+01                0.000000e+00  0.000000e+00
-min:  6.319222e-02 -1.936822e+02                0.000000e+00  0.000000e+00
-max:  7.603137e+02  6.200590e+01                0.000000e+00  0.000000e+00
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
+  x:  1.661051e+01 -1.044030e+01  4.946997e-01  7.484211e-01 -1.910625e-01 -1.148436e-01 -1.646720e+02  0.000000e+00
+ave:  2.794610e+01  9.982669e-01                8.464726e-01  1.760071e-02
+min:  1.661051e+01 -3.565858e+01                5.855813e-01 -1.910625e-01
+max:  7.776517e+01  2.267124e+01                1.703734e+00  1.074916e+00
+  y:  1.112097e+02 -2.539349e+01  4.890900e-01  0.000000e+00  0.000000e+00 -5.133952e-02 -5.154922e+02  0.000000e+00
+ave:  2.822120e+01 -4.438229e+00                0.000000e+00  0.000000e+00
+min:  2.663429e-01 -2.539349e+01                0.000000e+00  0.000000e+00
+max:  1.112097e+02  1.719691e+01                0.000000e+00  0.000000e+00
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6278
 &matrix_output
     printout = {NULL},
     printout_order = 1,
@@ -176,8 +150,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
     start_from_occurence = 1,
     SDDS_output_match = {NULL},
 &end
-*** Warning: Some elements had no matrix. --- 6 elements had no matrix
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6278
 &error_control
     clear_error_settings = 1,
     summarize_error_settings = 0,
@@ -187,7 +160,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
 &end
 
 *** Cleared error settings
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6278
 &error
     name = *,
     exclude = {NULL},
@@ -209,7 +182,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
     sample_file_column = {NULL},
     sample_mode = {NULL},
 &end
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6278
 &bunched_beam
     bunch = {NULL},
     n_particles_per_bunch = 1,
@@ -254,7 +227,7 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
         0.000000000000000e+00, 0.000000000000000e+00,
     first_is_fiducial = 0,
 &end
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6278
 &track
     center_on_orbit = 0,
     center_momentum_also = 1,
@@ -268,28 +241,22 @@ statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6313
     check_beam_structure = 0,
     interrupt_file = %s.interrupt,
 &end
-8 matrices (re)computed
+3 matrices (re)computed
 Updating floor coordinates
 tracking step 1
 generating bunch 1
 tracking 1 particles
-14 Nov 25 20:53:11: This step establishes energy profile vs s (fiducial beam).
-14 Nov 25 20:53:11: Rf phases/references reset.
+17 Nov 25 15:39:42: This step establishes energy profile vs s (fiducial beam).
+17 Nov 25 15:39:42: Rf phases/references reset.
 Warning: you asked for CSR on CSBEND but didn't give a CHARGE element
 Post-tracking output completed.
-Tracking step completed   ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6458
+Tracking step completed   ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6278
 
 
 Updating floor coordinates
 Finished tracking.
 End of input data encountered.
-statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6458
-
-************************** Summary of warnings ****************************
-1 types of warnings were recorded:
-1* Some elements had no matrix.
-*****************************************************************************
-
+statistics:    ET:     00:00:00 CP:    0.00 BIO:0 DIO:0 PF:0 MEM:6278
 =====================================================================================
 Thanks for using elegant.  Please cite the following reference in your publications:
   M. Borland, "elegant: A Flexible SDDS-Compliant Code for Accelerator Simulation,"

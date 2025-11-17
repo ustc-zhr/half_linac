@@ -14,7 +14,7 @@ from scipy.interpolate import UnivariateSpline
 from scipy.optimize import curve_fit
 from epics import caget, caget_many, caput, caput_many, PV
 
-from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QHBoxLayout, QWidget
+from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QHBoxLayout, QWidget, QFileDialog
 from PyQt5.QtCore import QTimer
 from PyQt5.QtCore import QThread
 
@@ -42,12 +42,23 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # refresh plot with timer (the default frequency: 1Hz)
         self.setup_timer()
         
-        #function connect
+        #function: fig setup
         self.lineEdit_expotime.returnPressed.connect(self.set_expotime)
         self.lineEdit_refresh.returnPressed.connect(self.set_refresh)
+
+        #function: eta and twiss calculation 
         self.checkBox_emit.clicked.connect(lambda: self.emit_withornot(self.checkBox_emit.isChecked()))
         self.pushButton_cal_disp.clicked.connect(self.cal_disp)
         self.pushButton_cal_twiss_disp.clicked.connect(self.cal_twiss_disp)
+
+        #function: background image
+        self.pushButton_sapmles.clicked.connect(self.background_samples)
+        self.pushButton_save.clicked.connect(self.save_bgfile)
+        self.pushButton_load.clicked.connect(self.load_bgfile)
+        self.checkBox_bg.clicked.connect(lambda: self.bg_removeornot(self.checkBox_bg.isChecked()))
+
+        #function
+        self.slider_energy.valueChanged.connect(self.set_bend_quad)
         
         
         # 
@@ -57,13 +68,95 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         
         # ESA 入口处束团参数
         self.with_emit = False # 默认不考虑发射度
+        self.remove_bg = False # 默认不去背景
 
         self.beta_flag = 0
         self.emi_flag = 0
         self.eta_flag = 0
-        # self.eta_flag = 0.74842 # design value
+        # 
         self.cal_disp()
         self.fit_method = "direct"
+
+    def set_bend_quad(self):
+        """update the energy value according to slider position"""
+        slider_value = self.slider_energy.value()
+        self.label_sliderenergy.setText(str(slider_value))
+
+        # # get current bend Q
+        # BEND_energy = caget("HALF:IN:PRFESA:EnergySet") # MeV
+        # QE01_k = caget(st.pv_prefix_quad + "QE01" + st.pv_suffix_quad)
+        # QE02_k = caget(st.pv_prefix_quad + "QE02" + st.pv_suffix_quad)
+        # QE03_k = caget(st.pv_prefix_quad + "QE03" + st.pv_suffix_quad)
+
+        # # update bend Q
+
+
+
+
+
+
+    def background_samples(self):
+        """sample background image and subtract later"""
+        n_samples = int(self.lineEdit_samples.text())
+        print(f"sampling {n_samples} background images...")
+        bg_images = []
+        for i in range(n_samples):
+            time.sleep(1) # wait for PV update
+            tmp = self.flag_pv_obj.get()
+            data_ini = list(map(float, tmp))
+            data = np.reshape(data_ini,(self.flag_pixel[1],self.flag_pixel[0])) # 注意shape顺序，先y后x
+            bg_images.append(data)
+        self.bg_image = np.mean(bg_images, axis=0)
+        print("background sampling done.")
+
+        colormap = self.comboBox_colormap.currentText() 
+
+        self.background_plot.axes.clear()
+        self.background_plot.axes.imshow(self.bg_image,cmap=colormap,origin="lower",extent=self.extent,aspect="auto")
+        self.background_plot.axes.set_xlabel("x (mm)")
+        self.background_plot.axes.set_ylabel("y (mm)")
+        self.background_plot.axes.set_xlim(self.xlim)
+        self.background_plot.axes.set_ylim(self.ylim)
+
+        self.background_plot.canvas.draw()
+    
+    def save_bgfile(self):
+        """save the background image to a file"""
+        options = QFileDialog.Options()
+        filePath, _ = QFileDialog.getSaveFileName(self,"Save Background Image","","NumPy Files (*.npy);;All Files (*)", options=options)
+        if self.bg_image is None:
+            print("No background image to save!")
+            return
+        if filePath:
+            np.save(filePath, self.bg_image)
+            print(f"background image saved to {filePath}")
+    
+    def load_bgfile(self):
+        """load the background image from a file"""
+        options = QFileDialog.Options()
+        filePath, _ = QFileDialog.getOpenFileName(self,"Load Background Image","","NumPy Files (*.npy);;All Files (*)", options=options)
+        if filePath:
+            self.bg_image = np.load(filePath)
+            print(f"background image loaded from {filePath}")
+
+            self.background_plot.axes.clear()
+            colormap = self.comboBox_colormap.currentText() 
+            self.background_plot.axes.imshow(self.bg_image,cmap=colormap,origin="lower",extent=self.extent,aspect="auto")
+            self.background_plot.axes.set_xlabel("x (mm)")
+            self.background_plot.axes.set_ylabel("y (mm)")
+            self.background_plot.axes.set_xlim(self.xlim)
+            self.background_plot.axes.set_ylim(self.ylim)
+
+            self.background_plot.canvas.draw()
+
+    def bg_removeornot(self, state):
+        """decide whether to remove background or not"""
+        if state:
+            self.remove_bg = True
+            print("background removal is ON")
+        else:
+            self.remove_bg = False
+            print("background removal is OFF")
 
 
     def init_ESAflag(self):
@@ -124,7 +217,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         tmp = self.flag_pv_obj.get()
         data_ini = list(map(float, tmp))
         data = np.reshape(data_ini,(self.flag_pixel[1],self.flag_pixel[0])) # 注意shape顺序，先y后x
-        
+        # subtract background if needed
+        if self.remove_bg == True:
+            data = data - self.bg_image
+            data[data<0] = 0  # 防止负值出现
+
         # plot the image
         self.ESAflag_image.axes.imshow(data,cmap=colormap,origin="lower",extent=self.extent,aspect="auto")
 
@@ -397,7 +494,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.lineEdit_alpha_ESAflag.setText(str(round(self.alpha_flag,5)))
         self.lineEdit_beta_ESAflag.setText(str(round(self.beta_flag,5)))
         # self.lineEdit_emi_ESAflag.setText(str(self.emi_flag*1e9))
-        self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag)))
+        self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag,5)))
 
     def emit_withornot(self, state):
         if state:
@@ -417,7 +514,6 @@ if __name__ == '__main__':
     window.show()
     sys.exit(app.exec_())
     
-    # window.plot_beamprofile()
     
     
 

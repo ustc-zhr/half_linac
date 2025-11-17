@@ -18,9 +18,9 @@
 &twiss_output
     filename = %s.twi,
     matched = 0,
-    beta_x = 88.6,
+    beta_x = 39,
     beta_y = 39,
-    alpha_x = -16.2,
+    alpha_x = 0.73,
     alpha_y = 0.73,
     concat_order = 1,
     statistics = 1,

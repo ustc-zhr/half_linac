@@ -61,34 +61,113 @@
             </property>
            </widget>
           </item>
-         </layout>
-        </item>
-        <item row="1" column="1">
-         <layout class="QGridLayout" name="gridLayout_5">
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_11">
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
+          <item row="1" column="1">
            <widget class="QPushButton" name="shutdown_VM">
             <property name="text">
              <string>shutdown VM</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
-           <widget class="QPushButton" name="pushButton_ESAline">
-            <property name="text">
-             <string>transfer to ESA</string>
-            </property>
-           </widget>
-          </item>
          </layout>
         </item>
-        <item row="3" column="1">
+        <item row="1" column="1">
+         <widget class="QFrame" name="frame">
+          <property name="frameShape">
+           <enum>QFrame::StyledPanel</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Raised</enum>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_3">
+           <item>
+            <layout class="QGridLayout" name="gridLayout_5">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_11">
+               <property name="text">
+                <string/>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QComboBox" name="comboBox_simply_start">
+               <item>
+                <property name="text">
+                 <string>QL27</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>QT01</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>QT02</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>QL15</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>QL16</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QComboBox" name="comboBox_simply_end">
+               <item>
+                <property name="text">
+                 <string>PRF04</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>PRF06</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>PRF07</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>PRF08</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item row="2" column="2">
+              <widget class="QPushButton" name="pushButton_simply_VM">
+               <property name="text">
+                <string>simply VM</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QPushButton" name="pushButton_ESAline">
+               <property name="text">
+                <string>transfer to ESA line</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="2">
+              <widget class="QPushButton" name="pushButton_FULLline">
+               <property name="text">
+                <string>back to Origin line</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="2" column="1">
          <spacer name="verticalSpacer">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
@@ -101,14 +180,14 @@
           </property>
          </spacer>
         </item>
-        <item row="4" column="0">
+        <item row="3" column="0">
          <widget class="QLabel" name="label_2">
           <property name="text">
            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:10pt; font-weight:600; color:#aa0000;&quot;&gt;ADD ERROR&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
           </property>
          </widget>
         </item>
-        <item row="4" column="1">
+        <item row="3" column="1">
          <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,0,0">
           <item row="0" column="0">
            <widget class="QPushButton" name="static_err">
@@ -126,7 +205,7 @@
           </item>
          </layout>
         </item>
-        <item row="5" column="1">
+        <item row="4" column="1">
          <layout class="QGridLayout" name="gridLayout">
           <item row="0" column="0">
            <widget class="QLabel" name="label_6">
@@ -144,7 +223,7 @@
           </item>
          </layout>
         </item>
-        <item row="6" column="1">
+        <item row="5" column="1">
          <layout class="QHBoxLayout" name="horizontalLayout">
           <item>
            <layout class="QGridLayout" name="gridLayout_4" columnstretch="1,1,1,1,1,1">
@@ -213,7 +292,7 @@
           </item>
          </layout>
         </item>
-        <item row="7" column="1">
+        <item row="6" column="1">
          <spacer name="verticalSpacer_2">
           <property name="orientation">
            <enum>Qt::Vertical</enum>

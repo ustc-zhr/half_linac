@@ -23,6 +23,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.static_err.clicked.connect(self.staticerr)
         self.err_off.clicked.connect(self.erroff)
         self.pushButton_ESAline.clicked.connect(self.ESAline)
+        self.pushButton_simply_VM.clicked.connect(self.simply_VM)
+        self.pushButton_FULLline.clicked.connect(self.back_FULL)
 
         # default value
         self.QDXDYvalue.setText('0') # um
@@ -89,6 +91,38 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.subprocesses.append(proc)
 
     # ---------------
+    # simply VM
+    # --------------- 
+    def simply_VM(self):
+        self.textEdit.append('simplify the VM lattice')
+        ele_start = self.comboBox_simply_start.currentText()
+        ele_end   = self.comboBox_simply_end.currentText()
+
+        # 跨平台启动进程（确保进程组独立）
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+        proc = Popen(
+            ["python3", "simply_VM.py", ele_start, ele_end],
+            cwd=st.rootpath + "/src/virtual_machine/half_elegant",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+    def back_FULL(self):
+        self.textEdit.append('back to FULL line')
+
+        # 跨平台启动进程（确保进程组独立）
+        kwargs = {}
+        kwargs["start_new_session"] = True  # Unix: 新会话组
+        proc = Popen(
+            ["python3", "full_VM.py"],
+            cwd=st.rootpath + "/src/virtual_machine/half_elegant",
+            shell=False,  # 避免 shell 进程干扰
+            **kwargs
+        )
+        self.subprocesses.append(proc)
+
+    # ---------------
     # err
     # --------------- 
     # add err
@@ -111,6 +145,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.QDXDYvalue.setText('0')
         self.QK1JITTER.setText('0')
         Popen("python3 err_gene_VM.py err_off",cwd=st.rootpath+"/src/virtual_machine/half_elegant",shell=True)
+        
 
     # --------------- 
     # shutdown the vm
