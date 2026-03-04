@@ -21,8 +21,11 @@ from PyQt5.QtCore import QThread
 from gui import Ui_MainWindow
 import half_linac.setup as st
 from half_linac.src.apps.energy_spectrum.get_energy0 import get_energy0
+from half_linac.src.apps.energy_spectrum.esa_auto_tuner import ESA_AutoTuner
+
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 
+# 会使用到VM计算η和twiss (不具有一般性)
 
 class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     """
@@ -57,9 +60,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.pushButton_load.clicked.connect(self.load_bgfile)
         self.checkBox_bg.clicked.connect(lambda: self.bg_removeornot(self.checkBox_bg.isChecked()))
 
-        #function
+        #function: tune energy
         self.slider_energy.valueChanged.connect(self.set_bend_quad)
-        
+        self.pushButton_autoFind.clicked.connect(self.run_esa_auto_tune)
+
         
         # 
         self.colorbar = None
@@ -76,22 +80,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # 
         self.cal_disp()
         self.fit_method = "direct"
-
-    def set_bend_quad(self):
-        """update the energy value according to slider position"""
-        slider_value = self.slider_energy.value()
-        self.label_sliderenergy.setText(str(slider_value))
-
-        # # get current bend Q
-        # BEND_energy = caget("HALF:IN:PRFESA:EnergySet") # MeV
-        # QE01_k = caget(st.pv_prefix_quad + "QE01" + st.pv_suffix_quad)
-        # QE02_k = caget(st.pv_prefix_quad + "QE02" + st.pv_suffix_quad)
-        # QE03_k = caget(st.pv_prefix_quad + "QE03" + st.pv_suffix_quad)
-
-        # # update bend Q
-
-
-
 
 
 
@@ -314,14 +302,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
 
         # -----------------
-        # energy0 calculation
-        # current_ES_Bend = caget("HALF:IN:ESA:PRF01:CurrentSet") # A
-        # current_ES_Bend = 100
-        # energy0 = get_energy0(current_ES_Bend) # MeV
+        # energy0 calculation (coresponding to the x=0)
         if self.machine_type == "vm":
             energy0 = 2200 # MeV  
         else:
-            # 若提供了相关的物理量在ioc中 可以直接caget获取
+            # 1. 若提供了相关的能量物理量在ioc中 可以直接caget获取
+            # 2. 根据磁铁(电流)强度给出energy0
+            # current_ES_Bend = caget("HALF:IN:ESA:PRF01:CurrentSet") # A
+            # current_ES_Bend = 100
+            # energy0 = get_energy0(current_ES_Bend) # MeV
             pass
 
         # dispersion calculation and display 
@@ -353,70 +342,75 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.energy_plot.canvas.draw()  # 强制刷新
 
     def cal_disp(self):
-        # 根据ESA的弯铁SM(L, angle)和Q铁QE01 QE02 QE03(k,L) 漂移段(L)参数计算eta    变量仅为Q_k
-        # 采用elegant计算
+        try:
+            # 根据ESA的弯铁SM(L, angle)和Q铁QE01 QE02 QE03(k,L) 漂移段(L)参数计算eta    变量仅为Q_k
+            # 采用elegant计算
 
-        # 获取当前ESA三块Q铁强度
-        QE01_k = caget(st.pv_prefix_quad + "QE01" + st.pv_suffix_quad)
-        QE02_k = caget(st.pv_prefix_quad + "QE02" + st.pv_suffix_quad)
-        QE03_k = caget(st.pv_prefix_quad + "QE03" + st.pv_suffix_quad)
+            # 获取当前ESA三块Q铁强度 这里假设获得的是强度k
+            QE01_k = caget(st.pv_prefix_quad + "QE01" + st.pv_suffix_quad)
+            QE02_k = caget(st.pv_prefix_quad + "QE02" + st.pv_suffix_quad)
+            QE03_k = caget(st.pv_prefix_quad + "QE03" + st.pv_suffix_quad)
 
-        #
-        lattice_file = st.rootpath+'/src/virtual_machine/half_elegant/elegant/lattice_ini.lte'
-        esa_ini_ele_file    = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa_ini.ele' 
-        line_name    = 'ESAlocal' #'use_beamline'
+            #
+            lattice_file = st.rootpath+'/src/virtual_machine/half_elegant/elegant/lattice_ini.lte'
+            esa_ini_ele_file    = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa_ini.ele' 
+            line_name    = 'ESAlocal' #'use_beamline'
 
-        esajson_path        = st.rootpath+"/src/virtual_machine/half_elegant/esa.json"
+            esajson_path        = st.rootpath+"/src/virtual_machine/half_elegant/esa.json"
 
-        esa_lte_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.lte'
-        esa_ele_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.ele'  
+            esa_lte_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.lte'
+            esa_ele_file        = st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.ele'  
+            
+
+            lte1 = elegant_parser(lattice_file, esa_ini_ele_file, line_name)
+            lte1.dump2json(esajson_path)
+            with open(esajson_path,"r") as f:
+                lte = json.load(f)
+            contl = lte["control"]
+            lattice  = lte["lattice"]
+
+            contl['run_setup']['lattice'] = 'esa.lte'
+            lattice['QE01']['K1'] = str(QE01_k)
+            lattice['QE02']['K1'] = str(QE02_k)
+            lattice['QE03']['K1'] = str(QE03_k)
+
+            lte["control"]  = contl
+            lte["lattice"]  = lattice
+
+            with open(esajson_path,"w") as f:
+                f.write(json.dumps(lte,indent=4))
+            
+            lte1.json2lte_ele(esa_lte_file,esa_ele_file,esajson_path)   
+
+            # run elegant 
+            # ==========================
+            cupath = os.getcwd()
+            os.chdir(st.rootpath+"/src/virtual_machine/half_elegant/elegant")
+            os.system("elegant esa.ele > esa.log")
+            os.chdir(cupath)
+            time.sleep(1)
+            
+            tmp = sdds.SDDS(0)
+            tmp.load(st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.mat')
+            list_R = [tmp.columnData[i][0][0] for i in range(12, 48)]
+            Rj = np.array(list_R).reshape(6,6)
+
+            self.eta_flag = Rj[0, -1] 
+            print('dispersion of ESA updates: ',self.eta_flag, 'm')
         
-
-        lte1 = elegant_parser(lattice_file, esa_ini_ele_file, line_name)
-        lte1.dump2json(esajson_path)
-        with open(esajson_path,"r") as f:
-            lte = json.load(f)
-        contl = lte["control"]
-        lattice  = lte["lattice"]
-
-        contl['run_setup']['lattice'] = 'esa.lte'
-        lattice['QE01']['K1'] = str(QE01_k)
-        lattice['QE02']['K1'] = str(QE02_k)
-        lattice['QE03']['K1'] = str(QE03_k)
-
-
-        lte["control"]  = contl
-        lte["lattice"]  = lattice
-
-        with open(esajson_path,"w") as f:
-            f.write(json.dumps(lte,indent=4))
-          
-        lte1.json2lte_ele(esa_lte_file,esa_ele_file,esajson_path)   
-
-        # run elegant 
-        # ==========================
-        cupath = os.getcwd()
-        os.chdir(st.rootpath+"/src/virtual_machine/half_elegant/elegant")
-        os.system("elegant esa.ele > esa.log")
-        os.chdir(cupath)
-        time.sleep(1)
-        
-        tmp = sdds.SDDS(0)
-        tmp.load(st.rootpath+'/src/virtual_machine/half_elegant/elegant/esa.mat')
-        list_R = [tmp.columnData[i][0][0] for i in range(12, 48)]
-        Rj = np.array(list_R).reshape(6,6)
-
-        self.eta_flag = Rj[0, -1] 
-        print('dispersion of ESA updates: ',self.eta_flag, 'm')
-
+        except Exception as e:
+            print(f"Error in cal_disp: {e}")
+            self.eta_flag = 0.7484210850804714  # 理论设计值
+            print('default dispersion: ',self.eta_flag, 'm')
+            
         self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag,5)))
 
     def cal_twiss_disp(self):
         """calculate the twiss @ ESA flag according the twiss @ in"""
         # get twiss @ in
-        alpha_in = self.doubleSpinBox_alpha_in.value() # 
-        beta_in = self.doubleSpinBox_beta_in.value() # m
-        emi_in = self.doubleSpinBox_emi_in.value()*1e-9 # m
+        alpha_in = self.doubleSpinBox_alpha_in.value() #    -16.2@QT02
+        beta_in = self.doubleSpinBox_beta_in.value() # m     88.6@QT02
+        emi_in = self.doubleSpinBox_emi_in.value()*1e-9 # m  ~43nm@QT02
         start_element = self.comboBox_start_element.currentText() 
 
         QE01_k = caget(st.pv_prefix_quad + "QE01" + st.pv_suffix_quad)
@@ -502,8 +496,41 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             
         if not state:
             self.with_emit = False
-            
 
+
+    def set_bend_quad(self):
+        """
+        update the energy0 value according to slider position
+        这里energy0是由ESA的弯铁强度决定的
+        """
+        slider_value = self.slider_energy.value()
+        self.label_sliderenergy.setText(str(slider_value))
+
+        # # get current bend Q
+        # BEND_energy = caget("HALF:IN:PRFESA:EnergySet") # MeV
+        # QE01_k = caget(st.pv_prefix_quad + "QE01" + st.pv_suffix_quad)
+        # QE02_k = caget(st.pv_prefix_quad + "QE02" + st.pv_suffix_quad)
+        # QE03_k = caget(st.pv_prefix_quad + "QE03" + st.pv_suffix_quad)
+
+        # # update bend Q
+
+    def run_esa_auto_tune(self):
+        # 暂停定时刷新，防止抢 PV
+        self.timer.stop()
+
+        best_I = ESA_AutoTuner(
+            B_min=0,
+            B_max=200,
+            coarse_steps=40,
+            fine_steps=15
+        )
+
+        if best_I is not None:
+            print(f"[GUI] ESA auto-tuned to {best_I:.3f} A")
+
+        # 恢复正常显示
+        self.timer.start()
+        # self.ESA_running()
 
 
 

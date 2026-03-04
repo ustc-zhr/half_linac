@@ -16,7 +16,7 @@
 ! sigma                    = %s.sig,
 ! final                    = %s.fin,
 !  parameters              = %s.param,
-! magnets                  = %s.mag,
+ magnets                  = %s.mag,
   bpm_centroid             = %s.bpmcen
 
 &end

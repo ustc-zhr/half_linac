@@ -13,69 +13,6 @@
   <property name="windowTitle">
    <string>Energy Spectrum Analysis</string>
   </property>
-  <property name="styleSheet">
-   <string notr="true">/* 全局基础：白色背景，深灰色文字 */
-QMainWindow, QWidget {
-    background-color: #ffffff;
-    color: #2d3436;
-    font-family: &quot;Segoe UI&quot;, &quot;PingFang SC&quot;, sans-serif;
-}
-
-/* 按钮：深蓝色系，在白底上非常醒目 */
-QPushButton {
-    background-color: #0984e3; /* 经典商务蓝 */
-    border: none;
-    border-radius: 4px;
-    color: white;
-    padding: 6px 12px;
-    font-weight: bold;
-}
-
-QPushButton:hover {
-    background-color: #74b9ff;
-}
-
-QPushButton:pressed {
-    background-color: #0a3d62;
-}
-
-/* 输入框：浅灰背景 + 蓝色下边框（现代简约感） */
-QLineEdit {
-    background-color: #f5f6fa;
-    border: 1px solid #dfe6e9;
-    border-bottom: 2px solid #0984e3; /* 底部强调色 */
-    border-radius: 2px;
-    padding: 3px;
-    color: #2d3436;
-}
-
-QLineEdit:focus {
-    background-color: #ffffff;
-    border: 1px solid #0984e3;
-}
-
-/* GroupBox：浅灰色描边，区分功能区 */
-QGroupBox {
-    background-color: #fdfdfd;
-    border: 1px solid #dfe6e9;
-    border-radius: 6px;
-    margin-top: 12px;
-    font-weight: bold;
-}
-
-QGroupBox::title {
-    subcontrol-origin: margin;
-    left: 10px;
-    padding: 0 5px;
-    color: #0984e3;
-}
-
-/* 标签加粗 */
-QLabel {
-    font-weight: bold;
-    background-color: transparent;
-}</string>
-  </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_2">
     <item>
@@ -90,7 +27,7 @@ QLabel {
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_4">
          <item>
-          <layout class="QVBoxLayout" name="verticalLayout_3" stretch="8,0,0">
+          <layout class="QVBoxLayout" name="verticalLayout_3" stretch="8,2,1">
            <item>
             <widget class="QFrame" name="frame_3">
              <property name="frameShape">
@@ -114,9 +51,12 @@ QLabel {
             </widget>
            </item>
            <item>
-            <widget class="QGroupBox" name="groupBox_4">
-             <property name="title">
-              <string>Config</string>
+            <widget class="QFrame" name="frame_4">
+             <property name="frameShape">
+              <enum>QFrame::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_8">
               <item>
@@ -213,9 +153,12 @@ QLabel {
             </widget>
            </item>
            <item>
-            <widget class="QGroupBox" name="groupBox_5">
-             <property name="title">
-              <string>Result</string>
+            <widget class="QFrame" name="frame_5">
+             <property name="frameShape">
+              <enum>QFrame::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
              </property>
              <layout class="QHBoxLayout" name="horizontalLayout_7">
               <item>
@@ -310,13 +253,42 @@ QLabel {
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_7">
          <item>
-          <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0,0">
+          <layout class="QVBoxLayout" name="verticalLayout" stretch="5,1,5">
            <item>
-            <widget class="QGroupBox" name="groupBox_6">
-             <property name="title">
-              <string>Twiss</string>
+            <widget class="QFrame" name="frame_6">
+             <property name="frameShape">
+              <enum>QFrame::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_9">
+              <item>
+               <widget class="QLabel" name="label_13">
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    color: #333; 
+    font: bold 14px;
+}</string>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::Panel</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Raised</enum>
+                </property>
+                <property name="text">
+                 <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+p, li { white-space: pre-wrap; }
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Sans Serif'; font-size:14px; font-weight:600; font-style:normal;&quot;&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:11pt; color:#000000;&quot;&gt;Twiss&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
               <item>
                <layout class="QVBoxLayout" name="verticalLayout_11">
                 <item>
@@ -499,9 +471,12 @@ QLabel {
             </widget>
            </item>
            <item>
-            <widget class="QGroupBox" name="groupBox_8">
-             <property name="title">
-              <string>Tune</string>
+            <widget class="QFrame" name="frame_8">
+             <property name="frameShape">
+              <enum>QFrame::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_14">
               <item>
@@ -546,11 +521,48 @@ QLabel {
             </widget>
            </item>
            <item>
-            <widget class="QGroupBox" name="groupBox_7">
-             <property name="title">
-              <string>Background</string>
+            <widget class="QFrame" name="frame_7">
+             <property name="frameShape">
+              <enum>QFrame::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_10">
+              <item>
+               <widget class="QLabel" name="label_12">
+                <property name="layoutDirection">
+                 <enum>Qt::LeftToRight</enum>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QLabel {
+    color: #333; 
+    font:bold 14px;
+}</string>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::Panel</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Raised</enum>
+                </property>
+                <property name="lineWidth">
+                 <number>1</number>
+                </property>
+                <property name="midLineWidth">
+                 <number>0</number>
+                </property>
+                <property name="text">
+                 <string>Background</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                </property>
+                <property name="margin">
+                 <number>1</number>
+                </property>
+               </widget>
+              </item>
               <item>
                <layout class="QVBoxLayout" name="verticalLayout_12" stretch="5,1">
                 <item>

@@ -15,6 +15,67 @@ class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1252, 928)
+        MainWindow.setStyleSheet("/* 全局基础：白色背景，深灰色文字 */\n"
+"QMainWindow, QWidget {\n"
+"    background-color: #ffffff;\n"
+"    color: #2d3436;\n"
+"    font-family: \"Segoe UI\", \"PingFang SC\", sans-serif;\n"
+"}\n"
+"\n"
+"/* 按钮：深蓝色系，在白底上非常醒目 */\n"
+"QPushButton {\n"
+"    background-color: #0984e3; /* 经典商务蓝 */\n"
+"    border: none;\n"
+"    border-radius: 4px;\n"
+"    color: white;\n"
+"    padding: 6px 12px;\n"
+"    font-weight: bold;\n"
+"}\n"
+"\n"
+"QPushButton:hover {\n"
+"    background-color: #74b9ff;\n"
+"}\n"
+"\n"
+"QPushButton:pressed {\n"
+"    background-color: #0a3d62;\n"
+"}\n"
+"\n"
+"/* 输入框：浅灰背景 + 蓝色下边框（现代简约感） */\n"
+"QLineEdit {\n"
+"    background-color: #f5f6fa;\n"
+"    border: 1px solid #dfe6e9;\n"
+"    border-bottom: 2px solid #0984e3; /* 底部强调色 */\n"
+"    border-radius: 2px;\n"
+"    padding: 3px;\n"
+"    color: #2d3436;\n"
+"}\n"
+"\n"
+"QLineEdit:focus {\n"
+"    background-color: #ffffff;\n"
+"    border: 1px solid #0984e3;\n"
+"}\n"
+"\n"
+"/* GroupBox：浅灰色描边，区分功能区 */\n"
+"QGroupBox {\n"
+"    background-color: #fdfdfd;\n"
+"    border: 1px solid #dfe6e9;\n"
+"    border-radius: 6px;\n"
+"    margin-top: 12px;\n"
+"    font-weight: bold;\n"
+"}\n"
+"\n"
+"QGroupBox::title {\n"
+"    subcontrol-origin: margin;\n"
+"    left: 10px;\n"
+"    padding: 0 5px;\n"
+"    color: #0984e3;\n"
+"}\n"
+"\n"
+"/* 标签加粗 */\n"
+"QLabel {\n"
+"    font-weight: bold;\n"
+"    background-color: transparent;\n"
+"}")
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.centralwidget)
@@ -45,27 +106,25 @@ class Ui_MainWindow(object):
         self.verticalLayout_5.addWidget(self.energy_plot)
         self.verticalLayout_6.addLayout(self.verticalLayout_5)
         self.verticalLayout_3.addWidget(self.frame_3)
-        self.frame_4 = QtWidgets.QFrame(self.frame)
-        self.frame_4.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame_4.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.frame_4.setObjectName("frame_4")
-        self.verticalLayout_8 = QtWidgets.QVBoxLayout(self.frame_4)
+        self.groupBox_4 = QtWidgets.QGroupBox(self.frame)
+        self.groupBox_4.setObjectName("groupBox_4")
+        self.verticalLayout_8 = QtWidgets.QVBoxLayout(self.groupBox_4)
         self.verticalLayout_8.setObjectName("verticalLayout_8")
         self.gridLayout = QtWidgets.QGridLayout()
         self.gridLayout.setObjectName("gridLayout")
-        self.label_3 = QtWidgets.QLabel(self.frame_4)
+        self.label_3 = QtWidgets.QLabel(self.groupBox_4)
         self.label_3.setObjectName("label_3")
         self.gridLayout.addWidget(self.label_3, 2, 0, 1, 1)
-        self.lineEdit_expotime = QtWidgets.QLineEdit(self.frame_4)
+        self.lineEdit_expotime = QtWidgets.QLineEdit(self.groupBox_4)
         self.lineEdit_expotime.setObjectName("lineEdit_expotime")
         self.gridLayout.addWidget(self.lineEdit_expotime, 0, 1, 1, 1)
-        self.lineEdit_refresh = QtWidgets.QLineEdit(self.frame_4)
+        self.lineEdit_refresh = QtWidgets.QLineEdit(self.groupBox_4)
         self.lineEdit_refresh.setObjectName("lineEdit_refresh")
         self.gridLayout.addWidget(self.lineEdit_refresh, 2, 1, 1, 1)
-        self.label_2 = QtWidgets.QLabel(self.frame_4)
+        self.label_2 = QtWidgets.QLabel(self.groupBox_4)
         self.label_2.setObjectName("label_2")
         self.gridLayout.addWidget(self.label_2, 1, 0, 1, 1)
-        self.comboBox_colormap = QtWidgets.QComboBox(self.frame_4)
+        self.comboBox_colormap = QtWidgets.QComboBox(self.groupBox_4)
         self.comboBox_colormap.setObjectName("comboBox_colormap")
         self.comboBox_colormap.addItem("")
         self.comboBox_colormap.addItem("")
@@ -74,35 +133,33 @@ class Ui_MainWindow(object):
         self.comboBox_colormap.addItem("")
         self.comboBox_colormap.addItem("")
         self.gridLayout.addWidget(self.comboBox_colormap, 1, 1, 1, 1)
-        self.label = QtWidgets.QLabel(self.frame_4)
+        self.label = QtWidgets.QLabel(self.groupBox_4)
         self.label.setObjectName("label")
         self.gridLayout.addWidget(self.label, 0, 0, 1, 1)
-        self.label_10 = QtWidgets.QLabel(self.frame_4)
+        self.label_10 = QtWidgets.QLabel(self.groupBox_4)
         self.label_10.setObjectName("label_10")
         self.gridLayout.addWidget(self.label_10, 3, 0, 1, 1)
-        self.comboBox_fitmethod = QtWidgets.QComboBox(self.frame_4)
+        self.comboBox_fitmethod = QtWidgets.QComboBox(self.groupBox_4)
         self.comboBox_fitmethod.setObjectName("comboBox_fitmethod")
         self.comboBox_fitmethod.addItem("")
         self.comboBox_fitmethod.addItem("")
         self.gridLayout.addWidget(self.comboBox_fitmethod, 3, 1, 1, 1)
         self.verticalLayout_8.addLayout(self.gridLayout)
-        self.verticalLayout_3.addWidget(self.frame_4)
-        self.frame_5 = QtWidgets.QFrame(self.frame)
-        self.frame_5.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame_5.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.frame_5.setObjectName("frame_5")
-        self.horizontalLayout_7 = QtWidgets.QHBoxLayout(self.frame_5)
+        self.verticalLayout_3.addWidget(self.groupBox_4)
+        self.groupBox_5 = QtWidgets.QGroupBox(self.frame)
+        self.groupBox_5.setObjectName("groupBox_5")
+        self.horizontalLayout_7 = QtWidgets.QHBoxLayout(self.groupBox_5)
         self.horizontalLayout_7.setObjectName("horizontalLayout_7")
         self.horizontalLayout_6 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_6.setObjectName("horizontalLayout_6")
-        self.label_4 = QtWidgets.QLabel(self.frame_5)
+        self.label_4 = QtWidgets.QLabel(self.groupBox_5)
         self.label_4.setStyleSheet("QLabel {\n"
 "    color: #313; \n"
 "    font: bold 14px;\n"
 "}")
         self.label_4.setObjectName("label_4")
         self.horizontalLayout_6.addWidget(self.label_4)
-        self.label_energy = QtWidgets.QLabel(self.frame_5)
+        self.label_energy = QtWidgets.QLabel(self.groupBox_5)
         self.label_energy.setStyleSheet("QLabel {\n"
 "    color: #333; \n"
 "    font: bold 14px;\n"
@@ -110,14 +167,14 @@ class Ui_MainWindow(object):
         self.label_energy.setText("")
         self.label_energy.setObjectName("label_energy")
         self.horizontalLayout_6.addWidget(self.label_energy)
-        self.label_6 = QtWidgets.QLabel(self.frame_5)
+        self.label_6 = QtWidgets.QLabel(self.groupBox_5)
         self.label_6.setStyleSheet("QLabel {\n"
 "    color: #333; \n"
 "    font: bold 14px;\n"
 "}")
         self.label_6.setObjectName("label_6")
         self.horizontalLayout_6.addWidget(self.label_6)
-        self.label_energyspread = QtWidgets.QLabel(self.frame_5)
+        self.label_energyspread = QtWidgets.QLabel(self.groupBox_5)
         self.label_energyspread.setStyleSheet("QLabel {\n"
 "    color: #333; \n"
 "    font: bold 14px;\n"
@@ -127,18 +184,16 @@ class Ui_MainWindow(object):
         self.horizontalLayout_6.addWidget(self.label_energyspread)
         self.verticalLayout_13 = QtWidgets.QVBoxLayout()
         self.verticalLayout_13.setObjectName("verticalLayout_13")
-        self.checkBox_emit = QtWidgets.QCheckBox(self.frame_5)
+        self.checkBox_emit = QtWidgets.QCheckBox(self.groupBox_5)
         self.checkBox_emit.setObjectName("checkBox_emit")
         self.verticalLayout_13.addWidget(self.checkBox_emit)
-        self.checkBox_bg = QtWidgets.QCheckBox(self.frame_5)
+        self.checkBox_bg = QtWidgets.QCheckBox(self.groupBox_5)
         self.checkBox_bg.setObjectName("checkBox_bg")
         self.verticalLayout_13.addWidget(self.checkBox_bg)
         self.horizontalLayout_6.addLayout(self.verticalLayout_13)
         self.horizontalLayout_7.addLayout(self.horizontalLayout_6)
-        self.verticalLayout_3.addWidget(self.frame_5)
+        self.verticalLayout_3.addWidget(self.groupBox_5)
         self.verticalLayout_3.setStretch(0, 8)
-        self.verticalLayout_3.setStretch(1, 2)
-        self.verticalLayout_3.setStretch(2, 1)
         self.verticalLayout_4.addLayout(self.verticalLayout_3)
         self.horizontalLayout_2.addWidget(self.frame)
         self.frame_2 = QtWidgets.QFrame(self.centralwidget)
@@ -149,82 +204,70 @@ class Ui_MainWindow(object):
         self.verticalLayout_7.setObjectName("verticalLayout_7")
         self.verticalLayout = QtWidgets.QVBoxLayout()
         self.verticalLayout.setObjectName("verticalLayout")
-        self.frame_6 = QtWidgets.QFrame(self.frame_2)
-        self.frame_6.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame_6.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.frame_6.setObjectName("frame_6")
-        self.verticalLayout_9 = QtWidgets.QVBoxLayout(self.frame_6)
+        self.groupBox_6 = QtWidgets.QGroupBox(self.frame_2)
+        self.groupBox_6.setObjectName("groupBox_6")
+        self.verticalLayout_9 = QtWidgets.QVBoxLayout(self.groupBox_6)
         self.verticalLayout_9.setObjectName("verticalLayout_9")
-        self.label_13 = QtWidgets.QLabel(self.frame_6)
-        self.label_13.setStyleSheet("QLabel {\n"
-"    color: #333; \n"
-"    font: bold 14px;\n"
-"}")
-        self.label_13.setFrameShape(QtWidgets.QFrame.Panel)
-        self.label_13.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.label_13.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter)
-        self.label_13.setObjectName("label_13")
-        self.verticalLayout_9.addWidget(self.label_13)
         self.verticalLayout_11 = QtWidgets.QVBoxLayout()
         self.verticalLayout_11.setObjectName("verticalLayout_11")
         self.gridLayout_3 = QtWidgets.QGridLayout()
         self.gridLayout_3.setObjectName("gridLayout_3")
-        self.doubleSpinBox_emi_in = QtWidgets.QDoubleSpinBox(self.frame_6)
+        self.doubleSpinBox_emi_in = QtWidgets.QDoubleSpinBox(self.groupBox_6)
         self.doubleSpinBox_emi_in.setDecimals(5)
         self.doubleSpinBox_emi_in.setMaximum(9999.99)
         self.doubleSpinBox_emi_in.setObjectName("doubleSpinBox_emi_in")
         self.gridLayout_3.addWidget(self.doubleSpinBox_emi_in, 3, 1, 1, 1)
-        self.lineEdit_beta_ESAflag = QtWidgets.QLineEdit(self.frame_6)
+        self.lineEdit_beta_ESAflag = QtWidgets.QLineEdit(self.groupBox_6)
         self.lineEdit_beta_ESAflag.setReadOnly(True)
         self.lineEdit_beta_ESAflag.setObjectName("lineEdit_beta_ESAflag")
         self.gridLayout_3.addWidget(self.lineEdit_beta_ESAflag, 2, 2, 1, 1)
-        self.label_eta = QtWidgets.QLabel(self.frame_6)
+        self.label_eta = QtWidgets.QLabel(self.groupBox_6)
         self.label_eta.setObjectName("label_eta")
         self.gridLayout_3.addWidget(self.label_eta, 4, 0, 1, 1)
-        self.label_5 = QtWidgets.QLabel(self.frame_6)
+        self.label_5 = QtWidgets.QLabel(self.groupBox_6)
         self.label_5.setObjectName("label_5")
         self.gridLayout_3.addWidget(self.label_5, 1, 0, 1, 1)
-        self.lineEdit_eta_ESAflag = QtWidgets.QLineEdit(self.frame_6)
+        self.lineEdit_eta_ESAflag = QtWidgets.QLineEdit(self.groupBox_6)
         self.lineEdit_eta_ESAflag.setReadOnly(True)
         self.lineEdit_eta_ESAflag.setObjectName("lineEdit_eta_ESAflag")
         self.gridLayout_3.addWidget(self.lineEdit_eta_ESAflag, 4, 2, 1, 1)
-        self.doubleSpinBox_beta_in = QtWidgets.QDoubleSpinBox(self.frame_6)
+        self.doubleSpinBox_beta_in = QtWidgets.QDoubleSpinBox(self.groupBox_6)
         self.doubleSpinBox_beta_in.setDecimals(5)
         self.doubleSpinBox_beta_in.setMinimum(-9999.0)
         self.doubleSpinBox_beta_in.setMaximum(9999.0)
         self.doubleSpinBox_beta_in.setObjectName("doubleSpinBox_beta_in")
         self.gridLayout_3.addWidget(self.doubleSpinBox_beta_in, 2, 1, 1, 1)
-        self.label_8 = QtWidgets.QLabel(self.frame_6)
+        self.label_8 = QtWidgets.QLabel(self.groupBox_6)
         self.label_8.setObjectName("label_8")
         self.gridLayout_3.addWidget(self.label_8, 3, 0, 1, 1)
-        self.doubleSpinBox_alpha_in = QtWidgets.QDoubleSpinBox(self.frame_6)
+        self.doubleSpinBox_alpha_in = QtWidgets.QDoubleSpinBox(self.groupBox_6)
         self.doubleSpinBox_alpha_in.setDecimals(5)
         self.doubleSpinBox_alpha_in.setMinimum(-9999.0)
         self.doubleSpinBox_alpha_in.setMaximum(9999.0)
         self.doubleSpinBox_alpha_in.setObjectName("doubleSpinBox_alpha_in")
         self.gridLayout_3.addWidget(self.doubleSpinBox_alpha_in, 1, 1, 1, 1)
-        self.label_7 = QtWidgets.QLabel(self.frame_6)
+        self.label_7 = QtWidgets.QLabel(self.groupBox_6)
         self.label_7.setObjectName("label_7")
         self.gridLayout_3.addWidget(self.label_7, 2, 0, 1, 1)
-        self.lineEdit_alpha_ESAflag = QtWidgets.QLineEdit(self.frame_6)
+        self.lineEdit_alpha_ESAflag = QtWidgets.QLineEdit(self.groupBox_6)
         self.lineEdit_alpha_ESAflag.setReadOnly(True)
         self.lineEdit_alpha_ESAflag.setObjectName("lineEdit_alpha_ESAflag")
         self.gridLayout_3.addWidget(self.lineEdit_alpha_ESAflag, 1, 2, 1, 1)
-        self.label_11 = QtWidgets.QLabel(self.frame_6)
+        self.label_11 = QtWidgets.QLabel(self.groupBox_6)
         self.label_11.setStyleSheet("QLabel {\n"
 "    color: #333; \n"
 "    font:  14px;\n"
 "}")
         self.label_11.setObjectName("label_11")
         self.gridLayout_3.addWidget(self.label_11, 0, 2, 1, 1)
-        self.label_9 = QtWidgets.QLabel(self.frame_6)
+        self.label_9 = QtWidgets.QLabel(self.groupBox_6)
         self.label_9.setStyleSheet("QLabel {\n"
 "    color: #333; \n"
 "    font:  14px;\n"
 "}")
         self.label_9.setObjectName("label_9")
         self.gridLayout_3.addWidget(self.label_9, 0, 0, 1, 1)
-        self.comboBox_start_element = QtWidgets.QComboBox(self.frame_6)
+        self.comboBox_start_element = QtWidgets.QComboBox(self.groupBox_6)
         self.comboBox_start_element.setObjectName("comboBox_start_element")
         self.comboBox_start_element.addItem("")
         self.comboBox_start_element.addItem("")
@@ -237,90 +280,73 @@ class Ui_MainWindow(object):
         self.verticalLayout_9.addLayout(self.verticalLayout_11)
         self.gridLayout_2 = QtWidgets.QGridLayout()
         self.gridLayout_2.setObjectName("gridLayout_2")
-        self.pushButton_cal_disp = QtWidgets.QPushButton(self.frame_6)
+        self.pushButton_cal_disp = QtWidgets.QPushButton(self.groupBox_6)
         self.pushButton_cal_disp.setObjectName("pushButton_cal_disp")
         self.gridLayout_2.addWidget(self.pushButton_cal_disp, 0, 0, 1, 1)
-        self.pushButton_cal_twiss_disp = QtWidgets.QPushButton(self.frame_6)
+        self.pushButton_cal_twiss_disp = QtWidgets.QPushButton(self.groupBox_6)
         self.pushButton_cal_twiss_disp.setObjectName("pushButton_cal_twiss_disp")
         self.gridLayout_2.addWidget(self.pushButton_cal_twiss_disp, 0, 1, 1, 1)
         self.verticalLayout_9.addLayout(self.gridLayout_2)
         spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout_9.addItem(spacerItem)
-        self.verticalLayout.addWidget(self.frame_6)
-        self.frame_8 = QtWidgets.QFrame(self.frame_2)
-        self.frame_8.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame_8.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.frame_8.setObjectName("frame_8")
-        self.verticalLayout_14 = QtWidgets.QVBoxLayout(self.frame_8)
+        self.verticalLayout.addWidget(self.groupBox_6)
+        self.groupBox_8 = QtWidgets.QGroupBox(self.frame_2)
+        self.groupBox_8.setObjectName("groupBox_8")
+        self.verticalLayout_14 = QtWidgets.QVBoxLayout(self.groupBox_8)
         self.verticalLayout_14.setObjectName("verticalLayout_14")
         self.gridLayout_6 = QtWidgets.QGridLayout()
         self.gridLayout_6.setObjectName("gridLayout_6")
-        self.label_14 = QtWidgets.QLabel(self.frame_8)
+        self.label_14 = QtWidgets.QLabel(self.groupBox_8)
         self.label_14.setObjectName("label_14")
         self.gridLayout_6.addWidget(self.label_14, 0, 0, 1, 1)
-        self.slider_energy = QtWidgets.QSlider(self.frame_8)
+        self.slider_energy = QtWidgets.QSlider(self.groupBox_8)
         self.slider_energy.setMaximum(2300)
         self.slider_energy.setSliderPosition(2200)
         self.slider_energy.setOrientation(QtCore.Qt.Horizontal)
         self.slider_energy.setObjectName("slider_energy")
         self.gridLayout_6.addWidget(self.slider_energy, 0, 1, 1, 1)
-        self.label_sliderenergy = QtWidgets.QLabel(self.frame_8)
+        self.label_sliderenergy = QtWidgets.QLabel(self.groupBox_8)
         self.label_sliderenergy.setObjectName("label_sliderenergy")
         self.gridLayout_6.addWidget(self.label_sliderenergy, 0, 2, 1, 1)
         self.verticalLayout_14.addLayout(self.gridLayout_6)
-        self.verticalLayout.addWidget(self.frame_8)
-        self.frame_7 = QtWidgets.QFrame(self.frame_2)
-        self.frame_7.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame_7.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.frame_7.setObjectName("frame_7")
-        self.verticalLayout_10 = QtWidgets.QVBoxLayout(self.frame_7)
+        self.pushButton_autoFind = QtWidgets.QPushButton(self.groupBox_8)
+        self.pushButton_autoFind.setObjectName("pushButton_autoFind")
+        self.verticalLayout_14.addWidget(self.pushButton_autoFind)
+        self.verticalLayout.addWidget(self.groupBox_8)
+        self.groupBox_7 = QtWidgets.QGroupBox(self.frame_2)
+        self.groupBox_7.setObjectName("groupBox_7")
+        self.verticalLayout_10 = QtWidgets.QVBoxLayout(self.groupBox_7)
         self.verticalLayout_10.setObjectName("verticalLayout_10")
-        self.label_12 = QtWidgets.QLabel(self.frame_7)
-        self.label_12.setLayoutDirection(QtCore.Qt.LeftToRight)
-        self.label_12.setStyleSheet("QLabel {\n"
-"    color: #333; \n"
-"    font:bold 14px;\n"
-"}")
-        self.label_12.setFrameShape(QtWidgets.QFrame.Panel)
-        self.label_12.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.label_12.setLineWidth(1)
-        self.label_12.setMidLineWidth(0)
-        self.label_12.setAlignment(QtCore.Qt.AlignLeading|QtCore.Qt.AlignLeft|QtCore.Qt.AlignVCenter)
-        self.label_12.setObjectName("label_12")
-        self.verticalLayout_10.addWidget(self.label_12)
         self.verticalLayout_12 = QtWidgets.QVBoxLayout()
         self.verticalLayout_12.setObjectName("verticalLayout_12")
-        self.background_plot = MplWidget(self.frame_7)
+        self.background_plot = MplWidget(self.groupBox_7)
         self.background_plot.setObjectName("background_plot")
         self.verticalLayout_12.addWidget(self.background_plot)
         self.gridLayout_4 = QtWidgets.QGridLayout()
         self.gridLayout_4.setObjectName("gridLayout_4")
-        self.pushButton_load = QtWidgets.QPushButton(self.frame_7)
+        self.pushButton_load = QtWidgets.QPushButton(self.groupBox_7)
         self.pushButton_load.setObjectName("pushButton_load")
         self.gridLayout_4.addWidget(self.pushButton_load, 2, 0, 1, 1)
-        self.lineEdit = QtWidgets.QLineEdit(self.frame_7)
+        self.lineEdit = QtWidgets.QLineEdit(self.groupBox_7)
         self.lineEdit.setObjectName("lineEdit")
         self.gridLayout_4.addWidget(self.lineEdit, 2, 1, 1, 1)
-        self.lineEdit_samples = QtWidgets.QLineEdit(self.frame_7)
+        self.lineEdit_samples = QtWidgets.QLineEdit(self.groupBox_7)
         self.lineEdit_samples.setObjectName("lineEdit_samples")
         self.gridLayout_4.addWidget(self.lineEdit_samples, 0, 1, 1, 1)
-        self.pushButton_save = QtWidgets.QPushButton(self.frame_7)
+        self.pushButton_save = QtWidgets.QPushButton(self.groupBox_7)
         self.pushButton_save.setObjectName("pushButton_save")
         self.gridLayout_4.addWidget(self.pushButton_save, 1, 0, 1, 1)
-        self.lineEdit_3 = QtWidgets.QLineEdit(self.frame_7)
+        self.lineEdit_3 = QtWidgets.QLineEdit(self.groupBox_7)
         self.lineEdit_3.setObjectName("lineEdit_3")
         self.gridLayout_4.addWidget(self.lineEdit_3, 1, 1, 1, 1)
-        self.pushButton_sapmles = QtWidgets.QPushButton(self.frame_7)
+        self.pushButton_sapmles = QtWidgets.QPushButton(self.groupBox_7)
         self.pushButton_sapmles.setObjectName("pushButton_sapmles")
         self.gridLayout_4.addWidget(self.pushButton_sapmles, 0, 0, 1, 1)
         self.verticalLayout_12.addLayout(self.gridLayout_4)
         self.verticalLayout_12.setStretch(0, 5)
         self.verticalLayout_12.setStretch(1, 1)
         self.verticalLayout_10.addLayout(self.verticalLayout_12)
-        self.verticalLayout.addWidget(self.frame_7)
-        self.verticalLayout.setStretch(0, 5)
-        self.verticalLayout.setStretch(1, 1)
-        self.verticalLayout.setStretch(2, 5)
+        self.verticalLayout.addWidget(self.groupBox_7)
         self.verticalLayout_7.addLayout(self.verticalLayout)
         self.horizontalLayout_2.addWidget(self.frame_2)
         self.horizontalLayout_2.setStretch(0, 2)
@@ -341,6 +367,7 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Energy Spectrum Analysis"))
+        self.groupBox_4.setTitle(_translate("MainWindow", "Config"))
         self.label_3.setText(_translate("MainWindow", "Refresh (s)"))
         self.lineEdit_refresh.setText(_translate("MainWindow", "1"))
         self.label_2.setText(_translate("MainWindow", "Colormap"))
@@ -354,15 +381,12 @@ class Ui_MainWindow(object):
         self.label_10.setText(_translate("MainWindow", "Cal. methods"))
         self.comboBox_fitmethod.setItemText(0, _translate("MainWindow", "direct"))
         self.comboBox_fitmethod.setItemText(1, _translate("MainWindow", "Gauss fit"))
+        self.groupBox_5.setTitle(_translate("MainWindow", "Result"))
         self.label_4.setText(_translate("MainWindow", "Energy (MeV):"))
         self.label_6.setText(_translate("MainWindow", "EnergySpread (%):"))
         self.checkBox_emit.setText(_translate("MainWindow", "with emit"))
         self.checkBox_bg.setText(_translate("MainWindow", "remove bg"))
-        self.label_13.setText(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
-"<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
-"p, li { white-space: pre-wrap; }\n"
-"</style></head><body style=\" font-family:\'Sans Serif\'; font-size:14px; font-weight:600; font-style:normal;\">\n"
-"<p style=\" margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><span style=\" font-size:11pt; color:#000000;\">Twiss</span></p></body></html>"))
+        self.groupBox_6.setTitle(_translate("MainWindow", "Twiss"))
         self.lineEdit_beta_ESAflag.setText(_translate("MainWindow", "0"))
         self.label_eta.setText(_translate("MainWindow", "<html><head/><body><p>eta<span style=\" vertical-align:sub;\">x</span> (m):</p></body></html>"))
         self.label_5.setText(_translate("MainWindow", "<html><head/><body><p>α<span style=\" vertical-align:sub;\">x</span>: </p></body></html>"))
@@ -377,9 +401,11 @@ class Ui_MainWindow(object):
         self.comboBox_start_element.setItemText(2, _translate("MainWindow", "QL16"))
         self.pushButton_cal_disp.setText(_translate("MainWindow", "cal. eta"))
         self.pushButton_cal_twiss_disp.setText(_translate("MainWindow", "cal. twiss and eta"))
+        self.groupBox_8.setTitle(_translate("MainWindow", "Tune"))
         self.label_14.setText(_translate("MainWindow", "Energy (MeV):"))
         self.label_sliderenergy.setText(_translate("MainWindow", "2200"))
-        self.label_12.setText(_translate("MainWindow", "Background"))
+        self.pushButton_autoFind.setText(_translate("MainWindow", "auto find"))
+        self.groupBox_7.setTitle(_translate("MainWindow", "Background"))
         self.pushButton_load.setText(_translate("MainWindow", "Load:"))
         self.lineEdit_samples.setText(_translate("MainWindow", "5"))
         self.pushButton_save.setText(_translate("MainWindow", "Save:"))

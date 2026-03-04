@@ -7,11 +7,83 @@
     <x>0</x>
     <y>0</y>
     <width>1251</width>
-    <height>863</height>
+    <height>868</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Orbit Display</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">/* 基础背景 */
+QMainWindow, QWidget#centralwidget {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+}
+
+/* 左侧控制面板 */
+QFrame {
+    background-color: #242437;
+    border-right: 1px solid #45475a;
+    border-radius: 0px;
+}
+
+/* 按钮统一：科技蓝方案 */
+QPushButton {
+    background-color: #3e5f7a;
+    border: 1px solid #589bcf;
+    border-radius: 4px;
+    color: white;
+    padding: 5px;
+    font-weight: bold;
+	 font-size: 14px;
+}
+
+QPushButton:hover {
+    background-color: #4a7a9d;
+}
+
+/* 输入框：琥珀色高亮（延续之前的风格） */
+QLineEdit {
+    background-color: #181825;
+    border: 1px solid #fab387;
+    border-radius: 3px;
+    color: #f9e2af;
+    padding: 2px;
+}
+
+/* 绘图控件容器（虽然绘图背景由 Matplotlib 控制，但边框可以统一） */
+MplWidget {
+    border: 1px solid #313244;
+    background-color: #000000;
+}
+
+/* 标签文字 */
+QLabel {
+    color: #bac2de;
+    font-size: 12px;
+	font-weight: bold;
+}
+
+QRadioButton {
+    color: #cdd6f4; /* 未选中时的文字颜色 */
+    font-weight: normal;
+    spacing: 8px;   /* 文字与圆圈之间的间距 */
+}
+
+/* 3. 修改指示器（圆圈）的样式 */
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #45475a;
+    border-radius: 9px; /* 圆角半径为宽的一半，确保是圆形 */
+    background-color: #313244;
+}
+
+/* 4. 选中时的指示器样式 */
+QRadioButton::indicator:checked {
+    background-color: #a6e3a1; /* 选中时内部填充为绿色 */
+    border: 2px solid #cdd6f4;  /* 亮色边框 */
+}</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
@@ -21,7 +93,10 @@
        <enum>QLayout::SetMinAndMaxSize</enum>
       </property>
       <item>
-       <layout class="QVBoxLayout" name="verticalLayout_6">
+       <layout class="QVBoxLayout" name="verticalLayout_3">
+        <property name="spacing">
+         <number>6</number>
+        </property>
         <item>
          <widget class="QFrame" name="frame_2">
           <property name="maximumSize">
@@ -36,104 +111,91 @@
           <property name="frameShadow">
            <enum>QFrame::Raised</enum>
           </property>
-          <widget class="QWidget" name="layoutWidget_2">
-           <property name="geometry">
-            <rect>
-             <x>20</x>
-             <y>20</y>
-             <width>121</width>
-             <height>243</height>
-            </rect>
-           </property>
-           <layout class="QVBoxLayout" name="verticalLayout_7">
-            <property name="spacing">
-             <number>16</number>
-            </property>
-            <item>
-             <layout class="QVBoxLayout" name="verticalLayout_8">
-              <property name="spacing">
-               <number>16</number>
-              </property>
-              <item>
-               <widget class="QPushButton" name="start_1">
-                <property name="text">
-                 <string>start</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="stop_1">
-                <property name="text">
-                 <string>stop</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QRadioButton" name="hold_1">
-                <property name="text">
-                 <string>hold on</string>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <layout class="QGridLayout" name="gridLayout" columnstretch="1,1">
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_5">
-                <property name="text">
-                 <string>ymin</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLineEdit" name="QL_cxmin"/>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="label_6">
-                <property name="text">
-                 <string>ymax</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QLineEdit" name="QL_cxmax"/>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1">
-              <item row="0" column="0">
-               <widget class="QLabel" name="bPMSLabel">
-                <property name="text">
-                 <string>BPM#s</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLineEdit" name="bPMSLineEdit"/>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="bPMELabel">
-                <property name="text">
-                 <string>BPM#e</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QLineEdit" name="bPMELineEdit"/>
-              </item>
-             </layout>
-            </item>
-           </layout>
-          </widget>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="detail">
-          <property name="text">
-           <string>detail</string>
-          </property>
+          <layout class="QVBoxLayout" name="verticalLayout">
+           <item>
+            <layout class="QVBoxLayout" name="verticalLayout_7">
+             <property name="spacing">
+              <number>16</number>
+             </property>
+             <item>
+              <layout class="QVBoxLayout" name="verticalLayout_8">
+               <property name="spacing">
+                <number>16</number>
+               </property>
+               <item>
+                <widget class="QPushButton" name="start_1">
+                 <property name="text">
+                  <string>start</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="stop_1">
+                 <property name="text">
+                  <string>stop</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QRadioButton" name="hold_1">
+                 <property name="text">
+                  <string>hold on</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QGridLayout" name="gridLayout" columnstretch="1,1">
+               <item row="0" column="0">
+                <widget class="QLabel" name="label_5">
+                 <property name="text">
+                  <string>ymin</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLineEdit" name="QL_cxmin"/>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="label_6">
+                 <property name="text">
+                  <string>ymax</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="QL_cxmax"/>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1">
+               <item row="0" column="0">
+                <widget class="QLabel" name="bPMSLabel">
+                 <property name="text">
+                  <string>BPM#s</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLineEdit" name="bPMSLineEdit"/>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="bPMELabel">
+                 <property name="text">
+                  <string>BPM#e</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="bPMELineEdit"/>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </item>
+          </layout>
          </widget>
         </item>
         <item>
@@ -150,111 +212,105 @@
           <property name="frameShadow">
            <enum>QFrame::Raised</enum>
           </property>
-          <widget class="QWidget" name="layoutWidget_3">
-           <property name="geometry">
-            <rect>
-             <x>20</x>
-             <y>20</y>
-             <width>121</width>
-             <height>243</height>
-            </rect>
-           </property>
-           <layout class="QVBoxLayout" name="verticalLayout_9">
-            <property name="spacing">
-             <number>16</number>
-            </property>
-            <item>
-             <layout class="QVBoxLayout" name="verticalLayout_10">
-              <property name="spacing">
-               <number>16</number>
-              </property>
-              <item>
-               <widget class="QPushButton" name="start_2">
-                <property name="text">
-                 <string>start</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QPushButton" name="stop_2">
-                <property name="text">
-                 <string>stop</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QRadioButton" name="hold_2">
-                <property name="text">
-                 <string>hold on</string>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <layout class="QGridLayout" name="gridLayout_3" rowstretch="0,0" columnstretch="1,1">
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_7">
-                <property name="text">
-                 <string>ymin</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLineEdit" name="QL_cymin">
-                <property name="text">
-                 <string/>
-                </property>
-                <property name="placeholderText">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="label_8">
-                <property name="text">
-                 <string>ymax</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QLineEdit" name="QL_cymax">
-                <property name="text">
-                 <string/>
-                </property>
-                <property name="placeholderText">
-                 <string/>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
-             <layout class="QGridLayout" name="gridLayout_4" rowstretch="0,0" columnstretch="1,1">
-              <item row="0" column="0">
-               <widget class="QLabel" name="bPMSLabel_2">
-                <property name="text">
-                 <string>BPM#s</string>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="1">
-               <widget class="QLineEdit" name="bPMSLineEdit_2"/>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="bPMYLabel">
-                <property name="text">
-                 <string>BPM#e</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QLineEdit" name="bPMYLineEdit"/>
-              </item>
-             </layout>
-            </item>
-           </layout>
-          </widget>
+          <layout class="QVBoxLayout" name="verticalLayout_2">
+           <item>
+            <layout class="QVBoxLayout" name="verticalLayout_9">
+             <property name="spacing">
+              <number>16</number>
+             </property>
+             <item>
+              <layout class="QVBoxLayout" name="verticalLayout_10">
+               <property name="spacing">
+                <number>16</number>
+               </property>
+               <item>
+                <widget class="QPushButton" name="start_2">
+                 <property name="text">
+                  <string>start</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="stop_2">
+                 <property name="text">
+                  <string>stop</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QRadioButton" name="hold_2">
+                 <property name="text">
+                  <string>hold on</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QGridLayout" name="gridLayout_3" rowstretch="0,0" columnstretch="1,1">
+               <item row="0" column="0">
+                <widget class="QLabel" name="label_7">
+                 <property name="text">
+                  <string>ymin</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLineEdit" name="QL_cymin">
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="placeholderText">
+                  <string/>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="label_8">
+                 <property name="text">
+                  <string>ymax</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="QL_cymax">
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="placeholderText">
+                  <string/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QGridLayout" name="gridLayout_4" rowstretch="0,0" columnstretch="1,1">
+               <item row="0" column="0">
+                <widget class="QLabel" name="bPMSLabel_2">
+                 <property name="text">
+                  <string>BPM#s</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLineEdit" name="bPMSLineEdit_2"/>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="bPMYLabel">
+                 <property name="text">
+                  <string>BPM#e</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="bPMYLineEdit"/>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </item>
+          </layout>
          </widget>
         </item>
        </layout>

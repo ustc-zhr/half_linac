@@ -162,12 +162,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
     # stop function：close the subprocesses
     def _stop_subpro(self):
         for pro in self.subprocesses:
-            try:
-                pro.send_signal(signal.SIGTERM)
-            except:
-                pro.kill()
-        self.subprocesses = []
-    
+            if pro.poll() is None:  # 还在运行
+                try:
+                    pro.terminate()  # 先优雅尝试（Windows 也有效）
+                except:
+                    pass
+        
+        time.sleep(0.5)  # 给点时间响应
+        
+        for pro in self.subprocesses:
+            if pro.poll() is None:
+                try:
+                    pro.kill()  # 强制杀
+                except:
+                    pass
+        
+        self.subprocesses.clear()
 
 
 if __name__ == '__main__':

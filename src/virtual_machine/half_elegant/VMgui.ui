@@ -6,308 +6,346 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>592</width>
-    <height>701</height>
+    <width>986</width>
+    <height>777</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Virtual Machine</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">/* 复用主界面的深色基调 */
+QMainWindow, QWidget {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+ 	font-family: &quot;Segoe UI&quot;, &quot;PingFang SC&quot;, sans-serif;
+}
+
+/* 文本框美化 */
+QTextEdit#textEdit {
+    background-color: #313244;
+    border: 1px solid #45475a;
+    border-radius: 8px;
+    padding: 10px;
+    color: #f38ba8; /* 对应你原本的红色提示 */
+}
+
+/* 按钮基础样式 */
+QPushButton {
+    background-color: #45475a;
+    border: none;
+    border-radius: 6px;
+    color: #a6e3a1;
+    padding: 8px;
+    font-weight: bold;
+    font-size: 13px;
+	min-height: 20px;
+}
+
+QPushButton {
+    margin-left: 30px;
+    margin-right: 30px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+
+QPushButton:hover {
+    background-color: #585b70;
+}
+
+QPushButton:pressed {
+    background-color: #313244;
+}
+
+
+
+
+
+
+/* 容器边框美化 */
+QFrame {
+    border: 1px solid #313244;
+    border-radius: 10px;
+    background-color: #242437;
+}
+
+/* GroupBox 容器整体样式 */
+QGroupBox {
+    background-color: #242437; /* 比背景稍亮一点的深蓝 */
+    border: 1px solid #45475a; /* 边框线 */
+    border-radius: 8px;
+    margin-top: 1.5ex; /* 为顶部的标题留出空间 */
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* GroupBox 标题样式 */
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left; /* 标题靠左上 */
+    left: 15px;                    /* 距离左边框的距离 */
+	top: -2px; /* 向上微调，使其跨在边框线上 */
+    padding: 0 5px;               /* 文字左右内边距，防止碰到背景线 */
+    color: #89b4fa;               /* 标题颜色：建议使用浅蓝色，代表科技感 */
+}
+
+/* 进阶：为标题添加一个小装饰点缀 */
+QGroupBox::indicator {
+    width: 8px;
+    height: 8px;
+    background-color: #f38ba8; /* 红色点缀，对应加速器的热点色 */
+    border-radius: 4px;
+}</string>
+  </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_2">
     <item>
-     <widget class="QTextEdit" name="textEdit"/>
+     <widget class="QFrame" name="frame_2">
+      <property name="frameShape">
+       <enum>QFrame::StyledPanel</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Raised</enum>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_4">
+       <item>
+        <widget class="QTextEdit" name="textEdit"/>
+       </item>
+      </layout>
+     </widget>
     </item>
     <item>
-     <spacer name="verticalSpacer_3">
-      <property name="orientation">
-       <enum>Qt::Vertical</enum>
+     <widget class="QGroupBox" name="groupBox">
+      <property name="title">
+       <string>Start VM</string>
       </property>
-      <property name="sizeType">
-       <enum>QSizePolicy::Fixed</enum>
-      </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>20</width>
-        <height>40</height>
-       </size>
-      </property>
-     </spacer>
+      <layout class="QVBoxLayout" name="verticalLayout_5">
+       <item>
+        <layout class="QGridLayout" name="gridLayout_3">
+         <item row="1" column="0">
+          <widget class="QPushButton" name="start_vm">
+           <property name="text">
+            <string>start VM</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QPushButton" name="shutdown_VM">
+           <property name="text">
+            <string>shutdown VM</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="QPushButton" name="start_ioc">
+           <property name="text">
+            <string>start IOC</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
     </item>
     <item>
-     <layout class="QVBoxLayout" name="verticalLayout">
-      <item>
-       <layout class="QFormLayout" name="formLayout">
-        <item row="0" column="0">
-         <widget class="QLabel" name="label">
-          <property name="text">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:10pt; font-weight:600; color:#aa0000;&quot;&gt;START VM&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <layout class="QGridLayout" name="gridLayout_3">
-          <item row="0" column="1">
-           <widget class="QPushButton" name="start_vm">
-            <property name="text">
-             <string>start VM</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QPushButton" name="start_ioc">
-            <property name="text">
-             <string>start IOC</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QPushButton" name="shutdown_VM">
-            <property name="text">
-             <string>shutdown VM</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="1" column="1">
-         <widget class="QFrame" name="frame">
-          <property name="frameShape">
-           <enum>QFrame::StyledPanel</enum>
-          </property>
-          <property name="frameShadow">
-           <enum>QFrame::Raised</enum>
-          </property>
-          <layout class="QVBoxLayout" name="verticalLayout_3">
+     <widget class="QGroupBox" name="groupBox_2">
+      <property name="title">
+       <string>Switch Line</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_6">
+       <item>
+        <layout class="QGridLayout" name="gridLayout_5">
+         <item row="2" column="0">
+          <widget class="QComboBox" name="comboBox_simply_start">
            <item>
-            <layout class="QGridLayout" name="gridLayout_5">
-             <item row="0" column="0">
-              <widget class="QLabel" name="label_11">
-               <property name="text">
-                <string/>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="0">
-              <widget class="QComboBox" name="comboBox_simply_start">
-               <item>
-                <property name="text">
-                 <string>QL27</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>QT01</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>QT02</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>QL15</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>QL16</string>
-                </property>
-               </item>
-              </widget>
-             </item>
-             <item row="2" column="1">
-              <widget class="QComboBox" name="comboBox_simply_end">
-               <item>
-                <property name="text">
-                 <string>PRF04</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>PRF06</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>PRF07</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>PRF08</string>
-                </property>
-               </item>
-              </widget>
-             </item>
-             <item row="2" column="2">
-              <widget class="QPushButton" name="pushButton_simply_VM">
-               <property name="text">
-                <string>simply VM</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="2">
-              <widget class="QPushButton" name="pushButton_ESAline">
-               <property name="text">
-                <string>transfer to ESA line</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="2">
-              <widget class="QPushButton" name="pushButton_FULLline">
-               <property name="text">
-                <string>back to Origin line</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <property name="text">
+             <string>QL27</string>
+            </property>
            </item>
-          </layout>
-         </widget>
-        </item>
-        <item row="2" column="1">
-         <spacer name="verticalSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>40</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-        <item row="3" column="0">
-         <widget class="QLabel" name="label_2">
-          <property name="text">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:10pt; font-weight:600; color:#aa0000;&quot;&gt;ADD ERROR&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="1">
-         <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,0,0">
-          <item row="0" column="0">
-           <widget class="QPushButton" name="static_err">
+           <item>
             <property name="text">
-             <string>add error</string>
+             <string>QT01</string>
             </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QPushButton" name="err_off">
+           </item>
+           <item>
             <property name="text">
-             <string>error off</string>
+             <string>QT02</string>
             </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="4" column="1">
-         <layout class="QGridLayout" name="gridLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_6">
+           </item>
+           <item>
             <property name="text">
-             <string>static error</string>
+             <string>QL15</string>
             </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QLabel" name="label_7">
+           </item>
+           <item>
             <property name="text">
-             <string>jitter</string>
+             <string>QL16</string>
             </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="5" column="1">
-         <layout class="QHBoxLayout" name="horizontalLayout">
-          <item>
-           <layout class="QGridLayout" name="gridLayout_4" columnstretch="1,1,1,1,1,1">
-            <item row="0" column="1">
-             <widget class="QLineEdit" name="QDXDYvalue">
-              <property name="minimumSize">
-               <size>
-                <width>0</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>80</width>
-                <height>16777215</height>
-               </size>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="4">
-             <widget class="QLineEdit" name="QK1JITTER"/>
-            </item>
-            <item row="0" column="2">
-             <widget class="QLabel" name="label_9">
-              <property name="text">
-               <string>um (rms)</string>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="0">
-             <widget class="QLabel" name="label_4">
-              <property name="text">
-               <string>Quad-DX/DY:</string>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="1">
-             <widget class="QLabel" name="label_3">
-              <property name="text">
-               <string/>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="3">
-             <widget class="QLabel" name="label_8">
-              <property name="text">
-               <string>Quad-K1</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="1">
-             <widget class="QLabel" name="label_5">
-              <property name="text">
-               <string/>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="5">
-             <widget class="QLabel" name="label_10">
-              <property name="text">
-               <string>ppm (rms)</string>
-              </property>
-             </widget>
+           </item>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QComboBox" name="comboBox_simply_end">
+           <item>
+            <property name="text">
+             <string>PRF04</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>PRF06</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>PRF07</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>PRF08</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QPushButton" name="pushButton_simply_VM">
+           <property name="text">
+            <string>simply VM</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QPushButton" name="pushButton_ESAline">
+           <property name="text">
+            <string>transfer to ESA line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QPushButton" name="pushButton_FULLline">
+           <property name="text">
+            <string>back to Origin line</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="groupBox_3">
+      <property name="title">
+       <string>Add Error</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_7">
+       <item>
+        <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,0">
+         <item row="0" column="1">
+          <widget class="QPushButton" name="err_off">
+           <property name="text">
+            <string>error off</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="QPushButton" name="static_err">
+           <property name="text">
+            <string>add error</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="1,1">
+         <item>
+          <widget class="QGroupBox" name="groupBox_4">
+           <property name="title">
+            <string>static error</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout">
+            <item>
+             <layout class="QGridLayout" name="gridLayout" columnstretch="1,2,1" columnminimumwidth="0,0,0">
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_4">
+                <property name="text">
+                 <string>Quad-DX/DY:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="QDXDYvalue">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>80</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="label_9">
+                <property name="text">
+                 <string>um (rms)</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </item>
            </layout>
-          </item>
-         </layout>
-        </item>
-        <item row="6" column="1">
-         <spacer name="verticalSpacer_2">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>40</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
-      </item>
-     </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="groupBox_5">
+           <property name="title">
+            <string>jitter</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_8">
+            <item>
+             <layout class="QGridLayout" name="gridLayout_7" columnstretch="1,1,1" columnminimumwidth="1,1,1">
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="QK1JITTER">
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_8">
+                <property name="text">
+                 <string>Quad-K</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="label_10">
+                <property name="text">
+                 <string>ppm (rms)</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
     </item>
    </layout>
   </widget>
@@ -317,7 +355,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>592</width>
+     <width>986</width>
      <height>20</height>
     </rect>
    </property>

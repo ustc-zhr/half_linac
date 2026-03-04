@@ -3,6 +3,7 @@ from PyQt5.QtCore import QThread
 import sys
 import signal
 from subprocess import Popen
+import time
 
 import half_linac.setup as st
 from gui import Ui_MainWindow
@@ -15,18 +16,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
         
         # connect button
         self.vmbtn.clicked.connect(self.start_vm)
-
-        self.pushButton_3.clicked.connect(self.start_beammonitor)
-        self.pushButton.clicked.connect(self.start_orbit_display)
-
-        self.pushButton_2.clicked.connect(self.start_emitMeasure)
-        self.pushButton_4.clicked.connect(self.start_bba)
-        self.orbit_correct.clicked.connect(self.orb_correct)
-
         self.online_opt.clicked.connect(self.online_optimization)
 
+        self.beammonitor.clicked.connect(self.start_beammonitor)
+        self.orbitdisplay.clicked.connect(self.start_orbit_display)
         self.jitter_plot.clicked.connect(self.jitter_custom)
 
+        self.emitmeasure.clicked.connect(self.start_emitMeasure)
+        self.BBA.clicked.connect(self.start_bba)
+        self.orbit_correct.clicked.connect(self.orb_correct)
         self.energy_spectrum.clicked.connect(self.start_energy_spectrum)
 
     def start_vm(self):
@@ -181,21 +179,39 @@ class myWindow(QMainWindow, Ui_MainWindow):
         '''
         windows close event
         '''
-        self.stop_subpro()  # 调用停止函数
+        self._stop_subpro()  # 调用停止函数
         event.accept()
 
 
-    def stop_subpro(self):
-        '''
-        close the subprocesses
-        '''
-        for pro in self.subprocesses:
-            try:
-                pro.send_signal(signal.SIGTERM)
-            except:
-                pro.kill()
-        self.subprocesses = []
+    # def stop_subpro(self):
+    #     '''
+    #     close the subprocesses
+    #     '''
+    #     for pro in self.subprocesses:
+    #         try:
+    #             pro.send_signal(signal.SIGTERM)
+    #         except:
+    #             pro.kill()
+    #     self.subprocesses = []
 
+    def _stop_subpro(self):
+        for pro in self.subprocesses:
+            if pro.poll() is None:  # 还在运行
+                try:
+                    pro.terminate()  # 先优雅尝试（Windows 也有效）
+                except:
+                    pass
+        
+        time.sleep(0.5)  # 给点时间响应
+        
+        for pro in self.subprocesses:
+            if pro.poll() is None:
+                try:
+                    pro.kill()  # 强制杀
+                except:
+                    pass
+        
+        self.subprocesses.clear()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

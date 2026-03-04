@@ -66,133 +66,133 @@ class myWindow(QWidget,Ui_Form):
 
         # other function
         self.comboBox.currentIndexChanged.connect(self.updateComboBox4)
-        self.pushButton_6.clicked.connect(self.simply_VM)
-        self.pushButton_7.clicked.connect(self.full_VM)
+        # self.pushButton_6.clicked.connect(self.simply_VM)
+        # self.pushButton_7.clicked.connect(self.full_VM)
 
-    def simply_VM(self):
-        """to simplify the lattice in VM for accelerate the testing process (only considering from Q to flag )"""
+    # def simply_VM(self):
+    #     """to simplify the lattice in VM for accelerate the testing process (only considering from Q to flag )"""
         
-        quad = self.comboBox.currentText()
-        flag = self.comboBox_4.currentText()
+    #     quad = self.comboBox.currentText()
+    #     flag = self.comboBox_4.currentText()
 
-        with open(jsonpath,"r") as f:
-            lte  = json.load(f)
-        contl    = lte  ["control"]
-        lattice  = lte  ["lattice"]
-        # usedline = lte  ["usedline"]
-        usedline = lte["lattice"]["ALL"]["LINE"]
+    #     with open(jsonpath,"r") as f:
+    #         lte  = json.load(f)
+    #     contl    = lte  ["control"]
+    #     lattice  = lte  ["lattice"]
+    #     # usedline = lte  ["usedline"]
+    #     usedline = lte["lattice"]["ALL"]["LINE"]
 
-        # pre the input beam before entrance of quad
-        # ------------------------------------------
-        # add a watch
-        prewatch = {}
-        prewatch["NAME"] = "PREW"
-        prewatch["TYPE"] = "WATCH"
-        prewatch["FILENAME"] = "pre.bun"
-        prewatch["MODE"] = "COORD"
-        prewatch["DISABLE"] = "0"
+    #     # pre the input beam before entrance of quad
+    #     # ------------------------------------------
+    #     # add a watch
+    #     prewatch = {}
+    #     prewatch["NAME"] = "PREW"
+    #     prewatch["TYPE"] = "WATCH"
+    #     prewatch["FILENAME"] = "pre.bun"
+    #     prewatch["MODE"] = "COORD"
+    #     prewatch["DISABLE"] = "0"
 
-        lattice["PREW"]={}
-        lattice["PREW"]=prewatch
+    #     lattice["PREW"]={}
+    #     lattice["PREW"]=prewatch
         
-        id = usedline.index(quad)
-        preline = usedline[0:id]
-        preline.append(prewatch["NAME"])
+    #     id = usedline.index(quad)
+    #     preline = usedline[0:id]
+    #     preline.append(prewatch["NAME"])
 
-        ltepre = {}
-        ltepre["control"]  = contl
-        ltepre["lattice"]  = lattice
-        ltepre["usedline"] = preline
-        with open(jsonpath,"w") as f:
-            f.write(json.dumps(ltepre,indent=4))
+    #     ltepre = {}
+    #     ltepre["control"]  = contl
+    #     ltepre["lattice"]  = lattice
+    #     ltepre["usedline"] = preline
+    #     with open(jsonpath,"w") as f:
+    #         f.write(json.dumps(ltepre,indent=4))
         
-        # wait the vm run
-        time.sleep(st.runtime_vmmachine)
-        print("pre.bun before ",quad," is ready")
+    #     # wait the vm run
+    #     time.sleep(st.runtime_vmmachine)
+    #     print("pre.bun before ",quad," is ready")
 
-        # get the energy before quad
-        tmp = sdds.SDDS(0)
-        tmp.load(st.rootpath+"/src/virtual_machine/half_elegant/elegant/one.cen")
-        tmppCentral = tmp.columnData[11][0][-1]
+    #     # get the energy before quad
+    #     tmp = sdds.SDDS(0)
+    #     tmp.load(st.rootpath+"/src/virtual_machine/half_elegant/elegant/one.cen")
+    #     tmppCentral = tmp.columnData[11][0][-1]
 
-        # simply VM
-        # ---------
-        contl    = lte  ["control"]
-        lattice  = lte  ["lattice"]
-        usedline = lte  ["usedline"]
+    #     # simply VM
+    #     # ---------
+    #     contl    = lte  ["control"]
+    #     lattice  = lte  ["lattice"]
+    #     usedline = lte  ["usedline"]
 
-        id1 = usedline.index(quad)
-        id2 = usedline.index(flag)
-        scanline = usedline[id1:id2+1]
+    #     id1 = usedline.index(quad)
+    #     id2 = usedline.index(flag)
+    #     scanline = usedline[id1:id2+1]
 
-        del contl["bunched_beam"]
+    #     del contl["bunched_beam"]
 
-        contl["run_setup"]["p_central"]= str(tmppCentral)
+    #     contl["run_setup"]["p_central"]= str(tmppCentral)
 
-        contl["sdds_beam"] = {}
-        contl["sdds_beam"]["input"]="pre.bun"
-        contl["sdds_beam"]["center_arrival_time"]="1"
-        contl["sdds_beam"]["reuse_bunch"]="1"
+    #     contl["sdds_beam"] = {}
+    #     contl["sdds_beam"]["input"]="pre.bun"
+    #     contl["sdds_beam"]["center_arrival_time"]="1"
+    #     contl["sdds_beam"]["reuse_bunch"]="1"
 
-        lte["control"]  = contl
-        lte["lattice"]  = lattice
-        lte["usedline"] = scanline
+    #     lte["control"]  = contl
+    #     lte["lattice"]  = lattice
+    #     lte["usedline"] = scanline
 
-        with open(jsonpath,"w") as f:
-            f.write(json.dumps(lte,indent=4))
+    #     with open(jsonpath,"w") as f:
+    #         f.write(json.dumps(lte,indent=4))
         
-        time.sleep(5)
-        print("simply VM: (",quad,"-to-",flag,") is ready")
+    #     time.sleep(5)
+    #     print("simply VM: (",quad,"-to-",flag,") is ready")
 
-        return
+    #     return
     
-    def full_VM(self):
-        # back to initial
-        # print(lattice_file)
-        # ltet = elegant_parser(lattice_file, ele_file, line_name)
-        # ltet.dump2json(jsonpath)
+    # def full_VM(self):
+    #     # back to initial
+    #     # print(lattice_file)
+    #     # ltet = elegant_parser(lattice_file, ele_file, line_name)
+    #     # ltet.dump2json(jsonpath)
         
-        # back to the state before simply
-        with open(jsonpath,"r") as f:
-            lte  = json.load(f)
-        contl    = lte  ["control"]
-        lattice  = lte  ["lattice"]
-        line = lte["lattice"]["ALL"]["LINE"]
+    #     # back to the state before simply
+    #     with open(jsonpath,"r") as f:
+    #         lte  = json.load(f)
+    #     contl    = lte  ["control"]
+    #     lattice  = lte  ["lattice"]
+    #     line = lte["lattice"]["ALL"]["LINE"]
 
-        lte["usedline"] = lte["lattice"]["ALL"]["LINE"]
+    #     lte["usedline"] = lte["lattice"]["ALL"]["LINE"]
 
-        if "PREW" in lattice:
-            del lattice["PREW"]
+    #     if "PREW" in lattice:
+    #         del lattice["PREW"]
         
-        if "sdds_beam" in contl:
-            del contl["sdds_beam"]
+    #     if "sdds_beam" in contl:
+    #         del contl["sdds_beam"]
 
-            bunched_beam = {
-                "n_particles_per_bunch": "10000",
-                "emit_nx": "10e-6",
-                "emit_ny": "10e-6",
-                "use_twiss_command_values": "10000",
-                "distribution_type[0]": "\"gaussian\"",
-                "distribution_type[1]": "\"gaussian\"",
-                "distribution_type[2]": "\"gaussian\"",
-                "distribution_cutoff[0]": "5",
-                "distribution_cutoff[1]": "5",
-                "distribution_cutoff[2]": "5",
-                "sigma_s": "1.11e-3",
-                "sigma_dp": "4e-3"
-            }
-            contl["bunched_beam"] = bunched_beam
+    #         bunched_beam = {
+    #             "n_particles_per_bunch": "10000",
+    #             "emit_nx": "10e-6",
+    #             "emit_ny": "10e-6",
+    #             "use_twiss_command_values": "10000",
+    #             "distribution_type[0]": "\"gaussian\"",
+    #             "distribution_type[1]": "\"gaussian\"",
+    #             "distribution_type[2]": "\"gaussian\"",
+    #             "distribution_cutoff[0]": "5",
+    #             "distribution_cutoff[1]": "5",
+    #             "distribution_cutoff[2]": "5",
+    #             "sigma_s": "1.11e-3",
+    #             "sigma_dp": "4e-3"
+    #         }
+    #         contl["bunched_beam"] = bunched_beam
         
-        contl["run_setup"]["p_central"]= "223.4028"
+    #     contl["run_setup"]["p_central"]= "223.4028"
 
-        lte["control"]  = contl
-        lte["lattice"]  = lattice
-        lte["usedline"] = line
-        with open(jsonpath,"w") as f:   
-            f.write(json.dumps(lte,indent=4))
+    #     lte["control"]  = contl
+    #     lte["lattice"]  = lattice
+    #     lte["usedline"] = line
+    #     with open(jsonpath,"w") as f:   
+    #         f.write(json.dumps(lte,indent=4))
 
-        print("full VM is back")
-        return
+    #     print("full VM is back")
+    #     return
 
         
     def updateComboBox4(self, index):  

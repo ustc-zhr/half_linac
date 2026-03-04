@@ -231,6 +231,27 @@ WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直�
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   ```
 
+  如不成功，可通过安装包安装：
+  
+  ```zsh
+  # 1. 下载压缩包
+  curl -L -o ohmyzsh-master.zip https://github.com/ohmyzsh/ohmyzsh/archive/master.zip
+  
+  # 2. 解压
+  unzip ohmyzsh-master.zip
+  
+  # 3. 移动到正确位置
+  mv ohmyzsh-master ~/.oh-my-zsh
+  
+  # 4. 复制配置文件
+  cp ~/.oh-my-zsh/templates/zshrc.zsh-template ~/.zshrc
+  
+  # 5. 切换默认shell
+  chsh -s $(which zsh)
+  
+  # 6. 重新登录或重启终端
+  ```
+  
   
 
 ### b. epics

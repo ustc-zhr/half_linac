@@ -375,6 +375,32 @@ p, li { white-space: pre-wrap; }
              <string>Stop</string>
             </property>
            </widget>
+           <widget class="QPushButton" name="pushButton_6">
+            <property name="geometry">
+             <rect>
+              <x>200</x>
+              <y>10</y>
+              <width>80</width>
+              <height>23</height>
+             </rect>
+            </property>
+            <property name="text">
+             <string>simply VM</string>
+            </property>
+           </widget>
+           <widget class="QPushButton" name="pushButton_7">
+            <property name="geometry">
+             <rect>
+              <x>290</x>
+              <y>10</y>
+              <width>80</width>
+              <height>23</height>
+             </rect>
+            </property>
+            <property name="text">
+             <string>full VM</string>
+            </property>
+           </widget>
           </widget>
          </item>
          <item row="0" column="0">
