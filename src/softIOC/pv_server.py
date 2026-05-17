@@ -1,255 +1,222 @@
-import epics 
-import json
 import time
-import os
-import numpy as np
+from pathlib import Path
+from subprocess import Popen
+
+import epics
 
 import half_linac.setup as st
+from half_linac.src.virtual_machine.half_elegant.runtime_state import (
+    ensure_runtime_state,
+    read_runtime_state,
+    update_runtime_state,
+    write_runtime_state,
+)
 
 
-# -------------
-# PAY ATTENTION
-# -------------
-# PV rule is: HALF:LN:QUAD:QL01:K1, element name should place at 4th 
+BEND_TYPES = {"BEND", "CSBEND", "CSRCSBEND", "SBEND", "SBEN"}
+COR_TYPES = {"HKICK", "VKICK"}
+
+
 class pv_server:
     def __init__(self, jsonpath, iocpath):
         self.pvl = []
         self.pv_val = []
-        
-        self.jsonpath = jsonpath    #st.rootpath+"/virtual_machine/half_elegant/halflinac.json"
-        self.iocpath = iocpath     
-        self.substitutions_name = jsonpath.split("/")[-1].split(".")[0] # keep the same name with .json file
-    
-    def gen_substitution_file(self):
-        '''
-        generate db/half.substitutions file
-        '''
-        # read lattice from json
-        with open(self.jsonpath,"r") as f:
-            lte = json.load(f)
+        self.pv_objects = []
 
-        lattice = lte["lattice"]
-        
-        with open(self.iocpath + "/db/" + self.substitutions_name + '.substitutions', 'w') as f:
-            # for QUAD
+        self.jsonpath = Path(jsonpath)
+        self.iocpath = Path(iocpath)
+        self.substitutions_name = self.jsonpath.stem
+
+    def _read_lattice_json(self):
+        return read_runtime_state(self.jsonpath)
+
+    def _write_lattice_json(self, data):
+        write_runtime_state(self.jsonpath, data)
+
+    def gen_substitution_file(self):
+        """
+        generate db/half.substitutions file
+        """
+        lattice = self._read_lattice_json()["lattice"]
+        substitutions_path = self.iocpath / "db" / f"{self.substitutions_name}.substitutions"
+
+        with substitutions_path.open("w", encoding="utf-8") as f:
             f.write("file db/quad.template {\n")
             f.write("  pattern {QUAD}\n")
             for key in lattice:
-                if lattice[key]["TYPE"] == "QUAD":   
-                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+                if lattice[key]["TYPE"] == "QUAD":
+                    f.write(f'  {{ "{lattice[key]["NAME"]}" }}\n')
             f.write("}\n")
-                
-            # for BEND
+
             f.write("file db/bend.template {\n")
             f.write("  pattern {BEND}\n")
             for key in lattice:
-                if lattice[key]["TYPE"] in ["BEND", "CSRCSBEND", "SBEND", "SBEN"]:   
-                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+                if lattice[key]["TYPE"] in BEND_TYPES:
+                    f.write(f'  {{ "{lattice[key]["NAME"]}" }}\n')
             f.write("}\n")
-            
-            # for BPM
+
             f.write("file db/bpm.template {\n")
             f.write("  pattern {BPM}\n")
             for key in lattice:
-                if lattice[key]["TYPE"] == "MONI":   
-                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+                if lattice[key]["TYPE"] == "MONI":
+                    f.write(f'  {{ "{lattice[key]["NAME"]}" }}\n')
             f.write("}\n")
-            
-            # for FLAG
+
             f.write("file db/flag.template {\n")
             f.write("  pattern {FLAG}\n")
             for key in lattice:
-                if lattice[key]["TYPE"] == "WATCH":   
-                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+                if lattice[key]["TYPE"] == "WATCH":
+                    f.write(f'  {{ "{lattice[key]["NAME"]}" }}\n')
             f.write("}\n")
-    
-            # for COR
+
             f.write("file db/corr.template {\n")
             f.write("  pattern {COR}\n")
             for key in lattice:
-                if lattice[key]["TYPE"] in ["HKICK", "VKICK"] :   
-                    f.write("  { \"" +lattice[key]["NAME"] +"\" }\n")
+                if lattice[key]["TYPE"] in COR_TYPES:
+                    f.write(f'  {{ "{lattice[key]["NAME"]}" }}\n')
             f.write("}\n")
-        
-                    
-        # and so on 
-        # ...
-    
-    def init_lattice_pv(self):
-        '''
-        initialize all PVs' value based on lattice.json
-        '''
-        with open(self.jsonpath,"r") as f:
-            lte = json.load(f)
-        
+
+    def prepare_initial_pvs(self):
+        """
+        collect all PV names and initial values based on lattice.json
+        """
+        def ensure_corrector_defaults(lte):
+            changed = False
+            lattice = lte["lattice"]
+
+            for key in lattice:
+                if lattice[key]["TYPE"] in COR_TYPES and "KICK" not in lattice[key]:
+                    lattice[key]["KICK"] = "0"
+                    changed = True
+
+            return changed
+
+        lte, _ = update_runtime_state(self.jsonpath, ensure_corrector_defaults)
         lattice = lte["lattice"]
-        print(lattice["SM"])
- 
-        ##1. add channel to json file
-        ##---------------------------
-        #for key in lattice:
-        #    if lattice[key]["TYPE"] == "QUAD":
-        #        # add AP attibute
-        #        lattice[key]["AP"] = "HALF:IN:QUAD:"+key+":K1"
 
-        #    elif lattice[key]["TYPE"] in ["CSRCSBEND", "CSBEND", "BEND", "SBEN", "SBEND"]:
-        #        lattice[key]["AP"] = "HALF:IN:BEND:"+key+":ANGLE"
-
-        #    # RFCW, COR,... and so on
-        #    # to be finished yet
-        #
-        ##write back to json file
-        #with open(self.jsonpath,"w") as f:
-        #    f.write(json.dumps(lte, indent=4))
-
-        #2. broadcast element setting values to epics
-        #----------------------------     
         pvl = []
         pv_val = []
-        # init all quads
+
         for key in lattice:
-            if lattice[key]["TYPE"] == "QUAD":        
+            elem_type = lattice[key]["TYPE"]
+            if elem_type == "QUAD":
                 pvl.append(lattice[key]["AP"])
                 pv_val.append(lattice[key]["K1"])
-
-            elif lattice[key]["TYPE"] in ["BEND", "CSRCSBEND", "SBEND", "SBEN"]:  
+            elif elem_type in BEND_TYPES:
                 pvl.append(lattice[key]["AP"])
                 pv_val.append(lattice[key]["ANGLE"])
-
-            # KICK pv value isn't set in *_ini.ele  AND pv is n't set in initial json file
-            # elif lattice[key]["TYPE"] in ["HKICK","VKICK"]:    
-            #     lattice[key]["AP"] = "HALF:IN:COR:"+key+":ao" 
-            #     lattice[key]["KICK"] = "0" 
-            #     pvl.append(lattice[key]["AP"])
-            #     pv_val.append(lattice[key]["KICK"])
-
-
-            # to be finished 
-            # RFCW, and so on
-       
+            elif elem_type in COR_TYPES:
+                pvl.append(lattice[key]["AP"])
+                pv_val.append(lattice[key]["KICK"])
 
         self.pvl = pvl
         self.pv_val = pv_val
-        epics.caput_many(pvl, pv_val)
-        #print(pvl)
+
+        return pvl, pv_val
+
+    def init_lattice_pv(self):
+        """
+        initialize all PVs' value based on lattice.json
+        """
+        if not self.pvl:
+            self.prepare_initial_pvs()
+
+        epics.caput_many(self.pvl, self.pv_val)
+
+    @staticmethod
+    def _normalize_numeric_string(value):
+        try:
+            return format(float(value), ".16g")
+        except (TypeError, ValueError):
+            return str(value)
+
+    @classmethod
+    def _field_needs_update(cls, current_value, new_value):
+        try:
+            return float(current_value) != float(new_value)
+        except (TypeError, ValueError):
+            return str(current_value) != str(new_value)
+
+    def _update_element_from_pv(self, lattice, pvname, value):
+        if pvname is None or value is None:
+            return False
+
+        parts = pvname.split(":")
+        if len(parts) < 4:
+            return False
+
+        elem_type = parts[2]
+        elem_name = parts[3]
+        if elem_name not in lattice:
+            return False
+
+        if elem_type == "QUAD":
+            field = "K1"
+        elif elem_type == "BEND":
+            field = "ANGLE"
+        elif elem_type == "COR":
+            field = "KICK"
+        else:
+            return False
+
+        current_value = lattice[elem_name].get(field)
+        if not self._field_needs_update(current_value, value):
+            return False
+
+        lattice[elem_name][field] = self._normalize_numeric_string(value)
+        return True
 
     def monitor_json(self):
-        '''
+        """
         In case caput a new value to a PV, the lattice.json should also be updated
-        '''
-        # pvl_value = epics.caget_many(self.pvl)
+        """
 
-        def onChanges(pvname=None, value=None, char_value=None,**kw):
-            print('PV Changed:', pvname,", new value=", value, ", time:",time.ctime())
-            print("lattice.json will be updated.\n")
-            
-            with open(self.jsonpath,"r") as f:
-                lte = json.load(f)
-            
-            lattice = lte["lattice"]
+        def onChanges(pvname=None, value=None, char_value=None, **kw):
+            _, changed = update_runtime_state(
+                self.jsonpath,
+                lambda lte: self._update_element_from_pv(lte["lattice"], pvname, value),
+            )
 
-            # get the element name from PV 
-            tmp = pvname.split(":")
-            if tmp[2] == "QUAD":
-                # HALF:LN:QUAD:QL01S:K1 => QL01S, so rule should be REALLY important 
-                elem_name = tmp[3]
-                lattice[elem_name]["K1"] = str(value)
-            
-            elif tmp[2] == "BEND":
-                # kicker
-                # IRFEL:PS:HC01:current:ao
-                elem_name = tmp[3]
-                lattice[elem_name]["ANGLE"] = str(value)
+            if not changed:
+                return
 
-            elif tmp[2] == "COR":
-                # kicker
-                # IRFEL:PS:HC01:current:ao
-                elem_name = tmp[3]
-                lattice[elem_name]["KICK"] = str(value)
+            print('PV Changed:', pvname, ", new value=", value, ", time:", time.ctime())
+            print("lattice.json has been updated.\n")
 
-            # to be finished, RFCW, BEND, ...
-            # ...
-            
-            with open(self.jsonpath,"w") as f:
-                f.write( json.dumps(lte, indent=4))
-        
+        self.pv_objects = []
         for pv in self.pvl:
             mypv = epics.PV(pv)
             mypv.add_callback(onChanges)
-
-#     def gen_random_Q_err(self):
-#         seed = 123456789
-#         # 设定高斯分布的参数
-#         mu = 0  # 均值
-#         sigma = 0.5e-4  # 标准差
-
-#         # 生成高斯分布的随机数
-# #        datax = np.random.normal(mu, sigma, 1)[0]  # 假设生成10000个数据点
-# #        datay = np.random.normal(mu, sigma, 1)[0]
-#         # 3σ截断
-#         lower_bound = mu - 3 * sigma
-#         upper_bound = mu + 3 * sigma
-
-#         f = open(self.jsonpath, "r")
-#         lte = json.load(f)
-#         lattice = lte["lattice"]
-#         f.close()
-#         for key in lattice:
-#             if lattice[key]["TYPE"] == "QUAD":
-#                 datax = np.random.normal(mu, sigma, 1)[0]
-#                 datay = np.random.normal(mu, sigma, 1)[0]
-#                 while not (lower_bound <= datax <= upper_bound):
-#                     datax = np.random.normal(mu, sigma, 1)[0]
-#                 lattice[key]["DX"] = str(datax)
-#                 while not (lower_bound <= datay <= upper_bound):
-#                     datay = np.random.normal(mu, sigma, 1)[0]
-#                 lattice[key]["DY"] = str(datay)
-#         f = open(self.jsonpath, "w")
-#         f.write(json.dumps(lte, indent=4))
-#         f.close()
-
-#     def err_off(self):
-
-#         f = open(self.jsonpath, "r")
-#         lte = json.load(f)
-#         lattice = lte["lattice"]
-#         f.close()
-#         for key in lattice:
-#             if lattice[key]["TYPE"] == "QUAD":
-#                 lattice[key]["DX"] = "0"
-#                 lattice[key]["DY"] = "0"
-#         f = open(self.jsonpath, "w")
-#         f.write(json.dumps(lte, indent=4))
-#         f.close()        
+            self.pv_objects.append(mypv)
 
 
+if __name__ == '__main__':
+    jsonpath = Path(st.rootpath) / "src/virtual_machine/half_elegant/halflinac.json"
+    iocpath = Path(st.rootpath) / "src/softIOC/halflinac"
 
-from subprocess import Popen
-if __name__=='__main__':
+    def build_initial_state():
+        lattice_file = Path(st.rootpath) / "src/virtual_machine/half_elegant/elegant/lattice_ini.lte"
+        ele_file = Path(st.rootpath) / "src/virtual_machine/half_elegant/elegant/one_ini.ele"
 
-    jsonpath  = st.rootpath+"src/virtual_machine/half_elegant/halflinac.json" 
-    iocpath   = st.rootpath+"src/softIOC/halflinac"
+        from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 
-    myserver = pv_server(jsonpath, iocpath)
-    
-    #1. lattice.lte => ./softIOC/db/half.substitutions 
+        return elegant_parser(str(lattice_file), str(ele_file), "ALL").build_runtime_state()
+
+    ensure_runtime_state(jsonpath, build_initial_state)
+
+    myserver = pv_server(str(jsonpath), str(iocpath))
     myserver.gen_substitution_file()
- 
-    #2. start softIOC
-    Popen("./runMe", cwd=iocpath, shell=True)
 
-    #3. initialize epics PV with the values from lattice.lte
-    myserver.init_lattice_pv()
+    ioc_proc = Popen(["bash", "runMe"], cwd=str(iocpath), shell=False)
+    try:
+        time.sleep(2.0)
+        myserver.init_lattice_pv()
+        myserver.monitor_json()
+        print('Now wait for changes')
 
-    #4. Now, we can monitor the lattice pv, in case they have changes
-    myserver.monitor_json()
-    # #---------------------------------
-    print('Now wait for changes')
-    
-    # 让该程序长时间运行下去 且添加时间间隔避免过分占资源
-    t0 = time.time()
-    while time.time() - t0 < 100000.0:
-    
-        time.sleep(1.e-3)
-    print('Done.')
-    
+        while ioc_proc.poll() is None:
+            time.sleep(1.0)
+    finally:
+        if ioc_proc.poll() is None:
+            ioc_proc.terminate()
+            ioc_proc.wait(timeout=3.0)

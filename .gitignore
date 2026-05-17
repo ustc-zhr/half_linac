@@ -1,5 +1,57 @@
 requirements.txt
-.vscode/
+
+# Python caches
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Editor and local tooling
+.vscode/
+.codex
+.DS_Store
+*.Zone.Identifier
+
+# Interactive shell history
+.iocsh_history
+
+# Generated UI backups
+*-backup.ui
+* - 副本.ui
+
+# Runtime artifacts
+*.log
+*.mat
+*.npy
+*.npz
+*.out
+*.twi
+*.cen
+*.bpmcen
+*.mag
+*.mpr
+
+# Generated VM state files
+src/virtual_machine/half_elegant/elegant/lattice.lte
+src/virtual_machine/half_elegant/elegant/one.ele
+src/virtual_machine/half_elegant/halflinac.json
+src/virtual_machine/half_elegant/esa.json
+src/virtual_machine/half_elegant/.*.lock
+
+# softIOC build outputs
+src/softIOC/halflinac/bin/
+src/softIOC/halflinac/db/halflinac.substitutions
+src/softIOC/halflinac/lib/
+src/softIOC/halflinac/dbd/target.dbd
+src/softIOC/halflinac/include/xxxRecord.h
+src/softIOC/halflinac/**/O.Common/
+src/softIOC/halflinac/**/O.linux-x86_64/
+src/softIOC/halflinac/iocBoot/ioctarget/envPaths
+src/softIOC/halflinac/iocBoot/ioctarget/cdCommands
+src/softIOC/halflinac/iocBoot/ioctarget/relPaths.sh
+src/softIOC/halflinac/iocBoot/ioctarget/dllPath.bat
+
+# Local environment exports
 scripts/export_env.sh

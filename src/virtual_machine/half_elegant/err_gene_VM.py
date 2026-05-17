@@ -1,16 +1,16 @@
 import sys
-import json
-import numpy as np
 from scipy.stats import truncnorm
+from pathlib import Path
 
 import half_linac.setup as st
+from half_linac.src.virtual_machine.half_elegant.runtime_state import update_runtime_state
 
 
 class errorVM():
     """通过更改half_linac.json文件的方式给虚拟机器添加误差"""
     def __init__(self,sigma_default,jsonpath):
         self.sigma_default = sigma_default
-        self.jsonpath = jsonpath
+        self.jsonpath = Path(jsonpath)
         # print('default',self.sigma_default)
 
     def gen_static_err(self,sigma=None):
@@ -21,18 +21,18 @@ class errorVM():
         mu = 0  # 均值
         sigma = sigma*1e-6  # 标准差 m
 
-        with open(self.jsonpath,"r") as f:
-            lte = json.load(f)
-        lattice = lte["lattice"]
+        def apply_static_error(lte):
+            lattice = lte["lattice"]
 
-        for key in lattice:
-            if lattice[key]["TYPE"] == "QUAD":
-                datax = truncnorm.rvs(-3, 3, loc=mu, scale=sigma)
-                datay = truncnorm.rvs(-3, 3, loc=mu, scale=sigma)
-                lattice[key]["DX"] = str(datax)
-                lattice[key]["DY"] = str(datay)
-        with open(self.jsonpath,"w") as f:
-            f.write(json.dumps(lte, indent=4))
+            for key in lattice:
+                if lattice[key]["TYPE"] == "QUAD":
+                    datax = truncnorm.rvs(-3, 3, loc=mu, scale=sigma)
+                    datay = truncnorm.rvs(-3, 3, loc=mu, scale=sigma)
+                    lattice[key]["DX"] = str(datax)
+                    lattice[key]["DY"] = str(datay)
+            return True
+
+        update_runtime_state(self.jsonpath, apply_static_error)
 
         print('static error is added:   Q DX/DY-',sigma,' m')
 
@@ -40,38 +40,33 @@ class errorVM():
         """直接通过error_element增加Q铁的动态随机抖动"""
         sigma = sigma_ppm*1e-6  # fraction
 
-        with open(self.jsonpath,"r") as f:
-            lte = json.load(f)
-        
-        # Q:K1 jitter
-        lte["control"]["error_element"]["amplitude"] = str(sigma)
+        def apply_jitter_error(lte):
+            lte["control"]["error_element"]["amplitude"] = str(sigma)
+            return True
 
-        with open(self.jsonpath,"w") as f:
-            f.write(json.dumps(lte, indent=4))
+        update_runtime_state(self.jsonpath, apply_jitter_error)
 
         print('jitter is added:   Q K1-',sigma_ppm,' ppm')
 
     def err_off(self):
 
-        with open(self.jsonpath,"r") as f:
-            lte = json.load(f)
-        
-        lattice = lte["lattice"]
-        for key in lattice:
-            if lattice[key]["TYPE"] == "QUAD":
-                lattice[key]["DX"] = "0"
-                lattice[key]["DY"] = "0"
+        def disable_errors(lte):
+            lattice = lte["lattice"]
+            for key in lattice:
+                if lattice[key]["TYPE"] == "QUAD":
+                    lattice[key]["DX"] = "0"
+                    lattice[key]["DY"] = "0"
 
-        lte["control"]["error_element"]["amplitude"] = "0"
+            lte["control"]["error_element"]["amplitude"] = "0"
+            return True
 
-        with open(self.jsonpath,"w") as f:
-            f.write(json.dumps(lte, indent=4))      
+        update_runtime_state(self.jsonpath, disable_errors)
 
         print('static/jitter error is off')
 
 
 sigma_default = 0
-jsonpath = st.rootpath+"/src/virtual_machine/half_elegant/halflinac.json"
+jsonpath = Path(st.rootpath) / "src/virtual_machine/half_elegant/halflinac.json"
 
 if __name__=='__main__':
     error_ele = errorVM(sigma_default,jsonpath)

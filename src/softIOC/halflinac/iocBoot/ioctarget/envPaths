@@ -1,3 +1,0 @@
-epicsEnvSet("IOC","ioctarget")
-epicsEnvSet("TOP","/home/zhanghaoran/gitproj/half_linac/src/softIOC/halflinac")
-epicsEnvSet("EPICS_BASE","/mnt/d/A/base-7.0.8/base-7.0.8")

@@ -5,4 +5,4 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/common.sh"
 
-exec python3 "$HALF_LINAC_ROOT/src/apps/launcher/main.py"
+exec python3 "$HALF_LINAC_ROOT/src/softIOC/mainIOC.py"

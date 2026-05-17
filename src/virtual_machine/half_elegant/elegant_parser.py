@@ -5,13 +5,23 @@ import re
 from math import *
 from collections import defaultdict
 import sdds
+import epics.ca
 from epics import caput, caget, caput_many
 import json
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 from half_linac.src.virtual_machine.lattice_parser import lattice_parser
+from half_linac.src.virtual_machine.half_elegant.runtime_state import (
+    read_runtime_state,
+    write_runtime_state,
+)
 import half_linac.setup as st
+
+
+EPICS_CONNECTION_TIMEOUT_S = 0.5
+EPICS_PUT_TIMEOUT_S = 5.0
 
 
 nest_dict = lambda: defaultdict(nest_dict)
@@ -146,6 +156,9 @@ class elegant_parser:
         self.lattice_file = lat_file  #'./elegant/lattice_ini.lte'
         self.line = line_name         #'ALL'
         self.ele_file = ele_file      #'./elegant/one_ini.ele'
+        self.vm_dir = Path(st.rootpath) / "src/virtual_machine/half_elegant"
+        self.elegant_dir = self.vm_dir / "elegant"
+        self.runtime_json_path = self.vm_dir / "halflinac.json"
         
         # get lattice
         lte = lattice_parser(self.lattice_file,self.line)
@@ -158,19 +171,30 @@ class elegant_parser:
         # dump lattice with channel added to halflinac.json 
         #self.dump2json()
 
-    def dump2json(self,j_file="halflinac.json"):
-        jsonfile = nest_dict()
-        
-        # add epics channel/PV
-        self._add_channel()   
+    def _resolve_runtime_json_path(self, j_file):
+        if j_file == "halflinac.json":
+            return self.runtime_json_path
+        return Path(j_file)
 
-        # control in dict
+    def _resolve_elegant_path(self, pathlike, default_name):
+        if pathlike == default_name:
+            return self.elegant_dir / default_name
+        return Path(pathlike)
+
+    def build_runtime_state(self):
+        jsonfile = nest_dict()
+
+        # add epics channel/PV
+        self._add_channel()
+
         jsonfile["control"] = self.control
         jsonfile["lattice"] = self.lattice
         jsonfile["usedline"] = self.trackline_names_list
-        
-        with open(j_file,"w") as f:
-           f.write(json.dumps(jsonfile, indent=4))
+
+        return jsonfile
+
+    def dump2json(self,j_file="halflinac.json"):
+        write_runtime_state(self._resolve_runtime_json_path(j_file), self.build_runtime_state())
 
     def _add_channel(self):
         for key in self.lattice:
@@ -190,13 +214,17 @@ class elegant_parser:
     # json2lte_ele broadcast_bpm broadcast_flag cycle
     # ===============================================
     def json2lte_ele(self,lat_f = "./elegant/lattice.lte", ele_f = "./elegant/one.ele",j_file="halflinac.json"):
+        json_path = self._resolve_runtime_json_path(j_file)
+        lattice_path = self._resolve_elegant_path(lat_f, "lattice.lte")
+        ele_path = self._resolve_elegant_path(ele_f, "one.ele")
+
         # update lattice.lte with halflinac.json (according to "usedline")
         #============================
-        with open(j_file,"r") as f:
+        with json_path.open("r", encoding="utf-8") as f:
             lte  = json.load(f)
     
         #halflinac.json => lattice.lte 
-        with open(lat_f, "w") as f:
+        with lattice_path.open("w", encoding="utf-8") as f:
             lattice = lte["lattice"]
             tmpnamelist = []
             for elem_name in lte["usedline"]: 
@@ -217,14 +245,72 @@ class elegant_parser:
             line2 = "\nUSEDLINE: LINE = (" +','.join(lte["usedline"]) +")"
             f.write(line2)
     
-      
+    
         # update one.ele with json file
         #==============================
         self.ele.control = lte["control"]
-        self.ele.back2ele(ele_f,lat_f)
+        self.ele.back2ele(str(ele_path), str(lattice_path))
     
     # sub-funcs for simulation results
     #----------------------------------------------
+    def _publish_many_best_effort(self, label, pv_names, values):
+        if not pv_names:
+            return True
+
+        try:
+            results = caput_many(
+                pv_names,
+                values,
+                wait=False,
+                connection_timeout=EPICS_CONNECTION_TIMEOUT_S,
+                put_timeout=EPICS_PUT_TIMEOUT_S,
+            )
+        except epics.ca.ChannelAccessException as exc:
+            print(f"{label} publish skipped: {exc}")
+            return False
+        except Exception as exc:
+            print(f"{label} publish skipped: {exc}")
+            return False
+
+        failures = 0
+        if results is not None:
+            failures = sum(1 for result in results if result in (None, False))
+
+        if failures:
+            print(f"{label} publish incomplete: {failures}/{len(pv_names)} PV writes were not confirmed.")
+            return False
+
+        return True
+
+    def _publish_flags_best_effort(self, flag_updates):
+        if not flag_updates:
+            return True
+
+        try:
+            failures = 0
+            for channel, value in flag_updates:
+                result = caput(
+                    channel,
+                    value,
+                    wait=False,
+                    connection_timeout=EPICS_CONNECTION_TIMEOUT_S,
+                    timeout=EPICS_PUT_TIMEOUT_S,
+                )
+                if result in (None, False):
+                    failures += 1
+        except epics.ca.ChannelAccessException as exc:
+            print(f"flag publish skipped: {exc}")
+            return False
+        except Exception as exc:
+            print(f"flag publish skipped: {exc}")
+            return False
+
+        if failures:
+            print(f"flag publish incomplete: {failures}/{len(flag_updates)} PV writes were not confirmed.")
+            return False
+
+        return True
+
     def broadcast_bpm(self):
         '''
         broadcast the BPM values to epics PV
@@ -248,14 +334,15 @@ class elegant_parser:
             pvlvaly.append(pvlvaly_temp)
         
         # put the values
-        caput_many(pvlx,pvlvalx) 
-        caput_many(pvly,pvlvaly) 
+        x_ok = self._publish_many_best_effort("BPM X", pvlx, pvlvalx)
+        y_ok = self._publish_many_best_effort("BPM Y", pvly, pvlvaly)
+        return x_ok and y_ok
 
     def broadcast_flag(self):
         # get watch channel
-        with open("./halflinac.json","r") as f:
-           lte = json.load(f)
+        lte = read_runtime_state(self.runtime_json_path)
         usedline = lte["usedline"] # 保证只有usedline里面的PRF才会被发布到ioc
+        flag_updates = []
 
         for key in self.lattice:
             #print(key)
@@ -271,13 +358,15 @@ class elegant_parser:
                 else:
                     tmp = self._get_watch_image(key)
 
-                caput(channel, tmp)
+                flag_updates.append((channel, tmp))
+
+        return self._publish_flags_best_effort(flag_updates)
 
 
     def _get_bpmdata(self):
         tmp = sdds.SDDS(0)
         
-        tmp.load('./elegant/one.bpmcen')
+        tmp.load(str(self.elegant_dir / "one.bpmcen"))
         colname = tmp.columnName
         data    = tmp.columnData
 
@@ -313,7 +402,7 @@ class elegant_parser:
         #pha = np.loadtxt("./impz/fort."+file_id, skiprows=1)
         tmp = sdds.SDDS(0)
         # print(file_id)
-        tmp.load('./elegant/'+file_id+".out")
+        tmp.load(str(self.elegant_dir / f"{file_id}.out"))
         tmpx = tmp.columnData[0][0]
         tmpy = tmp.columnData[2][0]
         

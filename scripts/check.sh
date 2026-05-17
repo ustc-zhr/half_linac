@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/common.sh"
+
+python3 -m compileall "$HALF_LINAC_ROOT/setup.py" "$HALF_LINAC_ROOT/src"
+bash -n "$HALF_LINAC_ROOT/scripts/common.sh"
+bash -n "$HALF_LINAC_ROOT/scripts/setup.sh"
+bash -n "$HALF_LINAC_ROOT/scripts/runMe"
+bash -n "$HALF_LINAC_ROOT/scripts/check.sh"
+bash -n "$HALF_LINAC_ROOT/scripts/build_ioc.sh"
+bash -n "$HALF_LINAC_ROOT/scripts/start_vm.sh"
+bash -n "$HALF_LINAC_ROOT/scripts/start_ioc_manager.sh"
+bash -n "$HALF_LINAC_ROOT/src/softIOC/halflinac/runMe"
+
+echo "Static checks passed."

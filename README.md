@@ -1,450 +1,121 @@
-# half_linac 上层物理应用软件
+# half_linac
 
+HALF 直线加速器上层物理应用软件仓库，包含：
 
+- `EPICS softIOC`
+- 基于 `elegant` 的 virtual machine
+- PyQt 上层应用 GUI
+- 在线优化算法与辅助工具
 
-# 每周开发进度
+当前仓库同时包含源码、生成文件、实验运行产物和少量历史备份文件。为了让 Codex 或人工审查更高效，项目入口已经收敛到本文档、`AGENTS.md` 和 `docs/`。
 
-##### 2025-11-13-Zhanghaoran
+## 仓库地图
 
-- 增加了新功能：`energy spectrum`
+- `src/apps/`: GUI 应用，包括 `launcher`、`orbit_correct`、`bba`、`beam_monitor`、`energy_spectrum` 等
+- `src/optimization/`: 在线优化 GUI 与 BO / RCDS / Rsimplex 算法
+- `src/softIOC/`: IOC 管理脚本、PV 同步逻辑、IOC 工程文件
+- `src/virtual_machine/`: lattice 解析、VM 管理、`elegant` 运行目录
+- `scripts/`: 仓库内统一脚本入口
+- `docs/`: 安装说明、开发记录、Codex 审查优先级
 
-##### 2025-9-25-Zhanghaoran
+## 快速开始
 
-- `optimization`
+### 1. 准备环境
 
-  继续开发贝叶斯优化算法，针对高维情况下添加多种采集函数优化器以提高收敛性。(@opt_algorithm_test)
+建议先阅读 [docs/SETUP_AND_RUN.md](docs/SETUP_AND_RUN.md)。
 
-##### 2025-9-18-Zhanghaoran
-
-- `optimization`
-
-  实现了多目标贝叶斯优化算法，并利用ZDT1函数进行测试
-
-##### 2025-9-11-Zhanghaoran
-
-- `jitter`
-
-  开展能量反馈功能开发：添加自定义抖动统计功能
-
-##### 2025-8-28-Zhanghaoran
-
-- `optimization`
-
-  实现了贝叶斯优化算法`BO`及其GUI界面，并通过虚拟加速器进行了初步测试
-
-##### 2025-8-21-Zhanghaoran
-
-- `optimization`
-
-  实现了贝叶斯优化算法，并针对Rosenbrock函数进行测试
-
-##### 2025-7-31-Zhanghaoran
-
-- 继续在线优化功能开发`optimization`
-
-  实现了`Rsimplex`优化算法及其GUI界面，并通过虚拟加速器进行了初步测试
-
-##### 2025-7-24-Zhanghaoran
-
-- 继续在线优化功能开发`optimization`
-
-  实现了Robust simplex算法，并针对Rosenbrock函数进行测试
-
-  Refs: 
-
-  1. PHYSICAL REVIEW ACCELERATORS AND BEAMS 21, 104601 (2018)  
-
-##### 2025-7-17-Zhanghaoran
-
-- 继续在线优化功能开发`optimization`
-
-  实现了RCDS优化算法GUI界面，并通过虚拟加速器进行了初步测试
-
-
-##### 2025-7-10-Zhanghaoran
-
-- 开展在线优化功能开发(half_linac\src\optimization)
-
-  实现了非梯度依赖的基于方向集的优化算法，robust conjugate direction search (RCDS)  ，并通过Rosenbrock函数进行了测试
-  
-  Refs: 
-  
-  1. Nuclear Instruments and Methods in Physics Research A 726 (2013) 77–83  
-  1. W.H. Press, et al., Numerical Recipes, 3rd edition, Cambridge University Press, 2007  
-
-##### 2025-6-26-Zhanghaoran
-
-- `orbit corrrect`
-
-  添加svd方法求解逆矩阵
-
-##### 2025-6-19-Zhanghaoran
-
-- `orbit corrrect`
-
-  完善global correction功能
-
-##### 2025-6-12-Zhanghaoran
-
-- `orbit corrrect`
-
-  添加任意定义目标轨道功能
-
-##### 2025-5-29-Zhanghaoran
-
-- `beam monitor`
-
-  优化束斑分布拟合，提升拟合准确度
-  
-- `Virtual Machine`
-
-  添加关闭功能
-
-##### 2025-5-22-Zhanghaoran
-
-- `Virtual Machine`
-
-  添加Q铁的强度jitter功能
-
-###### 2025-5-15-Zhanghaoran
-
-- `BBA`
-
-  BBA2经debug已可正确运行
-
-- `orbit correct`
-
-  添加了任意自选需校正的BPM功能，并测试了其在one-by-one校正方法下的正确性
-
-###### 2025-5-8-Zhanghaoran
-
-- 给orbit corrrect添加独立gui，可自定义相关参数（如采样间隔，校正精度）；并增加校正停止和归零功能按钮。
-
-###### 2025-4-29-Zhanghaoran
-
-- 重新调整了launcher的gui布局，并将与VM相关的功能（start VM;start IOC; add error）单独放在一个用户界面，且静态误差可自定义。
-
-###### 2025-4-24-Zhanghaoran
-
-- 鉴于BPM数量多，`orbit_display`界面增加了选择显示一定范围BPMs的选项，并添加按钮可查看所有BPM的实时读数。
-
-###### 2025-4-17-Zhanghaoran
-
-- 发射度测量界面增加了`simply VM`按钮，可根据所选取的Q铁和FLAG简化lattice，加速虚拟加速器运行速度，而`full VM`按钮可将lattice恢复到原始状态
-
-###### 2024-3~2025-4 Zhangshancai
-
-- 内容待补充。。。
-
-###### 2024-3-11-Libiaobin
-
-- 以 `lattice_ini.lte` =>` lattice.json` 作为输入文件，自动生成 quad.template, bpm.template 等 IOC 文件。后面如果需要修改元件名称和PV命名规则，直接修改`lattice_ini.lte` 文件即可。见`gen_substitution_file()`
-- 以 `lattice.json`文件作为中间媒介：
-  - 当epics修改了 quad 的K1值时，IOC监测到PV值发生了改变，将自动更新 `lattice.json` 文件。当前只添加了 QUAD。
-  - Elegant 每次循环运行时，都会重新读取 `lattice.json` 文件，生成 `lattice.lte`，然后运行。注意，lattice_ini.lte 文件没有改变。
-
-
-
-# 程序功能总览
-
-- ## virtual machine
-
-  - 第一次运行，根据lattice_ini.lte和one_ini.ele 生成 json 文件，之后根据 json 文件生成lattice.lte和one.ele
-  - 运行elegant one.ele 并向IOC发布相关pv value
-  - 进入监视状态，一旦json文件发生变化，运行elegant one.ele 并向IOC发布相关pv值
-
-
-
-- ## softIOC
-
-  - 第一次运行，将生成 db 文件夹下的 substitutions 文件
-
-  - 建立起IOC，将根据 json 文件初始化 epics 中所有四极铁等元件的初始pv值
-
-  - 利用onChange函数监听元件的pv值，一旦改变，更新 json 文件
-
-    
-
-- ## apps
-
-  - launcher 显示主界面，各按钮调用其他调束功能，单独开一个线程进行。
-  - 各种上层物理调束程序，打开后分别会单独开一个线程进行。
-    - bba
-    - beam_monitor
-    - emit_measure
-    - orbit_correct
-    - orbit_display
-
-​					  。。。。。。
-
-
-
-# Quick start
-
-## 1. Install some packages in Linux system
-
-### a. Linux environment
-
-#### windows下如何实现linux环境
-
-在Windows操作系统下创建和运行Linux环境通常有以下几种方法，推荐使用WSL：
-
-##### 1. 使用Windows子系统（Windows Subsystem for Linux, WSL）
-
-参考：https://learn.microsoft.com/zh-cn/windows/wsl/install
-
-WSL 是微软提供的一个功能，允许你在Windows 10和Windows 11上直接运行Linux发行版，如Ubuntu、Debian等。
-
-- 在管理员权限下进入Powershell
-
-  ```powershell
-  wsl --install
-  ```
-
-- wsl成功启用后安装ubantu（也可安装其它发行版）
-
-  ```powershell
-  wsl.exe --install Ubantu
-  ```
-
-##### 2. 使用虚拟机软件（如VirtualBox或VMware）
-
-通过虚拟机软件，你可以在Windows上运行一个完整的虚拟机，里面可以安装Linux操作系统。
-
-
-
-#### Tips: 推荐使用shell命令行工具on-my-zsh！【推荐但不必须】
-
-参考：https://www.cnblogs.com/misakivv/p/18183219
-
-- 安装zsh，替换，重启
-
-  ```bash
-  sudo apt-get install zsh
-  sudo chsh -s $(which zsh)
-  sudo reboot
-  ```
-
-- 安装oh-my-zsh
-
-  ```bash
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-  ```
-
-  如不成功，可通过安装包安装：
-  
-  ```zsh
-  # 1. 下载压缩包
-  curl -L -o ohmyzsh-master.zip https://github.com/ohmyzsh/ohmyzsh/archive/master.zip
-  
-  # 2. 解压
-  unzip ohmyzsh-master.zip
-  
-  # 3. 移动到正确位置
-  mv ohmyzsh-master ~/.oh-my-zsh
-  
-  # 4. 复制配置文件
-  cp ~/.oh-my-zsh/templates/zshrc.zsh-template ~/.zshrc
-  
-  # 5. 切换默认shell
-  chsh -s $(which zsh)
-  
-  # 6. 重新登录或重启终端
-  ```
-  
-  
-
-### b. epics
-
-参考官方网站：https://docs.epics-controls.org/en/latest/getting-started/installation-linux.html
-
-
-
-#### prepare 
-
-need `make`, `c++` and `libreadline` to compile from source
-
-```zsh
-sudo apt install build-essential
-sudo apt install libreadline-dev
-```
-
-#### install
-
-The recommended way to start working with EPICS is to download one of the release packages. The released versions of EPICS have been fully tested to work as documented. Choose the release that you want and download:
-
-```zsh
-mkdir $HOME/EPICS
-cd $HOME/EPICS
-wget https://epics-controls.org/download/base/base-7.0.8.1.tar.gz
-tar -xvf base-7.0.8.1.tar.gz
-cd base-7.0.8.1
-make
-```
-
-After compiling you should put the path into `$HOME/.profile` or into `$HOME/.bashrc` or into  `$HOME/.zshrc` by adding the following to either one of those files:
-
-```zsh
-export EPICS_BASE=${HOME}/EPICS/epics-base
-export EPICS_HOST_ARCH=$(${EPICS_BASE}/startup/EpicsHostArch)
-export PATH=${EPICS_BASE}/bin/${EPICS_HOST_ARCH}:${PATH}
-```
-
-EpicsHostArch is a program provided by EPICS that returns the architecture of your system. Thus the code above should be fine for every architecture.
-
-#### test
-
-Now log out and log in again, so that your new path is set correctly. Alternatively, you can execute the three lines above beginning with export directly from the terminal.
-
-Run `softIoc` and, if everything is ok, you should see an EPICS prompt.
-
-```zsh
-softIoc
-epics>
-```
-
-You can exit with ctrl-c or by typing exit.
-
-
-
-### c. python3 and something
-
-##### 1. anaconda（for virtual environment）+vscode【推荐但不必须】
-
-- install
-
-  ```zsh
-  # 下载最新版本的安装脚本
-  wget https://repo.anaconda.com/archive/Anaconda3-2023.09-0-Linux-x86_64.sh
-  # 运行安装脚本
-  bash Anaconda3-2023.09-0-Linux-x86_64.sh
-  # 重启shell
-  source ~/.zshrc
-  # 验证
-  conda --version
-  ```
-
-- create a virtual environment and activate it~
-
-  ```zsh
-  # 创建新环境
-  conda create -n myenv python=x.x
-  # 激活环境
-  conda activate myenv
-  ```
-
-- 后续安装建议在虚拟环境`myenv`中进行
-
-##### 2. pyqt5+QTdesigner
-
-```zsh
-conda install pyqt
-```
-
-or
-
-```zsh
-pip install PyQt5 PyQt5-tools
-```
-
-##### 3. pyepics
-
-```zsh
-pip install pyepics
-```
-
-##### 4. matplotlib、scipy、numpy
-
-```zsh
-conda install matplotlib scipy numpy
-```
-
-##### 5. python sdds
-
-the link of the module is: https://anaconda.org/soliday/sdds
+最短路径如下：
 
 ```bash
-conda install soliday::sdds
+conda env create -f environment.yml
+conda activate base
+source scripts/setup.sh
 ```
 
-##### 
+如果 `environment.yml` 不能直接复用，请至少保证以下依赖可用：
 
+- Python 3
+- PyQt5
+- pyepics
+- numpy / scipy / matplotlib
+- sdds Python 模块
+- 系统可执行的 `elegant`
+- 已安装并可运行的 EPICS base / `softIoc`
 
+### 2. 修改本机相关配置
 
-## 2. use Git for the 1st time
+IOC 启动前，需要按本机环境检查或修改：
 
-### a. install git
+- `src/softIOC/halflinac/configure/RELEASE`
 
-```zsh
-sudo apt-get install git
+这里真正应该改的是 `EPICS_BASE` 这类构建配置。`src/softIOC/halflinac/iocBoot/ioctarget/envPaths` 是 `make rebuild` 生成的派生文件，不应该作为手工维护入口。
+
+如果你改了 `configure/RELEASE` 里的路径，下一步不要直接启动 IOC，而是先执行：
+
+```bash
+bash scripts/build_ioc.sh
 ```
 
-### b. configuration Git 
+否则 `softIOC` 很可能继续沿用旧的 build-time `TOP`，启动时出现 `IOC is booting with TOP ... but was built with TOP ...` 警告。
 
-```zsh
-git config --global user.name "example:zhanghaoran"
-git config --global user.email "example:zhrzhm@ustc.edu.cn"
+### 3. 先做静态检查
+
+```bash
+bash scripts/check.sh
 ```
 
-### c. clone from Remote Repository to Local Repository
+这一步不会启动 GUI、IOC 或 `elegant` 长进程，只做快速静态验证。
 
-```zsh
-mkdir example:gitproj
-cd gitproj
-git clone https://git.ustc.edu.cn/zhanghaoran/half_linac.git
+### 4. 常用启动方式
+
+```bash
+bash scripts/runMe
 ```
 
-
-
-## 3. run this software
-
-### a. add env variable
-
-for my case, add the  env variable in my `.zshrc` file:
-
-```zsh
-export PYTHONPATH=$PYTHONPATH:~/gitproj
+```bash
+bash scripts/start_ioc_manager.sh
 ```
 
-### b. modify softIOC config
-
-文件在.\half_linac\softIOC\halflinac\iocBoot\ioctarget\envPaths   根据个人情况修改
-
-可通过下面命令测试是否可正常运行
-
-```zsh
-./st.cmd
+```bash
+bash scripts/build_ioc.sh
 ```
 
-### c. run it
-
-```zsh
-python /home/user/gitproj/half_linac/apps/launcher/main.py
+```bash
+bash scripts/start_vm.sh
 ```
 
-then you can try it~
+说明：
 
+- `scripts/runMe` 启动 launcher GUI
+- `scripts/build_ioc.sh` 在当前仓库路径下重建 `softIOC`
+- `scripts/start_ioc_manager.sh` 启动 Python 层 IOC 管理器
+- `scripts/start_vm.sh` 启动 virtual machine 管理器
 
+## 运行边界
 
-# 使用Git日常管理代码
+- 默认按 `VM / offline` 模式理解和审查代码
+- `src/virtual_machine/half_elegant/halflinac.json`
+- `src/virtual_machine/half_elegant/esa.json`
+- `src/virtual_machine/half_elegant/elegant/lattice.lte`
+- `src/virtual_machine/half_elegant/elegant/one.ele`
+- `src/softIOC/halflinac/db/halflinac.substitutions`
 
-为方便多人同步开发，这里采用git管理代码。远程仓库使用科大的GItLab。
+这些文件可能由程序生成或刷新。除非任务明确要求，否则优先修改它们的生成逻辑，而不是手工改生成物。
 
-- 从远程仓库更新合并
+## 文档导航
 
-```zsh
-git pull origin main
-```
+- [AGENTS.md](AGENTS.md): 仓库级 agent 规则与标准命令
+- [docs/SETUP_AND_RUN.md](docs/SETUP_AND_RUN.md): 安装、环境配置、运行方式
+- [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md): 历史开发记录
+- [docs/CODEX_REVIEW_PRIORITY.md](docs/CODEX_REVIEW_PRIORITY.md): 重新审查和完善仓库时的优先级建议
 
-- 向远程仓库提交修改后的文件
+## 推荐的 Codex 使用顺序
 
-```zsh
-git add .
-git commit -m 'you can add some description about this commit'
-git push origin main
-```
+如果你想让 Codex 重新审查并逐步完善这套代码，建议按这个顺序发任务：
 
+1. 先让 Codex 只做 review，不改代码，范围限定为 `src/softIOC` 和 `src/virtual_machine`
+2. 再让 Codex 修复 review 中最明确、最小的一类问题，例如路径、进程生命周期、生成文件边界
+3. 然后再审查 `src/apps` 和 `src/optimization`
+4. 最后再做仓库清理，例如重命名误导性文件、补测试、拆分运行产物
 
-
-
-
+更细的顺序和提示词建议见 [docs/CODEX_REVIEW_PRIORITY.md](docs/CODEX_REVIEW_PRIORITY.md)。
