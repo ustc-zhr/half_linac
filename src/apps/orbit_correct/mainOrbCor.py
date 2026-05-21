@@ -37,6 +37,7 @@ from OrbCorgui import Ui_MainWindow
 
 
 import half_linac.runtime_config as st
+from half_linac.src.shared.machine_profile import get_workflow, load_profile
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
 
 HEADER_ACTION_HEIGHT = 32
@@ -436,13 +437,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        self.machine_profile = load_profile()
+        self.orbit_workflow = get_workflow(self.machine_profile, "orbit")
         self.current_theme = "dark"
         self.last_notice = "Idle"
         self.process_manager = ManagedProcessGroup(notify=self._notify)
         self.process_manager.install_signal_handlers()
 
-        self.all_checkboxes = self.findChildren(QCheckBox)
+        self.all_checkboxes = []
+        self._bpmx_spinboxes = []
+        self._bpmy_spinboxes = []
         self._configure_window()
+        self._configure_machine_profile()
         self._clear_inline_styles()
         self._build_shell()
         self._configure_form_content()
@@ -495,6 +501,50 @@ class myWindow(QMainWindow, Ui_MainWindow):
         for widget_type in widget_types:
             for widget in self.findChildren(widget_type):
                 widget.setStyleSheet("")
+
+    @staticmethod
+    def _extract_widget_index(widget):
+        match = re.search(r"(\d+)$", widget.objectName())
+        return int(match.group(1)) if match else 0
+
+    def _configure_machine_profile(self):
+        orbit_bpms = self.orbit_workflow["bpms"]
+        checkbox_widgets = sorted(
+            self.findChildren(QCheckBox),
+            key=self._extract_widget_index,
+        )
+        bpmx_widgets = sorted(
+            self.findChildren(QDoubleSpinBox, QRegExp("bpmx_.*")),
+            key=self._extract_widget_index,
+        )
+        bpmy_widgets = sorted(
+            self.findChildren(QDoubleSpinBox, QRegExp("bpmy_.*")),
+            key=self._extract_widget_index,
+        )
+
+        available = min(len(checkbox_widgets), len(bpmx_widgets), len(bpmy_widgets))
+        if len(orbit_bpms) > available:
+            raise ValueError(
+                f"Orbit workflow defines {len(orbit_bpms)} BPMs but UI only exposes {available} slots."
+            )
+
+        self.all_checkboxes = checkbox_widgets[: len(orbit_bpms)]
+        self._bpmx_spinboxes = bpmx_widgets[: len(orbit_bpms)]
+        self._bpmy_spinboxes = bpmy_widgets[: len(orbit_bpms)]
+
+        for bpm_name, checkbox in zip(orbit_bpms, self.all_checkboxes):
+            checkbox.setText(bpm_name)
+            checkbox.show()
+            checkbox.setEnabled(True)
+
+        for extra_widget in checkbox_widgets[len(orbit_bpms) :]:
+            extra_widget.setChecked(False)
+            extra_widget.hide()
+            extra_widget.setEnabled(False)
+
+        for extra_widget in bpmx_widgets[len(orbit_bpms) :] + bpmy_widgets[len(orbit_bpms) :]:
+            extra_widget.hide()
+            extra_widget.setEnabled(False)
 
     def _build_shell(self):
         self.verticalLayout_2.setContentsMargins(10, 10, 10, 10)
@@ -724,57 +774,23 @@ class myWindow(QMainWindow, Ui_MainWindow):
             cb.setChecked(False)
     
     def all_BPM_target_value(self):
-        # 将BPM的目标值按照1~43依次排列
-        all_bpmx_spinboxes = self.findChildren(QDoubleSpinBox, QRegExp("bpmx_*"))
-        # 组合数据（索引、名称、值）
-        combined_data = []
-        for sb in all_bpmx_spinboxes:
-            index = self._extract_number(sb.objectName())
-            combined_data.append( (index, sb.objectName(), sb.value()) )
-        # 按索引排序
-        combined_data.sort(key=lambda x: x[0])
-        # 解包排序后的数据
-        indeics, all_bpmx_spinboxes_names, all_bpmx_target_values = zip(*combined_data)
-        # 转换为列表（如果后续需要修改）
-        # all_bpmx_spinboxes_names = list(all_bpmx_spinboxes_names)
-        all_bpmx_target_values = list(all_bpmx_target_values)
-
-        all_bpmy_spinboxes = self.findChildren(QDoubleSpinBox, QRegExp("bpmy_*"))
-        # 组合数据（索引、名称、值）
-        combined_data = []
-        for sb in all_bpmy_spinboxes:
-            index = self._extract_number(sb.objectName())
-            combined_data.append( (index, sb.objectName(), sb.value()) )
-        # 按索引排序
-        combined_data.sort(key=lambda x: x[0])
-        # 解包排序后的数据
-        indeics, all_bpmy_spinboxes_names, all_bpmy_target_values = zip(*combined_data)
-        # 转换为列表（如果后续需要修改）
-        # all_bpmy_spinboxes_names = list(all_bpmy_spinboxes_names)
-        all_bpmy_target_values = list(all_bpmy_target_values)
-
+        all_bpmx_target_values = [spinbox.value() for spinbox in self._bpmx_spinboxes]
+        all_bpmy_target_values = [spinbox.value() for spinbox in self._bpmy_spinboxes]
         return all_bpmx_target_values, all_bpmy_target_values
 
     def target_BPMs(self):
-        all_bpmx_target_values, all_bpmy_target_values = self.all_BPM_target_value()
-
-        # print(all_bpmx_target_values)
-        # print(all_bpmy_target_values)
-        all_checkboxes = self.findChildren(QCheckBox)
-        bpm_target_list = [cb.text() for cb in all_checkboxes if cb.isChecked()]
-        bpm_target_list.sort(key=self._extract_number)
-
-        indices = []
-        for cb in bpm_target_list:
-            indices.append(self._extract_number(cb))
-        # print(indices)
-        bpmx_target_values = [all_bpmx_target_values[i-1] for i in indices]
-        bpmy_target_values = [all_bpmy_target_values[i-1] for i in indices]
-        # print(bpmx_target_values)
-        # print(bpmy_target_values)
-
-        # target_list = list(zip(bpm_target_list, bpmx_target_values, bpmy_target_values))
-        
+        bpm_target_list = []
+        bpmx_target_values = []
+        bpmy_target_values = []
+        for checkbox, bpmx_spinbox, bpmy_spinbox in zip(
+            self.all_checkboxes,
+            self._bpmx_spinboxes,
+            self._bpmy_spinboxes,
+        ):
+            if checkbox.isChecked():
+                bpm_target_list.append(checkbox.text())
+                bpmx_target_values.append(bpmx_spinbox.value())
+                bpmy_target_values.append(bpmy_spinbox.value())
         return bpm_target_list, bpmx_target_values, bpmy_target_values
         
     def measure_res(self): #measure response matrix

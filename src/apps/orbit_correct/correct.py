@@ -18,6 +18,11 @@ from typing import List, Optional, Tuple, Union
 from epics import caput_many, PV, caget_many
 from scipy.linalg import svd
 import half_linac.runtime_config as st
+from half_linac.src.shared.machine_profile import (
+    get_workflow,
+    load_profile,
+    resolve_channel,
+)
 
 
 # configure the correction log
@@ -58,18 +63,21 @@ class OrbitCorrector:
                 target_BPMlist: Optional[List[str]] = None,
                 target_BPMx_values: Optional[List[float]] = None,
                 target_BPMy_values: Optional[List[float]] = None):
-        
+        self.machine_profile = load_profile()
+        self.orbit_workflow = get_workflow(self.machine_profile, "orbit")
+        self.machine_mode = self.machine_profile.machine.default_mode
+
         # constant definition
         self.RESPM_FILE = st.rootpath + '/src/apps/orbit_correct/response.txt'
-        self.N_BPM = 41
-        self.N_COR = 41
         self.d_value = 0.02 * 0.001  # step for corrector
         self.max_value = st.corrector_upperlimit
         
         # all cor and bpm lists
-        self.cor_x_list_all = [f'XC{i:02d}' for i in range(3, 44)]
-        self.cor_y_list_all = [f'YC{i:02d}' for i in range(3, 44)]
-        self.bpm_list_all = [f'BPM{i:02d}' for i in range(3, 44)]
+        self.cor_x_list_all = list(self.orbit_workflow["xcors"])
+        self.cor_y_list_all = list(self.orbit_workflow["ycors"])
+        self.bpm_list_all = list(self.orbit_workflow["bpms"])
+        self.N_BPM = len(self.bpm_list_all)
+        self.N_COR = len(self.cor_x_list_all)
         
         # parameter initialization
         self.sample_interval = sample_interval
@@ -78,10 +86,13 @@ class OrbitCorrector:
         
         # 初始化目标设备列表
         if target_BPMlist:
-            index = self._find_positions(self.bpm_list_all, target_BPMlist)
-            self.bpm_list_target = [self.bpm_list_all[i] for i in index]
-            self.cor_x_list_target = [self.cor_x_list_all[i] for i in index]
-            self.cor_y_list_target = [self.cor_y_list_all[i] for i in index]
+            index_map = {name: idx for idx, name in enumerate(self.bpm_list_all)}
+            missing = [name for name in target_BPMlist if name not in index_map]
+            if missing:
+                raise ValueError(f"Unknown target BPMs: {', '.join(missing)}")
+            self.bpm_list_target = list(target_BPMlist)
+            self.cor_x_list_target = [self.cor_x_list_all[index_map[name]] for name in target_BPMlist]
+            self.cor_y_list_target = [self.cor_y_list_all[index_map[name]] for name in target_BPMlist]
             self.target_BPMx_values = target_BPMx_values
             self.target_BPMy_values = target_BPMy_values
         else:
@@ -98,6 +109,12 @@ class OrbitCorrector:
         self.pvBPMy: List[PV] = []
         self.pvCORx: List[PV] = []
         self.pvCORy: List[PV] = []
+
+    def _bpm_pv(self, bpm_name: str, plane: str) -> str:
+        return resolve_channel(self.machine_profile, bpm_name, plane, self.machine_mode)
+
+    def _cor_pv(self, cor_name: str) -> str:
+        return resolve_channel(self.machine_profile, cor_name, "setpoint", self.machine_mode)
 
     def _find_positions(self, main_list: List[str], sub_list: List[str]) -> List[int]:
         """在设备列表中查找目标设备的位置索引"""
@@ -121,10 +138,12 @@ class OrbitCorrector:
         self.pvnameBPMx = []
         self.pvnameBPMy = []
         for bpm in self.bpm_list_target:
-            self.pvBPMx.append(PV(f"HALF:IN:BPM:{bpm}:X:ao"))
-            self.pvBPMy.append(PV(f"HALF:IN:BPM:{bpm}:Y:ao"))
-            self.pvnameBPMx.append(f"HALF:IN:BPM:{bpm}:X:ao")
-            self.pvnameBPMy.append(f"HALF:IN:BPM:{bpm}:Y:ao")
+            bpm_x_pv = self._bpm_pv(bpm, "x")
+            bpm_y_pv = self._bpm_pv(bpm, "y")
+            self.pvBPMx.append(PV(bpm_x_pv))
+            self.pvBPMy.append(PV(bpm_y_pv))
+            self.pvnameBPMx.append(bpm_x_pv)
+            self.pvnameBPMy.append(bpm_y_pv)
         # print('BPMxPVNAME:', self.pvnameBPMx)
 
     def init_COR_pv(self) -> None:
@@ -134,15 +153,17 @@ class OrbitCorrector:
         self.pvnameCORx = []
         self.pvnameCORy = []
         for cor in self.cor_x_list_target:
-            self.pvCORx.append(PV(f"HALF:IN:COR:{cor}:ao"))
-            self.pvnameCORx.append(f"HALF:IN:COR:{cor}:ao")
+            cor_pv = self._cor_pv(cor)
+            self.pvCORx.append(PV(cor_pv))
+            self.pvnameCORx.append(cor_pv)
         for cor in self.cor_y_list_target:
-            self.pvCORy.append(PV(f"HALF:IN:COR:{cor}:ao"))
-            self.pvnameCORy.append(f"HALF:IN:COR:{cor}:ao")
+            cor_pv = self._cor_pv(cor)
+            self.pvCORy.append(PV(cor_pv))
+            self.pvnameCORy.append(cor_pv)
     
     def save_origin_cor(self) -> None:
-        all_pvname_corx = [f"HALF:IN:COR:{corx}:ao" for corx in self.cor_x_list_all]
-        all_pvname_cory = [f"HALF:IN:COR:{cory}:ao" for cory in self.cor_y_list_all]
+        all_pvname_corx = [self._cor_pv(corx) for corx in self.cor_x_list_all]
+        all_pvname_cory = [self._cor_pv(cory) for cory in self.cor_y_list_all]
 
         hcor_vals = caget_many(all_pvname_corx)
         vcor_vals = caget_many(all_pvname_cory)
@@ -297,7 +318,7 @@ class OrbitCorrector:
             RM = np.loadtxt(self.RESPM_FILE)
             print(RM)
             ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
-            ORM_y = RM[self.N_BPM:82, self.N_COR:82]
+            ORM_y = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
             return np.linalg.inv(ORM_x), np.linalg.inv(ORM_y)
         except Exception as e:
             logger.error(f"加载响应矩阵失败: {e}")
@@ -307,7 +328,7 @@ class OrbitCorrector:
         """计算响应矩阵的SVD分解"""
         RM = np.loadtxt(self.RESPM_FILE)
         ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
-        ORM_y = RM[self.N_BPM:82, self.N_COR:82]
+        ORM_y = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
             
         U_x, s_x, Vt_x = svd(ORM_x, full_matrices=False)
         # self.svd_components_x = (U_x, s_x, Vt_x)
@@ -424,8 +445,8 @@ class OrbitCorrector:
         cor_x_list = self.cor_x_list_target or self.cor_x_list_all
         cor_y_list = self.cor_y_list_target or self.cor_y_list_all
 
-        pv_corx = [f"HALF:IN:COR:{name}:ao" for name in cor_x_list]
-        pv_cory = [f"HALF:IN:COR:{name}:ao" for name in cor_y_list]
+        pv_corx = [self._cor_pv(name) for name in cor_x_list]
+        pv_cory = [self._cor_pv(name) for name in cor_y_list]
         values = [0.0] * len(pv_corx)
         caput_many(pv_corx, values)
         caput_many(pv_cory, values) 
@@ -447,10 +468,10 @@ class OrbitCorrector:
         self.pvCORx = []
         self.pvCORy = []
         for j in self.cor_x_list_all:  
-            pv_CORx = "HALF:IN:COR:" + j + ":ao"  
+            pv_CORx = self._cor_pv(j)
             self.pvCORx.append(pv_CORx)  
         for j in self.cor_y_list_all:  
-            pv_CORy = "HALF:IN:COR:" + j + ":ao" 
+            pv_CORy = self._cor_pv(j)
             self.pvCORy.append(pv_CORy)
         caput_many(self.pvCORx, corx)
         caput_many(self.pvCORy, cory) 

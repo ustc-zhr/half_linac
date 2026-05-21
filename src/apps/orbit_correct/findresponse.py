@@ -17,6 +17,11 @@ import numpy as np
 from typing import List, Tuple
 from epics import caget, caget_many, caput, caput_many
 import half_linac.runtime_config as st
+from half_linac.src.shared.machine_profile import (
+    get_workflow,
+    load_profile,
+    resolve_channel,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -29,7 +34,7 @@ logger = logging.getLogger(__name__)
 class ResponseMatrixCalculator:
     """Calculate accelerator response matrix using corrector kicks."""
     
-    def __init__(self, n_bpm: int = 41, n_cor: int = 41, 
+    def __init__(self, n_bpm: int | None = None, n_cor: int | None = None, 
                  d_value: float = 1e-5, n_averages: int = 2):
         """
         Initialize response matrix calculator.
@@ -41,8 +46,15 @@ class ResponseMatrixCalculator:
             n_averages: Number of measurement averages
         """
         print('n_averages:', n_averages)
-        self.N_BPM = n_bpm
-        self.N_COR = n_cor
+        self.machine_profile = load_profile()
+        self.orbit_workflow = get_workflow(self.machine_profile, "orbit")
+        self.machine_mode = self.machine_profile.machine.default_mode
+        self.bpm_ids = list(self.orbit_workflow["bpms"])
+        self.xcor_ids = list(self.orbit_workflow["xcors"])
+        self.ycor_ids = list(self.orbit_workflow["ycors"])
+
+        self.N_BPM = len(self.bpm_ids) if n_bpm is None else len(self.bpm_ids)
+        self.N_COR = len(self.xcor_ids) if n_cor is None else len(self.xcor_ids)
         self.d_value = d_value
         self.n_averages = n_averages
         self.timer_interval = st.runtime_machine
@@ -58,23 +70,15 @@ class ResponseMatrixCalculator:
         
         logger.info("ResponseMatrixCalculator initialized")
 
-    def _generate_pv_name(self, prefix: str, device_type: str, 
-                         index: int, suffix: str) -> str:
-        """Generate EPICS PV name with proper zero padding."""
-        base = f"HALF:IN:{device_type}:"
-        if index + 3 < 10:
-            return f"{base}{prefix}0{index+3}:{suffix}"
-        return f"{base}{prefix}{index+3}:{suffix}"
-
     def init_BPM_pv(self) -> None:
         """Initialize BPM PV names."""
         self.pvBPMx = [
-            self._generate_pv_name("BPM", "BPM", j, "X:ao") 
-            for j in range(self.N_BPM)
+            resolve_channel(self.machine_profile, bpm_id, "x", self.machine_mode)
+            for bpm_id in self.bpm_ids
         ]
         self.pvBPMy = [
-            self._generate_pv_name("BPM", "BPM", j, "Y:ao") 
-            for j in range(self.N_BPM)
+            resolve_channel(self.machine_profile, bpm_id, "y", self.machine_mode)
+            for bpm_id in self.bpm_ids
         ]
         logger.debug(f"Initialized {len(self.pvBPMx)} BPM X PVs")
         logger.debug(f"Initialized {len(self.pvBPMy)} BPM Y PVs")
@@ -82,12 +86,12 @@ class ResponseMatrixCalculator:
     def init_COR_pv(self) -> None:
         """Initialize corrector PV names."""
         self.pvCORx = [
-            self._generate_pv_name("XC", "COR", j, "ao") 
-            for j in range(self.N_COR)
+            resolve_channel(self.machine_profile, cor_id, "setpoint", self.machine_mode)
+            for cor_id in self.xcor_ids
         ]
         self.pvCORy = [
-            self._generate_pv_name("YC", "COR", j, "ao") 
-            for j in range(self.N_COR)
+            resolve_channel(self.machine_profile, cor_id, "setpoint", self.machine_mode)
+            for cor_id in self.ycor_ids
         ]
         logger.debug(f"Initialized {len(self.pvCORx)} COR X PVs")
         logger.debug(f"Initialized {len(self.pvCORy)} COR Y PVs")
