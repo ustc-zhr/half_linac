@@ -73,11 +73,11 @@
 - 生成文件与源文件边界是否清晰
 - `elegant` 执行失败时是否有足够诊断信息
 
-### P3: launcher 与 VM GUI 的进程生命周期
+### P3: Control Room 与 VM GUI 的进程生命周期
 
 优先文件：
 
-- [`src/apps/launcher/main.py`](../src/apps/launcher/main.py)
+- [`src/apps/launcher/main.py`](../src/apps/launcher/main.py)（Control Room）
 - [`src/virtual_machine/half_elegant/mainVM.py`](../src/virtual_machine/half_elegant/mainVM.py)
 
 为什么先看：
@@ -128,7 +128,7 @@
 
 - 只 review `src/softIOC`，找 JSON/PV 同步中的 bug 和风险，不改代码
 - 只修复 `src/virtual_machine/half_elegant/start_VM.py` 的异常处理和日志问题
-- 只清理 `src/apps/launcher/main.py` 的进程生命周期管理
+- 只清理 `src/apps/launcher/main.py`（Control Room）的进程生命周期管理
 - 只整理 `src/optimization` 中日志文件和源码的边界
 
 不好的任务例子：
@@ -163,7 +163,7 @@
 ### 再扩到 GUI
 
 ```text
-请只审查 src/apps/launcher/main.py 和 src/virtual_machine/half_elegant/mainVM.py 的子进程管理与退出逻辑。
+请只审查 src/apps/launcher/main.py（Control Room）和 src/virtual_machine/half_elegant/mainVM.py 的子进程管理与退出逻辑。
 如果改代码，只做最小补丁，并说明还需要哪些手工 GUI 验证。
 ```
 

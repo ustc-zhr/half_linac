@@ -96,7 +96,7 @@
 
 ## 2025-04-29 Zhanghaoran
 
-- 重新调整 launcher 的 GUI 布局
+- 重新调整 Control Room（`launcher`）的 GUI 布局
 - 将与 VM 相关的功能 `start VM`、`start IOC`、`add error` 单独放在一个用户界面
 - 静态误差可自定义
 

@@ -165,7 +165,7 @@ bash scripts/check.sh
 
 ## 9. 常用运行命令
 
-### 启动 launcher
+### 启动 Control Room
 
 ```bash
 bash scripts/runMe

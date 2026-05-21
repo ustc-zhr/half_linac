@@ -13,7 +13,7 @@ HALF 直线加速器上层物理应用软件仓库，包含：
 
 ## 仓库地图
 
-- `src/apps/`: GUI 应用，包括 `launcher`、`orbit_correct`、`bba`、`beam_monitor`、`energy_spectrum` 等
+- `src/apps/`: GUI 应用，包括 Control Room（目录当前仍为 `launcher`）、`orbit_correct`、`bba`、`beam_monitor`、`energy_spectrum` 等
 - `src/shared/`: 跨多个 GUI / runtime 复用的共享辅助模块
 - `src/optimization/`: 在线优化 GUI 与 BO / RCDS / Rsimplex 算法
 - `src/softIOC/`: IOC 管理脚本、PV 同步逻辑、IOC 工程文件
@@ -89,7 +89,7 @@ bash scripts/start_vm.sh
 
 说明：
 
-- `scripts/runMe` 启动 launcher GUI
+- `scripts/runMe` 启动 Control Room GUI
 - `scripts/build_ioc.sh` 在当前仓库路径下重建 `softIOC`
 - `scripts/start_ioc_manager.sh` 启动 Python 层 IOC 管理器
 - `scripts/start_vm.sh` 启动 virtual machine 管理器

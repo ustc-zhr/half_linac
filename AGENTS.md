@@ -5,7 +5,7 @@
 - More specific `AGENTS.md` files inside subdirectories override these rules for their scope.
 
 ## Project Map
-- `src/apps/`: PyQt operator GUIs such as launcher, orbit correction, BBA, beam monitor, jitter, and energy spectrum.
+- `src/apps/`: PyQt operator GUIs such as the Control Room app (`launcher/`), orbit correction, BBA, beam monitor, jitter, and energy spectrum.
 - `src/optimization/`: online optimization GUI plus BO, RCDS, and Rsimplex implementations.
 - `src/softIOC/`: EPICS IOC manager, PV server, templates, and IOC boot files.
 - `src/virtual_machine/`: elegant-based virtual machine and lattice translators.
@@ -33,7 +33,7 @@
 - `source scripts/setup.sh`: export repo-local environment variables for Python entrypoints.
 - `bash scripts/check.sh`: run fast static checks without starting IOC, elegant, or GUI processes.
 - `bash scripts/build_ioc.sh`: rebuild the IOC application after changing `configure/RELEASE` or `iocBoot/ioctarget/envPaths`.
-- `bash scripts/runMe`: start the launcher GUI with repo-local path setup.
+- `bash scripts/runMe`: start the Control Room GUI with repo-local path setup.
 - `bash scripts/start_vm.sh`: start the VM manager.
 - `bash scripts/start_ioc_manager.sh`: start the Python IOC manager.
 
