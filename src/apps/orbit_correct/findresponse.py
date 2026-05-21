@@ -1,161 +1,202 @@
-# Author: Shancai Zhang
-# Date: 2024-07-25
-
 import time
+import logging
+import sys
+from pathlib import Path
+
+_REPO_BOOTSTRAP_ROOT = next(
+    parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
+)
+if str(_REPO_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_BOOTSTRAP_ROOT))
+
+from repo_bootstrap import ensure_repo_import_path
+
+ensure_repo_import_path(__file__)
+
 import numpy as np
-from epics import caget, caget_many,caput,caput_many
+from typing import List, Tuple
+from epics import caget, caget_many, caput, caput_many
 import half_linac.runtime_config as st
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename='findresponse.log'
+)
+logger = logging.getLogger(__name__)
 
-N_BPM = 41 #41
-N_COR = 41 #41
-d_value = 0.01*0.001 #rad
-timer_interval = st.runtime_machine
-
-#cor_x_list = ['XC03', 'XC04', 'XC05', 'XC06', 'XC07', 'XC08', 'XC09', 'XC10', 'XC11', 'XC12', 'XC13', 'XC14', 'XC15', 'XC16', 'XC17', 'XC18', 'XC19', 'XC20', 'XC21', 'XC22', 'XC23', 'XC24', 'XC25', 'XC26', 'XC27', 'XC28', 'XC29', 'XC30', 'XC31', 'XC32', 'XC33', 'XC34', 'XC35', 'XC36', 'XC37', 'XC38', 'XC39', 'XC40', 'XC41', 'XC42', 'XC43']
-#cor_y_list = ['YC03', 'YC04', 'YC05', 'YC06', 'YC07', 'YC08', 'YC09', 'YC10', 'YC11', 'YC12', 'YC13', 'YC14', 'YC15', 'YC16', 'YC17', 'YC18', 'YC19', 'YC20', 'YC21', 'YC22', 'YC23', 'YC24', 'YC25', 'YC26', 'YC27', 'YC28', 'YC29', 'YC30', 'YC31', 'YC32', 'YC33', 'YC34', 'YC35', 'YC36', 'YC37', 'YC38', 'YC39', 'YC40', 'YC41', 'YC42', 'YC43']
-#bpm_y_list = ['BPM03', 'BPM04', 'BPM05', 'BPM06', 'BPM07', 'BPM08', 'BPM09', 'BPM10', 'BPM11', 'BPM12', 'BPM13', 'BPM14', 'BPM15', 'BPM16', 'BPM17', 'BPM18', 'BPM19', 'BPM20', 'BPM21', 'BPM22', 'BPM23', 'BPM24', 'BPM25', 'BPM26', 'BPM27', 'BPM28', 'BPM29', 'BPM30', 'BPM31', 'BPM32', 'BPM33', 'BPM34', 'BPM35', 'BPM36', 'BPM37', 'BPM38', 'BPM39', 'BPM40', 'BPM41', 'BPM42', 'BPM43']
-class response:
+class ResponseMatrixCalculator:
+    """Calculate accelerator response matrix using corrector kicks."""
     
-    def __init__(self):
-        self.pvl = []
-        self.pv_val = []
-        self.pvBPMx = []
-        self.pvBPMy = []
-        self.pvCORx = []
-        self.pvCORy = []
-        self.mij = []
-        self.timer_interval = timer_interval
+    def __init__(self, n_bpm: int = 41, n_cor: int = 41, 
+                 d_value: float = 1e-5, n_averages: int = 2):
+        """
+        Initialize response matrix calculator.
+        
+        Args:
+            n_bpm: Number of BPMs
+            n_cor: Number of correctors
+            d_value: Kick amplitude [rad]
+            n_averages: Number of measurement averages
+        """
+        print('n_averages:', n_averages)
+        self.N_BPM = n_bpm
+        self.N_COR = n_cor
+        self.d_value = d_value
+        self.n_averages = n_averages
+        self.timer_interval = st.runtime_machine
+        
+        # Initialize PV lists
+        self.pvBPMx: List[str] = []
+        self.pvBPMy: List[str] = []
+        self.pvCORx: List[str] = []
+        self.pvCORy: List[str] = []
+        
+        # Initialize matrix storage
+        self.response_matrix: np.ndarray = np.zeros((2*self.N_BPM, 2*self.N_COR))
+        
+        logger.info("ResponseMatrixCalculator initialized")
 
-    def init_BPM_pv(self):
-        pvBPMx = []
-        pvBPMy = []
-        for j in range(N_BPM):
-            if j + 3 < 10:
-                pv_BPMx = "HALF:IN:BPM:BPM0" + str(j + 3) + ":X:ao"
-                pv_BPMy = "HALF:IN:BPM:BPM0" + str(j + 3) + ":Y:ao"
-            else:
-                pv_BPMx = "HALF:IN:BPM:BPM" + str(j + 3) + ":X:ao"
-                pv_BPMy = "HALF:IN:BPM:BPM" + str(j + 3) + ":Y:ao"
-            pvBPMx.append(pv_BPMx)
-            pvBPMy.append(pv_BPMy)
-        self.pvBPMx = pvBPMx
-        self.pvBPMy = pvBPMy
+    def _generate_pv_name(self, prefix: str, device_type: str, 
+                         index: int, suffix: str) -> str:
+        """Generate EPICS PV name with proper zero padding."""
+        base = f"HALF:IN:{device_type}:"
+        if index + 3 < 10:
+            return f"{base}{prefix}0{index+3}:{suffix}"
+        return f"{base}{prefix}{index+3}:{suffix}"
 
-    def init_COR_pv(self):
-        pvCORx = []
-        pvCORy = []
-        for j in range(N_COR):
-            if j + 3 < 10:
-                pv_CORx = "HALF:IN:COR:XC0" + str(j + 3) + ":ao"
-                pv_CORy = "HALF:IN:COR:YC0" + str(j + 3) + ":ao"
-            else:
-                pv_CORx = "HALF:IN:COR:XC" + str(j + 3) + ":ao"
-                pv_CORy = "HALF:IN:COR:YC" + str(j + 3) + ":ao"
-            pvCORx.append(pv_CORx)
-            pvCORy.append(pv_CORy)
-        self.pvCORx = pvCORx
-        self.pvCORy = pvCORy
+    def init_BPM_pv(self) -> None:
+        """Initialize BPM PV names."""
+        self.pvBPMx = [
+            self._generate_pv_name("BPM", "BPM", j, "X:ao") 
+            for j in range(self.N_BPM)
+        ]
+        self.pvBPMy = [
+            self._generate_pv_name("BPM", "BPM", j, "Y:ao") 
+            for j in range(self.N_BPM)
+        ]
+        logger.debug(f"Initialized {len(self.pvBPMx)} BPM X PVs")
+        logger.debug(f"Initialized {len(self.pvBPMy)} BPM Y PVs")
 
-    def findresponse(self):
-        n_averages = 2
-        mij = np.empty((0,2*N_BPM))
-        #先依次设校正铁值+dvalue，读bpm数n_averages次并平均
-        #设校正铁值-dvalue，读bpm数n_averages次并平均，两者差值为响应矩阵元素
-        for i in self.pvCORx:
-            va = caget(i)
-            caput(i, va + d_value)
-            time.sleep(self.timer_interval)
-            pvBPMx_val = caget_many(self.pvBPMx)
-            pvBPMy_val = caget_many(self.pvBPMy)
-            BPMx = pvBPMx_val
-            BPMy = pvBPMy_val
+    def init_COR_pv(self) -> None:
+        """Initialize corrector PV names."""
+        self.pvCORx = [
+            self._generate_pv_name("XC", "COR", j, "ao") 
+            for j in range(self.N_COR)
+        ]
+        self.pvCORy = [
+            self._generate_pv_name("YC", "COR", j, "ao") 
+            for j in range(self.N_COR)
+        ]
+        logger.debug(f"Initialized {len(self.pvCORx)} COR X PVs")
+        logger.debug(f"Initialized {len(self.pvCORy)} COR Y PVs")
 
-            for j in range(n_averages-1):
-                time.sleep(self.timer_interval)
-                pvBPMx_val = caget_many(self.pvBPMx)
-                pvBPMy_val = caget_many(self.pvBPMy)
-                BPMx = np.vstack((BPMx,pvBPMx_val))
-                BPMy = np.vstack((BPMy,pvBPMy_val))
-
-            mean_BPMx1 = np.mean(BPMx, axis=0)
-            mean_BPMy1 = np.mean(BPMy, axis=0)
-
-
-            caput(i, va - d_value)
-            time.sleep(self.timer_interval)
-            pvBPMx_val = caget_many(self.pvBPMx)
-            pvBPMy_val = caget_many(self.pvBPMy)
-            BPMx = pvBPMx_val
-            BPMy = pvBPMy_val
-            for j in range(n_averages-1):
-                time.sleep(self.timer_interval)
-                pvBPMx_val = caget_many(self.pvBPMx)
-                pvBPMy_val = caget_many(self.pvBPMy)
-                BPMx = np.vstack((BPMx,pvBPMx_val))
-                BPMy = np.vstack((BPMy,pvBPMy_val))
-            mean_BPMx2 = np.mean(BPMx, axis=0)
-            mean_BPMy2 = np.mean(BPMy, axis=0)
-
-            caput(i, va)
-            time.sleep(self.timer_interval)
-            mi11 = mean_BPMx1 - mean_BPMx2
-            mi12 = mean_BPMy1 - mean_BPMy2
-
-            mij11 = np.append(mi11, mi12)
-
-            mij = np.vstack((mij, mij11))
-
-        for i in self.pvCORy:
-            va = caget(i)
-            caput(i, va + d_value)
-            time.sleep(self.timer_interval)
-            pvBPMx_val = caget_many(self.pvBPMx)
-            pvBPMy_val = caget_many(self.pvBPMy)
-            BPMx = pvBPMx_val
-            BPMy = pvBPMy_val
-            for j in range(n_averages-1):
-                time.sleep(self.timer_interval)
-                pvBPMx_val = caget_many(self.pvBPMx)
-                pvBPMy_val = caget_many(self.pvBPMy)
-                BPMx = np.vstack((BPMx,pvBPMx_val))
-                BPMy = np.vstack((BPMy,pvBPMy_val))
-            #print(BPMx)
-            mean_BPMx1 = np.mean(BPMx, axis=0)
-            mean_BPMy1 = np.mean(BPMy, axis=0)
-            #print(mean_BPMx1)
-
-            caput(i, va - d_value)
-            time.sleep(self.timer_interval)
-            pvBPMx_val = caget_many(self.pvBPMx)
-            pvBPMy_val = caget_many(self.pvBPMy)
-            BPMx = pvBPMx_val
-            BPMy = pvBPMy_val
-            for j in range(n_averages-1):
-                time.sleep(self.timer_interval)
-                pvBPMx_val = caget_many(self.pvBPMx)
-                pvBPMy_val = caget_many(self.pvBPMy)
-                BPMx = np.vstack((BPMx, pvBPMx_val))
-                BPMy = np.vstack((BPMy, pvBPMy_val))
-            mean_BPMx2 = np.mean(BPMx, axis=0)
-            mean_BPMy2 = np.mean(BPMy, axis=0)
+    def _measure_response(self, cor_pv: str, is_x_corrector: bool) -> np.ndarray:
+        """
+        Measure response for a single corrector.
+        
+        Args:
+            cor_pv: Corrector PV name
+            is_x_corrector: True for X corrector, False for Y
             
-            caput(i, va)
+        Returns:
+            Response vector (2*N_BPM elements)
+        """
+        try:
+            # Store original value
+            original_value = caget(cor_pv)
+            if original_value is None:
+                raise ValueError(f"Failed to read PV: {cor_pv}")
+                
+            # Pre-allocate measurement arrays
+            bpm_x_plus = np.zeros((self.n_averages, self.N_BPM))
+            bpm_y_plus = np.zeros((self.n_averages, self.N_BPM))
+            bpm_x_minus = np.zeros((self.n_averages, self.N_BPM))
+            bpm_y_minus = np.zeros((self.n_averages, self.N_BPM))
+            
+            # Positive kick measurement
+            caput(cor_pv, original_value + 2*self.d_value)
             time.sleep(self.timer_interval)
-            mi21 = mean_BPMx1 - mean_BPMx2
-            mi22 = mean_BPMy1 - mean_BPMy2
-            mij21 = np.append(mi21, mi22)
-            mij = np.vstack((mij, mij21))
+            
+            for i in range(self.n_averages):
+                bpm_x_plus[i] = caget_many(self.pvBPMx)
+                bpm_y_plus[i] = caget_many(self.pvBPMy)
+                if i < self.n_averages - 1:
+                    time.sleep(self.timer_interval)
+            
+            # Negative kick measurement
+            caput(cor_pv, original_value - 0*self.d_value)
+            time.sleep(self.timer_interval)
+            
+            for i in range(self.n_averages):
+                bpm_x_minus[i] = caget_many(self.pvBPMx)
+                bpm_y_minus[i] = caget_many(self.pvBPMy)
+                if i < self.n_averages - 1:
+                    time.sleep(self.timer_interval)
+            
+            # Restore original value
+            caput(cor_pv, original_value)
+            time.sleep(self.timer_interval)
+            
+            # Calculate response
+            mean_x_plus = np.mean(bpm_x_plus, axis=0)
+            mean_y_plus = np.mean(bpm_y_plus, axis=0)
+            mean_x_minus = np.mean(bpm_x_minus, axis=0)
+            mean_y_minus = np.mean(bpm_y_minus, axis=0)
+            
+            response_x = (mean_x_plus - mean_x_minus) / (2 * self.d_value)
+            response_y = (mean_y_plus - mean_y_minus) / (2 * self.d_value)
+            
+            return np.concatenate([response_x, response_y])
+            
+        except Exception as e:
+            logger.error(f"Error measuring response for {cor_pv}: {str(e)}")
+            caput(cor_pv, original_value)  # Try to restore
+            raise
 
-        mij = np.transpose(mij)/2/d_value
-            #print(mij)
-        np.savetxt('response.txt', mij)
-            #with open('response.txt',"w") as f:
-            #    f.write( json.dumps(lte, indent=4))
+    def calculate_response_matrix(self) -> None:
+        """Calculate full response matrix.[dx/dcorr]""" 
+        logger.info("Starting response matrix calculation")
+        
+        try:
+            # Process X correctors
+            for i, cor_pv in enumerate(self.pvCORx):
+                logger.info(f"Processing X corrector {i+1}/{len(self.pvCORx)}: {cor_pv}")
+                response = self._measure_response(cor_pv, True)
+                print(response)
+                self.response_matrix[:, i] = response
+                print(self.response_matrix)
+            
+            # Process Y correctors (offset by N_COR in matrix)
+            for i, cor_pv in enumerate(self.pvCORy):
+                logger.info(f"Processing Y corrector {i+1}/{len(self.pvCORy)}: {cor_pv}")
+                response = self._measure_response(cor_pv, False)
+                print(response)
+                self.response_matrix[:, i + self.N_COR] = response
+                
+            logger.info("Response matrix calculation completed")
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate response matrix: {str(e)}")
+            raise
 
-if __name__=='__main__':  
-    f_res = response()
-    f_res.init_BPM_pv()
-    f_res.init_COR_pv()
-    f_res.findresponse()
- 
+    def save_matrix(self, filename: str = 'response.txt') -> None:
+        """Save response matrix to file."""
+        try:
+            np.savetxt(filename, self.response_matrix)
+            logger.info(f"Response matrix saved to {filename}")
+        except Exception as e:
+            logger.error(f"Failed to save matrix: {str(e)}")
+            raise
+
+if __name__ == '__main__':
+    try:
+        calculator = ResponseMatrixCalculator(n_averages=1)
+        calculator.init_BPM_pv()
+        calculator.init_COR_pv()
+        calculator.calculate_response_matrix()
+        calculator.save_matrix()
+    except Exception as e:
+        logger.critical(f"Fatal error: {str(e)}")
+        raise
