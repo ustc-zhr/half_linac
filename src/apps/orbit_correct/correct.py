@@ -7,7 +7,7 @@ import numpy as np
 import sys
 from epics import caput_many, PV
 import os
-import half_linac.setup as st
+import half_linac.runtime_config as st
 
 
 RESPM_FILE = st.rootpath+'/src/apps/orbit_correct/response.txt'

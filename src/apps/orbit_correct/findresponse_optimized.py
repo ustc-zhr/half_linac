@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from typing import List, Tuple
 from epics import caget, caget_many, caput, caput_many, PV
-import half_linac.setup as st
+import half_linac.runtime_config as st
 
 # Configure logging
 logging.basicConfig(

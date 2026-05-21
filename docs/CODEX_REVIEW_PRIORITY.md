@@ -18,13 +18,13 @@
 
 优先文件：
 
-- [`setup.py`](../setup.py)
+- [`runtime_config.py`](../runtime_config.py)
 - [`scripts/common.sh`](../scripts/common.sh)
 - `src/softIOC/halflinac/iocBoot/ioctarget/envPaths`
 
 为什么先看：
 
-- 当前 `setup.py` 实际上是运行时配置文件，不是 Python 打包文件
+- 当前 `runtime_config.py` 承担全局运行时配置入口
 - 路径依赖同时分散在 Python、shell、IOC boot 文件里
 - 这类问题会污染几乎所有运行和审查结果
 
@@ -116,7 +116,7 @@
 重点内容：
 
 - 进一步清理已跟踪的生成物和运行产物
-- 把误导性的文件命名逐步改正，例如根目录 `setup.py`
+- 继续减少误导性的历史命名痕迹，并补最小自动化检查
 - 补最小自动化检查脚本
 - 为高风险模块补更窄的 smoke test
 

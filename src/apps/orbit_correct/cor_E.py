@@ -6,7 +6,7 @@ import sys
 from epics import caget, caget_many,caput,caput_many,PV
 import os
 import re
-import half_linac.setup as st
+import half_linac.runtime_config as st
 
 d_value = 0.01*0.001
 d_value1 

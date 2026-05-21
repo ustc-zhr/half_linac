@@ -1,4 +1,4 @@
-import half_linac.setup as st
+import half_linac.runtime_config as st
 
 def get_energy0(current, L=2.7271, ANGLE=0.4363323129985824):
     """

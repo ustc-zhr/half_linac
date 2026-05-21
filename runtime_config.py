@@ -1,3 +1,5 @@
+"""Canonical shared runtime configuration for the HALF codebase."""
+
 from pathlib import Path
 
 # path
@@ -43,3 +45,35 @@ pv_prefix_bpmx, pv_suffix_bpmx = "HALF:IN:BPM:", ":X:ao"
 pv_prefix_bpmy, pv_suffix_bpmy = "HALF:IN:BPM:", ":Y:ao"
 pv_prefix_cor, pv_suffix_cor = "HALF:IN:COR:", ":ao"
 pv_prefix_bend, pv_suffix_bend = "HALF:IN:BEND:", ":ANGLE"
+
+__all__ = [
+    "rootpath",
+    "c_light",
+    "electron_mass",
+    "proton_mass",
+    "runtime_machine",
+    "runtime_vmmachine",
+    "corrector_upperlimit",
+    "flag_pixel",
+    "flag_pixel_width",
+    "ESAflag_pv",
+    "ESAflag_pixel",
+    "ESAflag_pixel_width",
+    "ESAflag_expotime_pv",
+    "machine_type",
+    "flag_pixel_vm",
+    "flag_pixel_width_vm",
+    "ESAflag_pv_vm",
+    "ESAflag_pixel_vm",
+    "ESAflag_pixel_width_vm",
+    "pv_prefix_quad",
+    "pv_suffix_quad",
+    "pv_prefix_bpmx",
+    "pv_suffix_bpmx",
+    "pv_prefix_bpmy",
+    "pv_suffix_bpmy",
+    "pv_prefix_cor",
+    "pv_suffix_cor",
+    "pv_prefix_bend",
+    "pv_suffix_bend",
+]

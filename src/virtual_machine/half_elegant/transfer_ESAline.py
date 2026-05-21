@@ -1,4 +1,4 @@
-import half_linac.setup as st
+import half_linac.runtime_config as st
 from pathlib import Path
 
 from half_linac.src.virtual_machine.half_elegant.runtime_state import update_runtime_state

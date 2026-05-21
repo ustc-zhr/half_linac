@@ -9,7 +9,7 @@ HALF 直线加速器上层物理应用软件仓库，包含：
 
 当前仓库同时包含源码、生成文件、实验运行产物和少量历史备份文件。为了让 Codex 或人工审查更高效，项目入口已经收敛到本文档、`AGENTS.md` 和 `docs/`。
 
-仓库根目录的运行时公共配置现在以 `half_linac.runtime_config` 作为规范导入入口；`half_linac.setup` 暂时保留为兼容别名，方便逐步迁移旧代码。
+仓库根目录的运行时公共配置现在以 `half_linac.runtime_config` 作为规范导入入口。
 
 ## 仓库地图
 
@@ -119,6 +119,6 @@ bash scripts/start_vm.sh
 1. 先让 Codex 只做 review，不改代码，范围限定为 `src/softIOC` 和 `src/virtual_machine`
 2. 再让 Codex 修复 review 中最明确、最小的一类问题，例如路径、进程生命周期、生成文件边界
 3. 然后再审查 `src/apps` 和 `src/optimization`
-4. 最后再做仓库清理，例如重命名误导性文件、补测试、拆分运行产物
+4. 最后再做仓库清理，例如补测试、继续收紧历史命名痕迹、拆分运行产物
 
 更细的顺序和提示词建议见 [docs/CODEX_REVIEW_PRIORITY.md](docs/CODEX_REVIEW_PRIORITY.md)。

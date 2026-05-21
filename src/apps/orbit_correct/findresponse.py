@@ -4,7 +4,7 @@
 import time
 import numpy as np
 from epics import caget, caget_many,caput,caput_many
-import half_linac.setup as st
+import half_linac.runtime_config as st
 
 
 N_BPM = 41 #41

@@ -9,7 +9,7 @@ from PyQt5.QtCore import QTimer
 
 from epics import caget, caget_many
 
-import half_linac.setup as st
+import half_linac.runtime_config as st
 
 class myWindow(QMainWindow, Ui_Form):
     def __init__(self):
@@ -156,7 +156,6 @@ if __name__ == '__main__':
     window = myWindow()
     window.show()
     sys.exit(app.exec_())
-
 
 
 

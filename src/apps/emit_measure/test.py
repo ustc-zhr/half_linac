@@ -10,7 +10,7 @@ from PyQt5.QtCore import QThread,pyqtSignal
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-import half_linac.setup as st
+import half_linac.runtime_config as st
 import json
 import copy
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
@@ -38,6 +38,5 @@ Rj = np.array(list_R).reshape(6,6)
 print(Rj)
 qf_map = np.transpose(Rj)
 # get the final phase 
-
 
 

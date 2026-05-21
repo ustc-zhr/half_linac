@@ -125,7 +125,7 @@ source scripts/setup.sh
 - 导出 `halflinac_ROOT`
 - 把仓库父目录加入 `PYTHONPATH`
 
-这样像 `python3 src/apps/launcher/main.py` 这类入口才可以正常导入 `half_linac.runtime_config`；旧代码里仍可兼容 `half_linac.setup`。
+这样像 `python3 src/apps/launcher/main.py` 这类入口才可以正常导入 `half_linac.runtime_config`。
 
 ## 7. 修改机器相关配置
 
@@ -159,7 +159,7 @@ bash scripts/check.sh
 
 这一步会：
 
-- 对 `setup.py` 和 `src/` 做 `compileall`
+- 对 `runtime_config.py` 和 `src/` 做 `compileall`
 - 检查仓库内脚本的 shell 语法
 - 不启动长进程
 
@@ -205,7 +205,7 @@ cd src/softIOC/halflinac/iocBoot/ioctarget
 
 ## 10. 常见注意事项
 
-- 当前根目录的 [`setup.py`](../setup.py) 不是 Python 打包入口，而是运行时常量配置文件。
+- 当前根目录的 [`runtime_config.py`](../runtime_config.py) 是运行时常量配置入口。
 - 仓库中存在不少生成物和历史运行产物，不要默认把它们当成手工维护源码。
 - GUI `gui.py` 文件很多是由 `.ui` 生成的；如果要改布局，最好同步考虑 `.ui` 文件。
 - `real` 和 `vm` 模式是两套不同假设。默认优先在 `vm` 模式下验证。

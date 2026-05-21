@@ -5,7 +5,7 @@ import sys
 from typing import List, Optional, Tuple, Union
 from epics import caput_many, PV, caget_many
 from scipy.linalg import svd
-import half_linac.setup as st
+import half_linac.runtime_config as st
 
 
 # configure the correction log
