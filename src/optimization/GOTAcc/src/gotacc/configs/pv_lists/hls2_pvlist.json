@@ -1,0 +1,512 @@
+{
+  "machine": "HLS2",
+  "description": "HLS2 control-room PV library",
+  "knobs": [
+    {
+      "name": "LA_PS_HIC1",
+      "pv_name": "LA_PS_HIC1:current:ao",
+      "readback": "LA_PS_HIC1:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HIC2",
+      "pv_name": "LA_PS_HIC2:current:ao",
+      "readback": "LA_PS_HIC2:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HIC3",
+      "pv_name": "LA_PS_HIC3:current:ao",
+      "readback": "LA_PS_HIC3:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HC1",
+      "pv_name": "LA_PS_HC1:current:ao",
+      "readback": "LA_PS_HC1:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HC2",
+      "pv_name": "LA_PS_HC2:current:ao",
+      "readback": "LA_PS_HC2:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HC3",
+      "pv_name": "LA_PS_HC3:current:ao",
+      "readback": "LA_PS_HC3:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HC4",
+      "pv_name": "LA_PS_HC4:current:ao",
+      "readback": "LA_PS_HC4:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HC5",
+      "pv_name": "LA_PS_HC5:current:ao",
+      "readback": "LA_PS_HC5:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HC6",
+      "pv_name": "LA_PS_HC6:current:ao",
+      "readback": "LA_PS_HC6:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HC7",
+      "pv_name": "LA_PS_HC7:current:ao",
+      "readback": "LA_PS_HC7:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_HC8",
+      "pv_name": "LA_PS_HC8:current:ao",
+      "readback": "LA_PS_HC8:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC1",
+      "pv_name": "TL_PS_HC1:current:ao",
+      "readback": "TL_PS_HC1:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC2",
+      "pv_name": "TL_PS_HC2:current:ao",
+      "readback": "TL_PS_HC2:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC3",
+      "pv_name": "TL_PS_HC3:current:ao",
+      "readback": "TL_PS_HC3:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC4",
+      "pv_name": "TL_PS_HC4:current:ao",
+      "readback": "TL_PS_HC4:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC5",
+      "pv_name": "TL_PS_HC5:current:ao",
+      "readback": "TL_PS_HC5:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC6",
+      "pv_name": "TL_PS_HC6:current:ao",
+      "readback": "TL_PS_HC6:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC7",
+      "pv_name": "TL_PS_HC7:current:ao",
+      "readback": "TL_PS_HC7:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC8",
+      "pv_name": "TL_PS_HC8:current:ao",
+      "readback": "TL_PS_HC8:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "TL_PS_HC9",
+      "pv_name": "TL_PS_HC9:current:ao",
+      "readback": "TL_PS_HC9:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "LA_PS_VIC1",
+      "pv_name": "LA_PS_VIC1:current:ao",
+      "readback": "LA_PS_VIC1:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VIC2",
+      "pv_name": "LA_PS_VIC2:current:ao",
+      "readback": "LA_PS_VIC2:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VIC3",
+      "pv_name": "LA_PS_VIC3:current:ao",
+      "readback": "LA_PS_VIC3:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VC1",
+      "pv_name": "LA_PS_VC1:current:ao",
+      "readback": "LA_PS_VC1:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VC2",
+      "pv_name": "LA_PS_VC2:current:ao",
+      "readback": "LA_PS_VC2:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VC3",
+      "pv_name": "LA_PS_VC3:current:ao",
+      "readback": "LA_PS_VC3:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VC4",
+      "pv_name": "LA_PS_VC4:current:ao",
+      "readback": "LA_PS_VC4:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VC5",
+      "pv_name": "LA_PS_VC5:current:ao",
+      "readback": "LA_PS_VC5:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VC6",
+      "pv_name": "LA_PS_VC6:current:ao",
+      "readback": "LA_PS_VC6:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VC7",
+      "pv_name": "LA_PS_VC7:current:ao",
+      "readback": "LA_PS_VC7:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_VC8",
+      "pv_name": "LA_PS_VC8:current:ao",
+      "readback": "LA_PS_VC8:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC1",
+      "pv_name": "TL_PS_VC1:current:ao",
+      "readback": "TL_PS_VC1:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC2",
+      "pv_name": "TL_PS_VC2:current:ao",
+      "readback": "TL_PS_VC2:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC3",
+      "pv_name": "TL_PS_VC3:current:ao",
+      "readback": "TL_PS_VC3:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC4",
+      "pv_name": "TL_PS_VC4:current:ao",
+      "readback": "TL_PS_VC4:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC5",
+      "pv_name": "TL_PS_VC5:current:ao",
+      "readback": "TL_PS_VC5:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC6",
+      "pv_name": "TL_PS_VC6:current:ao",
+      "readback": "TL_PS_VC6:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC7",
+      "pv_name": "TL_PS_VC7:current:ao",
+      "readback": "TL_PS_VC7:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC8",
+      "pv_name": "TL_PS_VC8:current:ao",
+      "readback": "TL_PS_VC8:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "TL_PS_VC9",
+      "pv_name": "TL_PS_VC9:current:ao",
+      "readback": "TL_PS_VC9:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "LA_PS_Q1",
+      "pv_name": "LA_PS_Q1:current:ao",
+      "readback": "LA_PS_Q1:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q2",
+      "pv_name": "LA_PS_Q2:current:ao",
+      "readback": "LA_PS_Q2:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q3",
+      "pv_name": "LA_PS_Q3:current:ao",
+      "readback": "LA_PS_Q3:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q4",
+      "pv_name": "LA_PS_Q4:current:ao",
+      "readback": "LA_PS_Q4:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q5",
+      "pv_name": "LA_PS_Q5:current:ao",
+      "readback": "LA_PS_Q5:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q6",
+      "pv_name": "LA_PS_Q6:current:ao",
+      "readback": "LA_PS_Q6:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q7",
+      "pv_name": "LA_PS_Q7:current:ao",
+      "readback": "LA_PS_Q7:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q8",
+      "pv_name": "LA_PS_Q8:current:ao",
+      "readback": "LA_PS_Q8:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q9",
+      "pv_name": "LA_PS_Q9:current:ao",
+      "readback": "LA_PS_Q9:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q10",
+      "pv_name": "LA_PS_Q10:current:ao",
+      "readback": "LA_PS_Q10:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q11",
+      "pv_name": "LA_PS_Q11:current:ao",
+      "readback": "LA_PS_Q11:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_Q12",
+      "pv_name": "LA_PS_Q12:current:ao",
+      "readback": "LA_PS_Q12:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_AQ2",
+      "pv_name": "LA_PS_AQ2:current:ao",
+      "readback": "LA_PS_AQ2:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA_PS_AQ3",
+      "pv_name": "LA_PS_AQ3:current:ao",
+      "readback": "LA_PS_AQ3:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q1",
+      "pv_name": "TL_PS_Q1:current:ao",
+      "readback": "TL_PS_Q1:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q2",
+      "pv_name": "TL_PS_Q2:current:ao",
+      "readback": "TL_PS_Q2:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q3",
+      "pv_name": "TL_PS_Q3:current:ao",
+      "readback": "TL_PS_Q3:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q4",
+      "pv_name": "TL_PS_Q4:current:ao",
+      "readback": "TL_PS_Q4:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q5",
+      "pv_name": "TL_PS_Q5:current:ao",
+      "readback": "TL_PS_Q5:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q6",
+      "pv_name": "TL_PS_Q6:current:ao",
+      "readback": "TL_PS_Q6:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q7",
+      "pv_name": "TL_PS_Q7:current:ao",
+      "readback": "TL_PS_Q7:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q8",
+      "pv_name": "TL_PS_Q8:current:ao",
+      "readback": "TL_PS_Q8:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q9",
+      "pv_name": "TL_PS_Q9:current:ao",
+      "readback": "TL_PS_Q9:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q10",
+      "pv_name": "TL_PS_Q10:current:ao",
+      "readback": "TL_PS_Q10:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q11",
+      "pv_name": "TL_PS_Q11:current:ao",
+      "readback": "TL_PS_Q11:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "TL_PS_Q12",
+      "pv_name": "TL_PS_Q12:current:ao",
+      "readback": "TL_PS_Q12:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "LA-PCI-KLY1",
+      "pv_name": "LA-PCI-KLY1:Elecontrolphaser",
+      "readback": "LA-PCI-KLY1:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "LA-PCI-KLY2",
+      "pv_name": "LA-PCI-KLY2:Elecontrolphaser",
+      "readback": "LA-PCI-KLY2:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "LA-PCI-KLY3",
+      "pv_name": "LA-PCI-KLY3:Elecontrolphaser",
+      "readback": "LA-PCI-KLY3:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "LA-PCI-KLY4",
+      "pv_name": "LA-PCI-KLY4:Elecontrolphaser",
+      "readback": "LA-PCI-KLY4:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "LA-PCI-KLY5",
+      "pv_name": "LA-PCI-KLY5:Elecontrolphaser",
+      "readback": "LA-PCI-KLY5:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "LA-PCI-KLY6",
+      "pv_name": "LA-PCI-KLY6:Elecontrolphaser",
+      "readback": "LA-PCI-KLY6:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "LA-PCI-KLY7",
+      "pv_name": "LA-PCI-KLY7:Elecontrolphaser",
+      "readback": "LA-PCI-KLY7:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "LA-PCI-KLY8",
+      "pv_name": "LA-PCI-KLY8:Elecontrolphaser",
+      "readback": "LA-PCI-KLY8:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "LA-PCI-KLY9",
+      "pv_name": "LA-PCI-KLY9:Elecontrolphaser",
+      "readback": "LA-PCI-KLY9:Elecontrolphaser",
+      "group": "cavity"
+    },
+    {
+      "name": "TL_PS_SM",
+      "pv_name": "TL_PS_SM:current:ao",
+      "readback": "TL_PS_SM:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "TL_PS_AM",
+      "pv_name": "TL_PS_AM:current:ao",
+      "readback": "TL_PS_AM:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "TL_PS_BM1256",
+      "pv_name": "TL_PS_BM1256:current:ao",
+      "readback": "TL_PS_BM1256:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "TL_PS_BM1",
+      "pv_name": "TL_PS_BM1:current:ao",
+      "readback": "TL_PS_BM1:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "TL_PS_BM2",
+      "pv_name": "TL_PS_BM2:current:ao",
+      "readback": "TL_PS_BM2:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "TL_PS_BM5",
+      "pv_name": "TL_PS_BM5:current:ao",
+      "readback": "TL_PS_BM5:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "TL_PS_BM6",
+      "pv_name": "TL_PS_BM6:current:ao",
+      "readback": "TL_PS_BM6:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "TL_PS_BM34",
+      "pv_name": "TL_PS_BM34:current:ao",
+      "readback": "TL_PS_BM34:current:ai",
+      "group": "bend"
+    }
+  ],
+  "objectives": [
+    {
+      "name": "LA-BD-FCT02",
+      "pv_name": "LA-BD-FCT02:BeamAmplitude",
+      "readback": "LA-BD-FCT02:BeamAmplitude",
+      "group": "CT"
+    }
+  ]
+}

@@ -1,0 +1,459 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MachinePage</class>
+ <widget class="QWidget" name="MachinePage">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>1280</width><height>920</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>Machine Interface</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_main">
+   <item>
+    <widget class="QFrame" name="frame_machineHero">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_machineHero">
+     <item>
+       <widget class="QLabel" name="label_machineTitle">
+        <property name="text">
+         <string>Machine</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_machineSummary">
+        <property name="text">
+         <string>Machine summary will update with the current connection and policy settings.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QSplitter" name="splitter_top">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <widget class="QGroupBox" name="groupBox_connection">
+      <property name="title"><string>Connection</string></property>
+      <layout class="QVBoxLayout" name="verticalLayout_connectionBox">
+       <item>
+        <layout class="QFormLayout" name="formLayout_connection">
+         <item row="0" column="0"><widget class="QLabel" name="label_caAddress"><property name="text"><string>CA Address List</string></property></widget></item>
+         <item row="0" column="1"><widget class="QLineEdit" name="lineEdit_caAddress"><property name="placeholderText"><string>optional: leave empty to inherit current EPICS environment</string></property></widget></item>
+         <item row="1" column="0"><widget class="QLabel" name="label_status"><property name="text"><string>Status</string></property></widget></item>
+         <item row="1" column="1"><widget class="QLabel" name="label_statusValue"><property name="text"><string>Disconnected</string></property></widget></item>
+         <item row="2" column="1"><widget class="QCheckBox" name="checkBox_autoConnect"><property name="text"><string>Auto connect before online runs</string></property></widget></item>
+         <item row="3" column="1">
+          <layout class="QHBoxLayout" name="horizontalLayout_buttons">
+           <item><widget class="QPushButton" name="pushButton_connect"><property name="text"><string>Connect</string></property></widget></item>
+           <item><widget class="QPushButton" name="pushButton_disconnect"><property name="text"><string>Disconnect</string></property></widget></item>
+           <item><widget class="QPushButton" name="pushButton_test"><property name="text"><string>Test Read</string></property></widget></item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QGroupBox" name="groupBox_guard">
+      <property name="title"><string>Safeguards</string></property>
+      <layout class="QVBoxLayout" name="verticalLayout_guardBox">
+       <item>
+        <layout class="QFormLayout" name="formLayout_guard">
+         <item row="0" column="0"><widget class="QLabel" name="label_confirm"><property name="text"><string>Confirmation</string></property></widget></item>
+         <item row="0" column="1"><widget class="QCheckBox" name="checkBox_confirm"><property name="text"><string>Ask before write</string></property></widget></item>
+         <item row="1" column="0"><widget class="QLabel" name="label_restore"><property name="text"><string>Restore</string></property></widget></item>
+         <item row="1" column="1"><widget class="QCheckBox" name="checkBox_restore"><property name="text"><string>Restore initial knob values</string></property></widget></item>
+         <item row="2" column="0"><widget class="QLabel" name="label_readbackCheck"><property name="text"><string>Readback Check</string></property></widget></item>
+         <item row="2" column="1"><widget class="QCheckBox" name="checkBox_readbackCheck"><property name="text"><string>Verify knob readback after write</string></property></widget></item>
+         <item row="3" column="0"><widget class="QLabel" name="label_readbackTol"><property name="text"><string>Readback Tol</string></property></widget></item>
+         <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBox_readbackTol"><property name="decimals"><number>8</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>999999999.000000000000000</double></property><property name="singleStep"><double>0.000001000000000</double></property><property name="value"><double>0.000001000000000</double></property></widget></item>
+         <item row="4" column="0"><widget class="QLabel" name="label_setInterval"><property name="text"><string>Set Interval [s]</string></property></widget></item>
+         <item row="4" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBox_setInterval"><property name="decimals"><number>4</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>999999999.000000000000000</double></property><property name="singleStep"><double>0.100000000000000</double></property><property name="value"><double>1.000000000000000</double></property></widget></item>
+         <item row="5" column="0"><widget class="QLabel" name="label_sampleInterval"><property name="text"><string>Sample Interval [s]</string></property></widget></item>
+         <item row="5" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBox_sampleInterval"><property name="decimals"><number>4</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>999999999.000000000000000</double></property><property name="singleStep"><double>0.100000000000000</double></property><property name="value"><double>0.200000000000000</double></property></widget></item>
+         <item row="7" column="0"><widget class="QLabel" name="label_timeout"><property name="text"><string>Timeout [s]</string></property></widget></item>
+         <item row="7" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBox_timeout"><property name="maximum"><double>999999999.000000000000000</double></property><property name="value"><double>1.000000000000000</double></property></widget></item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabWidget_machine">
+     <widget class="QWidget" name="tab_mapping">
+      <attribute name="title"><string>PV Mapping</string></attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_mapping">
+       <item>
+        <widget class="QFrame" name="frame_pvPresetLibrary">
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+        <layout class="QVBoxLayout" name="verticalLayout_pvPresetLibrary">
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_pvLibraryControls">
+            <item>
+             <widget class="QPushButton" name="pushButton_loadPvLibrary">
+              <property name="text">
+               <string>Load YAML/JSON</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_pvLibraryLoad">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_applySelectedPvLibrary">
+              <property name="text">
+               <string>Sync PV Mapping To Task</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_pvLibrarySource">
+            <property name="text">
+             <string>Library: none</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_pvLibrarySummary">
+            <property name="text">
+             <string>Mapping: 0 knob, 0 objective | Task: 0 knob, 0 objective | Not synced</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_pvPickerButtons">
+            <item>
+             <widget class="QPushButton" name="pushButton_pickKnobsFromLibrary">
+              <property name="text">
+               <string>Select Knobs</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_clearSelectedKnobs">
+              <property name="text">
+               <string>Clear Knobs</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_pvPickerKnobObjective">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Fixed</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>24</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_pickObjectivesFromLibrary">
+              <property name="text">
+               <string>Select Objectives</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_clearSelectedObjectives">
+              <property name="text">
+               <string>Clear Objectives</string>
+              </property>
+             </widget>
+           </item>
+            <item>
+             <spacer name="horizontalSpacer_pvPickerObjectiveConstraint">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Fixed</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>24</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_pickConstraintsFromLibrary">
+              <property name="text">
+               <string>Select Constraints</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_clearSelectedConstraints">
+              <property name="text">
+               <string>Clear Constraints</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_constraintPicker">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+          </layout>
+         </item>
+          <item>
+           <widget class="QFrame" name="frame_selectedLibrarySummary">
+            <property name="frameShape">
+             <enum>QFrame::StyledPanel</enum>
+            </property>
+            <layout class="QHBoxLayout" name="horizontalLayout_selectedLibrarySummary">
+             <item>
+              <widget class="QLabel" name="label_selectedKnobsSummary">
+                <property name="text">
+                <string>Mapped Knobs: none</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_selectedObjectivesSummary">
+                <property name="text">
+                <string>Mapped Objectives: none</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_selectedConstraintsSummary">
+                <property name="text">
+                <string>Mapped Constraints: none</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item><widget class="QTableWidget" name="tableWidget_mapping"><column><property name="text"><string>Role</string></property></column><column><property name="text"><string>Name</string></property></column><column><property name="text"><string>PV Name</string></property></column><column><property name="text"><string>Readback</string></property></column><column><property name="text"><string>Group</string></property></column><column><property name="text"><string>Note</string></property></column></widget></item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_writePolicy">
+      <attribute name="title"><string>Write Links</string></attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_writePolicy">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_writePolicyTop">
+         <item>
+          <widget class="QLabel" name="label_policy">
+           <property name="text">
+            <string>Policy Type</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="comboBox_policy">
+           <item>
+            <property name="text">
+             <string>none</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>equal</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_writeLinksToolbar">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_addWriteLink">
+           <property name="text">
+            <string>Add Link</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_removeWriteLink">
+           <property name="text">
+            <string>Remove Selected</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item><widget class="QTableWidget" name="tableWidget_writeLinks"><column><property name="text"><string>Source Index</string></property></column><column><property name="text"><string>Target PV</string></property></column><column><property name="text"><string>Enabled</string></property></column></widget></item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_objectivePolicy">
+      <attribute name="title"><string>Objective Policy</string></attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_objectivePolicy">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_objectivePolicyTop">
+         <item>
+          <spacer name="horizontalSpacer_objectivePolicyToolbar">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_addObjectivePolicy">
+           <property name="text">
+            <string>Add Policy</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_removeObjectivePolicy">
+           <property name="text">
+            <string>Remove Selected</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+       <widget class="QTableWidget" name="tableWidget_objectivePolicies">
+         <column>
+          <property name="text">
+           <string>Enabled</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Policy Name</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Kwargs JSON</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_constraintPolicy">
+      <attribute name="title"><string>Constraint Policy</string></attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_constraintPolicy">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_constraintPolicyTop">
+         <item>
+          <spacer name="horizontalSpacer_constraintPolicyToolbar">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_addConstraintPolicy">
+           <property name="text">
+            <string>Add Policy</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_removeConstraintPolicy">
+           <property name="text">
+            <string>Remove Selected</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="tableWidget_constraintPolicies">
+         <column>
+          <property name="text">
+           <string>Enabled</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Policy Name</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Kwargs JSON</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

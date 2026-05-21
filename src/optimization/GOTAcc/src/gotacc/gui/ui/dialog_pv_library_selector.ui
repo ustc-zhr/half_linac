@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PVLibrarySelectorDialog</class>
+ <widget class="QDialog" name="PVLibrarySelectorDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>960</width>
+    <height>620</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>PV Library Selector</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_main">
+   <item>
+    <widget class="QLabel" name="label_intro">
+     <property name="text">
+      <string>Choose one or more PV rows from the loaded machine library.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_filter">
+     <item>
+      <widget class="QLabel" name="label_search">
+       <property name="text">
+        <string>Search</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="lineEdit_filter">
+       <property name="placeholderText">
+        <string>filter by name, PV, readback, group or note...</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="label_summary">
+     <property name="text">
+      <string>No machine PV library loaded.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTableWidget" name="tableWidget_library">
+     <column><property name="text"><string>Name</string></property></column>
+     <column><property name="text"><string>PV Name</string></property></column>
+     <column><property name="text"><string>Readback</string></property></column>
+     <column><property name="text"><string>Group</string></property></column>
+     <column><property name="text"><string>Note</string></property></column>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

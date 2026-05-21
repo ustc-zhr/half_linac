@@ -1,0 +1,111 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# =========================
+# Build / packaging
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Jupyter / IPython
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs / temp
+# =========================
+*.log
+*.tmp
+*.temp
+*.pid
+
+# =========================
+# Project runtime outputs
+# =========================
+save/
+examples/save/
+tests/save/
+artifacts/
+results/
+output/
+outputs/
+
+# =========================
+# ML / data artifacts
+# =========================
+*.npz
+*.npy
+*.pth
+*.pt
+*.pkl
+*.joblib
+
+# =========================
+# Figures / generated plots
+# =========================
+figures/generated/
+plots/generated/
+
+# =========================
+# GUI / local runtime cache
+# =========================
+.cache/
+
+# =========================
+# Testing / coverage
+# =========================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# =========================
+# mypy / lint caches
+# =========================
+.mypy_cache/
+.ruff_cache/
+
+# =========================
+# Local tool state
+# =========================
+.python-version
+.envrc
+
+# =========================
+# EPICS / local machine config
+# =========================
+*.local.yaml
+*.local.yml
+*.local.json

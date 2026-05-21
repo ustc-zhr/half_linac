@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>RunMonitorPage</class>
+ <widget class="QWidget" name="RunMonitorPage">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>1400</width><height>960</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>Run Monitor</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_main">
+   <item>
+    <widget class="QFrame" name="frame_runHero">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_runHero">
+      <item>
+       <widget class="QLabel" name="label_runTitle">
+        <property name="text">
+         <string>Run</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_runSummary">
+        <property name="text">
+         <string>Idle · waiting for the next run.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+   <widget class="QGroupBox" name="groupBox_actions">
+     <property name="title"><string>Controls</string></property>
+     <layout class="QVBoxLayout" name="verticalLayout_actionsBox">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_actions">
+        <item><widget class="QPushButton" name="pushButton_start"><property name="text"><string>Start</string></property></widget></item>
+        <item><widget class="QPushButton" name="pushButton_pause"><property name="text"><string>Pause</string></property></widget></item>
+        <item><widget class="QPushButton" name="pushButton_resume"><property name="text"><string>Resume</string></property></widget></item>
+        <item><widget class="QPushButton" name="pushButton_stop"><property name="text"><string>Stop</string></property></widget></item>
+        <item><widget class="QPushButton" name="pushButton_abortRestore"><property name="text"><string>Abort &amp; Restore</string></property></widget></item>
+        <item><widget class="QPushButton" name="pushButton_restoreInitial"><property name="text"><string>Restore Initial</string></property></widget></item>
+        <item><widget class="QPushButton" name="pushButton_setBest"><property name="text"><string>Set Best to Machine</string></property></widget></item>
+        <item><spacer name="horizontalSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+   <widget class="QGroupBox" name="groupBox_runtime">
+     <property name="title"><string>Snapshot</string></property>
+     <layout class="QGridLayout" name="gridLayout_runtime">
+      <item row="0" column="0"><widget class="QFrame" name="frame_eval"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><layout class="QVBoxLayout" name="verticalLayout_eval"><item><widget class="QLabel" name="label_evalTitle"><property name="text"><string>Evaluations</string></property></widget></item><item><widget class="QLabel" name="label_evalValue"><property name="text"><string>0</string></property></widget></item></layout></widget></item>
+      <item row="0" column="1"><widget class="QFrame" name="frame_elapsed"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><layout class="QVBoxLayout" name="verticalLayout_elapsed"><item><widget class="QLabel" name="label_elapsedTitle"><property name="text"><string>Elapsed</string></property></widget></item><item><widget class="QLabel" name="label_elapsedValue"><property name="text"><string>00:00:00</string></property></widget></item></layout></widget></item>
+      <item row="0" column="2"><widget class="QFrame" name="frame_best"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><layout class="QVBoxLayout" name="verticalLayout_best"><item><widget class="QLabel" name="label_bestTitle"><property name="text"><string>Best Objective</string></property></widget></item><item><widget class="QLabel" name="label_bestValue"><property name="text"><string>--</string></property></widget></item></layout></widget></item>
+      <item row="0" column="3"><widget class="QFrame" name="frame_feasibility"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><layout class="QVBoxLayout" name="verticalLayout_feasibility"><item><widget class="QLabel" name="label_feasibilityTitle"><property name="text"><string>Feasibility Ratio</string></property></widget></item><item><widget class="QLabel" name="label_feasibilityValue"><property name="text"><string>--</string></property></widget></item></layout></widget></item>
+      <item row="0" column="4"><widget class="QFrame" name="frame_phase"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><layout class="QVBoxLayout" name="verticalLayout_phase"><item><widget class="QLabel" name="label_phaseTitle"><property name="text"><string>Phase</string></property></widget></item><item><widget class="QLabel" name="label_phaseValue"><property name="text"><string>Idle</string></property></widget></item></layout></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QSplitter" name="splitter_main">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <widget class="QGroupBox" name="groupBox_livePlots">
+      <property name="title"><string>Plots</string></property>
+      <layout class="QVBoxLayout" name="verticalLayout_livePlots">
+       <item>
+        <widget class="QTabWidget" name="tabWidget_plots">
+         <widget class="QWidget" name="tab_obj"><attribute name="title"><string>Objective</string></attribute><layout class="QVBoxLayout" name="verticalLayout_obj"><item><widget class="QFrame" name="frame_obj"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item></layout></widget>
+         <widget class="QWidget" name="tab_constraints"><attribute name="title"><string>Constraints</string></attribute><layout class="QVBoxLayout" name="verticalLayout_constraints"><item><widget class="QFrame" name="frame_constraints"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item></layout></widget>
+         <widget class="QWidget" name="tab_pareto"><attribute name="title"><string>Pareto</string></attribute><layout class="QVBoxLayout" name="verticalLayout_pareto"><item><widget class="QFrame" name="frame_pareto"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item></layout></widget>
+         <widget class="QWidget" name="tab_variables"><attribute name="title"><string>Variables</string></attribute><layout class="QVBoxLayout" name="verticalLayout_variables"><item><widget class="QFrame" name="frame_variables"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item></layout></widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QSplitter" name="splitter_runRight">
+      <property name="orientation"><enum>Qt::Vertical</enum></property>
+      <widget class="QGroupBox" name="groupBox_events">
+       <property name="title"><string>Events</string></property>
+       <layout class="QVBoxLayout" name="verticalLayout_events">
+        <item><widget class="QPlainTextEdit" name="plainTextEdit_events"/></item>
+       </layout>
+      </widget>
+      <widget class="QGroupBox" name="groupBox_table">
+       <property name="title"><string>Recent Evaluations</string></property>
+       <layout class="QVBoxLayout" name="verticalLayout_table">
+        <item><widget class="QTableWidget" name="tableWidget_recent"><column><property name="text"><string>Eval ID</string></property></column><column><property name="text"><string>Timestamp</string></property></column><column><property name="text"><string>Status</string></property></column><column><property name="text"><string>X Summary</string></property></column><column><property name="text"><string>Y Summary</string></property></column><column><property name="text"><string>Constraint Summary</string></property></column></widget></item>
+       </layout>
+      </widget>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

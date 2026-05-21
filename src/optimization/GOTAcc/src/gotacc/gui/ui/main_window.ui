@@ -1,0 +1,1189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1600</width>
+    <height>980</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>GOTAcc Studio</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="horizontalLayout_main">
+    <property name="spacing">
+     <number>6</number>
+    </property>
+    <property name="leftMargin">
+     <number>6</number>
+    </property>
+    <property name="topMargin">
+     <number>6</number>
+    </property>
+    <property name="rightMargin">
+     <number>6</number>
+    </property>
+    <property name="bottomMargin">
+     <number>6</number>
+    </property>
+    <item>
+     <widget class="QSplitter" name="splitter_main">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <widget class="QFrame" name="frame_leftNav">
+       <property name="minimumSize">
+        <size>
+         <width>260</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::StyledPanel</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Raised</enum>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_leftNav">
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="label_appTitle">
+          <property name="font">
+           <font>
+            <pointsize>16</pointsize>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="text">
+           <string>GOTAcc Studio</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_appSubtitle">
+          <property name="font">
+           <font>
+            <pointsize>11</pointsize>
+            <bold>false</bold>
+           </font>
+          </property>
+          <property name="text">
+           <string></string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_primaryNav">
+          <property name="title">
+           <string>Workspace</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_primaryNav">
+           <item>
+            <widget class="QListWidget" name="listWidget_navPages">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>220</height>
+              </size>
+             </property>
+             <property name="spacing">
+              <number>8</number>
+             </property>
+             <item>
+              <property name="text">
+               <string>Overview</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Configure</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Run</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QScrollArea" name="scrollArea_leftTools">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="widgetResizable">
+           <bool>true</bool>
+          </property>
+          <widget class="QWidget" name="scrollAreaWidgetContents_leftTools">
+           <property name="geometry">
+            <rect>
+             <x>0</x>
+             <y>0</y>
+             <width>244</width>
+             <height>284</height>
+            </rect>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_leftTools">
+            <item>
+             <widget class="QGroupBox" name="groupBox_quickActions">
+              <property name="title">
+               <string>Quick Actions</string>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_quickActions">
+               <item>
+                <widget class="QPushButton" name="pushButton_newOfflineTask">
+                 <property name="toolTip">
+                  <string>Start a new offline benchmark draft with builder defaults.</string>
+                 </property>
+                 <property name="text">
+                  <string>New Offline Task</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_newOnlineTask">
+                 <property name="toolTip">
+                  <string>Start a new online EPICS draft and jump into machine-oriented setup.</string>
+                 </property>
+                 <property name="text">
+                  <string>New Online Task</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_openConfig">
+                 <property name="toolTip">
+                  <string>Load a saved draft JSON into the builder.</string>
+                 </property>
+                 <property name="text">
+                  <string>Open Draft</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_saveProject">
+                 <property name="toolTip">
+                  <string>Save the current builder state as a reusable draft.</string>
+                 </property>
+                 <property name="text">
+                  <string>Save Draft</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="groupBox_runActions">
+              <property name="title">
+               <string>Run Controls</string>
+              </property>
+              <layout class="QGridLayout" name="gridLayout_runActions">
+               <item row="0" column="0">
+                <widget class="QPushButton" name="pushButton_validateTask">
+                 <property name="text">
+                  <string>Validate</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QPushButton" name="pushButton_startRun">
+                 <property name="text">
+                  <string>Start</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QPushButton" name="pushButton_pauseRun">
+                 <property name="text">
+                  <string>Pause</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QPushButton" name="pushButton_stopRun">
+                 <property name="text">
+                  <string>Stop</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_leftNav">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QSplitter" name="splitter_centerVertical">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <widget class="QStackedWidget" name="stackedWidget_pages">
+        <property name="currentIndex">
+         <number>0</number>
+        </property>
+        <widget class="QWidget" name="page_dashboard">
+         <layout class="QVBoxLayout" name="verticalLayout_dashboard">
+          <item>
+           <widget class="QFrame" name="frame_dashboardHero">
+            <property name="frameShape">
+             <enum>QFrame::StyledPanel</enum>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_dashboardHero">
+             <item>
+              <widget class="QLabel" name="label_dashboardHeroTitle">
+               <property name="text">
+                <string>Workspace Overview</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_dashboardHeroText">
+               <property name="text">
+                <string>Use this screen as the control-room overview: confirm the active task, environment readiness and recent drafts before starting a run.</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="groupBox_dashboardSummary">
+            <property name="title">
+             <string>Task Snapshot</string>
+            </property>
+            <layout class="QGridLayout" name="gridLayout_dashboardSummary">
+             <item row="0" column="0">
+              <widget class="QFrame" name="frame_cardCurrentTask">
+               <property name="frameShape">
+                <enum>QFrame::StyledPanel</enum>
+               </property>
+               <layout class="QVBoxLayout" name="verticalLayout_cardCurrentTask">
+                <item><widget class="QLabel" name="label_cardCurrentTaskTitle"><property name="text"><string>Current Task</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardCurrentTaskValue"><property name="text"><string>Not loaded</string></property></widget></item>
+               </layout>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QFrame" name="frame_cardMode">
+               <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+               <layout class="QVBoxLayout" name="verticalLayout_cardMode">
+                <item><widget class="QLabel" name="label_cardModeTitle"><property name="text"><string>Mode</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardModeValue"><property name="text"><string>Offline</string></property></widget></item>
+               </layout>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QFrame" name="frame_cardAlgorithm">
+               <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+               <layout class="QVBoxLayout" name="verticalLayout_cardAlgorithm">
+                <item><widget class="QLabel" name="label_cardAlgorithmTitle"><property name="text"><string>Algorithm</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardAlgorithmValue"><property name="text"><string>Not selected</string></property></widget></item>
+               </layout>
+              </widget>
+             </item>
+             <item row="0" column="3">
+              <widget class="QFrame" name="frame_cardStatus">
+               <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+               <layout class="QVBoxLayout" name="verticalLayout_cardStatus">
+                <item><widget class="QLabel" name="label_cardStatusTitle"><property name="text"><string>Status</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardStatusValue"><property name="text"><string>Idle</string></property></widget></item>
+               </layout>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+         </item>
+         <item>
+          <widget class="QSplitter" name="splitter_dashboardLower">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <widget class="QGroupBox" name="groupBox_recentProjects">
+             <property name="title">
+              <string>Recent Activity</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_recentProjects">
+              <item>
+               <widget class="QLabel" name="label_recentActivityHint">
+                <property name="text">
+                 <string>Keep the homepage focused on real activity. This list updates when you create, load, save or run tasks.</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QTableWidget" name="tableWidget_recentProjects">
+                <column>
+                 <property name="text"><string>Event</string></property>
+                </column>
+                <column>
+                 <property name="text"><string>Task</string></property>
+                </column>
+                <column>
+                 <property name="text"><string>Status</string></property>
+                </column>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_recentActivityEmpty">
+                <property name="text">
+                 <string>No activity yet. Create a task or run a short offline check to populate this view.</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QGroupBox" name="groupBox_environmentStatus">
+             <property name="title">
+              <string>Run Readiness</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_environmentStatus">
+              <item>
+               <widget class="QLabel" name="label_readinessHint">
+                <property name="text">
+                 <string>Show only the checks that matter before a run: Python and GUI availability, EPICS importability, current machine connection and the most recent Test Read result.</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <layout class="QFormLayout" name="formLayout_readiness">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label_readinessPythonTitle">
+                  <property name="text">
+                   <string>Python</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QLabel" name="label_readinessPythonValue">
+                  <property name="text">
+                   <string>Unknown</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_readinessGuiTitle">
+                  <property name="text">
+                   <string>GUI</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QLabel" name="label_readinessGuiValue">
+                  <property name="text">
+                   <string>Unknown</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="label_readinessEpicsTitle">
+                  <property name="text">
+                   <string>pyepics</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QLabel" name="label_readinessEpicsValue">
+                  <property name="text">
+                   <string>Not checked</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="label_readinessMachineTitle">
+                  <property name="text">
+                   <string>Machine</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="1">
+                 <widget class="QLabel" name="label_readinessMachineValue">
+                  <property name="text">
+                   <string>Disconnected</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="4" column="0">
+                 <widget class="QLabel" name="label_readinessTestReadTitle">
+                  <property name="text">
+                   <string>Last Test Read</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="4" column="1">
+                 <widget class="QLabel" name="label_readinessTestReadValue">
+                  <property name="text">
+                   <string>Not checked</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_readinessDetail">
+                <property name="text">
+                 <string>Run the readiness check to refresh EPICS availability and connection hints.</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_checkEnvironment">
+                <property name="text">
+                 <string>Refresh Readiness</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+        <widget class="QWidget" name="page_configure">
+         <layout class="QVBoxLayout" name="verticalLayout_configureShell">
+          <item>
+           <widget class="QSplitter" name="splitter_configureMain">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <widget class="QWidget" name="widget_configureMainLeft">
+             <layout class="QVBoxLayout" name="verticalLayout_configureMainLeft">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QTabWidget" name="tabWidget_configure">
+                <widget class="QWidget" name="page_configureBuilder">
+                 <attribute name="title">
+                  <string>Task Builder</string>
+                 </attribute>
+                 <layout class="QVBoxLayout" name="verticalLayout_configureBuilderPlaceholder">
+                  <item>
+                   <widget class="QLabel" name="label_configureBuilderPlaceholder">
+                    <property name="text">
+                     <string>Task Builder page will be mounted here at runtime.</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                    <property name="wordWrap">
+                     <bool>true</bool>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+                <widget class="QWidget" name="page_configureMachine">
+                 <attribute name="title">
+                  <string>Machine Setup</string>
+                 </attribute>
+                 <layout class="QVBoxLayout" name="verticalLayout_configureMachinePlaceholder">
+                  <item>
+                   <widget class="QLabel" name="label_configureMachinePlaceholder">
+                    <property name="text">
+                     <string>Machine Interface page will be mounted here at runtime.</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                    <property name="wordWrap">
+                     <bool>true</bool>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="page_runWorkspace">
+         <layout class="QVBoxLayout" name="verticalLayout_runShell">
+          <item>
+           <widget class="QTabWidget" name="tabWidget_runWorkspace">
+            <widget class="QWidget" name="page_runLive">
+             <attribute name="title">
+              <string>Live</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="verticalLayout_runLivePlaceholder">
+              <item>
+               <widget class="QLabel" name="label_runLivePlaceholder">
+                <property name="text">
+                 <string>Run Monitor page will be mounted here at runtime.</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="page_runResults">
+             <attribute name="title">
+              <string>Results</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="verticalLayout_runResultsPlaceholder">
+              <item>
+               <widget class="QLabel" name="label_runResultsPlaceholder">
+                <property name="text">
+                 <string>Results workspace will be mounted here at runtime.</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="page_taskBuilder">
+         <layout class="QVBoxLayout" name="verticalLayout_taskBuilderPlaceholder">
+          <item>
+           <widget class="QLabel" name="label_taskBuilderPlaceholder">
+            <property name="text">
+             <string>Task Builder page is loaded from `page_task_builder.ui` at runtime.</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="page_machineInterface">
+         <layout class="QVBoxLayout" name="verticalLayout_machinePlaceholder">
+          <item>
+           <widget class="QLabel" name="label_machinePlaceholder">
+            <property name="text">
+             <string>Machine Interface page is loaded from `page_machine.ui` at runtime.</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="page_runMonitor">
+         <layout class="QVBoxLayout" name="verticalLayout_runMonitorPlaceholder">
+          <item>
+           <widget class="QLabel" name="label_runMonitorPlaceholder">
+            <property name="text">
+             <string>Run Monitor page is loaded from `page_run_monitor.ui` at runtime.</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="page_results">
+         <layout class="QVBoxLayout" name="verticalLayout_resultsPage">
+          <item>
+           <widget class="QSplitter" name="splitter_resultsMain">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <widget class="QGroupBox" name="groupBox_runList">
+             <property name="minimumSize">
+              <size>
+               <width>280</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="title">
+              <string>Artifacts</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_runList">
+              <item>
+               <widget class="QTreeWidget" name="treeWidget_runList">
+                <column>
+                 <property name="text">
+                  <string>Run / Artifact</string>
+                 </property>
+                </column>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QSplitter" name="splitter_resultsRight">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <widget class="QTabWidget" name="tabWidget_resultsViews">
+              <widget class="QWidget" name="tab_convergence">
+               <attribute name="title">
+                <string>Convergence</string>
+               </attribute>
+               <layout class="QVBoxLayout" name="verticalLayout_convergence">
+                <item>
+                 <widget class="QSplitter" name="splitter_convergencePlots">
+                  <property name="orientation">
+                   <enum>Qt::Vertical</enum>
+                  </property>
+                  <widget class="QGroupBox" name="groupBox_convergencePlot">
+                   <property name="title">
+                    <string>Convergence</string>
+                   </property>
+                   <layout class="QVBoxLayout" name="verticalLayout_convergencePlot">
+                    <item>
+                     <widget class="QFrame" name="frame_plotConvergence">
+                      <property name="frameShape">
+                       <enum>QFrame::StyledPanel</enum>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </widget>
+                  <widget class="QGroupBox" name="groupBox_variablePlot">
+                   <property name="title">
+                    <string>Variables</string>
+                   </property>
+                   <layout class="QVBoxLayout" name="verticalLayout_variablePlot">
+                    <item>
+                     <widget class="QFrame" name="frame_plotVariables">
+                      <property name="frameShape">
+                       <enum>QFrame::StyledPanel</enum>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </widget>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+              <widget class="QWidget" name="tab_pareto">
+               <attribute name="title">
+                <string>Pareto Front</string>
+               </attribute>
+               <layout class="QVBoxLayout" name="verticalLayout_pareto">
+                <item>
+                 <widget class="QFrame" name="frame_plotParetoFinal">
+                  <property name="frameShape">
+                   <enum>QFrame::StyledPanel</enum>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+              <widget class="QWidget" name="tab_solutionInspector">
+               <attribute name="title">
+                <string>Selection Details</string>
+               </attribute>
+               <layout class="QVBoxLayout" name="verticalLayout_solutionInspector">
+                <item>
+                 <widget class="QTableWidget" name="tableWidget_solutionInspector">
+                  <column>
+                   <property name="text">
+                    <string>Field</string>
+                   </property>
+                  </column>
+                  <column>
+                   <property name="text">
+                    <string>Value</string>
+                   </property>
+                  </column>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </widget>
+             <widget class="QWidget" name="widget_resultsTables">
+              <layout class="QHBoxLayout" name="horizontalLayout_resultsTables">
+               <item>
+                <widget class="QGroupBox" name="groupBox_recentEvaluations">
+                 <property name="title">
+                  <string>Recent</string>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout_recentEvaluations">
+                  <item>
+                   <widget class="QTableWidget" name="tableWidget_recentEvaluations">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>220</height>
+                     </size>
+                    </property>
+                    <property name="selectionBehavior">
+                     <enum>QAbstractItemView::SelectRows</enum>
+                    </property>
+                    <property name="editTriggers">
+                     <set>QAbstractItemView::NoEditTriggers</set>
+                    </property>
+                    <column>
+                     <property name="text">
+                      <string>Eval ID</string>
+                     </property>
+                    </column>
+                    <column>
+                     <property name="text">
+                      <string>Timestamp</string>
+                     </property>
+                    </column>
+                    <column>
+                     <property name="text">
+                      <string>Status</string>
+                     </property>
+                    </column>
+                    <column>
+                     <property name="text">
+                      <string>X Summary</string>
+                     </property>
+                    </column>
+                    <column>
+                     <property name="text">
+                      <string>Y Summary</string>
+                     </property>
+                    </column>
+                    <column>
+                     <property name="text">
+                      <string>Constraint Summary</string>
+                     </property>
+                    </column>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QGroupBox" name="groupBox_evalHistory">
+                 <property name="title">
+                  <string>History</string>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout_evalHistory">
+                  <item>
+                   <widget class="QTableWidget" name="tableWidget_history">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>220</height>
+                     </size>
+                    </property>
+                    <property name="selectionBehavior">
+                     <enum>QAbstractItemView::SelectRows</enum>
+                    </property>
+                    <property name="editTriggers">
+                     <set>QAbstractItemView::NoEditTriggers</set>
+                    </property>
+                    <column>
+                     <property name="text">
+                      <string>Eval</string>
+                     </property>
+                    </column>
+                    <column>
+                     <property name="text">
+                      <string>X</string>
+                     </property>
+                    </column>
+                    <column>
+                     <property name="text">
+                      <string>Y</string>
+                     </property>
+                    </column>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </widget>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="page_templates">
+         <layout class="QVBoxLayout" name="verticalLayout_templatesPage">
+          <item>
+           <widget class="QGroupBox" name="groupBox_templatesIntro">
+            <property name="title">
+             <string>Template Workflow</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_templatesIntro">
+             <item>
+              <widget class="QLabel" name="label_templateHint">
+               <property name="text">
+                <string>Choose a starter template, inspect its defaults, then apply it into the current task draft.</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_templateSubHint">
+               <property name="text">
+                <string>`Apply Template` updates the current builder state, `Clone Template` creates a renamed draft, and `Export` writes the template draft to disk.</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSplitter" name="splitter_templatesMain">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <widget class="QGroupBox" name="groupBox_templateLibrary">
+             <property name="minimumSize">
+              <size>
+               <width>220</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="title">
+              <string>Browse Templates</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_templateLibrary">
+              <item>
+               <widget class="QLabel" name="label_templateLibraryHint">
+                <property name="text">
+                 <string>Pick a starter task and inspect its defaults in the panel on the right.</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QTreeWidget" name="treeWidget_templates">
+                <column>
+                 <property name="text">
+                  <string>Templates</string>
+                 </property>
+                </column>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="widget_templateRight">
+             <layout class="QVBoxLayout" name="verticalLayout_templateRight">
+              <item>
+               <widget class="QGroupBox" name="groupBox_templateDetails">
+               <property name="title">
+                 <string>Selected Template</string>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_templateDetails">
+                 <item>
+                  <widget class="QLabel" name="label_selectedTemplateSummary">
+                   <property name="text">
+                    <string>No template selected yet. Choose one from the list to preview its setup and apply it to the current task.</string>
+                   </property>
+                   <property name="wordWrap">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPlainTextEdit" name="plainTextEdit_templateDetails">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>180</height>
+                    </size>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="label_templateDetailsHint">
+                   <property name="text">
+                    <string>Use this preview to compare algorithm defaults, variables, and runtime settings before applying the template.</string>
+                   </property>
+                   <property name="wordWrap">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupBox_templateActions">
+                <property name="title">
+                 <string>Use This Template</string>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_templateActionsBox">
+                 <item>
+                  <widget class="QLabel" name="label_templateActionsHint">
+                   <property name="text">
+                    <string>Apply the selected template directly into the current task, or clone it first if you want to keep the original name intact.</string>
+                   </property>
+                   <property name="wordWrap">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="pushButton_applyTemplate">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>40</height>
+                    </size>
+                   </property>
+                   <property name="text">
+                    <string>Apply To Current Task</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_templateSecondaryActions">
+                   <item>
+                    <widget class="QPushButton" name="pushButton_cloneTemplate">
+                     <property name="text">
+                      <string>Clone Template</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="pushButton_exportTemplate">
+                     <property name="text">
+                      <string>Export</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </widget>
+       <widget class="QTabWidget" name="tabWidget_bottomOutput">
+        <widget class="QWidget" name="tab_consoleLog">
+         <attribute name="title"><string>Console Log</string></attribute>
+         <layout class="QVBoxLayout" name="verticalLayout_consoleLog">
+          <item><widget class="QPlainTextEdit" name="plainTextEdit_consoleLog"/></item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="tab_warningError">
+         <attribute name="title"><string>Warnings / Errors</string></attribute>
+         <layout class="QVBoxLayout" name="verticalLayout_warningError">
+          <item><widget class="QPlainTextEdit" name="plainTextEdit_warningError"/></item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="tab_pvLog">
+         <attribute name="title"><string>PV Log</string></attribute>
+         <layout class="QVBoxLayout" name="verticalLayout_pvLog">
+          <item><widget class="QPlainTextEdit" name="plainTextEdit_pvLog"/></item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="tab_runHistory">
+         <attribute name="title"><string>Run History</string></attribute>
+         <layout class="QVBoxLayout" name="verticalLayout_runHistory">
+          <item><widget class="QTableWidget" name="tableWidget_runHistory"><column><property name="text"><string>Run ID</string></property></column><column><property name="text"><string>Task</string></property></column><column><property name="text"><string>Status</string></property></column><column><property name="text"><string>Started</string></property></column><column><property name="text"><string>Finished</string></property></column></widget></item>
+         </layout>
+        </widget>
+       </widget>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QDockWidget" name="dockWidget_runtimeStatus">
+   <property name="windowTitle">
+    <string>Runtime Status</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents_runtimeStatus">
+    <layout class="QVBoxLayout" name="verticalLayout_runtimeStatusDock">
+     <item>
+      <layout class="QFormLayout" name="formLayout_runtimeStatusDock">
+       <item row="0" column="0"><widget class="QLabel" name="label_statusTask"><property name="text"><string>Task</string></property></widget></item>
+       <item row="0" column="1"><widget class="QLabel" name="label_statusTaskValue"><property name="text"><string>--</string></property></widget></item>
+       <item row="1" column="0"><widget class="QLabel" name="label_statusMode"><property name="text"><string>Mode</string></property></widget></item>
+       <item row="1" column="1"><widget class="QLabel" name="label_statusModeValue"><property name="text"><string>--</string></property></widget></item>
+       <item row="2" column="0"><widget class="QLabel" name="label_statusAlgorithm"><property name="text"><string>Algorithm</string></property></widget></item>
+       <item row="2" column="1"><widget class="QLabel" name="label_statusAlgorithmValue"><property name="text"><string>--</string></property></widget></item>
+       <item row="3" column="0"><widget class="QLabel" name="label_statusConnection"><property name="text"><string>EPICS</string></property></widget></item>
+       <item row="3" column="1"><widget class="QLabel" name="label_statusConnectionValue"><property name="text"><string>Disconnected</string></property></widget></item>
+       <item row="4" column="0"><widget class="QLabel" name="label_statusBest"><property name="text"><string>Best</string></property></widget></item>
+       <item row="4" column="1"><widget class="QLabel" name="label_statusBestValue"><property name="text"><string>--</string></property></widget></item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QProgressBar" name="progressBar_run">
+       <property name="value"><number>0</number></property>
+      </widget>
+     </item>
+     <item><spacer name="verticalSpacer_runtimeStatus"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1600</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title"><string>File</string></property>
+    <addaction name="actionNewTask"/>
+    <addaction name="actionOpenConfig"/>
+    <addaction name="actionSaveProject"/>
+    <addaction name="actionExportResults"/>
+    <addaction name="separator"/>
+    <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuRun">
+    <property name="title"><string>Run</string></property>
+    <addaction name="actionValidate"/>
+    <addaction name="actionStart"/>
+    <addaction name="actionPause"/>
+    <addaction name="actionStop"/>
+    <addaction name="actionRestoreMachine"/>
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title"><string>Tools</string></property>
+    <addaction name="actionEnvironmentCheck"/>
+    <addaction name="actionPVMonitor"/>
+    <addaction name="actionPolicyEditor"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title"><string>View</string></property>
+    <addaction name="menuTheme"/>
+    <addaction name="separator"/>
+    <addaction name="actionResetLayout"/>
+    <addaction name="actionToggleRuntimeDock"/>
+   </widget>
+   <widget class="QMenu" name="menuTheme">
+    <property name="title"><string>Theme</string></property>
+    <addaction name="actionThemeWarmStudio"/>
+    <addaction name="actionThemeCrispLab"/>
+    <addaction name="actionThemeOceanBlueprint"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title"><string>Help</string></property>
+    <addaction name="actionAboutGOTAcc"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuRun"/>
+   <addaction name="menuTools"/>
+   <addaction name="menuView"/>
+   <addaction name="menuHelp"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionNewTask"><property name="text"><string>New Task</string></property></action>
+  <action name="actionOpenConfig"><property name="text"><string>Open Draft</string></property></action>
+  <action name="actionSaveProject"><property name="text"><string>Save Draft</string></property></action>
+  <action name="actionExportResults"><property name="text"><string>Export Results</string></property></action>
+  <action name="actionExit"><property name="text"><string>Exit</string></property></action>
+  <action name="actionValidate"><property name="text"><string>Validate Task</string></property></action>
+  <action name="actionStart"><property name="text"><string>Start Run</string></property></action>
+  <action name="actionPause"><property name="text"><string>Pause Run</string></property></action>
+  <action name="actionStop"><property name="text"><string>Stop Run</string></property></action>
+  <action name="actionRestoreMachine"><property name="text"><string>Restore Machine</string></property></action>
+  <action name="actionEnvironmentCheck"><property name="text"><string>Environment Check</string></property></action>
+  <action name="actionPVMonitor"><property name="text"><string>PV Monitor</string></property></action>
+  <action name="actionPolicyEditor"><property name="text"><string>Policy Editor</string></property></action>
+  <action name="actionThemeWarmStudio">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>Warm Studio</string></property>
+  </action>
+  <action name="actionThemeCrispLab">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>Crisp Lab</string></property>
+  </action>
+  <action name="actionThemeOceanBlueprint">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>Ocean Blueprint</string></property>
+  </action>
+  <action name="actionResetLayout"><property name="text"><string>Reset Layout</string></property></action>
+  <action name="actionToggleRuntimeDock"><property name="text"><string>Runtime Status</string></property></action>
+  <action name="actionAboutGOTAcc"><property name="text"><string>About GOTAcc Studio</string></property></action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

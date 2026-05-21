@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TaskBuilderPage</class>
+ <widget class="QWidget" name="TaskBuilderPage">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>1280</width><height>980</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>Task Builder</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_main">
+   <item>
+    <widget class="QFrame" name="frame_builderHero">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_builderHero">
+     <item>
+      <widget class="QLabel" name="label_builderTitle">
+       <property name="text">
+         <string>Task Builder</string>
+       </property>
+      </widget>
+     </item>
+      <item>
+       <widget class="QLabel" name="label_builderSummary">
+        <property name="text">
+         <string>Configure an optimization task to begin.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+   </widget>
+  </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_topForms">
+     <item>
+     <widget class="QGroupBox" name="groupBox_meta">
+       <property name="title"><string>Task Metadata</string></property>
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+         <horstretch>1</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <layout class="QFormLayout" name="formLayout_meta">
+        <item row="0" column="0"><widget class="QLabel" name="label_taskName"><property name="text"><string>Task Name</string></property></widget></item>
+        <item row="0" column="1"><widget class="QLineEdit" name="lineEdit_taskName"><property name="placeholderText"><string>e.g. irfel_turbo_scan</string></property></widget></item>
+        <item row="1" column="0"><widget class="QLabel" name="label_mode"><property name="text"><string>Mode</string></property></widget></item>
+        <item row="1" column="1"><widget class="QComboBox" name="comboBox_mode"><item><property name="text"><string>Online EPICS</string></property></item><item><property name="text"><string>Offline</string></property></item></widget></item>
+        <item row="2" column="0"><widget class="QLabel" name="label_objType"><property name="text"><string>Objective Type</string></property></widget></item>
+        <item row="2" column="1"><widget class="QComboBox" name="comboBox_objectiveType"><item><property name="text"><string>Single Objective</string></property></item><item><property name="text"><string>Multi Objective</string></property></item></widget></item>
+        <item row="3" column="0"><widget class="QLabel" name="label_workdir"><property name="text"><string>Working Directory</string></property></widget></item>
+        <item row="3" column="1"><layout class="QHBoxLayout" name="horizontalLayout_workdir"><item><widget class="QLineEdit" name="lineEdit_workdir"><property name="placeholderText"><string>Select a working directory for histories, plots and exports</string></property></widget></item><item><widget class="QPushButton" name="pushButton_browseWorkdir"><property name="text"><string>Browse...</string></property></widget></item></layout></item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+     <widget class="QGroupBox" name="groupBox_algorithm">
+       <property name="title"><string>Optimization Strategy</string></property>
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+         <horstretch>1</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <layout class="QFormLayout" name="formLayout_algorithm">
+        <item row="0" column="0"><widget class="QLabel" name="label_algorithm"><property name="text"><string>Algorithm</string></property></widget></item>
+        <item row="0" column="1"><widget class="QComboBox" name="comboBox_algorithm"><property name="toolTip"><string>Select the optimizer family. Different algorithms consume evaluation budget differently; see the budget summary below.</string></property><item><property name="text"><string>BO</string></property></item><item><property name="text"><string>ConsBO</string></property></item><item><property name="text"><string>TuRBO</string></property></item><item><property name="text"><string>MOBO</string></property></item><item><property name="text"><string>ConsMOBO</string></property></item><item><property name="text"><string>MGGPO</string></property></item><item><property name="text"><string>ConsMGGPO</string></property></item><item><property name="text"><string>MOPSO</string></property></item><item><property name="text"><string>NSGA-II</string></property></item></widget></item>
+        <item row="1" column="0"><widget class="QLabel" name="label_seed"><property name="text"><string>Random Seed</string></property></widget></item>
+        <item row="1" column="1"><widget class="QSpinBox" name="spinBox_seed"><property name="maximum"><number>999999999</number></property></widget></item>
+        <item row="2" column="0"><widget class="QLabel" name="label_maxEval"><property name="text"><string>Max Evaluations</string></property></widget></item>
+        <item row="2" column="1"><widget class="QSpinBox" name="spinBox_maxEval"><property name="toolTip"><string>Target cap for total objective evaluations. The exact mapping to iterations or generations depends on the selected algorithm.</string></property><property name="maximum"><number>1000000</number></property><property name="value"><number>100</number></property></widget></item>
+        <item row="3" column="0"><widget class="QLabel" name="label_testFunction"><property name="text"><string>Offline Test Function</string></property></widget></item>
+        <item row="3" column="1"><widget class="QComboBox" name="comboBox_testFunction"><property name="toolTip"><string>Offline benchmark function. Only used for offline tasks; online EPICS tasks ignore this setting.</string></property><item><property name="text"><string>rosenbrock</string></property></item><item><property name="text"><string>ackley</string></property></item><item><property name="text"><string>sphere</string></property></item><item><property name="text"><string>tradeoff</string></property></item></widget></item>
+        <item row="4" column="0"><widget class="QLabel" name="label_algorithmDetail"><property name="text"><string>Algorithm Detail</string></property></widget></item>
+        <item row="4" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_algorithmDetail">
+          <item>
+           <widget class="QLabel" name="label_algorithmDetailSummary">
+            <property name="text">
+             <string>BO · 0 field(s)</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_algorithmDetail">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+           <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+          </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_openAlgorithmDetail">
+            <property name="text">
+             <string>Open...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox_dynamicParams">
+     <property name="visible">
+      <bool>false</bool>
+     </property>
+     <property name="toolTip"><string>Algorithm-specific overrides derived from the optimizer __init__ signature.</string></property>
+     <property name="title"><string>Algorithm Detail</string></property>
+     <layout class="QVBoxLayout" name="verticalLayout_dynamicParams">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_algorithmOverridesHeader">
+        <item>
+         <widget class="QLabel" name="label_algorithmParamSummary">
+          <property name="text">
+           <string>Parameters for current algorithm</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer_algorithmOverridesHeader">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QToolButton" name="toolButton_toggleAlgorithmOverrides">
+          <property name="text">
+           <string>Show</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QTableWidget" name="tableWidget_dynamicParams">
+        <property name="visible">
+         <bool>false</bool>
+        </property>
+        <property name="toolTip">
+         <string>Algorithm-specific overrides. Important budget-related keys include n_init, n_trust_regions, pop_size, n_generations, acq and q-Batch Size for q-acquisition MOBO.</string>
+        </property>
+        <column><property name="text"><string>Key</string></property></column>
+        <column><property name="text"><string>Value</string></property></column>
+        <column><property name="text"><string>Type</string></property></column>
+        <column><property name="text"><string>Description</string></property></column>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabWidget_tables">
+     <widget class="QWidget" name="tab_variables">
+     <attribute name="title"><string>Variables / Knobs</string></attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_variables">
+       <item>
+        <widget class="QFrame" name="frame_variablesToolbar">
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_variablesToolbar">
+          <property name="leftMargin">
+           <number>10</number>
+          </property>
+          <property name="topMargin">
+           <number>6</number>
+          </property>
+          <property name="rightMargin">
+           <number>10</number>
+          </property>
+          <property name="bottomMargin">
+           <number>6</number>
+          </property>
+          <item>
+           <spacer name="horizontalSpacer_boundsToolsButton">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_variablesToolbarActions">
+            <item>
+             <widget class="QPushButton" name="pushButton_openBoundsTools">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>Bounds Tools...</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item><widget class="QTableWidget" name="tableWidget_variables"><column><property name="text"><string>Enable</string></property></column><column><property name="text"><string>Name</string></property></column><column><property name="text"><string>Lower</string></property></column><column><property name="text"><string>Upper</string></property></column><column><property name="text"><string>Initial</string></property></column><column><property name="text"><string>Group</string></property></column></widget></item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_objectives">
+      <attribute name="title"><string>Objectives / Metrics</string></attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_objectives">
+       <item><widget class="QTableWidget" name="tableWidget_objectives"><column><property name="text"><string>Enable</string></property></column><column><property name="text"><string>Name</string></property></column><column><property name="text"><string>Direction</string></property></column><column><property name="text"><string>Weight</string></property></column><column><property name="text"><string>Samples</string></property></column><column><property name="text"><string>Math</string></property></column></widget></item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_constraints">
+      <attribute name="title"><string>Constraints / Guards</string></attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_constraints">
+       <item><widget class="QTableWidget" name="tableWidget_constraints"><column><property name="text"><string>Enable</string></property></column><column><property name="text"><string>Name</string></property></column><column><property name="text"><string>Lower</string></property></column><column><property name="text"><string>Upper</string></property></column><column><property name="text"><string>Math</string></property></column></widget></item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_actionBar">
+     <item>
+      <widget class="QPushButton" name="pushButton_preview">
+       <property name="text">
+        <string>Preview</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+     <widget class="QPushButton" name="pushButton_validate">
+       <property name="text">
+        <string>Validate</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_export">
+       <property name="text">
+        <string>Export TaskConfig</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

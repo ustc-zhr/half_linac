@@ -1,0 +1,78 @@
+{
+  "machine": "IRFEL",
+  "description": "Example control-room PV library for IRFEL. Load this file in Machine Setup and select the knob/objective rows you want to bind.",
+  "knobs": [
+    {
+      "name": "HC01",
+      "pv_name": "IRFEL:PS:HC01:current:ao",
+      "readback": "IRFEL:PS:HC01:current:ai",
+      "group": "steering-x",
+      "note": "Horizontal corrector HC01"
+    },
+    {
+      "name": "HC02",
+      "pv_name": "IRFEL:PS:HC02:current:ao",
+      "readback": "IRFEL:PS:HC02:current:ai",
+      "group": "steering-x",
+      "note": "Horizontal corrector HC02"
+    },
+    {
+      "name": "VC01",
+      "pv_name": "IRFEL:PS:VC01:current:ao",
+      "readback": "IRFEL:PS:VC01:current:ai",
+      "group": "steering-y",
+      "note": "Vertical corrector VC01"
+    },
+    {
+      "name": "VC02",
+      "pv_name": "IRFEL:PS:VC02:current:ao",
+      "readback": "IRFEL:PS:VC02:current:ai",
+      "group": "steering-y",
+      "note": "Vertical corrector VC02"
+    },
+    {
+      "name": "QM01",
+      "pv_name": "IRFEL:PS:QM01:current:ao",
+      "readback": "IRFEL:PS:QM01:current:ai",
+      "group": "quadrupole",
+      "note": "Quadrupole QM01"
+    },
+    {
+      "name": "QM02",
+      "pv_name": "IRFEL:PS:QM02:current:ao",
+      "readback": "IRFEL:PS:QM02:current:ai",
+      "group": "quadrupole",
+      "note": "Quadrupole QM02"
+    },
+    {
+      "name": "QM03",
+      "pv_name": "IRFEL:PS:QM03:current:ao",
+      "readback": "IRFEL:PS:QM03:current:ai",
+      "group": "quadrupole",
+      "note": "Quadrupole QM03"
+    }
+  ],
+  "objectives": [
+    {
+      "name": "FEL_Energy",
+      "pv_name": "FEL:Energy",
+      "readback": "FEL:Energy",
+      "group": "metric",
+      "note": "FEL energy monitor"
+    },
+    {
+      "name": "CH3_ASUM",
+      "pv_name": "IRFEL:BD:CT:CH3:WAV:ASUM",
+      "readback": "IRFEL:BD:CT:CH3:WAV:ASUM",
+      "group": "metric",
+      "note": "CH3 ASUM readout"
+    },
+    {
+      "name": "CH4_ASUM",
+      "pv_name": "IRFEL:BD:CT:CH4:WAV:ASUM",
+      "readback": "IRFEL:BD:CT:CH4:WAV:ASUM",
+      "group": "metric",
+      "note": "CH4 ASUM readout"
+    }
+  ]
+}

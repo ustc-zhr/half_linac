@@ -1,0 +1,71 @@
+meta:
+  name: irfel_nsga2_vector_fel
+  machine: IRFEL
+  description: IRFEL online NSGA2 with vector objective.
+
+backend:
+  type: epics
+  bounds_mode: relative
+  bounds:
+    - [-8, 8]
+    - [-8, 8]
+    - [-8, 8]
+    - [-8, 8]
+  kwargs:
+    knobs_pvnames:
+      - IRFEL:PS:HC01:current:ao
+      - IRFEL:PS:HC02:current:ao
+      - IRFEL:PS:VC01:current:ao
+      - IRFEL:PS:VC02:current:ao
+
+    obj_pvnames:
+      - FEL:Energy
+      - IRFEL:BD:CT:CH4:WAV:ASUM
+
+    obj_weights:
+      - -1.0
+      - -1.0
+
+    obj_samples: 3
+
+    obj_math:
+      - mean
+      - mean
+
+    set_interval: 1.0
+    sample_interval: 1.0
+
+    log_path: template.opt
+    readback_check: false
+    readback_tol: 1.0e-6
+
+    combine_mode: vector
+    best_selector_mode: sum_min
+
+    objective_policy: fel_energy_guard
+    objective_policy_kwargs:
+      target_col: 0
+      large_threshold: 1.0e6
+      change_threshold: 1.0e-6
+
+optimizer:
+  name: nsga2
+  kwargs:
+    pop_size: 40
+    n_gen: 20
+    random_state: 120
+    verbose: true
+    # 如果你的 NSGA2Optimizer 支持这些参数，可取消注释后使用
+    # crossover_eta: 20
+    # mutation_eta: 20
+    # mutation_prob: null
+
+runtime:
+  save_history: true
+  history_path: null
+  plot_convergence: false
+  plot_path: null
+  set_best: false
+  restore_initial_on_error: true
+  restore_initial_on_keyboard_interrupt: true
+  verbose: true

@@ -1,0 +1,79 @@
+meta:
+  name: irfel_bo_weighted_fel
+  machine: IRFEL
+  description: IRFEL online BO with weighted-sum scalar objective.
+
+backend:
+  type: epics
+  bounds_mode: relative
+  bounds:
+    - [-8, 8]
+    - [-8, 8]
+    - [-8, 8]
+    - [-8, 8]
+  kwargs:
+    knobs_pvnames:
+      - IRFEL:PS:HC01:current:ao
+      - IRFEL:PS:HC02:current:ao
+      - IRFEL:PS:VC01:current:ao
+      - IRFEL:PS:VC02:current:ao
+
+    obj_pvnames:
+      - FEL:Energy
+      - IRFEL:BD:CT:CH4:WAV:ASUM
+
+    obj_weights:
+      - -1.0
+      - -1.0
+
+    obj_samples: 3
+
+    obj_math:
+      - mean
+      - mean
+
+    set_interval: 1.0
+    sample_interval: 1.0
+
+    log_path: template.opt
+    readback_check: false
+    readback_tol: 1.0e-6
+
+    combine_mode: weighted_sum
+    best_selector_mode: max
+
+    objective_policy: fel_energy_guard
+    objective_policy_kwargs:
+      target_col: 0
+      large_threshold: 1.0e6
+      change_threshold: 1.0e-6
+
+optimizer:
+  name: bo
+  kwargs:
+    kernel_type: matern
+    gp_restarts: 5
+    acq: ucb
+    acq_para: 2.0
+    acq_para_kwargs:
+      beta_strategy: inv_decay
+      beta_lam: 0.01
+    acq_optimizer: optimize_acqf
+    acq_opt_kwargs:
+      num_restarts: 8
+      raw_samples: 256
+      n_candidates: 8192
+    n_init: 5
+    n_iter: 15
+    random_state: 120
+    verbose: true
+
+runtime:
+  save_history: true
+  history_path: null
+  plot_convergence: true
+  plot_path: null
+  set_best: true
+  restore_initial_on_error: true
+  restore_initial_on_keyboard_interrupt: true
+  verbose: true
