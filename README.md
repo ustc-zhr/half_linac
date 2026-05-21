@@ -1,4 +1,4 @@
-# half_linac
+# HALF Injector High-Level Applications
 
 HALF 直线加速器上层物理应用软件仓库，包含：
 
@@ -9,9 +9,12 @@ HALF 直线加速器上层物理应用软件仓库，包含：
 
 当前仓库同时包含源码、生成文件、实验运行产物和少量历史备份文件。为了让 Codex 或人工审查更高效，项目入口已经收敛到本文档、`AGENTS.md` 和 `docs/`。
 
+仓库根目录的运行时公共配置现在以 `half_linac.runtime_config` 作为规范导入入口；`half_linac.setup` 暂时保留为兼容别名，方便逐步迁移旧代码。
+
 ## 仓库地图
 
 - `src/apps/`: GUI 应用，包括 `launcher`、`orbit_correct`、`bba`、`beam_monitor`、`energy_spectrum` 等
+- `src/shared/`: 跨多个 GUI / runtime 复用的共享辅助模块
 - `src/optimization/`: 在线优化 GUI 与 BO / RCDS / Rsimplex 算法
 - `src/softIOC/`: IOC 管理脚本、PV 同步逻辑、IOC 工程文件
 - `src/virtual_machine/`: lattice 解析、VM 管理、`elegant` 运行目录
