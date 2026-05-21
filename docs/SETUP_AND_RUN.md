@@ -125,7 +125,7 @@ source scripts/setup.sh
 - 导出 `halflinac_ROOT`
 - 把仓库父目录加入 `PYTHONPATH`
 
-这样像 `python3 src/apps/launcher/main.py` 这类入口才可以正常导入 `half_linac.setup`。
+这样像 `python3 src/apps/launcher/main.py` 这类入口才可以正常导入 `half_linac.runtime_config`；旧代码里仍可兼容 `half_linac.setup`。
 
 ## 7. 修改机器相关配置
 

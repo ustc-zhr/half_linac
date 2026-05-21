@@ -12,6 +12,7 @@
 - Prefer changing behavior in the app entry script instead of large manual edits to generated `gui.py`.
 - If a UI change requires editing generated Python, keep the paired `.ui` file in mind and avoid broad formatting churn.
 - Keep subprocess launch behavior consistent with the launcher: `shell=False`, explicit working directories, and clean shutdown where possible.
+- Cross-app helpers should live in `src/shared/` instead of `src/apps/` when they are not owned by one specific app.
 
 ## Runtime Notes
 - Most apps assume the repository parent is on `PYTHONPATH`; use the scripts under `/scripts` to launch them.

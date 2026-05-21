@@ -4,7 +4,7 @@ from subprocess import Popen
 
 import epics
 
-import half_linac.setup as st
+import half_linac.runtime_config as st
 from half_linac.src.virtual_machine.half_elegant.runtime_state import (
     ensure_runtime_state,
     read_runtime_state,
