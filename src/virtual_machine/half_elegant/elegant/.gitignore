@@ -1,4 +1,5 @@
 *.cen 
+*.DAT
 *.fin
 *.mag
 *.out
@@ -6,4 +7,9 @@
 *.sig
 *.twi
 *.bpmcen
+*.mpr
+emitmat.txt
+one
+pout
+cleanUp
 lattice.lte

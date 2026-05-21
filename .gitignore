@@ -26,12 +26,6 @@ __pycache__/
 *.mat
 *.npy
 *.npz
-*.out
-*.twi
-*.cen
-*.bpmcen
-*.mag
-*.mpr
 
 # Generated VM state files
 src/virtual_machine/half_elegant/elegant/lattice.lte
