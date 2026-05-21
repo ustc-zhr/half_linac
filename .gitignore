@@ -13,6 +13,7 @@ __pycache__/
 .codex
 .DS_Store
 *.Zone.Identifier
+*:Zone.Identifier
 
 # Interactive shell history
 .iocsh_history
@@ -20,6 +21,14 @@ __pycache__/
 # Generated UI backups
 *-backup.ui
 * - 副本.ui
+gui_old.ui
+
+# Local backup copies and run-state snapshots
+* copy.py
+* copy [0-9].py
+bo_state.json
+bo_record.json
+jitterfile_*.txt
 
 # Runtime artifacts
 *.log
