@@ -1,0 +1,115 @@
+{
+  "presets": [
+    {
+      "id": "bba1_default",
+      "family": "standard",
+      "plane": "X",
+      "quad": "CQ3",
+      "corr": "HC01",
+      "bpm1": "BPM03",
+      "bpm2": "BPM07",
+      "scan": {
+        "corr_from": -0.001,
+        "corr_end": 0.001,
+        "corr_steps": 5,
+        "quad_from": 45,
+        "quad_end": 60,
+        "quad_steps": 5,
+        "samples": 1,
+        "sleeptime": 6
+      }
+    },
+    {
+      "id": "bba2_default",
+      "family": "bba2",
+      "plane": "X",
+      "quad": "QT01",
+      "corr": "XC21",
+      "bpm1": "BPM20",
+      "bpm2": "BPM21",
+      "scan": {
+        "quad_from": -3,
+        "quad_end": 0,
+        "quad_steps": 5,
+        "corr_from": -0.001,
+        "corr_end": 0.001,
+        "corr_steps": 5,
+        "samples": 1,
+        "sleeptime": 8
+      },
+      "analysis": {
+        "energy_mev": 2200,
+        "bpm1_samples": 1,
+        "by_formula": "-0.4813*current-0.7747",
+        "bx_formula": "-0.4968*current-0.3153",
+        "leff_by": 0.058287,
+        "leff_bx": 0.052513
+      }
+    }
+  ],
+  "standard": {
+    "correctors": [
+      "HC01",
+      "VC01",
+      "HC2",
+      "VC2",
+      "HC5",
+      "VC5",
+      "MS:HC",
+      "MS:VC",
+      "LS:HC",
+      "LS:VC",
+      "HIC01",
+      "VIC01",
+      "HIC02",
+      "VIC02"
+    ],
+    "quads": [
+      "CQ3",
+      "CQ4",
+      "MQ11",
+      "MQ12",
+      "CQ1",
+      "CQ2"
+    ],
+    "bpm1": [
+      "BPM03",
+      "BPM02",
+      "BPM07"
+    ],
+    "bpm2": [
+      "BPM07",
+      "BPM08",
+      "BPM02",
+      "BPM03"
+    ],
+    "default_preset": "bba1_default"
+  },
+  "bba2": {
+    "quads": [
+      "QT01",
+      "QT18"
+    ],
+    "correctors": [
+      "XC21",
+      "YC21",
+      "XC29",
+      "YC29"
+    ],
+    "bpm1": [
+      "BPM20",
+      "BPM27",
+      "BPM28"
+    ],
+    "bpm2": [
+      "BPM21",
+      "BPM28",
+      "BPM29"
+    ],
+    "control_backends": [
+      "Real Machine",
+      "Virtual Machine"
+    ],
+    "default_preset": "bba2_default"
+  }
+}

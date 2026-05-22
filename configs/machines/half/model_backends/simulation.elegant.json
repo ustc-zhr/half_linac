@@ -1,0 +1,15 @@
+{
+  "backend": "simulation",
+  "engine": "elegant",
+  "config": {
+    "source_json": "src/virtual_machine/half_elegant/halflinac.json",
+    "source_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
+    "emit_ini_ele": "src/virtual_machine/half_elegant/elegant/emit_ini.ele",
+    "emit_lte": "src/virtual_machine/half_elegant/elegant/emit.lte",
+    "emit_ele": "src/virtual_machine/half_elegant/elegant/emit.ele",
+    "emit_json": "src/virtual_machine/half_elegant/emit.json",
+    "emit_mat": "src/virtual_machine/half_elegant/elegant/emit.mat",
+    "emit_log": "emit.log",
+    "line_name": "ALL"
+  }
+}

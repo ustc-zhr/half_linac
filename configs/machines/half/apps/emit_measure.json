@@ -1,0 +1,86 @@
+{
+  "presets": [
+    {
+      "id": "emit_ql27_prf06",
+      "quad": "QL27",
+      "flag": "PRF06",
+      "scan": {
+        "k1_from": 0,
+        "k1_end": 5,
+        "k1_steps": 15,
+        "samples": 5,
+        "sleeptime": 5
+      },
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_ql27_prf07",
+      "quad": "QL27",
+      "flag": "PRF07",
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_ql27_prf08",
+      "quad": "QL27",
+      "flag": "PRF08",
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_qt01_prf06",
+      "quad": "QT01",
+      "flag": "PRF06",
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_qt01_prf07",
+      "quad": "QT01",
+      "flag": "PRF07",
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_qt01_prf08",
+      "quad": "QT01",
+      "flag": "PRF08",
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_qt02_prf06",
+      "quad": "QT02",
+      "flag": "PRF06",
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_qt02_prf07",
+      "quad": "QT02",
+      "flag": "PRF07",
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_qt02_prf08",
+      "quad": "QT02",
+      "flag": "PRF08",
+      "energy_mev": 2200
+    },
+    {
+      "id": "emit_ql15_prf04",
+      "quad": "QL15",
+      "flag": "PRF04",
+      "energy_mev": 220
+    },
+    {
+      "id": "emit_ql16_prf04",
+      "quad": "QL16",
+      "flag": "PRF04",
+      "energy_mev": 220
+    }
+  ],
+  "default_preset": "emit_ql27_prf06",
+  "twiss_quads": [
+    "CQ1",
+    "CQ2",
+    "CQ3",
+    "CQ4",
+    "MQ1",
+    "MQ2"
+  ]
+}

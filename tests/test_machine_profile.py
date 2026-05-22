@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -25,7 +27,10 @@ from half_linac.src.shared.machine_profile import (
     load_profile,
     resolve_channel,
 )
-from half_linac.src.shared.machine_profile.runtime_selector import list_machine_choices
+from half_linac.src.shared.machine_profile.runtime_selector import (
+    default_control_backend_choices,
+    list_machine_choices,
+)
 
 
 class MachineProfileTests(unittest.TestCase):
@@ -183,10 +188,173 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIn("half", machine_ids)
         self.assertTrue(any(choice.display_name for choice in choices if choice.machine_id == "half"))
 
+    def test_runtime_selector_discovers_control_backends_from_directory_profile(self):
+        self.assertEqual(default_control_backend_choices("half"), ("vm", "real"))
+
+    def test_half_model_backend_paths_are_resolved_from_directory_config(self):
+        context = load_app_context("emit_measure")
+        assert context.model_backend is not None
+        source_json = Path(context.model_backend.config["source_json"])
+        source_lattice = Path(context.model_backend.config["source_lattice"])
+        self.assertTrue(source_json.is_absolute())
+        self.assertTrue(source_lattice.is_absolute())
+        self.assertTrue(str(source_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
+        self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
+
     def test_invalid_machine_id_from_env_raises(self):
         with patch.dict(os.environ, {"HALF_MACHINE_ID": "../escape"}):
             with self.assertRaises(MachineProfileError):
                 load_profile()
+
+    def test_load_profile_falls_back_to_legacy_single_file_fixture(self):
+        legacy_profile = {
+            "schema_version": "1",
+            "machine": {
+                "id": "legacy",
+                "family": "linac",
+                "display_name": "Legacy Linac",
+                "default_mode": "vm",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "channels": {
+                        "x": {"vm": "LEGACY:BPM01:X", "real": "REAL:BPM01:X"},
+                        "y": {"vm": "LEGACY:BPM01:Y", "real": "REAL:BPM01:Y"},
+                    },
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 2,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "channels": {
+                        "setpoint": {"vm": "LEGACY:XC01", "real": "REAL:XC01"},
+                    },
+                },
+                {
+                    "id": "YC01",
+                    "kind": "corr",
+                    "display_name": "YC01",
+                    "order": 3,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "channels": {
+                        "setpoint": {"vm": "LEGACY:YC01", "real": "REAL:YC01"},
+                    },
+                },
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 4,
+                    "tags": ["bba", "emit_measure"],
+                    "limits": {},
+                    "channels": {
+                        "k1": {"vm": "LEGACY:Q01:K1", "real": "REAL:Q01:K1"},
+                    },
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 5,
+                    "tags": ["emit_measure"],
+                    "limits": {},
+                    "channels": {
+                        "sigx": {"vm": "LEGACY:PRF01:SIGX", "real": "REAL:PRF01:SIGX"},
+                        "sigy": {"vm": "LEGACY:PRF01:SIGY", "real": "REAL:PRF01:SIGY"},
+                    },
+                },
+            ],
+            "workflows": {
+                "orbit": {
+                    "bpms": ["BPM01"],
+                    "xcors": ["XC01"],
+                    "ycors": ["YC01"],
+                },
+                "bba": {
+                    "presets": [
+                        {
+                            "id": "legacy_bba",
+                            "family": "standard",
+                            "plane": "x",
+                            "quad": "Q01",
+                            "corr": "XC01",
+                            "bpm1": "BPM01",
+                            "bpm2": "BPM01",
+                            "scan": {
+                                "corr_from": -0.1,
+                                "corr_end": 0.1,
+                                "corr_steps": 3,
+                                "quad_from": 0.0,
+                                "quad_end": 1.0,
+                                "quad_steps": 3,
+                                "samples": 2,
+                                "sleeptime": 0.1,
+                            },
+                        }
+                    ],
+                    "standard": {
+                        "correctors": ["XC01"],
+                        "quads": ["Q01"],
+                        "bpm1": ["BPM01"],
+                        "bpm2": ["BPM01"],
+                        "default_preset": "legacy_bba",
+                    },
+                    "bba2": {
+                        "correctors": ["XC01"],
+                        "quads": ["Q01"],
+                        "bpm1": ["BPM01"],
+                        "bpm2": ["BPM01"],
+                        "control_backends": ["vm", "real"],
+                        "default_preset": "legacy_bba",
+                    },
+                },
+                "emit_measure": {
+                    "presets": [
+                        {
+                            "id": "legacy_emit",
+                            "quad": "Q01",
+                            "flag": "PRF01",
+                            "energy_mev": 220.0,
+                            "scan": {
+                                "k1_from": 0.0,
+                                "k1_end": 1.0,
+                                "k1_steps": 3,
+                                "samples": 2,
+                                "sleeptime": 0.1,
+                            },
+                        }
+                    ],
+                    "default_preset": "legacy_emit",
+                    "twiss_quads": ["Q01"],
+                },
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            legacy_dir = temp_root / "configs" / "machines" / "legacy"
+            legacy_dir.mkdir(parents=True)
+            (legacy_dir / "profile.json").write_text(
+                json.dumps(legacy_profile, indent=2),
+                encoding="utf-8",
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                profile = load_profile("legacy")
+                context = load_app_context("orbit_correct", machine_id="legacy")
+
+        self.assertEqual(profile.machine.id, "legacy")
+        self.assertEqual(context.machine.id, "legacy")
+        self.assertEqual(resolve_channel(profile, "BPM01", "x", "vm"), "LEGACY:BPM01:X")
 
     def test_duplicate_element_ids_raise(self):
         bad = {

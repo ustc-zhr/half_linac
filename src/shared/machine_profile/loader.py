@@ -29,17 +29,24 @@ from .models import (
 
 
 SUPPORTED_APP_NAMES = {"orbit_correct", "bba", "emit_measure"}
+MEASUREMENT_APP_NAMES = {"bba", "emit_measure"}
+APP_WORKFLOW_FILES = {
+    "orbit": "orbit_correct.json",
+    "bba": "bba.json",
+    "emit_measure": "emit_measure.json",
+}
+PATHLIKE_MODEL_CONFIG_KEYS = (
+    "_json",
+    "_lattice",
+    "_ele",
+    "_lte",
+    "_mat",
+)
 
 
 def load_profile(machine_id: str | None = None) -> MachineProfile:
     profile_id = resolve_machine_id(machine_id)
-    profile_path = repo_root() / "configs" / "machines" / profile_id / "profile.json"
-    if not profile_path.is_file():
-        raise MachineProfileError(f"Machine profile not found: {profile_path}")
-
-    with profile_path.open("r", encoding="utf-8") as handle:
-        raw = json.load(handle)
-    return MachineProfile.from_dict(raw)
+    return _load_profile_for_machine_id(profile_id)
 
 
 def load_app_context(
@@ -55,12 +62,17 @@ def load_app_context(
             f"Unsupported app_name {app_name!r}. Expected one of: {supported}."
         )
 
-    profile = load_profile(machine_id)
+    profile_id = resolve_machine_id(machine_id)
+    profile = _load_profile_for_machine_id(profile_id)
     selected_control_backend = ControlBackendConfig(
         name=resolve_control_backend(control_backend, profile.machine.default_mode)
     )
 
-    selected_model_backend = _resolve_model_backend(app_name, model_backend)
+    selected_model_backend = _resolve_model_backend(
+        app_name,
+        machine_root(profile_id),
+        model_backend,
+    )
 
     orbit_workflow = load_orbit_workflow(profile)
     bba_workflow = load_bba_workflow(profile)
@@ -159,6 +171,38 @@ def repo_root() -> Path:
     raise MachineProfileError("Could not locate repo root from machine_profile package.")
 
 
+def machine_root(machine_id: str) -> Path:
+    return repo_root() / "configs" / "machines" / machine_id
+
+
+def list_machine_profile_ids() -> tuple[str, ...]:
+    machines_dir = repo_root() / "configs" / "machines"
+    if not machines_dir.is_dir():
+        return ()
+
+    profile_ids: list[str] = []
+    for candidate in sorted(machines_dir.iterdir(), key=lambda path: path.name):
+        if not candidate.is_dir():
+            continue
+        if _has_directory_profile(candidate) or _has_legacy_profile(candidate):
+            profile_ids.append(candidate.name)
+    return tuple(profile_ids)
+
+
+def list_control_backend_choices(machine_id: str | None = None) -> tuple[str, ...]:
+    profile_id = resolve_machine_id(machine_id)
+    root = machine_root(profile_id)
+    if _has_directory_profile(root):
+        machine_data = _load_directory_machine_data(root)
+        machine_config = _expect_mapping(machine_data.get("machine"), "machine.json.machine")
+        default_mode = normalize_mode(machine_config.get("default_mode"), "machine.json.machine.default_mode")
+        backend_names = _discover_directory_control_backends(root)
+        return tuple(_ordered_backend_names(backend_names, default_mode))
+
+    profile = _load_profile_for_machine_id(profile_id)
+    return tuple(_ordered_backend_names(("vm", "real"), profile.machine.default_mode))
+
+
 def resolve_machine_id(machine_id: str | None) -> str:
     raw_machine_id = machine_id
     if raw_machine_id is None:
@@ -179,25 +223,251 @@ def resolve_control_backend(control_backend: str | None, default_mode: str) -> s
     return normalize_mode(raw_control_backend or default_mode, "control_backend")
 
 
+def _load_profile_for_machine_id(profile_id: str) -> MachineProfile:
+    root = machine_root(profile_id)
+    if _has_directory_profile(root):
+        raw = _load_directory_profile_raw(root)
+        return MachineProfile.from_dict(raw)
+
+    raw = _load_legacy_profile_raw(root)
+    return MachineProfile.from_dict(raw)
+
+
+def _has_directory_profile(root: Path) -> bool:
+    return (root / "machine.json").is_file()
+
+
+def _has_legacy_profile(root: Path) -> bool:
+    return (root / "profile.json").is_file()
+
+
+def _load_directory_profile_raw(root: Path) -> Mapping[str, Any]:
+    machine_data = _load_directory_machine_data(root)
+    machine_config = _expect_mapping(machine_data.get("machine"), "machine.json.machine")
+    elements_raw = _expect_list(machine_data.get("elements"), "machine.json.elements")
+    backend_channels = _load_directory_control_backend_channels(root, machine_config)
+    workflows = _load_directory_workflows(root)
+
+    elements: list[dict[str, Any]] = []
+    for index, raw_element in enumerate(elements_raw):
+        location = f"machine.json.elements[{index}]"
+        element = _expect_mapping(raw_element, location)
+        element_id = _expect_non_empty_string(element.get("id"), f"{location}.id")
+        logical_channels = _expect_string_list(
+            element.get("logical_channels"),
+            f"{location}.logical_channels",
+        )
+
+        channels: dict[str, dict[str, str]] = {}
+        for logical_channel in logical_channels:
+            channel_modes: dict[str, str] = {}
+            for backend_name, backend_mapping in backend_channels.items():
+                element_channels = _expect_mapping(
+                    backend_mapping.get(element_id),
+                    f"control_backends.{backend_name}.channels.{element_id}",
+                )
+                channel_modes[backend_name] = _expect_non_empty_string(
+                    element_channels.get(logical_channel),
+                    f"control_backends.{backend_name}.channels.{element_id}.{logical_channel}",
+                )
+            channels[logical_channel] = channel_modes
+
+        elements.append(
+            {
+                "id": element_id,
+                "kind": _expect_non_empty_string(element.get("kind"), f"{location}.kind"),
+                "display_name": _expect_non_empty_string(
+                    element.get("display_name"),
+                    f"{location}.display_name",
+                ),
+                "order": _expect_int(element.get("order"), f"{location}.order"),
+                "tags": _expect_optional_string_list(element.get("tags", []), f"{location}.tags"),
+                "limits": dict(_expect_mapping(element.get("limits", {}), f"{location}.limits")),
+                "channels": channels,
+            }
+        )
+
+    return {
+        "schema_version": str(machine_data.get("schema_version", "1")),
+        "machine": dict(machine_config),
+        "elements": elements,
+        "workflows": workflows,
+    }
+
+
+def _load_directory_machine_data(root: Path) -> Mapping[str, Any]:
+    return _load_json_file(root / "machine.json", "machine.json")
+
+
+def _load_directory_control_backend_channels(
+    root: Path,
+    machine_config: Mapping[str, Any],
+) -> Mapping[str, Mapping[str, Any]]:
+    control_dir = root / "control_backends"
+    if not control_dir.is_dir():
+        raise MachineProfileError(f"Missing control_backends directory: {control_dir}")
+
+    default_mode = normalize_mode(machine_config.get("default_mode"), "machine.default_mode")
+    backend_names = _ordered_backend_names(_discover_directory_control_backends(root), default_mode)
+    if not backend_names:
+        raise MachineProfileError(f"No control backend definitions found in {control_dir}")
+
+    channels_by_backend: dict[str, Mapping[str, Any]] = {}
+    for backend_name in backend_names:
+        filename = control_dir / f"{backend_name}.json"
+        payload = _load_json_file(
+            filename,
+            f"control_backends/{filename.name}",
+        )
+        declared_backend = normalize_mode(
+            payload.get("backend", backend_name),
+            f"control_backends/{filename.name}.backend",
+        )
+        if declared_backend != backend_name:
+            raise MachineProfileError(
+                f"control_backends/{filename.name} declares backend {declared_backend!r}, "
+                f"expected {backend_name!r}."
+            )
+        channels_by_backend[backend_name] = _expect_mapping(
+            payload.get("channels"),
+            f"control_backends/{filename.name}.channels",
+        )
+
+    return channels_by_backend
+
+
+def _discover_directory_control_backends(root: Path) -> tuple[str, ...]:
+    control_dir = root / "control_backends"
+    if not control_dir.is_dir():
+        return ()
+
+    backend_names: list[str] = []
+    for path in sorted(control_dir.glob("*.json"), key=lambda file: file.name):
+        payload = _load_json_file(path, f"control_backends/{path.name}")
+        backend_name = normalize_mode(
+            payload.get("backend", path.stem),
+            f"control_backends/{path.name}.backend",
+        )
+        backend_names.append(backend_name)
+    return tuple(dict.fromkeys(backend_names))
+
+
+def _load_directory_workflows(root: Path) -> Mapping[str, Any]:
+    apps_dir = root / "apps"
+    if not apps_dir.is_dir():
+        raise MachineProfileError(f"Missing apps workflow directory: {apps_dir}")
+
+    workflows: dict[str, Any] = {}
+    for workflow_name, filename in APP_WORKFLOW_FILES.items():
+        workflows[workflow_name] = _load_json_file(
+            apps_dir / filename,
+            f"apps/{filename}",
+        )
+    return workflows
+
+
+def _load_legacy_profile_raw(root: Path) -> Mapping[str, Any]:
+    profile_path = root / "profile.json"
+    if not profile_path.is_file():
+        raise MachineProfileError(f"Machine profile not found: {profile_path}")
+    return _load_json_file(profile_path, str(profile_path))
+
+
 def _resolve_model_backend(
     app_name: str,
+    root: Path,
     model_backend: str | None,
 ) -> ModelBackendConfig | None:
-    if app_name not in {"bba", "emit_measure"}:
+    if app_name not in MEASUREMENT_APP_NAMES:
         return None
+
+    directory_backend = _load_directory_model_backend(root, model_backend)
+    if directory_backend is not None:
+        return directory_backend
 
     backend_name = str(model_backend or "simulation").strip().lower().replace("_", " ")
     if backend_name in {"simulation", "elegant"}:
         return ModelBackendConfig(
             name="simulation",
             engine="elegant",
-            config=_default_elegant_model_config(),
+            config=_legacy_default_elegant_model_config(),
         )
 
     return ModelBackendConfig(name=backend_name)
 
 
-def _default_elegant_model_config() -> Mapping[str, Any]:
+def _load_directory_model_backend(
+    root: Path,
+    requested: str | None,
+) -> ModelBackendConfig | None:
+    model_dir = root / "model_backends"
+    if not model_dir.is_dir():
+        return None
+
+    configs: list[ModelBackendConfig] = []
+    for path in sorted(model_dir.glob("*.json"), key=lambda file: file.name):
+        payload = _load_json_file(path, f"model_backends/{path.name}")
+        backend_name = _expect_non_empty_string(
+            payload.get("backend"),
+            f"model_backends/{path.name}.backend",
+        )
+        engine = _expect_non_empty_string(
+            payload.get("engine"),
+            f"model_backends/{path.name}.engine",
+        )
+        config = _expect_mapping(
+            payload.get("config"),
+            f"model_backends/{path.name}.config",
+        )
+        configs.append(
+            ModelBackendConfig(
+                name=backend_name,
+                engine=engine,
+                config=_resolve_model_config_paths(config),
+            )
+        )
+
+    if not configs:
+        return None
+
+    if requested is None:
+        for config in configs:
+            if config.name == "simulation":
+                return config
+        return configs[0]
+
+    requested_name = str(requested).strip().lower().replace("_", " ")
+    for config in configs:
+        aliases = {
+            config.name.lower(),
+            str(config.engine or "").lower(),
+            f"{config.name}.{config.engine}".lower() if config.engine else config.name.lower(),
+        }
+        if requested_name in aliases:
+            return config
+
+    raise MachineProfileError(
+        f"Unknown model backend {requested!r} for machine directory {root.name!r}."
+    )
+
+
+def _resolve_model_config_paths(config: Mapping[str, Any]) -> Mapping[str, Any]:
+    resolved: dict[str, Any] = {}
+    root = repo_root()
+    for key, value in config.items():
+        if (
+            isinstance(value, str)
+            and value.strip()
+            and any(key.endswith(suffix) for suffix in PATHLIKE_MODEL_CONFIG_KEYS)
+        ):
+            path = Path(value.strip())
+            resolved[key] = str(path if path.is_absolute() else root / path)
+        else:
+            resolved[key] = value
+    return resolved
+
+
+def _legacy_default_elegant_model_config() -> Mapping[str, Any]:
     root = Path(st.rootpath)
     elegant_dir = root / "src" / "virtual_machine" / "half_elegant" / "elegant"
     vm_dir = root / "src" / "virtual_machine" / "half_elegant"
@@ -212,6 +482,24 @@ def _default_elegant_model_config() -> Mapping[str, Any]:
         "emit_log": "emit.log",
         "line_name": "ALL",
     }
+
+
+def _ordered_backend_names(backends: tuple[str, ...] | list[str], default_mode: str) -> list[str]:
+    unique = sorted(set(backends))
+    if default_mode in unique:
+        unique.remove(default_mode)
+        return [default_mode, *unique]
+    return unique
+
+
+def _load_json_file(path: Path, location: str) -> Mapping[str, Any]:
+    if not path.is_file():
+        raise MachineProfileError(f"Missing configuration file: {location}")
+    with path.open("r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+    if not isinstance(raw, Mapping):
+        raise MachineProfileError(f"{location} must contain a JSON object.")
+    return raw
 
 
 def _parse_bba_preset(raw_preset: Any, location: str) -> BBAPreset:
@@ -351,7 +639,21 @@ def _expect_string_list(value: Any, location: str) -> list[str]:
     return [_expect_non_empty_string(item, f"{location}[{index}]") for index, item in enumerate(value)]
 
 
+def _expect_optional_string_list(value: Any, location: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise MachineProfileError(f"{location} must be a list of strings.")
+    return [_expect_non_empty_string(item, f"{location}[{index}]") for index, item in enumerate(value)]
+
+
 def _expect_non_empty_string(value: Any, location: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise MachineProfileError(f"{location} must be a non-empty string.")
     return value.strip()
+
+
+def _expect_int(value: Any, location: str) -> int:
+    if not isinstance(value, int):
+        raise MachineProfileError(f"{location} must be an integer.")
+    return value

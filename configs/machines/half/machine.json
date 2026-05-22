@@ -1,0 +1,2237 @@
+{
+  "schema_version": "1",
+  "machine": {
+    "id": "half",
+    "family": "linac",
+    "display_name": "HALF Linac",
+    "default_mode": "vm"
+  },
+  "elements": [
+    {
+      "id": "BPM03",
+      "kind": "bpm",
+      "display_name": "BPM03",
+      "order": 1,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM04",
+      "kind": "bpm",
+      "display_name": "BPM04",
+      "order": 2,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM05",
+      "kind": "bpm",
+      "display_name": "BPM05",
+      "order": 3,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM06",
+      "kind": "bpm",
+      "display_name": "BPM06",
+      "order": 4,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM07",
+      "kind": "bpm",
+      "display_name": "BPM07",
+      "order": 5,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM08",
+      "kind": "bpm",
+      "display_name": "BPM08",
+      "order": 6,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM09",
+      "kind": "bpm",
+      "display_name": "BPM09",
+      "order": 7,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM10",
+      "kind": "bpm",
+      "display_name": "BPM10",
+      "order": 8,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM11",
+      "kind": "bpm",
+      "display_name": "BPM11",
+      "order": 9,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM12",
+      "kind": "bpm",
+      "display_name": "BPM12",
+      "order": 10,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM13",
+      "kind": "bpm",
+      "display_name": "BPM13",
+      "order": 11,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM14",
+      "kind": "bpm",
+      "display_name": "BPM14",
+      "order": 12,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM15",
+      "kind": "bpm",
+      "display_name": "BPM15",
+      "order": 13,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM16",
+      "kind": "bpm",
+      "display_name": "BPM16",
+      "order": 14,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM17",
+      "kind": "bpm",
+      "display_name": "BPM17",
+      "order": 15,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM18",
+      "kind": "bpm",
+      "display_name": "BPM18",
+      "order": 16,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM19",
+      "kind": "bpm",
+      "display_name": "BPM19",
+      "order": 17,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM20",
+      "kind": "bpm",
+      "display_name": "BPM20",
+      "order": 18,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM21",
+      "kind": "bpm",
+      "display_name": "BPM21",
+      "order": 19,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM22",
+      "kind": "bpm",
+      "display_name": "BPM22",
+      "order": 20,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM23",
+      "kind": "bpm",
+      "display_name": "BPM23",
+      "order": 21,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM24",
+      "kind": "bpm",
+      "display_name": "BPM24",
+      "order": 22,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM25",
+      "kind": "bpm",
+      "display_name": "BPM25",
+      "order": 23,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM26",
+      "kind": "bpm",
+      "display_name": "BPM26",
+      "order": 24,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM27",
+      "kind": "bpm",
+      "display_name": "BPM27",
+      "order": 25,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM28",
+      "kind": "bpm",
+      "display_name": "BPM28",
+      "order": 26,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM29",
+      "kind": "bpm",
+      "display_name": "BPM29",
+      "order": 27,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM30",
+      "kind": "bpm",
+      "display_name": "BPM30",
+      "order": 28,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM31",
+      "kind": "bpm",
+      "display_name": "BPM31",
+      "order": 29,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM32",
+      "kind": "bpm",
+      "display_name": "BPM32",
+      "order": 30,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM33",
+      "kind": "bpm",
+      "display_name": "BPM33",
+      "order": 31,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM34",
+      "kind": "bpm",
+      "display_name": "BPM34",
+      "order": 32,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM35",
+      "kind": "bpm",
+      "display_name": "BPM35",
+      "order": 33,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM36",
+      "kind": "bpm",
+      "display_name": "BPM36",
+      "order": 34,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM37",
+      "kind": "bpm",
+      "display_name": "BPM37",
+      "order": 35,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM38",
+      "kind": "bpm",
+      "display_name": "BPM38",
+      "order": 36,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM39",
+      "kind": "bpm",
+      "display_name": "BPM39",
+      "order": 37,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM40",
+      "kind": "bpm",
+      "display_name": "BPM40",
+      "order": 38,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM41",
+      "kind": "bpm",
+      "display_name": "BPM41",
+      "order": 39,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM42",
+      "kind": "bpm",
+      "display_name": "BPM42",
+      "order": 40,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM43",
+      "kind": "bpm",
+      "display_name": "BPM43",
+      "order": 41,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "BPM02",
+      "kind": "bpm",
+      "display_name": "BPM02",
+      "order": 42,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "id": "XC03",
+      "kind": "corr",
+      "display_name": "XC03",
+      "order": 43,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC04",
+      "kind": "corr",
+      "display_name": "XC04",
+      "order": 44,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC05",
+      "kind": "corr",
+      "display_name": "XC05",
+      "order": 45,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC06",
+      "kind": "corr",
+      "display_name": "XC06",
+      "order": 46,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC07",
+      "kind": "corr",
+      "display_name": "XC07",
+      "order": 47,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC08",
+      "kind": "corr",
+      "display_name": "XC08",
+      "order": 48,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC09",
+      "kind": "corr",
+      "display_name": "XC09",
+      "order": 49,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC10",
+      "kind": "corr",
+      "display_name": "XC10",
+      "order": 50,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC11",
+      "kind": "corr",
+      "display_name": "XC11",
+      "order": 51,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC12",
+      "kind": "corr",
+      "display_name": "XC12",
+      "order": 52,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC13",
+      "kind": "corr",
+      "display_name": "XC13",
+      "order": 53,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC14",
+      "kind": "corr",
+      "display_name": "XC14",
+      "order": 54,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC15",
+      "kind": "corr",
+      "display_name": "XC15",
+      "order": 55,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC16",
+      "kind": "corr",
+      "display_name": "XC16",
+      "order": 56,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC17",
+      "kind": "corr",
+      "display_name": "XC17",
+      "order": 57,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC18",
+      "kind": "corr",
+      "display_name": "XC18",
+      "order": 58,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC19",
+      "kind": "corr",
+      "display_name": "XC19",
+      "order": 59,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC20",
+      "kind": "corr",
+      "display_name": "XC20",
+      "order": 60,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC21",
+      "kind": "corr",
+      "display_name": "XC21",
+      "order": 61,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC22",
+      "kind": "corr",
+      "display_name": "XC22",
+      "order": 62,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC23",
+      "kind": "corr",
+      "display_name": "XC23",
+      "order": 63,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC24",
+      "kind": "corr",
+      "display_name": "XC24",
+      "order": 64,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC25",
+      "kind": "corr",
+      "display_name": "XC25",
+      "order": 65,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC26",
+      "kind": "corr",
+      "display_name": "XC26",
+      "order": 66,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC27",
+      "kind": "corr",
+      "display_name": "XC27",
+      "order": 67,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC28",
+      "kind": "corr",
+      "display_name": "XC28",
+      "order": 68,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC29",
+      "kind": "corr",
+      "display_name": "XC29",
+      "order": 69,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC30",
+      "kind": "corr",
+      "display_name": "XC30",
+      "order": 70,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC31",
+      "kind": "corr",
+      "display_name": "XC31",
+      "order": 71,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC32",
+      "kind": "corr",
+      "display_name": "XC32",
+      "order": 72,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC33",
+      "kind": "corr",
+      "display_name": "XC33",
+      "order": 73,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC34",
+      "kind": "corr",
+      "display_name": "XC34",
+      "order": 74,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC35",
+      "kind": "corr",
+      "display_name": "XC35",
+      "order": 75,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC36",
+      "kind": "corr",
+      "display_name": "XC36",
+      "order": 76,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC37",
+      "kind": "corr",
+      "display_name": "XC37",
+      "order": 77,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC38",
+      "kind": "corr",
+      "display_name": "XC38",
+      "order": 78,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC39",
+      "kind": "corr",
+      "display_name": "XC39",
+      "order": 79,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC40",
+      "kind": "corr",
+      "display_name": "XC40",
+      "order": 80,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC41",
+      "kind": "corr",
+      "display_name": "XC41",
+      "order": 81,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC42",
+      "kind": "corr",
+      "display_name": "XC42",
+      "order": 82,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "XC43",
+      "kind": "corr",
+      "display_name": "XC43",
+      "order": 83,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC03",
+      "kind": "corr",
+      "display_name": "YC03",
+      "order": 84,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC04",
+      "kind": "corr",
+      "display_name": "YC04",
+      "order": 85,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC05",
+      "kind": "corr",
+      "display_name": "YC05",
+      "order": 86,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC06",
+      "kind": "corr",
+      "display_name": "YC06",
+      "order": 87,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC07",
+      "kind": "corr",
+      "display_name": "YC07",
+      "order": 88,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC08",
+      "kind": "corr",
+      "display_name": "YC08",
+      "order": 89,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC09",
+      "kind": "corr",
+      "display_name": "YC09",
+      "order": 90,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC10",
+      "kind": "corr",
+      "display_name": "YC10",
+      "order": 91,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC11",
+      "kind": "corr",
+      "display_name": "YC11",
+      "order": 92,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC12",
+      "kind": "corr",
+      "display_name": "YC12",
+      "order": 93,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC13",
+      "kind": "corr",
+      "display_name": "YC13",
+      "order": 94,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC14",
+      "kind": "corr",
+      "display_name": "YC14",
+      "order": 95,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC15",
+      "kind": "corr",
+      "display_name": "YC15",
+      "order": 96,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC16",
+      "kind": "corr",
+      "display_name": "YC16",
+      "order": 97,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC17",
+      "kind": "corr",
+      "display_name": "YC17",
+      "order": 98,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC18",
+      "kind": "corr",
+      "display_name": "YC18",
+      "order": 99,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC19",
+      "kind": "corr",
+      "display_name": "YC19",
+      "order": 100,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC20",
+      "kind": "corr",
+      "display_name": "YC20",
+      "order": 101,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC21",
+      "kind": "corr",
+      "display_name": "YC21",
+      "order": 102,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC22",
+      "kind": "corr",
+      "display_name": "YC22",
+      "order": 103,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC23",
+      "kind": "corr",
+      "display_name": "YC23",
+      "order": 104,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC24",
+      "kind": "corr",
+      "display_name": "YC24",
+      "order": 105,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC25",
+      "kind": "corr",
+      "display_name": "YC25",
+      "order": 106,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC26",
+      "kind": "corr",
+      "display_name": "YC26",
+      "order": 107,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC27",
+      "kind": "corr",
+      "display_name": "YC27",
+      "order": 108,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC28",
+      "kind": "corr",
+      "display_name": "YC28",
+      "order": 109,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC29",
+      "kind": "corr",
+      "display_name": "YC29",
+      "order": 110,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC30",
+      "kind": "corr",
+      "display_name": "YC30",
+      "order": 111,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC31",
+      "kind": "corr",
+      "display_name": "YC31",
+      "order": 112,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC32",
+      "kind": "corr",
+      "display_name": "YC32",
+      "order": 113,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC33",
+      "kind": "corr",
+      "display_name": "YC33",
+      "order": 114,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC34",
+      "kind": "corr",
+      "display_name": "YC34",
+      "order": 115,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC35",
+      "kind": "corr",
+      "display_name": "YC35",
+      "order": 116,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC36",
+      "kind": "corr",
+      "display_name": "YC36",
+      "order": 117,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC37",
+      "kind": "corr",
+      "display_name": "YC37",
+      "order": 118,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC38",
+      "kind": "corr",
+      "display_name": "YC38",
+      "order": 119,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC39",
+      "kind": "corr",
+      "display_name": "YC39",
+      "order": 120,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC40",
+      "kind": "corr",
+      "display_name": "YC40",
+      "order": 121,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC41",
+      "kind": "corr",
+      "display_name": "YC41",
+      "order": 122,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC42",
+      "kind": "corr",
+      "display_name": "YC42",
+      "order": 123,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "YC43",
+      "kind": "corr",
+      "display_name": "YC43",
+      "order": 124,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "HC01",
+      "kind": "corr",
+      "display_name": "HC01",
+      "order": 125,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "VC01",
+      "kind": "corr",
+      "display_name": "VC01",
+      "order": 126,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "HC2",
+      "kind": "corr",
+      "display_name": "HC2",
+      "order": 127,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "VC2",
+      "kind": "corr",
+      "display_name": "VC2",
+      "order": 128,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "HC5",
+      "kind": "corr",
+      "display_name": "HC5",
+      "order": 129,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "VC5",
+      "kind": "corr",
+      "display_name": "VC5",
+      "order": 130,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "MS:HC",
+      "kind": "corr",
+      "display_name": "MS:HC",
+      "order": 131,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "MS:VC",
+      "kind": "corr",
+      "display_name": "MS:VC",
+      "order": 132,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "LS:HC",
+      "kind": "corr",
+      "display_name": "LS:HC",
+      "order": 133,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "LS:VC",
+      "kind": "corr",
+      "display_name": "LS:VC",
+      "order": 134,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "HIC01",
+      "kind": "corr",
+      "display_name": "HIC01",
+      "order": 135,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "VIC01",
+      "kind": "corr",
+      "display_name": "VIC01",
+      "order": 136,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "HIC02",
+      "kind": "corr",
+      "display_name": "HIC02",
+      "order": 137,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "VIC02",
+      "kind": "corr",
+      "display_name": "VIC02",
+      "order": 138,
+      "tags": [
+        "orbit",
+        "bba"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "CQ3",
+      "kind": "quad",
+      "display_name": "CQ3",
+      "order": 139,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "CQ4",
+      "kind": "quad",
+      "display_name": "CQ4",
+      "order": 140,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "MQ11",
+      "kind": "quad",
+      "display_name": "MQ11",
+      "order": 141,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "MQ12",
+      "kind": "quad",
+      "display_name": "MQ12",
+      "order": 142,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "CQ1",
+      "kind": "quad",
+      "display_name": "CQ1",
+      "order": 143,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "CQ2",
+      "kind": "quad",
+      "display_name": "CQ2",
+      "order": 144,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "QT01",
+      "kind": "quad",
+      "display_name": "QT01",
+      "order": 145,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "QT18",
+      "kind": "quad",
+      "display_name": "QT18",
+      "order": 146,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "QL27",
+      "kind": "quad",
+      "display_name": "QL27",
+      "order": 147,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "QT02",
+      "kind": "quad",
+      "display_name": "QT02",
+      "order": 148,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "QL15",
+      "kind": "quad",
+      "display_name": "QL15",
+      "order": 149,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "QL16",
+      "kind": "quad",
+      "display_name": "QL16",
+      "order": 150,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "MQ1",
+      "kind": "quad",
+      "display_name": "MQ1",
+      "order": 151,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "MQ2",
+      "kind": "quad",
+      "display_name": "MQ2",
+      "order": 152,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "PRF06",
+      "kind": "flag",
+      "display_name": "PRF06",
+      "order": 153,
+      "tags": [
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "sigx",
+        "sigy"
+      ]
+    },
+    {
+      "id": "PRF07",
+      "kind": "flag",
+      "display_name": "PRF07",
+      "order": 154,
+      "tags": [
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "sigx",
+        "sigy"
+      ]
+    },
+    {
+      "id": "PRF08",
+      "kind": "flag",
+      "display_name": "PRF08",
+      "order": 155,
+      "tags": [
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "sigx",
+        "sigy"
+      ]
+    },
+    {
+      "id": "PRF04",
+      "kind": "flag",
+      "display_name": "PRF04",
+      "order": 156,
+      "tags": [
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "sigx",
+        "sigy"
+      ]
+    }
+  ]
+}
