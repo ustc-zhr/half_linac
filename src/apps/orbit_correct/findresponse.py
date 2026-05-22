@@ -18,8 +18,7 @@ from typing import List, Tuple
 from epics import caget, caget_many, caput, caput_many
 import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
-    get_workflow,
-    load_profile,
+    load_app_context,
     resolve_channel,
 )
 
@@ -46,12 +45,15 @@ class ResponseMatrixCalculator:
             n_averages: Number of measurement averages
         """
         print('n_averages:', n_averages)
-        self.machine_profile = load_profile()
-        self.orbit_workflow = get_workflow(self.machine_profile, "orbit")
-        self.machine_mode = self.machine_profile.machine.default_mode
-        self.bpm_ids = list(self.orbit_workflow["bpms"])
-        self.xcor_ids = list(self.orbit_workflow["xcors"])
-        self.ycor_ids = list(self.orbit_workflow["ycors"])
+        self.app_context = load_app_context("orbit_correct")
+        self.machine_profile = self.app_context.profile
+        self.orbit_workflow = self.app_context.orbit_workflow
+        self.machine_mode = self.app_context.control_backend.name
+        if self.orbit_workflow is None:
+            raise ValueError("Orbit workflow is not available in the current app context.")
+        self.bpm_ids = list(self.orbit_workflow.bpms)
+        self.xcor_ids = list(self.orbit_workflow.xcors)
+        self.ycor_ids = list(self.orbit_workflow.ycors)
 
         self.N_BPM = len(self.bpm_ids) if n_bpm is None else len(self.bpm_ids)
         self.N_COR = len(self.xcor_ids) if n_cor is None else len(self.xcor_ids)
@@ -73,11 +75,11 @@ class ResponseMatrixCalculator:
     def init_BPM_pv(self) -> None:
         """Initialize BPM PV names."""
         self.pvBPMx = [
-            resolve_channel(self.machine_profile, bpm_id, "x", self.machine_mode)
+            resolve_channel(self.app_context, bpm_id, "x")
             for bpm_id in self.bpm_ids
         ]
         self.pvBPMy = [
-            resolve_channel(self.machine_profile, bpm_id, "y", self.machine_mode)
+            resolve_channel(self.app_context, bpm_id, "y")
             for bpm_id in self.bpm_ids
         ]
         logger.debug(f"Initialized {len(self.pvBPMx)} BPM X PVs")
@@ -86,11 +88,11 @@ class ResponseMatrixCalculator:
     def init_COR_pv(self) -> None:
         """Initialize corrector PV names."""
         self.pvCORx = [
-            resolve_channel(self.machine_profile, cor_id, "setpoint", self.machine_mode)
+            resolve_channel(self.app_context, cor_id, "setpoint")
             for cor_id in self.xcor_ids
         ]
         self.pvCORy = [
-            resolve_channel(self.machine_profile, cor_id, "setpoint", self.machine_mode)
+            resolve_channel(self.app_context, cor_id, "setpoint")
             for cor_id in self.ycor_ids
         ]
         logger.debug(f"Initialized {len(self.pvCORx)} COR X PVs")

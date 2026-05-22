@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PARENT = REPO_ROOT.parent
@@ -10,10 +12,16 @@ if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
 from half_linac.src.shared.machine_profile import (
+    AppContext,
+    ElegantModelBackend,
     MachineProfile,
     MachineProfileError,
+    build_model_backend,
+    get_bba_preset,
+    get_emit_preset,
     get_workflow,
     list_elements,
+    load_app_context,
     load_profile,
     resolve_channel,
 )
@@ -25,6 +33,40 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(profile.machine.id, "half")
         self.assertEqual(profile.machine.default_mode, "vm")
         self.assertEqual(profile.schema_version, "1")
+
+    def test_load_orbit_correct_app_context(self):
+        context = load_app_context("orbit_correct")
+        self.assertIsInstance(context, AppContext)
+        self.assertEqual(context.machine.id, "half")
+        self.assertEqual(context.control_backend.name, "vm")
+        self.assertIsNone(context.model_backend)
+        self.assertIsNotNone(context.orbit_workflow)
+        assert context.orbit_workflow is not None
+        self.assertEqual(len(context.orbit_workflow.bpms), 41)
+        self.assertEqual(context.orbit_workflow.xcors[18], "XC21")
+
+    def test_load_bba_app_context(self):
+        context = load_app_context("bba")
+        self.assertIsInstance(context, AppContext)
+        self.assertIsNotNone(context.bba_workflow)
+        self.assertIsNotNone(context.model_backend)
+        assert context.bba_workflow is not None
+        self.assertEqual(context.bba_workflow.standard.default_preset, "bba1_default")
+        self.assertEqual(context.bba_workflow.bba2.default_preset, "bba2_default")
+        self.assertIn("XC21", context.bba_workflow.bba2.correctors)
+        assert context.model_backend is not None
+        self.assertEqual(context.model_backend.engine, "elegant")
+
+    def test_load_emit_measure_app_context(self):
+        context = load_app_context("emit_measure")
+        self.assertIsInstance(context, AppContext)
+        self.assertIsNotNone(context.emit_measure_workflow)
+        self.assertIsNotNone(context.model_backend)
+        assert context.emit_measure_workflow is not None
+        self.assertEqual(context.emit_measure_workflow.default_preset, "emit_ql27_prf06")
+        self.assertIn("CQ1", context.emit_measure_workflow.twiss_quads)
+        assert context.model_backend is not None
+        self.assertEqual(context.model_backend.engine, "elegant")
 
     def test_resolve_expected_half_channels(self):
         profile = load_profile("half")
@@ -43,6 +85,13 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(
             resolve_channel(profile, "PRF07", "sigx", "Virtual Machine"),
             "HALF:IN:FLAG:PRF07:sigx",
+        )
+
+    def test_resolve_channel_from_app_context(self):
+        context = load_app_context("orbit_correct")
+        self.assertEqual(
+            resolve_channel(context, "BPM03", "x"),
+            "HALF:IN:BPM:BPM03:X:ao",
         )
 
     def test_orbit_workflow_matches_expected_shape(self):
@@ -70,12 +119,53 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIn(bba2_default, preset_ids)
         self.assertIn(emit_default, emit_ids)
 
+    def test_context_preset_helpers_return_default_presets(self):
+        bba_context = load_app_context("bba")
+        emit_context = load_app_context("emit_measure")
+        bba_preset = get_bba_preset(bba_context)
+        emit_preset = get_emit_preset(emit_context)
+
+        self.assertEqual(bba_preset.id, bba_context.bba_workflow.standard.default_preset)
+        self.assertEqual(bba_preset.plane, "x")
+        self.assertEqual(emit_preset.id, emit_context.emit_measure_workflow.default_preset)
+        self.assertGreater(emit_preset.energy_mev, 0)
+
+    def test_context_preset_helpers_support_explicit_bba_preset(self):
+        bba_context = load_app_context("bba")
+        preset = get_bba_preset(bba_context, "bba2_default")
+        self.assertEqual(preset.family, "bba2")
+        self.assertEqual(preset.mode, "real")
+        self.assertEqual(preset.corr, "XC21")
+
+    def test_context_preset_helpers_support_default_emit_preset(self):
+        emit_context = load_app_context("emit_measure")
+        preset = get_emit_preset(emit_context)
+        self.assertEqual(preset.quad, "QL27")
+        self.assertEqual(preset.flag, "PRF06")
+        self.assertEqual(preset.energy_mev, 2200)
+
+    def test_build_model_backend_returns_elegant_backend_for_measurement_apps(self):
+        bba_backend = build_model_backend(load_app_context("bba"), energy_mev=2200)
+        emit_backend = build_model_backend(load_app_context("emit_measure"), energy_mev=2200)
+        self.assertIsInstance(bba_backend, ElegantModelBackend)
+        self.assertIsInstance(emit_backend, ElegantModelBackend)
+
     def test_list_elements_filters_by_kind(self):
         profile = load_profile("half")
         bpm_elements = list_elements(profile, "bpm")
         flag_elements = list_elements(profile, "flag")
         self.assertTrue(any(element.id == "BPM03" for element in bpm_elements))
         self.assertEqual({element.id for element in flag_elements}, {"PRF04", "PRF06", "PRF07", "PRF08"})
+
+    def test_load_profile_uses_env_machine_id_when_unspecified(self):
+        with patch.dict(os.environ, {"HALF_MACHINE_ID": "half"}):
+            profile = load_profile()
+        self.assertEqual(profile.machine.id, "half")
+
+    def test_invalid_machine_id_from_env_raises(self):
+        with patch.dict(os.environ, {"HALF_MACHINE_ID": "../escape"}):
+            with self.assertRaises(MachineProfileError):
+                load_profile()
 
     def test_duplicate_element_ids_raise(self):
         bad = {
@@ -139,6 +229,231 @@ class MachineProfileTests(unittest.TestCase):
                 "emit_measure": {
                     "presets": [],
                     "default_preset": "missing",
+                    "twiss_quads": ["Q1"],
+                },
+            },
+        }
+        with self.assertRaises(MachineProfileError):
+            MachineProfile.from_dict(bad)
+
+    def test_missing_real_or_vm_channel_mapping_raises(self):
+        bad = {
+            "schema_version": "1",
+            "machine": {
+                "id": "bad",
+                "family": "linac",
+                "display_name": "Bad",
+                "default_mode": "vm",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {
+                        "x": {"vm": "BPM01:X", "real": "BPM01:X"},
+                        "y": {"vm": "BPM01:Y"},
+                    },
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {"setpoint": {"vm": "XC01", "real": "XC01"}},
+                },
+                {
+                    "id": "YC01",
+                    "kind": "corr",
+                    "display_name": "YC01",
+                    "order": 3,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {"setpoint": {"vm": "YC01", "real": "YC01"}},
+                },
+                {
+                    "id": "Q1",
+                    "kind": "quad",
+                    "display_name": "Q1",
+                    "order": 4,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {"k1": {"vm": "Q1", "real": "Q1"}},
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 5,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {
+                        "sigx": {"vm": "PRF01:sigx", "real": "PRF01:sigx"},
+                        "sigy": {"vm": "PRF01:sigy", "real": "PRF01:sigy"},
+                    },
+                },
+            ],
+            "workflows": {
+                "orbit": {
+                    "bpms": ["BPM01"],
+                    "xcors": ["XC01"],
+                    "ycors": ["YC01"],
+                },
+                "bba": {
+                    "presets": [
+                        {
+                            "id": "bba_default",
+                            "plane": "X",
+                            "quad": "Q1",
+                            "corr": "XC01",
+                            "bpm1": "BPM01",
+                            "bpm2": "BPM01",
+                        }
+                    ],
+                    "standard": {
+                        "correctors": ["XC01"],
+                        "quads": ["Q1"],
+                        "bpm1": ["BPM01"],
+                        "bpm2": ["BPM01"],
+                        "default_preset": "bba_default",
+                    },
+                    "bba2": {
+                        "quads": ["Q1"],
+                        "correctors": ["XC01"],
+                        "bpm1": ["BPM01"],
+                        "bpm2": ["BPM01"],
+                        "modes": ["Virtual Machine"],
+                        "default_preset": "bba_default",
+                    },
+                },
+                "emit_measure": {
+                    "presets": [
+                        {
+                            "id": "emit_default",
+                            "quad": "Q1",
+                            "flag": "PRF01",
+                            "energy_mev": 1,
+                        }
+                    ],
+                    "default_preset": "emit_default",
+                    "twiss_quads": ["Q1"],
+                },
+            },
+        }
+        with self.assertRaises(MachineProfileError):
+            MachineProfile.from_dict(bad)
+
+    def test_invalid_bba_plane_or_mode_raises(self):
+        bad = {
+            "schema_version": "1",
+            "machine": {
+                "id": "bad",
+                "family": "linac",
+                "display_name": "Bad",
+                "default_mode": "vm",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {
+                        "x": {"vm": "BPM01:X", "real": "BPM01:X"},
+                        "y": {"vm": "BPM01:Y", "real": "BPM01:Y"},
+                    },
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {"setpoint": {"vm": "XC01", "real": "XC01"}},
+                },
+                {
+                    "id": "YC01",
+                    "kind": "corr",
+                    "display_name": "YC01",
+                    "order": 3,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {"setpoint": {"vm": "YC01", "real": "YC01"}},
+                },
+                {
+                    "id": "Q1",
+                    "kind": "quad",
+                    "display_name": "Q1",
+                    "order": 4,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {"k1": {"vm": "Q1", "real": "Q1"}},
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 5,
+                    "tags": [],
+                    "limits": {},
+                    "channels": {
+                        "sigx": {"vm": "PRF01:sigx", "real": "PRF01:sigx"},
+                        "sigy": {"vm": "PRF01:sigy", "real": "PRF01:sigy"},
+                    },
+                },
+            ],
+            "workflows": {
+                "orbit": {
+                    "bpms": ["BPM01"],
+                    "xcors": ["XC01"],
+                    "ycors": ["YC01"],
+                },
+                "bba": {
+                    "presets": [
+                        {
+                            "id": "bba_default",
+                            "plane": "horizontal",
+                            "quad": "Q1",
+                            "corr": "XC01",
+                            "bpm1": "BPM01",
+                            "bpm2": "BPM01",
+                            "mode": "offline",
+                        }
+                    ],
+                    "standard": {
+                        "correctors": ["XC01"],
+                        "quads": ["Q1"],
+                        "bpm1": ["BPM01"],
+                        "bpm2": ["BPM01"],
+                        "default_preset": "bba_default",
+                    },
+                    "bba2": {
+                        "quads": ["Q1"],
+                        "correctors": ["XC01"],
+                        "bpm1": ["BPM01"],
+                        "bpm2": ["BPM01"],
+                        "modes": ["offline"],
+                        "default_preset": "bba_default",
+                    },
+                },
+                "emit_measure": {
+                    "presets": [
+                        {
+                            "id": "emit_default",
+                            "quad": "Q1",
+                            "flag": "PRF01",
+                            "energy_mev": 1,
+                        }
+                    ],
+                    "default_preset": "emit_default",
                     "twiss_quads": ["Q1"],
                 },
             },

@@ -37,7 +37,7 @@ from OrbCorgui import Ui_MainWindow
 
 
 import half_linac.runtime_config as st
-from half_linac.src.shared.machine_profile import get_workflow, load_profile
+from half_linac.src.shared.machine_profile import load_app_context
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
 
 HEADER_ACTION_HEIGHT = 32
@@ -437,8 +437,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.machine_profile = load_profile()
-        self.orbit_workflow = get_workflow(self.machine_profile, "orbit")
+        self.app_context = load_app_context("orbit_correct")
+        self.machine_profile = self.app_context.profile
+        self.orbit_workflow = self.app_context.orbit_workflow
         self.current_theme = "dark"
         self.last_notice = "Idle"
         self.process_manager = ManagedProcessGroup(notify=self._notify)
@@ -482,7 +483,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._refresh_status()
 
     def _configure_window(self):
-        self.setWindowTitle("HALF Linac Orbit Correction")
+        self.setWindowTitle(f"{self.machine_profile.machine.display_name} Orbit Correction")
         self.resize(1240, 1000)
         self.setMinimumSize(1100, 820)
 
@@ -508,7 +509,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         return int(match.group(1)) if match else 0
 
     def _configure_machine_profile(self):
-        orbit_bpms = self.orbit_workflow["bpms"]
+        if self.orbit_workflow is None:
+            raise ValueError("Orbit workflow is not available in the current app context.")
+        orbit_bpms = self.orbit_workflow.bpms
         checkbox_widgets = sorted(
             self.findChildren(QCheckBox),
             key=self._extract_widget_index,

@@ -19,8 +19,7 @@ from epics import caput_many, PV, caget_many
 from scipy.linalg import svd
 import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
-    get_workflow,
-    load_profile,
+    load_app_context,
     resolve_channel,
 )
 
@@ -63,9 +62,10 @@ class OrbitCorrector:
                 target_BPMlist: Optional[List[str]] = None,
                 target_BPMx_values: Optional[List[float]] = None,
                 target_BPMy_values: Optional[List[float]] = None):
-        self.machine_profile = load_profile()
-        self.orbit_workflow = get_workflow(self.machine_profile, "orbit")
-        self.machine_mode = self.machine_profile.machine.default_mode
+        self.app_context = load_app_context("orbit_correct")
+        self.machine_profile = self.app_context.profile
+        self.orbit_workflow = self.app_context.orbit_workflow
+        self.machine_mode = self.app_context.control_backend.name
 
         # constant definition
         self.RESPM_FILE = st.rootpath + '/src/apps/orbit_correct/response.txt'
@@ -73,9 +73,11 @@ class OrbitCorrector:
         self.max_value = st.corrector_upperlimit
         
         # all cor and bpm lists
-        self.cor_x_list_all = list(self.orbit_workflow["xcors"])
-        self.cor_y_list_all = list(self.orbit_workflow["ycors"])
-        self.bpm_list_all = list(self.orbit_workflow["bpms"])
+        if self.orbit_workflow is None:
+            raise ValueError("Orbit workflow is not available in the current app context.")
+        self.cor_x_list_all = list(self.orbit_workflow.xcors)
+        self.cor_y_list_all = list(self.orbit_workflow.ycors)
+        self.bpm_list_all = list(self.orbit_workflow.bpms)
         self.N_BPM = len(self.bpm_list_all)
         self.N_COR = len(self.cor_x_list_all)
         
@@ -111,10 +113,10 @@ class OrbitCorrector:
         self.pvCORy: List[PV] = []
 
     def _bpm_pv(self, bpm_name: str, plane: str) -> str:
-        return resolve_channel(self.machine_profile, bpm_name, plane, self.machine_mode)
+        return resolve_channel(self.app_context, bpm_name, plane)
 
     def _cor_pv(self, cor_name: str) -> str:
-        return resolve_channel(self.machine_profile, cor_name, "setpoint", self.machine_mode)
+        return resolve_channel(self.app_context, cor_name, "setpoint")
 
     def _find_positions(self, main_list: List[str], sub_list: List[str]) -> List[int]:
         """在设备列表中查找目标设备的位置索引"""

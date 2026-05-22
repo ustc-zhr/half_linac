@@ -32,8 +32,8 @@ from PyQt5.QtWidgets import (
 from gui import Ui_Form
 
 from half_linac.src.shared.machine_profile import (
-    get_workflow,
-    load_profile,
+    get_bba_preset,
+    load_app_context,
     resolve_channel,
 )
 
@@ -448,8 +448,11 @@ class myWindow(QWidget, Ui_Form):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.machine_profile = load_profile()
-        self.bba_workflow = get_workflow(self.machine_profile, "bba")
+        self.app_context = load_app_context("bba")
+        self.machine_profile = self.app_context.profile
+        self.bba_workflow = self.app_context.bba_workflow
+        if self.bba_workflow is None:
+            raise ValueError("BBA workflow is not available in the current app context.")
         self.current_theme = "dark"
         self.scan = None
         self.clear = None
@@ -469,7 +472,7 @@ class myWindow(QWidget, Ui_Form):
         self._refresh_status()
 
     def _configure_window(self):
-        self.setWindowTitle("HALF Linac BBA")
+        self.setWindowTitle(f"{self.machine_profile.machine.display_name} BBA")
         self.resize(1600, 960)
         self.setMinimumSize(1320, 860)
         self.tabWidget.setCurrentIndex(0)
@@ -941,44 +944,82 @@ class myWindow(QWidget, Ui_Form):
         if index >= 0:
             combo.setCurrentIndex(index)
 
+    @staticmethod
+    def _normalize_plane_value(value):
+        text = str(value).strip().lower()
+        if text.startswith("x"):
+            return "X"
+        if text.startswith("y"):
+            return "Y"
+        raise ValueError(f"Unsupported plane value: {value!r}")
+
+    @staticmethod
+    def _normalize_mode_value(value):
+        text = str(value).strip().lower().replace("_", " ")
+        if text in {"vm", "virtual machine"}:
+            return "vm"
+        if text in {"real", "real machine"}:
+            return "real"
+        raise ValueError(f"Unsupported machine mode: {value!r}")
+
+    def _set_combo_current_plane(self, combo, plane):
+        target = self._normalize_plane_value(plane)
+        for index in range(combo.count()):
+            try:
+                if self._normalize_plane_value(combo.itemText(index)) == target:
+                    combo.setCurrentIndex(index)
+                    return
+            except ValueError:
+                continue
+
+    def _set_combo_current_mode(self, combo, mode):
+        target = self._normalize_mode_value(mode)
+        for index in range(combo.count()):
+            try:
+                if self._normalize_mode_value(combo.itemText(index)) == target:
+                    combo.setCurrentIndex(index)
+                    return
+            except ValueError:
+                continue
+
     def _find_bba_preset(self, preset_id):
-        for preset in self.bba_workflow["presets"]:
-            if preset["id"] == preset_id:
-                return preset
-        raise KeyError(f"BBA preset not found: {preset_id}")
+        return get_bba_preset(self.app_context, preset_id)
 
     def _configure_machine_profile(self):
-        standard = self.bba_workflow["standard"]
-        bba2 = self.bba_workflow["bba2"]
+        standard = self.bba_workflow.standard
+        bba2 = self.bba_workflow.bba2
 
-        self._set_combo_items(self.comboBox, standard["correctors"])
-        self._set_combo_items(self.comboBox_2, standard["quads"])
-        self._set_combo_items(self.comboBox_3, standard["bpm1"])
-        self._set_combo_items(self.comboBox_4, standard["bpm2"])
+        self._set_combo_items(self.comboBox, standard.correctors)
+        self._set_combo_items(self.comboBox_2, standard.quads)
+        self._set_combo_items(self.comboBox_3, standard.bpm1)
+        self._set_combo_items(self.comboBox_4, standard.bpm2)
 
-        self._set_combo_items(self.comboBox_7, bba2["quads"])
-        self._set_combo_items(self.comboBox_9, bba2["correctors"])
-        self._set_combo_items(self.comboBox_8, bba2["bpm1"])
-        self._set_combo_items(self.comboBox_6, bba2["bpm2"])
-        self._set_combo_items(self.comboBox_11, bba2["modes"])
+        self._set_combo_items(self.comboBox_7, bba2.quads)
+        self._set_combo_items(self.comboBox_9, bba2.correctors)
+        self._set_combo_items(self.comboBox_8, bba2.bpm1)
+        self._set_combo_items(self.comboBox_6, bba2.bpm2)
+        self._set_combo_items(self.comboBox_11, bba2.modes)
 
-        standard_default = self._find_bba_preset(standard["default_preset"])
-        self._set_combo_current_text(self.comboBox_5, f"{standard_default['plane']}-Plane")
-        self._set_combo_current_text(self.comboBox, standard_default["corr"])
-        self._set_combo_current_text(self.comboBox_2, standard_default["quad"])
-        self._set_combo_current_text(self.comboBox_3, standard_default["bpm1"])
-        self._set_combo_current_text(self.comboBox_4, standard_default["bpm2"])
+        standard_default = self._find_bba_preset(standard.default_preset)
+        self._set_combo_current_plane(self.comboBox_5, standard_default.plane)
+        self._set_combo_current_text(self.comboBox, standard_default.corr)
+        self._set_combo_current_text(self.comboBox_2, standard_default.quad)
+        self._set_combo_current_text(self.comboBox_3, standard_default.bpm1)
+        self._set_combo_current_text(self.comboBox_4, standard_default.bpm2)
 
-        bba2_default = self._find_bba_preset(bba2["default_preset"])
-        self._set_combo_current_text(self.comboBox_10, f"{bba2_default['plane']}-Plane")
-        self._set_combo_current_text(self.comboBox_7, bba2_default["quad"])
-        self._set_combo_current_text(self.comboBox_9, bba2_default["corr"])
-        self._set_combo_current_text(self.comboBox_8, bba2_default["bpm1"])
-        self._set_combo_current_text(self.comboBox_6, bba2_default["bpm2"])
-        self._set_combo_current_text(self.comboBox_11, bba2_default.get("mode", "Real Machine"))
+        bba2_default = self._find_bba_preset(bba2.default_preset)
+        self._set_combo_current_plane(self.comboBox_10, bba2_default.plane)
+        self._set_combo_current_text(self.comboBox_7, bba2_default.quad)
+        self._set_combo_current_text(self.comboBox_9, bba2_default.corr)
+        self._set_combo_current_text(self.comboBox_8, bba2_default.bpm1)
+        self._set_combo_current_text(self.comboBox_6, bba2_default.bpm2)
+        self._set_combo_current_mode(
+            self.comboBox_11,
+            bba2_default.mode or self.app_context.control_backend.name,
+        )
 
     def _profile_default_mode(self):
-        return self.machine_profile.machine.default_mode
+        return self.app_context.control_backend.name
 
     @staticmethod
     def _bpm_logical_channel(plane):
@@ -1004,7 +1045,11 @@ class myWindow(QWidget, Ui_Form):
             self.status_panel.set_item("scan", "Idle", "subtle")
 
         mode_text = self._current_mode_text()
-        mode_tone = "warning" if mode_text == "Real Machine" else "success" if mode_text == "Virtual Machine" else "subtle"
+        try:
+            normalized_mode = self._normalize_mode_value(mode_text)
+        except ValueError:
+            normalized_mode = None
+        mode_tone = "warning" if normalized_mode == "real" else "success" if normalized_mode == "vm" else "subtle"
         self.status_panel.set_item("mode", mode_text, mode_tone)
 
     def _warn(self, message):
@@ -1047,18 +1092,14 @@ class myWindow(QWidget, Ui_Form):
             params.quad = self.comboBox_2.currentText()
             params.bpm1 = self.comboBox_3.currentText()
             params.bpm2 = self.comboBox_4.currentText()
-
-            if self.comboBox_5.currentText() == "X-Plane":
-                params.plane = "X"
-            else:
-                params.plane = "Y"
+            params.plane = self._normalize_plane_value(self.comboBox_5.currentText())
 
             mode = self._profile_default_mode()
             bpm_channel = self._bpm_logical_channel(params.plane)
-            params.corrPV = resolve_channel(self.machine_profile, params.corr, "setpoint", mode)
-            params.quadPV = resolve_channel(self.machine_profile, params.quad, "k1", mode)
-            params.bpm1PV = resolve_channel(self.machine_profile, params.bpm1, bpm_channel, mode)
-            params.bpm2PV = resolve_channel(self.machine_profile, params.bpm2, bpm_channel, mode)
+            params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", mode)
+            params.quadPV = resolve_channel(self.app_context, params.quad, "k1", mode)
+            params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, mode)
+            params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, mode)
 
             params.corr_from = float(self.lineEdit.text())
             params.corr_end = float(self.lineEdit_2.text())
@@ -1085,18 +1126,13 @@ class myWindow(QWidget, Ui_Form):
             params.corr = self.comboBox_9.currentText()
             params.bpm1 = self.comboBox_8.currentText()
             params.bpm2 = self.comboBox_6.currentText()
-
-            if self.comboBox_10.currentText() == "X-Plane":
-                params.plane = "X"
-            else:
-                params.plane = "Y"
-
-            params.realorVM = self.comboBox_11.currentText()
+            params.plane = self._normalize_plane_value(self.comboBox_10.currentText())
+            params.realorVM = self._normalize_mode_value(self.comboBox_11.currentText())
             bpm_channel = self._bpm_logical_channel(params.plane)
-            params.quadPV = resolve_channel(self.machine_profile, params.quad, "k1", params.realorVM)
-            params.corrPV = resolve_channel(self.machine_profile, params.corr, "setpoint", params.realorVM)
-            params.bpm1PV = resolve_channel(self.machine_profile, params.bpm1, bpm_channel, params.realorVM)
-            params.bpm2PV = resolve_channel(self.machine_profile, params.bpm2, bpm_channel, params.realorVM)
+            params.quadPV = resolve_channel(self.app_context, params.quad, "k1", params.realorVM)
+            params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", params.realorVM)
+            params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, params.realorVM)
+            params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, params.realorVM)
 
             params.quad_from = float(self.lineEdit_14.text())
             params.quad_end = float(self.lineEdit_17.text())
@@ -1656,7 +1692,7 @@ class BBAScanThreadBBA2(BBABaseThread):
         }
 
     def _calculate_kick_angles(self, kick_values):
-        if self.params.realorVM == "Virtual Machine":
+        if self.params.realorVM == "vm":
             print("Virtual Machine.")
             return np.asarray(kick_values, dtype=float)
 
