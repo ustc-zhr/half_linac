@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (
 from gui import Ui_Form
 
 from half_linac.src.shared.machine_profile import (
+    build_model_backend,
     get_bba_preset,
     load_app_context,
     resolve_channel,
@@ -435,13 +436,14 @@ class ScanParameters:
     samples: int = 0
     sleeptime: float = 0.0
     recal: bool = False
-    EnergyMeV: float = 0.0
-    bpm1sampleNum: int = 0
-    By: str = ""
-    Bx: str = ""
-    Leff_By: float = 0.0
-    Leff_Bx: float = 0.0
-    realorVM: str = ""
+    energy_mev: float = 0.0
+    bpm1_samples: int = 0
+    by_formula: str = ""
+    bx_formula: str = ""
+    leff_by: float = 0.0
+    leff_bx: float = 0.0
+    control_backend: str = ""
+    app_context: object | None = None
 
 
 class myWindow(QWidget, Ui_Form):
@@ -478,32 +480,11 @@ class myWindow(QWidget, Ui_Form):
         self.tabWidget.setCurrentIndex(0)
 
     def _setup_defaults(self):
-        self.lineEdit_3.setText("5")
-        self.lineEdit_5.setText("5")
-        self.lineEdit_7.setText("6")
-        self.lineEdit_8.setText("1")
-
-        self.lineEdit_6.setText("45")
-        self.lineEdit_4.setText("60")
-        self.lineEdit.setText("-0.001")
-        self.lineEdit_2.setText("0.001")
-
-        self.lineEdit_12.setText("5")
-        self.lineEdit_16.setText("5")
-        self.lineEdit_15.setText("8")
-        self.lineEdit_9.setText("1")
-        self.lineEdit_20.setText("2200")
-        self.lineEdit_22.setText("1")
-
-        self.lineEdit_23.setText("-0.4813*current-0.7747")
-        self.lineEdit_25.setText("0.058287")
-        self.lineEdit_24.setText("-0.4968*current-0.3153")
-        self.lineEdit_26.setText("0.052513")
-
-        self.lineEdit_14.setText("-3")
-        self.lineEdit_17.setText("0")
-        self.lineEdit_11.setText("-0.001")
-        self.lineEdit_13.setText("0.001")
+        self.lineEdit_10.clear()
+        self.lineEdit_18.clear()
+        self.lineEdit_19.clear()
+        self.lineEdit_19.setToolTip("")
+        self.lineEdit_21.clear()
 
     def _connect_buttons(self):
         self.pushButton.clicked.connect(self.startScan)
@@ -575,7 +556,7 @@ class myWindow(QWidget, Ui_Form):
         self.status_panel.add_item("tab", "TAB", self.tabWidget.tabText(self.tabWidget.currentIndex()))
         self.status_panel.add_item("plane", "PLANE", self.comboBox_5.currentText())
         self.status_panel.add_item("scan", "SCAN", "Idle")
-        self.status_panel.add_item("mode", "MODE", "Standard")
+        self.status_panel.add_item("backend", "BACKEND", "Standard")
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
@@ -945,6 +926,16 @@ class myWindow(QWidget, Ui_Form):
             combo.setCurrentIndex(index)
 
     @staticmethod
+    def _set_line_edit_value(line_edit, value):
+        line_edit.setText(str(value))
+
+    def _apply_typed_defaults(self, config, field_map):
+        for field_name, widget in field_map.items():
+            value = getattr(config, field_name, None)
+            if value is not None:
+                self._set_line_edit_value(widget, value)
+
+    @staticmethod
     def _normalize_plane_value(value):
         text = str(value).strip().lower()
         if text.startswith("x"):
@@ -954,13 +945,13 @@ class myWindow(QWidget, Ui_Form):
         raise ValueError(f"Unsupported plane value: {value!r}")
 
     @staticmethod
-    def _normalize_mode_value(value):
+    def _normalize_control_backend_value(value):
         text = str(value).strip().lower().replace("_", " ")
         if text in {"vm", "virtual machine"}:
             return "vm"
         if text in {"real", "real machine"}:
             return "real"
-        raise ValueError(f"Unsupported machine mode: {value!r}")
+        raise ValueError(f"Unsupported control backend: {value!r}")
 
     def _set_combo_current_plane(self, combo, plane):
         target = self._normalize_plane_value(plane)
@@ -972,11 +963,11 @@ class myWindow(QWidget, Ui_Form):
             except ValueError:
                 continue
 
-    def _set_combo_current_mode(self, combo, mode):
-        target = self._normalize_mode_value(mode)
+    def _set_combo_current_control_backend(self, combo, backend):
+        target = self._normalize_control_backend_value(backend)
         for index in range(combo.count()):
             try:
-                if self._normalize_mode_value(combo.itemText(index)) == target:
+                if self._normalize_control_backend_value(combo.itemText(index)) == target:
                     combo.setCurrentIndex(index)
                     return
             except ValueError:
@@ -998,7 +989,7 @@ class myWindow(QWidget, Ui_Form):
         self._set_combo_items(self.comboBox_9, bba2.correctors)
         self._set_combo_items(self.comboBox_8, bba2.bpm1)
         self._set_combo_items(self.comboBox_6, bba2.bpm2)
-        self._set_combo_items(self.comboBox_11, bba2.modes)
+        self._set_combo_items(self.comboBox_11, bba2.control_backends)
 
         standard_default = self._find_bba_preset(standard.default_preset)
         self._set_combo_current_plane(self.comboBox_5, standard_default.plane)
@@ -1006,6 +997,19 @@ class myWindow(QWidget, Ui_Form):
         self._set_combo_current_text(self.comboBox_2, standard_default.quad)
         self._set_combo_current_text(self.comboBox_3, standard_default.bpm1)
         self._set_combo_current_text(self.comboBox_4, standard_default.bpm2)
+        self._apply_typed_defaults(
+            standard_default.scan,
+            {
+                "corr_from": self.lineEdit,
+                "corr_end": self.lineEdit_2,
+                "corr_steps": self.lineEdit_3,
+                "quad_end": self.lineEdit_4,
+                "quad_steps": self.lineEdit_5,
+                "quad_from": self.lineEdit_6,
+                "sleeptime": self.lineEdit_7,
+                "samples": self.lineEdit_8,
+            },
+        )
 
         bba2_default = self._find_bba_preset(bba2.default_preset)
         self._set_combo_current_plane(self.comboBox_10, bba2_default.plane)
@@ -1013,12 +1017,36 @@ class myWindow(QWidget, Ui_Form):
         self._set_combo_current_text(self.comboBox_9, bba2_default.corr)
         self._set_combo_current_text(self.comboBox_8, bba2_default.bpm1)
         self._set_combo_current_text(self.comboBox_6, bba2_default.bpm2)
-        self._set_combo_current_mode(
+        self._set_combo_current_control_backend(
             self.comboBox_11,
-            bba2_default.mode or self.app_context.control_backend.name,
+            self.app_context.control_backend.name,
+        )
+        self._apply_typed_defaults(
+            bba2_default.scan,
+            {
+                "corr_steps": self.lineEdit_12,
+                "corr_from": self.lineEdit_11,
+                "corr_end": self.lineEdit_13,
+                "quad_from": self.lineEdit_14,
+                "sleeptime": self.lineEdit_15,
+                "quad_steps": self.lineEdit_16,
+                "quad_end": self.lineEdit_17,
+                "samples": self.lineEdit_9,
+            },
+        )
+        self._apply_typed_defaults(
+            bba2_default.analysis,
+            {
+                "energy_mev": self.lineEdit_20,
+                "bpm1_samples": self.lineEdit_22,
+                "by_formula": self.lineEdit_23,
+                "bx_formula": self.lineEdit_24,
+                "leff_by": self.lineEdit_25,
+                "leff_bx": self.lineEdit_26,
+            },
         )
 
-    def _profile_default_mode(self):
+    def _profile_default_control_backend(self):
         return self.app_context.control_backend.name
 
     @staticmethod
@@ -1028,7 +1056,7 @@ class myWindow(QWidget, Ui_Form):
     def _current_plane_text(self):
         return self.comboBox_5.currentText() if self.tabWidget.currentIndex() == 0 else self.comboBox_10.currentText()
 
-    def _current_mode_text(self):
+    def _current_control_backend_text(self):
         return "Standard" if self.tabWidget.currentIndex() == 0 else self.comboBox_11.currentText()
 
     def _refresh_status(self):
@@ -1044,13 +1072,15 @@ class myWindow(QWidget, Ui_Form):
         else:
             self.status_panel.set_item("scan", "Idle", "subtle")
 
-        mode_text = self._current_mode_text()
+        backend_text = self._current_control_backend_text()
         try:
-            normalized_mode = self._normalize_mode_value(mode_text)
+            normalized_backend = self._normalize_control_backend_value(backend_text)
         except ValueError:
-            normalized_mode = None
-        mode_tone = "warning" if normalized_mode == "real" else "success" if normalized_mode == "vm" else "subtle"
-        self.status_panel.set_item("mode", mode_text, mode_tone)
+            normalized_backend = None
+        backend_tone = (
+            "warning" if normalized_backend == "real" else "success" if normalized_backend == "vm" else "subtle"
+        )
+        self.status_panel.set_item("backend", backend_text, backend_tone)
 
     def _warn(self, message):
         print(message)
@@ -1094,7 +1124,7 @@ class myWindow(QWidget, Ui_Form):
             params.bpm2 = self.comboBox_4.currentText()
             params.plane = self._normalize_plane_value(self.comboBox_5.currentText())
 
-            mode = self._profile_default_mode()
+            mode = self._profile_default_control_backend()
             bpm_channel = self._bpm_logical_channel(params.plane)
             params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", mode)
             params.quadPV = resolve_channel(self.app_context, params.quad, "k1", mode)
@@ -1127,12 +1157,12 @@ class myWindow(QWidget, Ui_Form):
             params.bpm1 = self.comboBox_8.currentText()
             params.bpm2 = self.comboBox_6.currentText()
             params.plane = self._normalize_plane_value(self.comboBox_10.currentText())
-            params.realorVM = self._normalize_mode_value(self.comboBox_11.currentText())
+            params.control_backend = self._normalize_control_backend_value(self.comboBox_11.currentText())
             bpm_channel = self._bpm_logical_channel(params.plane)
-            params.quadPV = resolve_channel(self.app_context, params.quad, "k1", params.realorVM)
-            params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", params.realorVM)
-            params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, params.realorVM)
-            params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, params.realorVM)
+            params.quadPV = resolve_channel(self.app_context, params.quad, "k1", params.control_backend)
+            params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", params.control_backend)
+            params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, params.control_backend)
+            params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, params.control_backend)
 
             params.quad_from = float(self.lineEdit_14.text())
             params.quad_end = float(self.lineEdit_17.text())
@@ -1142,19 +1172,20 @@ class myWindow(QWidget, Ui_Form):
             params.corr_steps = int(self.lineEdit_12.text())
             params.samples = int(self.lineEdit_9.text())
             params.sleeptime = float(self.lineEdit_15.text())
-            params.EnergyMeV = float(self.lineEdit_20.text())
-            params.bpm1sampleNum = int(self.lineEdit_22.text())
-            params.By = self.lineEdit_23.text()
-            params.Bx = self.lineEdit_24.text()
-            params.Leff_By = float(self.lineEdit_25.text())
-            params.Leff_Bx = float(self.lineEdit_26.text())
+            params.energy_mev = float(self.lineEdit_20.text())
+            params.bpm1_samples = int(self.lineEdit_22.text())
+            params.by_formula = self.lineEdit_23.text()
+            params.bx_formula = self.lineEdit_24.text()
+            params.leff_by = float(self.lineEdit_25.text())
+            params.leff_bx = float(self.lineEdit_26.text())
+            params.app_context = self.app_context
 
             self._validate_positive_int(params.quad_steps, "Quad steps")
             self._validate_positive_int(params.corr_steps, "Corrector steps")
             self._validate_positive_int(params.samples, "Samples per step")
-            self._validate_positive_int(params.bpm1sampleNum, "BPM1 sample count")
+            self._validate_positive_int(params.bpm1_samples, "BPM1 sample count")
             self._validate_non_negative_float(params.sleeptime, "Sleep time")
-            if params.EnergyMeV <= 0:
+            if params.energy_mev <= 0:
                 raise ValueError("Energy must be positive.")
             return params
         except ValueError as exc:
@@ -1294,6 +1325,7 @@ class myWindow(QWidget, Ui_Form):
             self._draw_placeholder(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)", "Waiting for BBA-2 corrector scan")
             self.lineEdit_18.setText("")
             self.lineEdit_19.setText("")
+            self.lineEdit_19.setToolTip("")
             self.lineEdit_21.setText("")
             self._refresh_status()
             return
@@ -1337,6 +1369,14 @@ class myWindow(QWidget, Ui_Form):
             self.widget_4.canvas.draw()
             self.lineEdit_21.setText(str(data["m1_ave"] * 1e3))
             self.lineEdit_19.setText(str(data["R12"]))
+            tooltip_lines = [f"Measured R12: {data['R12']:.6g} m"]
+            model_r12 = data.get("model_R12")
+            if model_r12 is not None:
+                tooltip_lines.append(f"Model R12: {model_r12:.6g} m")
+            model_r12_error = data.get("model_R12_error")
+            if model_r12_error:
+                tooltip_lines.append(f"Model R12 unavailable: {model_r12_error}")
+            self.lineEdit_19.setToolTip("\n".join(tooltip_lines))
             self.lineEdit_18.setText(str(data["b1q1"] * 1e3))
         self._refresh_status()
 
@@ -1510,6 +1550,10 @@ class BBAScanThreadBBA2(BBABaseThread):
         self.S = None
         self.m1_ave = None
         self.R12 = None
+        self.model_backend = None
+        self.model_r12 = None
+        self.model_r12_error = None
+        self.initial_quad_k1 = None
 
     def run(self):
         try:
@@ -1518,6 +1562,11 @@ class BBAScanThreadBBA2(BBABaseThread):
             bpm1 = epics.PV(self.params.bpm1PV)
             bpm2 = epics.PV(self.params.bpm2PV)
             print(cor, quad, bpm1, bpm2)
+            if self.params.app_context is not None:
+                self.model_backend = build_model_backend(
+                    self.params.app_context,
+                    energy_mev=self.params.energy_mev,
+                )
 
             sign = -1 if self.params.plane == "X" else 1
             kick_values = np.linspace(self.params.corr_from, self.params.corr_end, self.params.corr_steps)
@@ -1568,6 +1617,10 @@ class BBAScanThreadBBA2(BBABaseThread):
     def _perform_quad_scan(self, quad, bpm2, sign):
         k1_values = np.linspace(self.params.quad_from, self.params.quad_end, self.params.quad_steps)
         initial_quad = self._safe_get(quad, self.params.quadPV)
+        try:
+            self.initial_quad_k1 = float(initial_quad)
+        except (TypeError, ValueError):
+            self.initial_quad_k1 = None
         print("ini values of the quad=", initial_quad)
 
         k1_samples = []
@@ -1620,7 +1673,7 @@ class BBAScanThreadBBA2(BBABaseThread):
     def _measure_bpm1(self, bpm1):
         samples = []
         print("get average BPM1 <m1> now:")
-        for _ in range(self.params.bpm1sampleNum):
+        for _ in range(self.params.bpm1_samples):
             if not self.is_running:
                 print("BPM1 scan stop.")
                 return None
@@ -1680,9 +1733,10 @@ class BBAScanThreadBBA2(BBABaseThread):
         if self.S is None or self.m1_ave is None:
             raise RuntimeError("BBA-2 fit inputs are incomplete.")
 
+        self.model_r12 = self._calculate_model_r12()
         b1q1 = self.S / self.R12 - self.m1_ave
         print(self.S, self.R12, self.m1_ave)
-        return {
+        result = {
             "show": "fit_thetam2",
             "x": theta_mean,
             "y": np.poly1d(coeff)(theta_mean),
@@ -1690,22 +1744,55 @@ class BBAScanThreadBBA2(BBABaseThread):
             "R12": self.R12,
             "b1q1": b1q1,
         }
+        if self.model_r12 is not None:
+            result["model_R12"] = self.model_r12
+        if self.model_r12_error:
+            result["model_R12_error"] = self.model_r12_error
+        return result
 
     def _calculate_kick_angles(self, kick_values):
-        if self.params.realorVM == "vm":
+        if self.params.control_backend == "vm":
             print("Virtual Machine.")
             return np.asarray(kick_values, dtype=float)
 
         if self.params.plane == "X":
-            field = self._evaluate_formula(self.params.By, kick_values) * 1e-4
-            effective_length = self.params.Leff_By
+            field = self._evaluate_formula(self.params.by_formula, kick_values) * 1e-4
+            effective_length = self.params.leff_by
         elif self.params.plane == "Y":
-            field = self._evaluate_formula(self.params.Bx, kick_values) * 1e-4
-            effective_length = self.params.Leff_Bx
+            field = self._evaluate_formula(self.params.bx_formula, kick_values) * 1e-4
+            effective_length = self.params.leff_bx
         else:
             raise RuntimeError("Plane should be X or Y.")
 
-        return 299.8 / self.params.EnergyMeV * field * effective_length
+        return 299.8 / self.params.energy_mev * field * effective_length
+
+    def _calculate_model_r12(self):
+        if self.model_backend is None:
+            self.model_r12_error = "model backend is not configured"
+            return None
+
+        if self.params.plane == "X":
+            row, col = 0, 1
+        elif self.params.plane == "Y":
+            row, col = 2, 3
+        else:
+            raise RuntimeError("Plane should be X or Y.")
+
+        overrides = None
+        if self.initial_quad_k1 is not None:
+            overrides = {self.params.quad: self.initial_quad_k1}
+
+        try:
+            return self.model_backend.get_matrix_element(
+                self.params.corr,
+                self.params.bpm2,
+                row,
+                col,
+                element_overrides=overrides,
+            )
+        except Exception as exc:
+            self.model_r12_error = str(exc)
+            return None
 
     def _evaluate_formula(self, formula, current_values):
         try:

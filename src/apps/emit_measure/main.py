@@ -463,15 +463,6 @@ class myWindow(QWidget,Ui_Form):
         self.machine_type = self.app_context.control_backend.name
         self.scan_mode = None
 
-        # default settings 
-        # ----------------
-        self.lineEdit_2.setText("2200") # energy=2200MeV
-        self.lineEdit_24.setText("5") # freq time=5s
-        self.lineEdit_7.setText("0")  # K1-start
-        self.lineEdit_8.setText("5")  # K1-end 
-        self.lineEdit_9.setText("15") # steps=15
-        self.lineEdit_10.setText("5") # samples=5 
-
         self.scan = None
         self.twissCal = None
         self.clear = None
@@ -1113,6 +1104,16 @@ class myWindow(QWidget,Ui_Form):
         if index >= 0:
             combo.setCurrentIndex(index)
 
+    @staticmethod
+    def _set_line_edit_value(line_edit, value):
+        line_edit.setText(str(value))
+
+    def _apply_typed_defaults(self, config, field_map):
+        for field_name, widget in field_map.items():
+            value = getattr(config, field_name, None)
+            if value is not None:
+                self._set_line_edit_value(widget, value)
+
     def _emit_presets_by_quad(self):
         grouped = defaultdict(list)
         for preset in self.emit_workflow.presets:
@@ -1137,14 +1138,34 @@ class myWindow(QWidget,Ui_Form):
         self._set_combo_current_text(self.comboBox_4, default_preset.flag)
         self._set_combo_current_text(self.comboBox_2, twiss_quads[0])
         self._set_combo_current_text(self.comboBox_3, twiss_quads[0])
-        self._sync_emit_preset_defaults()
+        self._apply_emit_preset_defaults(default_preset)
+
+    def _apply_emit_preset_defaults(self, preset):
+        default_preset = self._find_emit_preset(self.emit_workflow.default_preset)
+        scan_source = preset.scan if preset.scan.as_dict() else default_preset.scan
+        self._apply_typed_defaults(
+            scan_source,
+            {
+                "k1_from": self.lineEdit_7,
+                "k1_end": self.lineEdit_8,
+                "k1_steps": self.lineEdit_9,
+                "samples": self.lineEdit_10,
+                "sleeptime": self.lineEdit_24,
+            },
+        )
+        self._apply_typed_defaults(
+            preset.analysis,
+            {
+                "energy_mev": self.lineEdit_2,
+            },
+        )
 
     def _sync_emit_preset_defaults(self):
         quad_name = self.comboBox.currentText()
         flag_name = self.comboBox_4.currentText()
         for preset in self.emit_workflow.presets:
-            if preset.quad == quad_name and preset.flag == flag_name and preset.energy_mev is not None:
-                self.lineEdit_2.setText(str(preset.energy_mev))
+            if preset.quad == quad_name and preset.flag == flag_name:
+                self._apply_emit_preset_defaults(preset)
                 return
 
     def updateComboBox4(self, index):

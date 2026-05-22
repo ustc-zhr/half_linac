@@ -19,8 +19,21 @@ class BeamModelBackend(Protocol):
         elem1: str,
         elem2: str,
         k1: float | None = None,
+        element_overrides: Mapping[str, float] | None = None,
         seq: str = "exit2exit",
     ) -> np.ndarray: ...
+
+    def get_matrix_element(
+        self,
+        elem1: str,
+        elem2: str,
+        row: int,
+        col: int,
+        *,
+        k1: float | None = None,
+        element_overrides: Mapping[str, float] | None = None,
+        seq: str = "exit2exit",
+    ) -> float: ...
 
     def get_twiss1(
         self,
@@ -91,6 +104,7 @@ class ElegantModelBackend:
         elem1: str,
         elem2: str,
         k1: float | None = None,
+        element_overrides: Mapping[str, float] | None = None,
         seq: str = "exit2exit",
     ) -> np.ndarray:
         parser = elegant_parser(str(self.source_lattice), str(self.emit_ini_ele), self.line_name)
@@ -102,8 +116,21 @@ class ElegantModelBackend:
         lattice = lte["lattice"]
         usedline = lte["usedline"]
 
+        overrides = dict(element_overrides or {})
         if k1 is not None:
-            lattice[elem1]["K1"] = str(k1)
+            overrides[elem1] = k1
+        for element_id, override in overrides.items():
+            try:
+                element = lattice[element_id]
+            except KeyError as exc:
+                raise MachineProfileError(
+                    f"Model backend override references unknown element {element_id!r}."
+                ) from exc
+            if "K1" not in element:
+                raise MachineProfileError(
+                    f"Element {element_id!r} does not support K1 override in the model backend."
+                )
+            element["K1"] = str(float(override))
 
         if seq == "exit2exit":
             id1 = usedline.index(elem1)
@@ -149,6 +176,26 @@ class ElegantModelBackend:
         matrix_file.load(str(self.emit_mat))
         list_r = [matrix_file.columnData[i][0][0] for i in range(12, 48)]
         return np.array(list_r).reshape(6, 6)
+
+    def get_matrix_element(
+        self,
+        elem1: str,
+        elem2: str,
+        row: int,
+        col: int,
+        *,
+        k1: float | None = None,
+        element_overrides: Mapping[str, float] | None = None,
+        seq: str = "exit2exit",
+    ) -> float:
+        matrix = self.get_map(
+            elem1,
+            elem2,
+            k1=k1,
+            element_overrides=element_overrides,
+            seq=seq,
+        )
+        return float(matrix[row, col])
 
 
 def build_model_backend(

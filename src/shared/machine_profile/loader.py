@@ -9,12 +9,16 @@ import half_linac.runtime_config as st
 
 from .models import (
     AppContext,
+    BBAAnalysisConfig,
     BBAFamilyConfig,
     BBAPreset,
+    BBAScanConfig,
     BBAWorkflowConfig,
     ControlBackendConfig,
+    EmitAnalysisConfig,
     EmitMeasureWorkflowConfig,
     EmitPreset,
+    EmitScanConfig,
     MachineProfile,
     MachineProfileError,
     ModelBackendConfig,
@@ -217,16 +221,25 @@ def _parse_bba_preset(raw_preset: Any, location: str) -> BBAPreset:
         bpm1=_expect_non_empty_string(preset.get("bpm1"), f"{location}.bpm1"),
         bpm2=_expect_non_empty_string(preset.get("bpm2"), f"{location}.bpm2"),
         mode=normalize_mode(preset.get("mode"), f"{location}.mode") if "mode" in preset else None,
-        scan=_expect_mapping(preset.get("scan", {}), f"{location}.scan"),
-        analysis=_expect_mapping(preset.get("analysis", {}), f"{location}.analysis"),
+        scan=_parse_bba_scan_config(_expect_mapping(preset.get("scan", {}), f"{location}.scan")),
+        analysis=_parse_bba_analysis_config(
+            _expect_mapping(preset.get("analysis", {}), f"{location}.analysis"),
+        ),
     )
 
 
 def _parse_bba_family(raw_family: Any, name: str, location: str) -> BBAFamilyConfig:
     family = _expect_mapping(raw_family, location)
-    modes: tuple[str, ...] = ()
-    if "modes" in family:
-        modes = tuple(
+    control_backends: tuple[str, ...] = ()
+    if "control_backends" in family:
+        control_backends = tuple(
+            normalize_mode(backend, f"{location}.control_backends[{index}]")
+            for index, backend in enumerate(
+                _expect_string_list(family.get("control_backends"), f"{location}.control_backends")
+            )
+        )
+    elif "modes" in family:
+        control_backends = tuple(
             normalize_mode(mode, f"{location}.modes[{index}]")
             for index, mode in enumerate(_expect_string_list(family.get("modes"), f"{location}.modes"))
         )
@@ -238,25 +251,82 @@ def _parse_bba_family(raw_family: Any, name: str, location: str) -> BBAFamilyCon
         bpm1=tuple(_expect_string_list(family.get("bpm1"), f"{location}.bpm1")),
         bpm2=tuple(_expect_string_list(family.get("bpm2"), f"{location}.bpm2")),
         default_preset=_expect_non_empty_string(family.get("default_preset"), f"{location}.default_preset"),
-        modes=modes,
+        control_backends=control_backends,
     )
 
 
 def _parse_emit_preset(raw_preset: Any, location: str) -> EmitPreset:
     preset = _expect_mapping(raw_preset, location)
-    scan = _expect_mapping(preset.get("scan", {}), f"{location}.scan")
-    analysis = dict(_expect_mapping(preset.get("analysis", {}), f"{location}.analysis"))
+    scan = _parse_emit_scan_config(_expect_mapping(preset.get("scan", {}), f"{location}.scan"))
+    analysis_dict = dict(_expect_mapping(preset.get("analysis", {}), f"{location}.analysis"))
     energy_mev = preset.get("energy_mev")
     if energy_mev is not None:
-        analysis["energy_mev"] = energy_mev
+        analysis_dict["energy_mev"] = energy_mev
 
     return EmitPreset(
         id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
         quad=_expect_non_empty_string(preset.get("quad"), f"{location}.quad"),
         flag=_expect_non_empty_string(preset.get("flag"), f"{location}.flag"),
         scan=scan,
-        analysis=analysis,
+        analysis=_parse_emit_analysis_config(analysis_dict),
     )
+
+
+def _parse_bba_scan_config(raw_scan: Mapping[str, Any]) -> BBAScanConfig:
+    return BBAScanConfig(
+        corr_from=_optional_float(raw_scan, "corr_from"),
+        corr_end=_optional_float(raw_scan, "corr_end"),
+        corr_steps=_optional_int(raw_scan, "corr_steps"),
+        quad_from=_optional_float(raw_scan, "quad_from"),
+        quad_end=_optional_float(raw_scan, "quad_end"),
+        quad_steps=_optional_int(raw_scan, "quad_steps"),
+        samples=_optional_int(raw_scan, "samples"),
+        sleeptime=_optional_float(raw_scan, "sleeptime"),
+    )
+
+
+def _parse_bba_analysis_config(raw_analysis: Mapping[str, Any]) -> BBAAnalysisConfig:
+    return BBAAnalysisConfig(
+        energy_mev=_optional_float(raw_analysis, "energy_mev"),
+        bpm1_samples=_optional_int(raw_analysis, "bpm1_samples"),
+        by_formula=_optional_string(raw_analysis, "by_formula"),
+        bx_formula=_optional_string(raw_analysis, "bx_formula"),
+        leff_by=_optional_float(raw_analysis, "leff_by"),
+        leff_bx=_optional_float(raw_analysis, "leff_bx"),
+    )
+
+
+def _parse_emit_scan_config(raw_scan: Mapping[str, Any]) -> EmitScanConfig:
+    return EmitScanConfig(
+        k1_from=_optional_float(raw_scan, "k1_from"),
+        k1_end=_optional_float(raw_scan, "k1_end"),
+        k1_steps=_optional_int(raw_scan, "k1_steps"),
+        samples=_optional_int(raw_scan, "samples"),
+        sleeptime=_optional_float(raw_scan, "sleeptime"),
+    )
+
+
+def _parse_emit_analysis_config(raw_analysis: Mapping[str, Any]) -> EmitAnalysisConfig:
+    return EmitAnalysisConfig(
+        energy_mev=_optional_float(raw_analysis, "energy_mev"),
+    )
+
+
+def _optional_float(raw_mapping: Mapping[str, Any], key: str) -> float | None:
+    value = raw_mapping.get(key)
+    return float(value) if value is not None else None
+
+
+def _optional_int(raw_mapping: Mapping[str, Any], key: str) -> int | None:
+    value = raw_mapping.get(key)
+    return int(value) if value is not None else None
+
+
+def _optional_string(raw_mapping: Mapping[str, Any], key: str) -> str | None:
+    value = raw_mapping.get(key)
+    if value is None:
+        return None
+    return _expect_non_empty_string(value, key)
 
 
 def _expect_mapping(value: Any, location: str) -> Mapping[str, Any]:

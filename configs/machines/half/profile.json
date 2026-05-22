@@ -2981,7 +2981,17 @@
           "quad": "CQ3",
           "corr": "HC01",
           "bpm1": "BPM03",
-          "bpm2": "BPM07"
+          "bpm2": "BPM07",
+          "scan": {
+            "corr_from": -0.001,
+            "corr_end": 0.001,
+            "corr_steps": 5,
+            "quad_from": 45,
+            "quad_end": 60,
+            "quad_steps": 5,
+            "samples": 1,
+            "sleeptime": 6
+          }
         },
         {
           "id": "bba2_default",
@@ -2991,7 +3001,24 @@
           "corr": "XC21",
           "bpm1": "BPM20",
           "bpm2": "BPM21",
-          "mode": "Real Machine"
+          "scan": {
+            "quad_from": -3,
+            "quad_end": 0,
+            "quad_steps": 5,
+            "corr_from": -0.001,
+            "corr_end": 0.001,
+            "corr_steps": 5,
+            "samples": 1,
+            "sleeptime": 8
+          },
+          "analysis": {
+            "energy_mev": 2200,
+            "bpm1_samples": 1,
+            "by_formula": "-0.4813*current-0.7747",
+            "bx_formula": "-0.4968*current-0.3153",
+            "leff_by": 0.058287,
+            "leff_bx": 0.052513
+          }
         }
       ],
       "standard": {
@@ -3053,7 +3080,7 @@
           "BPM28",
           "BPM29"
         ],
-        "modes": [
+        "control_backends": [
           "Real Machine",
           "Virtual Machine"
         ],
@@ -3066,6 +3093,13 @@
           "id": "emit_ql27_prf06",
           "quad": "QL27",
           "flag": "PRF06",
+          "scan": {
+            "k1_from": 0,
+            "k1_end": 5,
+            "k1_steps": 15,
+            "samples": 5,
+            "sleeptime": 5
+          },
           "energy_mev": 2200
         },
         {

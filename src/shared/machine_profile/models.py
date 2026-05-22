@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Mapping
 
 
@@ -121,7 +121,54 @@ class BBAFamilyConfig:
     bpm1: tuple[str, ...]
     bpm2: tuple[str, ...]
     default_preset: str
-    modes: tuple[str, ...] = ()
+    control_backends: tuple[str, ...] = ()
+
+    @property
+    def modes(self) -> tuple[str, ...]:
+        return self.control_backends
+
+
+class _OptionalFieldMapping:
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            field_def.name: value
+            for field_def in fields(self)
+            if (value := getattr(self, field_def.name)) is not None
+        }
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.as_dict().get(key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        value = self.get(key, None)
+        if value is None and key not in self.as_dict():
+            raise KeyError(key)
+        return value
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.as_dict()
+
+
+@dataclass(frozen=True)
+class BBAScanConfig(_OptionalFieldMapping):
+    corr_from: float | None = None
+    corr_end: float | None = None
+    corr_steps: int | None = None
+    quad_from: float | None = None
+    quad_end: float | None = None
+    quad_steps: int | None = None
+    samples: int | None = None
+    sleeptime: float | None = None
+
+
+@dataclass(frozen=True)
+class BBAAnalysisConfig(_OptionalFieldMapping):
+    energy_mev: float | None = None
+    bpm1_samples: int | None = None
+    by_formula: str | None = None
+    bx_formula: str | None = None
+    leff_by: float | None = None
+    leff_bx: float | None = None
 
 
 @dataclass(frozen=True)
@@ -134,8 +181,12 @@ class BBAPreset:
     bpm1: str
     bpm2: str
     mode: str | None = None
-    scan: Mapping[str, Any] = field(default_factory=dict)
-    analysis: Mapping[str, Any] = field(default_factory=dict)
+    scan: BBAScanConfig = field(default_factory=BBAScanConfig)
+    analysis: BBAAnalysisConfig = field(default_factory=BBAAnalysisConfig)
+
+    @property
+    def energy_mev(self) -> float | None:
+        return self.analysis.energy_mev
 
 
 @dataclass(frozen=True)
@@ -147,17 +198,30 @@ class BBAWorkflowConfig:
 
 
 @dataclass(frozen=True)
+class EmitScanConfig(_OptionalFieldMapping):
+    k1_from: float | None = None
+    k1_end: float | None = None
+    k1_steps: int | None = None
+    samples: int | None = None
+    sleeptime: float | None = None
+
+
+@dataclass(frozen=True)
+class EmitAnalysisConfig(_OptionalFieldMapping):
+    energy_mev: float | None = None
+
+
+@dataclass(frozen=True)
 class EmitPreset:
     id: str
     quad: str
     flag: str
-    scan: Mapping[str, Any] = field(default_factory=dict)
-    analysis: Mapping[str, Any] = field(default_factory=dict)
+    scan: EmitScanConfig = field(default_factory=EmitScanConfig)
+    analysis: EmitAnalysisConfig = field(default_factory=EmitAnalysisConfig)
 
     @property
     def energy_mev(self) -> float | None:
-        energy = self.analysis.get("energy_mev")
-        return float(energy) if energy is not None else None
+        return self.analysis.energy_mev
 
 
 @dataclass(frozen=True)
@@ -291,9 +355,9 @@ def _validate_bba_workflow(
 
     bba2 = _expect_mapping(workflow.get("bba2"), "workflows.bba.bba2")
     _validate_bba_family(bba2, elements_by_id, "workflows.bba.bba2")
-    modes = _expect_string_list(bba2.get("modes"), "workflows.bba.bba2.modes")
-    for index, mode in enumerate(modes):
-        normalize_mode(mode, f"workflows.bba.bba2.modes[{index}]")
+    control_backends = _expect_bba_control_backends(bba2, "workflows.bba.bba2")
+    for index, backend in enumerate(control_backends):
+        normalize_mode(backend, f"workflows.bba.bba2.control_backends[{index}]")
     _validate_preset_ref(bba2.get("default_preset"), presets, "workflows.bba.bba2.default_preset")
 
 
@@ -326,6 +390,15 @@ def _validate_bba_family(
         f"{location}.bpm2",
         expected_kind="bpm",
     )
+
+
+def _expect_bba_control_backends(raw_family: Mapping[str, Any], location: str) -> list[str]:
+    if "control_backends" in raw_family:
+        return _expect_string_list(
+            raw_family.get("control_backends"),
+            f"{location}.control_backends",
+        )
+    return _expect_string_list(raw_family.get("modes"), f"{location}.modes")
 
 
 def _validate_emit_measure_workflow(

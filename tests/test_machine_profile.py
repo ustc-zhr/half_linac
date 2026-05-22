@@ -54,6 +54,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(context.bba_workflow.standard.default_preset, "bba1_default")
         self.assertEqual(context.bba_workflow.bba2.default_preset, "bba2_default")
         self.assertIn("XC21", context.bba_workflow.bba2.correctors)
+        self.assertEqual(context.bba_workflow.bba2.control_backends, ("real", "vm"))
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
 
@@ -134,8 +135,13 @@ class MachineProfileTests(unittest.TestCase):
         bba_context = load_app_context("bba")
         preset = get_bba_preset(bba_context, "bba2_default")
         self.assertEqual(preset.family, "bba2")
-        self.assertEqual(preset.mode, "real")
+        self.assertIsNone(preset.mode)
+        self.assertEqual(preset.energy_mev, 2200)
         self.assertEqual(preset.corr, "XC21")
+        self.assertEqual(preset.scan["quad_from"], -3)
+        self.assertEqual(preset.analysis["energy_mev"], 2200)
+        self.assertEqual(preset.analysis["bpm1_samples"], 1)
+        self.assertEqual(preset.analysis.leff_by, 0.058287)
 
     def test_context_preset_helpers_support_default_emit_preset(self):
         emit_context = load_app_context("emit_measure")
@@ -143,6 +149,9 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(preset.quad, "QL27")
         self.assertEqual(preset.flag, "PRF06")
         self.assertEqual(preset.energy_mev, 2200)
+        self.assertEqual(preset.scan.k1_steps, 15)
+        self.assertEqual(preset.scan["samples"], 5)
+        self.assertEqual(preset.analysis.energy_mev, 2200)
 
     def test_build_model_backend_returns_elegant_backend_for_measurement_apps(self):
         bba_backend = build_model_backend(load_app_context("bba"), energy_mev=2200)
