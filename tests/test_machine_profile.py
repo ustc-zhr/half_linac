@@ -25,6 +25,7 @@ from half_linac.src.shared.machine_profile import (
     load_profile,
     resolve_channel,
 )
+from half_linac.src.shared.machine_profile.runtime_selector import list_machine_choices
 
 
 class MachineProfileTests(unittest.TestCase):
@@ -170,6 +171,17 @@ class MachineProfileTests(unittest.TestCase):
         with patch.dict(os.environ, {"HALF_MACHINE_ID": "half"}):
             profile = load_profile()
         self.assertEqual(profile.machine.id, "half")
+
+    def test_load_app_context_uses_env_control_backend_when_unspecified(self):
+        with patch.dict(os.environ, {"HALF_CONTROL_BACKEND": "real"}):
+            context = load_app_context("orbit_correct")
+        self.assertEqual(context.control_backend.name, "real")
+
+    def test_runtime_selector_lists_half_machine_profile(self):
+        choices = list_machine_choices()
+        machine_ids = {choice.machine_id for choice in choices}
+        self.assertIn("half", machine_ids)
+        self.assertTrue(any(choice.display_name for choice in choices if choice.machine_id == "half"))
 
     def test_invalid_machine_id_from_env_raises(self):
         with patch.dict(os.environ, {"HALF_MACHINE_ID": "../escape"}):

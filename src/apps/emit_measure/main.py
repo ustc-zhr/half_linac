@@ -45,6 +45,10 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     resolve_channel,
 )
+from half_linac.src.shared.machine_profile.runtime_selector import (
+    RuntimeSelectorWidget,
+    request_runtime_restart,
+)
 
 nest_dict    = lambda: defaultdict(nest_dict)
 
@@ -460,7 +464,7 @@ class myWindow(QWidget,Ui_Form):
             raise ValueError("emit_measure workflow is not available in the current app context.")
 
         self.current_theme = "dark"
-        self.machine_type = self.app_context.control_backend.name
+        self.control_backend = self.app_context.control_backend.name
         self.scan_mode = None
 
         self.scan = None
@@ -538,6 +542,14 @@ class myWindow(QWidget,Ui_Form):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
+        self.runtime_selector = RuntimeSelectorWidget(
+            current_machine_id=self.machine_profile.machine.id,
+            current_control_backend=self.app_context.control_backend.name,
+            parent=panel,
+        )
+        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
+        header_layout.addWidget(self.runtime_selector)
+
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
         self.theme_toggle_button.setFixedSize(HEADER_ACTION_HEIGHT, HEADER_ACTION_HEIGHT)
@@ -547,7 +559,7 @@ class myWindow(QWidget,Ui_Form):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = EmitStatusStrip(panel)
-        self.status_panel.add_item("mode", "MODE", self.machine_type.upper())
+        self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
         self.status_panel.add_item("tab", "TAB", self.tabWidget.tabText(self.tabWidget.currentIndex()))
         self.status_panel.add_item("scan", "SCAN", "Idle")
         self.status_panel.add_item("twiss", "TWISS", "Idle")
@@ -883,8 +895,8 @@ class myWindow(QWidget,Ui_Form):
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
-        mode_tone = "warning" if self.machine_type == "real" else "success"
-        self.status_panel.set_item("mode", self.machine_type.upper(), mode_tone)
+        backend_tone = "warning" if self.control_backend == "real" else "success"
+        self.status_panel.set_item("backend", self.control_backend.upper(), backend_tone)
         self.status_panel.set_item("tab", self.tabWidget.tabText(self.tabWidget.currentIndex()), "subtle")
 
         if self._scan_is_running():
@@ -932,6 +944,20 @@ class myWindow(QWidget,Ui_Form):
     def _warn(self, message):
         print(message)
         QMessageBox.warning(self, "Emit Measure", message)
+
+    def _apply_runtime_selection(self, machine_id, control_backend):
+        if self._scan_is_running() or self._twiss_is_running():
+            self._warn("Stop the current scan or Twiss calculation before switching machine or backend.")
+            return
+
+        request_runtime_restart(
+            self,
+            app_label="Emit Measure",
+            current_machine_id=self.machine_profile.machine.id,
+            current_control_backend=self.app_context.control_backend.name,
+            machine_id=machine_id,
+            control_backend=control_backend,
+        )
 
     def _scan_is_running(self):
         return self.scan is not None and self.scan.isRunning()
@@ -1186,9 +1212,9 @@ class myWindow(QWidget,Ui_Form):
             # get scan parameters
             para.quad_name = self.comboBox.currentText()
             para.flag_name = self.comboBox_4.currentText()
-            para.quadPV = resolve_channel(self.app_context, para.quad_name, "k1", self.machine_type)
-            para.flagSigxPV = resolve_channel(self.app_context, para.flag_name, "sigx", self.machine_type)
-            para.flagSigyPV = resolve_channel(self.app_context, para.flag_name, "sigy", self.machine_type)
+            para.quadPV = resolve_channel(self.app_context, para.quad_name, "k1", self.control_backend)
+            para.flagSigxPV = resolve_channel(self.app_context, para.flag_name, "sigx", self.control_backend)
+            para.flagSigyPV = resolve_channel(self.app_context, para.flag_name, "sigy", self.control_backend)
             para.app_context = self.app_context
 
             para.k1_from  = float(self.lineEdit_7.text())

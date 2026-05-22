@@ -57,10 +57,7 @@ def load_app_context(
 
     profile = load_profile(machine_id)
     selected_control_backend = ControlBackendConfig(
-        name=normalize_mode(
-            control_backend or profile.machine.default_mode,
-            "control_backend",
-        )
+        name=resolve_control_backend(control_backend, profile.machine.default_mode)
     )
 
     selected_model_backend = _resolve_model_backend(app_name, model_backend)
@@ -173,6 +170,13 @@ def resolve_machine_id(machine_id: str | None) -> str:
             f"Invalid machine_id {profile_id!r}. Expected a simple profile directory name."
         )
     return profile_id
+
+
+def resolve_control_backend(control_backend: str | None, default_mode: str) -> str:
+    raw_control_backend = control_backend
+    if raw_control_backend is None:
+        raw_control_backend = os.environ.get("HALF_CONTROL_BACKEND", "")
+    return normalize_mode(raw_control_backend or default_mode, "control_backend")
 
 
 def _resolve_model_backend(

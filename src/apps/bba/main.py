@@ -37,6 +37,10 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     resolve_channel,
 )
+from half_linac.src.shared.machine_profile.runtime_selector import (
+    RuntimeSelectorWidget,
+    request_runtime_restart,
+)
 
 
 BBA_DIR = Path(__file__).resolve().parent
@@ -544,6 +548,14 @@ class myWindow(QWidget, Ui_Form):
         title.setObjectName("summaryTitle")
         header_layout.addWidget(title)
         header_layout.addStretch(1)
+
+        self.runtime_selector = RuntimeSelectorWidget(
+            current_machine_id=self.machine_profile.machine.id,
+            current_control_backend=self.app_context.control_backend.name,
+            parent=panel,
+        )
+        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
+        header_layout.addWidget(self.runtime_selector)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -1085,6 +1097,20 @@ class myWindow(QWidget, Ui_Form):
     def _warn(self, message):
         print(message)
         QMessageBox.warning(self, "BBA", message)
+
+    def _apply_runtime_selection(self, machine_id, control_backend):
+        if self._scan_is_running():
+            self._warn("Stop the current BBA scan before switching machine or backend.")
+            return
+
+        request_runtime_restart(
+            self,
+            app_label="BBA",
+            current_machine_id=self.machine_profile.machine.id,
+            current_control_backend=self.app_context.control_backend.name,
+            machine_id=machine_id,
+            control_backend=control_backend,
+        )
 
     def _scan_is_running(self):
         return self.scan is not None and self.scan.isRunning()

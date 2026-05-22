@@ -31,6 +31,13 @@ from .models import (
     normalize_mode,
     normalize_plane,
 )
+from .runtime_selector import (
+    MachineChoice,
+    RuntimeSelectorWidget,
+    default_control_backend_choices,
+    list_machine_choices,
+    request_runtime_restart,
+)
 
 __all__ = [
     "AppContext",
@@ -48,18 +55,23 @@ __all__ = [
     "EmitPreset",
     "EmitScanConfig",
     "MachineConfig",
+    "MachineChoice",
     "MachineProfile",
     "MachineProfileError",
     "ModelBackendConfig",
     "OrbitWorkflowConfig",
+    "RuntimeSelectorWidget",
     "build_model_backend",
+    "default_control_backend_choices",
     "get_bba_preset",
     "get_emit_preset",
     "get_workflow",
     "list_elements",
+    "list_machine_choices",
     "load_app_context",
     "load_profile",
     "normalize_mode",
     "normalize_plane",
+    "request_runtime_restart",
     "resolve_channel",
 ]

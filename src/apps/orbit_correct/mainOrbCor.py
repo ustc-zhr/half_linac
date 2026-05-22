@@ -38,6 +38,10 @@ from OrbCorgui import Ui_MainWindow
 
 import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import load_app_context
+from half_linac.src.shared.machine_profile.runtime_selector import (
+    RuntimeSelectorWidget,
+    request_runtime_restart,
+)
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
 
 HEADER_ACTION_HEIGHT = 32
@@ -577,6 +581,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
+        self.runtime_selector = RuntimeSelectorWidget(
+            current_machine_id=self.machine_profile.machine.id,
+            current_control_backend=self.app_context.control_backend.name,
+            parent=panel,
+        )
+        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
+        header_layout.addWidget(self.runtime_selector)
+
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
         self.theme_toggle_button.setFixedSize(HEADER_ACTION_HEIGHT, HEADER_ACTION_HEIGHT)
@@ -588,6 +600,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.add_item("tab", "TAB", "Run Correct")
         self.status_panel.add_item("method", "METHOD", self.comboBox.currentText())
         self.status_panel.add_item("targets", "TARGETS", "0/0")
+        self.status_panel.add_item("backend", "BACKEND", self.app_context.control_backend.name.upper())
         self.status_panel.add_item("process", "PROCESS", "Idle")
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -760,8 +773,33 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.set_item("tab", self.tabWidget.tabText(self.tabWidget.currentIndex()), "subtle")
         self.status_panel.set_item("method", self.comboBox.currentText(), "subtle")
         self.status_panel.set_item("targets", f"{selected}/{total}", "success" if selected else "warning")
+        backend_name = self.app_context.control_backend.name
+        backend_tone = "warning" if backend_name == "real" else "success"
+        self.status_panel.set_item("backend", backend_name.upper(), backend_tone)
         self.status_panel.set_item("process", process_text, process_tone)
         self.progressBar.setValue(selected)
+
+    def _apply_runtime_selection(self, machine_id, control_backend):
+        active_processes = (
+            self.process_manager.is_running("orbit_correction")
+            or self.process_manager.is_running("response_matrix")
+            or self.process_manager.is_running("cor_off")
+            or self.process_manager.is_running("cor_recover")
+        )
+        if active_processes:
+            message = "Stop orbit-correction subprocesses before switching machine or backend."
+            self._notify(message)
+            QMessageBox.warning(self, "Orbit Correct", message)
+            return
+
+        request_runtime_restart(
+            self,
+            app_label="Orbit Correction",
+            current_machine_id=self.machine_profile.machine.id,
+            current_control_backend=self.app_context.control_backend.name,
+            machine_id=machine_id,
+            control_backend=control_backend,
+        )
 
     def _extract_number(self, s):
         # 提取字符串中的第一个连续数字并转为整数
