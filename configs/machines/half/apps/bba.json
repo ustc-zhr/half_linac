@@ -46,11 +46,5 @@
         "leff_bx": 0.052513
       }
     }
-  ],
-  "standard": {
-    "default_preset": "bba1_default"
-  },
-  "bba2": {
-    "default_preset": "bba2_default"
-  }
+  ]
 }

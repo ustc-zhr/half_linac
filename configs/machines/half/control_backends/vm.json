@@ -504,18 +504,26 @@
       "k1": "HALF:IN:AP:QUAD:QT18:K1:ao"
     },
     "PRF04": {
+      "image": "HALF:IN:FLAG:PRF04:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF04:cam1:AcquireTime:vm",
       "sigx": "HALF:IN:FLAG:PRF04:sigx",
       "sigy": "HALF:IN:FLAG:PRF04:sigy"
     },
     "PRF06": {
+      "image": "HALF:IN:FLAG:PRF06:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF06:cam1:AcquireTime:vm",
       "sigx": "HALF:IN:FLAG:PRF06:sigx",
       "sigy": "HALF:IN:FLAG:PRF06:sigy"
     },
     "PRF07": {
+      "image": "HALF:IN:FLAG:PRF07:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF07:cam1:AcquireTime:vm",
       "sigx": "HALF:IN:FLAG:PRF07:sigx",
       "sigy": "HALF:IN:FLAG:PRF07:sigy"
     },
     "PRF08": {
+      "image": "HALF:IN:FLAG:PRF08:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF08:cam1:AcquireTime:vm",
       "sigx": "HALF:IN:FLAG:PRF08:sigx",
       "sigy": "HALF:IN:FLAG:PRF08:sigy"
     }

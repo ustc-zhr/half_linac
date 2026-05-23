@@ -19,6 +19,7 @@ from half_linac.src.shared.machine_profile import (
     MachineProfile,
     MachineProfileError,
     build_model_backend,
+    describe_app_support,
     get_bba_preset,
     get_emit_preset,
     get_workflow,
@@ -50,6 +51,22 @@ class MachineProfileTests(unittest.TestCase):
         assert context.orbit_workflow is not None
         self.assertEqual(len(context.orbit_workflow.bpms), 41)
         self.assertEqual(context.orbit_workflow.xcors[18], "XC21")
+
+    def test_load_orbit_display_app_context(self):
+        context = load_app_context("orbit_display")
+        self.assertIsInstance(context, AppContext)
+        self.assertEqual(context.machine.id, "half")
+        self.assertEqual(context.control_backend.name, "vm")
+        self.assertIsNone(context.model_backend)
+        self.assertIsNone(context.orbit_workflow)
+
+    def test_load_beam_monitor_app_context(self):
+        context = load_app_context("beam_monitor")
+        self.assertIsInstance(context, AppContext)
+        self.assertEqual(context.machine.id, "half")
+        self.assertEqual(context.control_backend.name, "vm")
+        self.assertIsNone(context.model_backend)
+        self.assertIsNone(context.emit_measure_workflow)
 
     def test_load_bba_app_context(self):
         context = load_app_context("bba")
@@ -95,6 +112,14 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(
             resolve_channel(profile, "PRF07", "sigx", "Virtual Machine"),
             "HALF:IN:FLAG:PRF07:sigx",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRF07", "image", "vm"),
+            "HALF:IN:FLAG:PRF07:image1:ArrayData:vm",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRF07", "exposure_time", "real"),
+            "HALF:IN:FLAG:PRF07:cam1:AcquireTime",
         )
 
     def test_real_backend_uses_raw_machine_pv_naming(self):
@@ -168,20 +193,15 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["ycors"][26], "YC29")
 
     def test_bba_and_emit_defaults_exist(self):
-        profile = load_profile("half")
-        bba = get_workflow(profile, "bba")
-        emit = get_workflow(profile, "emit_measure")
+        bba_context = load_app_context("bba")
+        emit_context = load_app_context("emit_measure")
 
-        standard_default = bba["standard"]["default_preset"]
-        bba2_default = bba["bba2"]["default_preset"]
-        emit_default = emit["default_preset"]
+        bba_preset_ids = {preset.id for preset in bba_context.bba_workflow.presets}
+        emit_preset_ids = {preset.id for preset in emit_context.emit_measure_workflow.presets}
 
-        preset_ids = {preset["id"] for preset in bba["presets"]}
-        emit_ids = {preset["id"] for preset in emit["presets"]}
-
-        self.assertIn(standard_default, preset_ids)
-        self.assertIn(bba2_default, preset_ids)
-        self.assertIn(emit_default, emit_ids)
+        self.assertIn(bba_context.bba_workflow.standard.default_preset, bba_preset_ids)
+        self.assertIn(bba_context.bba_workflow.bba2.default_preset, bba_preset_ids)
+        self.assertIn(emit_context.emit_measure_workflow.default_preset, emit_preset_ids)
 
     def test_context_preset_helpers_return_default_presets(self):
         bba_context = load_app_context("bba")
@@ -286,6 +306,7 @@ class MachineProfileTests(unittest.TestCase):
         choices = list_machine_choices()
         machine_ids = {choice.machine_id for choice in choices}
         self.assertIn("half", machine_ids)
+        self.assertNotIn("_template", machine_ids)
         self.assertTrue(any(choice.display_name for choice in choices if choice.machine_id == "half"))
 
     def test_runtime_selector_discovers_control_backends_from_directory_profile(self):
@@ -479,6 +500,394 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(resolve_channel(profile, "BPM01", "x", "vm"), "LEGACY:BPM01:X")
         self.assertEqual(profile.get_element("XC01").plane, "x")
         self.assertEqual(profile.get_element("YC01").plane, "y")
+
+    def test_loader_infers_defaults_when_family_sections_are_omitted(self):
+        inferred_profile = {
+            "schema_version": "1",
+            "machine": {
+                "id": "simple",
+                "family": "linac",
+                "display_name": "Simple Linac",
+                "default_mode": "vm",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": ["bba"],
+                    "limits": {},
+                    "channels": {
+                        "x": {"vm": "S:BPM01:X", "real": "R:BPM01:X"},
+                        "y": {"vm": "S:BPM01:Y", "real": "R:BPM01:Y"},
+                    },
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 2,
+                    "tags": ["bba"],
+                    "limits": {},
+                    "channels": {
+                        "setpoint": {"vm": "S:XC01", "real": "R:XC01"},
+                    },
+                },
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 3,
+                    "tags": ["bba", "emit"],
+                    "limits": {},
+                    "channels": {
+                        "k1": {"vm": "S:Q01:K1", "real": "R:Q01:K1"},
+                    },
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 4,
+                    "tags": ["emit"],
+                    "limits": {},
+                    "channels": {
+                        "sigx": {"vm": "S:PRF01:X", "real": "R:PRF01:X"},
+                        "sigy": {"vm": "S:PRF01:Y", "real": "R:PRF01:Y"},
+                    },
+                },
+            ],
+            "workflows": {
+                "orbit": {
+                    "bpms": ["BPM01"],
+                    "xcors": ["XC01"],
+                    "ycors": ["XC01"],
+                },
+                "bba": {
+                    "presets": [
+                        {
+                            "id": "simple_bba1",
+                            "family": "standard",
+                            "plane": "x",
+                            "quad": "Q01",
+                            "corr": "XC01",
+                            "bpm1": "BPM01",
+                            "bpm2": "BPM01",
+                        },
+                        {
+                            "id": "simple_bba2",
+                            "family": "bba2",
+                            "plane": "x",
+                            "quad": "Q01",
+                            "corr": "XC01",
+                            "bpm1": "BPM01",
+                            "bpm2": "BPM01",
+                        },
+                    ]
+                },
+                "emit_measure": {
+                    "presets": [
+                        {
+                            "id": "simple_emit",
+                            "quad": "Q01",
+                            "flag": "PRF01",
+                            "energy_mev": 100.0,
+                        }
+                    ]
+                },
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            simple_dir = temp_root / "configs" / "machines" / "simple"
+            simple_dir.mkdir(parents=True)
+            (simple_dir / "profile.json").write_text(
+                json.dumps(inferred_profile, indent=2),
+                encoding="utf-8",
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                bba_context = load_app_context("bba", machine_id="simple")
+                emit_context = load_app_context("emit_measure", machine_id="simple")
+
+        self.assertEqual(bba_context.bba_workflow.standard.default_preset, "simple_bba1")
+        self.assertEqual(bba_context.bba_workflow.bba2.default_preset, "simple_bba2")
+        self.assertEqual(emit_context.emit_measure_workflow.default_preset, "simple_emit")
+
+    def test_directory_profile_can_infer_orbit_workflow_without_explicit_file(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "dirsimple",
+                "family": "linac",
+                "display_name": "Directory Simple",
+                "default_mode": "vm",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["x", "y"],
+                },
+                {
+                    "id": "BPM02",
+                    "kind": "bpm",
+                    "display_name": "BPM02",
+                    "order": 2,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["x", "y"],
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 3,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+                {
+                    "id": "YC01",
+                    "kind": "corr",
+                    "display_name": "YC01",
+                    "order": 4,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+                {
+                    "id": "XC02",
+                    "kind": "corr",
+                    "display_name": "XC02",
+                    "order": 5,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+                {
+                    "id": "YC02",
+                    "kind": "corr",
+                    "display_name": "YC02",
+                    "order": 6,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 7,
+                    "tags": ["bba", "emit"],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 8,
+                    "tags": ["emit"],
+                    "limits": {},
+                    "logical_channels": ["sigx", "sigy"],
+                },
+            ],
+        }
+        backend_channels = {
+            "vm": {
+                "backend": "vm",
+                "channels": {
+                    "BPM01": {"x": "VM:BPM01:X", "y": "VM:BPM01:Y"},
+                    "BPM02": {"x": "VM:BPM02:X", "y": "VM:BPM02:Y"},
+                    "XC01": {"setpoint": "VM:XC01"},
+                    "YC01": {"setpoint": "VM:YC01"},
+                    "XC02": {"setpoint": "VM:XC02"},
+                    "YC02": {"setpoint": "VM:YC02"},
+                    "Q01": {"k1": "VM:Q01:K1"},
+                    "PRF01": {"sigx": "VM:PRF01:X", "sigy": "VM:PRF01:Y"},
+                },
+            },
+            "real": {
+                "backend": "real",
+                "channels": {
+                    "BPM01": {"x": "REAL:BPM01:X", "y": "REAL:BPM01:Y"},
+                    "BPM02": {"x": "REAL:BPM02:X", "y": "REAL:BPM02:Y"},
+                    "XC01": {"setpoint": "REAL:XC01"},
+                    "YC01": {"setpoint": "REAL:YC01"},
+                    "XC02": {"setpoint": "REAL:XC02"},
+                    "YC02": {"setpoint": "REAL:YC02"},
+                    "Q01": {"k1": "REAL:Q01:K1"},
+                    "PRF01": {"sigx": "REAL:PRF01:X", "sigy": "REAL:PRF01:Y"},
+                },
+            },
+        }
+        bba_json = {
+            "presets": [
+                {
+                    "id": "dirsimple_bba1",
+                    "family": "standard",
+                    "plane": "x",
+                    "quad": "Q01",
+                    "corr": "XC01",
+                    "bpm1": "BPM01",
+                    "bpm2": "BPM02",
+                },
+                {
+                    "id": "dirsimple_bba2",
+                    "family": "bba2",
+                    "plane": "x",
+                    "quad": "Q01",
+                    "corr": "XC02",
+                    "bpm1": "BPM01",
+                    "bpm2": "BPM02",
+                },
+            ]
+        }
+        emit_json = {
+            "presets": [
+                {
+                    "id": "dirsimple_emit",
+                    "quad": "Q01",
+                    "flag": "PRF01",
+                    "energy_mev": 100.0,
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            machine_dir = temp_root / "configs" / "machines" / "dirsimple"
+            (machine_dir / "control_backends").mkdir(parents=True)
+            (machine_dir / "apps").mkdir(parents=True)
+            (machine_dir / "machine.json").write_text(
+                json.dumps(machine_json, indent=2),
+                encoding="utf-8",
+            )
+            for backend_name, payload in backend_channels.items():
+                (machine_dir / "control_backends" / f"{backend_name}.json").write_text(
+                    json.dumps(payload, indent=2),
+                    encoding="utf-8",
+                )
+            (machine_dir / "apps" / "bba.json").write_text(
+                json.dumps(bba_json, indent=2),
+                encoding="utf-8",
+            )
+            (machine_dir / "apps" / "emit_measure.json").write_text(
+                json.dumps(emit_json, indent=2),
+                encoding="utf-8",
+            )
+
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                context = load_app_context("orbit_correct", machine_id="dirsimple")
+
+        assert context.orbit_workflow is not None
+        self.assertEqual(context.orbit_workflow.bpms, ("BPM01", "BPM02"))
+        self.assertEqual(context.orbit_workflow.xcors, ("XC01", "XC02"))
+        self.assertEqual(context.orbit_workflow.ycors, ("YC01", "YC02"))
+
+    def test_partial_directory_machine_can_load_only_requested_app_workflow(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "orbitonly",
+                "family": "linac",
+                "display_name": "Orbit Only",
+                "default_mode": "vm",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": ["orbit"],
+                    "limits": {},
+                    "logical_channels": ["x", "y"],
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 2,
+                    "tags": ["orbit"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+                {
+                    "id": "YC01",
+                    "kind": "corr",
+                    "display_name": "YC01",
+                    "order": 3,
+                    "tags": ["orbit"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+            ],
+        }
+        backend_channels = {
+            "vm": {
+                "backend": "vm",
+                "channels": {
+                    "BPM01": {"x": "VM:BPM01:X", "y": "VM:BPM01:Y"},
+                    "XC01": {"setpoint": "VM:XC01"},
+                    "YC01": {"setpoint": "VM:YC01"},
+                },
+            },
+            "real": {
+                "backend": "real",
+                "channels": {
+                    "BPM01": {"x": "REAL:BPM01:X", "y": "REAL:BPM01:Y"},
+                    "XC01": {"setpoint": "REAL:XC01"},
+                    "YC01": {"setpoint": "REAL:YC01"},
+                },
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            machine_dir = temp_root / "configs" / "machines" / "orbitonly"
+            (machine_dir / "control_backends").mkdir(parents=True)
+            (machine_dir / "machine.json").write_text(
+                json.dumps(machine_json, indent=2),
+                encoding="utf-8",
+            )
+            for backend_name, payload in backend_channels.items():
+                (machine_dir / "control_backends" / f"{backend_name}.json").write_text(
+                    json.dumps(payload, indent=2),
+                    encoding="utf-8",
+                )
+
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                profile = load_profile("orbitonly")
+                orbit_context = load_app_context("orbit_correct", machine_id="orbitonly")
+                orbit_display_context = load_app_context("orbit_display", machine_id="orbitonly")
+                supported_orbit, orbit_reason = describe_app_support("orbitonly", "orbit_correct")
+                supported_orbit_display, orbit_display_reason = describe_app_support("orbitonly", "orbit_display")
+                supported_bba, bba_reason = describe_app_support("orbitonly", "bba")
+                supported_beam, beam_reason = describe_app_support("orbitonly", "beam_monitor")
+                with self.assertRaises(MachineProfileError):
+                    load_app_context("bba", machine_id="orbitonly")
+
+        self.assertEqual(profile.machine.id, "orbitonly")
+        assert orbit_context.orbit_workflow is not None
+        self.assertIsNone(orbit_display_context.orbit_workflow)
+        self.assertTrue(supported_orbit)
+        self.assertIsNone(orbit_reason)
+        self.assertTrue(supported_orbit_display)
+        self.assertIsNone(orbit_display_reason)
+        self.assertFalse(supported_bba)
+        self.assertIsNotNone(bba_reason)
+        self.assertFalse(supported_beam)
+        self.assertIsNotNone(beam_reason)
+        self.assertEqual(orbit_context.orbit_workflow.bpms, ("BPM01",))
+        self.assertEqual(orbit_context.orbit_workflow.xcors, ("XC01",))
+        self.assertEqual(orbit_context.orbit_workflow.ycors, ("YC01",))
 
     def test_duplicate_element_ids_raise(self):
         bad = {

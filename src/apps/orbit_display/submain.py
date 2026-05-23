@@ -1,8 +1,25 @@
 import time
 import sys
+from pathlib import Path
 from subprocess import Popen
+
+_REPO_BOOTSTRAP_ROOT = next(
+    parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
+)
+if str(_REPO_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_BOOTSTRAP_ROOT))
+
+from repo_bootstrap import ensure_repo_import_path
+
+ensure_repo_import_path(__file__)
+
 import numpy as np
 
+from half_linac.src.shared.machine_profile import (
+    list_elements,
+    load_app_context,
+    resolve_channel,
+)
 from subgui import Ui_Form 
 from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QHBoxLayout
 from PyQt5.QtCore import QTimer
@@ -15,6 +32,14 @@ class myWindow(QMainWindow, Ui_Form):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        self.app_context = load_app_context("orbit_display")
+        self.machine_profile = self.app_context.profile
+        self.control_backend = self.app_context.control_backend.name
+        self.bpm_elements = list_elements(self.app_context, kind="bpm")
+        self.bpm_ids = [element.id for element in self.bpm_elements]
+        self.bpm_x_pvs = [resolve_channel(self.app_context, bpm_id, "x") for bpm_id in self.bpm_ids]
+        self.bpm_y_pvs = [resolve_channel(self.app_context, bpm_id, "y") for bpm_id in self.bpm_ids]
+        self._configure_bpm_widgets()
         
         # init pv
         # self.init_pv()
@@ -22,6 +47,34 @@ class myWindow(QMainWindow, Ui_Form):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.bpmvalue_dis)
         self.timer.start(1000) #every 1s
+
+    def _configure_bpm_widgets(self):
+        self.setWindowTitle(f"{self.machine_profile.machine.display_name} BPM Detail")
+        self.x_value_widgets = []
+        self.y_value_widgets = []
+        self.x_label_widgets = []
+        self.y_label_widgets = []
+
+        for index in range(1, 44):
+            x_label = getattr(self, f"bPMx{index:02d}Label")
+            y_label = getattr(self, f"bPMy{index:02d}Label")
+            x_value = getattr(self, f"bPMx{index:02d}LineEdit")
+            y_value = getattr(self, f"bPMy{index:02d}LineEdit")
+            self.x_label_widgets.append(x_label)
+            self.y_label_widgets.append(y_label)
+            self.x_value_widgets.append(x_value)
+            self.y_value_widgets.append(y_value)
+
+        visible_count = min(len(self.bpm_ids), len(self.x_label_widgets))
+        for index, bpm_id in enumerate(self.bpm_ids[:visible_count]):
+            self.x_label_widgets[index].setText(f"{bpm_id} X")
+            self.y_label_widgets[index].setText(f"{bpm_id} Y")
+
+        for index in range(visible_count, len(self.x_label_widgets)):
+            self.x_label_widgets[index].hide()
+            self.y_label_widgets[index].hide()
+            self.x_value_widgets[index].hide()
+            self.y_value_widgets[index].hide()
         
     def bpmvalue_dis(self):
         # init pv
@@ -29,125 +82,16 @@ class myWindow(QMainWindow, Ui_Form):
 
         self.pvlx_val = [round(num*1000, 3) for num in self.pvlx_val]
         self.pvly_val = [round(num*1000, 3) for num in self.pvly_val]
-        # BPMx 1-10
-        self.bPMx01LineEdit.setText(str(self.pvlx_val[0]))
-        self.bPMx02LineEdit.setText(str(self.pvlx_val[1]))
-        self.bPMx03LineEdit.setText(str(self.pvlx_val[2]))
-        self.bPMx04LineEdit.setText(str(self.pvlx_val[3]))
-        self.bPMx05LineEdit.setText(str(self.pvlx_val[4]))
-        self.bPMx06LineEdit.setText(str(self.pvlx_val[5]))
-        self.bPMx07LineEdit.setText(str(self.pvlx_val[6]))
-        self.bPMx08LineEdit.setText(str(self.pvlx_val[7]))
-        self.bPMx09LineEdit.setText(str(self.pvlx_val[8]))
-        self.bPMx10LineEdit.setText(str(self.pvlx_val[9]))
-        # BPMx 11-20
-        self.bPMx11LineEdit.setText(str(self.pvlx_val[10]))
-        self.bPMx12LineEdit.setText(str(self.pvlx_val[11]))
-        self.bPMx13LineEdit.setText(str(self.pvlx_val[12]))
-        self.bPMx14LineEdit.setText(str(self.pvlx_val[13]))
-        self.bPMx15LineEdit.setText(str(self.pvlx_val[14]))
-        self.bPMx16LineEdit.setText(str(self.pvlx_val[15]))
-        self.bPMx17LineEdit.setText(str(self.pvlx_val[16]))
-        self.bPMx18LineEdit.setText(str(self.pvlx_val[17]))
-        self.bPMx19LineEdit.setText(str(self.pvlx_val[18]))
-        self.bPMx20LineEdit.setText(str(self.pvlx_val[19]))
-        # BPMx 21-30
-        self.bPMx21LineEdit.setText(str(self.pvlx_val[20]))
-        self.bPMx22LineEdit.setText(str(self.pvlx_val[21]))
-        self.bPMx23LineEdit.setText(str(self.pvlx_val[22]))
-        self.bPMx24LineEdit.setText(str(self.pvlx_val[23]))
-        self.bPMx25LineEdit.setText(str(self.pvlx_val[24]))
-        self.bPMx26LineEdit.setText(str(self.pvlx_val[25]))
-        self.bPMx27LineEdit.setText(str(self.pvlx_val[26]))
-        self.bPMx28LineEdit.setText(str(self.pvlx_val[27]))
-        self.bPMx29LineEdit.setText(str(self.pvlx_val[28]))
-        self.bPMx30LineEdit.setText(str(self.pvlx_val[29]))
-        # BPMx 31-40
-        self.bPMx31LineEdit.setText(str(self.pvlx_val[30]))
-        self.bPMx32LineEdit.setText(str(self.pvlx_val[31]))
-        self.bPMx33LineEdit.setText(str(self.pvlx_val[32]))
-        self.bPMx34LineEdit.setText(str(self.pvlx_val[33]))
-        self.bPMx35LineEdit.setText(str(self.pvlx_val[34]))
-        self.bPMx36LineEdit.setText(str(self.pvlx_val[35]))
-        self.bPMx37LineEdit.setText(str(self.pvlx_val[36]))
-        self.bPMx38LineEdit.setText(str(self.pvlx_val[37]))
-        self.bPMx39LineEdit.setText(str(self.pvlx_val[38]))
-        self.bPMx40LineEdit.setText(str(self.pvlx_val[39]))
-
-        # BPMx 41-43
-        self.bPMx41LineEdit.setText(str(self.pvlx_val[40]))
-        self.bPMx42LineEdit.setText(str(self.pvlx_val[41]))
-        self.bPMx43LineEdit.setText(str(self.pvlx_val[42]))
-
-
-        # BPMy 1-10
-        self.bPMy01LineEdit.setText(str(self.pvly_val[0]))
-        self.bPMy02LineEdit.setText(str(self.pvly_val[1]))
-        self.bPMy03LineEdit.setText(str(self.pvly_val[2]))
-        self.bPMy04LineEdit.setText(str(self.pvly_val[3]))
-        self.bPMy05LineEdit.setText(str(self.pvly_val[4]))
-        self.bPMy06LineEdit.setText(str(self.pvly_val[5]))
-        self.bPMy07LineEdit.setText(str(self.pvly_val[6]))
-        self.bPMy08LineEdit.setText(str(self.pvly_val[7]))
-        self.bPMy09LineEdit.setText(str(self.pvly_val[8]))
-        self.bPMy10LineEdit.setText(str(self.pvly_val[9]))
-        # BPMy 11-20
-        self.bPMy11LineEdit.setText(str(self.pvly_val[10]))
-        self.bPMy12LineEdit.setText(str(self.pvly_val[11]))
-        self.bPMy13LineEdit.setText(str(self.pvly_val[12]))
-        self.bPMy14LineEdit.setText(str(self.pvly_val[13]))
-        self.bPMy15LineEdit.setText(str(self.pvly_val[14]))
-        self.bPMy16LineEdit.setText(str(self.pvly_val[15]))
-        self.bPMy17LineEdit.setText(str(self.pvly_val[16]))
-        self.bPMy18LineEdit.setText(str(self.pvly_val[17]))
-        self.bPMy19LineEdit.setText(str(self.pvly_val[18]))
-        self.bPMy20LineEdit.setText(str(self.pvly_val[19]))
-        # BPMy 21-30
-        self.bPMy21LineEdit.setText(str(self.pvly_val[20]))
-        self.bPMy22LineEdit.setText(str(self.pvly_val[21]))
-        self.bPMy23LineEdit.setText(str(self.pvly_val[22]))
-        self.bPMy24LineEdit.setText(str(self.pvly_val[23]))
-        self.bPMy25LineEdit.setText(str(self.pvly_val[24]))
-        self.bPMy26LineEdit.setText(str(self.pvly_val[25]))
-        self.bPMy27LineEdit.setText(str(self.pvly_val[26]))
-        self.bPMy28LineEdit.setText(str(self.pvly_val[27]))
-        self.bPMy29LineEdit.setText(str(self.pvly_val[28]))
-        self.bPMy30LineEdit.setText(str(self.pvly_val[29]))
-        # BPMy 31-40
-        self.bPMy31LineEdit.setText(str(self.pvly_val[30]))
-        self.bPMy32LineEdit.setText(str(self.pvly_val[31]))
-        self.bPMy33LineEdit.setText(str(self.pvly_val[32]))
-        self.bPMy34LineEdit.setText(str(self.pvly_val[33]))
-        self.bPMy35LineEdit.setText(str(self.pvly_val[34]))
-        self.bPMy36LineEdit.setText(str(self.pvly_val[35]))
-        self.bPMy37LineEdit.setText(str(self.pvly_val[36]))
-        self.bPMy38LineEdit.setText(str(self.pvly_val[37]))
-        self.bPMy39LineEdit.setText(str(self.pvly_val[38]))
-        self.bPMy40LineEdit.setText(str(self.pvly_val[39]))
-
-        # BPMy 41-43
-        self.bPMy41LineEdit.setText(str(self.pvly_val[40]))
-        self.bPMy42LineEdit.setText(str(self.pvly_val[41]))
-        self.bPMy43LineEdit.setText(str(self.pvly_val[42]))
+        visible_count = min(len(self.bpm_ids), len(self.x_value_widgets))
+        for index in range(visible_count):
+            self.x_value_widgets[index].setText(str(self.pvlx_val[index]))
+            self.y_value_widgets[index].setText(str(self.pvly_val[index]))
 
 
     def init_pv(self):
-        pvlx = []
-        pvly = []
-        for j in range(43):
-            if j+1 < 10:
-                pvx = "HALF:IN:BPM:BPM0"+str(j+1)+":X:ao"
-                pvy = "HALF:IN:BPM:BPM0"+str(j+1)+":Y:ao"
-            else:
-                pvx = "HALF:IN:BPM:BPM"+str(j+1)+":X:ao"
-                pvy = "HALF:IN:BPM:BPM"+str(j+1)+":Y:ao"
-            #print(pvx,pvlx)
-            pvlx.append(pvx)
-            pvly.append(pvy)
-
         # get the values
-        self.pvlx_val = caget_many(pvlx) 
-        self.pvly_val = caget_many(pvly) 
+        self.pvlx_val = caget_many(self.bpm_x_pvs) 
+        self.pvly_val = caget_many(self.bpm_y_pvs) 
 
 
 
@@ -156,7 +100,5 @@ if __name__ == '__main__':
     window = myWindow()
     window.show()
     sys.exit(app.exec_())
-
-
 
 

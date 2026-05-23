@@ -2202,6 +2202,8 @@
       ],
       "limits": {},
       "logical_channels": [
+        "image",
+        "exposure_time",
         "sigx",
         "sigy"
       ]
@@ -2216,6 +2218,8 @@
       ],
       "limits": {},
       "logical_channels": [
+        "image",
+        "exposure_time",
         "sigx",
         "sigy"
       ]
@@ -2230,6 +2234,8 @@
       ],
       "limits": {},
       "logical_channels": [
+        "image",
+        "exposure_time",
         "sigx",
         "sigy"
       ]
@@ -2244,6 +2250,8 @@
       ],
       "limits": {},
       "logical_channels": [
+        "image",
+        "exposure_time",
         "sigx",
         "sigy"
       ]

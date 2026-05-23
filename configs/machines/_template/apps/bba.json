@@ -1,0 +1,35 @@
+{
+  "presets": [
+    {
+      "id": "template_bba_standard",
+      "family": "standard",
+      "plane": "x",
+      "quad": "Q01",
+      "corr": "XC01",
+      "bpm1": "BPM01",
+      "bpm2": "BPM02",
+      "scan": {
+        "corr_from": -0.001,
+        "corr_end": 0.001,
+        "corr_steps": 5,
+        "quad_from": 0.0,
+        "quad_end": 1.0,
+        "quad_steps": 5,
+        "samples": 3,
+        "sleeptime": 0.5
+      }
+    },
+    {
+      "id": "template_bba2",
+      "family": "bba2",
+      "plane": "x",
+      "quad": "Q01",
+      "corr": "XC01",
+      "bpm1": "BPM01",
+      "bpm2": "BPM02",
+      "analysis": {
+        "energy_mev": 100.0
+      }
+    }
+  ]
+}

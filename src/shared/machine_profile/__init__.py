@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .compatibility import (
+    describe_app_support,
     get_bba_preset,
     get_emit_preset,
     get_workflow,
@@ -63,6 +64,7 @@ __all__ = [
     "RuntimeSelectorWidget",
     "build_model_backend",
     "default_control_backend_choices",
+    "describe_app_support",
     "get_bba_preset",
     "get_emit_preset",
     "get_workflow",

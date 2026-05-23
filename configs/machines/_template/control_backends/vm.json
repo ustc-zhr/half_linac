@@ -1,0 +1,28 @@
+{
+  "backend": "vm",
+  "channels": {
+    "BPM01": {
+      "x": "TEMPLATE:VM:BPM01:X",
+      "y": "TEMPLATE:VM:BPM01:Y"
+    },
+    "BPM02": {
+      "x": "TEMPLATE:VM:BPM02:X",
+      "y": "TEMPLATE:VM:BPM02:Y"
+    },
+    "XC01": {
+      "setpoint": "TEMPLATE:VM:XC01:SET"
+    },
+    "YC01": {
+      "setpoint": "TEMPLATE:VM:YC01:SET"
+    },
+    "Q01": {
+      "k1": "TEMPLATE:VM:Q01:K1"
+    },
+    "PRF01": {
+      "image": "TEMPLATE:VM:PRF01:IMAGE",
+      "exposure_time": "TEMPLATE:VM:PRF01:EXPTIME",
+      "sigx": "TEMPLATE:VM:PRF01:SIGX",
+      "sigy": "TEMPLATE:VM:PRF01:SIGY"
+    }
+  }
+}

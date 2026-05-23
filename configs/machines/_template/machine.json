@@ -1,0 +1,65 @@
+{
+  "schema_version": "1",
+  "machine": {
+    "id": "template_machine",
+    "family": "linac",
+    "display_name": "Template Machine",
+    "default_mode": "vm"
+  },
+  "elements": [
+    {
+      "id": "BPM01",
+      "kind": "bpm",
+      "display_name": "BPM01",
+      "order": 1,
+      "tags": ["orbit", "bba"],
+      "limits": {},
+      "logical_channels": ["x", "y"]
+    },
+    {
+      "id": "BPM02",
+      "kind": "bpm",
+      "display_name": "BPM02",
+      "order": 2,
+      "tags": ["orbit", "bba"],
+      "limits": {},
+      "logical_channels": ["x", "y"]
+    },
+    {
+      "id": "XC01",
+      "kind": "corr",
+      "display_name": "XC01",
+      "order": 3,
+      "tags": ["orbit", "bba"],
+      "limits": {},
+      "logical_channels": ["setpoint"]
+    },
+    {
+      "id": "YC01",
+      "kind": "corr",
+      "display_name": "YC01",
+      "order": 4,
+      "tags": ["orbit", "bba"],
+      "limits": {},
+      "logical_channels": ["setpoint"]
+    },
+    {
+      "id": "Q01",
+      "kind": "quad",
+      "display_name": "Q01",
+      "order": 5,
+      "tags": ["bba", "emit"],
+      "limits": {},
+      "logical_channels": ["k1"]
+    },
+    {
+      "id": "PRF01",
+      "kind": "flag",
+      "display_name": "PRF01",
+      "order": 6,
+      "tags": ["emit"],
+      "limits": {},
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
+    }
+  ]
+}

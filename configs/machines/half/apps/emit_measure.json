@@ -73,6 +73,5 @@
       "flag": "PRF04",
       "energy_mev": 220
     }
-  ],
-  "default_preset": "emit_ql27_prf06"
+  ]
 }

@@ -1,0 +1,19 @@
+{
+  "presets": [
+    {
+      "id": "template_emit",
+      "quad": "Q01",
+      "flag": "PRF01",
+      "scan": {
+        "k1_from": 0.0,
+        "k1_end": 1.0,
+        "k1_steps": 5,
+        "samples": 3,
+        "sleeptime": 0.5
+      },
+      "analysis": {
+        "energy_mev": 100.0
+      }
+    }
+  ]
+}

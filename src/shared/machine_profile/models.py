@@ -399,7 +399,11 @@ def _validate_orbit_workflow(
     raw_workflow: Any,
     elements_by_id: Mapping[str, ElementConfig],
 ) -> None:
+    if raw_workflow is None:
+        return
     workflow = _expect_mapping(raw_workflow, "workflows.orbit")
+    if not any(name in workflow for name in ("bpms", "xcors", "ycors")):
+        return
     bpms = _expect_string_list(workflow.get("bpms"), "workflows.orbit.bpms")
     xcors = _expect_string_list(workflow.get("xcors"), "workflows.orbit.xcors")
     ycors = _expect_string_list(workflow.get("ycors"), "workflows.orbit.ycors")
@@ -417,6 +421,8 @@ def _validate_bba_workflow(
     raw_workflow: Any,
     elements_by_id: Mapping[str, ElementConfig],
 ) -> None:
+    if raw_workflow is None:
+        return
     workflow = _expect_mapping(raw_workflow, "workflows.bba")
     presets = _expect_list(workflow.get("presets"), "workflows.bba.presets")
     _validate_unique_ids(presets, "workflows.bba.presets")
@@ -432,16 +438,26 @@ def _validate_bba_workflow(
         if "mode" in preset:
             normalize_mode(preset.get("mode"), f"{location}.mode")
 
-    standard = _expect_mapping(workflow.get("standard"), "workflows.bba.standard")
+    standard = _expect_optional_mapping(workflow.get("standard"), "workflows.bba.standard")
     _validate_bba_family(standard, elements_by_id, "workflows.bba.standard")
-    _validate_preset_ref(standard.get("default_preset"), presets, "workflows.bba.standard.default_preset")
+    _validate_family_default_preset(
+        standard,
+        "standard",
+        presets,
+        "workflows.bba.standard.default_preset",
+    )
 
-    bba2 = _expect_mapping(workflow.get("bba2"), "workflows.bba.bba2")
+    bba2 = _expect_optional_mapping(workflow.get("bba2"), "workflows.bba.bba2")
     _validate_bba_family(bba2, elements_by_id, "workflows.bba.bba2")
     control_backends = _expect_bba_control_backends(bba2, "workflows.bba.bba2")
     for index, backend in enumerate(control_backends):
         normalize_mode(backend, f"workflows.bba.bba2.control_backends[{index}]")
-    _validate_preset_ref(bba2.get("default_preset"), presets, "workflows.bba.bba2.default_preset")
+    _validate_family_default_preset(
+        bba2,
+        "bba2",
+        presets,
+        "workflows.bba.bba2.default_preset",
+    )
 
 
 def _validate_bba_family(
@@ -490,6 +506,8 @@ def _validate_emit_measure_workflow(
     raw_workflow: Any,
     elements_by_id: Mapping[str, ElementConfig],
 ) -> None:
+    if raw_workflow is None:
+        return
     workflow = _expect_mapping(raw_workflow, "workflows.emit_measure")
     presets = _expect_list(workflow.get("presets"), "workflows.emit_measure.presets")
     _validate_unique_ids(presets, "workflows.emit_measure.presets")
@@ -503,11 +521,14 @@ def _validate_emit_measure_workflow(
         if not isinstance(energy, (int, float)) or energy <= 0:
             raise MachineProfileError(f"{location}.energy_mev must be a positive number.")
 
-    _validate_preset_ref(
-        workflow.get("default_preset"),
-        presets,
-        "workflows.emit_measure.default_preset",
-    )
+    if "default_preset" in workflow:
+        _validate_preset_ref(
+            workflow.get("default_preset"),
+            presets,
+            "workflows.emit_measure.default_preset",
+        )
+    elif not presets:
+        raise MachineProfileError("workflows.emit_measure.presets must not be empty.")
     _validate_optional_element_refs(
         workflow.get("twiss_quads"),
         elements_by_id,
@@ -534,6 +555,29 @@ def _validate_preset_ref(preset_id: Any, presets: list[Any], location: str) -> N
     }
     if required_id not in preset_ids:
         raise MachineProfileError(f"{location} references unknown preset {required_id!r}.")
+
+
+def _validate_family_default_preset(
+    raw_family: Mapping[str, Any],
+    family_name: str,
+    presets: list[Any],
+    location: str,
+) -> None:
+    if "default_preset" in raw_family:
+        _validate_preset_ref(raw_family.get("default_preset"), presets, location)
+        return
+
+    matching_ids: list[str] = []
+    for index, raw_item in enumerate(presets):
+        item = _expect_mapping(raw_item, f"{location}.presets[{index}]")
+        if _expect_non_empty_string(item.get("family"), f"{location}.presets[{index}].family") == family_name:
+            matching_ids.append(
+                _expect_non_empty_string(item.get("id"), f"{location}.presets[{index}].id")
+            )
+    if not matching_ids:
+        raise MachineProfileError(
+            f"{location} is missing default_preset and no preset with family {family_name!r} was found."
+        )
 
 
 def _validate_element_refs(
@@ -579,6 +623,12 @@ def _expect_mapping(value: Any, location: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise MachineProfileError(f"{location} must be a mapping.")
     return value
+
+
+def _expect_optional_mapping(value: Any, location: str) -> Mapping[str, Any]:
+    if value is None:
+        return {}
+    return _expect_mapping(value, location)
 
 
 def _expect_list(value: Any, location: str) -> list[Any]:

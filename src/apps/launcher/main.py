@@ -30,7 +30,11 @@ from PyQt5.QtWidgets import (
 )
 
 import half_linac.runtime_config as st
-from half_linac.src.shared.machine_profile import load_profile, normalize_mode
+from half_linac.src.shared.machine_profile import (
+    describe_app_support,
+    load_profile,
+    normalize_mode,
+)
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
     request_runtime_restart,
@@ -556,6 +560,14 @@ CONTROL_KEYS = {
     "emitmeasure",
 }
 
+PROFILE_MANAGED_APP_KEYS = {
+    "orbitdisplay": "orbit_display",
+    "beammonitor": "beam_monitor",
+    "bba": "bba",
+    "orbit_correct": "orbit_correct",
+    "emitmeasure": "emit_measure",
+}
+
 
 class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
@@ -571,6 +583,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.current_theme = "dark"
         self.managed_buttons = {}
+        self.app_support_status = {}
         self.group_button_specs = []
 
         self._configure_window()
@@ -579,6 +592,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._configure_group_panel()
         self._configure_group_layouts()
         self._configure_app_buttons()
+        self._refresh_machine_capabilities()
         self._configure_session_buttons()
         self._schedule_group_button_layout_update()
         self._reset_activity_log()
@@ -707,6 +721,33 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.managed_buttons[key] = button
             self._refresh_widget_style(button)
 
+    def _refresh_machine_capabilities(self):
+        self.app_support_status = {}
+        for key, spec in APP_DEFINITIONS.items():
+            button = self.managed_buttons.get(key)
+            if button is None:
+                continue
+
+            tooltip = spec["description"]
+            supported = True
+            reason = None
+            profile_app_name = PROFILE_MANAGED_APP_KEYS.get(key)
+            if profile_app_name is not None:
+                supported, reason = describe_app_support(
+                    self.machine_profile.machine.id,
+                    profile_app_name,
+                )
+                if not supported and reason:
+                    tooltip = (
+                        f"{spec['description']}\n\n"
+                        f"Unavailable for machine '{self.machine_profile.machine.id}': {reason}"
+                    )
+
+            self.app_support_status[key] = (supported, reason)
+            button.setEnabled(supported)
+            button.setToolTip(tooltip)
+            self._refresh_widget_style(button)
+
     def _configure_session_buttons(self):
         self.groupBox.hide()
         self.energy_feedback.hide()
@@ -762,6 +803,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _launch_app(self, key):
         spec = APP_DEFINITIONS[key]
+        supported, reason = self.app_support_status.get(key, (True, None))
+        if not supported:
+            message = reason or (
+                f"{spec['label']} is not configured for machine {self.machine_profile.machine.id!r}."
+            )
+            self._notify(message)
+            QMessageBox.warning(self, spec["label"], message)
+            self._refresh_process_state()
+            return
         if self.process_manager.is_running(key):
             self._notify(f"{spec['label']} is already running.")
             self._refresh_process_state()

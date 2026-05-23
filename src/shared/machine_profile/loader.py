@@ -28,12 +28,25 @@ from .models import (
 )
 
 
-SUPPORTED_APP_NAMES = {"orbit_correct", "bba", "emit_measure"}
+SUPPORTED_APP_NAMES = {
+    "orbit_correct",
+    "orbit_display",
+    "beam_monitor",
+    "bba",
+    "emit_measure",
+}
 MEASUREMENT_APP_NAMES = {"bba", "emit_measure"}
 APP_WORKFLOW_FILES = {
     "orbit": "orbit_correct.json",
     "bba": "bba.json",
     "emit_measure": "emit_measure.json",
+}
+APP_WORKFLOW_NAMES_BY_APP = {
+    "orbit_correct": ("orbit",),
+    "orbit_display": (),
+    "beam_monitor": (),
+    "bba": ("bba",),
+    "emit_measure": ("emit_measure",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",
@@ -63,7 +76,9 @@ def load_app_context(
         )
 
     profile_id = resolve_machine_id(machine_id)
-    profile = _load_profile_for_machine_id(profile_id)
+    required_workflows = APP_WORKFLOW_NAMES_BY_APP[app_name]
+    profile = _load_profile_for_machine_id(profile_id, workflow_names=required_workflows)
+    _validate_basic_app_support(profile, app_name)
     selected_control_backend = ControlBackendConfig(
         name=resolve_control_backend(control_backend, profile.machine.default_mode)
     )
@@ -74,9 +89,15 @@ def load_app_context(
         model_backend,
     )
 
-    orbit_workflow = load_orbit_workflow(profile)
-    bba_workflow = load_bba_workflow(profile)
-    emit_measure_workflow = load_emit_measure_workflow(profile)
+    orbit_workflow = None
+    bba_workflow = None
+    emit_measure_workflow = None
+    if app_name == "orbit_correct":
+        orbit_workflow = load_orbit_workflow(profile)
+    elif app_name == "bba":
+        bba_workflow = load_bba_workflow(profile)
+    elif app_name == "emit_measure":
+        emit_measure_workflow = load_emit_measure_workflow(profile)
 
     if app_name == "orbit_correct":
         selected_model_backend = None
@@ -95,6 +116,8 @@ def load_app_context(
 
 def load_orbit_workflow(profile: MachineProfile) -> OrbitWorkflowConfig:
     workflow = _expect_mapping(profile.workflows.get("orbit"), "workflows.orbit")
+    if not any(name in workflow for name in ("bpms", "xcors", "ycors")):
+        return _infer_orbit_workflow(profile)
     return OrbitWorkflowConfig(
         bpms=tuple(_expect_string_list(workflow.get("bpms"), "workflows.orbit.bpms")),
         xcors=tuple(_expect_string_list(workflow.get("xcors"), "workflows.orbit.xcors")),
@@ -118,11 +141,13 @@ def load_bba_workflow(profile: MachineProfile) -> BBAWorkflowConfig:
         workflow.get("standard"),
         "standard",
         "workflows.bba.standard",
+        presets,
     )
     bba2 = _parse_bba_family(
         workflow.get("bba2"),
         "bba2",
         "workflows.bba.bba2",
+        presets,
     )
     return BBAWorkflowConfig(
         presets=tuple(presets),
@@ -157,7 +182,7 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
             )
         ),
         default_preset=_expect_non_empty_string(
-            workflow.get("default_preset"),
+            workflow.get("default_preset") or _infer_emit_default_preset(presets),
             "workflows.emit_measure.default_preset",
         ),
     )
@@ -184,9 +209,19 @@ def list_machine_profile_ids() -> tuple[str, ...]:
     for candidate in sorted(machines_dir.iterdir(), key=lambda path: path.name):
         if not candidate.is_dir():
             continue
+        if candidate.name.startswith("_"):
+            continue
         if _has_directory_profile(candidate) or _has_legacy_profile(candidate):
             profile_ids.append(candidate.name)
     return tuple(profile_ids)
+
+
+def describe_app_support(machine_id: str | None, app_name: str) -> tuple[bool, str | None]:
+    try:
+        load_app_context(app_name, machine_id=machine_id)
+    except MachineProfileError as exc:
+        return False, str(exc)
+    return True, None
 
 
 def list_control_backend_choices(machine_id: str | None = None) -> tuple[str, ...]:
@@ -216,6 +251,26 @@ def resolve_machine_id(machine_id: str | None) -> str:
     return profile_id
 
 
+def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
+    if app_name in {"orbit_correct", "orbit_display"}:
+        bpm_count = sum(1 for element in profile.elements if element.kind == "bpm")
+        if bpm_count <= 0:
+            raise MachineProfileError(f"{app_name} requires at least one BPM element.")
+        return
+
+    if app_name == "beam_monitor":
+        supported_flags = [
+            element
+            for element in profile.elements
+            if element.kind == "flag" and "image" in element.channels
+        ]
+        if not supported_flags:
+            raise MachineProfileError(
+                "beam_monitor requires at least one flag element with logical channel 'image'."
+            )
+        return
+
+
 def resolve_control_backend(control_backend: str | None, default_mode: str) -> str:
     raw_control_backend = control_backend
     if raw_control_backend is None:
@@ -223,10 +278,13 @@ def resolve_control_backend(control_backend: str | None, default_mode: str) -> s
     return normalize_mode(raw_control_backend or default_mode, "control_backend")
 
 
-def _load_profile_for_machine_id(profile_id: str) -> MachineProfile:
+def _load_profile_for_machine_id(
+    profile_id: str,
+    workflow_names: tuple[str, ...] | None = None,
+) -> MachineProfile:
     root = machine_root(profile_id)
     if _has_directory_profile(root):
-        raw = _load_directory_profile_raw(root)
+        raw = _load_directory_profile_raw(root, workflow_names=workflow_names)
         return MachineProfile.from_dict(raw)
 
     raw = _load_legacy_profile_raw(root)
@@ -241,12 +299,15 @@ def _has_legacy_profile(root: Path) -> bool:
     return (root / "profile.json").is_file()
 
 
-def _load_directory_profile_raw(root: Path) -> Mapping[str, Any]:
+def _load_directory_profile_raw(
+    root: Path,
+    workflow_names: tuple[str, ...] | None = None,
+) -> Mapping[str, Any]:
     machine_data = _load_directory_machine_data(root)
     machine_config = _expect_mapping(machine_data.get("machine"), "machine.json.machine")
     elements_raw = _expect_list(machine_data.get("elements"), "machine.json.elements")
     backend_channels = _load_directory_control_backend_channels(root, machine_config)
-    workflows = _load_directory_workflows(root)
+    workflows = _load_directory_workflows(root, workflow_names=workflow_names)
 
     elements: list[dict[str, Any]] = []
     for index, raw_element in enumerate(elements_raw):
@@ -356,15 +417,32 @@ def _discover_directory_control_backends(root: Path) -> tuple[str, ...]:
     return tuple(dict.fromkeys(backend_names))
 
 
-def _load_directory_workflows(root: Path) -> Mapping[str, Any]:
+def _load_directory_workflows(
+    root: Path,
+    workflow_names: tuple[str, ...] | None = None,
+) -> Mapping[str, Any]:
     apps_dir = root / "apps"
+    selected_names = tuple(workflow_names or APP_WORKFLOW_FILES.keys())
     if not apps_dir.is_dir():
+        if not workflow_names:
+            return {"orbit": {}}
+        if workflow_names == ("orbit",):
+            return {"orbit": {}}
         raise MachineProfileError(f"Missing apps workflow directory: {apps_dir}")
 
     workflows: dict[str, Any] = {}
-    for workflow_name, filename in APP_WORKFLOW_FILES.items():
+    for workflow_name in selected_names:
+        filename = APP_WORKFLOW_FILES[workflow_name]
+        workflow_path = apps_dir / filename
+        if workflow_name == "orbit" and not workflow_path.is_file():
+            workflows[workflow_name] = {}
+            continue
+        if not workflow_path.is_file():
+            if workflow_names is None:
+                continue
+            raise MachineProfileError(f"Missing configuration file: apps/{filename}")
         workflows[workflow_name] = _load_json_file(
-            apps_dir / filename,
+            workflow_path,
             f"apps/{filename}",
         )
     return workflows
@@ -471,6 +549,39 @@ def _resolve_model_config_paths(config: Mapping[str, Any]) -> Mapping[str, Any]:
     return resolved
 
 
+def _infer_orbit_workflow(profile: MachineProfile) -> OrbitWorkflowConfig:
+    bpm_ids = _infer_orbit_ids(profile, kind="bpm")
+    xcor_ids = _infer_orbit_ids(profile, kind="corr", plane="x")
+    ycor_ids = _infer_orbit_ids(profile, kind="corr", plane="y")
+    pair_count = min(len(bpm_ids), len(xcor_ids), len(ycor_ids))
+    if pair_count <= 0:
+        raise MachineProfileError(
+            "Cannot infer workflows.orbit because the machine profile does not define "
+            "enough BPM/XCOR/YCOR elements."
+        )
+    return OrbitWorkflowConfig(
+        bpms=tuple(bpm_ids[:pair_count]),
+        xcors=tuple(xcor_ids[:pair_count]),
+        ycors=tuple(ycor_ids[:pair_count]),
+    )
+
+
+def _infer_orbit_ids(
+    profile: MachineProfile,
+    *,
+    kind: str,
+    plane: str | None = None,
+) -> list[str]:
+    candidates = [
+        element
+        for element in profile.elements
+        if element.kind == kind and (plane is None or element.plane == plane)
+    ]
+    tagged = [element for element in candidates if "orbit" in element.tags]
+    source = tagged if tagged else candidates
+    return [element.id for element in source]
+
+
 def _legacy_default_elegant_model_config() -> Mapping[str, Any]:
     root = Path(st.rootpath)
     elegant_dir = root / "src" / "virtual_machine" / "half_elegant" / "elegant"
@@ -524,8 +635,13 @@ def _parse_bba_preset(raw_preset: Any, location: str) -> BBAPreset:
     )
 
 
-def _parse_bba_family(raw_family: Any, name: str, location: str) -> BBAFamilyConfig:
-    family = _expect_mapping(raw_family, location)
+def _parse_bba_family(
+    raw_family: Any,
+    name: str,
+    location: str,
+    presets: list[BBAPreset],
+) -> BBAFamilyConfig:
+    family = _expect_optional_mapping(raw_family, location)
     control_backends: tuple[str, ...] = ()
     if "control_backends" in family:
         control_backends = tuple(
@@ -546,7 +662,10 @@ def _parse_bba_family(raw_family: Any, name: str, location: str) -> BBAFamilyCon
         quads=tuple(_expect_optional_string_list(family.get("quads"), f"{location}.quads")),
         bpm1=tuple(_expect_optional_string_list(family.get("bpm1"), f"{location}.bpm1")),
         bpm2=tuple(_expect_optional_string_list(family.get("bpm2"), f"{location}.bpm2")),
-        default_preset=_expect_non_empty_string(family.get("default_preset"), f"{location}.default_preset"),
+        default_preset=_expect_non_empty_string(
+            family.get("default_preset") or _infer_bba_default_preset(presets, name),
+            f"{location}.default_preset",
+        ),
         control_backends=control_backends,
     )
 
@@ -608,6 +727,21 @@ def _parse_emit_analysis_config(raw_analysis: Mapping[str, Any]) -> EmitAnalysis
     )
 
 
+def _infer_bba_default_preset(presets: list[BBAPreset], family_name: str) -> str:
+    for preset in presets:
+        if preset.family == family_name:
+            return preset.id
+    raise MachineProfileError(
+        f"Could not infer default preset for BBA family {family_name!r}: no matching preset found."
+    )
+
+
+def _infer_emit_default_preset(presets: list[EmitPreset]) -> str:
+    if not presets:
+        raise MachineProfileError("workflows.emit_measure.presets must contain at least one preset.")
+    return presets[0].id
+
+
 def _optional_float(raw_mapping: Mapping[str, Any], key: str) -> float | None:
     value = raw_mapping.get(key)
     return float(value) if value is not None else None
@@ -629,6 +763,12 @@ def _expect_mapping(value: Any, location: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise MachineProfileError(f"{location} must be a mapping.")
     return value
+
+
+def _expect_optional_mapping(value: Any, location: str) -> Mapping[str, Any]:
+    if value is None:
+        return {}
+    return _expect_mapping(value, location)
 
 
 def _expect_list(value: Any, location: str) -> list[Any]:
