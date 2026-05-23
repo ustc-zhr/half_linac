@@ -5,8 +5,6 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
-import half_linac.runtime_config as st
-
 from .models import (
     AppContext,
     BBAAnalysisConfig,
@@ -32,19 +30,23 @@ SUPPORTED_APP_NAMES = {
     "orbit_correct",
     "orbit_display",
     "beam_monitor",
+    "energy_spectrum",
     "bba",
     "emit_measure",
 }
 MEASUREMENT_APP_NAMES = {"bba", "emit_measure"}
 APP_WORKFLOW_FILES = {
     "orbit": "orbit_correct.json",
+    "beam_monitor": "beam_monitor.json",
+    "energy_spectrum": "energy_spectrum.json",
     "bba": "bba.json",
     "emit_measure": "emit_measure.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
     "orbit_display": (),
-    "beam_monitor": (),
+    "beam_monitor": ("beam_monitor",),
+    "energy_spectrum": ("energy_spectrum",),
     "bba": ("bba",),
     "emit_measure": ("emit_measure",),
 }
@@ -268,6 +270,19 @@ def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
             raise MachineProfileError(
                 "beam_monitor requires at least one flag element with logical channel 'image'."
             )
+        workflow = profile.workflows.get("beam_monitor")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError("beam_monitor requires apps/beam_monitor.json.")
+        _validate_beam_monitor_workflow(workflow)
+        return
+
+    if app_name == "energy_spectrum":
+        workflow = profile.workflows.get("energy_spectrum")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError(
+                "energy_spectrum requires apps/energy_spectrum.json."
+            )
+        _validate_energy_spectrum_workflow(profile, workflow)
         return
 
 
@@ -478,6 +493,163 @@ def _resolve_model_backend(
     return ModelBackendConfig(name=backend_name)
 
 
+def _validate_energy_spectrum_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+) -> None:
+    required_keys = (
+        "flag_element",
+        "flag_image_channel",
+        "bend_element",
+        "bend_channel",
+        "esa_quads",
+        "flag_pixel_shape",
+        "flag_pixel_width_mm",
+    )
+    missing = [key for key in required_keys if key not in workflow]
+    if missing:
+        raise MachineProfileError(
+            "workflows.energy_spectrum is missing required keys: "
+            + ", ".join(sorted(missing))
+        )
+
+    flag_element = profile.get_element(
+        _expect_non_empty_string(workflow.get("flag_element"), "workflows.energy_spectrum.flag_element")
+    )
+    flag_image_channel = _expect_non_empty_string(
+        workflow.get("flag_image_channel"),
+        "workflows.energy_spectrum.flag_image_channel",
+    )
+    if flag_image_channel not in flag_element.channels:
+        raise MachineProfileError(
+            f"Element {flag_element.id} is missing logical channel {flag_image_channel!r} "
+            "required by workflows.energy_spectrum.flag_image_channel."
+        )
+
+    exposure_channel = workflow.get("flag_exposure_channel")
+    if exposure_channel:
+        exposure_name = _expect_non_empty_string(
+            exposure_channel,
+            "workflows.energy_spectrum.flag_exposure_channel",
+        )
+        if exposure_name not in flag_element.channels:
+            raise MachineProfileError(
+                f"Element {flag_element.id} is missing logical channel {exposure_name!r} "
+                "required by workflows.energy_spectrum.flag_exposure_channel."
+            )
+
+    bend_element = profile.get_element(
+        _expect_non_empty_string(workflow.get("bend_element"), "workflows.energy_spectrum.bend_element")
+    )
+    bend_channel = _expect_non_empty_string(
+        workflow.get("bend_channel"),
+        "workflows.energy_spectrum.bend_channel",
+    )
+    if bend_channel not in bend_element.channels:
+        raise MachineProfileError(
+            f"Element {bend_element.id} is missing logical channel {bend_channel!r} "
+            "required by workflows.energy_spectrum.bend_channel."
+        )
+
+    esa_quads = _expect_string_list(
+        workflow.get("esa_quads"),
+        "workflows.energy_spectrum.esa_quads",
+    )
+    if not esa_quads:
+        raise MachineProfileError("workflows.energy_spectrum.esa_quads must not be empty.")
+    for element_id in esa_quads:
+        element = profile.get_element(element_id)
+        if "k1" not in element.channels:
+            raise MachineProfileError(
+                f"Element {element_id} is missing logical channel 'k1' required by "
+                "workflows.energy_spectrum.esa_quads."
+            )
+
+    default_start = workflow.get("default_start_element")
+    if default_start:
+        element = profile.get_element(
+            _expect_non_empty_string(
+                default_start,
+                "workflows.energy_spectrum.default_start_element",
+            )
+        )
+        if element.kind != "quad":
+            raise MachineProfileError(
+                "workflows.energy_spectrum.default_start_element must reference a quad element."
+            )
+
+    pixel_shape = _expect_mapping(
+        workflow.get("flag_pixel_shape"),
+        "workflows.energy_spectrum.flag_pixel_shape",
+    )
+    pixel_width = _expect_mapping(
+        workflow.get("flag_pixel_width_mm"),
+        "workflows.energy_spectrum.flag_pixel_width_mm",
+    )
+    for backend_name in ("vm", "real"):
+        shape = pixel_shape.get(backend_name)
+        if not isinstance(shape, list) or len(shape) != 2:
+            raise MachineProfileError(
+                f"workflows.energy_spectrum.flag_pixel_shape.{backend_name} must be [nx, ny]."
+            )
+        if backend_name not in pixel_width:
+            raise MachineProfileError(
+                f"workflows.energy_spectrum.flag_pixel_width_mm is missing backend {backend_name!r}."
+            )
+
+    conversion = workflow.get("energy_from_bend_current")
+    if conversion is not None:
+        conversion_map = _expect_mapping(
+            conversion,
+            "workflows.energy_spectrum.energy_from_bend_current",
+        )
+        for key in ("magnet_length_m", "deflect_angle_rad", "field_t_per_a"):
+            value = conversion_map.get(key)
+            if value is None:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.energy_from_bend_current.{key} is required when "
+                    "energy_from_bend_current is provided."
+                )
+            try:
+                float(value)
+            except (TypeError, ValueError) as exc:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.energy_from_bend_current.{key} must be numeric."
+                ) from exc
+
+
+def _validate_beam_monitor_workflow(workflow: Mapping[str, Any]) -> None:
+    required_keys = (
+        "flag_pixel_shape",
+        "flag_pixel_width_mm",
+    )
+    missing = [key for key in required_keys if key not in workflow]
+    if missing:
+        raise MachineProfileError(
+            "workflows.beam_monitor is missing required keys: "
+            + ", ".join(sorted(missing))
+        )
+
+    pixel_shape = _expect_mapping(
+        workflow.get("flag_pixel_shape"),
+        "workflows.beam_monitor.flag_pixel_shape",
+    )
+    pixel_width = _expect_mapping(
+        workflow.get("flag_pixel_width_mm"),
+        "workflows.beam_monitor.flag_pixel_width_mm",
+    )
+    for backend_name in ("vm", "real"):
+        shape = pixel_shape.get(backend_name)
+        if not isinstance(shape, list) or len(shape) != 2:
+            raise MachineProfileError(
+                f"workflows.beam_monitor.flag_pixel_shape.{backend_name} must be [nx, ny]."
+            )
+        if backend_name not in pixel_width:
+            raise MachineProfileError(
+                f"workflows.beam_monitor.flag_pixel_width_mm is missing backend {backend_name!r}."
+            )
+
+
 def _load_directory_model_backend(
     root: Path,
     requested: str | None,
@@ -583,7 +755,7 @@ def _infer_orbit_ids(
 
 
 def _legacy_default_elegant_model_config() -> Mapping[str, Any]:
-    root = Path(st.rootpath)
+    root = repo_root()
     elegant_dir = root / "src" / "virtual_machine" / "half_elegant" / "elegant"
     vm_dir = root / "src" / "virtual_machine" / "half_elegant"
     return {

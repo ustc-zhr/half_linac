@@ -15,6 +15,7 @@ This template is intentionally hidden from the runtime selector by the leading u
   - `control_backends/real.json`
 - `apps/orbit_correct.json` is optional.
   If omitted, orbit BPM/XCOR/YCOR lists are inferred from machine element order.
+  If present, it may also hold small runtime facts such as response wait time or corrector limit.
 
 2. Add BBA later
 
@@ -23,6 +24,18 @@ This template is intentionally hidden from the runtime selector by the leading u
 3. Add emit_measure later
 
 - Add or edit `apps/emit_measure.json`
+
+4. Add beam_monitor later
+
+- Add or edit `apps/beam_monitor.json`
+- Set the shared flag image geometry for `vm` and `real`
+
+5. Add energy_spectrum later
+
+- Add or edit `apps/energy_spectrum.json`
+- Add one flag with `esa_image`
+- Add one bend with `current_set`
+- Add the three ESA quads referenced by the app config
 
 ## Design Direction
 

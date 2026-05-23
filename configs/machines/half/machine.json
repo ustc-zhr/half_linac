@@ -2115,7 +2115,8 @@
       "order": 148,
       "tags": [
         "bba",
-        "emit"
+        "emit",
+        "esa_start"
       ],
       "limits": {},
       "logical_channels": [
@@ -2129,7 +2130,8 @@
       "order": 149,
       "tags": [
         "bba",
-        "emit"
+        "emit",
+        "esa_start"
       ],
       "limits": {},
       "logical_channels": [
@@ -2171,7 +2173,8 @@
       "order": 152,
       "tags": [
         "bba",
-        "emit"
+        "emit",
+        "esa_start"
       ],
       "limits": {},
       "logical_channels": [
@@ -2179,10 +2182,62 @@
       ]
     },
     {
+      "id": "QE01",
+      "kind": "quad",
+      "display_name": "QE01",
+      "order": 153,
+      "tags": [
+        "energy_spectrum"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "QE02",
+      "kind": "quad",
+      "display_name": "QE02",
+      "order": 154,
+      "tags": [
+        "energy_spectrum"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "QE03",
+      "kind": "quad",
+      "display_name": "QE03",
+      "order": 155,
+      "tags": [
+        "energy_spectrum"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
+      "id": "SM",
+      "kind": "bend",
+      "display_name": "SM",
+      "order": 156,
+      "tags": [
+        "energy_spectrum"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "current_set"
+      ]
+    },
+    {
       "id": "QT18",
       "kind": "quad",
       "display_name": "QT18",
-      "order": 153,
+      "order": 157,
       "tags": [
         "bba",
         "emit"
@@ -2196,7 +2251,7 @@
       "id": "PRF04",
       "kind": "flag",
       "display_name": "PRF04",
-      "order": 154,
+      "order": 158,
       "tags": [
         "emit"
       ],
@@ -2212,7 +2267,7 @@
       "id": "PRF06",
       "kind": "flag",
       "display_name": "PRF06",
-      "order": 155,
+      "order": 159,
       "tags": [
         "emit"
       ],
@@ -2228,13 +2283,15 @@
       "id": "PRF07",
       "kind": "flag",
       "display_name": "PRF07",
-      "order": 156,
+      "order": 160,
       "tags": [
-        "emit"
+        "emit",
+        "energy_spectrum"
       ],
       "limits": {},
       "logical_channels": [
         "image",
+        "esa_image",
         "exposure_time",
         "sigx",
         "sigy"
@@ -2244,7 +2301,7 @@
       "id": "PRF08",
       "kind": "flag",
       "display_name": "PRF08",
-      "order": 157,
+      "order": 161,
       "tags": [
         "emit"
       ],

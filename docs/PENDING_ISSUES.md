@@ -19,3 +19,25 @@
   - If needed, distinguish clearly between:
     - machine-native presets
     - migrated legacy presets kept only for compatibility
+
+### 2. Energy Spectrum Auto Find Scan Trace
+
+- Status: open
+- Priority: low
+- Background:
+  - `energy_spectrum` Auto Find now runs in a background thread and updates the flag image step by step while scanning.
+  - During commissioning it can still be useful to review how the scan moved through current points before selecting the final bend setting.
+- Problem:
+  - The GUI currently shows live progress, but it does not yet keep a structured trace of the scan.
+  - Operators cannot yet review a compact history such as:
+    - scanned current points
+    - whether beam was detected at each point
+    - score used by the tuner
+- Follow-up:
+  - Add an optional lightweight trace view or temporary table for Auto Find.
+  - Prefer a simple operator-facing design first:
+    - current
+    - coarse/fine stage
+    - beam yes/no
+    - score
+  - Keep this separate from the core tuner logic so the scan algorithm stays simple.

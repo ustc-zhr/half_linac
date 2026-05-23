@@ -29,7 +29,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
     describe_app_support,
     load_profile,
@@ -42,8 +41,7 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
 from gui import Ui_MainWindow
 
-
-ROOT = Path(st.rootpath)
+ROOT = _REPO_BOOTSTRAP_ROOT
 HEADER_ACTION_HEIGHT = 32
 
 DARK_THEME = {
@@ -515,8 +513,8 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Energy Spectrum",
         "label": "Energy Spectrum",
-        "description": "Inspect the energy spectrum workflow in VM mode.",
-        "cmd": ["python3", "main.py", "vm"],
+        "description": "Inspect the energy spectrum workflow with the current machine/backend runtime.",
+        "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/energy_spectrum",
     },
     "bba": {
@@ -563,6 +561,7 @@ CONTROL_KEYS = {
 PROFILE_MANAGED_APP_KEYS = {
     "orbitdisplay": "orbit_display",
     "beammonitor": "beam_monitor",
+    "energy_spectrum": "energy_spectrum",
     "bba": "bba",
     "orbit_correct": "orbit_correct",
     "emitmeasure": "emit_measure",

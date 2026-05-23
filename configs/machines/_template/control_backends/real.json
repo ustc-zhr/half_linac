@@ -18,8 +18,21 @@
     "Q01": {
       "k1": "TEMPLATE:REAL:Q01:K1"
     },
+    "QE01": {
+      "k1": "TEMPLATE:REAL:QE01:K1"
+    },
+    "QE02": {
+      "k1": "TEMPLATE:REAL:QE02:K1"
+    },
+    "QE03": {
+      "k1": "TEMPLATE:REAL:QE03:K1"
+    },
+    "BEND01": {
+      "current_set": "TEMPLATE:REAL:BEND01:CURRENT_SET"
+    },
     "PRF01": {
       "image": "TEMPLATE:REAL:PRF01:IMAGE",
+      "esa_image": "TEMPLATE:REAL:PRF01:ESA_IMAGE",
       "exposure_time": "TEMPLATE:REAL:PRF01:EXPTIME",
       "sigx": "TEMPLATE:REAL:PRF01:SIGX",
       "sigy": "TEMPLATE:REAL:PRF01:SIGY"

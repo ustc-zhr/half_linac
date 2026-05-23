@@ -24,8 +24,11 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import load_app_context, resolve_channel
+from half_linac.src.apps.orbit_correct.profile_runtime import (
+    RESPONSE_MATRIX_PATH,
+    load_orbit_runtime_settings,
+)
 
 
 class EnergyCheckError(RuntimeError):
@@ -71,6 +74,7 @@ def estimate_energy_consistency(
     if workflow is None:
         raise EnergyCheckError("Orbit workflow is not available in the current app context.")
     mode = app_context.control_backend.name
+    orbit_runtime = load_orbit_runtime_settings(app_context)
 
     bpm_ids = list(workflow.bpms)
     xcor_ids = list(workflow.xcors)
@@ -92,12 +96,12 @@ def estimate_energy_consistency(
     bpm_pv = PV(resolve_channel(app_context, bpm_id, plane))
     cor_pv = PV(resolve_channel(app_context, corrector_id, "setpoint"))
 
-    response_file = Path(st.rootpath) / "src" / "apps" / "orbit_correct" / "response.txt"
+    response_file = RESPONSE_MATRIX_PATH
     inverse_block = _load_inverse_response_block(response_file, n_bpm, n_cor, plane)
 
     wait_s = interval_s
     if wait_s is None:
-        wait_s = st.runtime_vmmachine if mode == "vm" else st.runtime_machine
+        wait_s = orbit_runtime["response_wait_s"]
 
     original_corrector = cor_pv.get()
     if original_corrector is None:

@@ -18,6 +18,7 @@ class ESA_AutoTuner:
                  flag_pixel,
                  bend_pv,
                  mode="find_beam",
+                 progress_callback=None,
                  remove_bg=False,
                  bg_image=None):
         """
@@ -35,6 +36,7 @@ class ESA_AutoTuner:
         self.bend_pv = bend_pv
 
         self.mode = mode   
+        self.progress_callback = progress_callback
         self.remove_bg = remove_bg
         self.bg_image = bg_image
 
@@ -64,6 +66,18 @@ class ESA_AutoTuner:
 
         return img
 
+    def _report_progress(self, stage, current, *, has_beam, score=None):
+        if self.progress_callback is None:
+            return
+        self.progress_callback(
+            {
+                "stage": stage,
+                "current": float(current),
+                "has_beam": bool(has_beam),
+                "score": None if score is None else float(score),
+            }
+        )
+
     def _detect_beam(self, img):
         """
         Robust single-shot beam detection
@@ -81,17 +95,17 @@ class ESA_AutoTuner:
         labels = measure.label(binary)
         regions = measure.regionprops(labels)
         if not regions:
-            return False, 0.0
+            return False, 0.0, None
         region = max(regions, key=lambda r: r.area)
 
         # 该区域必须： 
         # 面积适中（50 ~ 100,000 像素）    
         if region.area < 50 or region.area > 1e5:
-            return False, 0.0
+            return False, 0.0, None
         # 不能太细长（长宽比 ≤ 6）
         aspect = region.major_axis_length / max(region.minor_axis_length, 1)
         if aspect > 6:
-            return False, 0.0
+            return False, 0.0, None
 
         # -----------------------------
         # beam properties
@@ -122,7 +136,8 @@ class ESA_AutoTuner:
         for B in np.linspace(B_min, B_max, n_steps):
             self._set_bend(B)
             img = self._get_flag_image()
-            has_beam, score = self._detect_beam(img)
+            has_beam, score, _ = self._detect_beam(img)
+            self._report_progress("coarse", B, has_beam=has_beam, score=score)
 
             if has_beam:
                 hits.append(B)
@@ -145,14 +160,16 @@ class ESA_AutoTuner:
             scores = []
             for _ in range(3):  # median over 3 pulses
                 img = self._get_flag_image()
-                has_beam, score = self._detect_beam(img)
+                has_beam, score, _ = self._detect_beam(img)
                 if has_beam:
                     scores.append(score)
 
             if not scores:
+                self._report_progress("fine", B, has_beam=False, score=None)
                 continue
 
             score_med = np.median(scores)
+            self._report_progress("fine", B, has_beam=True, score=score_med)
             if score_med > best_score:
                 best_score = score_med
                 best_B = B
@@ -185,6 +202,7 @@ class ESA_AutoTuner:
             return None
 
         self._set_bend(best_B)
+        self._report_progress("final", best_B, has_beam=True, score=None)
         self.best_current = best_B
         self.status = "DONE"
         return best_B

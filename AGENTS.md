@@ -20,7 +20,7 @@
 - Treat `src/optimization/GOTAcc/` and `src/apps/jitter_analysis/` as externally maintained integration code: prefer launcher, wrapper, config, or compatibility fixes around them, and avoid large functional changes inside those vendored subtrees unless the user explicitly asks.
 - Keep `src/apps/jitter_analysis/` outside the current machine-profile generalization scope unless the user explicitly asks to integrate it. Treat it like `GOTAcc`: it may keep its own runtime logic for now.
 - Keep architectural or workflow notes short in `AGENTS.md`; deeper explanations belong in `docs/` or `README.md`.
-- Prefer simple and easy-to-maintain machine-profile design: default to dynamic loading by `kind`, and only add `plane` or minimal tags when physically necessary. Avoid fine-grained app-specific role taxonomies unless the simpler approach clearly fails. Do not duplicate selectable element lists in app workflow config when they can be derived from machine-native element types.
+- Prefer simple and easy-to-maintain machine-profile design: default to dynamic loading by `kind`, and only add `plane` or minimal tags when physically necessary. Avoid fine-grained app-specific role taxonomies unless the simpler approach clearly fails. Do not duplicate selectable element lists in app workflow config when they can be derived from machine-native element types. Reserve app workflow config for small facts that cannot be inferred cleanly, such as image geometry, scan defaults, or one recommended default element.
 
 ## Safety Rules
 - Default to offline analysis and VM-oriented workflows.

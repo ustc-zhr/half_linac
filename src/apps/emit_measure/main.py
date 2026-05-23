@@ -38,7 +38,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
     build_model_backend,
     get_emit_preset,
@@ -52,10 +51,8 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
 )
 
 nest_dict    = lambda: defaultdict(nest_dict)
-
-#
-jsonpath     = st.rootpath+"/src/virtual_machine/half_elegant/halflinac.json"
 SCAN_RESULTS_PATH    = Path(__file__).resolve().parent / "scanResults.txt"
+ELECTRON_MASS_EV = 0.51099895000e6
 
 HEADER_ACTION_HEIGHT = 32
 
@@ -1031,12 +1028,12 @@ class myWindow(QWidget,Ui_Form):
     #         f.write(json.dumps(ltepre,indent=4))
         
     #     # wait the vm run
-    #     time.sleep(st.runtime_vmmachine)
+    #     time.sleep(backend-dependent refresh interval)
     #     print("pre.bun before ",quad," is ready")
 
     #     # get the energy before quad
     #     tmp = sdds.SDDS(0)
-    #     tmp.load(st.rootpath+"/src/virtual_machine/half_elegant/elegant/one.cen")
+    #     tmp.load(str((_REPO_BOOTSTRAP_ROOT / "src/virtual_machine/half_elegant/elegant/one.cen")))
     #     tmppCentral = tmp.columnData[11][0][-1]
 
     #     # simply VM
@@ -1545,6 +1542,7 @@ class scanThread(QThread):
         self.EnergyMeV  = paras.EnergyMeV
         self.sleeptime  = paras.sleeptime
         self.model_backend = build_model_backend(self.app_context, energy_mev=self.EnergyMeV)
+        self.model_source_json = Path(self.app_context.model_backend.config["source_json"])
 
         self.recal      = paras.recal 
         self.is_running = True
@@ -1742,7 +1740,7 @@ class scanThread(QThread):
             alpha = -sig12/ex
             gamma = sig22/ex
             
-            gam0 = self.EnergyMeV*1e6/st.electron_mass
+            gam0 = self.EnergyMeV * 1e6 / ELECTRON_MASS_EV
             exn = ex*gam0
             
             #print("exn,beta,alpha,gamma",exn,beta,alpha,gamma)
@@ -1774,7 +1772,7 @@ class scanThread(QThread):
         # err_sigx = np.max(sigxl,1)**2 - sigx_ave**2
         err_sigx = np.std(sigxl, axis=1)
 
-        with open(jsonpath,"r") as f:
+        with self.model_source_json.open("r", encoding="utf-8") as f:
             lte = json.load(f)
 
         lattice = lte["lattice"]
@@ -1828,7 +1826,7 @@ class scanThread(QThread):
         beta  = 2*a/fac
         gamma = (1+alpha**2)/beta
         
-        gam0 = self.EnergyMeV*1e6/st.electron_mass
+        gam0 = self.EnergyMeV * 1e6 / ELECTRON_MASS_EV
         exn = ex*gam0
         
         #print("exn,beta,alpha,gamma",exn,beta,alpha,gamma)

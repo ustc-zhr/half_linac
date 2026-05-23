@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+PARENT = REPO_ROOT.parent
+if str(PARENT) not in sys.path:
+    sys.path.insert(0, str(PARENT))
+
+from half_linac.src.apps.energy_spectrum.get_energy0 import get_energy0
+from half_linac.src.shared.machine_profile import get_workflow, load_profile
+
+
+class Energy0ConversionTests(unittest.TestCase):
+    def test_get_energy0_uses_configurable_conversion(self):
+        default_energy = get_energy0(100.0)
+        custom_energy = get_energy0(
+            100.0,
+            {
+                "magnet_length_m": 1.0,
+                "deflect_angle_rad": 0.5,
+                "field_t_per_a": 1.0e-3,
+            },
+        )
+        self.assertNotEqual(default_energy, custom_energy)
+        self.assertAlmostEqual(custom_energy, 59.9584916, places=6)
+
+    def test_half_energy_spectrum_workflow_exposes_bend_energy_conversion(self):
+        profile = load_profile("half")
+        workflow = get_workflow(profile, "energy_spectrum")
+        conversion = workflow["energy_from_bend_current"]
+        self.assertAlmostEqual(conversion["magnet_length_m"], 2.7271)
+        self.assertAlmostEqual(conversion["deflect_angle_rad"], 0.4363323129985824)
+        self.assertAlmostEqual(conversion["field_t_per_a"], 0.000599792458)
+
+
+if __name__ == "__main__":
+    unittest.main()

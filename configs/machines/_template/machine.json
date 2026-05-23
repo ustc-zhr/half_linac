@@ -48,18 +48,54 @@
       "kind": "quad",
       "display_name": "Q01",
       "order": 5,
-      "tags": ["bba", "emit"],
+      "tags": ["bba", "emit", "esa_start"],
       "limits": {},
       "logical_channels": ["k1"]
+    },
+    {
+      "id": "QE01",
+      "kind": "quad",
+      "display_name": "QE01",
+      "order": 6,
+      "tags": ["energy_spectrum"],
+      "limits": {},
+      "logical_channels": ["k1"]
+    },
+    {
+      "id": "QE02",
+      "kind": "quad",
+      "display_name": "QE02",
+      "order": 7,
+      "tags": ["energy_spectrum"],
+      "limits": {},
+      "logical_channels": ["k1"]
+    },
+    {
+      "id": "QE03",
+      "kind": "quad",
+      "display_name": "QE03",
+      "order": 8,
+      "tags": ["energy_spectrum"],
+      "limits": {},
+      "logical_channels": ["k1"]
+    },
+    {
+      "id": "BEND01",
+      "kind": "bend",
+      "display_name": "BEND01",
+      "order": 9,
+      "tags": ["energy_spectrum"],
+      "limits": {},
+      "logical_channels": ["current_set"]
     },
     {
       "id": "PRF01",
       "kind": "flag",
       "display_name": "PRF01",
-      "order": 6,
-      "tags": ["emit"],
+      "order": 10,
+      "tags": ["emit", "energy_spectrum"],
       "limits": {},
-      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
+      "logical_channels": ["image", "esa_image", "exposure_time", "sigx", "sigy"]
     }
   ]
 }

@@ -54,6 +54,7 @@ def list_elements(
     kind: str | None = None,
     role: str | None = None,
     plane: str | None = None,
+    logical_channel: str | None = None,
 ) -> list[ElementConfig]:
     profile = target.profile if isinstance(target, AppContext) else target
     normalized_plane = normalize_plane(plane, "plane") if plane is not None else None
@@ -64,6 +65,8 @@ def list_elements(
         elements = [element for element in elements if role in element.roles]
     if normalized_plane is not None:
         elements = [element for element in elements if element.plane == normalized_plane]
+    if logical_channel is not None:
+        elements = [element for element in elements if logical_channel in element.channels]
     return elements
 
 

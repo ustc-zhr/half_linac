@@ -34,8 +34,8 @@ from PyQt5.QtWidgets import (
 from scipy.optimize import curve_fit
 
 from gui import Ui_Form
-import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
+    get_workflow,
     list_elements,
     load_app_context,
     resolve_channel,
@@ -397,7 +397,8 @@ class myWindow(QWidget, Ui_Form):
         self.app_context = load_app_context("beam_monitor")
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
-        self.flag_elements = list_elements(self.app_context, kind="flag")
+        self.beam_monitor_config = get_workflow(self.machine_profile, "beam_monitor")
+        self.flag_elements = list_elements(self.app_context, kind="flag", logical_channel="image")
         self.flag_ids = [element.id for element in self.flag_elements]
 
         self.current_theme = "dark"
@@ -411,11 +412,7 @@ class myWindow(QWidget, Ui_Form):
         self.sigx = None
         self.sigy = None
 
-        self.width = st.flag_pixel_vm[0] * st.flag_pixel_width
-        self.height = st.flag_pixel_vm[1] * st.flag_pixel_width
-        self.xlim = (-0.5 * self.width, 0.5 * self.width)
-        self.ylim = (-0.5 * self.height, 0.5 * self.height)
-        self.extent = self.xlim + self.ylim
+        self._configure_pixel_geometry()
 
         self._configure_window()
         self._build_shell()
@@ -659,7 +656,10 @@ class myWindow(QWidget, Ui_Form):
     def _configure_default_state(self):
         self.pushButton.setEnabled(False)
         self.pushButton_2.setEnabled(True)
-        if "PRF06" in self.flag_ids:
+        default_flag = str(self.beam_monitor_config.get("default_flag", "")).strip()
+        if default_flag and default_flag in self.flag_ids:
+            self.flag_selec.setCurrentText(default_flag)
+        elif "PRF06" in self.flag_ids:
             self.flag_selec.setCurrentText("PRF06")
         elif self.flag_ids:
             self.flag_selec.setCurrentIndex(0)
@@ -808,6 +808,35 @@ class myWindow(QWidget, Ui_Form):
     def _current_mode(self):
         return self.control_backend
 
+    def _configure_pixel_geometry(self):
+        pixel_shape = self._select_backend_value(
+            self.beam_monitor_config["flag_pixel_shape"],
+            "workflows.beam_monitor.flag_pixel_shape",
+        )
+        if not isinstance(pixel_shape, list) or len(pixel_shape) != 2:
+            raise ValueError(
+                "workflows.beam_monitor.flag_pixel_shape must provide [nx, ny] per backend."
+            )
+        self.pixel = (int(pixel_shape[0]), int(pixel_shape[1]))
+        pixel_width = float(
+            self._select_backend_value(
+                self.beam_monitor_config["flag_pixel_width_mm"],
+                "workflows.beam_monitor.flag_pixel_width_mm",
+            )
+        )
+        self.width = self.pixel[0] * pixel_width
+        self.height = self.pixel[1] * pixel_width
+        self.xlim = (-0.5 * self.width, 0.5 * self.width)
+        self.ylim = (-0.5 * self.height, 0.5 * self.height)
+        self.extent = self.xlim + self.ylim
+
+    def _select_backend_value(self, values, location):
+        if not isinstance(values, dict):
+            raise ValueError(f"{location} must provide per-backend values.")
+        if self.control_backend not in values:
+            raise ValueError(f"{location} is missing backend {self.control_backend!r}.")
+        return values[self.control_backend]
+
     def _get_refresh_interval_ms(self):
         text = self.lineEdit_9.text().strip()
         if not text:
@@ -847,7 +876,6 @@ class myWindow(QWidget, Ui_Form):
             self.expoTimePV = None
 
         if mode == "real":
-            self.pixel = st.flag_pixel
             if self.expoTimePV is not None:
                 try:
                     expoTime = caget(self.expoTimePV)
@@ -856,7 +884,6 @@ class myWindow(QWidget, Ui_Form):
                 except Exception as exc:
                     self._mark_pv_unavailable(exc)
         elif mode == "vm":
-            self.pixel = st.flag_pixel_vm
             self.lineEdit.setText("VM")
         else:
             print("Error, usage: python main.py [real|vm]")

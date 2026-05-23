@@ -30,7 +30,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
@@ -41,6 +40,8 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
     request_runtime_restart,
 )
 from gui import Ui_MainWindow
+
+APP_DIR = Path(__file__).resolve().parent
 
 
 HEADER_ACTION_HEIGHT = 32
@@ -884,7 +885,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._notify("Opening BPM detail window.")
         Popen(
             ["python3", "submain.py"],
-            cwd=st.rootpath + "/src/apps/orbit_display",
+            cwd=str(APP_DIR),
             shell=False,
         )
 

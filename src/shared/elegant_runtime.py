@@ -1,10 +1,15 @@
 from pathlib import Path
 import subprocess
 
-import half_linac.runtime_config as st
+def _repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "repo_bootstrap.py").is_file():
+            return parent
+    raise RuntimeError("Could not locate repo root for elegant runtime.")
 
 
-VM_ELEGANT_DIR = Path(st.rootpath) / "src/virtual_machine/half_elegant/elegant"
+VM_ELEGANT_DIR = _repo_root() / "src/virtual_machine/half_elegant/elegant"
 
 
 def run_elegant_input(ele_name, log_name):

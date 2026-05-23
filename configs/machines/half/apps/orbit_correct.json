@@ -127,5 +127,10 @@
     "YC41",
     "YC42",
     "YC43"
-  ]
+  ],
+  "response_wait_s_by_backend": {
+    "vm": 8,
+    "real": 8
+  },
+  "corrector_upperlimit_rad": 0.001
 }

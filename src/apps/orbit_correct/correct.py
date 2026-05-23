@@ -2,7 +2,6 @@ import time
 import logging
 import numpy as np
 import sys
-from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -17,10 +16,15 @@ ensure_repo_import_path(__file__)
 from typing import List, Optional, Tuple, Union
 from epics import caput_many, PV, caget_many
 from scipy.linalg import svd
-import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
     load_app_context,
     resolve_channel,
+)
+from half_linac.src.apps.orbit_correct.profile_runtime import (
+    CORRECTOR_STATE_PATH,
+    CORRECT_LOG_PATH,
+    RESPONSE_MATRIX_PATH,
+    load_orbit_runtime_settings,
 )
 
 
@@ -29,7 +33,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(st.rootpath+'/src/apps/orbit_correct/correct.log'),
+        logging.FileHandler(CORRECT_LOG_PATH),
         logging.StreamHandler()
     ]
 )
@@ -66,11 +70,12 @@ class OrbitCorrector:
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
         self.machine_mode = self.app_context.control_backend.name
+        self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
 
         # constant definition
-        self.RESPM_FILE = st.rootpath + '/src/apps/orbit_correct/response.txt'
+        self.RESPM_FILE = str(RESPONSE_MATRIX_PATH)
         self.d_value = 0.02 * 0.001  # step for corrector
-        self.max_value = st.corrector_upperlimit
+        self.max_value = self.orbit_runtime["corrector_upperlimit_rad"]
         
         # all cor and bpm lists
         if self.orbit_workflow is None:
@@ -170,7 +175,7 @@ class OrbitCorrector:
         hcor_vals = caget_many(all_pvname_corx)
         vcor_vals = caget_many(all_pvname_cory)
         
-        with open('cor_temp.txt', 'w') as file:
+        with CORRECTOR_STATE_PATH.open('w', encoding='utf-8') as file:
             for item1, item2 in zip(hcor_vals, vcor_vals):
                 file.write(f"{item1}\t{item2}\n")
 
@@ -455,7 +460,7 @@ class OrbitCorrector:
 
     def cor_recover(self) -> None:
         """recvoer all corrector to the value before cor"""
-        cor_path = Path("cor_temp.txt")
+        cor_path = CORRECTOR_STATE_PATH
         if not cor_path.exists():
             raise FileNotFoundError(f"Corrector backup file not found: {cor_path}")
 

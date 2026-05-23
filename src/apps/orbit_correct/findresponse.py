@@ -16,17 +16,21 @@ ensure_repo_import_path(__file__)
 import numpy as np
 from typing import List, Tuple
 from epics import caget, caget_many, caput, caput_many
-import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
     load_app_context,
     resolve_channel,
+)
+from half_linac.src.apps.orbit_correct.profile_runtime import (
+    FINDRESPONSE_LOG_PATH,
+    RESPONSE_MATRIX_PATH,
+    load_orbit_runtime_settings,
 )
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='findresponse.log'
+    filename=FINDRESPONSE_LOG_PATH
 )
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,7 @@ class ResponseMatrixCalculator:
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
         self.machine_mode = self.app_context.control_backend.name
+        self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
         if self.orbit_workflow is None:
             raise ValueError("Orbit workflow is not available in the current app context.")
         self.bpm_ids = list(self.orbit_workflow.bpms)
@@ -59,7 +64,7 @@ class ResponseMatrixCalculator:
         self.N_COR = len(self.xcor_ids) if n_cor is None else len(self.xcor_ids)
         self.d_value = d_value
         self.n_averages = n_averages
-        self.timer_interval = st.runtime_machine
+        self.timer_interval = self.orbit_runtime["response_wait_s"]
         
         # Initialize PV lists
         self.pvBPMx: List[str] = []
@@ -187,7 +192,7 @@ class ResponseMatrixCalculator:
             logger.error(f"Failed to calculate response matrix: {str(e)}")
             raise
 
-    def save_matrix(self, filename: str = 'response.txt') -> None:
+    def save_matrix(self, filename: str = str(RESPONSE_MATRIX_PATH)) -> None:
         """Save response matrix to file."""
         try:
             np.savetxt(filename, self.response_matrix)

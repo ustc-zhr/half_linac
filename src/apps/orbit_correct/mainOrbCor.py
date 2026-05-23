@@ -35,14 +35,13 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QRegExp, QTimer
 from OrbCorgui import Ui_MainWindow
 
-
-import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import load_app_context
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
     request_runtime_restart,
 )
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
+from half_linac.src.apps.orbit_correct.profile_runtime import APP_DIR
 
 HEADER_ACTION_HEIGHT = 32
 
@@ -839,7 +838,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             key="response_matrix",
             label="Response Matrix Measurement",
             cmd=["python3", "findresponse.py"],
-            cwd=st.rootpath + "/src/apps/orbit_correct",
+            cwd=str(APP_DIR),
         )
 
     def start_cor(self):
@@ -871,7 +870,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             key="orbit_correction",
             label="Orbit Correction",
             cmd=cmd,
-            cwd=st.rootpath + "/src/apps/orbit_correct",
+            cwd=str(APP_DIR),
         )
  
 
@@ -879,7 +878,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     # cor_off
     # def cor_off(self):
-    #     Popen("python3 correct.py cor_off",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
+    #     Popen("python3 correct.py cor_off", cwd=str(APP_DIR), shell=True)
     def cor_off(self):
         bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
         cmd = [
@@ -891,7 +890,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             key="cor_off",
             label="Corrector Reset",
             cmd=cmd,
-            cwd=st.rootpath + "/src/apps/orbit_correct",
+            cwd=str(APP_DIR),
             expect_running=False,
         )
 
@@ -906,7 +905,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             key="cor_recover",
             label="Corrector Recover",
             cmd=cmd,
-            cwd=st.rootpath + "/src/apps/orbit_correct",
+            cwd=str(APP_DIR),
             expect_running=False,
         )
 

@@ -35,6 +35,37 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
 
 
 class MachineProfileTests(unittest.TestCase):
+    def test_machine_profile_managed_sources_do_not_import_runtime_config(self):
+        managed_paths = [
+            REPO_ROOT / "src/apps/launcher/main.py",
+            REPO_ROOT / "src/apps/orbit_correct/mainOrbCor.py",
+            REPO_ROOT / "src/apps/orbit_correct/correct.py",
+            REPO_ROOT / "src/apps/orbit_correct/findresponse.py",
+            REPO_ROOT / "src/apps/orbit_correct/cor_E.py",
+            REPO_ROOT / "src/apps/orbit_correct/profile_runtime.py",
+            REPO_ROOT / "src/apps/orbit_display/main.py",
+            REPO_ROOT / "src/apps/orbit_display/submain.py",
+            REPO_ROOT / "src/apps/beam_monitor/main.py",
+            REPO_ROOT / "src/apps/bba/main.py",
+            REPO_ROOT / "src/apps/emit_measure/main.py",
+            REPO_ROOT / "src/apps/emit_measure/test.py",
+            REPO_ROOT / "src/apps/energy_spectrum/main.py",
+            REPO_ROOT / "src/apps/energy_spectrum/get_energy0.py",
+            REPO_ROOT / "src/shared/elegant_runtime.py",
+            REPO_ROOT / "src/shared/machine_profile/loader.py",
+            REPO_ROOT / "src/shared/machine_profile/resolver.py",
+        ]
+        offenders = []
+        for path in managed_paths:
+            text = path.read_text(encoding="utf-8")
+            if "runtime_config as st" in text:
+                offenders.append(str(path.relative_to(REPO_ROOT)))
+        self.assertEqual(
+            offenders,
+            [],
+            f"Managed machine-profile sources must not import runtime_config directly: {offenders}",
+        )
+
     def test_load_half_profile(self):
         profile = load_profile("half")
         self.assertEqual(profile.machine.id, "half")
@@ -67,6 +98,21 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(context.control_backend.name, "vm")
         self.assertIsNone(context.model_backend)
         self.assertIsNone(context.emit_measure_workflow)
+
+    def test_half_beam_monitor_workflow_keeps_backend_image_geometry(self):
+        profile = load_profile("half")
+        workflow = get_workflow(profile, "beam_monitor")
+        self.assertEqual(workflow["default_flag"], "PRF06")
+        self.assertEqual(workflow["flag_pixel_shape"]["vm"], [360, 270])
+        self.assertEqual(workflow["flag_pixel_shape"]["real"], [1440, 1080])
+        self.assertEqual(workflow["flag_pixel_width_mm"]["vm"], 0.02)
+
+    def test_load_energy_spectrum_app_context(self):
+        context = load_app_context("energy_spectrum")
+        self.assertIsInstance(context, AppContext)
+        self.assertEqual(context.machine.id, "half")
+        self.assertEqual(context.control_backend.name, "vm")
+        self.assertIsNone(context.model_backend)
 
     def test_load_bba_app_context(self):
         context = load_app_context("bba")
@@ -118,8 +164,16 @@ class MachineProfileTests(unittest.TestCase):
             "HALF:IN:FLAG:PRF07:image1:ArrayData:vm",
         )
         self.assertEqual(
+            resolve_channel(profile, "PRF07", "esa_image", "vm"),
+            "HALF:IN:FLAG:PRFESA:image1:ArrayData:vm",
+        )
+        self.assertEqual(
             resolve_channel(profile, "PRF07", "exposure_time", "real"),
             "HALF:IN:FLAG:PRF07:cam1:AcquireTime",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "SM", "current_set", "vm"),
+            "HALF:IN:ESA:PRF01:CurrentSet",
         )
 
     def test_real_backend_uses_raw_machine_pv_naming(self):
@@ -191,6 +245,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["bpms"][-1], "BPM43")
         self.assertEqual(workflow["xcors"][18], "XC21")
         self.assertEqual(workflow["ycors"][26], "YC29")
+        self.assertEqual(workflow["response_wait_s_by_backend"]["vm"], 8)
+        self.assertEqual(workflow["corrector_upperlimit_rad"], 0.001)
 
     def test_bba_and_emit_defaults_exist(self):
         bba_context = load_app_context("bba")
@@ -268,12 +324,18 @@ class MachineProfileTests(unittest.TestCase):
         flag_ids = {element.id for element in list_elements(profile, kind="flag")}
         x_corrs = {element.id for element in list_elements(profile, kind="corr", plane="x")}
         y_corrs = {element.id for element in list_elements(profile, kind="corr", plane="y")}
+        image_flags = {element.id for element in list_elements(profile, kind="flag", logical_channel="image")}
+        esa_flags = {element.id for element in list_elements(profile, kind="flag", logical_channel="esa_image")}
 
         self.assertIn("QL03", quad_ids)
         self.assertIn("QT18", quad_ids)
+        self.assertIn("QE01", quad_ids)
+        self.assertIn("QE03", quad_ids)
         self.assertIn("BPM01", bpm_ids)
         self.assertIn("BPM29", bpm_ids)
         self.assertEqual(flag_ids, {"PRF04", "PRF06", "PRF07", "PRF08"})
+        self.assertEqual(image_flags, {"PRF04", "PRF06", "PRF07", "PRF08"})
+        self.assertEqual(esa_flags, {"PRF07"})
         self.assertIn("XC00", x_corrs)
         self.assertIn("MS:HC", x_corrs)
         self.assertNotIn("YC00", x_corrs)
@@ -321,6 +383,24 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(source_lattice.is_absolute())
         self.assertTrue(str(source_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
         self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
+
+    def test_energy_spectrum_is_reported_supported_for_half(self):
+        supported, reason = describe_app_support("half", "energy_spectrum")
+        self.assertTrue(supported)
+        self.assertIsNone(reason)
+
+    def test_beam_monitor_is_reported_supported_for_half(self):
+        supported, reason = describe_app_support("half", "beam_monitor")
+        self.assertTrue(supported)
+        self.assertIsNone(reason)
+
+    def test_half_energy_spectrum_workflow_keeps_real_energy_setpoint_pv(self):
+        profile = load_profile("half")
+        workflow = get_workflow(profile, "energy_spectrum")
+        self.assertEqual(
+            workflow["energy_set_pv"]["real"],
+            "HALF:IN:ESA:PRF01:EnergySet",
+        )
 
     def test_softioc_substitutions_include_vm_aliases_for_profile_only_elements(self):
         substitutions = (
@@ -871,6 +951,7 @@ class MachineProfileTests(unittest.TestCase):
                 supported_orbit_display, orbit_display_reason = describe_app_support("orbitonly", "orbit_display")
                 supported_bba, bba_reason = describe_app_support("orbitonly", "bba")
                 supported_beam, beam_reason = describe_app_support("orbitonly", "beam_monitor")
+                supported_energy, energy_reason = describe_app_support("orbitonly", "energy_spectrum")
                 with self.assertRaises(MachineProfileError):
                     load_app_context("bba", machine_id="orbitonly")
 
@@ -885,6 +966,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsNotNone(bba_reason)
         self.assertFalse(supported_beam)
         self.assertIsNotNone(beam_reason)
+        self.assertFalse(supported_energy)
+        self.assertIsNotNone(energy_reason)
         self.assertEqual(orbit_context.orbit_workflow.bpms, ("BPM01",))
         self.assertEqual(orbit_context.orbit_workflow.xcors, ("XC01",))
         self.assertEqual(orbit_context.orbit_workflow.ycors, ("YC01",))

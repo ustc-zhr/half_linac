@@ -500,6 +500,18 @@
     "QT02": {
       "k1": "IN:MG:L002:QUAD:QT02:K1"
     },
+    "QE01": {
+      "k1": "HALF:IN:QUAD:QE01:K1"
+    },
+    "QE02": {
+      "k1": "HALF:IN:QUAD:QE02:K1"
+    },
+    "QE03": {
+      "k1": "HALF:IN:QUAD:QE03:K1"
+    },
+    "SM": {
+      "current_set": "HALF:IN:ESA:PRF01:CurrentSet"
+    },
     "QT18": {
       "k1": "IN:MG:L002:QUAD:QT18:K1"
     },
@@ -517,6 +529,7 @@
     },
     "PRF07": {
       "image": "HALF:IN:FLAG:PRF07:image1:ArrayData",
+      "esa_image": "HALF:IN:FLAG:PRF07:image1:ArrayData",
       "exposure_time": "HALF:IN:FLAG:PRF07:cam1:AcquireTime",
       "sigx": "IN:BD:PRF07:H:SIZE",
       "sigy": "IN:BD:PRF07:V:SIZE"
