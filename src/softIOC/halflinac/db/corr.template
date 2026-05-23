@@ -1,4 +1,5 @@
 record(ao, "HALF:IN:COR:$(COR):ao") {
+  alias("$(SETALIAS)")
   field(VAL , "0.0")
   field(DRVL, "-10.0")
   field(DRVH, "10.0")
@@ -6,8 +7,8 @@ record(ao, "HALF:IN:COR:$(COR):ao") {
   field(FLNK, "HALF:IN:COR:$(COR):ai")
 }
 record(ai, "HALF:IN:COR:$(COR):ai") {
+  alias("$(READALIAS)")
   field(SCAN , "1 second")
   field(INP , "HALF:IN:COR:$(COR):ao NPP NMS")
   field(FLNK, "HALF:IN:COR:$(COR):ai")
 }
-

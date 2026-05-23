@@ -1,6 +1,18 @@
+import json
+import sys
 import time
 from pathlib import Path
 from subprocess import Popen
+
+_REPO_BOOTSTRAP_ROOT = next(
+    parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
+)
+if str(_REPO_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_BOOTSTRAP_ROOT))
+
+from repo_bootstrap import ensure_repo_import_path
+
+ensure_repo_import_path(__file__)
 
 import epics
 
@@ -33,19 +45,72 @@ class pv_server:
     def _write_lattice_json(self, data):
         write_runtime_state(self.jsonpath, data)
 
+    @staticmethod
+    def _dedupe_in_order(names):
+        seen = set()
+        ordered = []
+        for name in names:
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            ordered.append(name)
+        return ordered
+
+    def _machine_profile_path(self):
+        return Path(st.rootpath) / "configs" / "machines" / "half" / "machine.json"
+
+    def _machine_profile_elements_by_kind(self, kind):
+        machine_path = self._machine_profile_path()
+        if not machine_path.is_file():
+            return []
+
+        machine_data = json.loads(machine_path.read_text(encoding="utf-8"))
+        return [
+            element["id"]
+            for element in machine_data.get("elements", [])
+            if element.get("kind") == kind
+        ]
+
+    @staticmethod
+    def _lattice_element_names(lattice, valid_types):
+        return [
+            lattice[key]["NAME"]
+            for key in lattice
+            if lattice[key]["TYPE"] in valid_types
+        ]
+
+    @staticmethod
+    def _quad_alias(name):
+        return f"HALF:IN:AP:QUAD:{name}:K1:ao"
+
+    @staticmethod
+    def _corr_set_alias(name):
+        return f"HALF:IN:PS:{name}:current:ao"
+
+    @staticmethod
+    def _corr_read_alias(name):
+        return f"HALF:IN:PS:{name}:current:ai"
+
     def gen_substitution_file(self):
         """
         generate db/half.substitutions file
         """
         lattice = self._read_lattice_json()["lattice"]
         substitutions_path = self.iocpath / "db" / f"{self.substitutions_name}.substitutions"
+        quad_names = self._dedupe_in_order(
+            self._lattice_element_names(lattice, {"QUAD"})
+            + self._machine_profile_elements_by_kind("quad")
+        )
+        corr_names = self._dedupe_in_order(
+            self._lattice_element_names(lattice, COR_TYPES)
+            + self._machine_profile_elements_by_kind("corr")
+        )
 
         with substitutions_path.open("w", encoding="utf-8") as f:
             f.write("file db/quad.template {\n")
-            f.write("  pattern {QUAD}\n")
-            for key in lattice:
-                if lattice[key]["TYPE"] == "QUAD":
-                    f.write(f'  {{ "{lattice[key]["NAME"]}" }}\n')
+            f.write("  pattern {QUAD, K1ALIAS}\n")
+            for name in quad_names:
+                f.write(f'  {{ "{name}", "{self._quad_alias(name)}" }}\n')
             f.write("}\n")
 
             f.write("file db/bend.template {\n")
@@ -70,10 +135,11 @@ class pv_server:
             f.write("}\n")
 
             f.write("file db/corr.template {\n")
-            f.write("  pattern {COR}\n")
-            for key in lattice:
-                if lattice[key]["TYPE"] in COR_TYPES:
-                    f.write(f'  {{ "{lattice[key]["NAME"]}" }}\n')
+            f.write("  pattern {COR, SETALIAS, READALIAS}\n")
+            for name in corr_names:
+                f.write(
+                    f'  {{ "{name}", "{self._corr_set_alias(name)}", "{self._corr_read_alias(name)}" }}\n'
+                )
             f.write("}\n")
 
     def prepare_initial_pvs(self):

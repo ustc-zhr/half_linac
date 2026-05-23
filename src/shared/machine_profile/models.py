@@ -22,6 +22,8 @@ class ElementConfig:
     kind: str
     display_name: str
     order: int
+    plane: str | None
+    roles: tuple[str, ...]
     tags: tuple[str, ...]
     limits: Mapping[str, Any]
     channels: Mapping[str, Mapping[str, str]]
@@ -267,6 +269,8 @@ def normalize_plane(value: Any, location: str) -> str:
 def _parse_element(raw_element: Any, index: int) -> ElementConfig:
     location = f"elements[{index}]"
     element_raw = _expect_mapping(raw_element, location)
+    element_id = _expect_non_empty_string(element_raw.get("id"), f"{location}.id")
+    kind = _expect_non_empty_string(element_raw.get("kind"), f"{location}.kind")
     channels_raw = _expect_mapping(element_raw.get("channels"), f"{location}.channels")
     if not channels_raw:
         raise MachineProfileError(f"{location}.channels must not be empty.")
@@ -289,6 +293,8 @@ def _parse_element(raw_element: Any, index: int) -> ElementConfig:
     if not isinstance(tags_raw, list):
         raise MachineProfileError(f"{location}.tags must be a list.")
     tags = tuple(str(tag) for tag in tags_raw)
+    plane = _parse_element_plane(element_raw.get("plane"), element_id, kind, tags, location)
+    roles = _parse_element_roles(element_raw.get("roles"), kind, tags, plane, location)
 
     limits_raw = element_raw.get("limits", {})
     if not isinstance(limits_raw, Mapping):
@@ -299,17 +305,94 @@ def _parse_element(raw_element: Any, index: int) -> ElementConfig:
         raise MachineProfileError(f"{location}.order must be an integer.")
 
     return ElementConfig(
-        id=_expect_non_empty_string(element_raw.get("id"), f"{location}.id"),
-        kind=_expect_non_empty_string(element_raw.get("kind"), f"{location}.kind"),
+        id=element_id,
+        kind=kind,
         display_name=_expect_non_empty_string(
             element_raw.get("display_name"),
             f"{location}.display_name",
         ),
         order=order,
+        plane=plane,
+        roles=roles,
         tags=tags,
         limits=dict(limits_raw),
         channels=channels,
     )
+
+
+def _parse_element_plane(
+    raw_plane: Any,
+    element_id: str,
+    kind: str,
+    tags: tuple[str, ...],
+    location: str,
+) -> str | None:
+    if raw_plane is not None:
+        return normalize_plane(raw_plane, f"{location}.plane")
+    return _infer_element_plane(element_id, kind, tags)
+
+
+def _parse_element_roles(
+    raw_roles: Any,
+    kind: str,
+    tags: tuple[str, ...],
+    plane: str | None,
+    location: str,
+) -> tuple[str, ...]:
+    roles = list(_infer_element_roles(kind, tags, plane))
+    if raw_roles is not None:
+        roles.extend(_expect_optional_string_list(raw_roles, f"{location}.roles"))
+    return tuple(dict.fromkeys(roles))
+
+
+def _infer_element_plane(
+    element_id: str,
+    kind: str,
+    tags: tuple[str, ...],
+) -> str | None:
+    if kind != "corr":
+        return None
+
+    normalized_id = element_id.upper()
+    normalized_tags = {tag.lower() for tag in tags}
+
+    if normalized_id.startswith("XC") or normalized_id.startswith("HC") or normalized_id.endswith(":HC"):
+        return "x"
+    if normalized_id.startswith("YC") or normalized_id.startswith("VC") or normalized_id.endswith(":VC"):
+        return "y"
+    if "x" in normalized_tags or "horizontal" in normalized_tags:
+        return "x"
+    if "y" in normalized_tags or "vertical" in normalized_tags:
+        return "y"
+    return None
+
+
+def _infer_element_roles(
+    kind: str,
+    tags: tuple[str, ...],
+    plane: str | None,
+) -> tuple[str, ...]:
+    normalized_tags = {tag.lower().strip() for tag in tags}
+    roles: list[str] = []
+
+    if kind == "bpm":
+        if "orbit" in normalized_tags:
+            roles.append("orbit_bpm")
+        if "bba" in normalized_tags:
+            roles.append("bba_bpm")
+    elif kind == "corr":
+        if "bba" in normalized_tags:
+            roles.append("bba_corr")
+        if "orbit" in normalized_tags:
+            if plane == "x":
+                roles.append("orbit_hcorr")
+            elif plane == "y":
+                roles.append("orbit_vcorr")
+    elif kind == "flag":
+        if "emit" in normalized_tags or "emit_measure" in normalized_tags:
+            roles.append("emit_flag")
+
+    return tuple(roles)
 
 
 def _validate_orbit_workflow(
@@ -366,26 +449,26 @@ def _validate_bba_family(
     elements_by_id: Mapping[str, ElementConfig],
     location: str,
 ) -> None:
-    _validate_element_refs(
-        _expect_string_list(raw_family.get("correctors"), f"{location}.correctors"),
+    _validate_optional_element_refs(
+        raw_family.get("correctors"),
         elements_by_id,
         f"{location}.correctors",
         expected_kind="corr",
     )
-    _validate_element_refs(
-        _expect_string_list(raw_family.get("quads"), f"{location}.quads"),
+    _validate_optional_element_refs(
+        raw_family.get("quads"),
         elements_by_id,
         f"{location}.quads",
         expected_kind="quad",
     )
-    _validate_element_refs(
-        _expect_string_list(raw_family.get("bpm1"), f"{location}.bpm1"),
+    _validate_optional_element_refs(
+        raw_family.get("bpm1"),
         elements_by_id,
         f"{location}.bpm1",
         expected_kind="bpm",
     )
-    _validate_element_refs(
-        _expect_string_list(raw_family.get("bpm2"), f"{location}.bpm2"),
+    _validate_optional_element_refs(
+        raw_family.get("bpm2"),
         elements_by_id,
         f"{location}.bpm2",
         expected_kind="bpm",
@@ -394,11 +477,13 @@ def _validate_bba_family(
 
 def _expect_bba_control_backends(raw_family: Mapping[str, Any], location: str) -> list[str]:
     if "control_backends" in raw_family:
-        return _expect_string_list(
+        return _expect_optional_string_list(
             raw_family.get("control_backends"),
             f"{location}.control_backends",
         )
-    return _expect_string_list(raw_family.get("modes"), f"{location}.modes")
+    if "modes" in raw_family:
+        return _expect_optional_string_list(raw_family.get("modes"), f"{location}.modes")
+    return []
 
 
 def _validate_emit_measure_workflow(
@@ -423,8 +508,8 @@ def _validate_emit_measure_workflow(
         presets,
         "workflows.emit_measure.default_preset",
     )
-    _validate_element_refs(
-        _expect_string_list(workflow.get("twiss_quads"), "workflows.emit_measure.twiss_quads"),
+    _validate_optional_element_refs(
+        workflow.get("twiss_quads"),
         elements_by_id,
         "workflows.emit_measure.twiss_quads",
         expected_kind="quad",
@@ -459,6 +544,18 @@ def _validate_element_refs(
 ) -> None:
     for ref in refs:
         _validate_element_ref(ref, elements_by_id, location, expected_kind=expected_kind)
+
+
+def _validate_optional_element_refs(
+    raw_refs: Any,
+    elements_by_id: Mapping[str, ElementConfig],
+    location: str,
+    expected_kind: str | None = None,
+) -> None:
+    if raw_refs is None:
+        return
+    refs = _expect_optional_string_list(raw_refs, location)
+    _validate_element_refs(refs, elements_by_id, location, expected_kind=expected_kind)
 
 
 def _validate_element_ref(
@@ -497,6 +594,14 @@ def _expect_string_list(value: Any, location: str) -> list[str]:
     for index, item in enumerate(value):
         items.append(_expect_non_empty_string(item, f"{location}[{index}]"))
     return items
+
+
+def _expect_optional_string_list(value: Any, location: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise MachineProfileError(f"{location} must be a list of strings.")
+    return [_expect_non_empty_string(item, f"{location}[{index}]") for index, item in enumerate(value)]
 
 
 def _expect_non_empty_string(value: Any, location: str) -> str:

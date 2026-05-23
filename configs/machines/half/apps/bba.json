@@ -4,7 +4,7 @@
       "id": "bba1_default",
       "family": "standard",
       "plane": "X",
-      "quad": "CQ3",
+      "quad": "QL03",
       "corr": "HC01",
       "bpm1": "BPM03",
       "bpm2": "BPM07",
@@ -48,68 +48,9 @@
     }
   ],
   "standard": {
-    "correctors": [
-      "HC01",
-      "VC01",
-      "HC2",
-      "VC2",
-      "HC5",
-      "VC5",
-      "MS:HC",
-      "MS:VC",
-      "LS:HC",
-      "LS:VC",
-      "HIC01",
-      "VIC01",
-      "HIC02",
-      "VIC02"
-    ],
-    "quads": [
-      "CQ3",
-      "CQ4",
-      "MQ11",
-      "MQ12",
-      "CQ1",
-      "CQ2"
-    ],
-    "bpm1": [
-      "BPM03",
-      "BPM02",
-      "BPM07"
-    ],
-    "bpm2": [
-      "BPM07",
-      "BPM08",
-      "BPM02",
-      "BPM03"
-    ],
     "default_preset": "bba1_default"
   },
   "bba2": {
-    "quads": [
-      "QT01",
-      "QT18"
-    ],
-    "correctors": [
-      "XC21",
-      "YC21",
-      "XC29",
-      "YC29"
-    ],
-    "bpm1": [
-      "BPM20",
-      "BPM27",
-      "BPM28"
-    ],
-    "bpm2": [
-      "BPM21",
-      "BPM28",
-      "BPM29"
-    ],
-    "control_backends": [
-      "Real Machine",
-      "Virtual Machine"
-    ],
     "default_preset": "bba2_default"
   }
 }

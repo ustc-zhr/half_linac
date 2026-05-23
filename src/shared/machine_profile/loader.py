@@ -151,7 +151,7 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
         presets=tuple(presets),
         presets_by_id=presets_by_id,
         twiss_quads=tuple(
-            _expect_string_list(
+            _expect_optional_string_list(
                 workflow.get("twiss_quads"),
                 "workflows.emit_measure.twiss_quads",
             )
@@ -281,6 +281,10 @@ def _load_directory_profile_raw(root: Path) -> Mapping[str, Any]:
                     f"{location}.display_name",
                 ),
                 "order": _expect_int(element.get("order"), f"{location}.order"),
+                "plane": element.get("plane"),
+                "roles": _expect_optional_string_list(element.get("roles"), f"{location}.roles")
+                if "roles" in element
+                else None,
                 "tags": _expect_optional_string_list(element.get("tags", []), f"{location}.tags"),
                 "limits": dict(_expect_mapping(element.get("limits", {}), f"{location}.limits")),
                 "channels": channels,
@@ -538,10 +542,10 @@ def _parse_bba_family(raw_family: Any, name: str, location: str) -> BBAFamilyCon
 
     return BBAFamilyConfig(
         name=name,
-        correctors=tuple(_expect_string_list(family.get("correctors"), f"{location}.correctors")),
-        quads=tuple(_expect_string_list(family.get("quads"), f"{location}.quads")),
-        bpm1=tuple(_expect_string_list(family.get("bpm1"), f"{location}.bpm1")),
-        bpm2=tuple(_expect_string_list(family.get("bpm2"), f"{location}.bpm2")),
+        correctors=tuple(_expect_optional_string_list(family.get("correctors"), f"{location}.correctors")),
+        quads=tuple(_expect_optional_string_list(family.get("quads"), f"{location}.quads")),
+        bpm1=tuple(_expect_optional_string_list(family.get("bpm1"), f"{location}.bpm1")),
+        bpm2=tuple(_expect_optional_string_list(family.get("bpm2"), f"{location}.bpm2")),
         default_preset=_expect_non_empty_string(family.get("default_preset"), f"{location}.default_preset"),
         control_backends=control_backends,
     )

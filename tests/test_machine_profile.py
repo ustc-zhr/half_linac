@@ -59,8 +59,11 @@ class MachineProfileTests(unittest.TestCase):
         assert context.bba_workflow is not None
         self.assertEqual(context.bba_workflow.standard.default_preset, "bba1_default")
         self.assertEqual(context.bba_workflow.bba2.default_preset, "bba2_default")
-        self.assertIn("XC21", context.bba_workflow.bba2.correctors)
-        self.assertEqual(context.bba_workflow.bba2.control_backends, ("real", "vm"))
+        self.assertEqual(context.bba_workflow.standard.quads, ())
+        self.assertEqual(context.bba_workflow.standard.correctors, ())
+        self.assertEqual(context.bba_workflow.bba2.quads, ())
+        self.assertEqual(context.bba_workflow.bba2.correctors, ())
+        self.assertEqual(context.bba_workflow.bba2.control_backends, ())
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
 
@@ -71,7 +74,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsNotNone(context.model_backend)
         assert context.emit_measure_workflow is not None
         self.assertEqual(context.emit_measure_workflow.default_preset, "emit_ql27_prf06")
-        self.assertIn("CQ1", context.emit_measure_workflow.twiss_quads)
+        self.assertEqual(context.emit_measure_workflow.twiss_quads, ())
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
 
@@ -83,15 +86,69 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(
             resolve_channel(profile, "XC21", "setpoint", "real"),
-            "HALF:IN:COR:XC21:ao",
+            "IN:PS:LE16:XC21:current:ao",
         )
         self.assertEqual(
             resolve_channel(profile, "QL27", "k1", "vm"),
-            "HALF:IN:QUAD:QL27:K1",
+            "HALF:IN:AP:QUAD:QL27:K1:ao",
         )
         self.assertEqual(
             resolve_channel(profile, "PRF07", "sigx", "Virtual Machine"),
             "HALF:IN:FLAG:PRF07:sigx",
+        )
+
+    def test_real_backend_uses_raw_machine_pv_naming(self):
+        profile = load_profile("half")
+        self.assertEqual(
+            resolve_channel(profile, "BPM01", "x", "real"),
+            "IN:BD:LE05:DBPM:01:BPM_X",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "BPM20", "x", "real"),
+            "IN:BD:LE14:DBPM:20:BPM_X",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRF04", "sigy", "real"),
+            "IN:BD:PRF04:V:SIZE",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "XC00", "setpoint", "real"),
+            "IN:PS:LE07:XC00:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "MS:HC", "setpoint", "real"),
+            "IN:PS:LE07:SM01-DX:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "HC2", "setpoint", "real"),
+            "IRFEL:PS:HC02:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "QT01", "k1", "real"),
+            "IN:MG:L002:QUAD:QT01:K1",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "QL03", "k1", "real"),
+            "IN:PS:LE07:QL03:current:ao",
+        )
+
+    def test_vm_backend_uses_softioc_alias_naming_for_magnets(self):
+        profile = load_profile("half")
+        self.assertEqual(
+            resolve_channel(profile, "XC00", "setpoint", "vm"),
+            "HALF:IN:PS:XC00:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "XC21", "setpoint", "vm"),
+            "HALF:IN:PS:XC21:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "HC01", "setpoint", "vm"),
+            "HALF:IN:PS:HC01:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "QL03", "k1", "vm"),
+            "HALF:IN:AP:QUAD:QL03:K1:ao",
         )
 
     def test_resolve_channel_from_app_context(self):
@@ -169,8 +226,51 @@ class MachineProfileTests(unittest.TestCase):
         profile = load_profile("half")
         bpm_elements = list_elements(profile, "bpm")
         flag_elements = list_elements(profile, "flag")
+        corr_elements = list_elements(profile, "corr")
+        quad_elements = list_elements(profile, "quad")
+        corr_ids = {element.id for element in corr_elements}
+        bpm_ids = {element.id for element in bpm_elements}
+        quad_ids = {element.id for element in quad_elements}
         self.assertTrue(any(element.id == "BPM03" for element in bpm_elements))
+        self.assertIn("BPM01", bpm_ids)
+        self.assertIn("XC00", corr_ids)
+        self.assertIn("YC02", corr_ids)
+        self.assertNotIn("HIC01", corr_ids)
+        self.assertNotIn("VIC02", corr_ids)
+        self.assertIn("QL03", quad_ids)
+        self.assertNotIn("CQ3", quad_ids)
         self.assertEqual({element.id for element in flag_elements}, {"PRF04", "PRF06", "PRF07", "PRF08"})
+
+    def test_list_elements_supports_role_and_plane_filters(self):
+        profile = load_profile("half")
+        quad_ids = {element.id for element in list_elements(profile, kind="quad")}
+        bpm_ids = {element.id for element in list_elements(profile, kind="bpm")}
+        flag_ids = {element.id for element in list_elements(profile, kind="flag")}
+        x_corrs = {element.id for element in list_elements(profile, kind="corr", plane="x")}
+        y_corrs = {element.id for element in list_elements(profile, kind="corr", plane="y")}
+
+        self.assertIn("QL03", quad_ids)
+        self.assertIn("QT18", quad_ids)
+        self.assertIn("BPM01", bpm_ids)
+        self.assertIn("BPM29", bpm_ids)
+        self.assertEqual(flag_ids, {"PRF04", "PRF06", "PRF07", "PRF08"})
+        self.assertIn("XC00", x_corrs)
+        self.assertIn("MS:HC", x_corrs)
+        self.assertNotIn("YC00", x_corrs)
+        self.assertIn("YC00", y_corrs)
+        self.assertIn("LS:VC", y_corrs)
+        self.assertNotIn("XC00", y_corrs)
+
+    def test_half_elements_keep_simple_metadata_and_inferred_planes(self):
+        profile = load_profile("half")
+        ql03 = profile.get_element("QL03")
+        xc21 = profile.get_element("XC21")
+        yc21 = profile.get_element("YC21")
+
+        self.assertEqual(ql03.roles, ())
+        self.assertIn("bba_corr", xc21.roles)
+        self.assertEqual(xc21.plane, "x")
+        self.assertEqual(yc21.plane, "y")
 
     def test_load_profile_uses_env_machine_id_when_unspecified(self):
         with patch.dict(os.environ, {"HALF_MACHINE_ID": "half"}):
@@ -200,6 +300,28 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(source_lattice.is_absolute())
         self.assertTrue(str(source_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
         self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
+
+    def test_softioc_substitutions_include_vm_aliases_for_profile_only_elements(self):
+        substitutions = (
+            REPO_ROOT / "src" / "softIOC" / "halflinac" / "db" / "halflinac.substitutions"
+        ).read_text(encoding="utf-8")
+        self.assertIn('pattern {QUAD, K1ALIAS}', substitutions)
+        self.assertIn('pattern {COR, SETALIAS, READALIAS}', substitutions)
+        self.assertIn('{ "QL03", "HALF:IN:AP:QUAD:QL03:K1:ao" }', substitutions)
+        self.assertIn(
+            '{ "XC00", "HALF:IN:PS:XC00:current:ao", "HALF:IN:PS:XC00:current:ai" }',
+            substitutions,
+        )
+        self.assertIn(
+            '{ "HC01", "HALF:IN:PS:HC01:current:ao", "HALF:IN:PS:HC01:current:ai" }',
+            substitutions,
+        )
+        self.assertNotIn("CQ1", substitutions)
+        self.assertNotIn("CQ3", substitutions)
+        self.assertNotIn("MQ1", substitutions)
+        self.assertNotIn("MQ11", substitutions)
+        self.assertNotIn("HIC01", substitutions)
+        self.assertNotIn("VIC01", substitutions)
 
     def test_invalid_machine_id_from_env_raises(self):
         with patch.dict(os.environ, {"HALF_MACHINE_ID": "../escape"}):
@@ -355,6 +477,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(profile.machine.id, "legacy")
         self.assertEqual(context.machine.id, "legacy")
         self.assertEqual(resolve_channel(profile, "BPM01", "x", "vm"), "LEGACY:BPM01:X")
+        self.assertEqual(profile.get_element("XC01").plane, "x")
+        self.assertEqual(profile.get_element("YC01").plane, "y")
 
     def test_duplicate_element_ids_raise(self):
         bad = {

@@ -1,519 +1,523 @@
 {
   "backend": "real",
   "channels": {
-    "BPM03": {
-      "x": "HALF:IN:BPM:BPM03:X:ao",
-      "y": "HALF:IN:BPM:BPM03:Y:ao"
-    },
-    "BPM04": {
-      "x": "HALF:IN:BPM:BPM04:X:ao",
-      "y": "HALF:IN:BPM:BPM04:Y:ao"
-    },
-    "BPM05": {
-      "x": "HALF:IN:BPM:BPM05:X:ao",
-      "y": "HALF:IN:BPM:BPM05:Y:ao"
-    },
-    "BPM06": {
-      "x": "HALF:IN:BPM:BPM06:X:ao",
-      "y": "HALF:IN:BPM:BPM06:Y:ao"
-    },
-    "BPM07": {
-      "x": "HALF:IN:BPM:BPM07:X:ao",
-      "y": "HALF:IN:BPM:BPM07:Y:ao"
-    },
-    "BPM08": {
-      "x": "HALF:IN:BPM:BPM08:X:ao",
-      "y": "HALF:IN:BPM:BPM08:Y:ao"
-    },
-    "BPM09": {
-      "x": "HALF:IN:BPM:BPM09:X:ao",
-      "y": "HALF:IN:BPM:BPM09:Y:ao"
-    },
-    "BPM10": {
-      "x": "HALF:IN:BPM:BPM10:X:ao",
-      "y": "HALF:IN:BPM:BPM10:Y:ao"
-    },
-    "BPM11": {
-      "x": "HALF:IN:BPM:BPM11:X:ao",
-      "y": "HALF:IN:BPM:BPM11:Y:ao"
-    },
-    "BPM12": {
-      "x": "HALF:IN:BPM:BPM12:X:ao",
-      "y": "HALF:IN:BPM:BPM12:Y:ao"
-    },
-    "BPM13": {
-      "x": "HALF:IN:BPM:BPM13:X:ao",
-      "y": "HALF:IN:BPM:BPM13:Y:ao"
-    },
-    "BPM14": {
-      "x": "HALF:IN:BPM:BPM14:X:ao",
-      "y": "HALF:IN:BPM:BPM14:Y:ao"
-    },
-    "BPM15": {
-      "x": "HALF:IN:BPM:BPM15:X:ao",
-      "y": "HALF:IN:BPM:BPM15:Y:ao"
-    },
-    "BPM16": {
-      "x": "HALF:IN:BPM:BPM16:X:ao",
-      "y": "HALF:IN:BPM:BPM16:Y:ao"
-    },
-    "BPM17": {
-      "x": "HALF:IN:BPM:BPM17:X:ao",
-      "y": "HALF:IN:BPM:BPM17:Y:ao"
-    },
-    "BPM18": {
-      "x": "HALF:IN:BPM:BPM18:X:ao",
-      "y": "HALF:IN:BPM:BPM18:Y:ao"
-    },
-    "BPM19": {
-      "x": "HALF:IN:BPM:BPM19:X:ao",
-      "y": "HALF:IN:BPM:BPM19:Y:ao"
-    },
-    "BPM20": {
-      "x": "HALF:IN:BPM:BPM20:X:ao",
-      "y": "HALF:IN:BPM:BPM20:Y:ao"
-    },
-    "BPM21": {
-      "x": "HALF:IN:BPM:BPM21:X:ao",
-      "y": "HALF:IN:BPM:BPM21:Y:ao"
-    },
-    "BPM22": {
-      "x": "HALF:IN:BPM:BPM22:X:ao",
-      "y": "HALF:IN:BPM:BPM22:Y:ao"
-    },
-    "BPM23": {
-      "x": "HALF:IN:BPM:BPM23:X:ao",
-      "y": "HALF:IN:BPM:BPM23:Y:ao"
-    },
-    "BPM24": {
-      "x": "HALF:IN:BPM:BPM24:X:ao",
-      "y": "HALF:IN:BPM:BPM24:Y:ao"
-    },
-    "BPM25": {
-      "x": "HALF:IN:BPM:BPM25:X:ao",
-      "y": "HALF:IN:BPM:BPM25:Y:ao"
-    },
-    "BPM26": {
-      "x": "HALF:IN:BPM:BPM26:X:ao",
-      "y": "HALF:IN:BPM:BPM26:Y:ao"
-    },
-    "BPM27": {
-      "x": "HALF:IN:BPM:BPM27:X:ao",
-      "y": "HALF:IN:BPM:BPM27:Y:ao"
-    },
-    "BPM28": {
-      "x": "HALF:IN:BPM:BPM28:X:ao",
-      "y": "HALF:IN:BPM:BPM28:Y:ao"
-    },
-    "BPM29": {
-      "x": "HALF:IN:BPM:BPM29:X:ao",
-      "y": "HALF:IN:BPM:BPM29:Y:ao"
-    },
-    "BPM30": {
-      "x": "HALF:IN:BPM:BPM30:X:ao",
-      "y": "HALF:IN:BPM:BPM30:Y:ao"
-    },
-    "BPM31": {
-      "x": "HALF:IN:BPM:BPM31:X:ao",
-      "y": "HALF:IN:BPM:BPM31:Y:ao"
-    },
-    "BPM32": {
-      "x": "HALF:IN:BPM:BPM32:X:ao",
-      "y": "HALF:IN:BPM:BPM32:Y:ao"
-    },
-    "BPM33": {
-      "x": "HALF:IN:BPM:BPM33:X:ao",
-      "y": "HALF:IN:BPM:BPM33:Y:ao"
-    },
-    "BPM34": {
-      "x": "HALF:IN:BPM:BPM34:X:ao",
-      "y": "HALF:IN:BPM:BPM34:Y:ao"
-    },
-    "BPM35": {
-      "x": "HALF:IN:BPM:BPM35:X:ao",
-      "y": "HALF:IN:BPM:BPM35:Y:ao"
-    },
-    "BPM36": {
-      "x": "HALF:IN:BPM:BPM36:X:ao",
-      "y": "HALF:IN:BPM:BPM36:Y:ao"
-    },
-    "BPM37": {
-      "x": "HALF:IN:BPM:BPM37:X:ao",
-      "y": "HALF:IN:BPM:BPM37:Y:ao"
-    },
-    "BPM38": {
-      "x": "HALF:IN:BPM:BPM38:X:ao",
-      "y": "HALF:IN:BPM:BPM38:Y:ao"
-    },
-    "BPM39": {
-      "x": "HALF:IN:BPM:BPM39:X:ao",
-      "y": "HALF:IN:BPM:BPM39:Y:ao"
-    },
-    "BPM40": {
-      "x": "HALF:IN:BPM:BPM40:X:ao",
-      "y": "HALF:IN:BPM:BPM40:Y:ao"
-    },
-    "BPM41": {
-      "x": "HALF:IN:BPM:BPM41:X:ao",
-      "y": "HALF:IN:BPM:BPM41:Y:ao"
-    },
-    "BPM42": {
-      "x": "HALF:IN:BPM:BPM42:X:ao",
-      "y": "HALF:IN:BPM:BPM42:Y:ao"
-    },
-    "BPM43": {
-      "x": "HALF:IN:BPM:BPM43:X:ao",
-      "y": "HALF:IN:BPM:BPM43:Y:ao"
+    "BPM01": {
+      "x": "IN:BD:LE05:DBPM:01:BPM_X",
+      "y": "IN:BD:LE05:DBPM:01:BPM_Y"
     },
     "BPM02": {
-      "x": "HALF:IN:BPM:BPM02:X:ao",
-      "y": "HALF:IN:BPM:BPM02:Y:ao"
-    },
-    "XC03": {
-      "setpoint": "HALF:IN:COR:XC03:ao"
-    },
-    "XC04": {
-      "setpoint": "HALF:IN:COR:XC04:ao"
-    },
-    "XC05": {
-      "setpoint": "HALF:IN:COR:XC05:ao"
-    },
-    "XC06": {
-      "setpoint": "HALF:IN:COR:XC06:ao"
-    },
-    "XC07": {
-      "setpoint": "HALF:IN:COR:XC07:ao"
-    },
-    "XC08": {
-      "setpoint": "HALF:IN:COR:XC08:ao"
-    },
-    "XC09": {
-      "setpoint": "HALF:IN:COR:XC09:ao"
-    },
-    "XC10": {
-      "setpoint": "HALF:IN:COR:XC10:ao"
-    },
-    "XC11": {
-      "setpoint": "HALF:IN:COR:XC11:ao"
-    },
-    "XC12": {
-      "setpoint": "HALF:IN:COR:XC12:ao"
-    },
-    "XC13": {
-      "setpoint": "HALF:IN:COR:XC13:ao"
-    },
-    "XC14": {
-      "setpoint": "HALF:IN:COR:XC14:ao"
-    },
-    "XC15": {
-      "setpoint": "HALF:IN:COR:XC15:ao"
-    },
-    "XC16": {
-      "setpoint": "HALF:IN:COR:XC16:ao"
-    },
-    "XC17": {
-      "setpoint": "HALF:IN:COR:XC17:ao"
-    },
-    "XC18": {
-      "setpoint": "HALF:IN:COR:XC18:ao"
-    },
-    "XC19": {
-      "setpoint": "HALF:IN:COR:XC19:ao"
-    },
-    "XC20": {
-      "setpoint": "HALF:IN:COR:XC20:ao"
-    },
-    "XC21": {
-      "setpoint": "HALF:IN:COR:XC21:ao"
-    },
-    "XC22": {
-      "setpoint": "HALF:IN:COR:XC22:ao"
-    },
-    "XC23": {
-      "setpoint": "HALF:IN:COR:XC23:ao"
-    },
-    "XC24": {
-      "setpoint": "HALF:IN:COR:XC24:ao"
-    },
-    "XC25": {
-      "setpoint": "HALF:IN:COR:XC25:ao"
-    },
-    "XC26": {
-      "setpoint": "HALF:IN:COR:XC26:ao"
-    },
-    "XC27": {
-      "setpoint": "HALF:IN:COR:XC27:ao"
-    },
-    "XC28": {
-      "setpoint": "HALF:IN:COR:XC28:ao"
-    },
-    "XC29": {
-      "setpoint": "HALF:IN:COR:XC29:ao"
-    },
-    "XC30": {
-      "setpoint": "HALF:IN:COR:XC30:ao"
-    },
-    "XC31": {
-      "setpoint": "HALF:IN:COR:XC31:ao"
-    },
-    "XC32": {
-      "setpoint": "HALF:IN:COR:XC32:ao"
-    },
-    "XC33": {
-      "setpoint": "HALF:IN:COR:XC33:ao"
-    },
-    "XC34": {
-      "setpoint": "HALF:IN:COR:XC34:ao"
-    },
-    "XC35": {
-      "setpoint": "HALF:IN:COR:XC35:ao"
-    },
-    "XC36": {
-      "setpoint": "HALF:IN:COR:XC36:ao"
-    },
-    "XC37": {
-      "setpoint": "HALF:IN:COR:XC37:ao"
-    },
-    "XC38": {
-      "setpoint": "HALF:IN:COR:XC38:ao"
-    },
-    "XC39": {
-      "setpoint": "HALF:IN:COR:XC39:ao"
-    },
-    "XC40": {
-      "setpoint": "HALF:IN:COR:XC40:ao"
-    },
-    "XC41": {
-      "setpoint": "HALF:IN:COR:XC41:ao"
-    },
-    "XC42": {
-      "setpoint": "HALF:IN:COR:XC42:ao"
-    },
-    "XC43": {
-      "setpoint": "HALF:IN:COR:XC43:ao"
-    },
-    "YC03": {
-      "setpoint": "HALF:IN:COR:YC03:ao"
-    },
-    "YC04": {
-      "setpoint": "HALF:IN:COR:YC04:ao"
-    },
-    "YC05": {
-      "setpoint": "HALF:IN:COR:YC05:ao"
-    },
-    "YC06": {
-      "setpoint": "HALF:IN:COR:YC06:ao"
-    },
-    "YC07": {
-      "setpoint": "HALF:IN:COR:YC07:ao"
-    },
-    "YC08": {
-      "setpoint": "HALF:IN:COR:YC08:ao"
-    },
-    "YC09": {
-      "setpoint": "HALF:IN:COR:YC09:ao"
-    },
-    "YC10": {
-      "setpoint": "HALF:IN:COR:YC10:ao"
-    },
-    "YC11": {
-      "setpoint": "HALF:IN:COR:YC11:ao"
-    },
-    "YC12": {
-      "setpoint": "HALF:IN:COR:YC12:ao"
-    },
-    "YC13": {
-      "setpoint": "HALF:IN:COR:YC13:ao"
-    },
-    "YC14": {
-      "setpoint": "HALF:IN:COR:YC14:ao"
-    },
-    "YC15": {
-      "setpoint": "HALF:IN:COR:YC15:ao"
-    },
-    "YC16": {
-      "setpoint": "HALF:IN:COR:YC16:ao"
-    },
-    "YC17": {
-      "setpoint": "HALF:IN:COR:YC17:ao"
-    },
-    "YC18": {
-      "setpoint": "HALF:IN:COR:YC18:ao"
-    },
-    "YC19": {
-      "setpoint": "HALF:IN:COR:YC19:ao"
-    },
-    "YC20": {
-      "setpoint": "HALF:IN:COR:YC20:ao"
-    },
-    "YC21": {
-      "setpoint": "HALF:IN:COR:YC21:ao"
-    },
-    "YC22": {
-      "setpoint": "HALF:IN:COR:YC22:ao"
-    },
-    "YC23": {
-      "setpoint": "HALF:IN:COR:YC23:ao"
-    },
-    "YC24": {
-      "setpoint": "HALF:IN:COR:YC24:ao"
-    },
-    "YC25": {
-      "setpoint": "HALF:IN:COR:YC25:ao"
-    },
-    "YC26": {
-      "setpoint": "HALF:IN:COR:YC26:ao"
-    },
-    "YC27": {
-      "setpoint": "HALF:IN:COR:YC27:ao"
-    },
-    "YC28": {
-      "setpoint": "HALF:IN:COR:YC28:ao"
-    },
-    "YC29": {
-      "setpoint": "HALF:IN:COR:YC29:ao"
-    },
-    "YC30": {
-      "setpoint": "HALF:IN:COR:YC30:ao"
-    },
-    "YC31": {
-      "setpoint": "HALF:IN:COR:YC31:ao"
-    },
-    "YC32": {
-      "setpoint": "HALF:IN:COR:YC32:ao"
-    },
-    "YC33": {
-      "setpoint": "HALF:IN:COR:YC33:ao"
-    },
-    "YC34": {
-      "setpoint": "HALF:IN:COR:YC34:ao"
-    },
-    "YC35": {
-      "setpoint": "HALF:IN:COR:YC35:ao"
-    },
-    "YC36": {
-      "setpoint": "HALF:IN:COR:YC36:ao"
-    },
-    "YC37": {
-      "setpoint": "HALF:IN:COR:YC37:ao"
-    },
-    "YC38": {
-      "setpoint": "HALF:IN:COR:YC38:ao"
-    },
-    "YC39": {
-      "setpoint": "HALF:IN:COR:YC39:ao"
-    },
-    "YC40": {
-      "setpoint": "HALF:IN:COR:YC40:ao"
-    },
-    "YC41": {
-      "setpoint": "HALF:IN:COR:YC41:ao"
-    },
-    "YC42": {
-      "setpoint": "HALF:IN:COR:YC42:ao"
-    },
-    "YC43": {
-      "setpoint": "HALF:IN:COR:YC43:ao"
+      "x": "IN:BD:LE05:DBPM:02:BPM_X",
+      "y": "IN:BD:LE05:DBPM:02:BPM_Y"
+    },
+    "BPM03": {
+      "x": "IN:BD:LE05:DBPM:03:BPM_X",
+      "y": "IN:BD:LE05:DBPM:03:BPM_Y"
+    },
+    "BPM04": {
+      "x": "IN:BD:LE05:DBPM:04:BPM_X",
+      "y": "IN:BD:LE05:DBPM:04:BPM_Y"
+    },
+    "BPM05": {
+      "x": "IN:BD:LE05:DBPM:05:BPM_X",
+      "y": "IN:BD:LE05:DBPM:05:BPM_Y"
+    },
+    "BPM06": {
+      "x": "IN:BD:LE05:DBPM:06:BPM_X",
+      "y": "IN:BD:LE05:DBPM:06:BPM_Y"
+    },
+    "BPM07": {
+      "x": "IN:BD:LE05:DBPM:07:BPM_X",
+      "y": "IN:BD:LE05:DBPM:07:BPM_Y"
+    },
+    "BPM08": {
+      "x": "IN:BD:LE05:DBPM:08:BPM_X",
+      "y": "IN:BD:LE05:DBPM:08:BPM_Y"
+    },
+    "BPM09": {
+      "x": "IN:BD:LE05:DBPM:09:BPM_X",
+      "y": "IN:BD:LE05:DBPM:09:BPM_Y"
+    },
+    "BPM10": {
+      "x": "IN:BD:LE05:DBPM:10:BPM_X",
+      "y": "IN:BD:LE05:DBPM:10:BPM_Y"
+    },
+    "BPM11": {
+      "x": "IN:BD:LE05:DBPM:11:BPM_X",
+      "y": "IN:BD:LE05:DBPM:11:BPM_Y"
+    },
+    "BPM12": {
+      "x": "IN:BD:LE05:DBPM:12:BPM_X",
+      "y": "IN:BD:LE05:DBPM:12:BPM_Y"
+    },
+    "BPM13": {
+      "x": "IN:BD:LE05:DBPM:13:BPM_X",
+      "y": "IN:BD:LE05:DBPM:13:BPM_Y"
+    },
+    "BPM14": {
+      "x": "IN:BD:LE14:DBPM:14:BPM_X",
+      "y": "IN:BD:LE14:DBPM:14:BPM_Y"
+    },
+    "BPM15": {
+      "x": "IN:BD:LE14:DBPM:15:BPM_X",
+      "y": "IN:BD:LE14:DBPM:15:BPM_Y"
+    },
+    "BPM16": {
+      "x": "IN:BD:LE14:DBPM:16:BPM_X",
+      "y": "IN:BD:LE14:DBPM:16:BPM_Y"
+    },
+    "BPM17": {
+      "x": "IN:BD:LE14:DBPM:17:BPM_X",
+      "y": "IN:BD:LE14:DBPM:17:BPM_Y"
+    },
+    "BPM18": {
+      "x": "IN:BD:LE14:DBPM:18:BPM_X",
+      "y": "IN:BD:LE14:DBPM:18:BPM_Y"
+    },
+    "BPM19": {
+      "x": "IN:BD:LE14:DBPM:19:BPM_X",
+      "y": "IN:BD:LE14:DBPM:19:BPM_Y"
+    },
+    "BPM20": {
+      "x": "IN:BD:LE14:DBPM:20:BPM_X",
+      "y": "IN:BD:LE14:DBPM:20:BPM_Y"
+    },
+    "BPM21": {
+      "x": "IN:BD:LE14:DBPM:21:BPM_X",
+      "y": "IN:BD:LE14:DBPM:21:BPM_Y"
+    },
+    "BPM22": {
+      "x": "IN:BD:LE14:DBPM:22:BPM_X",
+      "y": "IN:BD:LE14:DBPM:22:BPM_Y"
+    },
+    "BPM23": {
+      "x": "IN:BD:LE14:DBPM:23:BPM_X",
+      "y": "IN:BD:LE14:DBPM:23:BPM_Y"
+    },
+    "BPM24": {
+      "x": "IN:BD:LE14:DBPM:24:BPM_X",
+      "y": "IN:BD:LE14:DBPM:24:BPM_Y"
+    },
+    "BPM25": {
+      "x": "IN:BD:LE20:DBPM:25:BPM_X",
+      "y": "IN:BD:LE20:DBPM:25:BPM_Y"
+    },
+    "BPM26": {
+      "x": "IN:BD:LE20:DBPM:26:BPM_X",
+      "y": "IN:BD:LE20:DBPM:26:BPM_Y"
+    },
+    "BPM27": {
+      "x": "IN:BD:LE20:DBPM:27:BPM_X",
+      "y": "IN:BD:LE20:DBPM:27:BPM_Y"
+    },
+    "BPM28": {
+      "x": "IN:BD:LE20:DBPM:28:BPM_X",
+      "y": "IN:BD:LE20:DBPM:28:BPM_Y"
+    },
+    "BPM29": {
+      "x": "IN:BD:LE20:DBPM:29:BPM_X",
+      "y": "IN:BD:LE20:DBPM:29:BPM_Y"
+    },
+    "BPM30": {
+      "x": "IN:BD:LE20:DBPM:30:BPM_X",
+      "y": "IN:BD:LE20:DBPM:30:BPM_Y"
+    },
+    "BPM31": {
+      "x": "IN:BD:LE20:DBPM:31:BPM_X",
+      "y": "IN:BD:LE20:DBPM:31:BPM_Y"
+    },
+    "BPM32": {
+      "x": "IN:BD:LE20:DBPM:32:BPM_X",
+      "y": "IN:BD:LE20:DBPM:32:BPM_Y"
+    },
+    "BPM33": {
+      "x": "IN:BD:LE20:DBPM:33:BPM_X",
+      "y": "IN:BD:LE20:DBPM:33:BPM_Y"
+    },
+    "BPM34": {
+      "x": "IN:BD:LE20:DBPM:34:BPM_X",
+      "y": "IN:BD:LE20:DBPM:34:BPM_Y"
+    },
+    "BPM35": {
+      "x": "IN:BD:LE20:DBPM:35:BPM_X",
+      "y": "IN:BD:LE20:DBPM:35:BPM_Y"
+    },
+    "BPM36": {
+      "x": "IN:BD:LE20:DBPM:36:BPM_X",
+      "y": "IN:BD:LE20:DBPM:36:BPM_Y"
+    },
+    "BPM37": {
+      "x": "IN:BD:LE20:DBPM:37:BPM_X",
+      "y": "IN:BD:LE20:DBPM:37:BPM_Y"
+    },
+    "BPM38": {
+      "x": "IN:BD:LE20:DBPM:38:BPM_X",
+      "y": "IN:BD:LE20:DBPM:38:BPM_Y"
+    },
+    "BPM39": {
+      "x": "IN:BD:LE20:DBPM:39:BPM_X",
+      "y": "IN:BD:LE20:DBPM:39:BPM_Y"
+    },
+    "BPM40": {
+      "x": "IN:BD:LE20:DBPM:40:BPM_X",
+      "y": "IN:BD:LE20:DBPM:40:BPM_Y"
+    },
+    "BPM41": {
+      "x": "IN:BD:LE20:DBPM:41:BPM_X",
+      "y": "IN:BD:LE20:DBPM:41:BPM_Y"
+    },
+    "BPM42": {
+      "x": "IN:BD:LE20:DBPM:42:BPM_X",
+      "y": "IN:BD:LE20:DBPM:42:BPM_Y"
+    },
+    "BPM43": {
+      "x": "IN:BD:LE20:DBPM:43:BPM_X",
+      "y": "IN:BD:LE20:DBPM:43:BPM_Y"
     },
     "HC01": {
-      "setpoint": "HALF:IN:COR:HC01:ao"
-    },
-    "VC01": {
-      "setpoint": "HALF:IN:COR:VC01:ao"
+      "setpoint": "IRFEL:PS:HC01:current:ao"
     },
     "HC2": {
-      "setpoint": "HALF:IN:COR:HC2:ao"
-    },
-    "VC2": {
-      "setpoint": "HALF:IN:COR:VC2:ao"
+      "setpoint": "IRFEL:PS:HC02:current:ao"
     },
     "HC5": {
-      "setpoint": "HALF:IN:COR:HC5:ao"
-    },
-    "VC5": {
-      "setpoint": "HALF:IN:COR:VC5:ao"
-    },
-    "MS:HC": {
-      "setpoint": "HALF:IN:COR:MS:HC:ao"
-    },
-    "MS:VC": {
-      "setpoint": "HALF:IN:COR:MS:VC:ao"
+      "setpoint": "IRFEL:PS:HC05:current:ao"
     },
     "LS:HC": {
-      "setpoint": "HALF:IN:COR:LS:HC:ao"
+      "setpoint": "IN:PS:LE07:SL01-DX:current:ao"
     },
     "LS:VC": {
-      "setpoint": "HALF:IN:COR:LS:VC:ao"
+      "setpoint": "IN:PS:LE07:SL01-DY:current:ao"
     },
-    "HIC01": {
-      "setpoint": "HALF:IN:COR:HIC01:ao"
+    "MS:HC": {
+      "setpoint": "IN:PS:LE07:SM01-DX:current:ao"
     },
-    "VIC01": {
-      "setpoint": "HALF:IN:COR:VIC01:ao"
+    "MS:VC": {
+      "setpoint": "IN:PS:LE07:SM01-DY:current:ao"
     },
-    "HIC02": {
-      "setpoint": "HALF:IN:COR:HIC02:ao"
+    "VC01": {
+      "setpoint": "IRFEL:PS:VC01:current:ao"
     },
-    "VIC02": {
-      "setpoint": "HALF:IN:COR:VIC02:ao"
+    "VC2": {
+      "setpoint": "IRFEL:PS:VC02:current:ao"
     },
-    "CQ3": {
-      "k1": "HALF:IN:QUAD:CQ3:K1"
+    "VC5": {
+      "setpoint": "IRFEL:PS:VC05:current:ao"
     },
-    "CQ4": {
-      "k1": "HALF:IN:QUAD:CQ4:K1"
+    "XC00": {
+      "setpoint": "IN:PS:LE07:XC00:current:ao"
     },
-    "MQ11": {
-      "k1": "HALF:IN:QUAD:MQ11:K1"
+    "XC01": {
+      "setpoint": "IN:PS:LE07:XC01:current:ao"
     },
-    "MQ12": {
-      "k1": "HALF:IN:QUAD:MQ12:K1"
+    "XC02": {
+      "setpoint": "IN:PS:LE07:XC02:current:ao"
     },
-    "CQ1": {
-      "k1": "HALF:IN:QUAD:CQ1:K1"
+    "XC03": {
+      "setpoint": "IN:PS:LE07:XC03:current:ao"
     },
-    "CQ2": {
-      "k1": "HALF:IN:QUAD:CQ2:K1"
+    "XC04": {
+      "setpoint": "IN:PS:LE07:XC04:current:ao"
     },
-    "QT01": {
-      "k1": "HALF:IN:QUAD:QT01:K1"
+    "XC05": {
+      "setpoint": "IN:PS:LE07:XC05:current:ao"
     },
-    "QT18": {
-      "k1": "HALF:IN:QUAD:QT18:K1"
+    "XC06": {
+      "setpoint": "IN:PS:LE07:XC06:current:ao"
     },
-    "QL27": {
-      "k1": "HALF:IN:QUAD:QL27:K1"
+    "XC07": {
+      "setpoint": "IN:PS:LE07:XC07:current:ao"
     },
-    "QT02": {
-      "k1": "HALF:IN:QUAD:QT02:K1"
+    "XC08": {
+      "setpoint": "IN:PS:LE07:XC08:current:ao"
+    },
+    "XC09": {
+      "setpoint": "IN:PS:LE07:XC09:current:ao"
+    },
+    "XC10": {
+      "setpoint": "IN:PS:LE07:XC10:current:ao"
+    },
+    "XC11": {
+      "setpoint": "IN:PS:LE07:XC11:current:ao"
+    },
+    "XC12": {
+      "setpoint": "IN:PS:LE07:XC12:current:ao"
+    },
+    "XC13": {
+      "setpoint": "IN:PS:LE07:XC13:current:ao"
+    },
+    "XC14": {
+      "setpoint": "IN:PS:LE07:XC14:current:ao"
+    },
+    "XC15": {
+      "setpoint": "IN:PS:LE07:XC15:current:ao"
+    },
+    "XC16": {
+      "setpoint": "IN:PS:LE07:XC16:current:ao"
+    },
+    "XC17": {
+      "setpoint": "IN:PS:LE07:XC17:current:ao"
+    },
+    "XC18": {
+      "setpoint": "IN:PS:LE07:XC18:current:ao"
+    },
+    "XC19": {
+      "setpoint": "IN:PS:LE07:XC19:current:ao"
+    },
+    "XC20": {
+      "setpoint": "IN:PS:LE07:XC20:current:ao"
+    },
+    "XC21": {
+      "setpoint": "IN:PS:LE16:XC21:current:ao"
+    },
+    "XC22": {
+      "setpoint": "IN:PS:LE16:XC22:current:ao"
+    },
+    "XC23": {
+      "setpoint": "IN:PS:LE16:XC23:current:ao"
+    },
+    "XC24": {
+      "setpoint": "IN:PS:LE16:XC24:current:ao"
+    },
+    "XC25": {
+      "setpoint": "IN:PS:LE16:XC25:current:ao"
+    },
+    "XC26": {
+      "setpoint": "IN:PS:LE16:XC26:current:ao"
+    },
+    "XC27": {
+      "setpoint": "IN:PS:LE16:XC27:current:ao"
+    },
+    "XC28": {
+      "setpoint": "IN:PS:LE16:XC28:current:ao"
+    },
+    "XC29": {
+      "setpoint": "IN:PS:LE16:XC29:current:ao"
+    },
+    "XC30": {
+      "setpoint": "IN:PS:LE16:XC30:current:ao"
+    },
+    "XC31": {
+      "setpoint": "IN:PS:LE16:XC31:current:ao"
+    },
+    "XC32": {
+      "setpoint": "IN:PS:LE16:XC32:current:ao"
+    },
+    "XC33": {
+      "setpoint": "IN:PS:LE16:XC33:current:ao"
+    },
+    "XC34": {
+      "setpoint": "IN:PS:LE16:XC34:current:ao"
+    },
+    "XC35": {
+      "setpoint": "IN:PS:LE16:XC35:current:ao"
+    },
+    "XC36": {
+      "setpoint": "IN:PS:LE16:XC36:current:ao"
+    },
+    "XC37": {
+      "setpoint": "IN:PS:LE16:XC37:current:ao"
+    },
+    "XC38": {
+      "setpoint": "IN:PS:LE16:XC38:current:ao"
+    },
+    "XC39": {
+      "setpoint": "IN:PS:LE16:XC39:current:ao"
+    },
+    "XC40": {
+      "setpoint": "IN:PS:LE16:XC40:current:ao"
+    },
+    "XC41": {
+      "setpoint": "IN:PS:LE16:XC41:current:ao"
+    },
+    "XC42": {
+      "setpoint": "IN:PS:LE16:XC42:current:ao"
+    },
+    "XC43": {
+      "setpoint": "IN:PS:LE16:XC43:current:ao"
+    },
+    "YC00": {
+      "setpoint": "IN:PS:LE07:YC00:current:ao"
+    },
+    "YC01": {
+      "setpoint": "IN:PS:LE07:YC01:current:ao"
+    },
+    "YC02": {
+      "setpoint": "IN:PS:LE07:YC02:current:ao"
+    },
+    "YC03": {
+      "setpoint": "IN:PS:LE07:YC03:current:ao"
+    },
+    "YC04": {
+      "setpoint": "IN:PS:LE07:YC04:current:ao"
+    },
+    "YC05": {
+      "setpoint": "IN:PS:LE07:YC05:current:ao"
+    },
+    "YC06": {
+      "setpoint": "IN:PS:LE07:YC06:current:ao"
+    },
+    "YC07": {
+      "setpoint": "IN:PS:LE07:YC07:current:ao"
+    },
+    "YC08": {
+      "setpoint": "IN:PS:LE07:YC08:current:ao"
+    },
+    "YC09": {
+      "setpoint": "IN:PS:LE07:YC09:current:ao"
+    },
+    "YC10": {
+      "setpoint": "IN:PS:LE07:YC10:current:ao"
+    },
+    "YC11": {
+      "setpoint": "IN:PS:LE07:YC11:current:ao"
+    },
+    "YC12": {
+      "setpoint": "IN:PS:LE07:YC12:current:ao"
+    },
+    "YC13": {
+      "setpoint": "IN:PS:LE07:YC13:current:ao"
+    },
+    "YC14": {
+      "setpoint": "IN:PS:LE07:YC14:current:ao"
+    },
+    "YC15": {
+      "setpoint": "IN:PS:LE07:YC15:current:ao"
+    },
+    "YC16": {
+      "setpoint": "IN:PS:LE07:YC16:current:ao"
+    },
+    "YC17": {
+      "setpoint": "IN:PS:LE07:YC17:current:ao"
+    },
+    "YC18": {
+      "setpoint": "IN:PS:LE07:YC18:current:ao"
+    },
+    "YC19": {
+      "setpoint": "IN:PS:LE07:YC19:current:ao"
+    },
+    "YC20": {
+      "setpoint": "IN:PS:LE07:YC20:current:ao"
+    },
+    "YC21": {
+      "setpoint": "IN:PS:LE16:YC21:current:ao"
+    },
+    "YC22": {
+      "setpoint": "IN:PS:LE16:YC22:current:ao"
+    },
+    "YC23": {
+      "setpoint": "IN:PS:LE16:YC23:current:ao"
+    },
+    "YC24": {
+      "setpoint": "IN:PS:LE16:YC24:current:ao"
+    },
+    "YC25": {
+      "setpoint": "IN:PS:LE16:YC25:current:ao"
+    },
+    "YC26": {
+      "setpoint": "IN:PS:LE16:YC26:current:ao"
+    },
+    "YC27": {
+      "setpoint": "IN:PS:LE16:YC27:current:ao"
+    },
+    "YC28": {
+      "setpoint": "IN:PS:LE16:YC28:current:ao"
+    },
+    "YC29": {
+      "setpoint": "IN:PS:LE16:YC29:current:ao"
+    },
+    "YC30": {
+      "setpoint": "IN:PS:LE16:YC30:current:ao"
+    },
+    "YC31": {
+      "setpoint": "IN:PS:LE16:YC31:current:ao"
+    },
+    "YC32": {
+      "setpoint": "IN:PS:LE16:YC32:current:ao"
+    },
+    "YC33": {
+      "setpoint": "IN:PS:LE16:YC33:current:ao"
+    },
+    "YC34": {
+      "setpoint": "IN:PS:LE16:YC34:current:ao"
+    },
+    "YC35": {
+      "setpoint": "IN:PS:LE16:YC35:current:ao"
+    },
+    "YC36": {
+      "setpoint": "IN:PS:LE16:YC36:current:ao"
+    },
+    "YC37": {
+      "setpoint": "IN:PS:LE16:YC37:current:ao"
+    },
+    "YC38": {
+      "setpoint": "IN:PS:LE16:YC38:current:ao"
+    },
+    "YC39": {
+      "setpoint": "IN:PS:LE16:YC39:current:ao"
+    },
+    "YC40": {
+      "setpoint": "IN:PS:LE16:YC40:current:ao"
+    },
+    "YC41": {
+      "setpoint": "IN:PS:LE16:YC41:current:ao"
+    },
+    "YC42": {
+      "setpoint": "IN:PS:LE16:YC42:current:ao"
+    },
+    "YC43": {
+      "setpoint": "IN:PS:LE16:YC43:current:ao"
+    },
+    "QL01": {
+      "k1": "IN:PS:LE07:QL01:current:ao"
+    },
+    "QL02": {
+      "k1": "IN:PS:LE07:QL02:current:ao"
+    },
+    "QL03": {
+      "k1": "IN:PS:LE07:QL03:current:ao"
+    },
+    "QL04": {
+      "k1": "IN:PS:LE07:QL04:current:ao"
+    },
+    "QL11": {
+      "k1": "IN:PS:LE07:QL11:current:ao"
+    },
+    "QL12": {
+      "k1": "IN:PS:LE07:QL12:current:ao"
     },
     "QL15": {
-      "k1": "HALF:IN:QUAD:QL15:K1"
+      "k1": "IRFEL:AP:QUAD:QL15:K1:ao"
     },
     "QL16": {
-      "k1": "HALF:IN:QUAD:QL16:K1"
+      "k1": "IRFEL:AP:QUAD:QL16:K1:ao"
     },
-    "MQ1": {
-      "k1": "HALF:IN:QUAD:MQ1:K1"
+    "QL27": {
+      "k1": "IRFEL:AP:QUAD:QL27:K1:ao"
     },
-    "MQ2": {
-      "k1": "HALF:IN:QUAD:MQ2:K1"
+    "QT01": {
+      "k1": "IN:MG:L002:QUAD:QT01:K1"
     },
-    "PRF06": {
-      "sigx": "HALF:IN:FLAG:PRF06:sigx",
-      "sigy": "HALF:IN:FLAG:PRF06:sigy"
+    "QT02": {
+      "k1": "IN:MG:L002:QUAD:QT02:K1"
     },
-    "PRF07": {
-      "sigx": "HALF:IN:FLAG:PRF07:sigx",
-      "sigy": "HALF:IN:FLAG:PRF07:sigy"
-    },
-    "PRF08": {
-      "sigx": "HALF:IN:FLAG:PRF08:sigx",
-      "sigy": "HALF:IN:FLAG:PRF08:sigy"
+    "QT18": {
+      "k1": "IN:MG:L002:QUAD:QT18:K1"
     },
     "PRF04": {
-      "sigx": "HALF:IN:FLAG:PRF04:sigx",
-      "sigy": "HALF:IN:FLAG:PRF04:sigy"
+      "sigx": "IN:BD:PRF04:H:SIZE",
+      "sigy": "IN:BD:PRF04:V:SIZE"
+    },
+    "PRF06": {
+      "sigx": "IN:BD:PRF06:H:SIZE",
+      "sigy": "IN:BD:PRF06:V:SIZE"
+    },
+    "PRF07": {
+      "sigx": "IN:BD:PRF07:H:SIZE",
+      "sigy": "IN:BD:PRF07:V:SIZE"
+    },
+    "PRF08": {
+      "sigx": "IN:BD:PRF08:H:SIZE",
+      "sigy": "IN:BD:PRF08:V:SIZE"
     }
   }
 }

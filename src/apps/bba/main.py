@@ -34,11 +34,13 @@ from gui import Ui_Form
 from half_linac.src.shared.machine_profile import (
     build_model_backend,
     get_bba_preset,
+    list_elements,
     load_app_context,
     resolve_channel,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
+    default_control_backend_choices,
     request_runtime_restart,
 )
 
@@ -502,7 +504,9 @@ class myWindow(QWidget, Ui_Form):
         self.pushButton_7.clicked.connect(self.recalculate_bba2)
         self.tabWidget.currentChanged.connect(self._refresh_status)
         self.comboBox_5.currentIndexChanged.connect(self._refresh_status)
+        self.comboBox_5.currentIndexChanged.connect(self._refresh_standard_correctors)
         self.comboBox_10.currentIndexChanged.connect(self._refresh_status)
+        self.comboBox_10.currentIndexChanged.connect(self._refresh_bba2_correctors)
         self.comboBox_11.currentIndexChanged.connect(self._refresh_status)
 
     def _build_shell(self):
@@ -988,24 +992,80 @@ class myWindow(QWidget, Ui_Form):
     def _find_bba_preset(self, preset_id):
         return get_bba_preset(self.app_context, preset_id)
 
+    def _profile_element_ids(self, *, kind, role=None, plane=None):
+        return [element.id for element in list_elements(self.app_context, kind=kind, role=role, plane=plane)]
+
+    def _standard_quad_items(self):
+        return self._profile_element_ids(kind="quad")
+
+    def _standard_corrector_items(self, plane):
+        return self._profile_element_ids(
+            kind="corr",
+            plane=self._normalize_plane_value(plane).lower(),
+        )
+
+    def _standard_bpm1_items(self):
+        return self._profile_element_ids(kind="bpm")
+
+    def _standard_bpm2_items(self):
+        return self._profile_element_ids(kind="bpm")
+
+    def _bba2_quad_items(self):
+        return self._profile_element_ids(kind="quad")
+
+    def _bba2_corrector_items(self, plane):
+        return self._profile_element_ids(
+            kind="corr",
+            plane=self._normalize_plane_value(plane).lower(),
+        )
+
+    def _bba2_bpm1_items(self):
+        return self._profile_element_ids(kind="bpm")
+
+    def _bba2_bpm2_items(self):
+        return self._profile_element_ids(kind="bpm")
+
+    def _refresh_corrector_combo(self, combo, items, preferred=None):
+        current = preferred or combo.currentText()
+        self._set_combo_items(combo, items)
+        if current in items:
+            self._set_combo_current_text(combo, current)
+        elif items:
+            self._set_combo_current_text(combo, items[0])
+
+    def _refresh_standard_correctors(self):
+        if not hasattr(self, "comboBox"):
+            return
+        items = self._standard_corrector_items(self.comboBox_5.currentText())
+        self._refresh_corrector_combo(self.comboBox, items)
+
+    def _refresh_bba2_correctors(self):
+        if not hasattr(self, "comboBox_9"):
+            return
+        items = self._bba2_corrector_items(self.comboBox_10.currentText())
+        self._refresh_corrector_combo(self.comboBox_9, items)
+
     def _configure_machine_profile(self):
         standard = self.bba_workflow.standard
         bba2 = self.bba_workflow.bba2
+        control_backends = bba2.control_backends or default_control_backend_choices(self.app_context.machine.id)
 
-        self._set_combo_items(self.comboBox, standard.correctors)
-        self._set_combo_items(self.comboBox_2, standard.quads)
-        self._set_combo_items(self.comboBox_3, standard.bpm1)
-        self._set_combo_items(self.comboBox_4, standard.bpm2)
+        self._set_combo_items(self.comboBox_2, self._standard_quad_items())
+        self._set_combo_items(self.comboBox_3, self._standard_bpm1_items())
+        self._set_combo_items(self.comboBox_4, self._standard_bpm2_items())
 
-        self._set_combo_items(self.comboBox_7, bba2.quads)
-        self._set_combo_items(self.comboBox_9, bba2.correctors)
-        self._set_combo_items(self.comboBox_8, bba2.bpm1)
-        self._set_combo_items(self.comboBox_6, bba2.bpm2)
-        self._set_combo_items(self.comboBox_11, bba2.control_backends)
+        self._set_combo_items(self.comboBox_7, self._bba2_quad_items())
+        self._set_combo_items(self.comboBox_8, self._bba2_bpm1_items())
+        self._set_combo_items(self.comboBox_6, self._bba2_bpm2_items())
+        self._set_combo_items(self.comboBox_11, control_backends)
 
         standard_default = self._find_bba_preset(standard.default_preset)
         self._set_combo_current_plane(self.comboBox_5, standard_default.plane)
-        self._set_combo_current_text(self.comboBox, standard_default.corr)
+        self._refresh_corrector_combo(
+            self.comboBox,
+            self._standard_corrector_items(standard_default.plane),
+            preferred=standard_default.corr,
+        )
         self._set_combo_current_text(self.comboBox_2, standard_default.quad)
         self._set_combo_current_text(self.comboBox_3, standard_default.bpm1)
         self._set_combo_current_text(self.comboBox_4, standard_default.bpm2)
@@ -1026,7 +1086,11 @@ class myWindow(QWidget, Ui_Form):
         bba2_default = self._find_bba_preset(bba2.default_preset)
         self._set_combo_current_plane(self.comboBox_10, bba2_default.plane)
         self._set_combo_current_text(self.comboBox_7, bba2_default.quad)
-        self._set_combo_current_text(self.comboBox_9, bba2_default.corr)
+        self._refresh_corrector_combo(
+            self.comboBox_9,
+            self._bba2_corrector_items(bba2_default.plane),
+            preferred=bba2_default.corr,
+        )
         self._set_combo_current_text(self.comboBox_8, bba2_default.bpm1)
         self._set_combo_current_text(self.comboBox_6, bba2_default.bpm2)
         self._set_combo_current_control_backend(

@@ -6,7 +6,8 @@
 
 ## Project Map
 - `src/apps/`: PyQt operator GUIs such as the Control Room app (`launcher/`), orbit correction, BBA, beam monitor, jitter, and energy spectrum.
-- `src/optimization/`: online optimization GUI plus BO, RCDS, and Rsimplex implementations.
+- `src/shared/`: shared runtime helpers that are not owned by a single app.
+- `src/optimization/`: optimization launcher entrypoints plus the vendored `GOTAcc/` package used for optimization workflows in this repo.
 - `src/softIOC/`: EPICS IOC manager, PV server, templates, and IOC boot files.
 - `src/virtual_machine/`: elegant-based virtual machine and lattice translators.
 - `scripts/`: repo-local helper scripts for environment setup, checks, and common entrypoints.
@@ -15,7 +16,10 @@
 - Default to the smallest safe change.
 - Preserve unrelated local changes in the worktree.
 - Prefer repo-relative scripts under `scripts/` instead of absolute home-directory paths.
+- Prefer `half_linac.runtime_config` for shared runtime/config imports.
+- Treat `src/optimization/GOTAcc/` and `src/apps/jitter_analysis/` as externally maintained integration code: prefer launcher, wrapper, config, or compatibility fixes around them, and avoid large functional changes inside those vendored subtrees unless the user explicitly asks.
 - Keep architectural or workflow notes short in `AGENTS.md`; deeper explanations belong in `docs/` or `README.md`.
+- Prefer simple and easy-to-maintain machine-profile design: default to dynamic loading by `kind`, and only add `plane` or minimal tags when physically necessary. Avoid fine-grained app-specific role taxonomies unless the simpler approach clearly fails. Do not duplicate selectable element lists in app workflow config when they can be derived from machine-native element types.
 
 ## Safety Rules
 - Default to offline analysis and VM-oriented workflows.

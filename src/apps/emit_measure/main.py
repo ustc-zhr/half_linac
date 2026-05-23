@@ -42,6 +42,7 @@ import half_linac.runtime_config as st
 from half_linac.src.shared.machine_profile import (
     build_model_backend,
     get_emit_preset,
+    list_elements,
     load_app_context,
     resolve_channel,
 )
@@ -1146,25 +1147,44 @@ class myWindow(QWidget,Ui_Form):
             grouped[preset.quad].append(preset)
         return grouped
 
+    def _profile_element_ids(self, *, kind, role=None, plane=None):
+        return [element.id for element in list_elements(self.app_context, kind=kind, role=role, plane=plane)]
+
+    def _emit_quad_items(self):
+        return self._profile_element_ids(kind="quad")
+
+    def _emit_flag_items(self):
+        return self._profile_element_ids(kind="flag")
+
+    def _emit_twiss_quad_items(self):
+        return self._emit_quad_items()
+
+    def _find_emit_preset_for_selection(self, quad_name, flag_name):
+        for preset in self.emit_workflow.presets:
+            if preset.quad == quad_name and preset.flag == flag_name:
+                return preset
+        return None
+
     def _find_emit_preset(self, preset_id):
         return get_emit_preset(self.app_context, preset_id)
 
     def _configure_machine_profile(self):
-        presets_by_quad = self._emit_presets_by_quad()
-        quad_items = list(presets_by_quad)
+        quad_items = self._emit_quad_items()
+        flag_items = self._emit_flag_items()
         self._set_combo_items(self.comboBox, quad_items)
+        self._set_combo_items(self.comboBox_4, flag_items)
 
-        twiss_quads = self.emit_workflow.twiss_quads
+        twiss_quads = self._emit_twiss_quad_items()
         self._set_combo_items(self.comboBox_2, twiss_quads)
         self._set_combo_items(self.comboBox_3, twiss_quads)
 
         default_preset = self._find_emit_preset(self.emit_workflow.default_preset)
         self._set_combo_current_text(self.comboBox, default_preset.quad)
-        self.updateComboBox4(self.comboBox.currentIndex())
         self._set_combo_current_text(self.comboBox_4, default_preset.flag)
         self._set_combo_current_text(self.comboBox_2, twiss_quads[0])
         self._set_combo_current_text(self.comboBox_3, twiss_quads[0])
         self._apply_emit_preset_defaults(default_preset)
+        self.updateComboBox4(self.comboBox.currentIndex())
 
     def _apply_emit_preset_defaults(self, preset):
         default_preset = self._find_emit_preset(self.emit_workflow.default_preset)
@@ -1189,16 +1209,13 @@ class myWindow(QWidget,Ui_Form):
     def _sync_emit_preset_defaults(self):
         quad_name = self.comboBox.currentText()
         flag_name = self.comboBox_4.currentText()
-        for preset in self.emit_workflow.presets:
-            if preset.quad == quad_name and preset.flag == flag_name:
-                self._apply_emit_preset_defaults(preset)
-                return
+        preset = self._find_emit_preset_for_selection(quad_name, flag_name)
+        if preset is not None:
+            self._apply_emit_preset_defaults(preset)
 
     def updateComboBox4(self, index):
         del index
-        quad_name = self.comboBox.currentText()
-        presets = self._emit_presets_by_quad().get(quad_name, [])
-        flag_items = [preset.flag for preset in presets]
+        flag_items = self._emit_flag_items()
         current_flag = self.comboBox_4.currentText()
         self._set_combo_items(self.comboBox_4, flag_items)
         if current_flag in flag_items:

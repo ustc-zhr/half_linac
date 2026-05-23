@@ -10,6 +10,7 @@ from .models import (
     MachineProfile,
     MachineProfileError,
     normalize_mode,
+    normalize_plane,
 )
 
 
@@ -48,9 +49,22 @@ def resolve_channel(
     return pv_name
 
 
-def list_elements(target: MachineProfile | AppContext, kind: str) -> list[ElementConfig]:
+def list_elements(
+    target: MachineProfile | AppContext,
+    kind: str | None = None,
+    role: str | None = None,
+    plane: str | None = None,
+) -> list[ElementConfig]:
     profile = target.profile if isinstance(target, AppContext) else target
-    return [element for element in profile.elements if element.kind == kind]
+    normalized_plane = normalize_plane(plane, "plane") if plane is not None else None
+    elements = list(profile.elements)
+    if kind is not None:
+        elements = [element for element in elements if element.kind == kind]
+    if role is not None:
+        elements = [element for element in elements if role in element.roles]
+    if normalized_plane is not None:
+        elements = [element for element in elements if element.plane == normalized_plane]
+    return elements
 
 
 def get_workflow(profile: MachineProfile, workflow_name: str) -> Mapping[str, object]:

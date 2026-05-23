@@ -74,13 +74,5 @@
       "energy_mev": 220
     }
   ],
-  "default_preset": "emit_ql27_prf06",
-  "twiss_quads": [
-    "CQ1",
-    "CQ2",
-    "CQ3",
-    "CQ4",
-    "MQ1",
-    "MQ2"
-  ]
+  "default_preset": "emit_ql27_prf06"
 }
