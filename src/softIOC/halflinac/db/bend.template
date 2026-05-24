@@ -1,7 +1,7 @@
-record(ao, "HALF:IN:BEND:$(BEND):ANGLE") {
+record(ao, "$(RECORD)") {
+  alias("$(CURRENTALIAS)")
   field(VAL, "0.0")
   field(DRVL, "-10.0")
   field(DRVH, "10.0")
   field(PINI, "YES")
-  #field(FLNK, "HALF:IN:BEND:$(BEND):ANGLE:ai")
 }

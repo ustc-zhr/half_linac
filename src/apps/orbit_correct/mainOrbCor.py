@@ -511,6 +511,29 @@ class myWindow(QMainWindow, Ui_MainWindow):
         match = re.search(r"(\d+)$", widget.objectName())
         return int(match.group(1)) if match else 0
 
+    def _append_target_bpm_row(self, index):
+        row = self.gridLayout_2.rowCount()
+        checkbox = QCheckBox(self.scrollAreaWidgetContents_2)
+        checkbox.setObjectName(f"checkBox_{index:02d}_dynamic")
+
+        bpmx_widget = QDoubleSpinBox(self.scrollAreaWidgetContents_2)
+        bpmx_widget.setObjectName(f"bpmx_doubleSpinBox_{index:02d}_dynamic")
+        bpmx_widget.setDecimals(2)
+        bpmx_widget.setMinimum(-99.99)
+        bpmx_widget.setMaximum(99.99)
+        bpmx_widget.setSingleStep(0.1)
+
+        bpmy_widget = QDoubleSpinBox(self.scrollAreaWidgetContents_2)
+        bpmy_widget.setObjectName(f"bpmy_doubleSpinBox_{index:02d}_dynamic")
+        bpmy_widget.setDecimals(2)
+        bpmy_widget.setMinimum(-99.99)
+        bpmy_widget.setMaximum(99.99)
+        bpmy_widget.setSingleStep(0.1)
+
+        self.gridLayout_2.addWidget(checkbox, row, 0)
+        self.gridLayout_2.addWidget(bpmx_widget, row, 1)
+        self.gridLayout_2.addWidget(bpmy_widget, row, 2)
+
     def _configure_machine_profile(self):
         if self.orbit_workflow is None:
             raise ValueError("Orbit workflow is not available in the current app context.")
@@ -529,10 +552,21 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
 
         available = min(len(checkbox_widgets), len(bpmx_widgets), len(bpmy_widgets))
-        if len(orbit_bpms) > available:
-            raise ValueError(
-                f"Orbit workflow defines {len(orbit_bpms)} BPMs but UI only exposes {available} slots."
+        while len(orbit_bpms) > available:
+            self._append_target_bpm_row(available + 1)
+            checkbox_widgets = sorted(
+                self.findChildren(QCheckBox),
+                key=self._extract_widget_index,
             )
+            bpmx_widgets = sorted(
+                self.findChildren(QDoubleSpinBox, QRegExp("bpmx_.*")),
+                key=self._extract_widget_index,
+            )
+            bpmy_widgets = sorted(
+                self.findChildren(QDoubleSpinBox, QRegExp("bpmy_.*")),
+                key=self._extract_widget_index,
+            )
+            available = min(len(checkbox_widgets), len(bpmx_widgets), len(bpmy_widgets))
 
         self.all_checkboxes = checkbox_widgets[: len(orbit_bpms)]
         self._bpmx_spinboxes = bpmx_widgets[: len(orbit_bpms)]

@@ -5,7 +5,9 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/common.sh"
 
-IOC_DIR="$HALF_LINAC_ROOT/src/softIOC/halflinac"
+IOC_DIR="$(
+  python3 -c 'from half_linac.src.shared.machine_profile import resolve_machine_runtime; print(resolve_machine_runtime().softioc.root)'
+)"
 RELEASE_FILE="$IOC_DIR/configure/RELEASE"
 
 read_release_var() {

@@ -35,6 +35,7 @@ from scipy.optimize import curve_fit
 
 from gui import Ui_Form
 from half_linac.src.shared.machine_profile import (
+    MachineProfileError,
     get_workflow,
     list_elements,
     load_app_context,
@@ -656,11 +657,9 @@ class myWindow(QWidget, Ui_Form):
     def _configure_default_state(self):
         self.pushButton.setEnabled(False)
         self.pushButton_2.setEnabled(True)
-        default_flag = str(self.beam_monitor_config.get("default_flag", "")).strip()
-        if default_flag and default_flag in self.flag_ids:
+        default_flag = self._pick_default_flag_id()
+        if default_flag:
             self.flag_selec.setCurrentText(default_flag)
-        elif "PRF06" in self.flag_ids:
-            self.flag_selec.setCurrentText("PRF06")
         elif self.flag_ids:
             self.flag_selec.setCurrentIndex(0)
         self.tmppv = self.flag_selec.currentText()
@@ -670,6 +669,18 @@ class myWindow(QWidget, Ui_Form):
         self.lineEdit_9.setText("1")
         self.lineEdit_5.setText("--")
         self.lineEdit_6.setText("--")
+
+    def _pick_default_flag_id(self):
+        default_flag = str(self.beam_monitor_config.get("default_flag", "")).strip()
+        if default_flag and default_flag in self.flag_ids:
+            return default_flag
+        return self.flag_ids[0] if self.flag_ids else ""
+
+    def _resolve_optional_channel(self, element_id, logical_channel):
+        try:
+            return resolve_channel(self.app_context, element_id, logical_channel)
+        except MachineProfileError:
+            return None
 
     def _connect_signals(self):
         self.pushButton.clicked.connect(self.start1_btn)
@@ -870,10 +881,7 @@ class myWindow(QWidget, Ui_Form):
     def init_realOrVM(self):
         mode = self._current_mode()
         self.pv = resolve_channel(self.app_context, self.tmppv, "image")
-        try:
-            self.expoTimePV = resolve_channel(self.app_context, self.tmppv, "exposure_time")
-        except Exception:
-            self.expoTimePV = None
+        self.expoTimePV = self._resolve_optional_channel(self.tmppv, "exposure_time")
 
         if mode == "real":
             if self.expoTimePV is not None:
@@ -883,6 +891,8 @@ class myWindow(QWidget, Ui_Form):
                         self.lineEdit.setText(str(expoTime))
                 except Exception as exc:
                     self._mark_pv_unavailable(exc)
+            else:
+                self.lineEdit.setText("--")
         elif mode == "vm":
             self.lineEdit.setText("VM")
         else:
@@ -891,13 +901,12 @@ class myWindow(QWidget, Ui_Form):
         return True
 
     def init_sigxy_pv(self):
-        try:
-            self.sigPV = [
-                resolve_channel(self.app_context, self.tmppv, "sigx"),
-                resolve_channel(self.app_context, self.tmppv, "sigy"),
-            ]
-        except Exception:
+        sigx_pv = self._resolve_optional_channel(self.tmppv, "sigx")
+        sigy_pv = self._resolve_optional_channel(self.tmppv, "sigy")
+        if sigx_pv is None or sigy_pv is None:
             self.sigPV = None
+            return
+        self.sigPV = [sigx_pv, sigy_pv]
 
     def start1_btn(self):
         freq = self._get_refresh_interval_ms()

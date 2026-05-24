@@ -1,22 +1,14 @@
-record(ao, "HALF:IN:BPM:$(BPM):X:ao") {
+record(ao, "$(XRECORD)") {
+  alias("$(XALIAS)")
   field(VAL, "0.0")
   field(DRVL, "-10.0")
   field(DRVH, "10.0")
   field(PINI, "YES")
-  field(FLNK, "HALF:IN:BPM:$(BPM):X:ai")
 }
-record(ai, "HALF:IN:BPM:$(BPM):X:ai") {
-  field(SCAN, "1 second")
-  #field(INP, "HALF:IN:BPM:$(BPM):X:ao NPP NMS")
-}
-record(ao, "HALF:IN:BPM:$(BPM):Y:ao") {
+record(ao, "$(YRECORD)") {
+  alias("$(YALIAS)")
   field(VAL, "0.0")
   field(DRVL, "-10.0")
   field(DRVH, "10.0")
   field(PINI, "YES")
-  field(FLNK, "HALF:IN:BPM:$(BPM):Y:ai")
-}
-record(ai, "HALF:IN:BPM:$(BPM):Y:ai") {
-  field(SCAN, "1 second")
-  #field(INP, "HALF:IN:BPM:$(BPM):Y:ao NPP NMS")
 }

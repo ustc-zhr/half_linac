@@ -21,7 +21,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
 )
 from subgui import Ui_Form 
-from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QHBoxLayout
+from PyQt5.QtWidgets import QApplication, QLabel, QLineEdit, QMainWindow
 from PyQt5.QtCore import QTimer
 
 from epics import caget, caget_many
@@ -63,16 +63,49 @@ class myWindow(QMainWindow, Ui_Form):
             self.x_value_widgets.append(x_value)
             self.y_value_widgets.append(y_value)
 
+        while len(self.bpm_ids) > len(self.x_label_widgets):
+            self._append_dynamic_bpm_row(len(self.x_label_widgets) + 1)
+
         visible_count = min(len(self.bpm_ids), len(self.x_label_widgets))
         for index, bpm_id in enumerate(self.bpm_ids[:visible_count]):
             self.x_label_widgets[index].setText(f"{bpm_id} X")
             self.y_label_widgets[index].setText(f"{bpm_id} Y")
+            self.x_label_widgets[index].show()
+            self.y_label_widgets[index].show()
+            self.x_value_widgets[index].show()
+            self.y_value_widgets[index].show()
 
         for index in range(visible_count, len(self.x_label_widgets)):
             self.x_label_widgets[index].hide()
             self.y_label_widgets[index].hide()
             self.x_value_widgets[index].hide()
             self.y_value_widgets[index].hide()
+
+    def _append_dynamic_bpm_row(self, index):
+        row = len(self.x_label_widgets)
+
+        x_label = QLabel(self.horizontalLayoutWidget)
+        x_label.setObjectName(f"bPMx{index:02d}Label_dynamic")
+        self.formLayout.setWidget(row, self.formLayout.LabelRole, x_label)
+
+        x_value = QLineEdit(self.horizontalLayoutWidget)
+        x_value.setReadOnly(True)
+        x_value.setObjectName(f"bPMx{index:02d}LineEdit_dynamic")
+        self.formLayout.setWidget(row, self.formLayout.FieldRole, x_value)
+
+        y_label = QLabel(self.horizontalLayoutWidget)
+        y_label.setObjectName(f"bPMy{index:02d}Label_dynamic")
+        self.formLayout_3.setWidget(row, self.formLayout_3.LabelRole, y_label)
+
+        y_value = QLineEdit(self.horizontalLayoutWidget)
+        y_value.setReadOnly(True)
+        y_value.setObjectName(f"bPMy{index:02d}LineEdit_dynamic")
+        self.formLayout_3.setWidget(row, self.formLayout_3.FieldRole, y_value)
+
+        self.x_label_widgets.append(x_label)
+        self.y_label_widgets.append(y_label)
+        self.x_value_widgets.append(x_value)
+        self.y_value_widgets.append(y_value)
         
     def bpmvalue_dis(self):
         # init pv
@@ -98,4 +131,3 @@ if __name__ == '__main__':
     window = myWindow()
     window.show()
     sys.exit(app.exec_())
-

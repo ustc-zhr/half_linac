@@ -6,6 +6,21 @@
     "display_name": "HALF Linac",
     "default_mode": "vm"
   },
+  "runtime": {
+    "vm": {
+      "root": "src/virtual_machine/half_elegant",
+      "ui_entrypoint": "src/virtual_machine/half_elegant/mainVM.py",
+      "manager_entrypoint": "src/virtual_machine/half_elegant/start_VM.py",
+      "runtime_json": "src/virtual_machine/half_elegant/halflinac.json",
+      "bootstrap_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
+      "bootstrap_ele": "src/virtual_machine/half_elegant/elegant/one_ini.ele",
+      "line_name": "ALL"
+    },
+    "softioc": {
+      "root": "src/softIOC/halflinac",
+      "substitutions_file": "db/halflinac.substitutions"
+    }
+  },
   "elements": [
     {
       "id": "BPM01",

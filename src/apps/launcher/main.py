@@ -33,6 +33,7 @@ from half_linac.src.shared.machine_profile import (
     describe_app_support,
     load_profile,
     normalize_mode,
+    resolve_machine_runtime,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
@@ -42,6 +43,7 @@ from half_linac.src.shared.process_runtime import ManagedProcessGroup
 from gui import Ui_MainWindow
 
 ROOT = _REPO_BOOTSTRAP_ROOT
+CURRENT_MACHINE_RUNTIME = resolve_machine_runtime()
 HEADER_ACTION_HEIGHT = 32
 
 DARK_THEME = {
@@ -469,8 +471,8 @@ APP_DEFINITIONS = {
         "button_text": "Virtual Accelerator",
         "label": "Virtual Accelerator",
         "description": "Open the VM control room and manage the VM plus softIOC workflow.",
-        "cmd": ["python3", "mainVM.py"],
-        "cwd": ROOT / "src/virtual_machine/half_elegant",
+        "cmd": ["python3", CURRENT_MACHINE_RUNTIME.vm.ui_entrypoint.name],
+        "cwd": CURRENT_MACHINE_RUNTIME.vm.root,
     },
     "optimization": {
         "button_name": "online_opt",

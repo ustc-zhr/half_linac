@@ -34,7 +34,7 @@ SUPPORTED_APP_NAMES = {
     "bba",
     "emit_measure",
 }
-MEASUREMENT_APP_NAMES = {"bba", "emit_measure"}
+MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum"}
 APP_WORKFLOW_FILES = {
     "orbit": "orbit_correct.json",
     "beam_monitor": "beam_monitor.json",
@@ -56,7 +56,10 @@ PATHLIKE_MODEL_CONFIG_KEYS = (
     "_ele",
     "_lte",
     "_mat",
+    "_file",
+    "_path",
 )
+PATHLIKE_MODEL_CONFIG_NAMES = {"working_dir"}
 
 
 def load_profile(machine_id: str | None = None) -> MachineProfile:
@@ -84,11 +87,21 @@ def load_app_context(
     selected_control_backend = ControlBackendConfig(
         name=resolve_control_backend(control_backend, profile.machine.default_mode)
     )
+    requested_model_backend = model_backend
+    if requested_model_backend is None and app_name == "energy_spectrum":
+        workflow = profile.workflows.get("energy_spectrum")
+        if isinstance(workflow, Mapping):
+            configured_backend = workflow.get("model_backend")
+            if configured_backend is not None:
+                requested_model_backend = _expect_non_empty_string(
+                    configured_backend,
+                    "workflows.energy_spectrum.model_backend",
+                )
 
     selected_model_backend = _resolve_model_backend(
         app_name,
         machine_root(profile_id),
-        model_backend,
+        requested_model_backend,
     )
 
     orbit_workflow = None
@@ -228,16 +241,8 @@ def describe_app_support(machine_id: str | None, app_name: str) -> tuple[bool, s
 
 def list_control_backend_choices(machine_id: str | None = None) -> tuple[str, ...]:
     profile_id = resolve_machine_id(machine_id)
-    root = machine_root(profile_id)
-    if _has_directory_profile(root):
-        machine_data = _load_directory_machine_data(root)
-        machine_config = _expect_mapping(machine_data.get("machine"), "machine.json.machine")
-        default_mode = normalize_mode(machine_config.get("default_mode"), "machine.json.machine.default_mode")
-        backend_names = _discover_directory_control_backends(root)
-        return tuple(_ordered_backend_names(backend_names, default_mode))
-
     profile = _load_profile_for_machine_id(profile_id)
-    return tuple(_ordered_backend_names(("vm", "real"), profile.machine.default_mode))
+    return tuple(profile.control_backends)
 
 
 def resolve_machine_id(machine_id: str | None) -> str:
@@ -273,7 +278,7 @@ def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
         workflow = profile.workflows.get("beam_monitor")
         if not isinstance(workflow, Mapping):
             raise MachineProfileError("beam_monitor requires apps/beam_monitor.json.")
-        _validate_beam_monitor_workflow(workflow)
+        _validate_beam_monitor_workflow(profile, workflow)
         return
 
     if app_name == "energy_spectrum":
@@ -370,6 +375,8 @@ def _load_directory_profile_raw(
     return {
         "schema_version": str(machine_data.get("schema_version", "1")),
         "machine": dict(machine_config),
+        "control_backends": list(backend_channels.keys()),
+        "runtime": machine_data.get("runtime"),
         "elements": elements,
         "workflows": workflows,
     }
@@ -391,6 +398,10 @@ def _load_directory_control_backend_channels(
     backend_names = _ordered_backend_names(_discover_directory_control_backends(root), default_mode)
     if not backend_names:
         raise MachineProfileError(f"No control backend definitions found in {control_dir}")
+    if default_mode not in backend_names:
+        raise MachineProfileError(
+            "machine.default_mode must match one of the declared control_backends/*.json files."
+        )
 
     channels_by_backend: dict[str, Mapping[str, Any]] = {}
     for backend_name in backend_names:
@@ -475,12 +486,17 @@ def _resolve_model_backend(
     root: Path,
     model_backend: str | None,
 ) -> ModelBackendConfig | None:
-    if app_name not in MEASUREMENT_APP_NAMES:
+    if app_name not in MODEL_APP_NAMES:
         return None
 
     directory_backend = _load_directory_model_backend(root, model_backend)
     if directory_backend is not None:
         return directory_backend
+
+    if _has_directory_profile(root):
+        raise MachineProfileError(
+            f"{app_name} requires model_backends/*.json for machine directory {root.name!r}."
+        )
 
     backend_name = str(model_backend or "simulation").strip().lower().replace("_", " ")
     if backend_name in {"simulation", "elegant"}:
@@ -586,7 +602,7 @@ def _validate_energy_spectrum_workflow(
         workflow.get("flag_pixel_width_mm"),
         "workflows.energy_spectrum.flag_pixel_width_mm",
     )
-    for backend_name in ("vm", "real"):
+    for backend_name in profile.control_backends:
         shape = pixel_shape.get(backend_name)
         if not isinstance(shape, list) or len(shape) != 2:
             raise MachineProfileError(
@@ -618,7 +634,10 @@ def _validate_energy_spectrum_workflow(
                 ) from exc
 
 
-def _validate_beam_monitor_workflow(workflow: Mapping[str, Any]) -> None:
+def _validate_beam_monitor_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+) -> None:
     required_keys = (
         "flag_pixel_shape",
         "flag_pixel_width_mm",
@@ -638,7 +657,7 @@ def _validate_beam_monitor_workflow(workflow: Mapping[str, Any]) -> None:
         workflow.get("flag_pixel_width_mm"),
         "workflows.beam_monitor.flag_pixel_width_mm",
     )
-    for backend_name in ("vm", "real"):
+    for backend_name in profile.control_backends:
         shape = pixel_shape.get(backend_name)
         if not isinstance(shape, list) or len(shape) != 2:
             raise MachineProfileError(
@@ -712,7 +731,10 @@ def _resolve_model_config_paths(config: Mapping[str, Any]) -> Mapping[str, Any]:
         if (
             isinstance(value, str)
             and value.strip()
-            and any(key.endswith(suffix) for suffix in PATHLIKE_MODEL_CONFIG_KEYS)
+            and (
+                key in PATHLIKE_MODEL_CONFIG_NAMES
+                or any(key.endswith(suffix) for suffix in PATHLIKE_MODEL_CONFIG_KEYS)
+            )
         ):
             path = Path(value.strip())
             resolved[key] = str(path if path.is_absolute() else root / path)

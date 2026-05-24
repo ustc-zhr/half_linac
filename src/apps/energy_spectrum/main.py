@@ -563,6 +563,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
         self.energy_config = self._load_energy_spectrum_config()
+        self.energy_model_config = self._load_energy_model_config()
         self.start_elements = self._build_start_elements()
         self.energy_set_pv = self._load_energy_set_pv()
         self.esa_quad_ids = tuple(self.energy_config["esa_quads"])
@@ -634,6 +635,32 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             raise MachineProfileError("workflows.energy_spectrum.esa_quads must be a non-empty list.")
         return workflow
 
+    def _load_energy_model_config(self):
+        if self.app_context.model_backend is None:
+            raise MachineProfileError("energy_spectrum requires a configured model backend.")
+
+        config = dict(self.app_context.model_backend.config)
+        required_keys = (
+            "working_dir",
+            "source_lattice",
+            "energy_ini_ele_file",
+            "energy_json_path",
+            "energy_lte_file",
+            "energy_ele_file",
+            "energy_mat_file",
+            "energy_twi_file",
+            "energy_log",
+            "energy_dispersion_line_name",
+            "energy_twiss_line_name",
+        )
+        for key in required_keys:
+            value = config.get(key)
+            if not isinstance(value, str) or not value.strip():
+                raise MachineProfileError(
+                    f"energy_spectrum model backend is missing required key {key!r}."
+                )
+        return config
+
     def _build_start_elements(self):
         explicit = self.energy_config.get("start_elements")
         if isinstance(explicit, list) and explicit:
@@ -673,11 +700,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         except KeyError as exc:
             raise MachineProfileError(f"{location} is missing backend {mode!r}.") from exc
 
-    def _resolve_repo_path(self, relative_path):
-        return _REPO_BOOTSTRAP_ROOT / relative_path
-
-    def _energy_config_path(self, key):
-        return self._resolve_repo_path(self.energy_config[key])
+    def _energy_model_path(self, key):
+        return Path(self.energy_model_config[key])
 
     def _get_esa_quad_values(self):
         values = {}
@@ -1584,14 +1608,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             quad_values = self._get_esa_quad_values()
 
             #
-            lattice_file = self._energy_config_path("lattice_file")
-            esa_ini_ele_file = self._energy_config_path("esa_ini_ele_file")
-            line_name = str(self.energy_config.get("dispersion_line_name", "ESAlocal"))
+            lattice_file = self._energy_model_path("source_lattice")
+            esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
+            line_name = self.energy_model_config["energy_dispersion_line_name"]
+            working_dir = self._energy_model_path("working_dir")
 
-            esajson_path = self._energy_config_path("esa_json_path")
-            esa_lte_file = self._energy_config_path("esa_lte_file")
-            esa_ele_file = self._energy_config_path("esa_ele_file")
-            esa_mat_file = self._energy_config_path("esa_mat_file")
+            esajson_path = self._energy_model_path("energy_json_path")
+            esa_lte_file = self._energy_model_path("energy_lte_file")
+            esa_ele_file = self._energy_model_path("energy_ele_file")
+            esa_mat_file = self._energy_model_path("energy_mat_file")
 
             lte1 = elegant_parser(str(lattice_file), str(esa_ini_ele_file), line_name)
             lte1.dump2json(str(esajson_path))
@@ -1614,7 +1639,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
             # run elegant
             # ==========================
-            run_elegant_input(esa_ele_file.name, "esa.log")
+            run_elegant_input(
+                esa_ele_file.name,
+                self.energy_model_config["energy_log"],
+                workdir=working_dir,
+            )
             
             tmp = sdds.SDDS(0)
             tmp.load(str(esa_mat_file))
@@ -1652,14 +1681,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         # run ESA lattice 
         #
-        lattice_file = self._energy_config_path("lattice_file")
-        esa_ini_ele_file = self._energy_config_path("esa_ini_ele_file")
-        line_name = str(self.energy_config.get("twiss_line_name", "ESA"))
+        lattice_file = self._energy_model_path("source_lattice")
+        esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
+        line_name = self.energy_model_config["energy_twiss_line_name"]
+        working_dir = self._energy_model_path("working_dir")
 
-        esajson_path = self._energy_config_path("esa_json_path")
-        esa_lte_file = self._energy_config_path("esa_lte_file")
-        esa_ele_file = self._energy_config_path("esa_ele_file")
-        esa_twi_file = self._energy_config_path("esa_twi_file")
+        esajson_path = self._energy_model_path("energy_json_path")
+        esa_lte_file = self._energy_model_path("energy_lte_file")
+        esa_ele_file = self._energy_model_path("energy_ele_file")
+        esa_twi_file = self._energy_model_path("energy_twi_file")
 
         try:
             lte1 = elegant_parser(str(lattice_file), str(esa_ini_ele_file), line_name)
@@ -1693,7 +1723,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
             # run elegant
             # ==========================
-            run_elegant_input(esa_ele_file.name, "esa.log")
+            run_elegant_input(
+                esa_ele_file.name,
+                self.energy_model_config["energy_log"],
+                workdir=working_dir,
+            )
             
             tmp = sdds.SDDS(0)
             tmp.load(str(esa_twi_file))

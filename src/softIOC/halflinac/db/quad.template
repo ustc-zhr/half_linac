@@ -1,8 +1,7 @@
-record(ao, "HALF:IN:QUAD:$(QUAD):K1") {
+record(ao, "$(RECORD)") {
   alias("$(K1ALIAS)")
   field(VAL, "0.0")
   #field(DRVL, "-10.0")
   #field(DRVH, "10.0")
   #field(PINI, "YES")
-  ##field(FLNK, "HALF:IN:QUAD:$(QUAD):K1:ai")
 }

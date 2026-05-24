@@ -63,6 +63,8 @@ class ElegantModelBackend:
         self.emit_mat = Path(_require_config(config, "emit_mat"))
         self.emit_log = _require_config(config, "emit_log")
         self.line_name = _require_config(config, "line_name")
+        working_dir = config.get("working_dir")
+        self.working_dir = Path(str(working_dir)) if working_dir is not None else self.emit_ele.parent
 
     def get_twiss1(
         self,
@@ -170,7 +172,11 @@ class ElegantModelBackend:
             handle.write(json.dumps(lte, indent=4))
 
         parser.json2lte_ele(str(self.emit_lte), str(self.emit_ele), str(self.emit_json))
-        run_elegant_input(self.emit_ele.name, self.emit_log)
+        run_elegant_input(
+            self.emit_ele.name,
+            self.emit_log,
+            workdir=self.working_dir,
+        )
 
         matrix_file = sdds.SDDS(0)
         matrix_file.load(str(self.emit_mat))

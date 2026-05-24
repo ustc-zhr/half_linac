@@ -30,9 +30,34 @@ class ElementConfig:
 
 
 @dataclass(frozen=True)
+class MachineVmRuntimeConfig:
+    root: str
+    ui_entrypoint: str
+    manager_entrypoint: str
+    runtime_json: str
+    bootstrap_lattice: str
+    bootstrap_ele: str
+    line_name: str
+
+
+@dataclass(frozen=True)
+class MachineSoftIocRuntimeConfig:
+    root: str
+    substitutions_file: str
+
+
+@dataclass(frozen=True)
+class MachineRuntimeConfig:
+    vm: MachineVmRuntimeConfig
+    softioc: MachineSoftIocRuntimeConfig
+
+
+@dataclass(frozen=True)
 class MachineProfile:
     schema_version: str
     machine: MachineConfig
+    control_backends: tuple[str, ...]
+    runtime: MachineRuntimeConfig | None
     elements: tuple[ElementConfig, ...]
     workflows: Mapping[str, Any]
     _elements_by_id: Mapping[str, ElementConfig]
@@ -76,6 +101,21 @@ class MachineProfile:
             elements.append(element)
             elements_by_id[element.id] = element
 
+        control_backends = _parse_profile_control_backends(
+            data.get("control_backends"),
+            elements,
+        )
+        if machine.default_mode not in control_backends:
+            raise MachineProfileError(
+                "machine.default_mode must be declared in control_backends."
+            )
+        control_backends = _order_control_backends(control_backends, machine.default_mode)
+        _validate_element_backends(elements, control_backends)
+
+        runtime = None
+        if "runtime" in data and data.get("runtime") is not None:
+            runtime = _parse_machine_runtime(data.get("runtime"), "runtime")
+
         workflows = _expect_mapping(data["workflows"], "workflows")
         _validate_orbit_workflow(workflows.get("orbit"), elements_by_id)
         _validate_bba_workflow(workflows.get("bba"), elements_by_id)
@@ -84,6 +124,8 @@ class MachineProfile:
         return cls(
             schema_version=schema_version,
             machine=machine,
+            control_backends=control_backends,
+            runtime=runtime,
             elements=tuple(sorted(elements, key=lambda elem: (elem.order, elem.id))),
             workflows=workflows,
             _elements_by_id=elements_by_id,
@@ -279,15 +321,23 @@ def _parse_element(raw_element: Any, index: int) -> ElementConfig:
     for logical_channel, raw_modes in channels_raw.items():
         channel_name = _expect_non_empty_string(logical_channel, f"{location}.channels key")
         modes_raw = _expect_mapping(raw_modes, f"{location}.channels.{channel_name}")
-        vm_pv = _expect_non_empty_string(
-            modes_raw.get("vm"),
-            f"{location}.channels.{channel_name}.vm",
-        )
-        real_pv = _expect_non_empty_string(
-            modes_raw.get("real"),
-            f"{location}.channels.{channel_name}.real",
-        )
-        channels[channel_name] = {"vm": vm_pv, "real": real_pv}
+        if not modes_raw:
+            raise MachineProfileError(f"{location}.channels.{channel_name} must not be empty.")
+        channel_modes: dict[str, str] = {}
+        for raw_backend_name, pv_name in modes_raw.items():
+            backend_name = normalize_mode(
+                raw_backend_name,
+                f"{location}.channels.{channel_name} backend",
+            )
+            if backend_name in channel_modes:
+                raise MachineProfileError(
+                    f"{location}.channels.{channel_name} declares duplicate backend {backend_name!r}."
+                )
+            channel_modes[backend_name] = _expect_non_empty_string(
+                pv_name,
+                f"{location}.channels.{channel_name}.{backend_name}",
+            )
+        channels[channel_name] = channel_modes
 
     tags_raw = element_raw.get("tags", [])
     if not isinstance(tags_raw, list):
@@ -545,6 +595,110 @@ def _validate_unique_ids(items: list[Any], location: str) -> None:
         if item_id in seen:
             raise MachineProfileError(f"Duplicate id {item_id!r} in {location}.")
         seen.add(item_id)
+
+
+def _parse_profile_control_backends(
+    raw_backends: Any,
+    elements: list[ElementConfig],
+) -> tuple[str, ...]:
+    if raw_backends is not None:
+        return tuple(
+            _dedupe_in_order(
+                normalize_mode(backend, f"control_backends[{index}]")
+                for index, backend in enumerate(
+                    _expect_string_list(raw_backends, "control_backends")
+                )
+            )
+        )
+
+    discovered: list[str] = []
+    for element in elements:
+        for channel_modes in element.channels.values():
+            discovered.extend(channel_modes.keys())
+    return tuple(_dedupe_in_order(discovered))
+
+
+def _validate_element_backends(
+    elements: list[ElementConfig],
+    control_backends: tuple[str, ...],
+) -> None:
+    allowed = set(control_backends)
+    for element in elements:
+        for logical_channel, channel_modes in element.channels.items():
+            unknown = set(channel_modes) - allowed
+            if unknown:
+                backend_list = ", ".join(sorted(unknown))
+                raise MachineProfileError(
+                    f"Element {element.id} channel {logical_channel!r} declares unknown control backend(s): "
+                    f"{backend_list}."
+                )
+
+
+def _parse_machine_runtime(raw_runtime: Any, location: str) -> MachineRuntimeConfig:
+    runtime = _expect_mapping(raw_runtime, location)
+    vm = _expect_mapping(runtime.get("vm"), f"{location}.vm")
+    softioc = _expect_mapping(runtime.get("softioc"), f"{location}.softioc")
+    return MachineRuntimeConfig(
+        vm=MachineVmRuntimeConfig(
+            root=_expect_non_empty_string(vm.get("root"), f"{location}.vm.root"),
+            ui_entrypoint=_expect_non_empty_string(
+                vm.get("ui_entrypoint"),
+                f"{location}.vm.ui_entrypoint",
+            ),
+            manager_entrypoint=_expect_non_empty_string(
+                vm.get("manager_entrypoint"),
+                f"{location}.vm.manager_entrypoint",
+            ),
+            runtime_json=_expect_non_empty_string(
+                vm.get("runtime_json"),
+                f"{location}.vm.runtime_json",
+            ),
+            bootstrap_lattice=_expect_non_empty_string(
+                vm.get("bootstrap_lattice"),
+                f"{location}.vm.bootstrap_lattice",
+            ),
+            bootstrap_ele=_expect_non_empty_string(
+                vm.get("bootstrap_ele"),
+                f"{location}.vm.bootstrap_ele",
+            ),
+            line_name=_expect_non_empty_string(
+                vm.get("line_name"),
+                f"{location}.vm.line_name",
+            ),
+        ),
+        softioc=MachineSoftIocRuntimeConfig(
+            root=_expect_non_empty_string(
+                softioc.get("root"),
+                f"{location}.softioc.root",
+            ),
+            substitutions_file=_expect_non_empty_string(
+                softioc.get("substitutions_file"),
+                f"{location}.softioc.substitutions_file",
+            ),
+        ),
+    )
+
+
+def _dedupe_in_order(items: Any) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
+
+
+def _order_control_backends(
+    control_backends: tuple[str, ...],
+    default_mode: str,
+) -> tuple[str, ...]:
+    ordered = list(control_backends)
+    if default_mode in ordered:
+        ordered.remove(default_mode)
+        ordered.insert(0, default_mode)
+    return tuple(ordered)
 
 
 def _validate_preset_ref(preset_id: Any, presets: list[Any], location: str) -> None:

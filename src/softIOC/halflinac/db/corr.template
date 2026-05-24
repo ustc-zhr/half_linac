@@ -1,14 +1,13 @@
-record(ao, "HALF:IN:COR:$(COR):ao") {
+record(ao, "$(SETRECORD)") {
   alias("$(SETALIAS)")
   field(VAL , "0.0")
   field(DRVL, "-10.0")
   field(DRVH, "10.0")
   field(PINI, "YES")
-  field(FLNK, "HALF:IN:COR:$(COR):ai")
+  field(FLNK, "$(READRECORD)")
 }
-record(ai, "HALF:IN:COR:$(COR):ai") {
-  alias("$(READALIAS)")
+record(ai, "$(READRECORD)") {
   field(SCAN , "1 second")
-  field(INP , "HALF:IN:COR:$(COR):ao NPP NMS")
-  field(FLNK, "HALF:IN:COR:$(COR):ai")
+  field(INP , "$(SETRECORD) NPP NMS")
+  field(FLNK, "$(READRECORD)")
 }

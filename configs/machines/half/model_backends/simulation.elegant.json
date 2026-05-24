@@ -2,6 +2,7 @@
   "backend": "simulation",
   "engine": "elegant",
   "config": {
+    "working_dir": "src/virtual_machine/half_elegant/elegant",
     "source_json": "src/virtual_machine/half_elegant/halflinac.json",
     "source_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
     "emit_ini_ele": "src/virtual_machine/half_elegant/elegant/emit_ini.ele",
@@ -10,6 +11,15 @@
     "emit_json": "src/virtual_machine/half_elegant/emit.json",
     "emit_mat": "src/virtual_machine/half_elegant/elegant/emit.mat",
     "emit_log": "emit.log",
-    "line_name": "ALL"
+    "line_name": "ALL",
+    "energy_ini_ele_file": "src/virtual_machine/half_elegant/elegant/esa_ini.ele",
+    "energy_json_path": "src/virtual_machine/half_elegant/esa.json",
+    "energy_lte_file": "src/virtual_machine/half_elegant/elegant/esa.lte",
+    "energy_ele_file": "src/virtual_machine/half_elegant/elegant/esa.ele",
+    "energy_mat_file": "src/virtual_machine/half_elegant/elegant/esa.mat",
+    "energy_twi_file": "src/virtual_machine/half_elegant/elegant/esa.twi",
+    "energy_log": "esa.log",
+    "energy_dispersion_line_name": "ESAlocal",
+    "energy_twiss_line_name": "ESA"
   }
 }

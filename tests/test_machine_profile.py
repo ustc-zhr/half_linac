@@ -27,6 +27,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     load_profile,
     resolve_channel,
+    resolve_machine_runtime,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
     default_control_backend_choices,
@@ -112,7 +113,9 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsInstance(context, AppContext)
         self.assertEqual(context.machine.id, "half")
         self.assertEqual(context.control_backend.name, "vm")
-        self.assertIsNone(context.model_backend)
+        self.assertIsNotNone(context.model_backend)
+        assert context.model_backend is not None
+        self.assertEqual(context.model_backend.engine, "elegant")
 
     def test_load_bba_app_context(self):
         context = load_app_context("bba")
@@ -379,10 +382,23 @@ class MachineProfileTests(unittest.TestCase):
         assert context.model_backend is not None
         source_json = Path(context.model_backend.config["source_json"])
         source_lattice = Path(context.model_backend.config["source_lattice"])
+        working_dir = Path(context.model_backend.config["working_dir"])
         self.assertTrue(source_json.is_absolute())
         self.assertTrue(source_lattice.is_absolute())
+        self.assertTrue(working_dir.is_absolute())
         self.assertTrue(str(source_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
         self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
+        self.assertTrue(str(working_dir).endswith("src/virtual_machine/half_elegant/elegant"))
+
+    def test_half_runtime_paths_are_resolved_from_machine_json(self):
+        runtime = resolve_machine_runtime("half")
+        self.assertEqual(runtime.profile.machine.id, "half")
+        self.assertTrue(str(runtime.vm.root).endswith("src/virtual_machine/half_elegant"))
+        self.assertTrue(str(runtime.vm.ui_entrypoint).endswith("src/virtual_machine/half_elegant/mainVM.py"))
+        self.assertTrue(str(runtime.vm.manager_entrypoint).endswith("src/virtual_machine/half_elegant/start_VM.py"))
+        self.assertTrue(str(runtime.vm.runtime_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
+        self.assertTrue(str(runtime.softioc.root).endswith("src/softIOC/halflinac"))
+        self.assertTrue(str(runtime.softioc.substitutions_file).endswith("src/softIOC/halflinac/db/halflinac.substitutions"))
 
     def test_energy_spectrum_is_reported_supported_for_half(self):
         supported, reason = describe_app_support("half", "energy_spectrum")
@@ -406,15 +422,15 @@ class MachineProfileTests(unittest.TestCase):
         substitutions = (
             REPO_ROOT / "src" / "softIOC" / "halflinac" / "db" / "halflinac.substitutions"
         ).read_text(encoding="utf-8")
-        self.assertIn('pattern {QUAD, K1ALIAS}', substitutions)
-        self.assertIn('pattern {COR, SETALIAS, READALIAS}', substitutions)
-        self.assertIn('{ "QL03", "HALF:IN:AP:QUAD:QL03:K1:ao" }', substitutions)
+        self.assertIn('pattern {QUAD, RECORD, K1ALIAS}', substitutions)
+        self.assertIn('pattern {COR, SETRECORD, SETALIAS, READRECORD}', substitutions)
+        self.assertIn('{ "QL03", "VMIOC:QUAD:QL03:K1", "HALF:IN:AP:QUAD:QL03:K1:ao" }', substitutions)
         self.assertIn(
-            '{ "XC00", "HALF:IN:PS:XC00:current:ao", "HALF:IN:PS:XC00:current:ai" }',
+            '{ "XC00", "VMIOC:COR:XC00:SET", "HALF:IN:PS:XC00:current:ao", "VMIOC:COR:XC00:READ" }',
             substitutions,
         )
         self.assertIn(
-            '{ "HC01", "HALF:IN:PS:HC01:current:ao", "HALF:IN:PS:HC01:current:ai" }',
+            '{ "HC01", "VMIOC:COR:HC01:SET", "HALF:IN:PS:HC01:current:ao", "VMIOC:COR:HC01:READ" }',
             substitutions,
         )
         self.assertNotIn("CQ1", substitutions)
@@ -423,6 +439,12 @@ class MachineProfileTests(unittest.TestCase):
         self.assertNotIn("MQ11", substitutions)
         self.assertNotIn("HIC01", substitutions)
         self.assertNotIn("VIC01", substitutions)
+
+    def test_softioc_generator_no_longer_hardcodes_half_alias_builders(self):
+        source = (REPO_ROOT / "src" / "softIOC" / "pv_server.py").read_text(encoding="utf-8")
+        self.assertNotIn('HALF:IN:PS:', source)
+        self.assertNotIn('HALF:IN:AP:QUAD:', source)
+        self.assertNotIn('configs/machines/half/machine.json', source)
 
     def test_invalid_machine_id_from_env_raises(self):
         with patch.dict(os.environ, {"HALF_MACHINE_ID": "../escape"}):
@@ -1041,7 +1063,7 @@ class MachineProfileTests(unittest.TestCase):
         with self.assertRaises(MachineProfileError):
             MachineProfile.from_dict(bad)
 
-    def test_missing_real_or_vm_channel_mapping_raises(self):
+    def test_missing_channel_mapping_is_allowed_until_that_backend_is_resolved(self):
         bad = {
             "schema_version": "1",
             "machine": {
@@ -1150,8 +1172,11 @@ class MachineProfileTests(unittest.TestCase):
                 },
             },
         }
+        profile = MachineProfile.from_dict(bad)
+        self.assertEqual(profile.control_backends, ("vm", "real"))
+        self.assertEqual(resolve_channel(profile, "BPM01", "y", "vm"), "BPM01:Y")
         with self.assertRaises(MachineProfileError):
-            MachineProfile.from_dict(bad)
+            resolve_channel(profile, "BPM01", "y", "real")
 
     def test_invalid_bba_plane_or_mode_raises(self):
         bad = {
@@ -1377,6 +1402,281 @@ class MachineProfileTests(unittest.TestCase):
         }
         with self.assertRaises(MachineProfileError):
             MachineProfile.from_dict(bad)
+
+    def test_directory_measurement_apps_require_model_backends(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "dirmodelmissing",
+                "family": "linac",
+                "display_name": "Directory Missing Model",
+                "default_mode": "vm",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["x", "y"],
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 2,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+                {
+                    "id": "YC01",
+                    "kind": "corr",
+                    "display_name": "YC01",
+                    "order": 3,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 4,
+                    "tags": ["bba", "emit"],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 5,
+                    "tags": ["emit"],
+                    "limits": {},
+                    "logical_channels": ["sigx", "sigy"],
+                },
+            ],
+        }
+        backend_channels = {
+            "vm": {
+                "backend": "vm",
+                "channels": {
+                    "BPM01": {"x": "VM:BPM01:X", "y": "VM:BPM01:Y"},
+                    "XC01": {"setpoint": "VM:XC01"},
+                    "YC01": {"setpoint": "VM:YC01"},
+                    "Q01": {"k1": "VM:Q01:K1"},
+                    "PRF01": {"sigx": "VM:PRF01:X", "sigy": "VM:PRF01:Y"},
+                },
+            },
+            "real": {
+                "backend": "real",
+                "channels": {
+                    "BPM01": {"x": "REAL:BPM01:X", "y": "REAL:BPM01:Y"},
+                    "XC01": {"setpoint": "REAL:XC01"},
+                    "YC01": {"setpoint": "REAL:YC01"},
+                    "Q01": {"k1": "REAL:Q01:K1"},
+                    "PRF01": {"sigx": "REAL:PRF01:X", "sigy": "REAL:PRF01:Y"},
+                },
+            },
+        }
+        emit_json = {
+            "presets": [
+                {
+                    "id": "emit_default",
+                    "quad": "Q01",
+                    "flag": "PRF01",
+                    "energy_mev": 100.0,
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            machine_dir = temp_root / "configs" / "machines" / "dirmodelmissing"
+            (machine_dir / "control_backends").mkdir(parents=True)
+            (machine_dir / "apps").mkdir(parents=True)
+            (machine_dir / "machine.json").write_text(
+                json.dumps(machine_json, indent=2),
+                encoding="utf-8",
+            )
+            for backend_name, payload in backend_channels.items():
+                (machine_dir / "control_backends" / f"{backend_name}.json").write_text(
+                    json.dumps(payload, indent=2),
+                    encoding="utf-8",
+                )
+            (machine_dir / "apps" / "emit_measure.json").write_text(
+                json.dumps(emit_json, indent=2),
+                encoding="utf-8",
+            )
+
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                with self.assertRaisesRegex(MachineProfileError, "model_backends"):
+                    load_app_context("emit_measure", machine_id="dirmodelmissing")
+
+    def test_directory_profile_allows_single_real_backend_for_beam_and_energy(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "realonly",
+                "family": "linac",
+                "display_name": "Real Only",
+                "default_mode": "real",
+            },
+            "runtime": {
+                "vm": {
+                    "root": "src/virtual_machine/half_elegant",
+                    "ui_entrypoint": "src/virtual_machine/half_elegant/mainVM.py",
+                    "manager_entrypoint": "src/virtual_machine/half_elegant/start_VM.py",
+                    "runtime_json": "src/virtual_machine/half_elegant/halflinac.json",
+                    "bootstrap_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
+                    "bootstrap_ele": "src/virtual_machine/half_elegant/elegant/one_ini.ele",
+                    "line_name": "ALL",
+                },
+                "softioc": {
+                    "root": "src/softIOC/halflinac",
+                    "substitutions_file": "db/halflinac.substitutions",
+                },
+            },
+            "elements": [
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 1,
+                    "tags": ["emit", "energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["image", "exposure_time", "sigx", "sigy"],
+                },
+                {
+                    "id": "SM",
+                    "kind": "bend",
+                    "display_name": "SM",
+                    "order": 2,
+                    "tags": ["energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["current_set"],
+                },
+                {
+                    "id": "QE01",
+                    "kind": "quad",
+                    "display_name": "QE01",
+                    "order": 3,
+                    "tags": ["energy_spectrum", "esa_start"],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "QE02",
+                    "kind": "quad",
+                    "display_name": "QE02",
+                    "order": 4,
+                    "tags": ["energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "QE03",
+                    "kind": "quad",
+                    "display_name": "QE03",
+                    "order": 5,
+                    "tags": ["energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "PRF01": {
+                    "image": "REAL:PRF01:IMAGE",
+                    "exposure_time": "REAL:PRF01:EXPO",
+                    "sigx": "REAL:PRF01:SIGX",
+                    "sigy": "REAL:PRF01:SIGY",
+                },
+                "SM": {"current_set": "REAL:SM:CURRENT"},
+                "QE01": {"k1": "REAL:QE01:K1"},
+                "QE02": {"k1": "REAL:QE02:K1"},
+                "QE03": {"k1": "REAL:QE03:K1"},
+            },
+        }
+        beam_monitor_json = {
+            "default_flag": "PRF01",
+            "flag_pixel_shape": {"real": [1440, 1080]},
+            "flag_pixel_width_mm": {"real": 0.02},
+        }
+        energy_spectrum_json = {
+            "flag_element": "PRF01",
+            "flag_image_channel": "image",
+            "flag_exposure_channel": "exposure_time",
+            "flag_pixel_shape": {"real": [1440, 1080]},
+            "flag_pixel_width_mm": {"real": 0.02},
+            "bend_element": "SM",
+            "bend_channel": "current_set",
+            "model_backend": "simulation",
+            "bend_scan": {"min": 0, "max": 10, "coarse_steps": 2, "fine_steps": 2},
+            "esa_quads": ["QE01", "QE02", "QE03"],
+            "default_start_element": "QE01",
+        }
+        model_backend_json = {
+            "backend": "simulation",
+            "engine": "elegant",
+            "config": {
+                "working_dir": "src/virtual_machine/half_elegant/elegant",
+                "source_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
+                "energy_ini_ele_file": "src/virtual_machine/half_elegant/elegant/esa_ini.ele",
+                "energy_json_path": "src/virtual_machine/half_elegant/esa.json",
+                "energy_lte_file": "src/virtual_machine/half_elegant/elegant/esa.lte",
+                "energy_ele_file": "src/virtual_machine/half_elegant/elegant/esa.ele",
+                "energy_mat_file": "src/virtual_machine/half_elegant/elegant/esa.mat",
+                "energy_twi_file": "src/virtual_machine/half_elegant/elegant/esa.twi",
+                "energy_log": "esa.log",
+                "energy_dispersion_line_name": "ESA",
+                "energy_twiss_line_name": "ESA",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            machine_dir = temp_root / "configs" / "machines" / "realonly"
+            (machine_dir / "control_backends").mkdir(parents=True)
+            (machine_dir / "apps").mkdir(parents=True)
+            (machine_dir / "model_backends").mkdir(parents=True)
+            (machine_dir / "machine.json").write_text(
+                json.dumps(machine_json, indent=2),
+                encoding="utf-8",
+            )
+            (machine_dir / "control_backends" / "real.json").write_text(
+                json.dumps(real_channels, indent=2),
+                encoding="utf-8",
+            )
+            (machine_dir / "apps" / "beam_monitor.json").write_text(
+                json.dumps(beam_monitor_json, indent=2),
+                encoding="utf-8",
+            )
+            (machine_dir / "apps" / "energy_spectrum.json").write_text(
+                json.dumps(energy_spectrum_json, indent=2),
+                encoding="utf-8",
+            )
+            (machine_dir / "model_backends" / "simulation.elegant.json").write_text(
+                json.dumps(model_backend_json, indent=2),
+                encoding="utf-8",
+            )
+
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                profile = load_profile("realonly")
+                beam_context = load_app_context("beam_monitor", machine_id="realonly")
+                energy_context = load_app_context("energy_spectrum", machine_id="realonly")
+                backend_choices = default_control_backend_choices("realonly")
+
+        self.assertEqual(profile.control_backends, ("real",))
+        self.assertEqual(backend_choices, ("real",))
+        self.assertEqual(beam_context.control_backend.name, "real")
+        self.assertEqual(energy_context.control_backend.name, "real")
+        self.assertIsNotNone(energy_context.model_backend)
 
 
 if __name__ == "__main__":

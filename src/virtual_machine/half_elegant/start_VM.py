@@ -4,12 +4,23 @@
 
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
-import half_linac.runtime_config as st
+_REPO_BOOTSTRAP_ROOT = next(
+    parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
+)
+if str(_REPO_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_BOOTSTRAP_ROOT))
+
+from repo_bootstrap import ensure_repo_import_path
+
+ensure_repo_import_path(__file__)
+
+from half_linac.src.shared.machine_profile import resolve_machine_runtime
+from half_linac.src.shared.runtime_state import ensure_runtime_state
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
-from half_linac.src.virtual_machine.half_elegant.runtime_state import ensure_runtime_state
 
 
 JSON_POLL_INTERVAL_S = 2.0
@@ -57,22 +68,26 @@ def main():
     signal.signal(signal.SIGTERM, _handle_shutdown_signal)
     signal.signal(signal.SIGINT, _handle_shutdown_signal)
 
-    root = Path(st.rootpath)
-    vm_dir = root / "src/virtual_machine/half_elegant"
-    elegant_dir = vm_dir / "elegant"
-    lattice_file = elegant_dir / "lattice_ini.lte"
-    ele_file = elegant_dir / "one_ini.ele"
-    jsonpath = vm_dir / "halflinac.json"
+    runtime = resolve_machine_runtime()
+    vm_dir = runtime.vm.root
+    elegant_dir = runtime.vm.bootstrap_lattice.parent
+    lattice_file = runtime.vm.bootstrap_lattice
+    ele_file = runtime.vm.bootstrap_ele
+    jsonpath = runtime.vm.runtime_json
 
     def build_initial_state():
-        return elegant_parser(str(lattice_file), str(ele_file), "ALL").build_runtime_state()
+        return elegant_parser(
+            str(lattice_file),
+            str(ele_file),
+            runtime.vm.line_name,
+        ).build_runtime_state()
 
     if ensure_runtime_state(jsonpath, build_initial_state):
         print("Initialized runtime lattice JSON.")
     else:
         print("Using existing runtime lattice JSON.")
 
-    lte = elegant_parser(str(lattice_file), str(ele_file), "ALL")
+    lte = elegant_parser(str(lattice_file), str(ele_file), runtime.vm.line_name)
     last_modified = jsonpath.stat().st_mtime
 
     _update_vm_outputs(lte, elegant_dir, jsonpath)
