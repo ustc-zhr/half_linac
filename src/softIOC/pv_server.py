@@ -17,6 +17,7 @@ ensure_repo_import_path(__file__)
 
 import epics
 
+from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     list_elements,
@@ -84,9 +85,16 @@ class pv_server:
         except MachineProfileError:
             return None
 
-    def _flag_alias(self, element_id: str, logical_channel: str) -> tuple[str, str]:
-        record = self._internal_record_name("FLAG", element_id, logical_channel.upper())
-        return record, self._resolve_vm_channel(element_id, logical_channel) or record
+    def _flag_record_name(self, element_id: str, logical_channel: str) -> str:
+        return self._internal_record_name("FLAG", element_id, logical_channel.upper())
+
+    @staticmethod
+    def _write_substitution_section(handle, template_name: str, pattern: str, rows: list[str]) -> None:
+        handle.write(f"file db/{template_name} {{\n")
+        handle.write(f"  pattern {{{pattern}}}\n")
+        for row in rows:
+            handle.write(f"{row}\n")
+        handle.write("}\n")
 
     def gen_substitution_file(self):
         self.substitutions_path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,28 +106,30 @@ class pv_server:
         flag_elements = list_elements(self.machine_profile, kind="flag")
 
         with self.substitutions_path.open("w", encoding="utf-8") as handle:
-            handle.write("file db/quad.template {\n")
-            handle.write("  pattern {QUAD, RECORD, K1ALIAS}\n")
+            quad_rows: list[str] = []
             for element in quad_elements:
                 alias = self._resolve_vm_channel(element.id, "k1")
                 if not alias:
                     continue
                 record = self._internal_record_name("QUAD", element.id, "K1")
-                handle.write(f'  {{ "{element.id}", "{record}", "{alias}" }}\n')
-            handle.write("}\n")
+                quad_rows.append(f'  {{ "{element.id}", "{record}", "{alias}" }}')
+            self._write_substitution_section(handle, "quad.template", "QUAD, RECORD, K1ALIAS", quad_rows)
 
-            handle.write("file db/bend.template {\n")
-            handle.write("  pattern {BEND, RECORD, CURRENTALIAS}\n")
+            bend_rows: list[str] = []
             for element in bend_elements:
                 alias = self._resolve_vm_channel(element.id, "current_set")
                 if not alias:
                     continue
                 record = self._internal_record_name("BEND", element.id, "CURRENT_SET")
-                handle.write(f'  {{ "{element.id}", "{record}", "{alias}" }}\n')
-            handle.write("}\n")
+                bend_rows.append(f'  {{ "{element.id}", "{record}", "{alias}" }}')
+            self._write_substitution_section(
+                handle,
+                "bend.template",
+                "BEND, RECORD, CURRENTALIAS",
+                bend_rows,
+            )
 
-            handle.write("file db/bpm.template {\n")
-            handle.write("  pattern {BPM, XRECORD, XALIAS, YRECORD, YALIAS}\n")
+            bpm_rows: list[str] = []
             for element in bpm_elements:
                 x_alias = self._resolve_vm_channel(element.id, "x")
                 y_alias = self._resolve_vm_channel(element.id, "y")
@@ -127,45 +137,99 @@ class pv_server:
                     continue
                 x_record = self._internal_record_name("BPM", element.id, "X")
                 y_record = self._internal_record_name("BPM", element.id, "Y")
-                handle.write(
-                    f'  {{ "{element.id}", "{x_record}", "{x_alias}", "{y_record}", "{y_alias}" }}\n'
+                bpm_rows.append(
+                    f'  {{ "{element.id}", "{x_record}", "{x_alias}", "{y_record}", "{y_alias}" }}'
                 )
-            handle.write("}\n")
-
-            handle.write("file db/flag.template {\n")
-            handle.write(
-                "  pattern {FLAG, IMAGERECORD, IMAGEALIAS, ESARECORD, ESAALIAS, "
-                "SIGXRECORD, SIGXALIAS, SIGYRECORD, SIGYALIAS, EXPOTIMERECORD, EXPOTIMEALIAS}\n"
+            self._write_substitution_section(
+                handle,
+                "bpm.template",
+                "BPM, XRECORD, XALIAS, YRECORD, YALIAS",
+                bpm_rows,
             )
-            for element in flag_elements:
-                image_record, image_alias = self._flag_alias(element.id, "image")
-                esa_record, esa_alias = self._flag_alias(element.id, "esa_image")
-                sigx_record, sigx_alias = self._flag_alias(element.id, "sigx")
-                sigy_record, sigy_alias = self._flag_alias(element.id, "sigy")
-                expo_record, expo_alias = self._flag_alias(element.id, "exposure_time")
-                handle.write(
-                    "  { "
-                    f'"{element.id}", "{image_record}", "{image_alias}", '
-                    f'"{esa_record}", "{esa_alias}", '
-                    f'"{sigx_record}", "{sigx_alias}", '
-                    f'"{sigy_record}", "{sigy_alias}", '
-                    f'"{expo_record}", "{expo_alias}" '
-                    "}\n"
-                )
-            handle.write("}\n")
 
-            handle.write("file db/corr.template {\n")
-            handle.write("  pattern {COR, SETRECORD, SETALIAS, READRECORD}\n")
+            flag_image_rows: list[str] = []
+            flag_esa_rows: list[str] = []
+            flag_sigx_rows: list[str] = []
+            flag_sigy_rows: list[str] = []
+            flag_exposure_rows: list[str] = []
+            for element in flag_elements:
+                image_alias = self._resolve_vm_channel(element.id, "image")
+                if image_alias:
+                    flag_image_rows.append(
+                        f'  {{ "{element.id}", "{self._flag_record_name(element.id, "image")}", "{image_alias}" }}'
+                    )
+
+                esa_alias = self._resolve_vm_channel(element.id, "esa_image")
+                if esa_alias:
+                    flag_esa_rows.append(
+                        f'  {{ "{element.id}", "{self._flag_record_name(element.id, "esa_image")}", "{esa_alias}" }}'
+                    )
+
+                sigx_alias = self._resolve_vm_channel(element.id, "sigx")
+                if sigx_alias:
+                    flag_sigx_rows.append(
+                        f'  {{ "{element.id}", "{self._flag_record_name(element.id, "sigx")}", "{sigx_alias}" }}'
+                    )
+
+                sigy_alias = self._resolve_vm_channel(element.id, "sigy")
+                if sigy_alias:
+                    flag_sigy_rows.append(
+                        f'  {{ "{element.id}", "{self._flag_record_name(element.id, "sigy")}", "{sigy_alias}" }}'
+                    )
+
+                expo_alias = self._resolve_vm_channel(element.id, "exposure_time")
+                if expo_alias:
+                    flag_exposure_rows.append(
+                        f'  {{ "{element.id}", "{self._flag_record_name(element.id, "exposure_time")}", "{expo_alias}" }}'
+                    )
+
+            self._write_substitution_section(
+                handle,
+                "flag.template",
+                "FLAG, IMAGERECORD, IMAGEALIAS",
+                flag_image_rows,
+            )
+            self._write_substitution_section(
+                handle,
+                "flag_esa.template",
+                "FLAG, ESARECORD, ESAALIAS",
+                flag_esa_rows,
+            )
+            self._write_substitution_section(
+                handle,
+                "flag_sigx.template",
+                "FLAG, SIGXRECORD, SIGXALIAS",
+                flag_sigx_rows,
+            )
+            self._write_substitution_section(
+                handle,
+                "flag_sigy.template",
+                "FLAG, SIGYRECORD, SIGYALIAS",
+                flag_sigy_rows,
+            )
+            self._write_substitution_section(
+                handle,
+                "flag_expotime.template",
+                "FLAG, EXPOTIMERECORD, EXPOTIMEALIAS",
+                flag_exposure_rows,
+            )
+
+            corr_rows: list[str] = []
             for element in corr_elements:
                 alias = self._resolve_vm_channel(element.id, "setpoint")
                 if not alias:
                     continue
                 set_record = self._internal_record_name("COR", element.id, "SET")
                 read_record = self._internal_record_name("COR", element.id, "READ")
-                handle.write(
-                    f'  {{ "{element.id}", "{set_record}", "{alias}", "{read_record}" }}\n'
+                corr_rows.append(
+                    f'  {{ "{element.id}", "{set_record}", "{alias}", "{read_record}" }}'
                 )
-            handle.write("}\n")
+            self._write_substitution_section(
+                handle,
+                "corr.template",
+                "COR, SETRECORD, SETALIAS, READRECORD",
+                corr_rows,
+            )
 
     def prepare_initial_pvs(self):
         def ensure_corrector_defaults(lte):
@@ -264,11 +328,9 @@ if __name__ == "__main__":
     iocpath = runtime.softioc.root
 
     def build_initial_state():
-        from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
-
-        return elegant_parser(
-            str(runtime.vm.bootstrap_lattice),
-            str(runtime.vm.bootstrap_ele),
+        return ElegantParser(
+            runtime.vm.bootstrap_lattice,
+            runtime.vm.bootstrap_ele,
             runtime.vm.line_name,
         ).build_runtime_state()
 

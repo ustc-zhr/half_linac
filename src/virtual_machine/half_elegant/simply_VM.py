@@ -3,13 +3,26 @@ import sdds
 import sys
 from pathlib import Path
 
+_REPO_BOOTSTRAP_ROOT = next(
+    parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
+)
+if str(_REPO_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_BOOTSTRAP_ROOT))
+
+from repo_bootstrap import ensure_repo_import_path
+
+ensure_repo_import_path(__file__)
+
 import half_linac.runtime_config as st
+from half_linac.src.shared.machine_profile import resolve_machine_runtime
 from half_linac.src.virtual_machine.half_elegant.runtime_state import (
     read_runtime_state,
     update_runtime_state,
 )
 
-jsonpath = Path(st.rootpath) / "src/virtual_machine/half_elegant/halflinac.json"
+runtime = resolve_machine_runtime()
+jsonpath = runtime.vm.runtime_json
+elegant_dir = runtime.vm.bootstrap_lattice.parent
 def simply_VM(elem_start, elem_end):
         """to simplify the lattice in VM for accelerate the testing process (only considering from Q to flag )"""
         
@@ -47,7 +60,7 @@ def simply_VM(elem_start, elem_end):
 
         # get the energy before quad
         tmp = sdds.SDDS(0)
-        tmp.load(st.rootpath+"/src/virtual_machine/half_elegant/elegant/one.cen")
+        tmp.load(str(elegant_dir / "one.cen"))
         tmppCentral = tmp.columnData[11][0][-1]
 
         # simply VM

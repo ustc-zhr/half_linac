@@ -44,6 +44,7 @@ from PyQt5.QtWidgets import (
 from gui import Ui_MainWindow
 from half_linac.src.apps.energy_spectrum.get_energy0 import get_energy0
 from half_linac.src.apps.energy_spectrum.esa_auto_tuner import ESA_AutoTuner
+from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.elegant_runtime import run_elegant_input
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
@@ -56,8 +57,6 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
     request_runtime_restart,
 )
-
-from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 
 # 会使用到VM计算η和twiss (不具有一般性)
 
@@ -1618,8 +1617,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             esa_ele_file = self._energy_model_path("energy_ele_file")
             esa_mat_file = self._energy_model_path("energy_mat_file")
 
-            lte1 = elegant_parser(str(lattice_file), str(esa_ini_ele_file), line_name)
-            lte1.dump2json(str(esajson_path))
+            lte1 = ElegantParser(
+                lattice_file,
+                esa_ini_ele_file,
+                line_name,
+                runtime_json_path=esajson_path,
+                elegant_dir=working_dir,
+            )
+            lte1.dump_runtime_state()
             with open(esajson_path, "r", encoding="utf-8") as f:
                 lte = json.load(f)
             contl = lte["control"]
@@ -1635,7 +1640,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             with open(esajson_path, "w", encoding="utf-8") as f:
                 f.write(json.dumps(lte, indent=4))
             
-            lte1.json2lte_ele(str(esa_lte_file), str(esa_ele_file), str(esajson_path))
+            lte1.json_to_lte_ele(esa_lte_file, esa_ele_file)
 
             # run elegant
             # ==========================
@@ -1692,8 +1697,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         esa_twi_file = self._energy_model_path("energy_twi_file")
 
         try:
-            lte1 = elegant_parser(str(lattice_file), str(esa_ini_ele_file), line_name)
-            lte1.dump2json(str(esajson_path))
+            lte1 = ElegantParser(
+                lattice_file,
+                esa_ini_ele_file,
+                line_name,
+                runtime_json_path=esajson_path,
+                elegant_dir=working_dir,
+            )
+            lte1.dump_runtime_state()
             with open(esajson_path, "r", encoding="utf-8") as f:
                 lte = json.load(f)
             contl = lte["control"]
@@ -1719,7 +1730,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             with open(esajson_path, "w", encoding="utf-8") as f:
                 f.write(json.dumps(lte, indent=4))
             
-            lte1.json2lte_ele(str(esa_lte_file), str(esa_ele_file), str(esajson_path))
+            lte1.json_to_lte_ele(esa_lte_file, esa_ele_file)
 
             # run elegant
             # ==========================

@@ -7,8 +7,8 @@ from typing import Mapping, Protocol
 import numpy as np
 import sdds
 
+from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.elegant_runtime import run_elegant_input
-from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 
 from .models import AppContext, MachineProfileError, ModelBackendConfig
 
@@ -109,8 +109,14 @@ class ElegantModelBackend:
         element_overrides: Mapping[str, float] | None = None,
         seq: str = "exit2exit",
     ) -> np.ndarray:
-        parser = elegant_parser(str(self.source_lattice), str(self.emit_ini_ele), self.line_name)
-        parser.dump2json(str(self.emit_json))
+        parser = ElegantParser(
+            self.source_lattice,
+            self.emit_ini_ele,
+            self.line_name,
+            runtime_json_path=self.emit_json,
+            elegant_dir=self.working_dir,
+        )
+        parser.dump_runtime_state()
         with self.emit_json.open("r", encoding="utf-8") as handle:
             lte = json.load(handle)
 
@@ -171,7 +177,7 @@ class ElegantModelBackend:
         with self.emit_json.open("w", encoding="utf-8") as handle:
             handle.write(json.dumps(lte, indent=4))
 
-        parser.json2lte_ele(str(self.emit_lte), str(self.emit_ele), str(self.emit_json))
+        parser.json_to_lte_ele(self.emit_lte, self.emit_ele)
         run_elegant_input(
             self.emit_ele.name,
             self.emit_log,

@@ -20,9 +20,9 @@ import epics.ca
 
 from pv_server import pv_server
 
+from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile import resolve_machine_runtime
 from half_linac.src.shared.runtime_state import ensure_runtime_state
-from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 
 
 IOC_READY_TIMEOUT_S = 15.0
@@ -134,9 +134,9 @@ def main():
     iocpath = runtime.softioc.root
 
     def build_initial_state():
-        return elegant_parser(
-            str(lattice_file),
-            str(ele_file),
+        return ElegantParser(
+            lattice_file,
+            ele_file,
             runtime.vm.line_name,
         ).build_runtime_state()
 

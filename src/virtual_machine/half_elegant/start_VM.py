@@ -18,9 +18,10 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
+from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile import resolve_machine_runtime
-from half_linac.src.shared.runtime_state import ensure_runtime_state
-from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
+from half_linac.src.shared.runtime_state import ensure_runtime_state, read_runtime_state
+from half_linac.src.virtual_machine.half_elegant.vm_publish import HalfVmPublisher
 
 
 JSON_POLL_INTERVAL_S = 2.0
@@ -41,24 +42,24 @@ def _run_elegant(elegant_dir):
     )
 
 
-def _update_vm_outputs(lte, elegant_dir, jsonpath):
+def _update_vm_outputs(parser, publisher, elegant_dir, jsonpath):
     lattice_file = elegant_dir / "lattice.lte"
     ele_file = elegant_dir / "one.ele"
 
-    lte.json2lte_ele(
-        lat_f=str(lattice_file),
-        ele_f=str(ele_file),
-        j_file=str(jsonpath),
-    )
+    parser.json_to_lte_ele(lattice_file, ele_file, jsonpath)
 
     print("Elegant is running ...")
     _run_elegant(elegant_dir)
-    if lte.broadcast_bpm():
+    if publisher.publish_bpm(elegant_dir / "one.bpmcen"):
         print("bpm data updated.")
     else:
         print("bpm publish skipped or incomplete.")
 
-    if lte.broadcast_flag():
+    if publisher.publish_flags(
+        lattice=parser.lattice,
+        usedline=read_runtime_state(jsonpath)["usedline"],
+        elegant_dir=elegant_dir,
+    ):
         print("flag data updated.")
     else:
         print("flag publish skipped or incomplete.")
@@ -76,10 +77,12 @@ def main():
     jsonpath = runtime.vm.runtime_json
 
     def build_initial_state():
-        return elegant_parser(
-            str(lattice_file),
-            str(ele_file),
+        return ElegantParser(
+            lattice_file,
+            ele_file,
             runtime.vm.line_name,
+            runtime_json_path=jsonpath,
+            elegant_dir=elegant_dir,
         ).build_runtime_state()
 
     if ensure_runtime_state(jsonpath, build_initial_state):
@@ -87,10 +90,17 @@ def main():
     else:
         print("Using existing runtime lattice JSON.")
 
-    lte = elegant_parser(str(lattice_file), str(ele_file), runtime.vm.line_name)
+    parser = ElegantParser(
+        lattice_file,
+        ele_file,
+        runtime.vm.line_name,
+        runtime_json_path=jsonpath,
+        elegant_dir=elegant_dir,
+    )
+    publisher = HalfVmPublisher()
     last_modified = jsonpath.stat().st_mtime
 
-    _update_vm_outputs(lte, elegant_dir, jsonpath)
+    _update_vm_outputs(parser, publisher, elegant_dir, jsonpath)
     print("VM is waiting for lattice changes.")
 
     while not _stop_requested:
@@ -102,7 +112,7 @@ def main():
         last_modified = current_modified
         print("\njson changed, refreshing VM ...")
         try:
-            _update_vm_outputs(lte, elegant_dir, jsonpath)
+            _update_vm_outputs(parser, publisher, elegant_dir, jsonpath)
             print("VM is waiting for lattice changes.")
         except Exception as exc:
             print(f"failed to refresh VM after json change: {exc}")

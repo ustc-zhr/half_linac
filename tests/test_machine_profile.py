@@ -424,6 +424,7 @@ class MachineProfileTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('pattern {QUAD, RECORD, K1ALIAS}', substitutions)
         self.assertIn('pattern {COR, SETRECORD, SETALIAS, READRECORD}', substitutions)
+        self.assertIn('pattern {FLAG, ESARECORD, ESAALIAS}', substitutions)
         self.assertIn('{ "QL03", "VMIOC:QUAD:QL03:K1", "HALF:IN:AP:QUAD:QL03:K1:ao" }', substitutions)
         self.assertIn(
             '{ "XC00", "VMIOC:COR:XC00:SET", "HALF:IN:PS:XC00:current:ao", "VMIOC:COR:XC00:READ" }',
@@ -439,6 +440,14 @@ class MachineProfileTests(unittest.TestCase):
         self.assertNotIn("MQ11", substitutions)
         self.assertNotIn("HIC01", substitutions)
         self.assertNotIn("VIC01", substitutions)
+        self.assertIn(
+            '{ "PRF07", "VMIOC:FLAG:PRF07:ESA_IMAGE", "HALF:IN:FLAG:PRFESA:image1:ArrayData:vm" }',
+            substitutions,
+        )
+        self.assertNotIn(
+            '{ "PRF04", "VMIOC:FLAG:PRF04:ESA_IMAGE", "VMIOC:FLAG:PRF04:ESA_IMAGE" }',
+            substitutions,
+        )
 
     def test_softioc_generator_no_longer_hardcodes_half_alias_builders(self):
         source = (REPO_ROOT / "src" / "softIOC" / "pv_server.py").read_text(encoding="utf-8")

@@ -2,25 +2,3 @@ record(waveform, "$(IMAGERECORD)") {
     alias("$(IMAGEALIAS)")
     field(NELM,"1555200")
 }
-
-record(waveform, "$(ESARECORD)") {
-    alias("$(ESAALIAS)")
-    field(NELM,"1555200")
-}
-
-record(ao, "$(SIGXRECORD)") {
-    alias("$(SIGXALIAS)")
-    field(DESC, "sigx")
-    field(MDEL, ".01")
-}
-
-record(ao, "$(SIGYRECORD)") {
-    alias("$(SIGYALIAS)")
-    field(DESC, "sigy")
-    field(MDEL, ".01")
-}
-
-record(ao, "$(EXPOTIMERECORD)") {
-    alias("$(EXPOTIMEALIAS)")
-    field(DESC, "exposure_time")
-}
