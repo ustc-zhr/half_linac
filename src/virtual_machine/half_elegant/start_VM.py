@@ -97,7 +97,11 @@ def main():
         runtime_json_path=jsonpath,
         elegant_dir=elegant_dir,
     )
-    publisher = HalfVmPublisher()
+    try:
+        publisher = HalfVmPublisher(runtime.profile)
+    except Exception as exc:
+        print(f"failed to build VM publish plan: {exc}")
+        return 1
     last_modified = jsonpath.stat().st_mtime
 
     _update_vm_outputs(parser, publisher, elegant_dir, jsonpath)

@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import sdds
@@ -13,7 +14,15 @@ PARENT = REPO_ROOT.parent
 if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
-from half_linac.src.shared.elegant_backend import ElegantParser
+from half_linac.src.shared.elegant_backend import (
+    ElegantParser,
+    VmBpmPublishSpec,
+    VmPublishPlan,
+    VmPublisher,
+    VmWatchImagePublishSpec,
+    build_vm_publish_plan,
+)
+from half_linac.src.shared.machine_profile import load_profile
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 
 
@@ -124,6 +133,141 @@ class ElegantBackendTests(unittest.TestCase):
             [],
             f"Shared/model/IOC callers must not import half_elegant.elegant_parser: {offenders}",
         )
+
+    def test_build_vm_publish_plan_uses_profile_channel_mappings(self):
+        profile = load_profile("half")
+        plan = build_vm_publish_plan(profile)
+
+        bpm_specs = {spec.element_id: spec for spec in plan.bpm_specs}
+        self.assertEqual(bpm_specs["BPM03"].x_pv, "HALF:IN:BPM:BPM03:X:ao")
+        self.assertEqual(bpm_specs["BPM03"].y_pv, "HALF:IN:BPM:BPM03:Y:ao")
+        self.assertEqual(len(bpm_specs), 43)
+
+        watch_specs = {
+            (spec.target_element_id, spec.logical_channel): spec
+            for spec in plan.watch_image_specs
+        }
+        for flag_id in ("PRF04", "PRF06", "PRF07", "PRF08"):
+            spec = watch_specs[(flag_id, "image")]
+            self.assertEqual(spec.source_watch_id, flag_id)
+            self.assertEqual(spec.pv_name, f"HALF:IN:FLAG:{flag_id}:image1:ArrayData:vm")
+
+        esa_spec = watch_specs[("PRF07", "esa_image")]
+        self.assertEqual(esa_spec.source_watch_id, "PRFESA")
+        self.assertEqual(esa_spec.target_element_id, "PRF07")
+        self.assertEqual(esa_spec.pv_name, "HALF:IN:FLAG:PRFESA:image1:ArrayData:vm")
+        self.assertEqual(esa_spec.pixel_shape, (720, 270))
+        self.assertEqual(esa_spec.pixel_width_mm, 0.02)
+
+    def test_shared_publisher_uses_plan_pvs_for_bpm_updates(self):
+        publisher = VmPublisher()
+        plan = VmPublishPlan(
+            bpm_specs=(
+                VmBpmPublishSpec(
+                    element_id="BPMX",
+                    x_pv="CUSTOM:BPMX:X",
+                    y_pv="CUSTOM:BPMX:Y",
+                ),
+            )
+        )
+
+        with patch(
+            "half_linac.src.shared.elegant_backend.publisher._load_bpm_centroids_from_sdds",
+            return_value={"BPMX": {"Cx": 1.25, "Cy": -2.5}},
+        ), patch(
+            "half_linac.src.shared.elegant_backend.publisher.caput_many",
+            side_effect=([True], [True]),
+        ) as caput_many_mock:
+            ok = publisher.publish_bpms(plan, REPO_ROOT / "fake.bpmcen")
+
+        self.assertTrue(ok)
+        self.assertEqual(caput_many_mock.call_count, 2)
+        self.assertEqual(caput_many_mock.call_args_list[0].args[0], ["CUSTOM:BPMX:X"])
+        self.assertEqual(caput_many_mock.call_args_list[0].args[1], [1.25])
+        self.assertEqual(caput_many_mock.call_args_list[1].args[0], ["CUSTOM:BPMX:Y"])
+        self.assertEqual(caput_many_mock.call_args_list[1].args[1], [-2.5])
+
+    def test_shared_publisher_reports_missing_watch_source(self):
+        publisher = VmPublisher()
+        plan = VmPublishPlan(
+            watch_image_specs=(
+                VmWatchImagePublishSpec(
+                    source_watch_id="PRFESA",
+                    target_element_id="PRF07",
+                    logical_channel="esa_image",
+                    pv_name="CUSTOM:FLAG:ESA",
+                    pixel_shape=(4, 3),
+                    pixel_width_mm=0.02,
+                ),
+            )
+        )
+
+        with patch("builtins.print") as print_mock:
+            ok = publisher.publish_watch_images(
+                plan,
+                lattice={},
+                usedline=["PRFESA"],
+                elegant_dir=self.elegant_dir,
+            )
+
+        self.assertFalse(ok)
+        self.assertTrue(any("PRFESA" in str(call) for call in print_mock.call_args_list))
+
+    def test_shared_publisher_skips_watch_not_in_usedline(self):
+        publisher = VmPublisher()
+        plan = VmPublishPlan(
+            watch_image_specs=(
+                VmWatchImagePublishSpec(
+                    source_watch_id="PRF06",
+                    target_element_id="PRF06",
+                    logical_channel="image",
+                    pv_name="CUSTOM:FLAG:PRF06",
+                    pixel_shape=(4, 3),
+                    pixel_width_mm=0.02,
+                ),
+            )
+        )
+        lattice = {
+            "PRF06": {
+                "TYPE": "WATCH",
+                "MODE": "coord",
+                "DISABLE": "0",
+            }
+        }
+
+        with patch("half_linac.src.shared.elegant_backend.publisher.caput") as caput_mock:
+            ok = publisher.publish_watch_images(
+                plan,
+                lattice=lattice,
+                usedline=[],
+                elegant_dir=self.elegant_dir,
+            )
+
+        self.assertTrue(ok)
+        caput_mock.assert_not_called()
+
+    def test_shared_publisher_sources_do_not_import_runtime_config_or_half_pv_prefixes(self):
+        parser_source = (REPO_ROOT / "src/shared/elegant_backend/parser.py").read_text(encoding="utf-8")
+        publisher_source = (
+            REPO_ROOT / "src/shared/elegant_backend/publisher.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("runtime_config as st", parser_source)
+        self.assertNotIn("runtime_config as st", publisher_source)
+        self.assertNotIn("HALF:IN:", publisher_source)
+
+    def test_machine_driven_gui_entrypoints_still_repopulate_generated_default_choices(self):
+        beam_source = (REPO_ROOT / "src/apps/beam_monitor/main.py").read_text(encoding="utf-8")
+        emit_source = (REPO_ROOT / "src/apps/emit_measure/main.py").read_text(encoding="utf-8")
+        self.assertIn("self.flag_selec.clear()", beam_source)
+        self.assertIn("self.flag_selec.addItems(self.flag_ids)", beam_source)
+        self.assertIn("self._set_combo_items(self.comboBox_4, flag_items)", emit_source)
+
+    def test_esa_auto_tuner_demo_uses_machine_profile_instead_of_half_bend_pv(self):
+        source = (REPO_ROOT / "src/apps/energy_spectrum/esa_auto_tuner.py").read_text(encoding="utf-8")
+        self.assertNotIn("HALF:IN:ESA:PRF01:CurrentSet", source)
+        self.assertIn("load_profile()", source)
+        self.assertIn("resolve_channel(profile", source)
 
     def test_half_vm_helper_scripts_use_runtime_resolver_for_paths(self):
         helper_paths = [

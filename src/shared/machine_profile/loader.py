@@ -41,6 +41,7 @@ APP_WORKFLOW_FILES = {
     "energy_spectrum": "energy_spectrum.json",
     "bba": "bba.json",
     "emit_measure": "emit_measure.json",
+    "virtual_machine": "virtual_machine.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
@@ -203,6 +204,64 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
     )
 
 
+def resolve_virtual_machine_segment_choices(
+    profile: MachineProfile,
+) -> tuple[tuple[str, ...], tuple[str, ...], str, str]:
+    workflow = profile.workflows.get("virtual_machine")
+    if isinstance(workflow, Mapping):
+        start_ids = tuple(
+            _expect_string_list(
+                workflow.get("simple_segment_start_ids"),
+                "workflows.virtual_machine.simple_segment_start_ids",
+            )
+        )
+        end_ids = tuple(
+            _expect_string_list(
+                workflow.get("simple_segment_end_ids"),
+                "workflows.virtual_machine.simple_segment_end_ids",
+            )
+        )
+        default_start_value = workflow.get("default_start_id") or (start_ids[0] if start_ids else None)
+        default_end_value = workflow.get("default_end_id") or (end_ids[0] if end_ids else None)
+        default_start = (
+            _expect_non_empty_string(
+                default_start_value,
+                "workflows.virtual_machine.default_start_id",
+            )
+            if default_start_value is not None
+            else ""
+        )
+        default_end = (
+            _expect_non_empty_string(
+                default_end_value,
+                "workflows.virtual_machine.default_end_id",
+            )
+            if default_end_value is not None
+            else ""
+        )
+    else:
+        start_ids = tuple(element.id for element in profile.elements if element.kind == "quad")
+        end_ids = tuple(
+            element.id
+            for element in profile.elements
+            if element.kind == "flag" and "image" in element.channels
+        )
+        default_start = start_ids[0] if start_ids else ""
+        default_end = end_ids[0] if end_ids else ""
+
+    if not start_ids:
+        raise MachineProfileError(
+            "VM simplified segment start candidates are empty. Add a virtual_machine workflow "
+            "or define at least one quad element."
+        )
+    if not end_ids:
+        raise MachineProfileError(
+            "VM simplified segment end candidates are empty. Add a virtual_machine workflow "
+            "or define at least one flag element with logical channel 'image'."
+        )
+    return start_ids, end_ids, default_start, default_end
+
+
 def repo_root() -> Path:
     current = Path(__file__).resolve()
     for parent in current.parents:
@@ -305,10 +364,13 @@ def _load_profile_for_machine_id(
     root = machine_root(profile_id)
     if _has_directory_profile(root):
         raw = _load_directory_profile_raw(root, workflow_names=workflow_names)
-        return MachineProfile.from_dict(raw)
+        profile = MachineProfile.from_dict(raw)
+    else:
+        raw = _load_legacy_profile_raw(root)
+        profile = MachineProfile.from_dict(raw)
 
-    raw = _load_legacy_profile_raw(root)
-    return MachineProfile.from_dict(raw)
+    _validate_optional_workflows(profile)
+    return profile
 
 
 def _has_directory_profile(root: Path) -> bool:
@@ -498,15 +560,10 @@ def _resolve_model_backend(
             f"{app_name} requires model_backends/*.json for machine directory {root.name!r}."
         )
 
-    backend_name = str(model_backend or "simulation").strip().lower().replace("_", " ")
-    if backend_name in {"simulation", "elegant"}:
-        return ModelBackendConfig(
-            name="simulation",
-            engine="elegant",
-            config=_legacy_default_elegant_model_config(),
-        )
-
-    return ModelBackendConfig(name=backend_name)
+    raise MachineProfileError(
+        f"{app_name} on legacy profile {root.name!r} requires migration to a directory machine profile "
+        "with machine.json and model_backends/*.json."
+    )
 
 
 def _validate_energy_spectrum_workflow(
@@ -516,6 +573,7 @@ def _validate_energy_spectrum_workflow(
     required_keys = (
         "flag_element",
         "flag_image_channel",
+        "vm_watch_element",
         "bend_element",
         "bend_channel",
         "esa_quads",
@@ -535,6 +593,10 @@ def _validate_energy_spectrum_workflow(
     flag_image_channel = _expect_non_empty_string(
         workflow.get("flag_image_channel"),
         "workflows.energy_spectrum.flag_image_channel",
+    )
+    _expect_non_empty_string(
+        workflow.get("vm_watch_element"),
+        "workflows.energy_spectrum.vm_watch_element",
     )
     if flag_image_channel not in flag_element.channels:
         raise MachineProfileError(
@@ -634,6 +696,62 @@ def _validate_energy_spectrum_workflow(
                 ) from exc
 
 
+def _validate_virtual_machine_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+) -> None:
+    start_ids = _expect_string_list(
+        workflow.get("simple_segment_start_ids"),
+        "workflows.virtual_machine.simple_segment_start_ids",
+    )
+    end_ids = _expect_string_list(
+        workflow.get("simple_segment_end_ids"),
+        "workflows.virtual_machine.simple_segment_end_ids",
+    )
+    if not start_ids:
+        raise MachineProfileError("workflows.virtual_machine.simple_segment_start_ids must not be empty.")
+    if not end_ids:
+        raise MachineProfileError("workflows.virtual_machine.simple_segment_end_ids must not be empty.")
+
+    for element_id in start_ids:
+        element = profile.get_element(element_id)
+        if element.kind != "quad":
+            raise MachineProfileError(
+                "workflows.virtual_machine.simple_segment_start_ids must reference quad elements."
+            )
+
+    for element_id in end_ids:
+        element = profile.get_element(element_id)
+        if element.kind != "flag":
+            raise MachineProfileError(
+                "workflows.virtual_machine.simple_segment_end_ids must reference flag elements."
+            )
+
+    default_start = workflow.get("default_start_id")
+    if default_start is not None:
+        value = _expect_non_empty_string(
+            default_start,
+            "workflows.virtual_machine.default_start_id",
+        )
+        if value not in start_ids:
+            raise MachineProfileError(
+                "workflows.virtual_machine.default_start_id must belong to "
+                "simple_segment_start_ids."
+            )
+
+    default_end = workflow.get("default_end_id")
+    if default_end is not None:
+        value = _expect_non_empty_string(
+            default_end,
+            "workflows.virtual_machine.default_end_id",
+        )
+        if value not in end_ids:
+            raise MachineProfileError(
+                "workflows.virtual_machine.default_end_id must belong to "
+                "simple_segment_end_ids."
+            )
+
+
 def _validate_beam_monitor_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
@@ -667,6 +785,12 @@ def _validate_beam_monitor_workflow(
             raise MachineProfileError(
                 f"workflows.beam_monitor.flag_pixel_width_mm is missing backend {backend_name!r}."
             )
+
+
+def _validate_optional_workflows(profile: MachineProfile) -> None:
+    workflow = profile.workflows.get("virtual_machine")
+    if isinstance(workflow, Mapping):
+        _validate_virtual_machine_workflow(profile, workflow)
 
 
 def _load_directory_model_backend(
@@ -774,23 +898,6 @@ def _infer_orbit_ids(
     tagged = [element for element in candidates if "orbit" in element.tags]
     source = tagged if tagged else candidates
     return [element.id for element in source]
-
-
-def _legacy_default_elegant_model_config() -> Mapping[str, Any]:
-    root = repo_root()
-    elegant_dir = root / "src" / "virtual_machine" / "half_elegant" / "elegant"
-    vm_dir = root / "src" / "virtual_machine" / "half_elegant"
-    return {
-        "source_json": str(vm_dir / "halflinac.json"),
-        "source_lattice": str(elegant_dir / "lattice_ini.lte"),
-        "emit_ini_ele": str(elegant_dir / "emit_ini.ele"),
-        "emit_lte": str(elegant_dir / "emit.lte"),
-        "emit_ele": str(elegant_dir / "emit.ele"),
-        "emit_json": str(vm_dir / "emit.json"),
-        "emit_mat": str(elegant_dir / "emit.mat"),
-        "emit_log": "emit.log",
-        "line_name": "ALL",
-    }
 
 
 def _ordered_backend_names(backends: tuple[str, ...] | list[str], default_mode: str) -> list[str]:

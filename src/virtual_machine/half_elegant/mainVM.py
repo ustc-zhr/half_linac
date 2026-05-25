@@ -30,9 +30,13 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from VMgui import Ui_MainWindow
+from half_linac.src.virtual_machine.half_elegant.VMgui import Ui_MainWindow
 
-from half_linac.src.shared.machine_profile import resolve_machine_runtime
+from half_linac.src.shared.machine_profile import (
+    MachineProfileError,
+    resolve_machine_runtime,
+    resolve_virtual_machine_segment_choices,
+)
 
 
 PROCESS_START_TIMEOUT_S = 0.3
@@ -507,6 +511,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.runtime = resolve_machine_runtime()
         self.machine_profile = self.runtime.profile
+        (
+            self.simple_segment_start_ids,
+            self.simple_segment_end_ids,
+            self.default_simple_segment_start_id,
+            self.default_simple_segment_end_id,
+        ) = resolve_virtual_machine_segment_choices(self.machine_profile)
         self.processes = {}
         self.process_start_times = {}
         self.current_theme = "dark"
@@ -565,7 +575,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
 
-        title = QLabel("HALF Linac VM Control", panel)
+        title = QLabel(f"{self.machine_profile.machine.display_name} VM Control", panel)
         title.setObjectName("summaryTitle")
         header_layout.addWidget(title)
         header_layout.addStretch(1)
@@ -622,10 +632,34 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.QDXDYvalue.setToolTip("Quadrupole static offset in micrometers rms.")
         self.QK1JITTER.setToolTip("Quadrupole K1 jitter in ppm rms.")
 
+        self._set_combo_items(self.comboBox_simply_start, self.simple_segment_start_ids)
+        self._set_combo_items(self.comboBox_simply_end, self.simple_segment_end_ids)
+        self._set_combo_current_text(
+            self.comboBox_simply_start,
+            self.default_simple_segment_start_id,
+        )
+        self._set_combo_current_text(
+            self.comboBox_simply_end,
+            self.default_simple_segment_end_id,
+        )
+
         self.QDXDYvalue.setMaximumWidth(110)
         self.QK1JITTER.setMaximumWidth(110)
         self.QDXDYvalue.setAlignment(Qt.AlignCenter)
         self.QK1JITTER.setAlignment(Qt.AlignCenter)
+
+    @staticmethod
+    def _set_combo_items(combo, items):
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItems(list(items))
+        combo.blockSignals(False)
+
+    @staticmethod
+    def _set_combo_current_text(combo, value):
+        index = combo.findText(value)
+        if index >= 0:
+            combo.setCurrentIndex(index)
 
     def _configure_action_buttons(self):
         self.action_buttons = {}
@@ -1134,6 +1168,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = myWindow()
+    try:
+        window = myWindow()
+    except MachineProfileError as exc:
+        print(f"failed to initialize VM control: {exc}")
+        raise SystemExit(1) from exc
     window.show()
     sys.exit(app.exec_())

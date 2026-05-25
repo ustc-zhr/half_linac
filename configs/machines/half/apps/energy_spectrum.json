@@ -1,6 +1,7 @@
 {
   "flag_element": "PRF07",
   "flag_image_channel": "esa_image",
+  "vm_watch_element": "PRFESA",
   "flag_exposure_channel": "exposure_time",
   "flag_pixel_shape": {
     "vm": [720, 270],

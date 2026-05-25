@@ -215,23 +215,46 @@ class ESA_AutoTuner:
 
 
 if __name__=='__main__':
-    flag_pixel_machine = [1440,1080] 
-    # flag_pixel_width = 0.08 #[mm]
-    flag_pv = "IRFEL:BD:FLAG4:image1:ArrayData"
-    bend_pv = ""
+    from half_linac.src.shared.machine_profile import (
+        get_workflow,
+        load_profile,
+        resolve_channel,
+    )
+
+    profile = load_profile()
+    workflow = get_workflow(profile, "energy_spectrum")
+    preferred_backend = "real" if "real" in profile.control_backends else profile.machine.default_mode
+    flag_element = str(workflow["flag_element"])
+    flag_channel = str(workflow["flag_image_channel"])
+    pixel_shape_by_backend = workflow.get("flag_pixel_shape", {})
+    if not isinstance(pixel_shape_by_backend, dict):
+        raise ValueError("workflows.energy_spectrum.flag_pixel_shape must provide per-backend values.")
+    flag_pixel_machine = pixel_shape_by_backend.get(preferred_backend)
+    if not isinstance(flag_pixel_machine, list) or len(flag_pixel_machine) != 2:
+        raise ValueError(
+            "workflows.energy_spectrum.flag_pixel_shape must provide [nx, ny] for the selected backend."
+        )
+    flag_pv = resolve_channel(profile, flag_element, flag_channel, preferred_backend)
+    bend_pv = resolve_channel(
+        profile,
+        str(workflow["bend_element"]),
+        str(workflow["bend_channel"]),
+        preferred_backend,
+    )
     esa_tuner = ESA_AutoTuner(
         flag_pv_obj=flag_pv,
         flag_pixel=flag_pixel_machine,
-        bend_pv="HALF:IN:ESA:PRF01:CurrentSet",
+        bend_pv=bend_pv,
         remove_bg=False,
         bg_image=None
     )
 
+    scan = workflow.get("bend_scan", {})
     best_I = esa_tuner.run(
-        B_min=0,
-        B_max=200,
-        coarse_steps=40,
-        fine_steps=15
+        B_min=float(scan.get("min", 0)),
+        B_max=float(scan.get("max", 200)),
+        coarse_steps=int(scan.get("coarse_steps", 40)),
+        fine_steps=int(scan.get("fine_steps", 15)),
     )
 
     if best_I is not None:

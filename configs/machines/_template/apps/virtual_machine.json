@@ -1,0 +1,6 @@
+{
+  "simple_segment_start_ids": ["Q01", "QE01"],
+  "simple_segment_end_ids": ["PRF01"],
+  "default_start_id": "Q01",
+  "default_end_id": "PRF01"
+}

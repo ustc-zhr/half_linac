@@ -39,7 +39,7 @@ class elegant_parser:
         self.trackline_names_list = self._shared.trackline_names_list
         self.ele = EleParser(self.ele_file)
         self.control = self._shared.control
-        self._publisher = HalfVmPublisher()
+        self._publisher = HalfVmPublisher(runtime.profile)
 
     def _resolve_runtime_json_path(self, j_file):
         if j_file == "halflinac.json":

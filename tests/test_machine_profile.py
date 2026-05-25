@@ -28,11 +28,54 @@ from half_linac.src.shared.machine_profile import (
     load_profile,
     resolve_channel,
     resolve_machine_runtime,
+    resolve_virtual_machine_segment_choices,
+)
+from half_linac.src.shared.machine_profile.loader import (
+    load_bba_workflow,
+    load_emit_measure_workflow,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
     default_control_backend_choices,
     list_machine_choices,
 )
+
+
+def _write_directory_profile_fixture(
+    temp_root: Path,
+    machine_id: str,
+    machine_json: dict,
+    *,
+    backends: dict[str, dict],
+    apps: dict[str, dict] | None = None,
+    model_backends: dict[str, dict] | None = None,
+) -> Path:
+    machine_dir = temp_root / "configs" / "machines" / machine_id
+    (machine_dir / "control_backends").mkdir(parents=True)
+    if apps:
+        (machine_dir / "apps").mkdir(parents=True)
+    if model_backends:
+        (machine_dir / "model_backends").mkdir(parents=True)
+
+    (machine_dir / "machine.json").write_text(
+        json.dumps(machine_json, indent=2),
+        encoding="utf-8",
+    )
+    for backend_name, payload in backends.items():
+        (machine_dir / "control_backends" / f"{backend_name}.json").write_text(
+            json.dumps(payload, indent=2),
+            encoding="utf-8",
+        )
+    for app_name, payload in (apps or {}).items():
+        (machine_dir / "apps" / f"{app_name}.json").write_text(
+            json.dumps(payload, indent=2),
+            encoding="utf-8",
+        )
+    for backend_name, payload in (model_backends or {}).items():
+        (machine_dir / "model_backends" / f"{backend_name}.json").write_text(
+            json.dumps(payload, indent=2),
+            encoding="utf-8",
+        )
+    return machine_dir
 
 
 class MachineProfileTests(unittest.TestCase):
@@ -52,6 +95,8 @@ class MachineProfileTests(unittest.TestCase):
             REPO_ROOT / "src/apps/emit_measure/test.py",
             REPO_ROOT / "src/apps/energy_spectrum/main.py",
             REPO_ROOT / "src/apps/energy_spectrum/get_energy0.py",
+            REPO_ROOT / "src/shared/elegant_backend/parser.py",
+            REPO_ROOT / "src/shared/elegant_backend/publisher.py",
             REPO_ROOT / "src/shared/elegant_runtime.py",
             REPO_ROOT / "src/shared/machine_profile/loader.py",
             REPO_ROOT / "src/shared/machine_profile/resolver.py",
@@ -107,6 +152,17 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["flag_pixel_shape"]["vm"], [360, 270])
         self.assertEqual(workflow["flag_pixel_shape"]["real"], [1440, 1080])
         self.assertEqual(workflow["flag_pixel_width_mm"]["vm"], 0.02)
+
+    def test_half_virtual_machine_workflow_keeps_expected_segment_choices(self):
+        profile = load_profile("half")
+        workflow = get_workflow(profile, "virtual_machine")
+        start_ids, end_ids, default_start, default_end = resolve_virtual_machine_segment_choices(profile)
+        self.assertEqual(workflow["simple_segment_start_ids"], ["QL27", "QT01", "QT02", "QL15", "QL16"])
+        self.assertEqual(workflow["simple_segment_end_ids"], ["PRF04", "PRF06", "PRF07", "PRF08"])
+        self.assertEqual(default_start, "QL27")
+        self.assertEqual(default_end, "PRF04")
+        self.assertEqual(start_ids, ("QL27", "QT01", "QT02", "QL15", "QL16"))
+        self.assertEqual(end_ids, ("PRF04", "PRF06", "PRF07", "PRF08"))
 
     def test_load_energy_spectrum_app_context(self):
         context = load_app_context("energy_spectrum")
@@ -417,6 +473,381 @@ class MachineProfileTests(unittest.TestCase):
             workflow["energy_set_pv"]["real"],
             "HALF:IN:ESA:PRF01:EnergySet",
         )
+        self.assertEqual(workflow["vm_watch_element"], "PRFESA")
+
+    def test_virtual_machine_segment_choices_fall_back_to_quad_and_flag_inference(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "vmfallback",
+                "family": "linac",
+                "display_name": "VM Fallback",
+                "default_mode": "real",
+            },
+            "elements": [
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "Q02",
+                    "kind": "quad",
+                    "display_name": "Q02",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 3,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["image"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "Q01": {"k1": "REAL:Q01:K1"},
+                "Q02": {"k1": "REAL:Q02:K1"},
+                "PRF01": {"image": "REAL:PRF01:IMAGE"},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            _write_directory_profile_fixture(
+                temp_root,
+                "vmfallback",
+                machine_json,
+                backends={"real": real_channels},
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                profile = load_profile("vmfallback")
+                start_ids, end_ids, default_start, default_end = resolve_virtual_machine_segment_choices(profile)
+
+        self.assertEqual(start_ids, ("Q01", "Q02"))
+        self.assertEqual(end_ids, ("PRF01",))
+        self.assertEqual(default_start, "Q01")
+        self.assertEqual(default_end, "PRF01")
+
+    def test_virtual_machine_workflow_rejects_non_quad_start_ids(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "vminvalidstart",
+                "family": "linac",
+                "display_name": "VM Invalid Start",
+                "default_mode": "real",
+            },
+            "elements": [
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["image"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "Q01": {"k1": "REAL:Q01:K1"},
+                "PRF01": {"image": "REAL:PRF01:IMAGE"},
+            },
+        }
+        vm_workflow = {
+            "simple_segment_start_ids": ["PRF01"],
+            "simple_segment_end_ids": ["PRF01"],
+            "default_start_id": "PRF01",
+            "default_end_id": "PRF01",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            _write_directory_profile_fixture(
+                temp_root,
+                "vminvalidstart",
+                machine_json,
+                backends={"real": real_channels},
+                apps={"virtual_machine": vm_workflow},
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                with self.assertRaisesRegex(MachineProfileError, "must reference quad"):
+                    load_profile("vminvalidstart")
+
+    def test_virtual_machine_workflow_rejects_unknown_end_ids(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "vminvalidend",
+                "family": "linac",
+                "display_name": "VM Invalid End",
+                "default_mode": "real",
+            },
+            "elements": [
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["image"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "Q01": {"k1": "REAL:Q01:K1"},
+                "PRF01": {"image": "REAL:PRF01:IMAGE"},
+            },
+        }
+        vm_workflow = {
+            "simple_segment_start_ids": ["Q01"],
+            "simple_segment_end_ids": ["PRF02"],
+            "default_start_id": "Q01",
+            "default_end_id": "PRF02",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            _write_directory_profile_fixture(
+                temp_root,
+                "vminvalidend",
+                machine_json,
+                backends={"real": real_channels},
+                apps={"virtual_machine": vm_workflow},
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                with self.assertRaisesRegex(MachineProfileError, "Unknown element id: PRF02"):
+                    load_profile("vminvalidend")
+
+    def test_virtual_machine_workflow_rejects_default_outside_candidate_list(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "vminvaliddefault",
+                "family": "linac",
+                "display_name": "VM Invalid Default",
+                "default_mode": "real",
+            },
+            "elements": [
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "Q02",
+                    "kind": "quad",
+                    "display_name": "Q02",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 3,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["image"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "Q01": {"k1": "REAL:Q01:K1"},
+                "Q02": {"k1": "REAL:Q02:K1"},
+                "PRF01": {"image": "REAL:PRF01:IMAGE"},
+            },
+        }
+        vm_workflow = {
+            "simple_segment_start_ids": ["Q01"],
+            "simple_segment_end_ids": ["PRF01"],
+            "default_start_id": "Q02",
+            "default_end_id": "PRF01",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            _write_directory_profile_fixture(
+                temp_root,
+                "vminvaliddefault",
+                machine_json,
+                backends={"real": real_channels},
+                apps={"virtual_machine": vm_workflow},
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                with self.assertRaisesRegex(MachineProfileError, "default_start_id must belong"):
+                    load_profile("vminvaliddefault")
+
+    def test_energy_spectrum_workflow_requires_vm_watch_element(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "missingwatch",
+                "family": "linac",
+                "display_name": "Missing Watch",
+                "default_mode": "real",
+            },
+            "elements": [
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 1,
+                    "tags": ["energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["image", "exposure_time"],
+                },
+                {
+                    "id": "SM",
+                    "kind": "bend",
+                    "display_name": "SM",
+                    "order": 2,
+                    "tags": ["energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["current_set"],
+                },
+                {
+                    "id": "QE01",
+                    "kind": "quad",
+                    "display_name": "QE01",
+                    "order": 3,
+                    "tags": ["energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "QE02",
+                    "kind": "quad",
+                    "display_name": "QE02",
+                    "order": 4,
+                    "tags": ["energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "QE03",
+                    "kind": "quad",
+                    "display_name": "QE03",
+                    "order": 5,
+                    "tags": ["energy_spectrum"],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "PRF01": {
+                    "image": "REAL:PRF01:IMAGE",
+                    "exposure_time": "REAL:PRF01:EXPO",
+                },
+                "SM": {"current_set": "REAL:SM:CURRENT"},
+                "QE01": {"k1": "REAL:QE01:K1"},
+                "QE02": {"k1": "REAL:QE02:K1"},
+                "QE03": {"k1": "REAL:QE03:K1"},
+            },
+        }
+        energy_spectrum_json = {
+            "flag_element": "PRF01",
+            "flag_image_channel": "image",
+            "flag_exposure_channel": "exposure_time",
+            "flag_pixel_shape": {"real": [1440, 1080]},
+            "flag_pixel_width_mm": {"real": 0.02},
+            "bend_element": "SM",
+            "bend_channel": "current_set",
+            "model_backend": "simulation",
+            "bend_scan": {"min": 0, "max": 10, "coarse_steps": 2, "fine_steps": 2},
+            "esa_quads": ["QE01", "QE02", "QE03"],
+            "default_start_element": "QE01",
+        }
+        model_backend_json = {
+            "backend": "simulation",
+            "engine": "elegant",
+            "config": {
+                "working_dir": "src/virtual_machine/half_elegant/elegant",
+                "source_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
+                "energy_ini_ele_file": "src/virtual_machine/half_elegant/elegant/esa_ini.ele",
+                "energy_json_path": "src/virtual_machine/half_elegant/esa.json",
+                "energy_lte_file": "src/virtual_machine/half_elegant/elegant/esa.lte",
+                "energy_ele_file": "src/virtual_machine/half_elegant/elegant/esa.ele",
+                "energy_mat_file": "src/virtual_machine/half_elegant/elegant/esa.mat",
+                "energy_twi_file": "src/virtual_machine/half_elegant/elegant/esa.twi",
+                "energy_log": "esa.log",
+                "energy_dispersion_line_name": "ESA",
+                "energy_twiss_line_name": "ESA",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            machine_dir = temp_root / "configs" / "machines" / "missingwatch"
+            (machine_dir / "control_backends").mkdir(parents=True)
+            (machine_dir / "apps").mkdir(parents=True)
+            (machine_dir / "model_backends").mkdir(parents=True)
+            (machine_dir / "machine.json").write_text(
+                json.dumps(machine_json, indent=2),
+                encoding="utf-8",
+            )
+            (machine_dir / "control_backends" / "real.json").write_text(
+                json.dumps(real_channels, indent=2),
+                encoding="utf-8",
+            )
+            (machine_dir / "apps" / "energy_spectrum.json").write_text(
+                json.dumps(energy_spectrum_json, indent=2),
+                encoding="utf-8",
+            )
+            (machine_dir / "model_backends" / "simulation.elegant.json").write_text(
+                json.dumps(model_backend_json, indent=2),
+                encoding="utf-8",
+            )
+
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                with self.assertRaisesRegex(MachineProfileError, "vm_watch_element"):
+                    load_app_context("energy_spectrum", machine_id="missingwatch")
 
     def test_softioc_substitutions_include_vm_aliases_for_profile_only_elements(self):
         substitutions = (
@@ -612,6 +1043,97 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(profile.get_element("XC01").plane, "x")
         self.assertEqual(profile.get_element("YC01").plane, "y")
 
+    def test_legacy_single_file_profile_model_apps_require_directory_migration(self):
+        legacy_profile = {
+            "schema_version": "1",
+            "machine": {
+                "id": "legacy",
+                "family": "linac",
+                "display_name": "Legacy Linac",
+                "default_mode": "vm",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "channels": {
+                        "x": {"vm": "LEGACY:BPM01:X", "real": "REAL:BPM01:X"},
+                        "y": {"vm": "LEGACY:BPM01:Y", "real": "REAL:BPM01:Y"},
+                    },
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 2,
+                    "tags": ["orbit", "bba"],
+                    "limits": {},
+                    "channels": {
+                        "setpoint": {"vm": "LEGACY:XC01", "real": "REAL:XC01"},
+                    },
+                },
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 3,
+                    "tags": ["bba", "emit_measure"],
+                    "limits": {},
+                    "channels": {
+                        "k1": {"vm": "LEGACY:Q01:K1", "real": "REAL:Q01:K1"},
+                    },
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 4,
+                    "tags": ["emit_measure"],
+                    "limits": {},
+                    "channels": {
+                        "sigx": {"vm": "LEGACY:PRF01:SIGX", "real": "REAL:PRF01:SIGX"},
+                        "sigy": {"vm": "LEGACY:PRF01:SIGY", "real": "REAL:PRF01:SIGY"},
+                    },
+                },
+            ],
+            "workflows": {
+                "emit_measure": {
+                    "presets": [
+                        {
+                            "id": "legacy_emit",
+                            "quad": "Q01",
+                            "flag": "PRF01",
+                            "energy_mev": 220.0,
+                            "scan": {
+                                "k1_from": 0.0,
+                                "k1_end": 1.0,
+                                "k1_steps": 3,
+                                "samples": 2,
+                                "sleeptime": 0.1,
+                            },
+                        }
+                    ],
+                    "default_preset": "legacy_emit",
+                },
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            legacy_dir = temp_root / "configs" / "machines" / "legacy"
+            legacy_dir.mkdir(parents=True)
+            (legacy_dir / "profile.json").write_text(
+                json.dumps(legacy_profile, indent=2),
+                encoding="utf-8",
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                with self.assertRaisesRegex(MachineProfileError, "directory machine profile"):
+                    load_app_context("emit_measure", machine_id="legacy")
+
     def test_loader_infers_defaults_when_family_sections_are_omitted(self):
         inferred_profile = {
             "schema_version": "1",
@@ -719,12 +1241,13 @@ class MachineProfileTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
-                bba_context = load_app_context("bba", machine_id="simple")
-                emit_context = load_app_context("emit_measure", machine_id="simple")
+                profile = load_profile("simple")
+                bba_workflow = load_bba_workflow(profile)
+                emit_workflow = load_emit_measure_workflow(profile)
 
-        self.assertEqual(bba_context.bba_workflow.standard.default_preset, "simple_bba1")
-        self.assertEqual(bba_context.bba_workflow.bba2.default_preset, "simple_bba2")
-        self.assertEqual(emit_context.emit_measure_workflow.default_preset, "simple_emit")
+        self.assertEqual(bba_workflow.standard.default_preset, "simple_bba1")
+        self.assertEqual(bba_workflow.bba2.default_preset, "simple_bba2")
+        self.assertEqual(emit_workflow.default_preset, "simple_emit")
 
     def test_directory_profile_can_infer_orbit_workflow_without_explicit_file(self):
         machine_json = {
@@ -1620,6 +2143,7 @@ class MachineProfileTests(unittest.TestCase):
         energy_spectrum_json = {
             "flag_element": "PRF01",
             "flag_image_channel": "image",
+            "vm_watch_element": "PRF01",
             "flag_exposure_channel": "exposure_time",
             "flag_pixel_shape": {"real": [1440, 1080]},
             "flag_pixel_width_mm": {"real": 0.02},

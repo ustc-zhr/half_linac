@@ -8,6 +8,7 @@ from .compatibility import (
     list_elements,
     load_app_context,
     load_profile,
+    resolve_virtual_machine_segment_choices,
     resolve_channel,
 )
 from .model_backend import BeamModelBackend, ElegantModelBackend, build_model_backend
@@ -91,6 +92,7 @@ __all__ = [
     "load_profile",
     "normalize_mode",
     "normalize_plane",
+    "resolve_virtual_machine_segment_choices",
     "resolve_machine_runtime",
     "resolve_softioc_runtime",
     "resolve_vm_runtime",
