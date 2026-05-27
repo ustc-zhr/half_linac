@@ -51,6 +51,11 @@ from .runtime_selector import (
     list_machine_choices,
     request_runtime_restart,
 )
+from .validation import (
+    MachineValidationCheck,
+    MachineValidationReport,
+    validate_machine_profile,
+)
 
 __all__ = [
     "AppContext",
@@ -80,6 +85,8 @@ __all__ = [
     "ResolvedSoftIocRuntimeConfig",
     "ResolvedVmRuntimeConfig",
     "RuntimeSelectorWidget",
+    "MachineValidationCheck",
+    "MachineValidationReport",
     "build_model_backend",
     "default_control_backend_choices",
     "describe_app_support",
@@ -98,4 +105,5 @@ __all__ = [
     "resolve_vm_runtime",
     "request_runtime_restart",
     "resolve_channel",
+    "validate_machine_profile",
 ]

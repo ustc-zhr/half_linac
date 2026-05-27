@@ -10,9 +10,11 @@ bash -n "$HALF_LINAC_ROOT/scripts/common.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/setup.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/runMe"
 bash -n "$HALF_LINAC_ROOT/scripts/check.sh"
+bash -n "$HALF_LINAC_ROOT/scripts/check_machine.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/build_ioc.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/start_vm.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/start_ioc_manager.sh"
 bash -n "$HALF_LINAC_ROOT/src/softIOC/halflinac/runMe"
+bash "$HALF_LINAC_ROOT/scripts/check_machine.sh" half
 
 echo "Static checks passed."

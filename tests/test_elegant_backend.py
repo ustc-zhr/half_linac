@@ -22,7 +22,7 @@ from half_linac.src.shared.elegant_backend import (
     VmWatchImagePublishSpec,
     build_vm_publish_plan,
 )
-from half_linac.src.shared.machine_profile import load_profile
+from half_linac.src.shared.machine_profile import load_profile, resolve_machine_runtime
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 
 
@@ -85,6 +85,38 @@ class ElegantBackendTests(unittest.TestCase):
 
             self.assertEqual(shared_lte.read_text(encoding="utf-8"), compat_lte.read_text(encoding="utf-8"))
             self.assertEqual(shared_ele.read_text(encoding="utf-8"), compat_ele.read_text(encoding="utf-8"))
+
+    def test_half_compat_parser_defaults_follow_machine_runtime_metadata(self):
+        runtime = resolve_machine_runtime()
+        compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL")
+
+        self.assertEqual(compat_parser._resolve_runtime_json_path(), runtime.vm.runtime_json)
+        self.assertEqual(
+            compat_parser._resolve_runtime_json_path(runtime.vm.runtime_json.name),
+            runtime.vm.runtime_json,
+        )
+        self.assertEqual(
+            compat_parser._resolve_runtime_json_path(f"./{runtime.vm.runtime_json.name}"),
+            runtime.vm.runtime_json,
+        )
+        self.assertEqual(
+            compat_parser._resolve_elegant_path(None, compat_parser.default_lattice_output_path),
+            compat_parser.default_lattice_output_path,
+        )
+        self.assertEqual(
+            compat_parser._resolve_elegant_path(
+                "./elegant/lattice.lte",
+                compat_parser.default_lattice_output_path,
+            ),
+            compat_parser.default_lattice_output_path,
+        )
+        self.assertEqual(
+            compat_parser._resolve_elegant_path(
+                "./elegant/one.ele",
+                compat_parser.default_ele_output_path,
+            ),
+            compat_parser.default_ele_output_path,
+        )
 
     def test_load_bpm_centroids_matches_current_half_sample(self):
         if not hasattr(sdds, "SDDS"):
@@ -286,4 +318,14 @@ class ElegantBackendTests(unittest.TestCase):
             offenders,
             [],
             f"HALF VM helper scripts should resolve runtime JSON through machine runtime metadata: {offenders}",
+        )
+
+    def test_half_compat_parser_no_longer_hardcodes_half_runtime_default_paths(self):
+        source = (
+            REPO_ROOT / "src/virtual_machine/half_elegant/elegant_parser.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn('dump2json(self, j_file="halflinac.json")', source)
+        self.assertNotIn(
+            'json2lte_ele(self, lat_f="./elegant/lattice.lte", ele_f="./elegant/one.ele", j_file="halflinac.json")',
+            source,
         )

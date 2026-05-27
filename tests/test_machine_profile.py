@@ -18,6 +18,7 @@ from half_linac.src.shared.machine_profile import (
     ElegantModelBackend,
     MachineProfile,
     MachineProfileError,
+    MachineValidationReport,
     build_model_backend,
     describe_app_support,
     get_bba_preset,
@@ -29,6 +30,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
     resolve_machine_runtime,
     resolve_virtual_machine_segment_choices,
+    validate_machine_profile,
 )
 from half_linac.src.shared.machine_profile.loader import (
     load_bba_workflow,
@@ -461,6 +463,17 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(supported)
         self.assertIsNone(reason)
 
+    def test_machine_acceptance_validator_passes_for_half(self):
+        report = validate_machine_profile("half")
+        self.assertIsInstance(report, MachineValidationReport)
+        self.assertTrue(report.ok, report.format_text())
+        self.assertEqual(report.failed, ())
+        self.assertEqual(report.get_check("profile").status, "pass")
+        self.assertEqual(report.get_check("runtime").status, "pass")
+        self.assertEqual(report.get_check("vm_publish_plan").status, "pass")
+        self.assertEqual(report.get_check("app:orbit_correct").status, "pass")
+        self.assertEqual(report.get_check("model:energy_spectrum").status, "pass")
+
     def test_beam_monitor_is_reported_supported_for_half(self):
         supported, reason = describe_app_support("half", "beam_monitor")
         self.assertTrue(supported)
@@ -539,6 +552,87 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(end_ids, ("PRF01",))
         self.assertEqual(default_start, "Q01")
         self.assertEqual(default_end, "PRF01")
+
+    def test_machine_acceptance_validator_reports_missing_runtime_paths(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "runtimebroken",
+                "family": "linac",
+                "display_name": "Runtime Broken",
+                "default_mode": "real",
+            },
+            "runtime": {
+                "vm": {
+                    "root": "missing/vm",
+                    "ui_entrypoint": "missing/vm/mainVM.py",
+                    "manager_entrypoint": "missing/vm/start_VM.py",
+                    "runtime_json": "missing/vm/runtime.json",
+                    "bootstrap_lattice": "missing/vm/elegant/lattice_ini.lte",
+                    "bootstrap_ele": "missing/vm/elegant/one_ini.ele",
+                    "line_name": "ALL",
+                },
+                "softioc": {
+                    "root": "missing/softioc",
+                    "substitutions_file": "missing/softioc/db/runtime.substitutions",
+                },
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["x", "y"],
+                },
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 3,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["image"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "BPM01": {"x": "REAL:BPM01:X", "y": "REAL:BPM01:Y"},
+                "Q01": {"k1": "REAL:Q01:K1"},
+                "PRF01": {"image": "REAL:PRF01:IMAGE"},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            _write_directory_profile_fixture(
+                temp_root,
+                "runtimebroken",
+                machine_json,
+                backends={"real": real_channels},
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                report = validate_machine_profile("runtimebroken")
+
+        self.assertFalse(report.ok)
+        runtime_check = report.get_check("runtime")
+        self.assertIsNotNone(runtime_check)
+        assert runtime_check is not None
+        self.assertEqual(runtime_check.status, "fail")
+        self.assertIn("runtime.vm.root", runtime_check.detail)
 
     def test_virtual_machine_workflow_rejects_non_quad_start_ids(self):
         machine_json = {
