@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -61,6 +62,32 @@ PATHLIKE_MODEL_CONFIG_KEYS = (
     "_path",
 )
 PATHLIKE_MODEL_CONFIG_NAMES = {"working_dir"}
+
+
+@dataclass(frozen=True)
+class VirtualMachinePredefinedUsedline:
+    id: str
+    label: str
+    role: str
+
+
+@dataclass(frozen=True)
+class VirtualMachineLocalSegment:
+    id: str
+    label: str
+    parent_usedline: str
+    start_ids: tuple[str, ...]
+    end_ids: tuple[str, ...]
+    default_start_id: str
+    default_end_id: str
+
+
+@dataclass(frozen=True)
+class VirtualMachineUsedlineWorkflow:
+    predefined_usedlines: tuple[VirtualMachinePredefinedUsedline, ...]
+    default_usedline: str
+    local_segments: tuple[VirtualMachineLocalSegment, ...]
+    default_segment_id: str
 
 
 def load_profile(machine_id: str | None = None) -> MachineProfile:
@@ -207,47 +234,12 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
 def resolve_virtual_machine_segment_choices(
     profile: MachineProfile,
 ) -> tuple[tuple[str, ...], tuple[str, ...], str, str]:
-    workflow = profile.workflows.get("virtual_machine")
-    if isinstance(workflow, Mapping):
-        start_ids = tuple(
-            _expect_string_list(
-                workflow.get("simple_segment_start_ids"),
-                "workflows.virtual_machine.simple_segment_start_ids",
-            )
-        )
-        end_ids = tuple(
-            _expect_string_list(
-                workflow.get("simple_segment_end_ids"),
-                "workflows.virtual_machine.simple_segment_end_ids",
-            )
-        )
-        default_start_value = workflow.get("default_start_id") or (start_ids[0] if start_ids else None)
-        default_end_value = workflow.get("default_end_id") or (end_ids[0] if end_ids else None)
-        default_start = (
-            _expect_non_empty_string(
-                default_start_value,
-                "workflows.virtual_machine.default_start_id",
-            )
-            if default_start_value is not None
-            else ""
-        )
-        default_end = (
-            _expect_non_empty_string(
-                default_end_value,
-                "workflows.virtual_machine.default_end_id",
-            )
-            if default_end_value is not None
-            else ""
-        )
-    else:
-        start_ids = tuple(element.id for element in profile.elements if element.kind == "quad")
-        end_ids = tuple(
-            element.id
-            for element in profile.elements
-            if element.kind == "flag" and "image" in element.channels
-        )
-        default_start = start_ids[0] if start_ids else ""
-        default_end = end_ids[0] if end_ids else ""
+    usedline_workflow = resolve_virtual_machine_usedline_workflow(profile)
+    segment = _select_virtual_machine_local_segment(usedline_workflow)
+    start_ids = segment.start_ids
+    end_ids = segment.end_ids
+    default_start = segment.default_start_id
+    default_end = segment.default_end_id
 
     if not start_ids:
         raise MachineProfileError(
@@ -260,6 +252,280 @@ def resolve_virtual_machine_segment_choices(
             "or define at least one flag element with logical channel 'image'."
         )
     return start_ids, end_ids, default_start, default_end
+
+
+def resolve_virtual_machine_usedline_workflow(
+    profile: MachineProfile,
+) -> VirtualMachineUsedlineWorkflow:
+    workflow = profile.workflows.get("virtual_machine")
+    if isinstance(workflow, Mapping):
+        if "predefined_usedlines" in workflow or "local_segments" in workflow:
+            return _parse_virtual_machine_usedline_workflow(profile, workflow)
+        return _parse_legacy_virtual_machine_workflow(profile, workflow)
+    return _infer_virtual_machine_usedline_workflow(profile)
+
+
+def _select_virtual_machine_local_segment(
+    workflow: VirtualMachineUsedlineWorkflow,
+) -> VirtualMachineLocalSegment:
+    if not workflow.local_segments:
+        raise MachineProfileError(
+            "VM simplified segment candidates are empty. Add workflows.virtual_machine.local_segments."
+        )
+
+    for segment in workflow.local_segments:
+        if segment.id == workflow.default_segment_id:
+            return segment
+    return workflow.local_segments[0]
+
+
+def _parse_virtual_machine_usedline_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+) -> VirtualMachineUsedlineWorkflow:
+    predefined_raw = _expect_list(
+        workflow.get("predefined_usedlines"),
+        "workflows.virtual_machine.predefined_usedlines",
+    )
+    if not predefined_raw:
+        raise MachineProfileError("workflows.virtual_machine.predefined_usedlines must not be empty.")
+
+    predefined = tuple(
+        _parse_virtual_machine_predefined_usedline(item, index)
+        for index, item in enumerate(predefined_raw)
+    )
+    predefined_ids = tuple(choice.id for choice in predefined)
+    _require_unique_ids(predefined_ids, "workflows.virtual_machine.predefined_usedlines")
+
+    default_usedline = _expect_non_empty_string(
+        workflow.get("default_usedline") or predefined[0].id,
+        "workflows.virtual_machine.default_usedline",
+    )
+    if default_usedline not in predefined_ids:
+        raise MachineProfileError(
+            "workflows.virtual_machine.default_usedline must belong to predefined_usedlines."
+        )
+
+    local_segments_raw = _expect_list(
+        workflow.get("local_segments"),
+        "workflows.virtual_machine.local_segments",
+    )
+    if not local_segments_raw:
+        raise MachineProfileError("workflows.virtual_machine.local_segments must not be empty.")
+
+    local_segments = tuple(
+        _parse_virtual_machine_local_segment(
+            item,
+            index,
+            default_usedline=default_usedline,
+            predefined_ids=predefined_ids,
+        )
+        for index, item in enumerate(local_segments_raw)
+    )
+    segment_ids = tuple(segment.id for segment in local_segments)
+    _require_unique_ids(segment_ids, "workflows.virtual_machine.local_segments")
+
+    default_segment_id = _expect_non_empty_string(
+        workflow.get("default_segment_id") or local_segments[0].id,
+        "workflows.virtual_machine.default_segment_id",
+    )
+    if default_segment_id not in segment_ids:
+        raise MachineProfileError(
+            "workflows.virtual_machine.default_segment_id must belong to local_segments."
+        )
+
+    return VirtualMachineUsedlineWorkflow(
+        predefined_usedlines=predefined,
+        default_usedline=default_usedline,
+        local_segments=local_segments,
+        default_segment_id=default_segment_id,
+    )
+
+
+def _parse_virtual_machine_predefined_usedline(
+    raw: Any,
+    index: int,
+) -> VirtualMachinePredefinedUsedline:
+    location = f"workflows.virtual_machine.predefined_usedlines[{index}]"
+    if isinstance(raw, str):
+        line_id = _expect_non_empty_string(raw, location)
+        return VirtualMachinePredefinedUsedline(id=line_id, label=line_id, role="")
+
+    item = _expect_mapping(raw, location)
+    line_id = _expect_non_empty_string(item.get("id"), f"{location}.id")
+    label = _expect_non_empty_string(item.get("label") or line_id, f"{location}.label")
+    role = _expect_non_empty_string(item.get("role") or "", f"{location}.role") if item.get("role") else ""
+    return VirtualMachinePredefinedUsedline(id=line_id, label=label, role=role)
+
+
+def _parse_virtual_machine_local_segment(
+    raw: Any,
+    index: int,
+    *,
+    default_usedline: str,
+    predefined_ids: tuple[str, ...],
+) -> VirtualMachineLocalSegment:
+    location = f"workflows.virtual_machine.local_segments[{index}]"
+    item = _expect_mapping(raw, location)
+    segment_id = _expect_non_empty_string(item.get("id"), f"{location}.id")
+    label = _expect_non_empty_string(item.get("label") or segment_id, f"{location}.label")
+    parent_usedline = _expect_non_empty_string(
+        item.get("parent_usedline") or default_usedline,
+        f"{location}.parent_usedline",
+    )
+    if parent_usedline not in predefined_ids:
+        raise MachineProfileError(
+            f"{location}.parent_usedline must belong to workflows.virtual_machine.predefined_usedlines."
+        )
+
+    start_ids = tuple(_expect_string_list(item.get("start_ids"), f"{location}.start_ids"))
+    end_ids = tuple(_expect_string_list(item.get("end_ids"), f"{location}.end_ids"))
+    default_start_id = _expect_non_empty_string(
+        item.get("default_start_id") or start_ids[0],
+        f"{location}.default_start_id",
+    )
+    if default_start_id not in start_ids:
+        raise MachineProfileError(f"{location}.default_start_id must belong to start_ids.")
+
+    default_end_id = _expect_non_empty_string(
+        item.get("default_end_id") or end_ids[0],
+        f"{location}.default_end_id",
+    )
+    if default_end_id not in end_ids:
+        raise MachineProfileError(f"{location}.default_end_id must belong to end_ids.")
+
+    return VirtualMachineLocalSegment(
+        id=segment_id,
+        label=label,
+        parent_usedline=parent_usedline,
+        start_ids=start_ids,
+        end_ids=end_ids,
+        default_start_id=default_start_id,
+        default_end_id=default_end_id,
+    )
+
+
+def _parse_legacy_virtual_machine_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+) -> VirtualMachineUsedlineWorkflow:
+    start_ids = tuple(
+        _expect_string_list(
+            workflow.get("simple_segment_start_ids"),
+            "workflows.virtual_machine.simple_segment_start_ids",
+        )
+    )
+    end_ids = tuple(
+        _expect_string_list(
+            workflow.get("simple_segment_end_ids"),
+            "workflows.virtual_machine.simple_segment_end_ids",
+        )
+    )
+
+    for element_id in start_ids:
+        profile.get_element(element_id)
+    for element_id in end_ids:
+        profile.get_element(element_id)
+
+    default_start_id = _expect_non_empty_string(
+        workflow.get("default_start_id") or start_ids[0],
+        "workflows.virtual_machine.default_start_id",
+    )
+    if default_start_id not in start_ids:
+        raise MachineProfileError(
+            "workflows.virtual_machine.default_start_id must belong to simple_segment_start_ids."
+        )
+
+    default_end_id = _expect_non_empty_string(
+        workflow.get("default_end_id") or end_ids[0],
+        "workflows.virtual_machine.default_end_id",
+    )
+    if default_end_id not in end_ids:
+        raise MachineProfileError(
+            "workflows.virtual_machine.default_end_id must belong to simple_segment_end_ids."
+        )
+
+    main_line_id = _profile_runtime_line_name(profile) or "ALL_MAIN"
+    predefined = [VirtualMachinePredefinedUsedline(id=main_line_id, label="Main Line", role="main")]
+    esa_line_id = workflow.get("esa_line_id")
+    if esa_line_id:
+        esa_id = _expect_non_empty_string(
+            esa_line_id,
+            "workflows.virtual_machine.esa_line_id",
+        )
+        if esa_id != main_line_id:
+            predefined.append(
+                VirtualMachinePredefinedUsedline(
+                    id=esa_id,
+                    label="ESA Line",
+                    role="energy_spectrum",
+                )
+            )
+
+    local_segment = VirtualMachineLocalSegment(
+        id="legacy_segment",
+        label="Legacy Segment",
+        parent_usedline=main_line_id,
+        start_ids=start_ids,
+        end_ids=end_ids,
+        default_start_id=default_start_id,
+        default_end_id=default_end_id,
+    )
+    return VirtualMachineUsedlineWorkflow(
+        predefined_usedlines=tuple(predefined),
+        default_usedline=main_line_id,
+        local_segments=(local_segment,),
+        default_segment_id=local_segment.id,
+    )
+
+
+def _infer_virtual_machine_usedline_workflow(profile: MachineProfile) -> VirtualMachineUsedlineWorkflow:
+    start_ids = tuple(element.id for element in profile.elements if element.kind == "quad")
+    end_ids = tuple(
+        element.id
+        for element in profile.elements
+        if element.kind == "flag" and "image" in element.channels
+    )
+    main_line_id = _profile_runtime_line_name(profile)
+    predefined = (
+        (VirtualMachinePredefinedUsedline(id=main_line_id, label="Main Line", role="main"),)
+        if main_line_id
+        else ()
+    )
+    local_segment = VirtualMachineLocalSegment(
+        id="inferred_segment",
+        label="Inferred Segment",
+        parent_usedline=main_line_id,
+        start_ids=start_ids,
+        end_ids=end_ids,
+        default_start_id=start_ids[0] if start_ids else "",
+        default_end_id=end_ids[0] if end_ids else "",
+    )
+    return VirtualMachineUsedlineWorkflow(
+        predefined_usedlines=predefined,
+        default_usedline=main_line_id,
+        local_segments=(local_segment,),
+        default_segment_id=local_segment.id,
+    )
+
+
+def _profile_runtime_line_name(profile: MachineProfile) -> str:
+    if profile.runtime is None:
+        return ""
+    return profile.runtime.vm.line_name
+
+
+def _require_unique_ids(values: tuple[str, ...], location: str) -> None:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for value in values:
+        if value in seen:
+            duplicates.append(value)
+        seen.add(value)
+    if duplicates:
+        raise MachineProfileError(
+            f"{location} contains duplicate id(s): {', '.join(sorted(set(duplicates)))}."
+        )
 
 
 def repo_root() -> Path:
@@ -510,10 +776,12 @@ def _load_directory_workflows(
     workflow_names: tuple[str, ...] | None = None,
 ) -> Mapping[str, Any]:
     apps_dir = root / "apps"
-    selected_names = tuple(workflow_names or APP_WORKFLOW_FILES.keys())
+    selected_names = tuple(APP_WORKFLOW_FILES.keys() if workflow_names is None else workflow_names)
     if not apps_dir.is_dir():
-        if not workflow_names:
+        if workflow_names is None:
             return {"orbit": {}}
+        if workflow_names == ():
+            return {}
         if workflow_names == ("orbit",):
             return {"orbit": {}}
         raise MachineProfileError(f"Missing apps workflow directory: {apps_dir}")
@@ -700,56 +968,7 @@ def _validate_virtual_machine_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
 ) -> None:
-    start_ids = _expect_string_list(
-        workflow.get("simple_segment_start_ids"),
-        "workflows.virtual_machine.simple_segment_start_ids",
-    )
-    end_ids = _expect_string_list(
-        workflow.get("simple_segment_end_ids"),
-        "workflows.virtual_machine.simple_segment_end_ids",
-    )
-    if not start_ids:
-        raise MachineProfileError("workflows.virtual_machine.simple_segment_start_ids must not be empty.")
-    if not end_ids:
-        raise MachineProfileError("workflows.virtual_machine.simple_segment_end_ids must not be empty.")
-
-    for element_id in start_ids:
-        element = profile.get_element(element_id)
-        if element.kind != "quad":
-            raise MachineProfileError(
-                "workflows.virtual_machine.simple_segment_start_ids must reference quad elements."
-            )
-
-    for element_id in end_ids:
-        element = profile.get_element(element_id)
-        if element.kind != "flag":
-            raise MachineProfileError(
-                "workflows.virtual_machine.simple_segment_end_ids must reference flag elements."
-            )
-
-    default_start = workflow.get("default_start_id")
-    if default_start is not None:
-        value = _expect_non_empty_string(
-            default_start,
-            "workflows.virtual_machine.default_start_id",
-        )
-        if value not in start_ids:
-            raise MachineProfileError(
-                "workflows.virtual_machine.default_start_id must belong to "
-                "simple_segment_start_ids."
-            )
-
-    default_end = workflow.get("default_end_id")
-    if default_end is not None:
-        value = _expect_non_empty_string(
-            default_end,
-            "workflows.virtual_machine.default_end_id",
-        )
-        if value not in end_ids:
-            raise MachineProfileError(
-                "workflows.virtual_machine.default_end_id must belong to "
-                "simple_segment_end_ids."
-            )
+    resolve_virtual_machine_usedline_workflow(profile)
 
 
 def _validate_beam_monitor_workflow(

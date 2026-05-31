@@ -9,7 +9,13 @@ from .compatibility import (
     load_app_context,
     load_profile,
     resolve_virtual_machine_segment_choices,
+    resolve_virtual_machine_usedline_workflow,
     resolve_channel,
+)
+from .loader import (
+    VirtualMachineLocalSegment,
+    VirtualMachinePredefinedUsedline,
+    VirtualMachineUsedlineWorkflow,
 )
 from .model_backend import BeamModelBackend, ElegantModelBackend, build_model_backend
 from .models import (
@@ -85,6 +91,9 @@ __all__ = [
     "ResolvedSoftIocRuntimeConfig",
     "ResolvedVmRuntimeConfig",
     "RuntimeSelectorWidget",
+    "VirtualMachineLocalSegment",
+    "VirtualMachinePredefinedUsedline",
+    "VirtualMachineUsedlineWorkflow",
     "MachineValidationCheck",
     "MachineValidationReport",
     "build_model_backend",
@@ -100,6 +109,7 @@ __all__ = [
     "normalize_mode",
     "normalize_plane",
     "resolve_virtual_machine_segment_choices",
+    "resolve_virtual_machine_usedline_workflow",
     "resolve_machine_runtime",
     "resolve_softioc_runtime",
     "resolve_vm_runtime",

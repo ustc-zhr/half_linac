@@ -5,6 +5,7 @@ from .loader import (
     load_app_context,
     load_profile,
     resolve_virtual_machine_segment_choices,
+    resolve_virtual_machine_usedline_workflow,
 )
 from .resolver import get_bba_preset, get_emit_preset, get_workflow, list_elements, resolve_channel
 
@@ -17,5 +18,6 @@ __all__ = [
     "load_app_context",
     "load_profile",
     "resolve_virtual_machine_segment_choices",
+    "resolve_virtual_machine_usedline_workflow",
     "resolve_channel",
 ]

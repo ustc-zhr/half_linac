@@ -42,11 +42,42 @@ configs/machines/irfel/
 
 `configs/machines/_template/` is the recommended starting point.
 
-`apps/virtual_machine.json` is optional. Only add it if you want the VM control GUI to expose
-machine-specific simplified start/end candidates instead of using the generic fallback:
+`apps/virtual_machine.json` is optional. Add it when the VM control GUI should expose
+machine-specific usedline operations instead of using the generic fallback:
 
 - start candidates = all `quad` elements
 - end candidates = all `flag` elements with logical channel `image`
+
+The VM GUI now distinguishes two concepts:
+
+- predefined full usedlines, such as `ALL_MAIN` and `ALL_ESA`, which must already exist in
+  `lattice_ini.lte`
+- local segment definitions, which choose start/end candidates within one parent predefined
+  usedline
+
+Minimal shape:
+
+```json
+{
+  "predefined_usedlines": [
+    {"id": "ALL_MAIN", "label": "Main Line", "role": "main"},
+    {"id": "ALL_ESA", "label": "ESA Line", "role": "energy_spectrum"}
+  ],
+  "default_usedline": "ALL_MAIN",
+  "local_segments": [
+    {
+      "id": "main_segment",
+      "label": "Main Segment",
+      "parent_usedline": "ALL_MAIN",
+      "start_ids": ["Q01"],
+      "end_ids": ["PRF01"],
+      "default_start_id": "Q01",
+      "default_end_id": "PRF01"
+    }
+  ],
+  "default_segment_id": "main_segment"
+}
+```
 
 ## What Can Be Extracted From `irfel_pvlist.json`
 
@@ -185,8 +216,8 @@ Then add:
 
 ### Stage 5: VM GUI
 
-Only do this after you want the VM control window to present machine-specific simplified
-segment choices.
+Only do this after you want the VM control window to present machine-specific predefined
+usedlines or local segment choices.
 
 Then optionally add:
 
@@ -282,8 +313,9 @@ The main extra VM-specific file is:
 
 - `apps/virtual_machine.json`
 
-That file is only needed if the default `quad` -> `flag(image)` fallback is not the simplified
-segment list you want to expose in the VM control GUI.
+That file is only needed if the default `quad` -> `flag(image)` fallback is not the local
+segment list you want to expose, or if you need named predefined usedlines such as `ALL_MAIN`
+and `ALL_ESA` in the VM control GUI.
 
 ## Minimal `real.json` Mapping Strategy
 
@@ -379,19 +411,44 @@ And it gives you a clean base for later adding:
 Use this exact order:
 
 1. Copy `_template` into `configs/machines/irfel/`
-2. Keep `irfel_pvlist.json` in the same directory as the raw source
-3. Fill `machine.json` with:
+2. Keep the raw PV list under `configs/machines/irfel/other/`
+3. Fill `machine.json` with the real-only orbit subset first:
    - BPMs
-   - correctors
-   - quads
-   - bends
+   - horizontal correctors
+   - vertical correctors
 4. Fill `control_backends/real.json` from the PV list
-5. Create a temporary `control_backends/vm.json`
-6. Fill `apps/orbit_correct.json`
-7. Verify:
-   - `orbit_display`
-   - `orbit_correct`
-8. Only then continue to image-screen and model-based apps
+5. Fill `apps/orbit_correct.json` with explicit BPM/XCOR/YCOR arrays
+6. Run offline validation
+7. Only then continue to real machine smoke tests, image-screen apps, model-based apps, or VM support
+
+Do not create `control_backends/vm.json` for IRFEL until there is an IRFEL lattice/VM plan.
+For real-only orbit bring-up, `vm.json` and softIOC substitutions are intentionally absent.
+
+## Current IRFEL Real-Only Offline Acceptance
+
+The current IRFEL profile is intentionally limited to real-only orbit support:
+
+- `configs/machines/irfel/machine.json`
+- `configs/machines/irfel/control_backends/real.json`
+- `configs/machines/irfel/apps/orbit_correct.json`
+
+This can be validated without connecting to the real machine:
+
+```bash
+bash scripts/check_machine.sh irfel
+python3 -m unittest discover -s tests -p test_machine_profile.py
+```
+
+These checks only load profile/configuration files and resolve logical channels. They do not
+perform `caget`, `caput`, response-matrix scans, or correction writes.
+
+Before a live IRFEL test, confirm these site-specific facts:
+
+- BPM x/y PVs are readback PVs with the expected unit and sign.
+- Corrector `setpoint` PVs are safe to write from the orbit app.
+- Corrector `readback` PVs match the same device and unit as the setpoint.
+- `response_wait_s_by_backend.real` is long enough for magnet and BPM settling.
+- `corrector_upperlimit_rad` is still the right safety cap for the real IRFEL corrector unit.
 
 ## Recommended Principle While Building IRFEL
 

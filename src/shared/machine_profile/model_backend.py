@@ -44,6 +44,8 @@ class BeamModelBackend(Protocol):
         inverse: bool = False,
     ) -> Mapping[str, float]: ...
 
+    def get_lattice_element(self, element_id: str) -> Mapping[str, str]: ...
+
 
 class ElegantModelBackend:
     def __init__(self, model_config: ModelBackendConfig, energy_mev: float | None = None):
@@ -65,6 +67,16 @@ class ElegantModelBackend:
         self.line_name = _require_config(config, "line_name")
         working_dir = config.get("working_dir")
         self.working_dir = Path(str(working_dir)) if working_dir is not None else self.emit_ele.parent
+
+    def get_lattice_element(self, element_id: str) -> Mapping[str, str]:
+        parser = self._new_parser()
+        runtime_state = parser.build_runtime_state()
+        try:
+            return dict(runtime_state["lattice"][element_id])
+        except KeyError as exc:
+            raise MachineProfileError(
+                f"Model backend lattice does not define element {element_id!r}."
+            ) from exc
 
     def get_twiss1(
         self,
@@ -109,13 +121,7 @@ class ElegantModelBackend:
         element_overrides: Mapping[str, float] | None = None,
         seq: str = "exit2exit",
     ) -> np.ndarray:
-        parser = ElegantParser(
-            self.source_lattice,
-            self.emit_ini_ele,
-            self.line_name,
-            runtime_json_path=self.emit_json,
-            elegant_dir=self.working_dir,
-        )
+        parser = self._new_parser()
         parser.dump_runtime_state()
         with self.emit_json.open("r", encoding="utf-8") as handle:
             lte = json.load(handle)
@@ -208,6 +214,15 @@ class ElegantModelBackend:
             seq=seq,
         )
         return float(matrix[row, col])
+
+    def _new_parser(self) -> ElegantParser:
+        return ElegantParser(
+            self.source_lattice,
+            self.emit_ini_ele,
+            self.line_name,
+            runtime_json_path=self.emit_json,
+            elegant_dir=self.working_dir,
+        )
 
 
 def build_model_backend(

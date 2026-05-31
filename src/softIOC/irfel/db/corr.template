@@ -1,0 +1,13 @@
+record(ao, "$(SETRECORD)") {
+  alias("$(SETALIAS)")
+  field(VAL , "0.0")
+  field(DRVL, "-10.0")
+  field(DRVH, "10.0")
+  field(PINI, "YES")
+  field(FLNK, "$(READRECORD)")
+}
+record(ai, "$(READRECORD)") {
+  field(SCAN , "1 second")
+  field(INP , "$(SETRECORD) NPP NMS")
+  field(FLNK, "$(READRECORD)")
+}

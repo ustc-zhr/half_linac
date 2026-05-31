@@ -16,5 +16,6 @@ bash -n "$HALF_LINAC_ROOT/scripts/start_vm.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/start_ioc_manager.sh"
 bash -n "$HALF_LINAC_ROOT/src/softIOC/halflinac/runMe"
 bash "$HALF_LINAC_ROOT/scripts/check_machine.sh" half
+bash "$HALF_LINAC_ROOT/scripts/check_machine.sh" irfel
 
 echo "Static checks passed."

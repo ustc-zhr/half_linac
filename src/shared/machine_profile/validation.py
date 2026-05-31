@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from half_linac.src.shared.elegant_backend import ElegantParser, build_vm_publish_plan
+from half_linac.src.shared.elegant_backend.parser import ElegantParser
 
 from .loader import SUPPORTED_APP_NAMES, resolve_machine_id
 from .model_backend import ElegantModelBackend, build_model_backend
@@ -17,7 +17,7 @@ from .compatibility import (
     describe_app_support,
     load_app_context,
     load_profile,
-    resolve_virtual_machine_segment_choices,
+    resolve_virtual_machine_usedline_workflow,
 )
 
 
@@ -104,7 +104,7 @@ def validate_machine_profile(machine_id: str | None = None) -> MachineValidation
     checks.append(runtime_check)
 
     if "vm" in profile.control_backends or "virtual_machine" in profile.workflows:
-        checks.append(_validate_virtual_machine_segments(profile))
+        checks.append(_validate_virtual_machine_segments(profile, runtime))
     else:
         checks.append(
             MachineValidationCheck(
@@ -163,6 +163,26 @@ def _validate_channel_resolution(profile: MachineProfile) -> MachineValidationCh
 def _validate_runtime(
     profile: MachineProfile,
 ) -> tuple[MachineValidationCheck, Any | None]:
+    requires_vm_runtime = "vm" in profile.control_backends or "virtual_machine" in profile.workflows
+    if profile.runtime is None:
+        if requires_vm_runtime:
+            return (
+                MachineValidationCheck(
+                    "runtime",
+                    FAIL,
+                    f"Machine profile {profile.machine.id!r} requires a runtime section for vm workflows.",
+                ),
+                None,
+            )
+        return (
+            MachineValidationCheck(
+                "runtime",
+                SKIP,
+                "profile does not declare a vm backend, so runtime/softIOC validation is skipped.",
+            ),
+            None,
+        )
+
     try:
         runtime = resolve_machine_runtime(profile)
     except MachineProfileError as exc:
@@ -210,24 +230,158 @@ def _validate_runtime(
     )
 
 
-def _validate_virtual_machine_segments(profile: MachineProfile) -> MachineValidationCheck:
+def _validate_virtual_machine_segments(
+    profile: MachineProfile,
+    runtime: Any | None,
+) -> MachineValidationCheck:
     try:
-        start_ids, end_ids, default_start, default_end = resolve_virtual_machine_segment_choices(profile)
+        workflow = resolve_virtual_machine_usedline_workflow(profile)
     except MachineProfileError as exc:
         return MachineValidationCheck("virtual_machine", FAIL, str(exc))
+
+    detail = (
+        f"{len(workflow.predefined_usedlines)} predefined usedline(s), "
+        f"{len(workflow.local_segments)} local segment definition(s), "
+        f"default usedline {workflow.default_usedline!r}, "
+        f"default segment {workflow.default_segment_id!r}."
+    )
+    if runtime is None:
+        return MachineValidationCheck("virtual_machine", PASS, detail)
+
+    try:
+        parser = ElegantParser(
+            runtime.vm.bootstrap_lattice,
+            runtime.vm.bootstrap_ele,
+            runtime.vm.line_name,
+            runtime_json_path=runtime.vm.runtime_json,
+            elegant_dir=runtime.vm.bootstrap_lattice.parent,
+        )
+        problems = _validate_virtual_machine_usedlines_against_lattice(
+            workflow,
+            parser.lattice,
+        )
+    except Exception as exc:
+        return MachineValidationCheck(
+            "virtual_machine",
+            FAIL,
+            f"{detail} Failed to parse VM lattice sources: {exc}",
+        )
+
+    if problems:
+        return MachineValidationCheck("virtual_machine", FAIL, "; ".join(problems))
 
     return MachineValidationCheck(
         "virtual_machine",
         PASS,
-        f"{len(start_ids)} start candidate(s), {len(end_ids)} end candidate(s), "
-        f"default {default_start} -> {default_end}.",
+        detail,
     )
+
+
+def _validate_virtual_machine_usedlines_against_lattice(
+    workflow: Any,
+    lattice: Mapping[str, Mapping[str, Any]],
+) -> list[str]:
+    problems: list[str] = []
+    predefined_ids = {choice.id for choice in workflow.predefined_usedlines}
+    for choice in workflow.predefined_usedlines:
+        if choice.id not in lattice:
+            problems.append(f"predefined usedline {choice.id!r} is not defined in VM lattice")
+            continue
+        if str(lattice[choice.id].get("TYPE", "")).upper() != "LINE":
+            problems.append(f"predefined usedline {choice.id!r} is not a LINE")
+
+    if workflow.default_usedline not in predefined_ids:
+        problems.append(
+            f"default usedline {workflow.default_usedline!r} is not in predefined usedlines"
+        )
+
+    for segment in workflow.local_segments:
+        if segment.parent_usedline not in predefined_ids:
+            problems.append(
+                f"local segment {segment.id!r} parent {segment.parent_usedline!r} "
+                "is not in predefined usedlines"
+            )
+            continue
+        if segment.parent_usedline not in lattice:
+            continue
+        if str(lattice[segment.parent_usedline].get("TYPE", "")).upper() != "LINE":
+            continue
+
+        try:
+            parent_usedline = _expand_lattice_line_for_validation(lattice, segment.parent_usedline)
+        except MachineProfileError as exc:
+            problems.append(str(exc))
+            continue
+
+        parent_set = set(parent_usedline)
+        for element_id in segment.start_ids:
+            if element_id not in parent_set:
+                problems.append(
+                    f"local segment {segment.id!r} start {element_id!r} is not in "
+                    f"parent usedline {segment.parent_usedline!r}"
+                )
+        for element_id in segment.end_ids:
+            if element_id not in parent_set:
+                problems.append(
+                    f"local segment {segment.id!r} end {element_id!r} is not in "
+                    f"parent usedline {segment.parent_usedline!r}"
+                )
+
+    return problems
+
+
+def _expand_lattice_line_for_validation(
+    lattice: Mapping[str, Mapping[str, Any]],
+    line_name: str,
+) -> list[str]:
+    if line_name not in lattice:
+        raise MachineProfileError(f"VM lattice does not define line {line_name!r}.")
+    if str(lattice[line_name].get("TYPE", "")).upper() != "LINE":
+        raise MachineProfileError(f"VM lattice entry {line_name!r} is not a LINE.")
+    return _expand_lattice_line_tokens_for_validation(
+        lattice,
+        _split_lattice_line_for_validation(lattice[line_name].get("LINE", "")),
+        stack=(line_name,),
+    )
+
+
+def _expand_lattice_line_tokens_for_validation(
+    lattice: Mapping[str, Mapping[str, Any]],
+    tokens: Sequence[str],
+    *,
+    stack: tuple[str, ...],
+) -> list[str]:
+    result: list[str] = []
+    for token in tokens:
+        if token not in lattice:
+            raise MachineProfileError(f"VM lattice line references unknown element {token!r}.")
+        element = lattice[token]
+        if str(element.get("TYPE", "")).upper() == "LINE":
+            if token in stack:
+                cycle = " -> ".join((*stack, token))
+                raise MachineProfileError(f"VM lattice line recursion detected: {cycle}.")
+            result.extend(
+                _expand_lattice_line_tokens_for_validation(
+                    lattice,
+                    _split_lattice_line_for_validation(element.get("LINE", "")),
+                    stack=(*stack, token),
+                )
+            )
+            continue
+        result.append(token)
+    return result
+
+
+def _split_lattice_line_for_validation(line: Any) -> list[str]:
+    return [token.strip() for token in str(line).split(",") if token.strip()]
 
 
 def _validate_vm_publish_plan(
     profile: MachineProfile,
     runtime: Any | None,
 ) -> tuple[MachineValidationCheck, ElegantParser | None]:
+    from half_linac.src.shared.elegant_backend.publisher import build_vm_publish_plan
+
     try:
         plan = build_vm_publish_plan(profile)
     except MachineProfileError as exc:
@@ -266,6 +420,8 @@ def _validate_vm_publish_sources(
     runtime: Any,
     parser: ElegantParser,
 ) -> MachineValidationCheck:
+    from half_linac.src.shared.elegant_backend.publisher import build_vm_publish_plan
+
     try:
         plan = build_vm_publish_plan(profile)
     except MachineProfileError as exc:

@@ -1,0 +1,51 @@
+&run_setup
+
+	lattice			= lattice_ini.lte
+        default_order 		= 1,
+	        use_beamline 		= ALL_MAIN, 
+        default_order           = 3,
+	p_central_mev 	        = 36, 
+	always_change_p0	= 1
+
+        ! print_statistics         = 1,
+        ! output                   = %s.out,
+        centroid                = %s.cen,
+        ! sigma                    = %s.sig,
+        ! final                    = %s.fin,
+        !  parameters              = %s.param,
+        magnets                  = %s.mag,
+        bpm_centroid             = %s.bpmcen
+&end
+
+
+&twiss_output
+        filename = %s.twi
+        matched = 0,
+! after acc1  from PARMELA(me)	36MeV_slitbeam_col.dat	
+!        beta_x=15.2, alpha_x=-1.66
+!        beta_y=15.1, alpha_y=-1.64
+! after acc1  from ele(lbb) same with mad(huang)	
+!       beta_x=10, alpha_x=-2.26
+!       beta_y=10, alpha_y=-2.26
+
+		
+        output_at_each_step=1
+&end
+
+&run_control
+        n_steps = 1
+&end
+
+&sdds_beam
+  input                     ="36MeV_slitbeam_col.dat"
+  !input                     ="input_dog.sdds"
+  input_type                = "elegant",
+  sample_interval           = 1,
+  !p_lower                   = 10,
+  !p_upper                   = 70,
+  center_arrival_time       = 1,
+  reuse_bunch               = 1
+&end
+
+&track &end
+&stop &end

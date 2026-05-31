@@ -14,7 +14,7 @@
       "runtime_json": "src/virtual_machine/half_elegant/halflinac.json",
       "bootstrap_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
       "bootstrap_ele": "src/virtual_machine/half_elegant/elegant/one_ini.ele",
-      "line_name": "ALL"
+      "line_name": "ALL_MAIN"
     },
     "softioc": {
       "root": "src/softIOC/halflinac",

@@ -5,6 +5,7 @@ import sys
 from dataclasses import dataclass
 
 from PyQt5.QtCore import QTimer, pyqtSignal
+from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -69,18 +70,88 @@ def request_runtime_restart(
         f"Reload {app_label} with machine '{machine_id}' and backend '{control_backend}'?\n\n"
         "Current unsaved GUI state will be lost."
     )
-    answer = QMessageBox.question(
-        parent,
-        "Switch Runtime",
-        message,
-        QMessageBox.Yes | QMessageBox.No,
-        QMessageBox.No,
-    )
+    prompt = QMessageBox(parent)
+    prompt.setIcon(QMessageBox.Question)
+    prompt.setWindowTitle("Switch Runtime")
+    prompt.setText(message)
+    prompt.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+    prompt.setDefaultButton(QMessageBox.No)
+    _apply_runtime_prompt_style(prompt, parent)
+    answer = prompt.exec_()
     if answer != QMessageBox.Yes:
         return False
 
     QTimer.singleShot(0, lambda: relaunch_current_process(machine_id, control_backend))
     return True
+
+
+def _apply_runtime_prompt_style(prompt: QMessageBox, parent: QWidget) -> None:
+    dark_parent = _is_dark_widget(parent)
+    if dark_parent:
+        prompt.setStyleSheet(
+            """
+QMessageBox {
+    background-color: #172027;
+    color: #e6edf2;
+}
+QMessageBox QLabel {
+    color: #e6edf2;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 600;
+}
+QMessageBox QPushButton {
+    background-color: #11191f;
+    border: 1px solid #2b3d48;
+    border-radius: 8px;
+    color: #edf3f7;
+    min-width: 72px;
+    min-height: 28px;
+    padding: 4px 12px;
+    font-weight: 700;
+}
+QMessageBox QPushButton:hover {
+    background-color: #18242c;
+}
+"""
+        )
+        return
+
+    prompt.setStyleSheet(
+        """
+QMessageBox {
+    background-color: #fffdf9;
+    color: #2c3942;
+}
+QMessageBox QLabel {
+    color: #2c3942;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 600;
+}
+QMessageBox QPushButton {
+    background-color: #f8f3eb;
+    border: 1px solid #d9d0c3;
+    border-radius: 8px;
+    color: #2c3942;
+    min-width: 72px;
+    min-height: 28px;
+    padding: 4px 12px;
+    font-weight: 700;
+}
+QMessageBox QPushButton:hover {
+    background-color: #efe6d9;
+}
+"""
+    )
+
+
+def _is_dark_widget(widget: QWidget) -> bool:
+    if getattr(widget, "current_theme", None) == "dark":
+        return True
+    if getattr(widget, "current_theme", None) == "light":
+        return False
+    return widget.palette().color(QPalette.Window).lightness() < 128
 
 
 class RuntimeSelectorWidget(QWidget):
@@ -93,11 +164,17 @@ class RuntimeSelectorWidget(QWidget):
         current_control_backend: str,
         machine_choices: tuple[MachineChoice, ...] | None = None,
         control_backend_choices: tuple[str, ...] | None = None,
+        control_height: int | None = None,
+        machine_width: int | None = None,
+        backend_width: int | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.machine_choices = machine_choices or list_machine_choices()
         self._fixed_control_backend_choices = control_backend_choices
+        self._control_height = control_height
+        self._machine_width = machine_width
+        self._backend_width = backend_width
 
         self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
 
@@ -110,7 +187,8 @@ class RuntimeSelectorWidget(QWidget):
         layout.addWidget(machine_label)
 
         self.machine_combo = QComboBox(self)
-        self.machine_combo.setMinimumWidth(150)
+        self.machine_combo.setMinimumWidth(self._machine_width or 150)
+        self._apply_control_height(self.machine_combo)
         for choice in self.machine_choices:
             self.machine_combo.addItem(choice.display_name, choice.machine_id)
         layout.addWidget(self.machine_combo)
@@ -120,12 +198,15 @@ class RuntimeSelectorWidget(QWidget):
         layout.addWidget(backend_label)
 
         self.backend_combo = QComboBox(self)
-        self.backend_combo.setMinimumWidth(140)
+        self.backend_combo.setMinimumWidth(self._backend_width or 140)
+        self._apply_control_height(self.backend_combo)
         layout.addWidget(self.backend_combo)
 
         self.apply_button = QPushButton("Apply", self)
         self.apply_button.setProperty("compact", True)
         self.apply_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.apply_button.setMinimumWidth(82)
+        self._apply_control_height(self.apply_button)
         self.apply_button.clicked.connect(self._emit_apply_requested)
         layout.addWidget(self.apply_button)
 
@@ -176,6 +257,11 @@ class RuntimeSelectorWidget(QWidget):
 
     def _emit_apply_requested(self) -> None:
         self.apply_requested.emit(self.current_machine_id(), self.current_control_backend())
+
+    def _apply_control_height(self, widget: QWidget) -> None:
+        if self._control_height is None:
+            return
+        widget.setFixedHeight(self._control_height)
 
 
 def _display_control_backend(control_backend: str) -> str:

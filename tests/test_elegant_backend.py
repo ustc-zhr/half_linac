@@ -23,7 +23,9 @@ from half_linac.src.shared.elegant_backend import (
     build_vm_publish_plan,
 )
 from half_linac.src.shared.machine_profile import load_profile, resolve_machine_runtime
+from half_linac.src.shared.runtime_state import read_runtime_state
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
+from half_linac.src.virtual_machine.lattice_usedline import expand_lattice_line, select_esa_line_name
 
 
 class ElegantBackendTests(unittest.TestCase):
@@ -33,8 +35,8 @@ class ElegantBackendTests(unittest.TestCase):
         self.ele_file = self.elegant_dir / "one_ini.ele"
 
     def test_shared_runtime_state_matches_half_wrapper_except_ap(self):
-        shared_parser = ElegantParser(self.lattice_file, self.ele_file, "ALL")
-        compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL")
+        shared_parser = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN")
+        compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL_MAIN")
 
         shared_state = shared_parser.build_runtime_state()
         compat_state = compat_parser.build_runtime_state()
@@ -61,8 +63,8 @@ class ElegantBackendTests(unittest.TestCase):
         )
 
     def test_json_to_lte_ele_matches_half_wrapper_output(self):
-        shared_parser = ElegantParser(self.lattice_file, self.ele_file, "ALL")
-        compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL")
+        shared_parser = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN")
+        compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL_MAIN")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
@@ -86,9 +88,58 @@ class ElegantBackendTests(unittest.TestCase):
             self.assertEqual(shared_lte.read_text(encoding="utf-8"), compat_lte.read_text(encoding="utf-8"))
             self.assertEqual(shared_ele.read_text(encoding="utf-8"), compat_ele.read_text(encoding="utf-8"))
 
+    def test_irfel_elegant_inputs_parse_and_roundtrip(self):
+        elegant_dir = REPO_ROOT / "src/virtual_machine/irfel_elegant/elegant"
+        parser = ElegantParser(
+            elegant_dir / "lattice_ini.lte",
+            elegant_dir / "one_ini.ele",
+            "ALL_MAIN",
+        )
+        state = parser.build_runtime_state()
+
+        self.assertIn("QM01", state["lattice"])
+        self.assertIn("UND", state["usedline"])
+        self.assertNotIn("USE", state["lattice"])
+        esa_state = ElegantParser(
+            elegant_dir / "lattice_ini.lte",
+            elegant_dir / "one_ini.ele",
+            "ALL_ESA",
+        ).build_runtime_state()
+        self.assertIn("PRFESA", esa_state["usedline"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            runtime_json = tmpdir_path / "irfel.json"
+            parser.dump_runtime_state(runtime_json)
+            lattice_path, ele_path = parser.json_to_lte_ele(
+                tmpdir_path / "lattice.lte",
+                tmpdir_path / "one.ele",
+                runtime_json,
+            )
+            self.assertIn("ALL_MAIN: LINE", lattice_path.read_text(encoding="utf-8"))
+            self.assertIn("&sdds_beam", ele_path.read_text(encoding="utf-8"))
+            self.assertIn("use_beamline = ALL_MAIN", ele_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(lattice_path.name, "lattice.lte")
+        self.assertEqual(ele_path.name, "one.ele")
+
+    def test_lattice_usedline_helper_expands_irfel_main_and_esa_lines(self):
+        runtime = resolve_machine_runtime("irfel")
+        state = read_runtime_state(runtime.vm.runtime_json)
+
+        main_usedline = expand_lattice_line(state["lattice"], runtime.vm.line_name)
+        esa_line = select_esa_line_name(state["lattice"], configured_line_name="ALL_ESA")
+        esa_usedline = expand_lattice_line(state["lattice"], esa_line)
+
+        self.assertEqual(esa_line, "ALL_ESA")
+        self.assertIn("PRF03", main_usedline)
+        self.assertNotIn("PRF03", esa_usedline)
+        self.assertIn("PRFESA", esa_usedline)
+        self.assertTrue(all(state["lattice"][element]["TYPE"] != "LINE" for element in main_usedline))
+
     def test_half_compat_parser_defaults_follow_machine_runtime_metadata(self):
         runtime = resolve_machine_runtime()
-        compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL")
+        compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL_MAIN")
 
         self.assertEqual(compat_parser._resolve_runtime_json_path(), runtime.vm.runtime_json)
         self.assertEqual(
@@ -121,21 +172,22 @@ class ElegantBackendTests(unittest.TestCase):
     def test_load_bpm_centroids_matches_current_half_sample(self):
         if not hasattr(sdds, "SDDS"):
             self.skipTest("Legacy SDDS python binding is unavailable in this test environment.")
-        parser = ElegantParser(self.lattice_file, self.ele_file, "ALL")
+        parser = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN")
         try:
             bpm = parser.load_bpm_centroids(self.elegant_dir / "one.bpmcen")
         except RuntimeError as exc:
             self.skipTest(str(exc))
-        self.assertIn("BPM01", bpm)
-        self.assertIn("Cx", bpm["BPM01"])
-        self.assertIn("Cy", bpm["BPM01"])
-        self.assertIsInstance(bpm["BPM01"]["Cx"], float)
-        self.assertIsInstance(bpm["BPM01"]["Cy"], float)
+        self.assertTrue(bpm)
+        sample = next(iter(bpm.values()))
+        self.assertIn("Cx", sample)
+        self.assertIn("Cy", sample)
+        self.assertIsInstance(sample["Cx"], float)
+        self.assertIsInstance(sample["Cy"], float)
 
     def test_load_watch_image_matches_half_geometry(self):
         if not hasattr(sdds, "SDDS"):
             self.skipTest("Legacy SDDS python binding is unavailable in this test environment.")
-        parser = ElegantParser(self.lattice_file, self.ele_file, "ALL")
+        parser = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN")
         try:
             image = parser.load_watch_image(
                 self.elegant_dir / "PRF06.out",
@@ -151,6 +203,7 @@ class ElegantBackendTests(unittest.TestCase):
     def test_shared_callers_no_longer_import_half_elegant_parser(self):
         managed_paths = [
             REPO_ROOT / "src/shared/machine_profile/model_backend.py",
+            REPO_ROOT / "src/apps/emit_measure/main.py",
             REPO_ROOT / "src/apps/energy_spectrum/main.py",
             REPO_ROOT / "src/softIOC/mainIOC.py",
             REPO_ROOT / "src/softIOC/pv_server.py",
@@ -277,6 +330,53 @@ class ElegantBackendTests(unittest.TestCase):
 
         self.assertTrue(ok)
         caput_mock.assert_not_called()
+
+    def test_shared_publisher_uses_watch_filename_from_lattice(self):
+        publisher = VmPublisher()
+        plan = VmPublishPlan(
+            watch_image_specs=(
+                VmWatchImagePublishSpec(
+                    source_watch_id="PRF03",
+                    target_element_id="PRF03",
+                    logical_channel="image",
+                    pv_name="CUSTOM:FLAG:PRF03",
+                    pixel_shape=(2, 2),
+                    pixel_width_mm=0.02,
+                ),
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            elegant_dir = Path(tmpdir)
+            watch_path = elegant_dir / "custom-prf03.out"
+            watch_path.write_text("stub", encoding="utf-8")
+            lattice = {
+                "PRF03": {
+                    "TYPE": "WATCH",
+                    "MODE": "coord",
+                    "DISABLE": "0",
+                    "FILENAME": '"custom-prf03.out"',
+                }
+            }
+
+            with patch(
+                "half_linac.src.shared.elegant_backend.publisher._load_watch_image_from_sdds",
+                return_value=np.arange(4),
+            ) as load_image_mock, patch(
+                "half_linac.src.shared.elegant_backend.publisher.caput",
+                return_value=True,
+            ) as caput_mock:
+                ok = publisher.publish_watch_images(
+                    plan,
+                    lattice=lattice,
+                    usedline=["PRF03"],
+                    elegant_dir=elegant_dir,
+                )
+
+        self.assertTrue(ok)
+        load_image_mock.assert_called_once()
+        self.assertEqual(load_image_mock.call_args.args[0], watch_path)
+        self.assertEqual(caput_mock.call_args.args[0], "CUSTOM:FLAG:PRF03")
 
     def test_shared_publisher_sources_do_not_import_runtime_config_or_half_pv_prefixes(self):
         parser_source = (REPO_ROOT / "src/shared/elegant_backend/parser.py").read_text(encoding="utf-8")

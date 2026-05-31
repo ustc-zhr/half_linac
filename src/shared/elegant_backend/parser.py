@@ -111,12 +111,16 @@ class EleParser(lattice_parser):
             lines = []
 
             self.control["run_setup"]["lattice"] = lattice_path.name
-            lines.extend(self._section_lines("run_setup"))
-            lines.extend(self._section_lines("run_control"))
-            lines.extend(self._section_lines("twiss_output"))
-            lines.extend(self._section_lines("matrix_output"))
-            lines.extend(self._section_lines("error_control"))
-            lines.extend(self._section_lines("error_element"))
+            for section_name in (
+                "run_setup",
+                "run_control",
+                "twiss_output",
+                "matrix_output",
+                "error_control",
+                "error_element",
+            ):
+                if section_name in self.control:
+                    lines.extend(self._section_lines(section_name))
 
             if "sdds_beam" in self.control:
                 lines.extend(self._section_lines("sdds_beam"))
@@ -201,9 +205,10 @@ class ElegantParser:
                         line += f',{key}="{value}"'
                 handle.write(f"{line}\n")
 
-            handle.write(f'\nUSEDLINE: LINE = ({",".join(usedline)})')
+            handle.write(f'\n{self.line_name}: LINE = ({",".join(usedline)})')
 
         self.ele.control = lte["control"]
+        self.ele.control["run_setup"]["use_beamline"] = self.line_name
         self.ele.back2ele(ele_path, lattice_path)
         return lattice_path, ele_path
 

@@ -1,0 +1,11 @@
+{
+  "default_flag": "PRF03",
+  "flag_pixel_shape": {
+    "vm": [360, 270],
+    "real": [360, 270]
+  },
+  "flag_pixel_width_mm": {
+    "vm": 0.02,
+    "real": 0.02
+  }
+}

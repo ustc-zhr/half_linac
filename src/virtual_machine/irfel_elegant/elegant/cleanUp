@@ -1,0 +1,3 @@
+#!/bin/bash
+
+rm -f *.twi *.sig *.param *.fin *.mag *.cen *.bpmcen *.log

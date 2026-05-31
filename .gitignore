@@ -42,6 +42,17 @@ src/virtual_machine/half_elegant/elegant/one.ele
 src/virtual_machine/half_elegant/halflinac.json
 src/virtual_machine/half_elegant/esa.json
 src/virtual_machine/half_elegant/.*.lock
+src/virtual_machine/*_elegant/*.json
+src/virtual_machine/*_elegant/.*.lock
+src/virtual_machine/*_elegant/elegant/lattice.lte
+src/virtual_machine/*_elegant/elegant/one.ele
+src/virtual_machine/*_elegant/elegant/esa.lte
+src/virtual_machine/*_elegant/elegant/esa.ele
+src/virtual_machine/*_elegant/elegant/*.bpmcen
+src/virtual_machine/*_elegant/elegant/*.cen
+src/virtual_machine/*_elegant/elegant/*.mag
+src/virtual_machine/*_elegant/elegant/*.out
+src/virtual_machine/*_elegant/elegant/*.twi
 
 # softIOC build outputs
 src/softIOC/halflinac/bin/
@@ -55,6 +66,17 @@ src/softIOC/halflinac/iocBoot/ioctarget/envPaths
 src/softIOC/halflinac/iocBoot/ioctarget/cdCommands
 src/softIOC/halflinac/iocBoot/ioctarget/relPaths.sh
 src/softIOC/halflinac/iocBoot/ioctarget/dllPath.bat
+src/softIOC/*/bin/
+src/softIOC/*/lib/
+src/softIOC/irfel/db/irfel.substitutions
+src/softIOC/*/dbd/target.dbd
+src/softIOC/*/include/xxxRecord.h
+src/softIOC/*/**/O.Common/
+src/softIOC/*/**/O.linux-x86_64/
+src/softIOC/*/iocBoot/ioctarget/envPaths
+src/softIOC/*/iocBoot/ioctarget/cdCommands
+src/softIOC/*/iocBoot/ioctarget/relPaths.sh
+src/softIOC/*/iocBoot/ioctarget/dllPath.bat
 
 # Local environment exports
 scripts/export_env.sh

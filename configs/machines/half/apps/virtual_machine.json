@@ -1,6 +1,27 @@
 {
-  "simple_segment_start_ids": ["QL27", "QT01", "QT02", "QL15", "QL16"],
-  "simple_segment_end_ids": ["PRF04", "PRF06", "PRF07", "PRF08"],
-  "default_start_id": "QL27",
-  "default_end_id": "PRF04"
+  "predefined_usedlines": [
+    {
+      "id": "ALL_MAIN",
+      "label": "Main Line",
+      "role": "main"
+    },
+    {
+      "id": "ALL_ESA",
+      "label": "ESA Line",
+      "role": "energy_spectrum"
+    }
+  ],
+  "default_usedline": "ALL_MAIN",
+  "local_segments": [
+    {
+      "id": "main_segment",
+      "label": "Main Segment",
+      "parent_usedline": "ALL_MAIN",
+      "start_ids": ["QL27", "QT01", "QT02", "QL15", "QL16"],
+      "end_ids": ["PRF04", "PRF06", "PRF07", "PRF08"],
+      "default_start_id": "QL27",
+      "default_end_id": "PRF04"
+    }
+  ],
+  "default_segment_id": "main_segment"
 }

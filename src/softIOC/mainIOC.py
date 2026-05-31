@@ -3,7 +3,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from subprocess import Popen, TimeoutExpired
+from subprocess import PIPE, Popen, TimeoutExpired
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -75,6 +75,7 @@ def _start_ioc_process(iocpath):
         ["bash", "runMe"],
         cwd=str(iocpath),
         shell=False,
+        stdin=PIPE,
         start_new_session=True,
     )
 

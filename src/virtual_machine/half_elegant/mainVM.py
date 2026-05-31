@@ -19,6 +19,7 @@ ensure_repo_import_path(__file__)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QApplication,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -35,7 +36,7 @@ from half_linac.src.virtual_machine.half_elegant.VMgui import Ui_MainWindow
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     resolve_machine_runtime,
-    resolve_virtual_machine_segment_choices,
+    resolve_virtual_machine_usedline_workflow,
 )
 
 
@@ -478,19 +479,19 @@ BUTTON_CONFIG = {
         "tooltip": "Stop every process started from this VM control window.",
     },
     "pushButton_ESAline": {
-        "text": "ESA Line",
+        "text": "Apply Usedline",
         "category": "routing",
-        "tooltip": "Switch the VM lattice to the ESA branch configuration.",
+        "tooltip": "Switch the VM lattice to the selected predefined usedline.",
     },
     "pushButton_FULLline": {
-        "text": "Restore Full Line",
+        "text": "Restore Main Line",
         "category": "routing",
-        "tooltip": "Restore the full baseline lattice definition.",
+        "tooltip": "Restore the machine main usedline from runtime metadata.",
     },
     "pushButton_simply_VM": {
         "text": "Simplify Segment",
         "category": "routing",
-        "tooltip": "Build a simplified lattice between the selected start and end elements.",
+        "tooltip": "Build a temporary usedline between the selected start and end elements.",
     },
     "static_err": {
         "text": "Apply Error",
@@ -511,12 +512,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.runtime = resolve_machine_runtime()
         self.machine_profile = self.runtime.profile
-        (
-            self.simple_segment_start_ids,
-            self.simple_segment_end_ids,
-            self.default_simple_segment_start_id,
-            self.default_simple_segment_end_id,
-        ) = resolve_virtual_machine_segment_choices(self.machine_profile)
+        self.usedline_workflow = resolve_virtual_machine_usedline_workflow(self.machine_profile)
+        self.comboBox_predefined_usedline = QComboBox(self.groupBox_2)
+        self.comboBox_segment = QComboBox(self.groupBox_2)
         self.processes = {}
         self.process_start_times = {}
         self.current_theme = "dark"
@@ -550,6 +548,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_ESAline.clicked.connect(self.ESAline)
         self.pushButton_simply_VM.clicked.connect(self.simply_VM)
         self.pushButton_FULLline.clicked.connect(self.back_FULL)
+        self.comboBox_segment.currentIndexChanged.connect(self._refresh_segment_choices)
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} VM Control")
@@ -612,7 +611,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _configure_group_titles(self):
         self.groupBox.setTitle("Startup Sequence")
-        self.groupBox_2.setTitle("Lattice Setup")
+        self.groupBox_2.setTitle("Lattice Usedline")
         self.groupBox_3.setTitle("Error Settings")
         self.groupBox_4.setTitle("Static Offset")
         self.groupBox_5.setTitle("Quadrupole Jitter")
@@ -629,19 +628,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.comboBox_simply_start.setToolTip("Start element for the simplified VM segment.")
         self.comboBox_simply_end.setToolTip("End element for the simplified VM segment.")
+        self.comboBox_predefined_usedline.setToolTip(
+            "Predefined full usedline from the VM lattice, such as ALL_MAIN or ALL_ESA."
+        )
+        self.comboBox_segment.setToolTip(
+            "Local segment definition. Start/end candidates are scoped to its parent usedline."
+        )
         self.QDXDYvalue.setToolTip("Quadrupole static offset in micrometers rms.")
         self.QK1JITTER.setToolTip("Quadrupole K1 jitter in ppm rms.")
 
-        self._set_combo_items(self.comboBox_simply_start, self.simple_segment_start_ids)
-        self._set_combo_items(self.comboBox_simply_end, self.simple_segment_end_ids)
-        self._set_combo_current_text(
-            self.comboBox_simply_start,
-            self.default_simple_segment_start_id,
-        )
-        self._set_combo_current_text(
-            self.comboBox_simply_end,
-            self.default_simple_segment_end_id,
-        )
+        self._populate_predefined_usedline_combo()
+        self._populate_segment_combo()
+        self._refresh_segment_choices()
 
         self.QDXDYvalue.setMaximumWidth(110)
         self.QK1JITTER.setMaximumWidth(110)
@@ -660,6 +658,58 @@ class myWindow(QMainWindow, Ui_MainWindow):
         index = combo.findText(value)
         if index >= 0:
             combo.setCurrentIndex(index)
+
+    @staticmethod
+    def _set_combo_current_data(combo, value):
+        for index in range(combo.count()):
+            if combo.itemData(index) == value:
+                combo.setCurrentIndex(index)
+                return
+
+    def _populate_predefined_usedline_combo(self):
+        self.comboBox_predefined_usedline.blockSignals(True)
+        self.comboBox_predefined_usedline.clear()
+        for choice in self.usedline_workflow.predefined_usedlines:
+            label = choice.label if choice.label == choice.id else f"{choice.label} ({choice.id})"
+            self.comboBox_predefined_usedline.addItem(label, choice.id)
+        self._set_combo_current_data(
+            self.comboBox_predefined_usedline,
+            self.usedline_workflow.default_usedline,
+        )
+        self.comboBox_predefined_usedline.blockSignals(False)
+
+    def _populate_segment_combo(self):
+        self.comboBox_segment.blockSignals(True)
+        self.comboBox_segment.clear()
+        for segment in self.usedline_workflow.local_segments:
+            label = f"{segment.label} ({segment.parent_usedline})"
+            self.comboBox_segment.addItem(label, segment.id)
+        self._set_combo_current_data(
+            self.comboBox_segment,
+            self.usedline_workflow.default_segment_id,
+        )
+        self.comboBox_segment.blockSignals(False)
+
+    def _current_local_segment(self):
+        segment_id = self.comboBox_segment.currentData()
+        for segment in self.usedline_workflow.local_segments:
+            if segment.id == segment_id:
+                return segment
+        if self.usedline_workflow.local_segments:
+            return self.usedline_workflow.local_segments[0]
+        return None
+
+    def _refresh_segment_choices(self):
+        segment = self._current_local_segment()
+        if segment is None:
+            self._set_combo_items(self.comboBox_simply_start, ())
+            self._set_combo_items(self.comboBox_simply_end, ())
+            return
+
+        self._set_combo_items(self.comboBox_simply_start, segment.start_ids)
+        self._set_combo_items(self.comboBox_simply_end, segment.end_ids)
+        self._set_combo_current_text(self.comboBox_simply_start, segment.default_start_id)
+        self._set_combo_current_text(self.comboBox_simply_end, segment.default_end_id)
 
     def _configure_action_buttons(self):
         self.action_buttons = {}
@@ -964,25 +1014,38 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
 
     def ESAline(self):
-        self._notify("Requesting ESA line configuration.")
+        line_id = self.comboBox_predefined_usedline.currentData()
+        if not line_id:
+            self._notify("No predefined usedline is selected.")
+            return
+
+        self._notify(f"Requesting predefined usedline: {line_id}.")
         self._start_vm_config(
-            label="ESA line transfer",
-            cmd=["python3", "transfer_ESAline.py"],
+            label="predefined usedline transfer",
+            cmd=["python3", "transfer_ESAline.py", line_id],
         )
 
     def simply_VM(self):
+        segment = self._current_local_segment()
+        if segment is None:
+            self._notify("No local VM segment is configured.")
+            return
+
         ele_start = self.comboBox_simply_start.currentText()
         ele_end = self.comboBox_simply_end.currentText()
-        self._notify(f"Requesting simplified lattice: {ele_start} -> {ele_end}.")
+        self._notify(
+            f"Requesting simplified usedline from {segment.parent_usedline}: "
+            f"{ele_start} -> {ele_end}."
+        )
         self._start_vm_config(
-            label="VM lattice simplification",
-            cmd=["python3", "simply_VM.py", ele_start, ele_end],
+            label="VM usedline simplification",
+            cmd=["python3", "simply_VM.py", segment.parent_usedline, ele_start, ele_end],
         )
 
     def back_FULL(self):
-        self._notify("Requesting full-line restore.")
+        self._notify("Requesting main usedline restore.")
         self._start_vm_config(
-            label="Full line restore",
+            label="Main usedline restore",
             cmd=["python3", "full_VM.py"],
         )
 
@@ -1124,20 +1187,24 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout_5.setVerticalSpacing(10)
 
         if width < 420:
-            self.groupBox_2.setMinimumHeight(280)
-            self.gridLayout_5.addWidget(self.pushButton_ESAline, 0, 0)
-            self.gridLayout_5.addWidget(self.pushButton_FULLline, 1, 0)
-            self.gridLayout_5.addWidget(self.comboBox_simply_start, 2, 0)
-            self.gridLayout_5.addWidget(self.comboBox_simply_end, 3, 0)
-            self.gridLayout_5.addWidget(self.pushButton_simply_VM, 4, 0)
+            self.groupBox_2.setMinimumHeight(360)
+            self.gridLayout_5.addWidget(self.comboBox_predefined_usedline, 0, 0)
+            self.gridLayout_5.addWidget(self.pushButton_ESAline, 1, 0)
+            self.gridLayout_5.addWidget(self.pushButton_FULLline, 2, 0)
+            self.gridLayout_5.addWidget(self.comboBox_segment, 3, 0)
+            self.gridLayout_5.addWidget(self.comboBox_simply_start, 4, 0)
+            self.gridLayout_5.addWidget(self.comboBox_simply_end, 5, 0)
+            self.gridLayout_5.addWidget(self.pushButton_simply_VM, 6, 0)
             return
 
-        self.groupBox_2.setMinimumHeight(200)
-        self.gridLayout_5.addWidget(self.pushButton_ESAline, 0, 0)
-        self.gridLayout_5.addWidget(self.pushButton_FULLline, 0, 1)
-        self.gridLayout_5.addWidget(self.comboBox_simply_start, 1, 0)
-        self.gridLayout_5.addWidget(self.comboBox_simply_end, 1, 1)
-        self.gridLayout_5.addWidget(self.pushButton_simply_VM, 2, 0, 1, 2)
+        self.groupBox_2.setMinimumHeight(260)
+        self.gridLayout_5.addWidget(self.comboBox_predefined_usedline, 0, 0)
+        self.gridLayout_5.addWidget(self.pushButton_ESAline, 0, 1)
+        self.gridLayout_5.addWidget(self.pushButton_FULLline, 1, 0, 1, 2)
+        self.gridLayout_5.addWidget(self.comboBox_segment, 2, 0, 1, 2)
+        self.gridLayout_5.addWidget(self.comboBox_simply_start, 3, 0)
+        self.gridLayout_5.addWidget(self.comboBox_simply_end, 3, 1)
+        self.gridLayout_5.addWidget(self.pushButton_simply_VM, 4, 0, 1, 2)
         self.gridLayout_5.setColumnStretch(0, 1)
         self.gridLayout_5.setColumnStretch(1, 1)
 

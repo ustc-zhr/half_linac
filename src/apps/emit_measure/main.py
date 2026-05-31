@@ -3,7 +3,6 @@ import sys
 import epics
 import time
 import numpy as np
-import json
 import math
 from pathlib import Path
 
@@ -41,18 +40,14 @@ from PyQt5.QtWidgets import (
 from half_linac.src.shared.machine_profile import (
     build_model_backend,
     get_emit_preset,
-    list_elements,
     load_app_context,
     resolve_channel,
 )
-from half_linac.src.shared.machine_profile.runtime_selector import (
-    RuntimeSelectorWidget,
-    request_runtime_restart,
-)
 
 nest_dict    = lambda: defaultdict(nest_dict)
-SCAN_RESULTS_PATH    = Path(__file__).resolve().parent / "scanResults.txt"
+
 ELECTRON_MASS_EV = 0.51099895000e6
+SCAN_RESULTS_PATH    = Path(__file__).resolve().parent / "scanResults.txt"
 
 HEADER_ACTION_HEIGHT = 32
 
@@ -459,11 +454,20 @@ class myWindow(QWidget,Ui_Form):
         self.machine_profile = self.app_context.profile
         self.emit_workflow = self.app_context.emit_measure_workflow
         if self.emit_workflow is None:
-            raise ValueError("emit_measure workflow is not available in the current app context.")
+            raise ValueError("Emit measure workflow is not available in the current app context.")
 
         self.current_theme = "dark"
-        self.control_backend = self.app_context.control_backend.name
+        self.machine_type = self.machine_profile.machine.default_mode
         self.scan_mode = None
+
+        # default settings 
+        # ----------------
+        self.lineEdit_2.setText("2200") # energy=2200MeV
+        self.lineEdit_24.setText("5") # freq time=5s
+        self.lineEdit_7.setText("0")  # K1-start
+        self.lineEdit_8.setText("5")  # K1-end 
+        self.lineEdit_9.setText("15") # steps=15
+        self.lineEdit_10.setText("5") # samples=5 
 
         self.scan = None
         self.twissCal = None
@@ -540,14 +544,6 @@ class myWindow(QWidget,Ui_Form):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        self.runtime_selector = RuntimeSelectorWidget(
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.app_context.control_backend.name,
-            parent=panel,
-        )
-        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
-        header_layout.addWidget(self.runtime_selector)
-
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
         self.theme_toggle_button.setFixedSize(HEADER_ACTION_HEIGHT, HEADER_ACTION_HEIGHT)
@@ -557,7 +553,7 @@ class myWindow(QWidget,Ui_Form):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = EmitStatusStrip(panel)
-        self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
+        self.status_panel.add_item("mode", "MODE", self.machine_type.upper())
         self.status_panel.add_item("tab", "TAB", self.tabWidget.tabText(self.tabWidget.currentIndex()))
         self.status_panel.add_item("scan", "SCAN", "Idle")
         self.status_panel.add_item("twiss", "TWISS", "Idle")
@@ -893,8 +889,8 @@ class myWindow(QWidget,Ui_Form):
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
-        backend_tone = "warning" if self.control_backend == "real" else "success"
-        self.status_panel.set_item("backend", self.control_backend.upper(), backend_tone)
+        mode_tone = "warning" if self.machine_type == "real" else "success"
+        self.status_panel.set_item("mode", self.machine_type.upper(), mode_tone)
         self.status_panel.set_item("tab", self.tabWidget.tabText(self.tabWidget.currentIndex()), "subtle")
 
         if self._scan_is_running():
@@ -943,20 +939,6 @@ class myWindow(QWidget,Ui_Form):
         print(message)
         QMessageBox.warning(self, "Emit Measure", message)
 
-    def _apply_runtime_selection(self, machine_id, control_backend):
-        if self._scan_is_running() or self._twiss_is_running():
-            self._warn("Stop the current scan or Twiss calculation before switching machine or backend.")
-            return
-
-        request_runtime_restart(
-            self,
-            app_label="Emit Measure",
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.app_context.control_backend.name,
-            machine_id=machine_id,
-            control_backend=control_backend,
-        )
-
     def _scan_is_running(self):
         return self.scan is not None and self.scan.isRunning()
 
@@ -990,131 +972,6 @@ class myWindow(QWidget,Ui_Form):
             raise ValueError(f"{field_name} must be non-negative.")
         return value
 
-    # def simply_VM(self):
-    #     """to simplify the lattice in VM for accelerate the testing process (only considering from Q to flag )"""
-        
-    #     quad = self.comboBox.currentText()
-    #     flag = self.comboBox_4.currentText()
-
-    #     with open(jsonpath,"r") as f:
-    #         lte  = json.load(f)
-    #     contl    = lte  ["control"]
-    #     lattice  = lte  ["lattice"]
-    #     # usedline = lte  ["usedline"]
-    #     usedline = lte["lattice"]["ALL"]["LINE"]
-
-    #     # pre the input beam before entrance of quad
-    #     # ------------------------------------------
-    #     # add a watch
-    #     prewatch = {}
-    #     prewatch["NAME"] = "PREW"
-    #     prewatch["TYPE"] = "WATCH"
-    #     prewatch["FILENAME"] = "pre.bun"
-    #     prewatch["MODE"] = "COORD"
-    #     prewatch["DISABLE"] = "0"
-
-    #     lattice["PREW"]={}
-    #     lattice["PREW"]=prewatch
-        
-    #     id = usedline.index(quad)
-    #     preline = usedline[0:id]
-    #     preline.append(prewatch["NAME"])
-
-    #     ltepre = {}
-    #     ltepre["control"]  = contl
-    #     ltepre["lattice"]  = lattice
-    #     ltepre["usedline"] = preline
-    #     with open(jsonpath,"w") as f:
-    #         f.write(json.dumps(ltepre,indent=4))
-        
-    #     # wait the vm run
-    #     time.sleep(backend-dependent refresh interval)
-    #     print("pre.bun before ",quad," is ready")
-
-    #     # get the energy before quad
-    #     tmp = sdds.SDDS(0)
-    #     tmp.load(str((_REPO_BOOTSTRAP_ROOT / "src/virtual_machine/half_elegant/elegant/one.cen")))
-    #     tmppCentral = tmp.columnData[11][0][-1]
-
-    #     # simply VM
-    #     # ---------
-    #     contl    = lte  ["control"]
-    #     lattice  = lte  ["lattice"]
-    #     usedline = lte  ["usedline"]
-
-    #     id1 = usedline.index(quad)
-    #     id2 = usedline.index(flag)
-    #     scanline = usedline[id1:id2+1]
-
-    #     del contl["bunched_beam"]
-
-    #     contl["run_setup"]["p_central"]= str(tmppCentral)
-
-    #     contl["sdds_beam"] = {}
-    #     contl["sdds_beam"]["input"]="pre.bun"
-    #     contl["sdds_beam"]["center_arrival_time"]="1"
-    #     contl["sdds_beam"]["reuse_bunch"]="1"
-
-    #     lte["control"]  = contl
-    #     lte["lattice"]  = lattice
-    #     lte["usedline"] = scanline
-
-    #     with open(jsonpath,"w") as f:
-    #         f.write(json.dumps(lte,indent=4))
-        
-    #     time.sleep(5)
-    #     print("simply VM: (",quad,"-to-",flag,") is ready")
-
-    #     return
-    
-    # def full_VM(self):
-    #     # back to initial
-    #     # print(lattice_file)
-    #     # ltet = elegant_parser(lattice_file, ele_file, line_name)
-    #     # ltet.dump2json(jsonpath)
-        
-    #     # back to the state before simply
-    #     with open(jsonpath,"r") as f:
-    #         lte  = json.load(f)
-    #     contl    = lte  ["control"]
-    #     lattice  = lte  ["lattice"]
-    #     line = lte["lattice"]["ALL"]["LINE"]
-
-    #     lte["usedline"] = lte["lattice"]["ALL"]["LINE"]
-
-    #     if "PREW" in lattice:
-    #         del lattice["PREW"]
-        
-    #     if "sdds_beam" in contl:
-    #         del contl["sdds_beam"]
-
-    #         bunched_beam = {
-    #             "n_particles_per_bunch": "10000",
-    #             "emit_nx": "10e-6",
-    #             "emit_ny": "10e-6",
-    #             "use_twiss_command_values": "10000",
-    #             "distribution_type[0]": "\"gaussian\"",
-    #             "distribution_type[1]": "\"gaussian\"",
-    #             "distribution_type[2]": "\"gaussian\"",
-    #             "distribution_cutoff[0]": "5",
-    #             "distribution_cutoff[1]": "5",
-    #             "distribution_cutoff[2]": "5",
-    #             "sigma_s": "1.11e-3",
-    #             "sigma_dp": "4e-3"
-    #         }
-    #         contl["bunched_beam"] = bunched_beam
-        
-    #     contl["run_setup"]["p_central"]= "223.4028"
-
-    #     lte["control"]  = contl
-    #     lte["lattice"]  = lattice
-    #     lte["usedline"] = line
-    #     with open(jsonpath,"w") as f:   
-    #         f.write(json.dumps(lte,indent=4))
-
-    #     print("full VM is back")
-    #     return
-
     @staticmethod
     def _set_combo_items(combo, items):
         combo.blockSignals(True)
@@ -1128,91 +985,68 @@ class myWindow(QWidget,Ui_Form):
         if index >= 0:
             combo.setCurrentIndex(index)
 
-    @staticmethod
-    def _set_line_edit_value(line_edit, value):
-        line_edit.setText(str(value))
-
-    def _apply_typed_defaults(self, config, field_map):
-        for field_name, widget in field_map.items():
-            value = getattr(config, field_name, None)
-            if value is not None:
-                self._set_line_edit_value(widget, value)
-
     def _emit_presets_by_quad(self):
         grouped = defaultdict(list)
         for preset in self.emit_workflow.presets:
             grouped[preset.quad].append(preset)
         return grouped
 
-    def _profile_element_ids(self, *, kind, role=None, plane=None):
-        return [element.id for element in list_elements(self.app_context, kind=kind, role=role, plane=plane)]
-
-    def _emit_quad_items(self):
-        return self._profile_element_ids(kind="quad")
-
-    def _emit_flag_items(self):
-        return self._profile_element_ids(kind="flag")
-
-    def _emit_twiss_quad_items(self):
-        return self._emit_quad_items()
-
-    def _find_emit_preset_for_selection(self, quad_name, flag_name):
-        for preset in self.emit_workflow.presets:
-            if preset.quad == quad_name and preset.flag == flag_name:
-                return preset
-        return None
-
     def _find_emit_preset(self, preset_id):
         return get_emit_preset(self.app_context, preset_id)
 
-    def _configure_machine_profile(self):
-        quad_items = self._emit_quad_items()
-        flag_items = self._emit_flag_items()
-        self._set_combo_items(self.comboBox, quad_items)
-        self._set_combo_items(self.comboBox_4, flag_items)
+    def _twiss_quad_choices(self):
+        if self.emit_workflow.twiss_quads:
+            return list(self.emit_workflow.twiss_quads)
 
-        twiss_quads = self._emit_twiss_quad_items()
+        choices = []
+        for preset in self.emit_workflow.presets:
+            if preset.quad not in choices:
+                choices.append(preset.quad)
+        return choices
+
+    def _configure_machine_profile(self):
+        presets_by_quad = self._emit_presets_by_quad()
+        quad_items = list(presets_by_quad)
+        self._set_combo_items(self.comboBox, quad_items)
+
+        twiss_quads = self._twiss_quad_choices()
         self._set_combo_items(self.comboBox_2, twiss_quads)
         self._set_combo_items(self.comboBox_3, twiss_quads)
 
         default_preset = self._find_emit_preset(self.emit_workflow.default_preset)
         self._set_combo_current_text(self.comboBox, default_preset.quad)
-        self._set_combo_current_text(self.comboBox_4, default_preset.flag)
-        self._set_combo_current_text(self.comboBox_2, twiss_quads[0])
-        self._set_combo_current_text(self.comboBox_3, twiss_quads[0])
-        self._apply_emit_preset_defaults(default_preset)
         self.updateComboBox4(self.comboBox.currentIndex())
-
-    def _apply_emit_preset_defaults(self, preset):
-        default_preset = self._find_emit_preset(self.emit_workflow.default_preset)
-        scan_source = preset.scan if preset.scan.as_dict() else default_preset.scan
-        self._apply_typed_defaults(
-            scan_source,
-            {
-                "k1_from": self.lineEdit_7,
-                "k1_end": self.lineEdit_8,
-                "k1_steps": self.lineEdit_9,
-                "samples": self.lineEdit_10,
-                "sleeptime": self.lineEdit_24,
-            },
-        )
-        self._apply_typed_defaults(
-            preset.analysis,
-            {
-                "energy_mev": self.lineEdit_2,
-            },
-        )
+        self._set_combo_current_text(self.comboBox_4, default_preset.flag)
+        if twiss_quads:
+            self._set_combo_current_text(self.comboBox_2, twiss_quads[0])
+            self._set_combo_current_text(self.comboBox_3, twiss_quads[0])
+        self._sync_emit_preset_defaults()
 
     def _sync_emit_preset_defaults(self):
         quad_name = self.comboBox.currentText()
         flag_name = self.comboBox_4.currentText()
-        preset = self._find_emit_preset_for_selection(quad_name, flag_name)
-        if preset is not None:
-            self._apply_emit_preset_defaults(preset)
+        for preset in self.emit_workflow.presets:
+            if preset.quad == quad_name and preset.flag == flag_name:
+                if preset.energy_mev is not None:
+                    self.lineEdit_2.setText(str(preset.energy_mev))
+                scan = preset.scan
+                if scan.k1_from is not None:
+                    self.lineEdit_7.setText(str(scan.k1_from))
+                if scan.k1_end is not None:
+                    self.lineEdit_8.setText(str(scan.k1_end))
+                if scan.k1_steps is not None:
+                    self.lineEdit_9.setText(str(scan.k1_steps))
+                if scan.samples is not None:
+                    self.lineEdit_10.setText(str(scan.samples))
+                if scan.sleeptime is not None:
+                    self.lineEdit_24.setText(str(scan.sleeptime))
+                return
 
     def updateComboBox4(self, index):
         del index
-        flag_items = self._emit_flag_items()
+        quad_name = self.comboBox.currentText()
+        presets = self._emit_presets_by_quad().get(quad_name, [])
+        flag_items = [preset.flag for preset in presets]
         current_flag = self.comboBox_4.currentText()
         self._set_combo_items(self.comboBox_4, flag_items)
         if current_flag in flag_items:
@@ -1226,9 +1060,9 @@ class myWindow(QWidget,Ui_Form):
             # get scan parameters
             para.quad_name = self.comboBox.currentText()
             para.flag_name = self.comboBox_4.currentText()
-            para.quadPV = resolve_channel(self.app_context, para.quad_name, "k1", self.control_backend)
-            para.flagSigxPV = resolve_channel(self.app_context, para.flag_name, "sigx", self.control_backend)
-            para.flagSigyPV = resolve_channel(self.app_context, para.flag_name, "sigy", self.control_backend)
+            para.quadPV = resolve_channel(self.machine_profile, para.quad_name, "k1", self.machine_type)
+            para.flagSigxPV = resolve_channel(self.machine_profile, para.flag_name, "sigx", self.machine_type)
+            para.flagSigyPV = resolve_channel(self.machine_profile, para.flag_name, "sigy", self.machine_type)
             para.app_context = self.app_context
 
             para.k1_from  = float(self.lineEdit_7.text())
@@ -1501,7 +1335,6 @@ class twissCalThread(QThread):
         super().__init__()
 
         self.input = para
-        self.app_context = para["app_context"]
 
     def run(self):
         try:
@@ -1516,8 +1349,8 @@ class twissCalThread(QThread):
             plane = self.input["plane"]
             inverse = self.input["inverse_map"]
 
-            model_backend = build_model_backend(self.app_context, energy_mev=self.input["EnergyMeV"])
-            twiss1 = model_backend.get_twiss1(quad1,quad2,twiss0,plane=plane,inverse=inverse)
+            trans = transfer(self.input["EnergyMeV"], app_context=self.input["app_context"])
+            twiss1 = trans.getTwiss1(quad1,quad2,twiss0,plane=plane,inverse=inverse)
 
             self.trigger.emit(twiss1)
         except Exception as exc:
@@ -1529,7 +1362,6 @@ class scanThread(QThread):
 
     def __init__(self,paras):
         super().__init__()
-        self.app_context = paras.app_context
         self.quad_name  = paras.quad_name.upper() 
         self.flag_name  = paras.flag_name.upper() 
         self.quadPV     = paras.quadPV    
@@ -1541,8 +1373,8 @@ class scanThread(QThread):
         self.samples    = paras.samples   
         self.EnergyMeV  = paras.EnergyMeV
         self.sleeptime  = paras.sleeptime
-        self.model_backend = build_model_backend(self.app_context, energy_mev=self.EnergyMeV)
-        self.model_source_json = Path(self.app_context.model_backend.config["source_json"])
+        self.app_context = paras.app_context
+        self.quad_length = None
 
         self.recal      = paras.recal 
         self.is_running = True
@@ -1627,7 +1459,9 @@ class scanThread(QThread):
             # Parabolic fitting method
             # ========================
             # get the transfer matrix of (exit of quad-to-flag) 
-            mat = self.model_backend.get_map(self.quad_name,self.flag_name)
+            trans = transfer(self.EnergyMeV, app_context=self.app_context)
+            mat = trans.get_map(self.quad_name,self.flag_name)
+            self.quad_length = trans.get_lattice_float(self.quad_name, "L")
             
             m11 = mat[0,0]
             m12 = mat[0,1]
@@ -1700,7 +1534,8 @@ class scanThread(QThread):
         A0_y = []
         for k1 in k1l:
             # get the transfer map 
-            mat = self.model_backend.get_map(self.quad_name,self.flag_name,k1=k1,seq="ent2exit")
+            trans = transfer(self.EnergyMeV, app_context=self.app_context)
+            mat = trans.get_map(self.quad_name,self.flag_name,k1=k1,seq="ent2exit")
             
             # X-plane
             A11 = mat[0,0]**2
@@ -1740,7 +1575,7 @@ class scanThread(QThread):
             alpha = -sig12/ex
             gamma = sig22/ex
             
-            gam0 = self.EnergyMeV * 1e6 / ELECTRON_MASS_EV
+            gam0 = self.EnergyMeV*1e6/ELECTRON_MASS_EV
             exn = ex*gam0
             
             #print("exn,beta,alpha,gamma",exn,beta,alpha,gamma)
@@ -1772,11 +1607,10 @@ class scanThread(QThread):
         # err_sigx = np.max(sigxl,1)**2 - sigx_ave**2
         err_sigx = np.std(sigxl, axis=1)
 
-        with self.model_source_json.open("r", encoding="utf-8") as f:
-            lte = json.load(f)
-
-        lattice = lte["lattice"]
-        Lq = lattice[self.quad_name]["L"]
+        if self.quad_length is None:
+            trans = transfer(self.EnergyMeV, app_context=self.app_context)
+            self.quad_length = trans.get_lattice_float(self.quad_name, "L")
+        Lq = self.quad_length
 
         # s_quad = lattice[self.quad_name]["S"]
         # s_flag = lattice[self.flag_name]["S"]
@@ -1826,7 +1660,7 @@ class scanThread(QThread):
         beta  = 2*a/fac
         gamma = (1+alpha**2)/beta
         
-        gam0 = self.EnergyMeV * 1e6 / ELECTRON_MASS_EV
+        gam0 = self.EnergyMeV*1e6/ELECTRON_MASS_EV
         exn = ex*gam0
         
         #print("exn,beta,alpha,gamma",exn,beta,alpha,gamma)
@@ -1845,6 +1679,40 @@ class scanThread(QThread):
     
     def stop(self):
         self.is_running = False
+
+class transfer:
+    def __init__(self,EnergyMeV=None, app_context=None):
+        self.energy = EnergyMeV
+        self.app_context = app_context or load_app_context("emit_measure")
+        self.model_backend = build_model_backend(
+            self.app_context,
+            energy_mev=EnergyMeV,
+        )
+
+    def getTwiss1(self, quad1, quad2, twiss0, plane="xplane", inverse=False):
+        return self.model_backend.get_twiss1(
+            quad1,
+            quad2,
+            twiss0,
+            plane=plane,
+            inverse=inverse,
+        )
+
+    def get_map(self, elem1, elem2, k1=None, seq="exit2exit"):
+        return self.model_backend.get_map(elem1, elem2, k1=k1, seq=seq)
+
+    def get_lattice_float(self, element_id, field_name):
+        element = self.model_backend.get_lattice_element(element_id)
+        try:
+            return float(element[field_name])
+        except KeyError as exc:
+            raise RuntimeError(
+                f"Model backend lattice element {element_id!r} is missing {field_name!r}."
+            ) from exc
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Model backend lattice element {element_id!r}.{field_name} is not numeric."
+            ) from exc
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

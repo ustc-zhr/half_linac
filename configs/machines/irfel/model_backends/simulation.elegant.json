@@ -1,0 +1,17 @@
+{
+  "backend": "simulation",
+  "engine": "elegant",
+  "config": {
+    "working_dir": "src/virtual_machine/irfel_elegant/elegant",
+    "source_lattice": "src/virtual_machine/irfel_elegant/elegant/lattice_ini.lte",
+    "energy_ini_ele_file": "src/virtual_machine/irfel_elegant/elegant/esa_ini.ele",
+    "energy_json_path": "src/virtual_machine/irfel_elegant/esa.json",
+    "energy_lte_file": "src/virtual_machine/irfel_elegant/elegant/esa.lte",
+    "energy_ele_file": "src/virtual_machine/irfel_elegant/elegant/esa.ele",
+    "energy_mat_file": "src/virtual_machine/irfel_elegant/elegant/esa.mat",
+    "energy_twi_file": "src/virtual_machine/irfel_elegant/elegant/esa.twi",
+    "energy_log": "esa.log",
+    "energy_dispersion_line_name": "ESAlocal",
+    "energy_twiss_line_name": "ALL_ESA"
+  }
+}

@@ -30,6 +30,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
     resolve_machine_runtime,
     resolve_virtual_machine_segment_choices,
+    resolve_virtual_machine_usedline_workflow,
     validate_machine_profile,
 )
 from half_linac.src.shared.machine_profile.loader import (
@@ -157,10 +158,17 @@ class MachineProfileTests(unittest.TestCase):
 
     def test_half_virtual_machine_workflow_keeps_expected_segment_choices(self):
         profile = load_profile("half")
-        workflow = get_workflow(profile, "virtual_machine")
+        workflow = resolve_virtual_machine_usedline_workflow(profile)
         start_ids, end_ids, default_start, default_end = resolve_virtual_machine_segment_choices(profile)
-        self.assertEqual(workflow["simple_segment_start_ids"], ["QL27", "QT01", "QT02", "QL15", "QL16"])
-        self.assertEqual(workflow["simple_segment_end_ids"], ["PRF04", "PRF06", "PRF07", "PRF08"])
+        segment = workflow.local_segments[0]
+        self.assertEqual(
+            tuple(choice.id for choice in workflow.predefined_usedlines),
+            ("ALL_MAIN", "ALL_ESA"),
+        )
+        self.assertEqual(workflow.default_usedline, "ALL_MAIN")
+        self.assertEqual(segment.parent_usedline, "ALL_MAIN")
+        self.assertEqual(segment.start_ids, ("QL27", "QT01", "QT02", "QL15", "QL16"))
+        self.assertEqual(segment.end_ids, ("PRF04", "PRF06", "PRF07", "PRF08"))
         self.assertEqual(default_start, "QL27")
         self.assertEqual(default_end, "PRF04")
         self.assertEqual(start_ids, ("QL27", "QT01", "QT02", "QL15", "QL16"))
@@ -479,6 +487,130 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(supported)
         self.assertIsNone(reason)
 
+    def test_irfel_profile_supports_orbit_apps_and_vm_runtime(self):
+        profile = load_profile("irfel")
+        orbit_context = load_app_context("orbit_correct", machine_id="irfel")
+        vm_orbit_context = load_app_context(
+            "orbit_correct",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        beam_context = load_app_context(
+            "beam_monitor",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        energy_context = load_app_context(
+            "energy_spectrum",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        orbit_display_context = load_app_context("orbit_display", machine_id="irfel")
+        runtime = resolve_machine_runtime(profile)
+        report = validate_machine_profile("irfel")
+        workflow = get_workflow(profile, "orbit")
+        beam_workflow = get_workflow(profile, "beam_monitor")
+        energy_workflow = get_workflow(profile, "energy_spectrum")
+        vm_start_ids, vm_end_ids, vm_default_start, vm_default_end = (
+            resolve_virtual_machine_segment_choices(profile)
+        )
+        vm_workflow = resolve_virtual_machine_usedline_workflow(profile)
+
+        self.assertEqual(profile.machine.id, "irfel")
+        self.assertEqual(profile.control_backends, ("real", "vm"))
+        self.assertTrue(report.ok, report.format_text())
+        self.assertEqual(report.get_check("runtime").status, "pass")
+        self.assertEqual(report.get_check("virtual_machine").status, "pass")
+        self.assertEqual(report.get_check("vm_publish_plan").status, "pass")
+        self.assertEqual(report.get_check("app:orbit_correct").status, "pass")
+        self.assertEqual(report.get_check("app:beam_monitor").status, "pass")
+        self.assertEqual(report.get_check("app:energy_spectrum").status, "pass")
+        self.assertEqual(report.get_check("model:energy_spectrum").status, "pass")
+        self.assertEqual(beam_context.app_name, "beam_monitor")
+        self.assertEqual(energy_context.app_name, "energy_spectrum")
+        self.assertEqual(energy_context.control_backend.name, "vm")
+        self.assertIsNotNone(energy_context.model_backend)
+        assert energy_context.model_backend is not None
+        self.assertEqual(energy_context.model_backend.name, "simulation")
+        self.assertTrue(str(runtime.vm.root).endswith("src/virtual_machine/irfel_elegant"))
+        self.assertTrue(str(runtime.softioc.root).endswith("src/softIOC/irfel"))
+        assert orbit_context.orbit_workflow is not None
+        assert vm_orbit_context.orbit_workflow is not None
+        self.assertEqual(len(orbit_context.orbit_workflow.bpms), 10)
+        self.assertEqual(len(orbit_context.orbit_workflow.xcors), 10)
+        self.assertEqual(len(orbit_context.orbit_workflow.ycors), 10)
+        self.assertEqual(len(vm_orbit_context.orbit_workflow.bpms), 10)
+        self.assertEqual(orbit_context.orbit_workflow.bpms[0], "BPM01")
+        self.assertEqual(orbit_context.orbit_workflow.bpms[-1], "BPM10")
+        self.assertEqual(orbit_context.orbit_workflow.xcors[-1], "MSHC")
+        self.assertEqual(orbit_context.orbit_workflow.ycors[-1], "MSVC")
+        self.assertEqual(workflow["response_wait_s_by_backend"]["real"], 1.0)
+        self.assertEqual(workflow["corrector_upperlimit_rad"], 0.001)
+        self.assertEqual(beam_workflow["default_flag"], "PRF03")
+        self.assertEqual(energy_workflow["flag_element"], "PRFESA")
+        self.assertEqual(energy_workflow["flag_image_channel"], "image")
+        self.assertEqual(energy_workflow["vm_watch_element"], "PRFESA")
+        self.assertEqual(energy_workflow["esa_quads"], ["QM19", "QM20"])
+        self.assertEqual(energy_workflow["energy0_default_mev"], 36)
+        self.assertIn("BPM02", vm_start_ids)
+        self.assertEqual(vm_end_ids, ("PRF03",))
+        self.assertEqual(vm_default_start, "QM13")
+        self.assertEqual(vm_default_end, "PRF03")
+        self.assertEqual(
+            tuple(choice.id for choice in vm_workflow.predefined_usedlines),
+            ("ALL_MAIN", "ALL_ESA", "ALL_DUMP"),
+        )
+        self.assertEqual(vm_workflow.local_segments[1].parent_usedline, "ALL_ESA")
+        self.assertEqual(vm_workflow.local_segments[1].end_ids, ("PRFESA",))
+        self.assertEqual(vm_workflow.local_segments[2].parent_usedline, "ALL_DUMP")
+        self.assertEqual(vm_workflow.local_segments[2].end_ids, ("PRF04",))
+        self.assertIsNone(orbit_display_context.orbit_workflow)
+
+    def test_irfel_profile_exposes_imported_real_magnet_channels(self):
+        profile = load_profile("irfel")
+
+        self.assertEqual(len(list_elements(profile, "quad")), 20)
+        self.assertEqual(len(list_elements(profile, "bend")), 3)
+        self.assertEqual(len(list_elements(profile, "solenoid")), 4)
+        self.assertEqual(len(list_elements(profile, "modulator")), 2)
+        self.assertEqual(len(list_elements(profile, "flag")), 5)
+        self.assertEqual(
+            resolve_channel(profile, "QM01", "k1", "real"),
+            "IRFEL:PS:QM01:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "QM20", "readback", "real"),
+            "IRFEL:PS:QM20:current:ai",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "BM01", "current_set", "real"),
+            "IRFEL:PS:BM01:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "MS01", "setpoint", "real"),
+            "IRFEL:PS:MS01:current:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "MODULATOR_HV1", "voltage_set", "real"),
+            "IRFEL:modulator1:HV:set:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "BPM01", "x", "vm"),
+            "IRFEL:VM:BPM:BPM01:X",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRF01", "image", "vm"),
+            "IRFEL:VM:FLAG:PRF01:image1:ArrayData",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRF03", "image", "vm"),
+            "IRFEL:VM:FLAG:PRF03:image1:ArrayData",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRFESA", "image", "vm"),
+            "IRFEL:VM:FLAG:PRFESA:image1:ArrayData",
+        )
+
     def test_half_energy_spectrum_workflow_keeps_real_energy_setpoint_pv(self):
         profile = load_profile("half")
         workflow = get_workflow(profile, "energy_spectrum")
@@ -634,7 +766,75 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(runtime_check.status, "fail")
         self.assertIn("runtime.vm.root", runtime_check.detail)
 
-    def test_virtual_machine_workflow_rejects_non_quad_start_ids(self):
+    def test_machine_acceptance_validator_skips_runtime_for_real_only_orbit_profile(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "realorbit",
+                "family": "linac",
+                "display_name": "Real Orbit",
+                "default_mode": "real",
+            },
+            "elements": [
+                {
+                    "id": "BPM01",
+                    "kind": "bpm",
+                    "display_name": "BPM01",
+                    "order": 1,
+                    "tags": ["orbit"],
+                    "limits": {},
+                    "logical_channels": ["x", "y"],
+                },
+                {
+                    "id": "XC01",
+                    "kind": "corr",
+                    "display_name": "XC01",
+                    "order": 2,
+                    "plane": "x",
+                    "tags": ["orbit"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+                {
+                    "id": "YC01",
+                    "kind": "corr",
+                    "display_name": "YC01",
+                    "order": 3,
+                    "plane": "y",
+                    "tags": ["orbit"],
+                    "limits": {},
+                    "logical_channels": ["setpoint"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "BPM01": {"x": "REAL:BPM01:X", "y": "REAL:BPM01:Y"},
+                "XC01": {"setpoint": "REAL:XC01"},
+                "YC01": {"setpoint": "REAL:YC01"},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            _write_directory_profile_fixture(
+                temp_root,
+                "realorbit",
+                machine_json,
+                backends={"real": real_channels},
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                report = validate_machine_profile("realorbit")
+
+        self.assertTrue(report.ok, report.format_text())
+        runtime_check = report.get_check("runtime")
+        self.assertIsNotNone(runtime_check)
+        assert runtime_check is not None
+        self.assertEqual(runtime_check.status, "skip")
+        self.assertEqual(report.get_check("app:orbit_correct").status, "pass")
+
+    def test_virtual_machine_workflow_accepts_non_quad_segment_start_ids(self):
         machine_json = {
             "schema_version": "1",
             "machine": {
@@ -688,8 +888,13 @@ class MachineProfileTests(unittest.TestCase):
                 apps={"virtual_machine": vm_workflow},
             )
             with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
-                with self.assertRaisesRegex(MachineProfileError, "must reference quad"):
-                    load_profile("vminvalidstart")
+                profile = load_profile("vminvalidstart")
+                start_ids, end_ids, default_start, default_end = resolve_virtual_machine_segment_choices(profile)
+
+        self.assertEqual(start_ids, ("PRF01",))
+        self.assertEqual(end_ids, ("PRF01",))
+        self.assertEqual(default_start, "PRF01")
+        self.assertEqual(default_end, "PRF01")
 
     def test_virtual_machine_workflow_rejects_unknown_end_ids(self):
         machine_json = {
@@ -814,6 +1019,147 @@ class MachineProfileTests(unittest.TestCase):
             with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
                 with self.assertRaisesRegex(MachineProfileError, "default_start_id must belong"):
                     load_profile("vminvaliddefault")
+
+    def test_virtual_machine_usedline_workflow_accepts_lattice_only_segment_ids(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "vmnewworkflow",
+                "family": "linac",
+                "display_name": "VM New Workflow",
+                "default_mode": "real",
+            },
+            "elements": [
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["image"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "Q01": {"k1": "REAL:Q01:K1"},
+                "PRF01": {"image": "REAL:PRF01:IMAGE"},
+            },
+        }
+        vm_workflow = {
+            "predefined_usedlines": [
+                {"id": "ALL_MAIN", "label": "Main Line", "role": "main"},
+                {"id": "ALL_ESA", "label": "ESA Line", "role": "energy_spectrum"},
+            ],
+            "default_usedline": "ALL_MAIN",
+            "local_segments": [
+                {
+                    "id": "esa_segment",
+                    "label": "ESA Segment",
+                    "parent_usedline": "ALL_ESA",
+                    "start_ids": ["QM19"],
+                    "end_ids": ["PRFESA"],
+                    "default_start_id": "QM19",
+                    "default_end_id": "PRFESA",
+                }
+            ],
+            "default_segment_id": "esa_segment",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            _write_directory_profile_fixture(
+                temp_root,
+                "vmnewworkflow",
+                machine_json,
+                backends={"real": real_channels},
+                apps={"virtual_machine": vm_workflow},
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                profile = load_profile("vmnewworkflow")
+                workflow = resolve_virtual_machine_usedline_workflow(profile)
+
+        self.assertEqual(workflow.default_usedline, "ALL_MAIN")
+        self.assertEqual(workflow.local_segments[0].parent_usedline, "ALL_ESA")
+        self.assertEqual(workflow.local_segments[0].end_ids, ("PRFESA",))
+
+    def test_virtual_machine_usedline_workflow_rejects_unknown_default_segment(self):
+        machine_json = {
+            "schema_version": "1",
+            "machine": {
+                "id": "vmnewworkflowbad",
+                "family": "linac",
+                "display_name": "VM New Workflow Bad",
+                "default_mode": "real",
+            },
+            "elements": [
+                {
+                    "id": "Q01",
+                    "kind": "quad",
+                    "display_name": "Q01",
+                    "order": 1,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["k1"],
+                },
+                {
+                    "id": "PRF01",
+                    "kind": "flag",
+                    "display_name": "PRF01",
+                    "order": 2,
+                    "tags": [],
+                    "limits": {},
+                    "logical_channels": ["image"],
+                },
+            ],
+        }
+        real_channels = {
+            "backend": "real",
+            "channels": {
+                "Q01": {"k1": "REAL:Q01:K1"},
+                "PRF01": {"image": "REAL:PRF01:IMAGE"},
+            },
+        }
+        vm_workflow = {
+            "predefined_usedlines": ["ALL_MAIN"],
+            "default_usedline": "ALL_MAIN",
+            "local_segments": [
+                {
+                    "id": "main_segment",
+                    "label": "Main Segment",
+                    "parent_usedline": "ALL_MAIN",
+                    "start_ids": ["Q01"],
+                    "end_ids": ["PRF01"],
+                    "default_start_id": "Q01",
+                    "default_end_id": "PRF01",
+                }
+            ],
+            "default_segment_id": "missing_segment",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            _write_directory_profile_fixture(
+                temp_root,
+                "vmnewworkflowbad",
+                machine_json,
+                backends={"real": real_channels},
+                apps={"virtual_machine": vm_workflow},
+            )
+            with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
+                with self.assertRaisesRegex(MachineProfileError, "default_segment_id must belong"):
+                    load_profile("vmnewworkflowbad")
 
     def test_energy_spectrum_workflow_requires_vm_watch_element(self):
         machine_json = {

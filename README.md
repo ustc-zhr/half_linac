@@ -32,8 +32,10 @@ HALF 直线加速器上层物理应用软件仓库，包含：
 ```bash
 conda env create -f environment.yml
 conda activate base
-source scripts/setup.sh
+bash scripts/runMe
 ```
+
+说明：`scripts/` 下的启动脚本和主要 Python 入口现在都会自行定位仓库，不需要你先在 `.zshrc` / `.bashrc` 里手工追加 `PYTHONPATH`。`source scripts/setup.sh` 只在你想反复手动执行多个 `python3 src/...` 入口时才有帮助。
 
 如果 `environment.yml` 不能直接复用，请至少保证以下依赖可用：
 

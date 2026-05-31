@@ -1,0 +1,5 @@
+record(ao, "$(SIGXRECORD)") {
+    alias("$(SIGXALIAS)")
+    field(DESC, "sigx")
+    field(MDEL, ".01")
+}

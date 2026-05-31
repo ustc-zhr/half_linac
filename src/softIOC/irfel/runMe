@@ -1,0 +1,9 @@
+#!/bin/bash
+
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+EPICS_BASE="${EPICS_BASE:-/mnt/d/A/base-7.0.8/base-7.0.8}"
+export LD_LIBRARY_PATH="$APP_DIR/lib/linux-x86_64:$EPICS_BASE/lib/linux-x86_64:${LD_LIBRARY_PATH:-}"
+
+cd iocBoot/ioctarget
+
+./st.cmd 

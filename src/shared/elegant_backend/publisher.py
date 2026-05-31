@@ -131,7 +131,11 @@ class VmPublisher:
             if str(element.get("DISABLE", "0")) != "0":
                 continue
 
-            watch_output_path = elegant_dir / f"{spec.source_watch_id}.out"
+            watch_output_path = _resolve_watch_output_path(
+                elegant_dir,
+                spec.source_watch_id,
+                element,
+            )
             if not watch_output_path.is_file():
                 print(
                     "flag publish skipped for "
@@ -233,6 +237,22 @@ def _build_beam_monitor_watch_specs(profile: MachineProfile) -> list[VmWatchImag
             )
         )
     return specs
+
+
+def _resolve_watch_output_path(
+    elegant_dir: Path,
+    source_watch_id: str,
+    element: Mapping[str, Any],
+) -> Path:
+    filename = str(element.get("FILENAME") or f"{source_watch_id}.out").strip()
+    filename = filename.strip("\"'")
+    if not filename:
+        filename = f"{source_watch_id}.out"
+
+    output_path = Path(filename)
+    if not output_path.is_absolute():
+        output_path = elegant_dir / output_path
+    return output_path
 
 
 def _build_energy_spectrum_watch_spec(profile: MachineProfile) -> VmWatchImagePublishSpec:

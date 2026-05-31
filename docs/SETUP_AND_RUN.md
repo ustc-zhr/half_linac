@@ -113,7 +113,9 @@ cd half_linac
 
 ## 6. 配置项目环境变量
 
-现在推荐的方式不是手工写绝对路径，而是进入仓库后执行：
+不需要在 `.zshrc` / `.bashrc` 里手工追加 `PYTHONPATH`。仓库自带的 `scripts/` 启动脚本，以及主要 Python 入口文件，现在都会自行定位仓库根和导入路径。
+
+如果你希望在当前 shell 里反复手动执行多个 Python 入口，再执行：
 
 ```bash
 source scripts/setup.sh
@@ -125,7 +127,7 @@ source scripts/setup.sh
 - 导出 `halflinac_ROOT`
 - 把仓库父目录加入 `PYTHONPATH`
 
-这样像 `python3 src/apps/launcher/main.py` 这类入口才可以正常导入 `half_linac.runtime_config`。
+这只是一个方便的 shell 级捷径，不再是运行 `half_linac` 的前置条件。
 
 ## 7. 修改机器相关配置
 

@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
 )
 
 from half_linac.src.shared.machine_profile import (
+    MachineProfileError,
     describe_app_support,
     load_profile,
     normalize_mode,
@@ -37,13 +38,11 @@ from half_linac.src.shared.machine_profile import (
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
-    request_runtime_restart,
 )
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
 from gui import Ui_MainWindow
 
 ROOT = _REPO_BOOTSTRAP_ROOT
-CURRENT_MACHINE_RUNTIME = resolve_machine_runtime()
 HEADER_ACTION_HEIGHT = 32
 
 DARK_THEME = {
@@ -248,6 +247,14 @@ QPushButton {{
     text-align: center;
 }}
 
+QPushButton[compact="true"] {{
+    padding: 0px 12px;
+    min-height: {header_action_height}px;
+    max-height: {header_action_height}px;
+    border-radius: 11px;
+    font-size: 11px;
+}}
+
 QPushButton:hover {{
     background-color: {button_hover_bg};
 }}
@@ -275,6 +282,64 @@ QPushButton#shutdownButton {{
     max-height: {header_action_height}px;
     border-radius: 11px;
     font-size: 11px;
+}}
+
+QComboBox {{
+    background-color: {button_bg};
+    border: 1px solid {button_border};
+    border-radius: 11px;
+    color: {button_fg};
+    padding: 0px 10px;
+    min-height: {header_action_height}px;
+    max-height: {header_action_height}px;
+    font-size: 11px;
+    font-weight: 700;
+}}
+
+QComboBox:hover {{
+    background-color: {button_hover_bg};
+}}
+
+QComboBox::drop-down {{
+    border: none;
+    width: 22px;
+}}
+
+QLabel[role="field"] {{
+    color: {metric_label_fg};
+    background: transparent;
+    border: none;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}}
+
+QMessageBox {{
+    background-color: {frame_bg};
+    color: {window_fg};
+}}
+
+QMessageBox QLabel {{
+    color: {window_fg};
+    background: transparent;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+}}
+
+QMessageBox QPushButton {{
+    background-color: {button_bg};
+    border: 1px solid {button_border};
+    border-radius: 8px;
+    color: {button_fg};
+    min-width: 72px;
+    min-height: 28px;
+    padding: 4px 12px;
+    font-weight: 700;
+}}
+
+QMessageBox QPushButton:hover {{
+    background-color: {button_hover_bg};
 }}
 
 QToolButton#themeToggleButton {{
@@ -471,8 +536,8 @@ APP_DEFINITIONS = {
         "button_text": "Virtual Accelerator",
         "label": "Virtual Accelerator",
         "description": "Open the VM control room and manage the VM plus softIOC workflow.",
-        "cmd": ["python3", CURRENT_MACHINE_RUNTIME.vm.ui_entrypoint.name],
-        "cwd": CURRENT_MACHINE_RUNTIME.vm.root,
+        "cmd": ["python3", "mainVM.py"],
+        "cwd": ROOT / "src/virtual_machine/half_elegant",
     },
     "optimization": {
         "button_name": "online_opt",
@@ -617,6 +682,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
             5000,
         )
 
+    def _refresh_window_identity(self):
+        self.setWindowTitle(f"{self.machine_profile.machine.display_name} Control Room")
+        if hasattr(self, "summary_title"):
+            self.summary_title.setText(f"{self.machine_profile.machine.display_name} Control Room")
+        self.statusBar().showMessage(
+            f"Control Room ready for {self.machine_profile.machine.display_name} ({self.control_backend}).",
+            5000,
+        )
+
     def _build_summary_panel(self):
         panel = QFrame(self.frame)
         panel.setObjectName("summaryPanel")
@@ -630,14 +704,17 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
 
-        title = QLabel(f"{self.machine_profile.machine.display_name} Control Room", panel)
-        title.setObjectName("summaryTitle")
-        header_layout.addWidget(title)
+        self.summary_title = QLabel(f"{self.machine_profile.machine.display_name} Control Room", panel)
+        self.summary_title.setObjectName("summaryTitle")
+        header_layout.addWidget(self.summary_title)
         header_layout.addStretch(1)
 
         self.runtime_selector = RuntimeSelectorWidget(
             current_machine_id=self.machine_profile.machine.id,
             current_control_backend=self.control_backend,
+            control_height=HEADER_ACTION_HEIGHT,
+            machine_width=132,
+            backend_width=118,
             parent=panel,
         )
         self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
@@ -653,7 +730,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.shutdown_button = QPushButton("Shutdown Apps", panel)
         self.shutdown_button.setObjectName("shutdownButton")
         self.shutdown_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        self.shutdown_button.setMinimumWidth(190)
+        self.shutdown_button.setMinimumWidth(142)
         self.shutdown_button.setFixedHeight(HEADER_ACTION_HEIGHT)
         header_layout.addWidget(self.shutdown_button)
         header_layout.addWidget(self.theme_toggle_button)
@@ -732,8 +809,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
             tooltip = spec["description"]
             supported = True
             reason = None
+            if key == "vm_manager":
+                supported, reason = self._refresh_vm_manager_launch_spec(spec)
+                if not supported and reason:
+                    tooltip = (
+                        f"{spec['description']}\n\n"
+                        f"Unavailable for machine '{self.machine_profile.machine.id}': {reason}"
+                    )
             profile_app_name = PROFILE_MANAGED_APP_KEYS.get(key)
-            if profile_app_name is not None:
+            if supported and profile_app_name is not None:
                 supported, reason = describe_app_support(
                     self.machine_profile.machine.id,
                     profile_app_name,
@@ -748,6 +832,17 @@ class myWindow(QMainWindow, Ui_MainWindow):
             button.setEnabled(supported)
             button.setToolTip(tooltip)
             self._refresh_widget_style(button)
+
+    def _refresh_vm_manager_launch_spec(self, spec):
+        if "vm" not in self.machine_profile.control_backends:
+            return False, "VM backend is not configured for this machine."
+        try:
+            runtime = resolve_machine_runtime(self.machine_profile)
+        except MachineProfileError as exc:
+            return False, str(exc)
+        spec["cmd"] = ["python3", runtime.vm.ui_entrypoint.name]
+        spec["cwd"] = runtime.vm.root
+        return True, None
 
     def _configure_session_buttons(self):
         self.groupBox.hide()
@@ -837,13 +932,40 @@ class myWindow(QMainWindow, Ui_MainWindow):
             QMessageBox.warning(self, "Control Room", message)
             return
 
-        request_runtime_restart(
-            self,
-            app_label="Control Room",
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.control_backend,
-            machine_id=machine_id,
-            control_backend=control_backend,
+        normalized_backend = normalize_mode(control_backend, "control_backend")
+        if machine_id == self.machine_profile.machine.id and normalized_backend == self.control_backend:
+            self._notify("Runtime selection is already active.")
+            return
+
+        try:
+            next_profile = load_profile(machine_id)
+        except MachineProfileError as exc:
+            message = f"Failed to switch runtime: {exc}"
+            self._notify(message)
+            QMessageBox.warning(self, "Control Room", message)
+            return
+
+        if normalized_backend not in next_profile.control_backends:
+            message = (
+                f"Backend {normalized_backend!r} is not configured for "
+                f"machine {next_profile.machine.id!r}."
+            )
+            self._notify(message)
+            QMessageBox.warning(self, "Control Room", message)
+            return
+
+        os.environ["HALF_MACHINE_ID"] = next_profile.machine.id
+        os.environ["HALF_CONTROL_BACKEND"] = normalized_backend
+        self.machine_profile = next_profile
+        self.control_backend = normalized_backend
+
+        self._refresh_window_identity()
+        self._refresh_machine_capabilities()
+        self._reset_activity_log()
+        self._refresh_process_state()
+        self._notify(
+            f"Runtime switched to machine={self.machine_profile.machine.id}, "
+            f"backend={self.control_backend}."
         )
 
     def _shutdown_all(self):
@@ -909,7 +1031,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._set_summary_value("tools", "Idle", "idle")
 
         backend_tone = "warning" if self.control_backend == "real" else "active"
-        self._set_summary_value("machine", self.machine_profile.machine.id, "idle")
+        self._set_summary_value("machine", self.machine_profile.machine.id, "active")
         self._set_summary_value("backend", self.control_backend.upper(), backend_tone)
 
         has_running_processes = active_count > 0
