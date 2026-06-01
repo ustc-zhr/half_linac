@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+
+
+def resolve_initial_visibility(
+    keys: Sequence[str],
+    previous_visibility: Mapping[str, bool] | None = None,
+    explicit_visible_keys: Sequence[str] | None = None,
+    default_visible_count: int = 0,
+) -> dict[str, bool]:
+    """Resolve per-series visibility with support for default display limits."""
+
+    previous = {
+        str(key): bool(value)
+        for key, value in dict(previous_visibility or {}).items()
+        if str(key).strip()
+    }
+    explicit = {
+        str(key)
+        for key in (explicit_visible_keys or [])
+        if str(key).strip()
+    }
+    visible_limit = max(int(default_visible_count), 0)
+
+    resolved: dict[str, bool] = {}
+    for index, key in enumerate(keys):
+        token = str(key).strip()
+        if not token:
+            continue
+        if explicit:
+            resolved[token] = token in explicit
+        elif token in previous:
+            resolved[token] = previous[token]
+        else:
+            resolved[token] = index < visible_limit
+    return resolved
+
+
+def slice_series_tail(
+    x_values: Sequence[float],
+    y_values: Sequence[float],
+    max_points: int | None = None,
+) -> tuple[Sequence[float], Sequence[float]]:
+    """Return full series or its trailing window while keeping x/y aligned."""
+    if max_points is None:
+        return x_values, y_values
+
+    limit = max(int(max_points), 0)
+    if limit <= 0:
+        return _slice_sequence_tail(x_values, 0), _slice_sequence_tail(y_values, 0)
+    if len(x_values) <= limit and len(y_values) <= limit:
+        return x_values, y_values
+    return _slice_sequence_tail(x_values, limit), _slice_sequence_tail(y_values, limit)
+
+
+def _slice_sequence_tail(values: Sequence[float], limit: int) -> Sequence[float]:
+    try:
+        return values[-limit:] if limit > 0 else values[:0]
+    except TypeError:
+        rows = list(values)
+        return rows[-limit:] if limit > 0 else rows[:0]

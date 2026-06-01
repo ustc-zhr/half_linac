@@ -1,0 +1,2490 @@
+{
+  "schema_version": "2.0",
+  "machine": {
+    "name": "IRFEL",
+    "facility": "IRFEL",
+    "description": "IRFEL control-room PV library"
+  },
+  "defaults": {
+    "acquisition": {
+      "sample_interval_sec": 0.2,
+      "sample_count": 200,
+      "timeout_sec": 1.0,
+      "mode": "poll"
+    },
+    "scan": {
+      "settle_mode": "fixed_delay",
+      "settle_delay_sec": 0.5,
+      "sample_count_per_step": 20,
+      "restore_initial_value": true,
+      "max_wait_sec": 3.0
+    },
+    "storage": {
+      "format": "hdf5",
+      "save_raw_data": true,
+      "save_analysis_summary": true
+    },
+    "safety": {
+      "confirm_before_write": true,
+      "abort_on_disconnection": true
+    }
+  },
+  "groups": [
+    {
+      "id": "steering_x",
+      "label": "Steering X",
+      "kind": "knob",
+      "color": "#c84c09",
+      "order": 10
+    },
+    {
+      "id": "steering_y",
+      "label": "Steering Y",
+      "kind": "knob",
+      "color": "#2a6f97",
+      "order": 20
+    },
+    {
+      "id": "solenoid",
+      "label": "Solenoid",
+      "kind": "knob",
+      "color": "#5b8c5a",
+      "order": 30
+    },
+    {
+      "id": "quadrupole",
+      "label": "Quadrupole",
+      "kind": "knob",
+      "color": "#6c757d",
+      "order": 35
+    },
+    {
+      "id": "bend",
+      "label": "Bend",
+      "kind": "knob",
+      "color": "#355070",
+      "order": 36
+    },
+    {
+      "id": "modulator",
+      "label": "Modulator",
+      "kind": "knob",
+      "color": "#bc6c25",
+      "order": 37
+    },
+    {
+      "id": "ct",
+      "label": "CT",
+      "kind": "object",
+      "color": "#8d6a9f",
+      "order": 40
+    },
+    {
+      "id": "radiation",
+      "label": "Radiation",
+      "kind": "object",
+      "color": "#cc5803",
+      "order": 50
+    },
+    {
+      "id": "bpm_x",
+      "label": "BPM X",
+      "kind": "object",
+      "color": "#20639b",
+      "order": 60
+    },
+    {
+      "id": "bpm_y",
+      "label": "BPM Y",
+      "kind": "object",
+      "color": "#3caea3",
+      "order": 70
+    },
+    {
+      "id": "shb",
+      "label": "SHB",
+      "kind": "object",
+      "color": "#7b6d8d",
+      "order": 80
+    },
+    {
+      "id": "gun",
+      "label": "Gun",
+      "kind": "object",
+      "color": "#8a5a44",
+      "order": 85
+    },
+    {
+      "id": "kly1",
+      "label": "KLY1",
+      "kind": "object",
+      "color": "#a44a3f",
+      "order": 90
+    },
+    {
+      "id": "esa",
+      "label": "ESA",
+      "kind": "object",
+      "color": "#4d908e",
+      "order": 100
+    }
+  ],
+  "knobs": [
+    {
+      "id": "hc01_current",
+      "name": "HC01",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HC01:current:ao",
+      "readback_pv": "IRFEL:PS:HC01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "hc02_current",
+      "name": "HC02",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HC02:current:ao",
+      "readback_pv": "IRFEL:PS:HC02:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "hc03_current",
+      "name": "HC03",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HC03:current:ao",
+      "readback_pv": "IRFEL:PS:HC03:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "hc04_current",
+      "name": "HC04",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HC04:current:ao",
+      "readback_pv": "IRFEL:PS:HC04:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "hc05_current",
+      "name": "HC05",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HC05:current:ao",
+      "readback_pv": "IRFEL:PS:HC05:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "hc06_current",
+      "name": "HC06",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HC06:current:ao",
+      "readback_pv": "IRFEL:PS:HC06:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "hc07_current",
+      "name": "HC07",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HC07:current:ao",
+      "readback_pv": "IRFEL:PS:HC07:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "hic01_current",
+      "name": "HIC01",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HIC01:current:ao",
+      "readback_pv": "IRFEL:PS:HIC01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "hic02_current",
+      "name": "HIC02",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:HIC02:current:ao",
+      "readback_pv": "IRFEL:PS:HIC02:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "mshc_current",
+      "name": "MSHC",
+      "group": "steering_x",
+      "write_pv": "IRFEL:PS:MS:HC:current:ao",
+      "readback_pv": "IRFEL:PS:MS:HC:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "vc01_current",
+      "name": "VC01",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VC01:current:ao",
+      "readback_pv": "IRFEL:PS:VC01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "vc02_current",
+      "name": "VC02",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VC02:current:ao",
+      "readback_pv": "IRFEL:PS:VC02:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "vc03_current",
+      "name": "VC03",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VC03:current:ao",
+      "readback_pv": "IRFEL:PS:VC03:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "vc04_current",
+      "name": "VC04",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VC04:current:ao",
+      "readback_pv": "IRFEL:PS:VC04:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "vc05_current",
+      "name": "VC05",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VC05:current:ao",
+      "readback_pv": "IRFEL:PS:VC05:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "vc06_current",
+      "name": "VC06",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VC06:current:ao",
+      "readback_pv": "IRFEL:PS:VC06:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "vc07_current",
+      "name": "VC07",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VC07:current:ao",
+      "readback_pv": "IRFEL:PS:VC07:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "vic01_current",
+      "name": "VIC01",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VIC01:current:ao",
+      "readback_pv": "IRFEL:PS:VIC01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "vic02_current",
+      "name": "VIC02",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:VIC02:current:ao",
+      "readback_pv": "IRFEL:PS:VIC02:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "msvc_current",
+      "name": "MSVC",
+      "group": "steering_y",
+      "write_pv": "IRFEL:PS:MS:VC:current:ao",
+      "readback_pv": "IRFEL:PS:MS:VC:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -5.0,
+        "high": 5.0
+      },
+      "step_hint": 0.05,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.01,
+        "max_wait_sec": 3.0
+      },
+      "tags": [
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "ms01_current",
+      "name": "MS01",
+      "group": "solenoid",
+      "write_pv": "IRFEL:PS:MS01:current:ao",
+      "readback_pv": "IRFEL:PS:MS01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": 0.0,
+        "high": 20.0
+      },
+      "step_hint": 0.1,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.02,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "solenoid",
+        "focus"
+      ]
+    },
+    {
+      "id": "ls01_current",
+      "name": "LS01",
+      "group": "solenoid",
+      "write_pv": "IRFEL:PS:LS01:current:ao",
+      "readback_pv": "IRFEL:PS:LS01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": 0.0,
+        "high": 20.0
+      },
+      "step_hint": 0.1,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.02,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "solenoid",
+        "focus"
+      ]
+    },
+    {
+      "id": "ss01_current",
+      "name": "SS01",
+      "group": "solenoid",
+      "write_pv": "IRFEL:PS:SS01:current:ao",
+      "readback_pv": "IRFEL:PS:SS01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": 0.0,
+        "high": 20.0
+      },
+      "step_hint": 0.1,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.02,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "solenoid",
+        "focus"
+      ]
+    },
+    {
+      "id": "ss02_current",
+      "name": "SS02",
+      "group": "solenoid",
+      "write_pv": "IRFEL:PS:SS02:current:ao",
+      "readback_pv": "IRFEL:PS:SS02:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": 0.0,
+        "high": 20.0
+      },
+      "step_hint": 0.1,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.02,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "solenoid",
+        "focus"
+      ]
+    },
+    {
+      "id": "qm01_current",
+      "name": "QM01",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM01:current:ao",
+      "readback_pv": "IRFEL:PS:QM01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm02_current",
+      "name": "QM02",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM02:current:ao",
+      "readback_pv": "IRFEL:PS:QM02:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm03_current",
+      "name": "QM03",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM03:current:ao",
+      "readback_pv": "IRFEL:PS:QM03:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm04_current",
+      "name": "QM04",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM04:current:ao",
+      "readback_pv": "IRFEL:PS:QM04:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm05_current",
+      "name": "QM05",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM05:current:ao",
+      "readback_pv": "IRFEL:PS:QM05:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm06_current",
+      "name": "QM06",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM06:current:ao",
+      "readback_pv": "IRFEL:PS:QM06:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm07_current",
+      "name": "QM07",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM07:current:ao",
+      "readback_pv": "IRFEL:PS:QM07:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm08_current",
+      "name": "QM08",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM08:current:ao",
+      "readback_pv": "IRFEL:PS:QM08:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm09_current",
+      "name": "QM09",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM09:current:ao",
+      "readback_pv": "IRFEL:PS:QM09:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm10_current",
+      "name": "QM10",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM10:current:ao",
+      "readback_pv": "IRFEL:PS:QM10:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm11_current",
+      "name": "QM11",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM11:current:ao",
+      "readback_pv": "IRFEL:PS:QM11:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm12_current",
+      "name": "QM12",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM12:current:ao",
+      "readback_pv": "IRFEL:PS:QM12:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm13_current",
+      "name": "QM13",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM13:current:ao",
+      "readback_pv": "IRFEL:PS:QM13:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm14_current",
+      "name": "QM14",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM14:current:ao",
+      "readback_pv": "IRFEL:PS:QM14:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm15_current",
+      "name": "QM15",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM15:current:ao",
+      "readback_pv": "IRFEL:PS:QM15:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm16_current",
+      "name": "QM16",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM16:current:ao",
+      "readback_pv": "IRFEL:PS:QM16:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm17_current",
+      "name": "QM17",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM17:current:ao",
+      "readback_pv": "IRFEL:PS:QM17:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm18_current",
+      "name": "QM18",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM18:current:ao",
+      "readback_pv": "IRFEL:PS:QM18:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm19_current",
+      "name": "QM19",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM19:current:ao",
+      "readback_pv": "IRFEL:PS:QM19:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "qm20_current",
+      "name": "QM20",
+      "group": "quadrupole",
+      "write_pv": "IRFEL:PS:QM20:current:ao",
+      "readback_pv": "IRFEL:PS:QM20:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -20.0,
+        "high": 20.0
+      },
+      "step_hint": 0.2,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.3,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 5.0
+      },
+      "tags": [
+        "quadrupole",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "bm01_current",
+      "name": "BM01",
+      "group": "bend",
+      "write_pv": "IRFEL:PS:BM01:current:ao",
+      "readback_pv": "IRFEL:PS:BM01:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -15.0,
+        "high": 15.0
+      },
+      "step_hint": 0.5,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 6.0
+      },
+      "tags": [
+        "bend",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "bm02_current",
+      "name": "BM02",
+      "group": "bend",
+      "write_pv": "IRFEL:PS:BM02:current:ao",
+      "readback_pv": "IRFEL:PS:BM02:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -15.0,
+        "high": 15.0
+      },
+      "step_hint": 0.5,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 6.0
+      },
+      "tags": [
+        "bend",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "bm03_current",
+      "name": "BM03",
+      "group": "bend",
+      "write_pv": "IRFEL:PS:BM03:current:ao",
+      "readback_pv": "IRFEL:PS:BM03:current:ai",
+      "unit": "A",
+      "access": "rw",
+      "limits": {
+        "low": -15.0,
+        "high": 15.0
+      },
+      "step_hint": 0.5,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.05,
+        "max_wait_sec": 6.0
+      },
+      "tags": [
+        "bend",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "modulator_hv1_set",
+      "name": "modulator_HV1",
+      "group": "modulator",
+      "write_pv": "IRFEL:modulator1:HV:set:ao",
+      "readback_pv": "IRFEL:modulator1:HV:ai",
+      "unit": "kV",
+      "access": "rw",
+      "limits": {
+        "low": 0.0,
+        "high": 80.0
+      },
+      "step_hint": 2.0,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 1.0,
+        "readback_tolerance": 0.2,
+        "max_wait_sec": 8.0
+      },
+      "tags": [
+        "modulator",
+        "hv",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    },
+    {
+      "id": "modulator_hv2_set",
+      "name": "modulator_HV2",
+      "group": "modulator",
+      "write_pv": "IRFEL:modulator2:HV:set:ao",
+      "readback_pv": "IRFEL:modulator2:HV:ai",
+      "unit": "kV",
+      "access": "rw",
+      "limits": {
+        "low": 0.0,
+        "high": 80.0
+      },
+      "step_hint": 2.0,
+      "settle": {
+        "mode": "fixed_delay",
+        "delay_sec": 1.0,
+        "readback_tolerance": 0.2,
+        "max_wait_sec": 8.0
+      },
+      "tags": [
+        "modulator",
+        "hv",
+        "legacy_import"
+      ],
+      "note": "Imported from legacy irfel_pvlist_zz.json. Limits, step_hint, and settle settings are provisional and must be confirmed before scan use."
+    }
+  ],
+  "objects": [
+    {
+      "id": "filament_hv",
+      "name": "FILAMENT_HV",
+      "group": "gun",
+      "read_pv": "IRFEL:EG:PS:voltage:ai",
+      "unit": "a.u.",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "gun"
+      ]
+    },
+    {
+      "id": "filament_current",
+      "name": "FILAMENT_CURRENT",
+      "group": "gun",
+      "read_pv": "IRFEL:EG:PS:voltagebattery:ai",
+      "unit": "a.u.",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "gun"
+      ]
+    },
+    {
+      "id": "gun_hv",
+      "name": "GUN_HV",
+      "group": "gun",
+      "read_pv": "IRFEL:EG:HV:voltage:ai",
+      "unit": "a.u.",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "gun"
+      ]
+    },
+    {
+      "id": "gun_current",
+      "name": "GUN_CURRENT",
+      "group": "gun",
+      "read_pv": "IRFEL:EG:HV:current:ai",
+      "unit": "a.u.",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "gun"
+      ]
+    },
+    {
+      "id": "ch1_asum",
+      "name": "FCT_ASUM",
+      "group": "ct",
+      "read_pv": "IRFEL:BD:CT:CH1:WAV:ASUM",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "charge",
+        "ct"
+      ]
+    },
+    {
+      "id": "ch2_asum",
+      "name": "CH2_ASUM",
+      "group": "ct",
+      "read_pv": "IRFEL:BD:CT:CH2:WAV:ASUM",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "charge",
+        "ct"
+      ]
+    },
+    {
+      "id": "ch3_asum",
+      "name": "CH3_ASUM",
+      "group": "ct",
+      "read_pv": "IRFEL:BD:CT:CH3:WAV:ASUM",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "charge",
+        "ct"
+      ]
+    },
+    {
+      "id": "ch4_asum",
+      "name": "CH4_ASUM",
+      "group": "ct",
+      "read_pv": "IRFEL:BD:CT:CH4:WAV:ASUM",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "charge",
+        "ct"
+      ]
+    },
+    {
+      "id": "fel_ene",
+      "name": "FEL_ENE",
+      "group": "radiation",
+      "read_pv": "FEL:Energy",
+      "unit": "uJ",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "fel",
+        "energy"
+      ]
+    },
+    {
+      "id": "bpm01_x",
+      "name": "BPM01_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM01:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm02_x",
+      "name": "BPM02_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM02:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm03_x",
+      "name": "BPM03_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM03:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm04_x",
+      "name": "BPM04_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM04:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm05_x",
+      "name": "BPM05_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM05:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm06_x",
+      "name": "BPM06_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM06:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm07_x",
+      "name": "BPM07_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM07:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm08_x",
+      "name": "BPM08_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM08:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm09_x",
+      "name": "BPM09_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM09:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm10_x",
+      "name": "BPM10_x",
+      "group": "bpm_x",
+      "read_pv": "IRFEL-BI:BPM10:BPM_PX2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "horizontal"
+      ]
+    },
+    {
+      "id": "bpm01_y",
+      "name": "BPM01_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM01:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm02_y",
+      "name": "BPM02_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM02:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm03_y",
+      "name": "BPM03_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM03:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm04_y",
+      "name": "BPM04_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM04:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm05_y",
+      "name": "BPM05_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM05:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm06_y",
+      "name": "BPM06_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM06:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm07_y",
+      "name": "BPM07_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM07:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm08_y",
+      "name": "BPM08_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM08:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm09_y",
+      "name": "BPM09_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM09:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "bpm10_y",
+      "name": "BPM10_y",
+      "group": "bpm_y",
+      "read_pv": "IRFEL-BI:BPM10:BPM_PY2",
+      "unit": "mm",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "bpm",
+        "orbit",
+        "vertical"
+      ]
+    },
+    {
+      "id": "shb_ref_amp",
+      "name": "SHB REF Amp",
+      "group": "shb",
+      "read_pv": "IRFEL:IN-MW:SHB:GET_CH7_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "shb",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "shb_ref_pha",
+      "name": "SHB REF Phase",
+      "group": "shb",
+      "read_pv": "IRFEL:IN-MW:SHB:GET_CH7_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "shb",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "shb_vm_amp",
+      "name": "SHB VM Amp",
+      "group": "shb",
+      "read_pv": "IRFEL:IN-MW:SHB:GET_CH8_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "shb",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "shb_vm_pha",
+      "name": "SHB VM Phase",
+      "group": "shb",
+      "read_pv": "IRFEL:IN-MW:SHB:GET_CH8_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "shb",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "shb_pplus_amp",
+      "name": "SHB PPLUS Amp",
+      "group": "shb",
+      "read_pv": "IRFEL:IN-MW:SHB:GET_CH4_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "shb",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "shb_pplus_pha",
+      "name": "SHB PPLUS Phase",
+      "group": "shb",
+      "read_pv": "IRFEL:IN-MW:SHB:GET_CH4_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "shb",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "shb_pc_amp",
+      "name": "SHB PC Amp",
+      "group": "shb",
+      "read_pv": "IRFEL:IN-MW:SHB:GET_CH3_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "shb",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "shb_pc_pha",
+      "name": "SHB PC Phase",
+      "group": "shb",
+      "read_pv": "IRFEL:IN-MW:SHB:GET_CH3_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "shb",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_pc_amp",
+      "name": "KLY1 PC Amp",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH7_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_ref_pha",
+      "name": "KLY1 REF Phase",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH7_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_vm_amp",
+      "name": "KLY1 VM Amp",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH8_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_vm_pha",
+      "name": "KLY1 VM Phase",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH8_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_ssa_amp",
+      "name": "KLY1 SSA Amp",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH1_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_ssa_pha",
+      "name": "KLY1 SSA Phase",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH1_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_for_amp",
+      "name": "KLY1 FOR Amp",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH2_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_for_pha",
+      "name": "KLY1 FOR Phase",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH2_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_acc1_amp",
+      "name": "KLY1 ACC1 Amp",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH6_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_acc1_pha",
+      "name": "KLY1 ACC1 Phase",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH6_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_acc1load_amp",
+      "name": "KLY1 ACC1LOAD Amp",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH4_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_acc1load_pha",
+      "name": "KLY1 ACC1LOAD Phase",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH4_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_bc_amp",
+      "name": "KLY1 BC Amp",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH5_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_bc_pha",
+      "name": "KLY1 BC Phase",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH5_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_bcload_amp",
+      "name": "KLY1 BCLOAD Amp",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH3_AMP",
+      "unit": "a.u.",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "amplitude",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "kly1_bcload_pha",
+      "name": "KLY1 BCLOAD Phase",
+      "group": "kly1",
+      "read_pv": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE",
+      "unit": "deg",
+      "precision": 3,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "rf",
+        "kly1",
+        "phase",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "beam_energy",
+      "name": "BEAM ENERGY",
+      "group": "esa",
+      "read_pv": "IRFEL:BD:ESA:H:E",
+      "unit": "MeV",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "beam",
+        "energy",
+        "esa",
+        "legacy_import"
+      ]
+    },
+    {
+      "id": "beam_es",
+      "name": "BEAM ES",
+      "group": "esa",
+      "read_pv": "IRFEL:BD:ESA:H:Sigma:Centroid",
+      "unit": "a.u.",
+      "precision": 4,
+      "kind": "scalar",
+      "access": "ro",
+      "analysis": {
+        "jitter": true,
+        "correlation": true,
+        "spectrum": true
+      },
+      "tags": [
+        "beam",
+        "esa",
+        "legacy_import"
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "id": "bpm_fast_jitter",
+      "name": "BPM Fast Jitter",
+      "mode": "timed_acquisition",
+      "targets": [
+        "bpm01_x",
+        "bpm01_y",
+        "bpm02_x",
+        "bpm02_y",
+        "fel_ene"
+      ],
+      "sample_interval_sec": 0.1,
+      "sample_count": 500
+    },
+    {
+      "id": "hc01_orbit_scan",
+      "name": "HC01 Orbit Scan",
+      "mode": "knob_scan",
+      "knob_id": "hc01_current",
+      "scan_values": [
+        -0.2,
+        -0.1,
+        0.0,
+        0.1,
+        0.2
+      ],
+      "settle_delay_sec": 1.0,
+      "sample_count_per_step": 20,
+      "targets": [
+        "bpm01_x",
+        "bpm01_y",
+        "bpm02_x",
+        "bpm02_y",
+        "ch2_asum",
+        "fel_ene"
+      ]
+    }
+  ]
+}
