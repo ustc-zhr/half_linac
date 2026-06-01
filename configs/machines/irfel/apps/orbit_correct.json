@@ -1,11 +1,6 @@
 {
   "bpms": [
-    "BPM01",
-    "BPM02",
     "BPM03",
-    "BPM04",
-    "BPM05",
-    "BPM06",
     "BPM07",
     "BPM08",
     "BPM09",
@@ -14,28 +9,19 @@
   "xcors": [
     "HC01",
     "HC02",
-    "HC03",
-    "HC04",
     "HC05",
     "HC06",
-    "HC07",
-    "HIC01",
-    "HIC02",
-    "MSHC"
+    "HC07"
   ],
   "ycors": [
     "VC01",
     "VC02",
-    "VC03",
-    "VC04",
     "VC05",
     "VC06",
-    "VC07",
-    "VIC01",
-    "VIC02",
-    "MSVC"
+    "VC07"
   ],
   "response_wait_s_by_backend": {
+    "vm": 3.0,
     "real": 1.0
   },
   "corrector_upperlimit_rad": 0.001

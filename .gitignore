@@ -29,6 +29,7 @@ gui_old.ui
 bo_state.json
 bo_record.json
 jitterfile_*.txt
+src/apps/orbit_correct/runtime/
 
 # Runtime artifacts
 *.log

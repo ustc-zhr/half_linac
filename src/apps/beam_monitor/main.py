@@ -406,6 +406,7 @@ class myWindow(QWidget, Ui_Form):
         self.is_timer_running = True
         self._pv_available = False
         self._pv_error = None
+        self._profile_warning = None
         self.tmppv = self.flag_ids[0] if self.flag_ids else ""
 
         self.h = None
@@ -787,12 +788,48 @@ class myWindow(QWidget, Ui_Form):
 
     def _draw_placeholder_plot(self, title):
         palette = self._palette()
+        self._clear_image_plot_state()
+        self._clear_profile_stats()
         self.widget.axes.clear()
         self._style_plot_axes()
         self.widget.axes.set_title(title, color=palette["plot_text"], fontsize=11, fontweight="bold", loc="left")
         self.widget.axes.set_xlabel("x (mm)")
         self.widget.axes.set_ylabel("y (mm)")
+        self.widget.axes.set_xlim(self.xlim)
+        self.widget.axes.set_ylim(self.ylim)
         self.widget.canvas.draw()
+
+    def _clear_image_plot_state(self):
+        if self.colorbar is not None:
+            try:
+                self.colorbar.remove()
+            except (AttributeError, KeyError, ValueError):
+                pass
+            self.colorbar = None
+        self.h = None
+
+    def _clear_profile_stats(self):
+        self.sigx = None
+        self.sigy = None
+        if hasattr(self, "lineEdit_5"):
+            self.lineEdit_5.setText("--")
+        if hasattr(self, "lineEdit_6"):
+            self.lineEdit_6.setText("--")
+
+    def _active_image_axes(self):
+        if self.h is None:
+            return None
+        axes = getattr(self.h, "axes", None)
+        if axes is None:
+            self.h = None
+        return axes
+
+    def _show_profile_placeholder(self, title, warning=None):
+        if warning and warning != self._profile_warning:
+            print(warning)
+            self._profile_warning = warning
+        self._draw_placeholder_plot(title)
+        self._refresh_status()
 
     def _style_plot_axes(self):
         palette = self._palette()
@@ -873,9 +910,10 @@ class myWindow(QWidget, Ui_Form):
         tmp2 = tuple(np.array(self.extent)[2:4] - offy)
         self.extent = tmp1 + tmp2
 
-        if self.h is not None:
-            self.h.axes.set_xlim(tmp1)
-            self.h.axes.set_ylim(tmp2)
+        axes = self._active_image_axes()
+        if axes is not None:
+            axes.set_xlim(tmp1)
+            axes.set_ylim(tmp2)
             self.widget.canvas.draw()
 
     def init_realOrVM(self):
@@ -967,40 +1005,52 @@ class myWindow(QWidget, Ui_Form):
             self._mark_pv_available()
         except Exception as exc:
             self._mark_pv_unavailable(exc)
-            self.sigx = None
-            self.sigy = None
-            self.lineEdit_5.setText("--")
-            self.lineEdit_6.setText("--")
-            self._draw_placeholder_plot("Beam Profile / Offline")
-            self._refresh_status()
+            self._show_profile_placeholder("Beam Profile / Offline")
             return
 
         if tmp is None:
-            print(f"Warning: {self.pv} has no image data.")
-            self._draw_placeholder_plot(f"{self.tmppv} / No Data")
-            self._refresh_status()
+            self._show_profile_placeholder(
+                f"{self.tmppv} / No Data",
+                warning=f"Warning: {self.pv} has no image data.",
+            )
             return
 
-        data_ini = list(map(float, tmp))
         try:
-            data = np.reshape(data_ini, (self.pixel[1], self.pixel[0]))
-        except ValueError as exc:
-            print(f"Warning: beam profile reshape failed: {exc}")
-            self._draw_placeholder_plot(f"{self.tmppv} / Invalid Data")
-            self._refresh_status()
+            data_ini = list(map(float, tmp))
+        except TypeError as exc:
+            self._show_profile_placeholder(
+                f"{self.tmppv} / Invalid Data",
+                warning=f"Warning: beam profile data is not array-like: {exc}",
+            )
             return
 
-        self.sigx = None
-        self.sigy = None
+        expected_size = self.pixel[0] * self.pixel[1]
+        if len(data_ini) != expected_size:
+            if len(data_ini) == 0:
+                title = f"{self.tmppv} / Not In Active Usedline"
+                warning = (
+                    f"Warning: {self.tmppv} has no VM image data in the active usedline. "
+                    "Switch to a usedline containing this flag, or select a published flag."
+                )
+            else:
+                title = f"{self.tmppv} / Invalid Data"
+                warning = (
+                    f"Warning: beam profile data length mismatch for {self.tmppv}: "
+                    f"got {len(data_ini)}, expected {expected_size}."
+                )
+            self._show_profile_placeholder(title, warning=warning)
+            return
 
-        if self.h is not None:
-            self.xlim = self.h.axes.get_xlim()
-            self.ylim = self.h.axes.get_ylim()
+        data = np.reshape(data_ini, (self.pixel[1], self.pixel[0]))
+        self._profile_warning = None
+        self._clear_profile_stats()
 
-        if self.colorbar is not None:
-            self.colorbar.remove()
-            self.colorbar = None
+        axes = self._active_image_axes()
+        if axes is not None:
+            self.xlim = axes.get_xlim()
+            self.ylim = axes.get_ylim()
 
+        self._clear_image_plot_state()
         self.widget.axes.clear()
         self._style_plot_axes()
 

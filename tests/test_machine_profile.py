@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PARENT = REPO_ROOT.parent
 if str(PARENT) not in sys.path:
@@ -515,6 +517,9 @@ class MachineProfileTests(unittest.TestCase):
             resolve_virtual_machine_segment_choices(profile)
         )
         vm_workflow = resolve_virtual_machine_usedline_workflow(profile)
+        from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
+
+        orbit_runtime_paths = orbit_runtime.resolve_orbit_runtime_paths(vm_orbit_context)
 
         self.assertEqual(profile.machine.id, "irfel")
         self.assertEqual(profile.control_backends, ("real", "vm"))
@@ -536,14 +541,14 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(str(runtime.softioc.root).endswith("src/softIOC/irfel"))
         assert orbit_context.orbit_workflow is not None
         assert vm_orbit_context.orbit_workflow is not None
-        self.assertEqual(len(orbit_context.orbit_workflow.bpms), 10)
-        self.assertEqual(len(orbit_context.orbit_workflow.xcors), 10)
-        self.assertEqual(len(orbit_context.orbit_workflow.ycors), 10)
-        self.assertEqual(len(vm_orbit_context.orbit_workflow.bpms), 10)
-        self.assertEqual(orbit_context.orbit_workflow.bpms[0], "BPM01")
+        self.assertEqual(len(orbit_context.orbit_workflow.bpms), 5)
+        self.assertEqual(len(orbit_context.orbit_workflow.xcors), 5)
+        self.assertEqual(len(orbit_context.orbit_workflow.ycors), 5)
+        self.assertEqual(len(vm_orbit_context.orbit_workflow.bpms), 5)
+        self.assertEqual(orbit_context.orbit_workflow.bpms[0], "BPM03")
         self.assertEqual(orbit_context.orbit_workflow.bpms[-1], "BPM10")
-        self.assertEqual(orbit_context.orbit_workflow.xcors[-1], "MSHC")
-        self.assertEqual(orbit_context.orbit_workflow.ycors[-1], "MSVC")
+        self.assertEqual(orbit_context.orbit_workflow.xcors[-1], "HC07")
+        self.assertEqual(orbit_context.orbit_workflow.ycors[-1], "VC07")
         self.assertEqual(workflow["response_wait_s_by_backend"]["real"], 1.0)
         self.assertEqual(workflow["corrector_upperlimit_rad"], 0.001)
         self.assertEqual(beam_workflow["default_flag"], "PRF03")
@@ -565,6 +570,80 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(vm_workflow.local_segments[2].parent_usedline, "ALL_DUMP")
         self.assertEqual(vm_workflow.local_segments[2].end_ids, ("PRF04",))
         self.assertIsNone(orbit_display_context.orbit_workflow)
+        self.assertTrue(
+            str(orbit_runtime_paths["response_matrix_dir"]).endswith(
+                "src/apps/orbit_correct/runtime/irfel/vm/matrices"
+            )
+        )
+        self.assertTrue(
+            str(orbit_runtime_paths["active_response_path"]).endswith(
+                "src/apps/orbit_correct/runtime/irfel/vm/active_response.json"
+            )
+        )
+        self.assertTrue(
+            str(orbit_runtime_paths["corrector_state_path"]).endswith(
+                "src/apps/orbit_correct/runtime/irfel/vm/cor_temp.txt"
+            )
+        )
+
+    def test_orbit_response_matrix_snapshots_are_active_and_profile_checked(self):
+        from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
+
+        context = load_app_context(
+            "orbit_correct",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        matrix = np.eye(10)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(orbit_runtime, "ORBIT_RUNTIME_ROOT", Path(temp_dir)):
+                record = orbit_runtime.write_response_matrix_snapshot(context, matrix)
+                active_path = orbit_runtime.resolve_active_response_matrix(context)
+                records = orbit_runtime.list_response_matrix_records(context)
+
+                self.assertEqual(active_path, Path(record["matrix_path"]))
+                self.assertEqual(len(records), 1)
+                self.assertEqual(records[0]["bpms"][0], "BPM03")
+                self.assertEqual(records[0]["shape"], [10, 10])
+
+                # Dimension is checked when loading, not only when selecting a file.
+                np.savetxt(active_path, np.eye(19))
+                with self.assertRaisesRegex(ValueError, "shape"):
+                    orbit_runtime.resolve_active_response_matrix(context)
+
+    def test_orbit_global_correction_uses_selected_response_submatrix(self):
+        from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
+        from half_linac.src.apps.orbit_correct.correct import OrbitCorrector
+
+        context = load_app_context(
+            "orbit_correct",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        matrix = np.eye(10)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(orbit_runtime, "ORBIT_RUNTIME_ROOT", Path(temp_dir)):
+                orbit_runtime.write_response_matrix_snapshot(context, matrix)
+                with patch.dict(
+                    os.environ,
+                    {
+                        "HALF_MACHINE_ID": "irfel",
+                        "HALF_CONTROL_BACKEND": "vm",
+                    },
+                ):
+                    corrector = OrbitCorrector(
+                        target_BPMlist=["BPM03", "BPM09", "BPM10"],
+                        target_BPMx_values=[0.0, 0.0, 0.0],
+                        target_BPMy_values=[0.0, 0.0, 0.0],
+                    )
+                    corrector._compute_svd(min_singular_value=1e-12)
+
+        self.assertEqual(corrector.target_indices, [0, 3, 4])
+        self.assertEqual(corrector.cor_x_list_target, ["HC01", "HC06", "HC07"])
+        self.assertEqual(corrector.pseudo_inverse_x.shape, (3, 3))
+        self.assertEqual(corrector.pseudo_inverse_y.shape, (3, 3))
 
     def test_irfel_profile_exposes_imported_real_magnet_channels(self):
         profile = load_profile("irfel")

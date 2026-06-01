@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -32,7 +33,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt5.QtCore import QRegExp, QTimer
+from PyQt5.QtCore import QRegExp, Qt, QTimer
 from OrbCorgui import Ui_MainWindow
 
 from half_linac.src.shared.machine_profile import load_app_context
@@ -41,7 +42,12 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
     request_runtime_restart,
 )
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
-from half_linac.src.apps.orbit_correct.profile_runtime import APP_DIR
+from half_linac.src.apps.orbit_correct.profile_runtime import (
+    APP_DIR,
+    get_active_response_matrix_record,
+    list_response_matrix_records,
+    set_active_response_matrix,
+)
 
 HEADER_ACTION_HEIGHT = 32
 
@@ -131,6 +137,18 @@ QFrame#sectionCard, QFrame#toolbarPanel, QFrame#commandPane {{
     border-radius: 14px;
 }}
 
+QFrame#subCard {{
+    background-color: {status_strip_bg};
+    border: 1px solid {status_strip_border};
+    border-radius: 12px;
+}}
+
+QFrame#targetToolbar {{
+    background-color: {status_strip_bg};
+    border: 1px solid {status_strip_border};
+    border-radius: 12px;
+}}
+
 QTabWidget::pane {{
     border: 1px solid {panel_border};
     border-radius: 14px;
@@ -173,6 +191,22 @@ QLabel#panelTitle {{
     font-weight: 700;
 }}
 
+QLabel#subTitle {{
+    color: {summary_title_fg};
+    font-size: 13px;
+    font-weight: 700;
+    background: transparent;
+    border: none;
+}}
+
+QLabel#hintText {{
+    color: {muted_fg};
+    font-size: 11px;
+    font-weight: 500;
+    background: transparent;
+    border: none;
+}}
+
 QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
@@ -213,6 +247,21 @@ QPushButton[compact="true"] {{
     padding: 3px 10px;
     min-height: 22px;
     font-size: 11px;
+}}
+
+QPushButton[primary="true"] {{
+    background-color: {metric_active_fg};
+    border-color: {metric_active_fg};
+    color: {window_bg};
+}}
+
+QPushButton[primary="true"]:hover {{
+    background-color: {metric_active_fg};
+}}
+
+QPushButton[danger="true"] {{
+    color: {metric_warning_fg};
+    border-color: {metric_warning_fg};
 }}
 
 QLineEdit, QComboBox, QDoubleSpinBox {{
@@ -447,6 +496,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.last_notice = "Idle"
         self.process_manager = ManagedProcessGroup(notify=self._notify)
         self.process_manager.install_signal_handlers()
+        self._response_scan_was_running = False
 
         self.all_checkboxes = []
         self._bpmx_spinboxes = []
@@ -467,6 +517,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         # other button
         self.pushButton_5.clicked.connect(self.selectall)
         self.pushButton_6.clicked.connect(self.cancelall)
+        self.load_response_matrix_button.clicked.connect(self.load_response_matrix)
+        self.refresh_response_matrix_button.clicked.connect(self.refresh_response_matrices)
 
         self.comboBox.currentIndexChanged.connect(self._refresh_status)
         self.tabWidget.currentChanged.connect(self._refresh_status)
@@ -482,6 +534,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_timer.timeout.connect(self._refresh_status)
         self.status_timer.start(700)
 
+        self.refresh_response_matrices()
         self._apply_theme()
         self._refresh_status()
 
@@ -669,6 +722,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.scrollArea.setObjectName("targetsScroll")
         self.scrollAreaWidgetContents_2.setObjectName("targetsContent")
+        self.gridLayout_3.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout_3.removeItem(self.gridLayout_2)
+        self.gridLayout_3.addLayout(self.gridLayout_2, 0, 0, 1, 1, Qt.AlignTop)
+        self.gridLayout_3.setRowStretch(0, 0)
+        self.gridLayout_3.setRowStretch(1, 1)
+        self._build_target_bpm_panel()
 
     def _build_tab_layouts(self):
         self.gridLayout_4.setHorizontalSpacing(10)
@@ -677,6 +736,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout_5.setVerticalSpacing(8)
         self.gridLayout_2.setHorizontalSpacing(10)
         self.gridLayout_2.setVerticalSpacing(6)
+        self.gridLayout_2.setContentsMargins(8, 8, 8, 8)
         self.gridLayout.setHorizontalSpacing(0)
         self.gridLayout.setVerticalSpacing(10)
 
@@ -687,9 +747,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.command_pane.setObjectName("commandPane")
         command_layout = QVBoxLayout(self.command_pane)
         command_layout.setContentsMargins(14, 14, 14, 14)
-        command_layout.setSpacing(10)
+        command_layout.setSpacing(12)
         command_layout.addWidget(self._make_panel_title("Correction Session", self.command_pane))
-        command_layout.addLayout(self.gridLayout)
+        command_layout.addWidget(
+            self._make_hint(
+                "Select target BPMs on the right, then run one-to-one correction or global correction with an active response matrix.",
+                self.command_pane,
+            )
+        )
+        command_layout.addWidget(self._build_correction_parameters_card())
+        command_layout.addWidget(self._build_correction_actions_card())
         command_layout.addStretch(1)
         self.horizontalLayout.addWidget(self.command_pane)
 
@@ -703,11 +770,141 @@ class myWindow(QMainWindow, Ui_MainWindow):
         response_layout.setContentsMargins(14, 14, 14, 14)
         response_layout.setSpacing(12)
         response_layout.addWidget(self._make_panel_title("Response Matrix", self.response_pane))
-        response_layout.addStretch(1)
-        self.pushButton.setParent(self.response_pane)
-        self.pushButton.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        response_layout.addWidget(self.pushButton, 0)
+        response_layout.addWidget(
+            self._make_hint(
+                "Measured matrices are stored per machine/backend. Loading a matrix validates metadata before global correction can use it.",
+                self.response_pane,
+            )
+        )
+        response_layout.addWidget(self._build_active_matrix_card())
+        response_layout.addWidget(self._build_matrix_library_card())
+        response_layout.addWidget(self._build_matrix_measure_card())
         response_layout.addStretch(2)
+
+    def _build_target_bpm_panel(self):
+        self.verticalLayout_5.removeItem(self.gridLayout_5)
+        for widget in (
+            self.pushButton_5,
+            self.pushButton_6,
+            self.label_45,
+            self.label_46,
+            self.progressBar,
+        ):
+            self.gridLayout_5.removeWidget(widget)
+
+        toolbar = QFrame(self.right_panel)
+        toolbar.setObjectName("targetToolbar")
+        toolbar_layout = QGridLayout(toolbar)
+        toolbar_layout.setContentsMargins(12, 10, 12, 10)
+        toolbar_layout.setHorizontalSpacing(10)
+        toolbar_layout.setVerticalSpacing(8)
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(8)
+        action_row.addWidget(self.pushButton_5)
+        action_row.addWidget(self.pushButton_6)
+        action_row.addStretch(1)
+
+        toolbar_layout.addLayout(action_row, 0, 0)
+        toolbar_layout.addWidget(self.label_45, 0, 1)
+        toolbar_layout.addWidget(self.label_46, 0, 2)
+        toolbar_layout.addWidget(self.progressBar, 0, 3)
+        toolbar_layout.setColumnStretch(0, 2)
+        toolbar_layout.setColumnStretch(1, 2)
+        toolbar_layout.setColumnStretch(2, 2)
+        toolbar_layout.setColumnStretch(3, 1)
+
+        self.target_toolbar = toolbar
+        self.verticalLayout_5.insertWidget(1, toolbar)
+
+    def _build_correction_parameters_card(self):
+        card, layout = self._make_subcard("Correction Parameters", self.command_pane)
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+
+        rows = (
+            (self.label_6, self.comboBox),
+            (self.samplingIntervalSLabel, self.samplingIntervalSLineEdit),
+            (self.correctorAccuracyUmLabel, self.correctorAccuracyUmLineEdit),
+            (self.sampPerStepLabel, self.sampPerStepLineEdit),
+        )
+        for row, (label, widget) in enumerate(rows):
+            self.gridLayout.removeWidget(label)
+            self.gridLayout.removeWidget(widget)
+            grid.addWidget(label, row, 0)
+            grid.addWidget(widget, row, 1)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
+        layout.addLayout(grid)
+        return card
+
+    def _build_correction_actions_card(self):
+        card, layout = self._make_subcard("Execution", self.command_pane)
+
+        primary_row = QHBoxLayout()
+        primary_row.setContentsMargins(0, 0, 0, 0)
+        primary_row.setSpacing(10)
+        for button in (self.pushButton_4, self.pushButton_3):
+            self.gridLayout.removeWidget(button)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            primary_row.addWidget(button)
+        layout.addLayout(primary_row)
+
+        utility_row = QHBoxLayout()
+        utility_row.setContentsMargins(0, 0, 0, 0)
+        utility_row.setSpacing(10)
+        for button in (self.pushButton_2, self.pushButton_7):
+            self.gridLayout.removeWidget(button)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            utility_row.addWidget(button)
+        layout.addLayout(utility_row)
+
+        self.notice_label = self._make_hint("Status messages appear in the header strip and terminal.", card)
+        layout.addWidget(self.notice_label)
+        return card
+
+    def _build_active_matrix_card(self):
+        card, layout = self._make_subcard("Active Matrix", self.response_pane)
+        self.active_response_matrix_label = QLabel("Active: --", card)
+        self.active_response_matrix_label.setProperty("role", "field")
+        self.active_response_matrix_label.setWordWrap(True)
+        layout.addWidget(self.active_response_matrix_label)
+        return card
+
+    def _build_matrix_library_card(self):
+        card, layout = self._make_subcard("Matrix Library", self.response_pane)
+        self.response_matrix_combo = QComboBox(card)
+        self.response_matrix_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout.addWidget(self.response_matrix_combo)
+
+        matrix_action_row = QHBoxLayout()
+        matrix_action_row.setContentsMargins(0, 0, 0, 0)
+        matrix_action_row.setSpacing(10)
+        self.load_response_matrix_button = QPushButton("Load Selected Matrix", card)
+        self.refresh_response_matrix_button = QPushButton("Refresh List", card)
+        for button in (self.load_response_matrix_button, self.refresh_response_matrix_button):
+            button.setProperty("compact", True)
+            button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            matrix_action_row.addWidget(button)
+        matrix_action_row.addStretch(1)
+        layout.addLayout(matrix_action_row)
+        return card
+
+    def _build_matrix_measure_card(self):
+        card, layout = self._make_subcard("Measure New Matrix", self.response_pane)
+        layout.addWidget(
+            self._make_hint(
+                "A new measurement is timestamped and becomes active automatically.",
+                card,
+            )
+        )
+        self.pushButton.setParent(card)
+        self.pushButton.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        layout.addWidget(self.pushButton, 0)
+        return card
 
     def _configure_form_content(self):
         self.label_6.setProperty("role", "field")
@@ -721,8 +918,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.samplingIntervalSLabel.setText("Sampling Interval (s)")
         self.correctorAccuracyUmLabel.setText("Accuracy (um)")
         self.sampPerStepLabel.setText("Samples / Step")
-        self.label_45.setText("BPM X")
-        self.label_46.setText("BPM Y")
+        self.label_45.setText("BPM X (mm)")
+        self.label_46.setText("BPM Y (mm)")
+        self._hide_target_bpm_unit_labels()
 
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), "Run Correct")
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), "Response Matrix")
@@ -735,6 +933,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.pushButton_5,
             self.pushButton_6,
             self.pushButton_7,
+            self.load_response_matrix_button,
+            self.refresh_response_matrix_button,
         ):
             button.setProperty("compact", True)
 
@@ -745,14 +945,39 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_7.setText("Recover Correctors")
         self.pushButton_5.setText("All BPMs")
         self.pushButton_6.setText("Clear Selection")
+        self.pushButton_4.setProperty("primary", True)
+        self.pushButton_3.setProperty("danger", True)
 
         self.progressBar.setRange(0, len(self.all_checkboxes))
         self.progressBar.setTextVisible(True)
         self.progressBar.setFormat("%v/%m")
 
+    def _hide_target_bpm_unit_labels(self):
+        for label in self.scrollAreaWidgetContents_2.findChildren(QLabel):
+            if label.text().strip().lower() == "mm":
+                label.hide()
+                label.setEnabled(False)
+
     def _make_panel_title(self, text, parent):
         label = QLabel(text, parent)
         label.setObjectName("panelTitle")
+        return label
+
+    def _make_subcard(self, title, parent):
+        card = QFrame(parent)
+        card.setObjectName("subCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+        title_label = QLabel(title, card)
+        title_label.setObjectName("subTitle")
+        layout.addWidget(title_label)
+        return card, layout
+
+    def _make_hint(self, text, parent):
+        label = QLabel(text, parent)
+        label.setObjectName("hintText")
+        label.setWordWrap(True)
         return label
 
     def _palette(self):
@@ -800,6 +1025,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
+        response_running = self.process_manager.is_running("response_matrix")
+        if self._response_scan_was_running and not response_running:
+            self.refresh_response_matrices()
+        self._response_scan_was_running = response_running
+
         total = len(self.all_checkboxes)
         selected = self._selected_bpm_count()
         process_text, process_tone = self._current_process_status()
@@ -811,6 +1041,75 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.set_item("backend", backend_name.upper(), backend_tone)
         self.status_panel.set_item("process", process_text, process_tone)
         self.progressBar.setValue(selected)
+
+    def _format_response_matrix_record(self, record):
+        created_at = str(record.get("created_at", "--"))
+        matrix_file = Path(str(record.get("matrix_file", "--"))).name
+        shape = record.get("shape", ("?", "?"))
+        try:
+            shape_text = f"{shape[0]}x{shape[1]}"
+        except (TypeError, IndexError):
+            shape_text = "?x?"
+        return f"{created_at}  {shape_text}  {matrix_file}"
+
+    def refresh_response_matrices(self):
+        if not hasattr(self, "response_matrix_combo"):
+            return
+
+        current_metadata = self.response_matrix_combo.currentData()
+        self.response_matrix_combo.blockSignals(True)
+        self.response_matrix_combo.clear()
+        records = list_response_matrix_records(self.app_context)
+        for record in records:
+            self.response_matrix_combo.addItem(
+                self._format_response_matrix_record(record),
+                record.get("metadata_path"),
+            )
+        self.response_matrix_combo.blockSignals(False)
+
+        if current_metadata:
+            index = self.response_matrix_combo.findData(current_metadata)
+            if index >= 0:
+                self.response_matrix_combo.setCurrentIndex(index)
+
+        try:
+            active = get_active_response_matrix_record(self.app_context)
+        except Exception as exc:
+            self.active_response_matrix_label.setText(f"Active: invalid ({exc})")
+            return
+
+        if active is None:
+            self.active_response_matrix_label.setText("Active: --")
+            return
+
+        self.active_response_matrix_label.setText(
+            f"Active: {self._format_response_matrix_record(active)}"
+        )
+        active_metadata = active.get("metadata_path")
+        if active_metadata:
+            index = self.response_matrix_combo.findData(active_metadata)
+            if index >= 0:
+                self.response_matrix_combo.setCurrentIndex(index)
+
+    def load_response_matrix(self):
+        metadata_path = self.response_matrix_combo.currentData()
+        if not metadata_path:
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "No response matrix is available for the current machine/backend.",
+            )
+            return
+
+        try:
+            active = set_active_response_matrix(self.app_context, metadata_path)
+        except Exception as exc:
+            QMessageBox.warning(self, "Orbit Correct", str(exc))
+            self.refresh_response_matrices()
+            return
+
+        self._notify(f"Loaded response matrix: {Path(active['matrix_file']).name}")
+        self.refresh_response_matrices()
 
     def _apply_runtime_selection(self, machine_id, control_backend):
         active_processes = (

@@ -22,8 +22,8 @@ from half_linac.src.shared.machine_profile import (
 )
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     FINDRESPONSE_LOG_PATH,
-    RESPONSE_MATRIX_PATH,
     load_orbit_runtime_settings,
+    write_response_matrix_snapshot,
 )
 
 # Configure logging
@@ -192,11 +192,21 @@ class ResponseMatrixCalculator:
             logger.error(f"Failed to calculate response matrix: {str(e)}")
             raise
 
-    def save_matrix(self, filename: str = str(RESPONSE_MATRIX_PATH)) -> None:
+    def save_matrix(self, filename: str | Path | None = None) -> None:
         """Save response matrix to file."""
         try:
-            np.savetxt(filename, self.response_matrix)
-            logger.info(f"Response matrix saved to {filename}")
+            if filename is None:
+                metadata = write_response_matrix_snapshot(self.app_context, self.response_matrix)
+                logger.info(
+                    "Response matrix saved to %s and set active",
+                    metadata["matrix_file"],
+                )
+                return
+
+            output_path = Path(filename)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            np.savetxt(output_path, self.response_matrix)
+            logger.info(f"Response matrix saved to {output_path}")
         except Exception as e:
             logger.error(f"Failed to save matrix: {str(e)}")
             raise

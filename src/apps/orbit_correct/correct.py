@@ -14,7 +14,7 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 from epics import caput_many, PV, caget_many
 from scipy.linalg import svd
 from half_linac.src.shared.machine_profile import (
@@ -22,10 +22,10 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
 )
 from half_linac.src.apps.orbit_correct.profile_runtime import (
-    CORRECTOR_STATE_PATH,
     CORRECT_LOG_PATH,
     RESPONSE_MATRIX_PATH,
     load_orbit_runtime_settings,
+    resolve_active_response_matrix,
 )
 
 
@@ -74,7 +74,8 @@ class OrbitCorrector:
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
 
         # constant definition
-        self.RESPM_FILE = str(RESPONSE_MATRIX_PATH)
+        self.response_matrix_path: Path | None = None
+        self.corrector_state_path = Path(self.orbit_runtime["corrector_state_path"])
         self.d_value = 0.02 * 0.001  # step for corrector
         self.max_value = self.orbit_runtime["corrector_upperlimit_rad"]
         
@@ -98,12 +99,14 @@ class OrbitCorrector:
             missing = [name for name in target_BPMlist if name not in index_map]
             if missing:
                 raise ValueError(f"Unknown target BPMs: {', '.join(missing)}")
+            self.target_indices = [index_map[name] for name in target_BPMlist]
             self.bpm_list_target = list(target_BPMlist)
-            self.cor_x_list_target = [self.cor_x_list_all[index_map[name]] for name in target_BPMlist]
-            self.cor_y_list_target = [self.cor_y_list_all[index_map[name]] for name in target_BPMlist]
+            self.cor_x_list_target = [self.cor_x_list_all[idx] for idx in self.target_indices]
+            self.cor_y_list_target = [self.cor_y_list_all[idx] for idx in self.target_indices]
             self.target_BPMx_values = target_BPMx_values
             self.target_BPMy_values = target_BPMy_values
         else:
+            self.target_indices = []
             self.bpm_list_target = []
             self.cor_x_list_target = []
             self.cor_y_list_target = []
@@ -176,7 +179,8 @@ class OrbitCorrector:
         hcor_vals = caget_many(all_pvname_corx)
         vcor_vals = caget_many(all_pvname_cory)
         
-        with CORRECTOR_STATE_PATH.open('w', encoding='utf-8') as file:
+        self.corrector_state_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.corrector_state_path.open('w', encoding='utf-8') as file:
             for item1, item2 in zip(hcor_vals, vcor_vals):
                 file.write(f"{item1}\t{item2}\n")
 
@@ -323,7 +327,7 @@ class OrbitCorrector:
     def _load_response_matrix(self) -> Tuple[np.ndarray, np.ndarray]:
         """加载并计算响应矩阵的逆矩阵"""
         try:
-            RM = np.loadtxt(self.RESPM_FILE)
+            RM = self._load_valid_response_matrix()
             print(RM)
             ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
             ORM_y = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
@@ -332,11 +336,42 @@ class OrbitCorrector:
             logger.error(f"加载响应矩阵失败: {e}")
             raise
 
+    def _expected_response_shape(self) -> tuple[int, int]:
+        return (2 * self.N_BPM, 2 * self.N_COR)
+
+    def _load_valid_response_matrix(self) -> np.ndarray:
+        expected_shape = self._expected_response_shape()
+        legacy_path = RESPONSE_MATRIX_PATH if self.machine_profile.machine.id == "half" else None
+        matrix_path = resolve_active_response_matrix(
+            self.app_context,
+            legacy_matrix_path=legacy_path,
+        )
+        self.response_matrix_path = matrix_path
+        matrix = np.loadtxt(matrix_path)
+        if matrix.shape != expected_shape:
+            raise ValueError(
+                "Response matrix shape mismatch for "
+                f"{self.machine_profile.machine.id}/{self.machine_mode}: "
+                f"{matrix_path} has shape {matrix.shape}, expected {expected_shape}. "
+                "Run Measure Response Matrix for the current machine/backend before using global correction."
+            )
+        return matrix
+
     def _compute_svd(self, min_singular_value=0.01):
         """计算响应矩阵的SVD分解"""
-        RM = np.loadtxt(self.RESPM_FILE)
-        ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
-        ORM_y = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
+        self._require_targets()
+        RM = self._load_valid_response_matrix()
+        selected = np.array(self.target_indices, dtype=int)
+        ORM_x_full = RM[0:self.N_BPM, 0:self.N_COR]
+        ORM_y_full = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
+        ORM_x = ORM_x_full[np.ix_(selected, selected)]
+        ORM_y = ORM_y_full[np.ix_(selected, selected)]
+        logger.info(
+            "global correction uses %sx%s response submatrix for BPMs: %s",
+            ORM_x.shape[0],
+            ORM_x.shape[1],
+            ", ".join(self.bpm_list_target),
+        )
             
         U_x, s_x, Vt_x = svd(ORM_x, full_matrices=False)
         # self.svd_components_x = (U_x, s_x, Vt_x)
@@ -461,7 +496,7 @@ class OrbitCorrector:
 
     def cor_recover(self) -> None:
         """recvoer all corrector to the value before cor"""
-        cor_path = CORRECTOR_STATE_PATH
+        cor_path = self.corrector_state_path
         if not cor_path.exists():
             raise FileNotFoundError(f"Corrector backup file not found: {cor_path}")
 
