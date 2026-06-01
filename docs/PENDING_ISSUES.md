@@ -49,14 +49,19 @@
 - Background:
   - IRFEL `energy_spectrum` is currently brought up as a VM-only skeleton.
   - The VM workflow uses `PRFESA` as the energy-spectrum image target and uses the IRFEL elegant model backend.
+  - Verified in VM on 2026-06-01:
+    - `PRFESA` VM image publication/display works.
+    - Dispersion calculation works with the IRFEL elegant backend.
   - Real-machine integration is intentionally deferred until site PVs and calibration constants are confirmed.
 - Problem:
   - `configs/machines/irfel/apps/energy_spectrum.json` currently keeps VM-safe/default values and must not be treated as a validated real-machine setup.
-  - The real backend still needs confirmed PVs and physics calibration before enabling operational use.
+  - The scan workflow cannot be meaningfully validated in VM and must be treated as a real-machine commissioning item.
+  - The real backend still needs confirmed PVs, physics calibration, scan bounds, and rollback expectations before enabling operational use.
 - Follow-up:
   - Confirm the real image PV for `PRFESA`, including array shape and pixel width.
   - Confirm whether `exposure_time`, `sigx`, and `sigy` are available from the real camera/diagnostics system.
   - Confirm the real spectrometer bend element and PV mapping for current readback/setpoint.
   - Confirm the current-to-energy conversion constants: magnet length, deflection angle, and field-per-current calibration.
+  - Confirm safe scan range, step size, dwell time, stop condition, and post-scan restore behavior for the real bend.
   - Confirm whether the app should write a target energy/current setpoint PV in real mode, or only calculate and display it.
   - After those facts are confirmed, update `configs/machines/irfel/control_backends/real.json` and `configs/machines/irfel/apps/energy_spectrum.json`, then run a real-mode smoke test only with explicit approval.
