@@ -1,0 +1,48 @@
+{
+  "presets": [
+    {
+      "id": "emit_qm12_prf04",
+      "quad": "QM12",
+      "flag": "PRF04",
+      "model_line": "ALL_DUMP",
+      "scan": {
+        "k1_from": -9.0,
+        "k1_end": -7.0,
+        "k1_steps": 9,
+        "samples": 3,
+        "sleeptime": 1.0
+      },
+      "energy_mev": 36
+    },
+    {
+      "id": "emit_qm14_prf03",
+      "quad": "QM14",
+      "flag": "PRF03",
+      "model_line": "ALL_MAIN",
+      "scan": {
+        "k1_from": 25.0,
+        "k1_end": 28.0,
+        "k1_steps": 9,
+        "samples": 3,
+        "sleeptime": 1.0
+      },
+      "energy_mev": 36
+    },
+    {
+      "id": "emit_qm15_prf03",
+      "quad": "QM15",
+      "flag": "PRF03",
+      "model_line": "ALL_MAIN",
+      "scan": {
+        "k1_from": 25.0,
+        "k1_end": 28.0,
+        "k1_steps": 9,
+        "samples": 3,
+        "sleeptime": 1.0
+      },
+      "energy_mev": 36
+    }
+  ],
+  "default_preset": "emit_qm12_prf04",
+  "twiss_quads": ["QM11", "QM12"]
+}

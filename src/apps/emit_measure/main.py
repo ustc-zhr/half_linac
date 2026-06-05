@@ -26,18 +26,24 @@ from gui import Ui_Form
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
+    QAbstractItemView,
     QFrame,
     QGridLayout,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QMessageBox,
+    QPushButton,
     QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from half_linac.src.shared.machine_profile import (
+    MachineProfileError,
     build_model_backend,
     get_emit_preset,
     load_app_context,
@@ -48,6 +54,7 @@ nest_dict    = lambda: defaultdict(nest_dict)
 
 ELECTRON_MASS_EV = 0.51099895000e6
 SCAN_RESULTS_PATH    = Path(__file__).resolve().parent / "scanResults.txt"
+SCAN_POINT_COLUMNS = ("Use", "K1", "sigx", "sigy")
 
 HEADER_ACTION_HEIGHT = 32
 
@@ -266,6 +273,31 @@ QComboBox QAbstractItemView {{
     selection-background-color: {button_hover_bg};
 }}
 
+QTableWidget {{
+    background-color: {input_bg};
+    border: 1px solid {input_border};
+    border-radius: 10px;
+    color: {input_fg};
+    gridline-color: {panel_border};
+    selection-background-color: {button_hover_bg};
+    selection-color: {input_fg};
+}}
+
+QTableWidget::item {{
+    padding: 3px 6px;
+}}
+
+QHeaderView::section {{
+    background-color: {button_bg};
+    border: none;
+    border-right: 1px solid {button_border};
+    border-bottom: 1px solid {button_border};
+    color: {button_fg};
+    padding: 4px 6px;
+    font-size: 11px;
+    font-weight: 700;
+}}
+
 QRadioButton {{
     color: {window_fg};
     font-size: 12px;
@@ -457,7 +489,7 @@ class myWindow(QWidget,Ui_Form):
             raise ValueError("Emit measure workflow is not available in the current app context.")
 
         self.current_theme = "dark"
-        self.machine_type = self.machine_profile.machine.default_mode
+        self.machine_type = self.app_context.control_backend.name
         self.scan_mode = None
 
         # default settings 
@@ -472,6 +504,8 @@ class myWindow(QWidget,Ui_Form):
         self.scan = None
         self.twissCal = None
         self.clear = None
+        self.scan_points_table = None
+        self.scan_points_summary_label = None
         self._plot_wrappers = {}
         self._result_fields = []
         self._configure_window()
@@ -749,6 +783,48 @@ class myWindow(QWidget,Ui_Form):
 
         layout.addLayout(actions)
 
+        points_header = QHBoxLayout()
+        points_header.setContentsMargins(0, 4, 0, 0)
+        points_header.setSpacing(6)
+
+        points_title = QLabel("Scan Points", self.widget_4)
+        points_title.setObjectName("panelTitle")
+        points_header.addWidget(points_title)
+        points_header.addStretch(1)
+
+        self.scan_points_summary_label = QLabel("0 active / 0 total", self.widget_4)
+        self.scan_points_summary_label.setProperty("role", "field")
+        points_header.addWidget(self.scan_points_summary_label)
+        layout.addLayout(points_header)
+
+        self.scan_points_table = QTableWidget(0, len(SCAN_POINT_COLUMNS), self.widget_4)
+        self.scan_points_table.setHorizontalHeaderLabels(SCAN_POINT_COLUMNS)
+        self.scan_points_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.scan_points_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.scan_points_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.scan_points_table.setAlternatingRowColors(False)
+        self.scan_points_table.setMaximumHeight(170)
+        self.scan_points_table.verticalHeader().setVisible(False)
+        header = self.scan_points_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        for column in range(1, len(SCAN_POINT_COLUMNS)):
+            header.setSectionResizeMode(column, QHeaderView.Stretch)
+        self.scan_points_table.itemChanged.connect(self._on_scan_point_item_changed)
+        layout.addWidget(self.scan_points_table)
+
+        point_actions = QHBoxLayout()
+        point_actions.setContentsMargins(0, 0, 0, 0)
+        point_actions.setSpacing(6)
+        self.exclude_points_button = QPushButton("Exclude Selected", self.widget_4)
+        self.restore_points_button = QPushButton("Restore All", self.widget_4)
+        for button in (self.exclude_points_button, self.restore_points_button):
+            button.setProperty("compact", True)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            point_actions.addWidget(button)
+        self.exclude_points_button.clicked.connect(self._exclude_selected_scan_points)
+        self.restore_points_button.clicked.connect(self._restore_all_scan_points)
+        layout.addLayout(point_actions)
+
     def _rebuild_x_results_panel(self):
         layout = QVBoxLayout(self.widget_5)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -901,9 +977,194 @@ class myWindow(QWidget,Ui_Form):
 
         self.status_panel.set_item("twiss", "Running" if self._twiss_is_running() else "Idle", "success" if self._twiss_is_running() else "subtle")
         if SCAN_RESULTS_PATH.exists():
-            self.status_panel.set_item("data", SCAN_RESULTS_PATH.name, "success")
+            active, total = self._scan_points_counts()
+            if total:
+                self.status_panel.set_item("data", f"{active}/{total} points", "success")
+            else:
+                self.status_panel.set_item("data", SCAN_RESULTS_PATH.name, "success")
         else:
             self.status_panel.set_item("data", "No scan file", "warning")
+
+    def _scan_points_counts(self):
+        table = self.scan_points_table
+        if table is None:
+            return 0, 0
+        total = table.rowCount()
+        active = 0
+        for row in range(total):
+            item = table.item(row, 0)
+            if item is not None and item.checkState() == Qt.Checked:
+                active += 1
+        return active, total
+
+    def _update_scan_points_summary(self):
+        if self.scan_points_summary_label is None:
+            return
+        active, total = self._scan_points_counts()
+        self.scan_points_summary_label.setText(f"{active} active / {total} total")
+        self._refresh_status()
+
+    def _on_scan_point_item_changed(self, item):
+        if item.column() != 0:
+            return
+        self._update_scan_points_summary()
+        self._redraw_scan_points_from_table()
+
+    def _clear_scan_points(self):
+        if self.scan_points_table is None:
+            return
+        self.scan_points_table.blockSignals(True)
+        self.scan_points_table.setRowCount(0)
+        self.scan_points_table.blockSignals(False)
+        self._update_scan_points_summary()
+
+    def _append_scan_point(self, k1, sigx, sigy, *, enabled=True):
+        table = self.scan_points_table
+        if table is None:
+            return
+        table.blockSignals(True)
+        row = table.rowCount()
+        table.insertRow(row)
+
+        use_item = QTableWidgetItem("")
+        use_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
+        use_item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
+        use_item.setTextAlignment(Qt.AlignCenter)
+        table.setItem(row, 0, use_item)
+
+        for column, value in enumerate((k1, sigx, sigy), start=1):
+            numeric_value = float(value)
+            data_item = QTableWidgetItem(f"{numeric_value:.6g}")
+            data_item.setData(Qt.UserRole, numeric_value)
+            data_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            data_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            table.setItem(row, column, data_item)
+
+        table.blockSignals(False)
+        self._update_scan_points_summary()
+
+    def _scan_point_value(self, row, column):
+        item = self.scan_points_table.item(row, column)
+        if item is None:
+            raise ValueError(f"Scan point row {row + 1} is incomplete.")
+        value = item.data(Qt.UserRole)
+        if value is None:
+            value = item.text()
+        return float(value)
+
+    def _enabled_scan_points(self):
+        table = self.scan_points_table
+        if table is None:
+            return []
+        points = []
+        for row in range(table.rowCount()):
+            use_item = table.item(row, 0)
+            if use_item is None or use_item.checkState() != Qt.Checked:
+                continue
+            points.append((
+                self._scan_point_value(row, 1),
+                self._scan_point_value(row, 2),
+                self._scan_point_value(row, 3),
+            ))
+        return points
+
+    def _exclude_selected_scan_points(self):
+        table = self.scan_points_table
+        if table is None:
+            return
+        rows = sorted({index.row() for index in table.selectedIndexes()})
+        if not rows:
+            return
+        table.blockSignals(True)
+        for row in rows:
+            item = table.item(row, 0)
+            if item is not None:
+                item.setCheckState(Qt.Unchecked)
+        table.blockSignals(False)
+        self._update_scan_points_summary()
+        self._redraw_scan_points_from_table()
+
+    def _restore_all_scan_points(self):
+        table = self.scan_points_table
+        if table is None:
+            return
+        table.blockSignals(True)
+        for row in range(table.rowCount()):
+            item = table.item(row, 0)
+            if item is not None:
+                item.setCheckState(Qt.Checked)
+        table.blockSignals(False)
+        self._update_scan_points_summary()
+        self._redraw_scan_points_from_table()
+
+    def _load_scan_results_into_table(self):
+        if not SCAN_RESULTS_PATH.exists():
+            raise RuntimeError(f"{SCAN_RESULTS_PATH} not found. Run a scan before recalculating.")
+        data = np.loadtxt(SCAN_RESULTS_PATH, ndmin=2)
+        if data.ndim != 2 or data.shape[1] < 3:
+            raise RuntimeError(f"{SCAN_RESULTS_PATH.name} must contain K1, sigx and sigy columns.")
+        self._clear_scan_points()
+        for k1, sigx, sigy in data[:, :3]:
+            self._append_scan_point(k1, sigx, sigy)
+        self._redraw_scan_points_from_table()
+
+    def _redraw_scan_points_from_table(self):
+        table = self.scan_points_table
+        if table is None:
+            return
+
+        active = []
+        excluded = []
+        for row in range(table.rowCount()):
+            point = (
+                self._scan_point_value(row, 1),
+                self._scan_point_value(row, 2),
+                self._scan_point_value(row, 3),
+            )
+            use_item = table.item(row, 0)
+            if use_item is not None and use_item.checkState() == Qt.Checked:
+                active.append(point)
+            else:
+                excluded.append(point)
+
+        palette = self._palette()
+        self.widget.axes.clear()
+        self._style_axes(self.widget, "$K_1 (m^{-2})$", "sigx (mm)")
+        self.widget_8.axes.clear()
+        self._style_axes(self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)")
+
+        if excluded:
+            k1, sigx, sigy = np.array(excluded).T
+            self.widget.axes.plot(k1, sigx, marker="x", linestyle="None", color=palette["muted_fg"], alpha=0.45)
+            self.widget_8.axes.plot(k1, sigy, marker="x", linestyle="None", color=palette["muted_fg"], alpha=0.45)
+        if active:
+            k1, sigx, sigy = np.array(active).T
+            self.widget.axes.plot(k1, sigx, marker="x", linestyle="None", color=palette["plot_point"])
+            self.widget_8.axes.plot(k1, sigy, marker="x", linestyle="None", color=palette["plot_point"])
+        else:
+            self.widget.axes.text(
+                0.5,
+                0.5,
+                "No active scan points",
+                transform=self.widget.axes.transAxes,
+                ha="center",
+                va="center",
+                color=palette["muted_fg"],
+                fontsize=10,
+            )
+            self.widget_8.axes.text(
+                0.5,
+                0.5,
+                "No active scan points",
+                transform=self.widget_8.axes.transAxes,
+                ha="center",
+                va="center",
+                color=palette["muted_fg"],
+                fontsize=10,
+            )
+
+        self.widget.canvas.draw()
+        self.widget_8.canvas.draw()
 
     def _redraw_current_results(self):
         palette = self._palette()
@@ -994,6 +1255,14 @@ class myWindow(QWidget,Ui_Form):
     def _find_emit_preset(self, preset_id):
         return get_emit_preset(self.app_context, preset_id)
 
+    def _current_emit_preset(self):
+        quad_name = self.comboBox.currentText()
+        flag_name = self.comboBox_4.currentText()
+        for preset in self.emit_workflow.presets:
+            if preset.quad == quad_name and preset.flag == flag_name:
+                return preset
+        return None
+
     def _twiss_quad_choices(self):
         if self.emit_workflow.twiss_quads:
             return list(self.emit_workflow.twiss_quads)
@@ -1023,24 +1292,22 @@ class myWindow(QWidget,Ui_Form):
         self._sync_emit_preset_defaults()
 
     def _sync_emit_preset_defaults(self):
-        quad_name = self.comboBox.currentText()
-        flag_name = self.comboBox_4.currentText()
-        for preset in self.emit_workflow.presets:
-            if preset.quad == quad_name and preset.flag == flag_name:
-                if preset.energy_mev is not None:
-                    self.lineEdit_2.setText(str(preset.energy_mev))
-                scan = preset.scan
-                if scan.k1_from is not None:
-                    self.lineEdit_7.setText(str(scan.k1_from))
-                if scan.k1_end is not None:
-                    self.lineEdit_8.setText(str(scan.k1_end))
-                if scan.k1_steps is not None:
-                    self.lineEdit_9.setText(str(scan.k1_steps))
-                if scan.samples is not None:
-                    self.lineEdit_10.setText(str(scan.samples))
-                if scan.sleeptime is not None:
-                    self.lineEdit_24.setText(str(scan.sleeptime))
-                return
+        preset = self._current_emit_preset()
+        if preset is None:
+            return
+        if preset.energy_mev is not None:
+            self.lineEdit_2.setText(str(preset.energy_mev))
+        scan = preset.scan
+        if scan.k1_from is not None:
+            self.lineEdit_7.setText(str(scan.k1_from))
+        if scan.k1_end is not None:
+            self.lineEdit_8.setText(str(scan.k1_end))
+        if scan.k1_steps is not None:
+            self.lineEdit_9.setText(str(scan.k1_steps))
+        if scan.samples is not None:
+            self.lineEdit_10.setText(str(scan.samples))
+        if scan.sleeptime is not None:
+            self.lineEdit_24.setText(str(scan.sleeptime))
 
     def updateComboBox4(self, index):
         del index
@@ -1060,9 +1327,15 @@ class myWindow(QWidget,Ui_Form):
             # get scan parameters
             para.quad_name = self.comboBox.currentText()
             para.flag_name = self.comboBox_4.currentText()
+            preset = self._current_emit_preset()
+            if preset is None:
+                raise ValueError(
+                    f"No emit_measure preset is defined for {para.quad_name} -> {para.flag_name}."
+                )
             para.quadPV = resolve_channel(self.machine_profile, para.quad_name, "k1", self.machine_type)
             para.flagSigxPV = resolve_channel(self.machine_profile, para.flag_name, "sigx", self.machine_type)
             para.flagSigyPV = resolve_channel(self.machine_profile, para.flag_name, "sigy", self.machine_type)
+            para.model_line = preset.model_line
             para.app_context = self.app_context
 
             para.k1_from  = float(self.lineEdit_7.text())
@@ -1074,7 +1347,7 @@ class myWindow(QWidget,Ui_Form):
             if para.EnergyMeV <= 0:
                 raise ValueError("Energy must be positive.")
             return para
-        except ValueError as exc:
+        except (MachineProfileError, ValueError) as exc:
             self._warn(str(exc))
             return None
  
@@ -1111,11 +1384,26 @@ class myWindow(QWidget,Ui_Form):
             print("Scan is already running. Stop it before recalculating.")
             return
 
+        try:
+            if self.scan_points_table is not None and self.scan_points_table.rowCount() == 0:
+                self._load_scan_results_into_table()
+        except RuntimeError as exc:
+            self._warn(str(exc))
+            return
+
+        recal_points = self._enabled_scan_points()
+        if self.scan_points_table is not None and self.scan_points_table.rowCount() > 0:
+            if len(recal_points) < 3:
+                self._warn("At least 3 active scan points are required for recalculation.")
+                return
+            self._redraw_scan_points_from_table()
+
         self.paras = self.get_setting()
         if self.paras is None:
             return
         self.paras.recal = True 
         self.paras.clear = False 
+        self.paras.recal_points = recal_points if recal_points else None
         self.scan_mode = "recalculate"
         self.scan = scanThread(self.paras)
         self.scan.trigger.connect(self.display)
@@ -1202,6 +1490,7 @@ class myWindow(QWidget,Ui_Form):
             self.lineEdit_44.setText("")
             self.lineEdit_45.setText("")
 
+            self._clear_scan_points()
             self._refresh_status()
             
             return
@@ -1210,6 +1499,7 @@ class myWindow(QWidget,Ui_Form):
             k1 = dict["k1"]
             sigx = dict["sigx"]
             sigy = dict["sigy"]
+            self._append_scan_point(k1, sigx, sigy)
 
             palette = self._palette()
             if not self.widget.axes.lines:
@@ -1373,10 +1663,12 @@ class scanThread(QThread):
         self.samples    = paras.samples   
         self.EnergyMeV  = paras.EnergyMeV
         self.sleeptime  = paras.sleeptime
+        self.model_line = paras.model_line
         self.app_context = paras.app_context
         self.quad_length = None
 
         self.recal      = paras.recal 
+        self.recal_points = getattr(paras, "recal_points", None)
         self.is_running = True
 
     def _sleep_or_stop(self, seconds):
@@ -1444,14 +1736,22 @@ class scanThread(QThread):
                 np.savetxt(SCAN_RESULTS_PATH,txt,fmt="%.6e")
             
             elif self.recal == True:
-                print(f"Loading {SCAN_RESULTS_PATH.name} ...")
-                if not SCAN_RESULTS_PATH.exists():
-                    raise RuntimeError(f"{SCAN_RESULTS_PATH} not found. Run a scan before recalculating.")
-                with open(SCAN_RESULTS_PATH,"r") as f:
-                    data = np.loadtxt(f, ndmin=2)
+                if self.recal_points is not None:
+                    print(f"Loading {len(self.recal_points)} enabled scan points from table ...")
+                    data = np.asarray(self.recal_points, dtype=float)
+                else:
+                    print(f"Loading {SCAN_RESULTS_PATH.name} ...")
+                    if not SCAN_RESULTS_PATH.exists():
+                        raise RuntimeError(f"{SCAN_RESULTS_PATH} not found. Run a scan before recalculating.")
+                    with open(SCAN_RESULTS_PATH,"r") as f:
+                        data = np.loadtxt(f, ndmin=2)
+                if data.ndim != 2 or data.shape[1] < 3:
+                    raise RuntimeError("Scan data must contain K1, sigx and sigy columns.")
                 self.k1l   = data[:,0]
                 self.sigxl = data[:,1]   #[mm]
                 self.sigyl = data[:,2]   #[mm]
+                if len(self.k1l) < 3:
+                    raise RuntimeError("At least 3 scan points are required for emit recalculation.")
 
             else:
                 raise RuntimeError("self.recal should be True or False.")
@@ -1459,7 +1759,11 @@ class scanThread(QThread):
             # Parabolic fitting method
             # ========================
             # get the transfer matrix of (exit of quad-to-flag) 
-            trans = transfer(self.EnergyMeV, app_context=self.app_context)
+            trans = transfer(
+                self.EnergyMeV,
+                app_context=self.app_context,
+                model_line=self.model_line,
+            )
             mat = trans.get_map(self.quad_name,self.flag_name)
             self.quad_length = trans.get_lattice_float(self.quad_name, "L")
             
@@ -1534,7 +1838,11 @@ class scanThread(QThread):
         A0_y = []
         for k1 in k1l:
             # get the transfer map 
-            trans = transfer(self.EnergyMeV, app_context=self.app_context)
+            trans = transfer(
+                self.EnergyMeV,
+                app_context=self.app_context,
+                model_line=self.model_line,
+            )
             mat = trans.get_map(self.quad_name,self.flag_name,k1=k1,seq="ent2exit")
             
             # X-plane
@@ -1681,12 +1989,14 @@ class scanThread(QThread):
         self.is_running = False
 
 class transfer:
-    def __init__(self,EnergyMeV=None, app_context=None):
+    def __init__(self,EnergyMeV=None, app_context=None, model_line=None):
         self.energy = EnergyMeV
         self.app_context = app_context or load_app_context("emit_measure")
+        self.model_line = model_line
         self.model_backend = build_model_backend(
             self.app_context,
             energy_mev=EnergyMeV,
+            line_name=model_line,
         )
 
     def getTwiss1(self, quad1, quad2, twiss0, plane="xplane", inverse=False):

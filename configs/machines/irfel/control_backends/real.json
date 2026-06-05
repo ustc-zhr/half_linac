@@ -254,10 +254,14 @@
       "image": "IRFEL:VM:FLAG:PRF02:image1:ArrayData"
     },
     "PRF03": {
-      "image": "IRFEL:VM:FLAG:PRF03:image1:ArrayData"
+      "image": "IRFEL:VM:FLAG:PRF03:image1:ArrayData",
+      "sigx": "IRFEL:VM:FLAG:PRF03:sigx",
+      "sigy": "IRFEL:VM:FLAG:PRF03:sigy"
     },
     "PRF04": {
-      "image": "IRFEL:VM:FLAG:PRF04:image1:ArrayData"
+      "image": "IRFEL:VM:FLAG:PRF04:image1:ArrayData",
+      "sigx": "IRFEL:VM:FLAG:PRF04:sigx",
+      "sigy": "IRFEL:VM:FLAG:PRF04:sigy"
     },
     "PRFESA": {
       "image": "IRFEL:VM:FLAG:PRFESA:image1:ArrayData"

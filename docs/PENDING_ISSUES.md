@@ -65,3 +65,19 @@
   - Confirm safe scan range, step size, dwell time, stop condition, and post-scan restore behavior for the real bend.
   - Confirm whether the app should write a target energy/current setpoint PV in real mode, or only calculate and display it.
   - After those facts are confirmed, update `configs/machines/irfel/control_backends/real.json` and `configs/machines/irfel/apps/energy_spectrum.json`, then run a real-mode smoke test only with explicit approval.
+
+### 4. VM Flag Scalar Publisher
+
+- Status: open
+- Priority: medium
+- Background:
+  - `beam_monitor` can fit the selected flag image and write `sigx/sigy` back to profile-defined PVs.
+  - IRFEL temporarily uses this app-side publication path for `PRF03`, so `emit_measure` can read `IRFEL:VM:FLAG:PRF03:sigx/sigy` after beam monitor is running and refreshing `PRF03`.
+- Problem:
+  - This depends on the beam monitor GUI being open, connected, and refreshing the same flag that `emit_measure` reads.
+  - VM runtime itself still only publishes BPM coordinates and flag images.
+- Follow-up:
+  - Add `sigx/sigy` scalar specs to `VmPublishPlan`.
+  - Compute flag scalar outputs from the same WATCH data or image-derived profile used by VM image publishing.
+  - Publish scalars from `VmPublisher` so measurement apps do not depend on `beam_monitor` being open.
+  - Keep units consistent with `emit_measure` expectations, currently millimeters.

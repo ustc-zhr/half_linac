@@ -539,6 +539,43 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
     if missing:
         return MachineValidationCheck(f"model:{app_name}", FAIL, "; ".join(missing))
 
+    if app_name == "emit_measure" and context.emit_measure_workflow is not None:
+        try:
+            runtime_state = ElegantParser(
+                backend.source_lattice,
+                backend.emit_ini_ele,
+                backend.line_name,
+                elegant_dir=backend.working_dir,
+            ).build_runtime_state()
+        except Exception as exc:
+            return MachineValidationCheck(
+                f"model:{app_name}",
+                FAIL,
+                f"failed to parse elegant model lattice for emit_measure: {exc}",
+            )
+
+        lattice = runtime_state.get("lattice", {})
+        line_names = {backend.line_name}
+        line_names.update(
+            preset.model_line
+            for preset in context.emit_measure_workflow.presets
+            if preset.model_line
+        )
+        for line_name in sorted(line_names):
+            line = lattice.get(line_name)
+            if line is None:
+                return MachineValidationCheck(
+                    f"model:{app_name}",
+                    FAIL,
+                    f"emit_measure model line {line_name!r} is not defined in {backend.source_lattice}.",
+                )
+            if str(line.get("TYPE", "")).upper() != "LINE":
+                return MachineValidationCheck(
+                    f"model:{app_name}",
+                    FAIL,
+                    f"emit_measure model line {line_name!r} is not a LINE in {backend.source_lattice}.",
+                )
+
     return MachineValidationCheck(
         f"model:{app_name}",
         PASS,

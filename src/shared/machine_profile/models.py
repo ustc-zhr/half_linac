@@ -260,6 +260,7 @@ class EmitPreset:
     id: str
     quad: str
     flag: str
+    model_line: str | None = None
     scan: EmitScanConfig = field(default_factory=EmitScanConfig)
     analysis: EmitAnalysisConfig = field(default_factory=EmitAnalysisConfig)
 
@@ -567,6 +568,8 @@ def _validate_emit_measure_workflow(
         _expect_non_empty_string(preset.get("id"), f"{location}.id")
         _validate_element_ref(preset.get("quad"), elements_by_id, f"{location}.quad", expected_kind="quad")
         _validate_element_ref(preset.get("flag"), elements_by_id, f"{location}.flag", expected_kind="flag")
+        if "model_line" in preset:
+            _expect_non_empty_string(preset.get("model_line"), f"{location}.model_line")
         energy = preset.get("energy_mev")
         if not isinstance(energy, (int, float)) or energy <= 0:
             raise MachineProfileError(f"{location}.energy_mev must be a positive number.")

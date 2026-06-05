@@ -598,7 +598,7 @@
       "order": 62,
       "tags": ["vm", "watch", "beam_monitor"],
       "limits": {},
-      "logical_channels": ["image"]
+      "logical_channels": ["image", "sigx", "sigy"]
     },
     {
       "id": "PRF04",
@@ -607,7 +607,7 @@
       "order": 63,
       "tags": ["vm", "watch"],
       "limits": {},
-      "logical_channels": ["image"]
+      "logical_channels": ["image", "sigx", "sigy"]
     },
     {
       "id": "PRFESA",

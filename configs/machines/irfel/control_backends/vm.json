@@ -62,8 +62,16 @@
     "MODULATOR_HV2": {"voltage_set": "IRFEL:VM:MODULATOR_HV2:voltage:ao", "voltage_readback": "IRFEL:VM:MODULATOR_HV2:voltage:ai"},
     "PRF01": {"image": "IRFEL:VM:FLAG:PRF01:image1:ArrayData"},
     "PRF02": {"image": "IRFEL:VM:FLAG:PRF02:image1:ArrayData"},
-    "PRF03": {"image": "IRFEL:VM:FLAG:PRF03:image1:ArrayData"},
-    "PRF04": {"image": "IRFEL:VM:FLAG:PRF04:image1:ArrayData"},
+    "PRF03": {
+      "image": "IRFEL:VM:FLAG:PRF03:image1:ArrayData",
+      "sigx": "IRFEL:VM:FLAG:PRF03:sigx",
+      "sigy": "IRFEL:VM:FLAG:PRF03:sigy"
+    },
+    "PRF04": {
+      "image": "IRFEL:VM:FLAG:PRF04:image1:ArrayData",
+      "sigx": "IRFEL:VM:FLAG:PRF04:sigx",
+      "sigy": "IRFEL:VM:FLAG:PRF04:sigy"
+    },
     "PRFESA": {"image": "IRFEL:VM:FLAG:PRFESA:image1:ArrayData"}
   }
 }

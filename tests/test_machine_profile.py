@@ -507,12 +507,18 @@ class MachineProfileTests(unittest.TestCase):
             machine_id="irfel",
             control_backend="vm",
         )
+        emit_context = load_app_context(
+            "emit_measure",
+            machine_id="irfel",
+            control_backend="vm",
+        )
         orbit_display_context = load_app_context("orbit_display", machine_id="irfel")
         runtime = resolve_machine_runtime(profile)
         report = validate_machine_profile("irfel")
         workflow = get_workflow(profile, "orbit")
         beam_workflow = get_workflow(profile, "beam_monitor")
         energy_workflow = get_workflow(profile, "energy_spectrum")
+        emit_workflow = get_workflow(profile, "emit_measure")
         vm_start_ids, vm_end_ids, vm_default_start, vm_default_end = (
             resolve_virtual_machine_segment_choices(profile)
         )
@@ -529,6 +535,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(report.get_check("vm_publish_plan").status, "pass")
         self.assertEqual(report.get_check("app:orbit_correct").status, "pass")
         self.assertEqual(report.get_check("app:beam_monitor").status, "pass")
+        self.assertEqual(report.get_check("app:emit_measure").status, "pass")
+        self.assertEqual(report.get_check("model:emit_measure").status, "pass")
         self.assertEqual(report.get_check("app:energy_spectrum").status, "pass")
         self.assertEqual(report.get_check("model:energy_spectrum").status, "pass")
         self.assertEqual(beam_context.app_name, "beam_monitor")
@@ -537,6 +545,24 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsNotNone(energy_context.model_backend)
         assert energy_context.model_backend is not None
         self.assertEqual(energy_context.model_backend.name, "simulation")
+        self.assertEqual(emit_context.app_name, "emit_measure")
+        self.assertEqual(emit_context.control_backend.name, "vm")
+        self.assertIsNotNone(emit_context.emit_measure_workflow)
+        self.assertIsNotNone(emit_context.model_backend)
+        assert emit_context.emit_measure_workflow is not None
+        assert emit_context.model_backend is not None
+        self.assertEqual(emit_context.emit_measure_workflow.default_preset, "emit_qm12_prf04")
+        self.assertEqual(emit_context.emit_measure_workflow.twiss_quads, ("QM11", "QM12"))
+        self.assertEqual(
+            emit_context.emit_measure_workflow.presets_by_id["emit_qm12_prf04"].model_line,
+            "ALL_DUMP",
+        )
+        self.assertEqual(
+            emit_context.emit_measure_workflow.presets_by_id["emit_qm14_prf03"].model_line,
+            "ALL_MAIN",
+        )
+        self.assertEqual(emit_context.model_backend.config["line_name"], "ALL_MAIN")
+        self.assertEqual(build_model_backend(emit_context, line_name="ALL_DUMP").line_name, "ALL_DUMP")
         self.assertTrue(str(runtime.vm.root).endswith("src/virtual_machine/irfel_elegant"))
         self.assertTrue(str(runtime.softioc.root).endswith("src/softIOC/irfel"))
         assert orbit_context.orbit_workflow is not None
@@ -552,11 +578,31 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["response_wait_s_by_backend"]["real"], 1.0)
         self.assertEqual(workflow["corrector_upperlimit_rad"], 0.001)
         self.assertEqual(beam_workflow["default_flag"], "PRF03")
+        self.assertEqual(
+            resolve_channel(profile, "PRF03", "sigx", "vm"),
+            "IRFEL:VM:FLAG:PRF03:sigx",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRF03", "sigy", "vm"),
+            "IRFEL:VM:FLAG:PRF03:sigy",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRF04", "sigx", "vm"),
+            "IRFEL:VM:FLAG:PRF04:sigx",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "PRF04", "sigy", "vm"),
+            "IRFEL:VM:FLAG:PRF04:sigy",
+        )
         self.assertEqual(energy_workflow["flag_element"], "PRFESA")
         self.assertEqual(energy_workflow["flag_image_channel"], "image")
         self.assertEqual(energy_workflow["vm_watch_element"], "PRFESA")
         self.assertEqual(energy_workflow["esa_quads"], ["QM19", "QM20"])
         self.assertEqual(energy_workflow["energy0_default_mev"], 36)
+        self.assertEqual(emit_workflow["default_preset"], "emit_qm12_prf04")
+        self.assertEqual(emit_workflow["presets"][0]["quad"], "QM12")
+        self.assertEqual(emit_workflow["presets"][0]["flag"], "PRF04")
+        self.assertEqual(emit_workflow["presets"][0]["model_line"], "ALL_DUMP")
         self.assertIn("BPM02", vm_start_ids)
         self.assertEqual(vm_end_ids, ("PRF03",))
         self.assertEqual(vm_default_start, "QM13")

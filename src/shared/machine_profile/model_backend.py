@@ -48,7 +48,12 @@ class BeamModelBackend(Protocol):
 
 
 class ElegantModelBackend:
-    def __init__(self, model_config: ModelBackendConfig, energy_mev: float | None = None):
+    def __init__(
+        self,
+        model_config: ModelBackendConfig,
+        energy_mev: float | None = None,
+        line_name: str | None = None,
+    ):
         if model_config.engine != "elegant":
             raise MachineProfileError(
                 f"ElegantModelBackend requires engine='elegant', got {model_config.engine!r}."
@@ -64,7 +69,7 @@ class ElegantModelBackend:
         self.emit_json = Path(_require_config(config, "emit_json"))
         self.emit_mat = Path(_require_config(config, "emit_mat"))
         self.emit_log = _require_config(config, "emit_log")
-        self.line_name = _require_config(config, "line_name")
+        self.line_name = line_name or _require_config(config, "line_name")
         working_dir = config.get("working_dir")
         self.working_dir = Path(str(working_dir)) if working_dir is not None else self.emit_ele.parent
 
@@ -229,6 +234,7 @@ def build_model_backend(
     app_context: AppContext,
     *,
     energy_mev: float | None = None,
+    line_name: str | None = None,
 ) -> BeamModelBackend:
     if app_context.model_backend is None:
         raise MachineProfileError(
@@ -236,7 +242,11 @@ def build_model_backend(
         )
 
     if app_context.model_backend.engine == "elegant":
-        return ElegantModelBackend(app_context.model_backend, energy_mev=energy_mev)
+        return ElegantModelBackend(
+            app_context.model_backend,
+            energy_mev=energy_mev,
+            line_name=line_name,
+        )
 
     raise MachineProfileError(
         f"Unsupported model backend engine: {app_context.model_backend.engine!r}."

@@ -1,0 +1,39 @@
+&run_setup
+  lattice                  = emit_ini.lte,
+  use_beamline             = USEDLINE,
+  combine_bunch_statistics = 0,
+  default_order            = 3,
+  random_number_seed       = 987654321,
+  p_central_mev            = 36,
+  always_change_p0         = 1,
+  tracking_updates         = 1
+&end
+
+&run_control
+  n_steps                  = 1,
+  reset_rf_for_each_step   = 1,
+  restrict_fiducialization = 1
+&end
+
+&twiss_output
+  filename                 = %s.twi,
+  matched                  = 0,
+  beta_x                   = 10,
+  beta_y                   = 10,
+  alpha_x                  = -2.26,
+  alpha_y                  = -2.26,
+  concat_order             = 1,
+  statistics               = 1
+&end
+
+&matrix_output
+  SDDS_output              = %s.mat,
+  individual_matrices      = 0,
+  full_matrix_only         = 1
+&end
+
+&bunched_beam
+  n_particles_per_bunch    = 1
+&end
+
+&track &end

@@ -1202,6 +1202,11 @@ def _parse_emit_preset(raw_preset: Any, location: str) -> EmitPreset:
         id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
         quad=_expect_non_empty_string(preset.get("quad"), f"{location}.quad"),
         flag=_expect_non_empty_string(preset.get("flag"), f"{location}.flag"),
+        model_line=(
+            _expect_non_empty_string(preset.get("model_line"), f"{location}.model_line")
+            if preset.get("model_line") is not None
+            else None
+        ),
         scan=scan,
         analysis=_parse_emit_analysis_config(analysis_dict),
     )
