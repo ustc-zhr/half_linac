@@ -31,6 +31,7 @@ bo_record.json
 jitterfile_*.txt
 configs/machines/half/other/
 src/apps/orbit_correct/runtime/
+src/apps/emit_measure/scanResults.txt
 src/apps/emit_measure/scanResults.meta.json
 src/apps/emit_measure/runtime/
 
