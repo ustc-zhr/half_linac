@@ -2,9 +2,11 @@
 import sys
 import epics
 import time
+import json
 import numpy as np
 import math
 from pathlib import Path
+from datetime import datetime
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -31,6 +33,7 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QHeaderView,
     QHBoxLayout,
+    QFileDialog,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -54,6 +57,9 @@ nest_dict    = lambda: defaultdict(nest_dict)
 
 ELECTRON_MASS_EV = 0.51099895000e6
 SCAN_RESULTS_PATH    = Path(__file__).resolve().parent / "scanResults.txt"
+SCAN_RESULTS_META_PATH = Path(__file__).resolve().parent / "scanResults.meta.json"
+SCAN_ARCHIVE_ROOT = Path(__file__).resolve().parent / "runtime" / "scans"
+SCAN_DATA_SCHEMA_VERSION = "emit_scan_v1"
 SCAN_POINT_COLUMNS = ("Use", "K1", "sigx", "sigy")
 
 HEADER_ACTION_HEIGHT = 32
@@ -506,6 +512,9 @@ class myWindow(QWidget,Ui_Form):
         self.clear = None
         self.scan_points_table = None
         self.scan_points_summary_label = None
+        self.loaded_scan_metadata = None
+        self.loaded_scan_results_path = None
+        self.pending_scan_metadata = None
         self._plot_wrappers = {}
         self._result_fields = []
         self._configure_window()
@@ -815,12 +824,14 @@ class myWindow(QWidget,Ui_Form):
         point_actions = QHBoxLayout()
         point_actions.setContentsMargins(0, 0, 0, 0)
         point_actions.setSpacing(6)
+        self.load_points_button = QPushButton("Load Archive", self.widget_4)
         self.exclude_points_button = QPushButton("Exclude Selected", self.widget_4)
         self.restore_points_button = QPushButton("Restore All", self.widget_4)
-        for button in (self.exclude_points_button, self.restore_points_button):
+        for button in (self.load_points_button, self.exclude_points_button, self.restore_points_button):
             button.setProperty("compact", True)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             point_actions.addWidget(button)
+        self.load_points_button.clicked.connect(self._load_scan_archive)
         self.exclude_points_button.clicked.connect(self._exclude_selected_scan_points)
         self.restore_points_button.clicked.connect(self._restore_all_scan_points)
         layout.addLayout(point_actions)
@@ -1041,6 +1052,9 @@ class myWindow(QWidget,Ui_Form):
             table.setItem(row, column, data_item)
 
         table.blockSignals(False)
+        if self.loaded_scan_metadata is None and self.pending_scan_metadata is not None:
+            self.loaded_scan_metadata = dict(self.pending_scan_metadata)
+            self.loaded_scan_results_path = SCAN_RESULTS_PATH
         self._update_scan_points_summary()
 
     def _scan_point_value(self, row, column):
@@ -1097,16 +1111,107 @@ class myWindow(QWidget,Ui_Form):
         self._update_scan_points_summary()
         self._redraw_scan_points_from_table()
 
-    def _load_scan_results_into_table(self):
-        if not SCAN_RESULTS_PATH.exists():
-            raise RuntimeError(f"{SCAN_RESULTS_PATH} not found. Run a scan before recalculating.")
-        data = np.loadtxt(SCAN_RESULTS_PATH, ndmin=2)
+    def _scan_archive_dir(self):
+        return SCAN_ARCHIVE_ROOT / self.machine_profile.machine.id / self.machine_type
+
+    def _scan_metadata_from_paras(self, paras):
+        return {
+            "schema_version": SCAN_DATA_SCHEMA_VERSION,
+            "machine_id": self.machine_profile.machine.id,
+            "machine_display_name": self.machine_profile.machine.display_name,
+            "backend": self.machine_type,
+            "quad": paras.quad_name,
+            "flag": paras.flag_name,
+            "model_line": paras.model_line,
+            "energy_mev": paras.EnergyMeV,
+            "k1_from": paras.k1_from,
+            "k1_end": paras.k1_end,
+            "k1_steps": paras.k1_steps,
+            "samples": paras.samples,
+        }
+
+    def _metadata_path_for_results(self, results_path):
+        results_path = Path(results_path)
+        if results_path.resolve() == SCAN_RESULTS_PATH.resolve():
+            return SCAN_RESULTS_META_PATH
+        return results_path.with_suffix(".json")
+
+    def _read_scan_metadata(self, results_path):
+        metadata_path = self._metadata_path_for_results(results_path)
+        if not metadata_path.exists():
+            return None
+        try:
+            return json.loads(metadata_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid scan metadata file: {metadata_path}") from exc
+
+    def _validate_scan_metadata(self, metadata, expected, source_label):
+        if metadata is None:
+            print(f"Warning: {source_label} has no metadata; context compatibility cannot be verified.")
+            return
+        if metadata.get("schema_version") != SCAN_DATA_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"{source_label} has unsupported metadata schema: {metadata.get('schema_version')!r}."
+            )
+
+        mismatches = []
+        for key in ("machine_id", "backend", "quad", "flag", "model_line"):
+            if metadata.get(key) != expected.get(key):
+                mismatches.append(f"{key}: file={metadata.get(key)!r}, current={expected.get(key)!r}")
+
+        try:
+            file_energy = float(metadata.get("energy_mev"))
+            current_energy = float(expected.get("energy_mev"))
+        except (TypeError, ValueError):
+            mismatches.append(
+                f"energy_mev: file={metadata.get('energy_mev')!r}, current={expected.get('energy_mev')!r}"
+            )
+        else:
+            if abs(file_energy - current_energy) > 1e-9:
+                mismatches.append(f"energy_mev: file={file_energy:g}, current={current_energy:g}")
+
+        if mismatches:
+            detail = "; ".join(mismatches)
+            raise RuntimeError(f"{source_label} does not match current emit settings: {detail}.")
+
+    def _load_scan_results_into_table(self, results_path=SCAN_RESULTS_PATH, *, expected_metadata=None):
+        results_path = Path(results_path)
+        if not results_path.exists():
+            raise RuntimeError(f"{results_path} not found. Run a scan or load an archive before recalculating.")
+        metadata = self._read_scan_metadata(results_path)
+        if expected_metadata is not None:
+            self._validate_scan_metadata(metadata, expected_metadata, str(results_path))
+        data = np.loadtxt(results_path, ndmin=2)
         if data.ndim != 2 or data.shape[1] < 3:
-            raise RuntimeError(f"{SCAN_RESULTS_PATH.name} must contain K1, sigx and sigy columns.")
+            raise RuntimeError(f"{results_path.name} must contain K1, sigx and sigy columns.")
         self._clear_scan_points()
         for k1, sigx, sigy in data[:, :3]:
             self._append_scan_point(k1, sigx, sigy)
+        self.loaded_scan_metadata = metadata
+        self.loaded_scan_results_path = results_path
         self._redraw_scan_points_from_table()
+
+    def _load_scan_archive(self):
+        paras = self.get_setting()
+        if paras is None:
+            return
+        archive_dir = self._scan_archive_dir()
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Emit Scan Archive",
+            str(archive_dir),
+            "Emit scan data (*.txt);;All files (*)",
+        )
+        if not path:
+            return
+        try:
+            self._load_scan_results_into_table(
+                Path(path),
+                expected_metadata=self._scan_metadata_from_paras(paras),
+            )
+        except RuntimeError as exc:
+            self._warn(str(exc))
 
     def _redraw_scan_points_from_table(self):
         table = self.scan_points_table
@@ -1209,6 +1314,7 @@ class myWindow(QWidget,Ui_Form):
     def _on_scan_finished(self):
         self.scan = None
         self.scan_mode = None
+        self.pending_scan_metadata = None
         self._refresh_status()
 
     def _on_twiss_finished(self):
@@ -1356,13 +1462,16 @@ class myWindow(QWidget,Ui_Form):
             print("Scan is already running. Stop it before starting a new scan.")
             return
 
-        self.clearPlot()
+        self.display({"clear": True})
 
         self.paras = self.get_setting()
         if self.paras is None:
             return
         self.paras.recal = False
         self.paras.clear = False 
+        self.paras.scan_metadata = self._scan_metadata_from_paras(self.paras)
+        self.paras.scan_archive_dir = self._scan_archive_dir()
+        self.pending_scan_metadata = dict(self.paras.scan_metadata)
         self.scan_mode = "scan"
         self.scan = scanThread(self.paras)
         self.scan.trigger.connect(self.display)
@@ -1384,9 +1493,20 @@ class myWindow(QWidget,Ui_Form):
             print("Scan is already running. Stop it before recalculating.")
             return
 
+        self.paras = self.get_setting()
+        if self.paras is None:
+            return
+        expected_metadata = self._scan_metadata_from_paras(self.paras)
+
         try:
             if self.scan_points_table is not None and self.scan_points_table.rowCount() == 0:
-                self._load_scan_results_into_table()
+                self._load_scan_results_into_table(expected_metadata=expected_metadata)
+            else:
+                self._validate_scan_metadata(
+                    self.loaded_scan_metadata,
+                    expected_metadata,
+                    "current scan table",
+                )
         except RuntimeError as exc:
             self._warn(str(exc))
             return
@@ -1398,9 +1518,6 @@ class myWindow(QWidget,Ui_Form):
                 return
             self._redraw_scan_points_from_table()
 
-        self.paras = self.get_setting()
-        if self.paras is None:
-            return
         self.paras.recal = True 
         self.paras.clear = False 
         self.paras.recal_points = recal_points if recal_points else None
@@ -1491,6 +1608,8 @@ class myWindow(QWidget,Ui_Form):
             self.lineEdit_45.setText("")
 
             self._clear_scan_points()
+            self.loaded_scan_metadata = None
+            self.loaded_scan_results_path = None
             self._refresh_status()
             
             return
@@ -1669,6 +1788,10 @@ class scanThread(QThread):
 
         self.recal      = paras.recal 
         self.recal_points = getattr(paras, "recal_points", None)
+        self.scan_metadata = getattr(paras, "scan_metadata", None)
+        self.scan_archive_dir = Path(
+            getattr(paras, "scan_archive_dir", SCAN_ARCHIVE_ROOT / "unknown" / "unknown")
+        )
         self.is_running = True
 
     def _sleep_or_stop(self, seconds):
@@ -1733,7 +1856,7 @@ class scanThread(QThread):
                 print("Scan finished, quad is back to initial values, K1=",iniK1)
 
                 txt = np.matrix([self.k1l,self.sigxl,self.sigyl]).transpose()
-                np.savetxt(SCAN_RESULTS_PATH,txt,fmt="%.6e")
+                self._write_scan_results(txt)
             
             elif self.recal == True:
                 if self.recal_points is not None:
@@ -1826,6 +1949,41 @@ class scanThread(QThread):
 
     # Method-1, least squares method
     # --------------------
+    def _scan_archive_stem(self):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        quad = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in self.quad_name)
+        flag = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in self.flag_name)
+        return f"scan_{timestamp}_{quad}_{flag}"
+
+    def _write_scan_results(self, data):
+        data = np.asarray(data, dtype=float)
+        metadata = dict(self.scan_metadata or {})
+        metadata.update(
+            {
+                "schema_version": SCAN_DATA_SCHEMA_VERSION,
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+                "points": int(data.shape[0]),
+                "columns": ["k1", "sigx", "sigy"],
+            }
+        )
+
+        np.savetxt(SCAN_RESULTS_PATH, data, fmt="%.6e")
+        SCAN_RESULTS_META_PATH.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+        self.scan_archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = self.scan_archive_dir / f"{self._scan_archive_stem()}.txt"
+        archive_meta_path = archive_path.with_suffix(".json")
+        np.savetxt(archive_path, data, fmt="%.6e")
+        archive_meta_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        print(f"Saved scan results: {SCAN_RESULTS_PATH}")
+        print(f"Saved scan archive: {archive_path}")
+
     def leastSquare(self):
         k1l  = np.array(self.k1l)
         sigx = np.array(self.sigxl)    #[mm]

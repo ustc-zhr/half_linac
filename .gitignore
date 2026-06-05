@@ -31,6 +31,8 @@ bo_record.json
 jitterfile_*.txt
 configs/machines/half/other/
 src/apps/orbit_correct/runtime/
+src/apps/emit_measure/scanResults.meta.json
+src/apps/emit_measure/runtime/
 
 # Runtime artifacts
 *.log
@@ -50,6 +52,8 @@ src/virtual_machine/*_elegant/elegant/lattice.lte
 src/virtual_machine/*_elegant/elegant/one.ele
 src/virtual_machine/*_elegant/elegant/esa.lte
 src/virtual_machine/*_elegant/elegant/esa.ele
+src/virtual_machine/*_elegant/elegant/emit.lte
+src/virtual_machine/*_elegant/elegant/emit.ele
 src/virtual_machine/*_elegant/elegant/*.bpmcen
 src/virtual_machine/*_elegant/elegant/*.cen
 src/virtual_machine/*_elegant/elegant/*.mag
