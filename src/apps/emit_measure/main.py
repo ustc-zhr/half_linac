@@ -25,7 +25,8 @@ from collections import defaultdict
 from scipy.stats import truncnorm
 
 from gui import Ui_Form
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from mplwidget import MplWidget
+from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -45,13 +46,17 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from half_linac.src.shared.beam_diagnostics import fit_beam_image
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     build_model_backend,
     get_emit_preset,
+    get_workflow,
     load_app_context,
+    load_profile,
     require_workflow_write_allowed,
     resolve_channel,
+    resolve_flag_pixel_geometry,
 )
 
 nest_dict    = lambda: defaultdict(nest_dict)
@@ -64,6 +69,44 @@ SCAN_DATA_SCHEMA_VERSION = "emit_scan_v1"
 SCAN_POINT_COLUMNS = ("Use", "K1", "sigx", "sigy")
 
 HEADER_ACTION_HEIGHT = 32
+
+
+def _image_extent_from_geometry(geometry):
+    pixel_width = geometry.pixel_width_mm
+    width = geometry.shape[0] * pixel_width
+    height = geometry.shape[1] * pixel_width
+    return (-0.5 * width, 0.5 * width, -0.5 * height, 0.5 * height)
+
+
+def _read_flag_image_fit(image_pv, pixel_shape, extent):
+    raw_image = epics.caget(image_pv)
+    if raw_image is None:
+        raise RuntimeError(f"Failed to read flag image PV: {image_pv}.")
+    try:
+        flat_image = np.asarray(raw_image, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"Flag image PV is not numeric array data: {image_pv}.") from exc
+
+    expected_size = pixel_shape[0] * pixel_shape[1]
+    if flat_image.size != expected_size:
+        raise RuntimeError(
+            f"Flag image length mismatch for {image_pv}: got {flat_image.size}, expected {expected_size}."
+        )
+
+    image = np.reshape(flat_image, (pixel_shape[1], pixel_shape[0]))
+    fit_result = fit_beam_image(image, extent=extent)
+    return image, fit_result
+
+
+def _load_beam_image_geometry_config(machine_id):
+    profile = load_profile(machine_id)
+    try:
+        return get_workflow(profile, "beam_monitor")
+    except MachineProfileError as exc:
+        raise MachineProfileError(
+            "emit_measure local image fitting requires beam_monitor flag_pixel_geometry "
+            f"for machine {machine_id!r}."
+        ) from exc
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -494,6 +537,7 @@ class myWindow(QWidget,Ui_Form):
         self.emit_workflow = self.app_context.emit_measure_workflow
         if self.emit_workflow is None:
             raise ValueError("Emit measure workflow is not available in the current app context.")
+        self.beam_monitor_config = _load_beam_image_geometry_config(self.machine_profile.machine.id)
 
         self.current_theme = "dark"
         self.machine_type = self.app_context.control_backend.name
@@ -516,6 +560,11 @@ class myWindow(QWidget,Ui_Form):
         self.loaded_scan_metadata = None
         self.loaded_scan_results_path = None
         self.pending_scan_metadata = None
+        self.latest_beam_image = None
+        self.latest_beam_fit_result = None
+        self.latest_beam_fit_flag = None
+        self.latest_beam_fit_k1 = None
+        self._beam_image_auto_refresh_ready = False
         self._plot_wrappers = {}
         self._result_fields = []
         self._configure_window()
@@ -531,7 +580,7 @@ class myWindow(QWidget,Ui_Form):
 
         # other function
         self.comboBox.currentIndexChanged.connect(self.updateComboBox4)
-        self.comboBox_4.currentIndexChanged.connect(self._sync_emit_preset_defaults)
+        self.comboBox_4.currentIndexChanged.connect(self._handle_emit_flag_changed)
         self.tabWidget.currentChanged.connect(self._refresh_status)
         # self.pushButton_6.clicked.connect(self.simply_VM)
         # self.pushButton_7.clicked.connect(self.full_VM)
@@ -540,6 +589,8 @@ class myWindow(QWidget,Ui_Form):
         self._apply_theme()
         self._draw_placeholder_plots()
         self._refresh_status()
+        self._beam_image_auto_refresh_ready = True
+        self._schedule_beam_image_refresh()
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} Emit Measure")
@@ -601,6 +652,7 @@ class myWindow(QWidget,Ui_Form):
         self.status_panel.add_item("tab", "TAB", self.tabWidget.tabText(self.tabWidget.currentIndex()))
         self.status_panel.add_item("scan", "SCAN", "Idle")
         self.status_panel.add_item("twiss", "TWISS", "Idle")
+        self.status_panel.add_item("fit", "PRF FIT", "No image")
         self.status_panel.add_item("data", "DATA", "No scan file")
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -642,8 +694,58 @@ class myWindow(QWidget,Ui_Form):
             self.tab_2,
         )
 
-        for widget in (self.widget_3, self.widget_6, self.widget_11, self.widget_12):
+        self._build_beam_image_card()
+        for widget in (self.widget_6, self.widget_11, self.widget_12):
             widget.hide()
+
+    def _build_beam_image_card(self):
+        self.gridLayout_2.removeWidget(self.widget_3)
+        self.widget_3.hide()
+
+        card = QFrame(self.X_Plane)
+        card.setObjectName("plotCard")
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        title = QLabel("Current PRF Image", card)
+        title.setObjectName("panelTitle")
+        layout.addWidget(title)
+
+        self.beam_image_widget = MplWidget(card)
+        layout.addWidget(self.beam_image_widget, 1)
+
+        status_grid = QGridLayout()
+        status_grid.setHorizontalSpacing(8)
+        status_grid.setVerticalSpacing(4)
+        self.beam_fit_flag_label = QLabel("--", card)
+        self.beam_fit_sigx_label = QLabel("--", card)
+        self.beam_fit_sigy_label = QLabel("--", card)
+        self.beam_fit_status_label = QLabel("No image", card)
+        for label in (
+            self.beam_fit_flag_label,
+            self.beam_fit_sigx_label,
+            self.beam_fit_sigy_label,
+            self.beam_fit_status_label,
+        ):
+            label.setWordWrap(True)
+        for col, text in enumerate(("Flag", "sigx", "sigy", "Status")):
+            label = QLabel(text, card)
+            label.setProperty("role", "field")
+            status_grid.addWidget(label, 0, col)
+        status_grid.addWidget(self.beam_fit_flag_label, 1, 0)
+        status_grid.addWidget(self.beam_fit_sigx_label, 1, 1)
+        status_grid.addWidget(self.beam_fit_sigy_label, 1, 2)
+        status_grid.addWidget(self.beam_fit_status_label, 1, 3)
+        status_grid.setColumnStretch(3, 1)
+        layout.addLayout(status_grid)
+
+        self.gridLayout_2.addWidget(card, 0, 2, 1, 1)
+        self.gridLayout_2.setColumnStretch(2, 2)
+        self.beam_image_card = card
+        self._plot_wrappers[self.beam_image_widget] = card
 
     def _wrap_plot_card(self, layout, widget, title_text, row, col, parent):
         layout.removeWidget(widget)
@@ -792,6 +894,16 @@ class myWindow(QWidget,Ui_Form):
             actions.addWidget(button)
 
         layout.addLayout(actions)
+
+        preview_actions = QHBoxLayout()
+        preview_actions.setContentsMargins(0, 0, 0, 0)
+        preview_actions.setSpacing(6)
+        self.preview_fit_button = QPushButton("Update PRF Image", self.widget_4)
+        self.preview_fit_button.setProperty("compact", True)
+        self.preview_fit_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.preview_fit_button.clicked.connect(lambda: self.refresh_current_beam_image_fit())
+        preview_actions.addWidget(self.preview_fit_button)
+        layout.addLayout(preview_actions)
 
         points_header = QHBoxLayout()
         points_header.setContentsMargins(0, 4, 0, 0)
@@ -949,8 +1061,12 @@ class myWindow(QWidget,Ui_Form):
         self._style_axes(self.widget_2, "$-K= K_1 L_q (m^{-1})$", "$sigx^2 (mm^2)$")
         self._style_axes(self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)")
         self._style_axes(self.widget_9, "$K= K_1 L_q (m^{-1})$", "$sigy^2 (mm^2)$")
+        if hasattr(self, "beam_image_widget"):
+            self._style_axes(self.beam_image_widget, "x (mm)", "y (mm)")
         for plot in (self.widget, self.widget_2, self.widget_8, self.widget_9):
             plot.canvas.draw_idle()
+        if hasattr(self, "beam_image_widget"):
+            self.beam_image_widget.canvas.draw_idle()
 
     def _draw_placeholder(self, widget, xlabel, ylabel, note):
         palette = self._palette()
@@ -973,6 +1089,72 @@ class myWindow(QWidget,Ui_Form):
         self._draw_placeholder(self.widget_2, "$-K= K_1 L_q (m^{-1})$", "$sigx^2 (mm^2)$", "Waiting for fit")
         self._draw_placeholder(self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)", "Waiting for scan points")
         self._draw_placeholder(self.widget_9, "$K= K_1 L_q (m^{-1})$", "$sigy^2 (mm^2)$", "Waiting for fit")
+        self._draw_beam_image_placeholder()
+
+    def _draw_beam_image_placeholder(self, note="Update PRF image before scan"):
+        if not hasattr(self, "beam_image_widget"):
+            return
+        self.latest_beam_image = None
+        self.latest_beam_fit_result = None
+        self.latest_beam_fit_flag = None
+        self.latest_beam_fit_k1 = None
+        self._draw_placeholder(self.beam_image_widget, "x (mm)", "y (mm)", note)
+        if hasattr(self, "beam_fit_flag_label"):
+            self.beam_fit_flag_label.setText(self.comboBox_4.currentText() or "--")
+            self.beam_fit_sigx_label.setText("--")
+            self.beam_fit_sigy_label.setText("--")
+            self.beam_fit_status_label.setText("No image")
+
+    def _display_beam_image_fit(self, flag_name, image, fit_result, *, k1=None, extent=None):
+        if not hasattr(self, "beam_image_widget"):
+            return
+        if extent is None:
+            extent = self._current_flag_image_extent(flag_name)
+        palette = self._palette()
+        widget = self.beam_image_widget
+        widget.axes.clear()
+        self._style_axes(widget, "x (mm)", "y (mm)")
+        widget.axes.imshow(
+            image,
+            cmap="viridis",
+            origin="lower",
+            extent=extent,
+            aspect="auto",
+        )
+
+        height = abs(extent[3] - extent[2])
+        width = abs(extent[1] - extent[0])
+        x_projection = fit_result.x_projection.normalized_projection
+        y_projection = fit_result.y_projection.normalized_projection
+        if x_projection is not None and y_projection is not None:
+            denx = x_projection * height * 0.3 + extent[2] * 0.98
+            deny = y_projection * width * 0.3 + extent[0] * 0.98
+            widget.axes.plot(fit_result.x_axis, denx, "--c")
+            widget.axes.plot(deny, fit_result.y_axis, "--c")
+        if fit_result.valid:
+            fit_denx = fit_result.x_projection.fitted_projection * height * 0.3 + extent[2] * 0.98
+            fit_deny = fit_result.y_projection.fitted_projection * width * 0.3 + extent[0] * 0.98
+            widget.axes.plot(fit_result.x_axis, fit_denx, "--", color=palette["plot_fit"])
+            widget.axes.plot(fit_deny, fit_result.y_axis, "--", color=palette["plot_fit"])
+
+        title = flag_name
+        if k1 is not None:
+            title = f"{flag_name} / K1 {float(k1):.6g}"
+        widget.axes.set_title(title, color=palette["plot_text"], fontsize=11, fontweight="bold", loc="left")
+        widget.canvas.draw()
+
+        self.latest_beam_image = image
+        self.latest_beam_fit_result = fit_result
+        self.latest_beam_fit_flag = flag_name
+        self.latest_beam_fit_k1 = k1
+        self.beam_fit_flag_label.setText(flag_name)
+        self.beam_fit_sigx_label.setText(f"{fit_result.sigx_mm:.3f}" if fit_result.sigx_mm is not None else "--")
+        self.beam_fit_sigy_label.setText(f"{fit_result.sigy_mm:.3f}" if fit_result.sigy_mm is not None else "--")
+        if fit_result.valid:
+            self.beam_fit_status_label.setText("valid")
+        else:
+            self.beam_fit_status_label.setText(fit_result.status)
+        self._refresh_status()
 
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
@@ -988,6 +1170,20 @@ class myWindow(QWidget,Ui_Form):
             self.status_panel.set_item("scan", "Idle", "subtle")
 
         self.status_panel.set_item("twiss", "Running" if self._twiss_is_running() else "Idle", "success" if self._twiss_is_running() else "subtle")
+        if self.latest_beam_fit_result is None:
+            self.status_panel.set_item("fit", "No image", "subtle")
+        elif self.latest_beam_fit_result.valid:
+            self.status_panel.set_item(
+                "fit",
+                f"{self.latest_beam_fit_flag} sx {self.latest_beam_fit_result.sigx_mm:.3f} sy {self.latest_beam_fit_result.sigy_mm:.3f}",
+                "success",
+            )
+        else:
+            self.status_panel.set_item(
+                "fit",
+                f"{self.latest_beam_fit_flag} {self.latest_beam_fit_result.status}",
+                "warning",
+            )
         if SCAN_RESULTS_PATH.exists():
             active, total = self._scan_points_counts()
             if total:
@@ -1124,6 +1320,8 @@ class myWindow(QWidget,Ui_Form):
             "quad": paras.quad_name,
             "flag": paras.flag_name,
             "model_line": paras.model_line,
+            "beam_size_source": "local_fit",
+            "flag_image_pv": paras.flagImagePV,
             "energy_mev": paras.EnergyMeV,
             "k1_from": paras.k1_from,
             "k1_end": paras.k1_end,
@@ -1370,6 +1568,18 @@ class myWindow(QWidget,Ui_Form):
                 return preset
         return None
 
+    def _current_flag_pixel_geometry(self, flag_name=None):
+        flag_name = flag_name or self.comboBox_4.currentText()
+        return resolve_flag_pixel_geometry(
+            self.beam_monitor_config,
+            "workflows.beam_monitor",
+            self.machine_type,
+            flag_name,
+        )
+
+    def _current_flag_image_extent(self, flag_name=None):
+        return _image_extent_from_geometry(self._current_flag_pixel_geometry(flag_name))
+
     def _twiss_quad_choices(self):
         if self.emit_workflow.twiss_quads:
             return list(self.emit_workflow.twiss_quads)
@@ -1416,6 +1626,13 @@ class myWindow(QWidget,Ui_Form):
         if scan.sleeptime is not None:
             self.lineEdit_24.setText(str(scan.sleeptime))
 
+    def _handle_emit_flag_changed(self, index):
+        del index
+        self._sync_emit_preset_defaults()
+        self._draw_beam_image_placeholder()
+        if self._beam_image_auto_refresh_ready:
+            self._schedule_beam_image_refresh()
+
     def updateComboBox4(self, index):
         del index
         quad_name = self.comboBox.currentText()
@@ -1426,6 +1643,9 @@ class myWindow(QWidget,Ui_Form):
         if current_flag in flag_items:
             self._set_combo_current_text(self.comboBox_4, current_flag)
         self._sync_emit_preset_defaults()
+        self._draw_beam_image_placeholder()
+        if self._beam_image_auto_refresh_ready:
+            self._schedule_beam_image_refresh()
 
 
     def get_setting(self):
@@ -1440,8 +1660,10 @@ class myWindow(QWidget,Ui_Form):
                     f"No emit_measure preset is defined for {para.quad_name} -> {para.flag_name}."
                 )
             para.quadPV = resolve_channel(self.machine_profile, para.quad_name, "k1", self.machine_type)
-            para.flagSigxPV = resolve_channel(self.machine_profile, para.flag_name, "sigx", self.machine_type)
-            para.flagSigyPV = resolve_channel(self.machine_profile, para.flag_name, "sigy", self.machine_type)
+            para.flagImagePV = resolve_channel(self.machine_profile, para.flag_name, "image", self.machine_type)
+            geometry = self._current_flag_pixel_geometry(para.flag_name)
+            para.flag_pixel_shape = geometry.shape
+            para.flag_image_extent = _image_extent_from_geometry(geometry)
             para.model_line = preset.model_line
             para.app_context = self.app_context
 
@@ -1457,6 +1679,42 @@ class myWindow(QWidget,Ui_Form):
         except (MachineProfileError, ValueError) as exc:
             self._warn(str(exc))
             return None
+
+    def refresh_current_beam_image_fit(self, paras=None, *, show_warning=True):
+        if paras is None:
+            paras = self.get_setting()
+            if paras is None:
+                return False
+        try:
+            image, fit_result = _read_flag_image_fit(
+                paras.flagImagePV,
+                paras.flag_pixel_shape,
+                paras.flag_image_extent,
+            )
+        except RuntimeError as exc:
+            self._draw_beam_image_placeholder("PRF image unavailable")
+            if show_warning:
+                self._warn(str(exc))
+            return False
+
+        self._display_beam_image_fit(
+            paras.flag_name,
+            image,
+            fit_result,
+            extent=paras.flag_image_extent,
+        )
+        if not fit_result.valid:
+            if show_warning:
+                detail = f": {fit_result.message}" if fit_result.message else ""
+                self._warn(f"Current PRF image fit is not valid ({fit_result.status}){detail}.")
+            return False
+        return True
+
+    def _schedule_beam_image_refresh(self):
+        QTimer.singleShot(
+            250,
+            lambda: self.refresh_current_beam_image_fit(show_warning=False),
+        )
  
     def startScan(self):
         if self._scan_is_running():
@@ -1467,6 +1725,8 @@ class myWindow(QWidget,Ui_Form):
 
         self.paras = self.get_setting()
         if self.paras is None:
+            return
+        if not self.refresh_current_beam_image_fit(self.paras):
             return
         try:
             require_workflow_write_allowed(
@@ -1624,7 +1884,18 @@ class myWindow(QWidget,Ui_Form):
             
             return
 
+        if "beam_image" in dict and "beam_fit" in dict:
+            self._display_beam_image_fit(
+                dict.get("flag", self.comboBox_4.currentText()),
+                dict["beam_image"],
+                dict["beam_fit"],
+                k1=dict.get("k1"),
+                extent=dict.get("beam_extent"),
+            )
+
         if dict["method"] == None:
+            if "sigx" not in dict or "sigy" not in dict:
+                return
             k1 = dict["k1"]
             sigx = dict["sigx"]
             sigy = dict["sigy"]
@@ -1784,8 +2055,9 @@ class scanThread(QThread):
         self.quad_name  = paras.quad_name.upper() 
         self.flag_name  = paras.flag_name.upper() 
         self.quadPV     = paras.quadPV    
-        self.flagSigxPV = paras.flagSigxPV
-        self.flagSigyPV = paras.flagSigyPV
+        self.flagImagePV = paras.flagImagePV
+        self.flag_pixel_shape = paras.flag_pixel_shape
+        self.flag_image_extent = paras.flag_image_extent
         self.k1_from    = paras.k1_from   
         self.k1_end     = paras.k1_end    
         self.k1_steps   = paras.k1_steps  
@@ -1848,22 +2120,37 @@ class scanThread(QThread):
                                 print("Stop scan, quad is back to initial values, K1=",iniK1)
                                 return
                             
-                            [tmp2, tmp3] = epics.caget_many([self.flagSigxPV,self.flagSigyPV])
-                            if tmp2 is None or tmp3 is None:
+                            image, fit_result = _read_flag_image_fit(
+                                self.flagImagePV,
+                                self.flag_pixel_shape,
+                                self.flag_image_extent,
+                            )
+                            point = {
+                                "method": None,
+                                "k1": k1,
+                                "flag": self.flag_name,
+                                "beam_image": image,
+                                "beam_fit": fit_result,
+                                "beam_extent": self.flag_image_extent,
+                            }
+                            if not fit_result.valid:
+                                self.trigger.emit(point)
+                                detail = f": {fit_result.message}" if fit_result.message else ""
                                 raise RuntimeError(
-                                    f"Failed to read flag sigma PVs: {self.flagSigxPV}, {self.flagSigyPV}."
+                                    f"Flag image fit failed for {self.flag_name} ({fit_result.status}){detail}."
                                 )
+                            tmp2 = float(fit_result.sigx_mm)
+                            tmp3 = float(fit_result.sigy_mm)
                             print("sigmax=",tmp2,"sigamy=",tmp3)
 
-                            tmp["k1"]   = k1
-                            tmp["sigx"] = tmp2
-                            tmp["sigy"] = tmp3
+                            point["sigx"] = tmp2
+                            point["sigy"] = tmp3
 
                             self.k1l.append(k1)
                             self.sigxl.append(tmp2)
                             self.sigyl.append(tmp3)
 
-                            self.trigger.emit(tmp)
+                            self.trigger.emit(point)
                         else:
                             print("Stop scan, quad is back to initial values, K1=",iniK1)
                             return

@@ -31,9 +31,9 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from scipy.optimize import curve_fit
 
 from gui import Ui_Form
+from half_linac.src.shared.beam_diagnostics import fit_beam_image
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     get_workflow,
@@ -1112,62 +1112,40 @@ class myWindow(QWidget, Ui_Form):
         height = abs(self.ylim[1] - self.ylim[0])
         width = abs(self.xlim[1] - self.xlim[0])
 
-        x = np.linspace(self.extent[0], self.extent[1], self.pixel[0])
-        y = np.linspace(self.extent[2], self.extent[3], self.pixel[1])
+        fit_result = fit_beam_image(
+            data,
+            extent=self.extent,
+            xlim=self.xlim,
+            ylim=self.ylim,
+        )
 
-        idx = np.logical_and(x > self.xlim[0], x < self.xlim[1])
-        idy = np.logical_and(y > self.ylim[0], y < self.ylim[1])
-
-        x = x[idx]
-        y = y[idy]
-        data = data[idy, :][:, idx]
-
-        denx0 = np.sum(data, axis=0)
-        deny0 = np.sum(data, axis=1)
-
-        if np.max(denx0) == 0 or np.max(deny0) == 0:
+        if not fit_result.has_signal:
             self.widget.canvas.draw()
             self._refresh_status()
             return
 
-        denx = denx0 / np.max(denx0) * height * 0.3 + self.ylim[0] * 0.98
-        deny = deny0 / np.max(deny0) * width * 0.3 + self.xlim[0] * 0.98
-        self.widget.axes.plot(x, denx, "--c")
-        self.widget.axes.plot(deny, y, "--c")
+        norm_denx = fit_result.x_projection.normalized_projection
+        norm_deny = fit_result.y_projection.normalized_projection
+        if norm_denx is not None and norm_deny is not None:
+            denx = norm_denx * height * 0.3 + self.ylim[0] * 0.98
+            deny = norm_deny * width * 0.3 + self.xlim[0] * 0.98
+            self.widget.axes.plot(fit_result.x_axis, denx, "--c")
+            self.widget.axes.plot(deny, fit_result.y_axis, "--c")
 
-        def Gauss(x_value, a, x0, sigma, c):
-            return a * np.exp(-(x_value - x0) ** 2 / (2 * sigma**2)) + c
-
-        try:
-            norm_denx = denx0 / np.max(denx0)
-            norm_deny = deny0 / np.max(deny0)
-
-            max_den = np.max(norm_denx)
-            max_index = np.argmax(norm_denx)
-            x0_initial = x[max_index]
-            initial_guess = [max_den, x0_initial, 1.0, np.min(norm_denx)]
-            popt, _pcov = curve_fit(Gauss, x, norm_denx, p0=initial_guess)
-
-            fit_denx = Gauss(x, popt[0], popt[1], popt[2], popt[3]) * height * 0.3 + self.ylim[0] * 0.98
-            self.widget.axes.plot(x, fit_denx, "--r")
-            self.sigx = abs(round(popt[2], 3))
+        if fit_result.valid:
+            fit_denx = fit_result.x_projection.fitted_projection * height * 0.3 + self.ylim[0] * 0.98
+            self.widget.axes.plot(fit_result.x_axis, fit_denx, "--r")
+            self.sigx = round(fit_result.sigx_mm, 3)
             self.lineEdit_5.setText(str(self.sigx))
 
-            max_den = np.max(norm_deny)
-            max_index = np.argmax(norm_deny)
-            y0_initial = y[max_index]
-
-            initial_guess = [max_den, y0_initial, 1.0, np.min(norm_deny)]
-            popt, _pcov = curve_fit(Gauss, y, norm_deny, p0=initial_guess)
-
-            fit_deny = Gauss(y, popt[0], popt[1], popt[2], popt[3]) * width * 0.3 + self.xlim[0] * 0.98
-            self.widget.axes.plot(fit_deny, y, "--r", label="fitting curve")
+            fit_deny = fit_result.y_projection.fitted_projection * width * 0.3 + self.xlim[0] * 0.98
+            self.widget.axes.plot(fit_deny, fit_result.y_axis, "--r", label="fitting curve")
 
             self.widget.axes.legend()
-            self.sigy = abs(round(popt[2], 3))
+            self.sigy = round(fit_result.sigy_mm, 3)
             self.lineEdit_6.setText(str(self.sigy))
-        except (RuntimeError, ValueError, ZeroDivisionError, FloatingPointError) as exc:
-            print(f"Warning: beam profile Gaussian fitting skipped: {exc}")
+        elif fit_result.status == "fit_failed":
+            print(f"Warning: beam profile Gaussian fitting skipped: {fit_result.message}")
             self.lineEdit_5.setText("--")
             self.lineEdit_6.setText("--")
 
