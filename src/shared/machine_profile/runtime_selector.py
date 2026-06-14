@@ -17,6 +17,10 @@ from PyQt5.QtWidgets import (
 )
 
 from .loader import (
+    CONTROL_BACKEND_ENV,
+    LEGACY_CONTROL_BACKEND_ENV,
+    LEGACY_MACHINE_ID_ENV,
+    MACHINE_ID_ENV,
     list_control_backend_choices,
     list_machine_profile_ids,
     load_profile,
@@ -48,8 +52,10 @@ def default_control_backend_choices(machine_id: str | None = None) -> tuple[str,
 
 def relaunch_current_process(machine_id: str, control_backend: str) -> None:
     env = os.environ.copy()
-    env["HALF_MACHINE_ID"] = machine_id
-    env["HALF_CONTROL_BACKEND"] = control_backend
+    env[MACHINE_ID_ENV] = machine_id
+    env[CONTROL_BACKEND_ENV] = control_backend
+    env[LEGACY_MACHINE_ID_ENV] = machine_id
+    env[LEGACY_CONTROL_BACKEND_ENV] = control_backend
     argv = [sys.executable, *sys.argv]
     os.execvpe(sys.executable, argv, env)
 

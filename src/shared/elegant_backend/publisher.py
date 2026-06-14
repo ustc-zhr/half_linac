@@ -9,6 +9,7 @@ import epics.ca
 from epics import caput, caput_many
 
 from half_linac.src.shared.machine_profile.models import MachineProfile, MachineProfileError
+from half_linac.src.shared.machine_profile.pixel_geometry import resolve_flag_pixel_geometry
 from half_linac.src.shared.machine_profile.resolver import (
     get_workflow,
     list_elements,
@@ -221,19 +222,23 @@ class VmPublisher:
 
 def _build_beam_monitor_watch_specs(profile: MachineProfile) -> list[VmWatchImagePublishSpec]:
     workflow = get_workflow(profile, "beam_monitor")
-    pixel_shape = _require_backend_pixel_shape(workflow, "workflows.beam_monitor", "vm")
-    pixel_width_mm = _require_backend_pixel_width(workflow, "workflows.beam_monitor", "vm")
 
     specs: list[VmWatchImagePublishSpec] = []
     for element in list_elements(profile, kind="flag", logical_channel="image"):
+        pixel_geometry = resolve_flag_pixel_geometry(
+            workflow,
+            "workflows.beam_monitor",
+            "vm",
+            element.id,
+        )
         specs.append(
             VmWatchImagePublishSpec(
                 source_watch_id=element.id,
                 target_element_id=element.id,
                 logical_channel="image",
                 pv_name=resolve_channel(profile, element.id, "image", "vm"),
-                pixel_shape=pixel_shape,
-                pixel_width_mm=pixel_width_mm,
+                pixel_shape=pixel_geometry.shape,
+                pixel_width_mm=pixel_geometry.pixel_width_mm,
             )
         )
     return specs

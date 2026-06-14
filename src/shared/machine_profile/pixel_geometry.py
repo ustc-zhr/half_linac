@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Mapping
+
+from .models import MachineProfileError
+
+
+@dataclass(frozen=True)
+class FlagPixelGeometry:
+    shape: tuple[int, int]
+    pixel_width_mm: float
+
+
+def resolve_flag_pixel_geometry(
+    workflow: Mapping[str, object],
+    workflow_path: str,
+    backend_name: str,
+    flag_id: str | None = None,
+) -> FlagPixelGeometry:
+    geometry = workflow.get("flag_pixel_geometry")
+    if isinstance(geometry, Mapping):
+        return _resolve_structured_geometry(geometry, workflow_path, backend_name, flag_id)
+    if geometry is not None:
+        raise MachineProfileError(f"{workflow_path}.flag_pixel_geometry must be a mapping.")
+    return _resolve_legacy_geometry(workflow, workflow_path, backend_name)
+
+
+def _resolve_structured_geometry(
+    geometry: Mapping[str, object],
+    workflow_path: str,
+    backend_name: str,
+    flag_id: str | None,
+) -> FlagPixelGeometry:
+    default_by_backend = _expect_mapping(
+        geometry.get("default"),
+        f"{workflow_path}.flag_pixel_geometry.default",
+    )
+    default_geometry = _expect_mapping(
+        default_by_backend.get(backend_name),
+        f"{workflow_path}.flag_pixel_geometry.default.{backend_name}",
+    )
+
+    selected_geometry = dict(default_geometry)
+    by_flag = geometry.get("by_flag", {})
+    if by_flag is not None:
+        by_flag = _expect_mapping(by_flag, f"{workflow_path}.flag_pixel_geometry.by_flag")
+        if flag_id:
+            flag_geometry_by_backend = by_flag.get(flag_id)
+            if flag_geometry_by_backend is not None:
+                flag_geometry_by_backend = _expect_mapping(
+                    flag_geometry_by_backend,
+                    f"{workflow_path}.flag_pixel_geometry.by_flag.{flag_id}",
+                )
+                flag_geometry = flag_geometry_by_backend.get(backend_name)
+                if flag_geometry is not None:
+                    selected_geometry.update(
+                        _expect_mapping(
+                            flag_geometry,
+                            f"{workflow_path}.flag_pixel_geometry.by_flag.{flag_id}.{backend_name}",
+                        )
+                    )
+
+    return _parse_geometry(
+        selected_geometry,
+        f"{workflow_path}.flag_pixel_geometry"
+        + (f".by_flag.{flag_id}.{backend_name}" if flag_id else f".default.{backend_name}"),
+    )
+
+
+def _resolve_legacy_geometry(
+    workflow: Mapping[str, object],
+    workflow_path: str,
+    backend_name: str,
+) -> FlagPixelGeometry:
+    shape_by_backend = _expect_mapping(
+        workflow.get("flag_pixel_shape"),
+        f"{workflow_path}.flag_pixel_shape",
+    )
+    width_by_backend = _expect_mapping(
+        workflow.get("flag_pixel_width_mm"),
+        f"{workflow_path}.flag_pixel_width_mm",
+    )
+    shape = shape_by_backend.get(backend_name)
+    if not isinstance(shape, list) or len(shape) != 2:
+        raise MachineProfileError(
+            f"{workflow_path}.flag_pixel_shape.{backend_name} must be [nx, ny]."
+        )
+    if backend_name not in width_by_backend:
+        raise MachineProfileError(
+            f"{workflow_path}.flag_pixel_width_mm is missing backend {backend_name!r}."
+        )
+    return _parse_geometry(
+        {"shape": shape, "pixel_width_mm": width_by_backend[backend_name]},
+        f"{workflow_path}.{backend_name}",
+    )
+
+
+def _parse_geometry(raw: Mapping[str, object], location: str) -> FlagPixelGeometry:
+    shape = raw.get("shape")
+    if not isinstance(shape, list) or len(shape) != 2:
+        raise MachineProfileError(f"{location}.shape must be [nx, ny].")
+    try:
+        pixel_shape = (int(shape[0]), int(shape[1]))
+    except (TypeError, ValueError) as exc:
+        raise MachineProfileError(f"{location}.shape must contain integer values.") from exc
+    if pixel_shape[0] <= 0 or pixel_shape[1] <= 0:
+        raise MachineProfileError(f"{location}.shape values must be positive.")
+
+    try:
+        pixel_width_mm = float(raw["pixel_width_mm"])
+    except KeyError as exc:
+        raise MachineProfileError(f"{location}.pixel_width_mm is required.") from exc
+    except (TypeError, ValueError) as exc:
+        raise MachineProfileError(f"{location}.pixel_width_mm must be numeric.") from exc
+    if pixel_width_mm <= 0:
+        raise MachineProfileError(f"{location}.pixel_width_mm must be positive.")
+
+    return FlagPixelGeometry(shape=pixel_shape, pixel_width_mm=pixel_width_mm)
+
+
+def _expect_mapping(value: object, location: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise MachineProfileError(f"{location} must be a mapping.")
+    return value
+
+
+__all__ = ["FlagPixelGeometry", "resolve_flag_pixel_geometry"]

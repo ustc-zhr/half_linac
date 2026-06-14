@@ -44,5 +44,10 @@
     }
   ],
   "default_preset": "emit_qm12_prf04",
-  "twiss_quads": ["QM11", "QM12"]
+  "twiss_quads": ["QM11", "QM12"],
+  "real_status": "write_blocked",
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
+  }
 }

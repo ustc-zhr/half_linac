@@ -13,8 +13,8 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from half_linac.src.virtual_machine.lattice_usedline import simplify_usedline_segment_cli
+from half_linac.src.virtual_machine.common.simply_VM import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(simplify_usedline_segment_cli())
+    raise SystemExit(main())

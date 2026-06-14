@@ -19,6 +19,7 @@ from epics import caput_many, PV, caget_many
 from scipy.linalg import svd
 from half_linac.src.shared.machine_profile import (
     load_app_context,
+    require_workflow_write_allowed,
     resolve_channel,
 )
 from half_linac.src.apps.orbit_correct.profile_runtime import (
@@ -77,7 +78,8 @@ class OrbitCorrector:
         self.response_matrix_path: Path | None = None
         self.corrector_state_path = Path(self.orbit_runtime["corrector_state_path"])
         self.d_value = 0.02 * 0.001  # step for corrector
-        self.max_value = self.orbit_runtime["corrector_upperlimit_rad"]
+        self.max_value = self.orbit_runtime["corrector_upperlimit"]
+        self.max_value_unit = self.orbit_runtime["corrector_upperlimit_unit"]
         
         # all cor and bpm lists
         if self.orbit_workflow is None:
@@ -140,6 +142,9 @@ class OrbitCorrector:
 
         if len(self.target_BPMy_values) != len(self.bpm_list_target):
             raise ValueError("Target BPM Y values do not match the selected BPM list.")
+
+    def _require_write_allowed(self, operation: str) -> None:
+        require_workflow_write_allowed(self.app_context, "orbit", operation)
     
     
     def init_BPM_pv(self) -> None:
@@ -216,6 +221,7 @@ class OrbitCorrector:
 
     def correct_one_to_one(self) -> None:
         """one-to-one method"""
+        self._require_write_allowed("One-to-one orbit correction")
         self._require_targets()
         for j in range(len(self.bpm_list_target)):
             logger.info(f"开始校正: {self.bpm_list_target[j]}")
@@ -413,6 +419,7 @@ class OrbitCorrector:
      
     def correct_global(self, max_iter: int = 20) -> bool:
         """全局校正方法"""
+        self._require_write_allowed("Global orbit correction")
         self._require_targets()
 
         # 加载响应矩阵
@@ -485,6 +492,7 @@ class OrbitCorrector:
 
     def reset_cor(self) -> None:
         """Reset the selected correctors, or all of them if no selection is provided."""
+        self._require_write_allowed("Corrector reset")
         cor_x_list = self.cor_x_list_target or self.cor_x_list_all
         cor_y_list = self.cor_y_list_target or self.cor_y_list_all
 
@@ -496,6 +504,7 @@ class OrbitCorrector:
 
     def cor_recover(self) -> None:
         """recvoer all corrector to the value before cor"""
+        self._require_write_allowed("Corrector recover")
         cor_path = self.corrector_state_path
         if not cor_path.exists():
             raise FileNotFoundError(f"Corrector backup file not found: {cor_path}")

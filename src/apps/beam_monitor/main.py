@@ -39,7 +39,9 @@ from half_linac.src.shared.machine_profile import (
     get_workflow,
     list_elements,
     load_app_context,
+    require_workflow_write_allowed,
     resolve_channel,
+    resolve_flag_pixel_geometry,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
@@ -407,14 +409,16 @@ class myWindow(QWidget, Ui_Form):
         self._pv_available = False
         self._pv_error = None
         self._profile_warning = None
+        self._write_block_notice = None
         self.tmppv = self.flag_ids[0] if self.flag_ids else ""
+        self._pixel_geometry_flag_id = None
 
         self.h = None
         self.colorbar = None
         self.sigx = None
         self.sigy = None
 
-        self._configure_pixel_geometry()
+        self._configure_pixel_geometry(self.tmppv)
 
         self._configure_window()
         self._build_shell()
@@ -664,6 +668,7 @@ class myWindow(QWidget, Ui_Form):
         elif self.flag_ids:
             self.flag_selec.setCurrentIndex(0)
         self.tmppv = self.flag_selec.currentText()
+        self._configure_pixel_geometry(self.tmppv)
         self.lineEdit_7.setText("0")
         self.lineEdit_8.setText("0")
         self.lineEdit_4.setText("0")
@@ -689,7 +694,13 @@ class myWindow(QWidget, Ui_Form):
         self.pushButton_3.clicked.connect(self.moveaxis)
         self.lineEdit.returnPressed.connect(self.setExpoTime)
         self.lineEdit_9.textChanged.connect(self.change_interval)
-        self.flag_selec.currentTextChanged.connect(self._refresh_status)
+        self.flag_selec.currentTextChanged.connect(self._handle_flag_changed)
+
+    def _handle_flag_changed(self, flag_id):
+        self.tmppv = flag_id
+        self._configure_pixel_geometry(flag_id)
+        self._draw_placeholder_plot("Beam Profile")
+        self._refresh_status()
 
     def _apply_theme(self):
         palette = self._palette()
@@ -776,6 +787,17 @@ class myWindow(QWidget, Ui_Form):
     def _notify(self, message):
         print(message)
 
+    def _writes_allowed(self, operation):
+        try:
+            require_workflow_write_allowed(self.app_context, "beam_monitor", operation)
+        except MachineProfileError as exc:
+            message = str(exc)
+            if message != self._write_block_notice:
+                self._write_block_notice = message
+                self._notify(message)
+            return False
+        return True
+
     def _apply_runtime_selection(self, machine_id, control_backend):
         request_runtime_restart(
             self,
@@ -856,34 +878,21 @@ class myWindow(QWidget, Ui_Form):
     def _current_mode(self):
         return self.control_backend
 
-    def _configure_pixel_geometry(self):
-        pixel_shape = self._select_backend_value(
-            self.beam_monitor_config["flag_pixel_shape"],
-            "workflows.beam_monitor.flag_pixel_shape",
+    def _configure_pixel_geometry(self, flag_id):
+        geometry = resolve_flag_pixel_geometry(
+            self.beam_monitor_config,
+            "workflows.beam_monitor",
+            self.control_backend,
+            flag_id,
         )
-        if not isinstance(pixel_shape, list) or len(pixel_shape) != 2:
-            raise ValueError(
-                "workflows.beam_monitor.flag_pixel_shape must provide [nx, ny] per backend."
-            )
-        self.pixel = (int(pixel_shape[0]), int(pixel_shape[1]))
-        pixel_width = float(
-            self._select_backend_value(
-                self.beam_monitor_config["flag_pixel_width_mm"],
-                "workflows.beam_monitor.flag_pixel_width_mm",
-            )
-        )
+        self._pixel_geometry_flag_id = flag_id
+        self.pixel = geometry.shape
+        pixel_width = geometry.pixel_width_mm
         self.width = self.pixel[0] * pixel_width
         self.height = self.pixel[1] * pixel_width
         self.xlim = (-0.5 * self.width, 0.5 * self.width)
         self.ylim = (-0.5 * self.height, 0.5 * self.height)
         self.extent = self.xlim + self.ylim
-
-    def _select_backend_value(self, values, location):
-        if not isinstance(values, dict):
-            raise ValueError(f"{location} must provide per-backend values.")
-        if self.control_backend not in values:
-            raise ValueError(f"{location} is missing backend {self.control_backend!r}.")
-        return values[self.control_backend]
 
     def _get_refresh_interval_ms(self):
         text = self.lineEdit_9.text().strip()
@@ -979,6 +988,8 @@ class myWindow(QWidget, Ui_Form):
     def setExpoTime(self):
         mode = self._current_mode()
         if mode == "real" and self.expoTimePV is not None:
+            if not self._writes_allowed("set beam monitor exposure time"):
+                return
             try:
                 expoTime = float(self.lineEdit.text())
             except ValueError:
@@ -995,6 +1006,8 @@ class myWindow(QWidget, Ui_Form):
 
     def plot_beamprofile(self):
         self.tmppv = self.flag_selec.currentText()
+        if self.tmppv != self._pixel_geometry_flag_id:
+            self._configure_pixel_geometry(self.tmppv)
         if not self.init_realOrVM():
             return
         self.init_sigxy_pv()
@@ -1162,6 +1175,8 @@ class myWindow(QWidget, Ui_Form):
         self._refresh_status()
 
         if self.sigx is not None and self.sigy is not None and self.sigPV is not None:
+            if not self._writes_allowed("publish beam monitor fitted sigma"):
+                return
             try:
                 caput_many(self.sigPV, [self.sigx, self.sigy])
             except Exception as exc:

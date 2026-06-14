@@ -24,5 +24,22 @@
     "vm": 3.0,
     "real": 1.0
   },
-  "corrector_upperlimit_rad": 0.001
+  "corrector_upperlimit_by_backend": {
+    "vm": {
+      "value": 0.001,
+      "unit": "rad"
+    },
+    "real": {
+      "value": 5.0,
+      "unit": "A"
+    }
+  },
+  "real_status": {
+    "orbit_correct": "write_blocked",
+    "orbit_display": "read_only"
+  },
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
+  }
 }

@@ -1,6 +1,16 @@
 from __future__ import annotations
 
 from .compatibility import (
+    CONTROL_BACKEND_ENV,
+    LEGACY_CONTROL_BACKEND_ENV,
+    LEGACY_MACHINE_ID_ENV,
+    MACHINE_ID_ENV,
+    REAL_COMMISSIONING_STATUSES,
+    REAL_STATUS_COMMISSIONED,
+    REAL_STATUS_NOT_SUPPORTED,
+    REAL_STATUS_READ_ONLY,
+    REAL_STATUS_WRITE_BLOCKED,
+    REAL_STATUS_WRITE_SMOKE_PASSED,
     describe_app_support,
     get_bba_preset,
     get_emit_preset,
@@ -8,9 +18,13 @@ from .compatibility import (
     list_elements,
     load_app_context,
     load_profile,
+    real_commissioning_status,
+    real_commissioning_status_label,
+    real_commissioning_status_tone,
     resolve_virtual_machine_segment_choices,
     resolve_virtual_machine_usedline_workflow,
     resolve_channel,
+    resolve_flag_pixel_geometry,
 )
 from .loader import (
     VirtualMachineLocalSegment,
@@ -42,6 +56,7 @@ from .models import (
     normalize_mode,
     normalize_plane,
 )
+from .pixel_geometry import FlagPixelGeometry
 from .runtime_resolver import (
     ResolvedMachineRuntimeConfig,
     ResolvedSoftIocRuntimeConfig,
@@ -62,6 +77,13 @@ from .validation import (
     MachineValidationReport,
     validate_machine_profile,
 )
+from .write_control import (
+    WRITE_ALLOWED,
+    WRITE_BLOCKED,
+    require_workflow_write_allowed,
+    workflow_write_policy,
+    workflow_writes_allowed,
+)
 
 __all__ = [
     "AppContext",
@@ -72,14 +94,19 @@ __all__ = [
     "BBAWorkflowConfig",
     "BeamModelBackend",
     "ControlBackendConfig",
+    "CONTROL_BACKEND_ENV",
     "ElementConfig",
     "ElegantModelBackend",
     "EmitAnalysisConfig",
     "EmitMeasureWorkflowConfig",
     "EmitPreset",
     "EmitScanConfig",
+    "FlagPixelGeometry",
     "MachineConfig",
     "MachineChoice",
+    "MACHINE_ID_ENV",
+    "LEGACY_CONTROL_BACKEND_ENV",
+    "LEGACY_MACHINE_ID_ENV",
     "MachineProfile",
     "MachineProfileError",
     "MachineRuntimeConfig",
@@ -87,6 +114,12 @@ __all__ = [
     "MachineVmRuntimeConfig",
     "ModelBackendConfig",
     "OrbitWorkflowConfig",
+    "REAL_COMMISSIONING_STATUSES",
+    "REAL_STATUS_COMMISSIONED",
+    "REAL_STATUS_NOT_SUPPORTED",
+    "REAL_STATUS_READ_ONLY",
+    "REAL_STATUS_WRITE_BLOCKED",
+    "REAL_STATUS_WRITE_SMOKE_PASSED",
     "ResolvedMachineRuntimeConfig",
     "ResolvedSoftIocRuntimeConfig",
     "ResolvedVmRuntimeConfig",
@@ -94,6 +127,8 @@ __all__ = [
     "VirtualMachineLocalSegment",
     "VirtualMachinePredefinedUsedline",
     "VirtualMachineUsedlineWorkflow",
+    "WRITE_ALLOWED",
+    "WRITE_BLOCKED",
     "MachineValidationCheck",
     "MachineValidationReport",
     "build_model_backend",
@@ -108,6 +143,9 @@ __all__ = [
     "load_profile",
     "normalize_mode",
     "normalize_plane",
+    "real_commissioning_status",
+    "real_commissioning_status_label",
+    "real_commissioning_status_tone",
     "resolve_virtual_machine_segment_choices",
     "resolve_virtual_machine_usedline_workflow",
     "resolve_machine_runtime",
@@ -115,5 +153,9 @@ __all__ = [
     "resolve_vm_runtime",
     "request_runtime_restart",
     "resolve_channel",
+    "resolve_flag_pixel_geometry",
+    "require_workflow_write_allowed",
     "validate_machine_profile",
+    "workflow_write_policy",
+    "workflow_writes_allowed",
 ]

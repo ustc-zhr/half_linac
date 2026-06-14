@@ -21,6 +21,9 @@ from half_linac.src.shared.machine_profile import (
     MachineProfile,
     MachineProfileError,
     MachineValidationReport,
+    REAL_STATUS_NOT_SUPPORTED,
+    REAL_STATUS_READ_ONLY,
+    REAL_STATUS_WRITE_BLOCKED,
     build_model_backend,
     describe_app_support,
     get_bba_preset,
@@ -29,11 +32,15 @@ from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
     load_profile,
+    real_commissioning_status,
+    require_workflow_write_allowed,
     resolve_channel,
+    resolve_flag_pixel_geometry,
     resolve_machine_runtime,
     resolve_virtual_machine_segment_choices,
     resolve_virtual_machine_usedline_workflow,
     validate_machine_profile,
+    workflow_writes_allowed,
 )
 from half_linac.src.shared.machine_profile.loader import (
     load_bba_workflow,
@@ -133,6 +140,8 @@ class MachineProfileTests(unittest.TestCase):
         assert context.orbit_workflow is not None
         self.assertEqual(len(context.orbit_workflow.bpms), 41)
         self.assertEqual(context.orbit_workflow.xcors[18], "XC21")
+        self.assertTrue(workflow_writes_allowed(context, "orbit"))
+        require_workflow_write_allowed(context, "orbit", "test write")
 
     def test_load_orbit_display_app_context(self):
         context = load_app_context("orbit_display")
@@ -157,6 +166,59 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["flag_pixel_shape"]["vm"], [360, 270])
         self.assertEqual(workflow["flag_pixel_shape"]["real"], [1440, 1080])
         self.assertEqual(workflow["flag_pixel_width_mm"]["vm"], 0.02)
+        self.assertEqual(
+            resolve_flag_pixel_geometry(
+                workflow,
+                "workflows.beam_monitor",
+                "vm",
+                "PRF06",
+            ).shape,
+            (360, 270),
+        )
+
+    def test_beam_monitor_pixel_geometry_supports_per_flag_override(self):
+        workflow = {
+            "flag_pixel_geometry": {
+                "default": {
+                    "vm": {"shape": [360, 270], "pixel_width_mm": 0.02},
+                    "real": {"shape": [360, 270], "pixel_width_mm": 0.02},
+                },
+                "by_flag": {
+                    "PRF04": {
+                        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0065},
+                    },
+                    "PRF05": {
+                        "vm": {"shape": [720, 540]},
+                    },
+                },
+            },
+        }
+
+        self.assertEqual(
+            resolve_flag_pixel_geometry(
+                workflow,
+                "workflows.beam_monitor",
+                "real",
+                "PRF03",
+            ).shape,
+            (360, 270),
+        )
+        prf04_real = resolve_flag_pixel_geometry(
+            workflow,
+            "workflows.beam_monitor",
+            "real",
+            "PRF04",
+        )
+        self.assertEqual(prf04_real.shape, (1440, 1080))
+        self.assertEqual(prf04_real.pixel_width_mm, 0.0065)
+        prf05_vm = resolve_flag_pixel_geometry(
+            workflow,
+            "workflows.beam_monitor",
+            "vm",
+            "PRF05",
+        )
+        self.assertEqual(prf05_vm.shape, (720, 540))
+        self.assertEqual(prf05_vm.pixel_width_mm, 0.02)
 
     def test_half_virtual_machine_workflow_keeps_expected_segment_choices(self):
         profile = load_profile("half")
@@ -311,6 +373,8 @@ class MachineProfileTests(unittest.TestCase):
     def test_orbit_workflow_matches_expected_shape(self):
         profile = load_profile("half")
         workflow = get_workflow(profile, "orbit")
+        from half_linac.src.apps.orbit_correct.profile_runtime import load_orbit_runtime_settings
+
         self.assertEqual(len(workflow["bpms"]), 41)
         self.assertEqual(workflow["bpms"][0], "BPM03")
         self.assertEqual(workflow["bpms"][-1], "BPM43")
@@ -318,6 +382,9 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["ycors"][26], "YC29")
         self.assertEqual(workflow["response_wait_s_by_backend"]["vm"], 8)
         self.assertEqual(workflow["corrector_upperlimit_rad"], 0.001)
+        runtime = load_orbit_runtime_settings(load_app_context("orbit_correct", machine_id="half", control_backend="vm"))
+        self.assertEqual(runtime["corrector_upperlimit"], 0.001)
+        self.assertEqual(runtime["corrector_upperlimit_unit"], "rad")
 
     def test_bba_and_emit_defaults_exist(self):
         bba_context = load_app_context("bba")
@@ -426,14 +493,56 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(yc21.plane, "y")
 
     def test_load_profile_uses_env_machine_id_when_unspecified(self):
-        with patch.dict(os.environ, {"HALF_MACHINE_ID": "half"}):
+        with patch.dict(os.environ, {"HALF_LINAC_MACHINE_ID": "irfel"}, clear=False):
+            profile = load_profile()
+        self.assertEqual(profile.machine.id, "irfel")
+
+    def test_load_profile_accepts_legacy_env_machine_id(self):
+        with patch.dict(
+            os.environ,
+            {"HALF_LINAC_MACHINE_ID": "", "HALF_MACHINE_ID": "half"},
+            clear=False,
+        ):
             profile = load_profile()
         self.assertEqual(profile.machine.id, "half")
 
+    def test_new_env_machine_id_takes_precedence_over_legacy_env(self):
+        with patch.dict(
+            os.environ,
+            {
+                "HALF_LINAC_MACHINE_ID": "irfel",
+                "HALF_MACHINE_ID": "half",
+            },
+            clear=False,
+        ):
+            profile = load_profile()
+        self.assertEqual(profile.machine.id, "irfel")
+
     def test_load_app_context_uses_env_control_backend_when_unspecified(self):
-        with patch.dict(os.environ, {"HALF_CONTROL_BACKEND": "real"}):
+        with patch.dict(os.environ, {"HALF_LINAC_CONTROL_BACKEND": "real"}, clear=False):
             context = load_app_context("orbit_correct")
         self.assertEqual(context.control_backend.name, "real")
+
+    def test_load_app_context_accepts_legacy_env_control_backend(self):
+        with patch.dict(
+            os.environ,
+            {"HALF_LINAC_CONTROL_BACKEND": "", "HALF_CONTROL_BACKEND": "real"},
+            clear=False,
+        ):
+            context = load_app_context("orbit_correct")
+        self.assertEqual(context.control_backend.name, "real")
+
+    def test_new_env_control_backend_takes_precedence_over_legacy_env(self):
+        with patch.dict(
+            os.environ,
+            {
+                "HALF_LINAC_CONTROL_BACKEND": "vm",
+                "HALF_CONTROL_BACKEND": "real",
+            },
+            clear=False,
+        ):
+            context = load_app_context("orbit_correct")
+        self.assertEqual(context.control_backend.name, "vm")
 
     def test_runtime_selector_lists_half_machine_profile(self):
         choices = list_machine_choices()
@@ -502,6 +611,11 @@ class MachineProfileTests(unittest.TestCase):
             machine_id="irfel",
             control_backend="vm",
         )
+        real_beam_context = load_app_context(
+            "beam_monitor",
+            machine_id="irfel",
+            control_backend="real",
+        )
         energy_context = load_app_context(
             "energy_spectrum",
             machine_id="irfel",
@@ -512,6 +626,21 @@ class MachineProfileTests(unittest.TestCase):
             machine_id="irfel",
             control_backend="vm",
         )
+        real_emit_context = load_app_context(
+            "emit_measure",
+            machine_id="irfel",
+            control_backend="real",
+        )
+        bba_context = load_app_context(
+            "bba",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        real_energy_context = load_app_context(
+            "energy_spectrum",
+            machine_id="irfel",
+            control_backend="real",
+        )
         orbit_display_context = load_app_context("orbit_display", machine_id="irfel")
         runtime = resolve_machine_runtime(profile)
         report = validate_machine_profile("irfel")
@@ -519,6 +648,7 @@ class MachineProfileTests(unittest.TestCase):
         beam_workflow = get_workflow(profile, "beam_monitor")
         energy_workflow = get_workflow(profile, "energy_spectrum")
         emit_workflow = get_workflow(profile, "emit_measure")
+        bba_workflow = get_workflow(profile, "bba")
         vm_start_ids, vm_end_ids, vm_default_start, vm_default_end = (
             resolve_virtual_machine_segment_choices(profile)
         )
@@ -537,8 +667,38 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(report.get_check("app:beam_monitor").status, "pass")
         self.assertEqual(report.get_check("app:emit_measure").status, "pass")
         self.assertEqual(report.get_check("model:emit_measure").status, "pass")
+        self.assertEqual(report.get_check("app:bba").status, "pass")
+        self.assertEqual(report.get_check("model:bba").status, "pass")
         self.assertEqual(report.get_check("app:energy_spectrum").status, "pass")
         self.assertEqual(report.get_check("model:energy_spectrum").status, "pass")
+        self.assertEqual(report.get_check("commissioning:orbit_correct").status, "pass")
+        self.assertEqual(report.get_check("commissioning:orbit_display").status, "pass")
+        self.assertEqual(report.get_check("commissioning:beam_monitor").status, "pass")
+        self.assertEqual(report.get_check("commissioning:bba").status, "pass")
+        self.assertEqual(report.get_check("commissioning:emit_measure").status, "pass")
+        self.assertEqual(report.get_check("commissioning:energy_spectrum").status, "pass")
+        self.assertEqual(
+            real_commissioning_status(profile, "orbit_correct"),
+            REAL_STATUS_WRITE_BLOCKED,
+        )
+        self.assertEqual(real_commissioning_status(profile, "orbit_display"), REAL_STATUS_READ_ONLY)
+        self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_WRITE_BLOCKED)
+        self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_NOT_SUPPORTED)
+        self.assertEqual(real_commissioning_status(profile, "emit_measure"), REAL_STATUS_WRITE_BLOCKED)
+        self.assertEqual(real_commissioning_status(profile, "energy_spectrum"), REAL_STATUS_WRITE_BLOCKED)
+        self.assertFalse(workflow_writes_allowed(orbit_context, "orbit"))
+        self.assertTrue(workflow_writes_allowed(vm_orbit_context, "orbit"))
+        self.assertFalse(workflow_writes_allowed(real_beam_context, "beam_monitor"))
+        self.assertTrue(workflow_writes_allowed(beam_context, "beam_monitor"))
+        self.assertFalse(workflow_writes_allowed(real_emit_context, "emit_measure"))
+        self.assertTrue(workflow_writes_allowed(emit_context, "emit_measure"))
+        self.assertFalse(workflow_writes_allowed(real_energy_context, "energy_spectrum"))
+        self.assertTrue(workflow_writes_allowed(energy_context, "energy_spectrum"))
+        with self.assertRaisesRegex(MachineProfileError, "blocked"):
+            require_workflow_write_allowed(orbit_context, "orbit", "test write")
+        with self.assertRaisesRegex(MachineProfileError, "blocked"):
+            require_workflow_write_allowed(real_beam_context, "beam_monitor", "test write")
+        require_workflow_write_allowed(vm_orbit_context, "orbit", "test write")
         self.assertEqual(beam_context.app_name, "beam_monitor")
         self.assertEqual(energy_context.app_name, "energy_spectrum")
         self.assertEqual(energy_context.control_backend.name, "vm")
@@ -576,8 +736,39 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(orbit_context.orbit_workflow.xcors[-1], "HC07")
         self.assertEqual(orbit_context.orbit_workflow.ycors[-1], "VC07")
         self.assertEqual(workflow["response_wait_s_by_backend"]["real"], 1.0)
-        self.assertEqual(workflow["corrector_upperlimit_rad"], 0.001)
+        self.assertEqual(workflow["corrector_upperlimit_by_backend"]["vm"]["value"], 0.001)
+        self.assertEqual(workflow["corrector_upperlimit_by_backend"]["vm"]["unit"], "rad")
+        self.assertEqual(workflow["corrector_upperlimit_by_backend"]["real"]["value"], 5.0)
+        self.assertEqual(workflow["corrector_upperlimit_by_backend"]["real"]["unit"], "A")
+        irfel_vm_orbit_runtime = orbit_runtime.load_orbit_runtime_settings(vm_orbit_context)
+        irfel_real_orbit_runtime = orbit_runtime.load_orbit_runtime_settings(orbit_context)
+        self.assertEqual(irfel_vm_orbit_runtime["corrector_upperlimit"], 0.001)
+        self.assertEqual(irfel_vm_orbit_runtime["corrector_upperlimit_unit"], "rad")
+        self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit"], 5.0)
+        self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit_unit"], "A")
         self.assertEqual(beam_workflow["default_flag"], "PRF03")
+        self.assertEqual(
+            beam_workflow["flag_pixel_geometry"]["default"]["vm"]["shape"],
+            [360, 270],
+        )
+        self.assertEqual(
+            resolve_flag_pixel_geometry(
+                beam_workflow,
+                "workflows.beam_monitor",
+                "vm",
+                "PRF03",
+            ).shape,
+            (360, 270),
+        )
+        self.assertEqual(
+            resolve_flag_pixel_geometry(
+                beam_workflow,
+                "workflows.beam_monitor",
+                "real",
+                "PRF04",
+            ).pixel_width_mm,
+            0.02,
+        )
         self.assertEqual(
             resolve_channel(profile, "PRF03", "sigx", "vm"),
             "IRFEL:VM:FLAG:PRF03:sigx",
@@ -603,6 +794,17 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(emit_workflow["presets"][0]["quad"], "QM12")
         self.assertEqual(emit_workflow["presets"][0]["flag"], "PRF04")
         self.assertEqual(emit_workflow["presets"][0]["model_line"], "ALL_DUMP")
+        self.assertEqual(bba_context.app_name, "bba")
+        self.assertEqual(bba_context.control_backend.name, "vm")
+        self.assertIsNotNone(bba_context.bba_workflow)
+        assert bba_context.bba_workflow is not None
+        self.assertEqual(bba_context.bba_workflow.standard.control_backends, ("vm",))
+        self.assertEqual(bba_context.bba_workflow.bba2.control_backends, ("vm",))
+        self.assertEqual(bba_context.bba_workflow.standard.quads, ("QM01",))
+        self.assertEqual(bba_context.bba_workflow.standard.correctors, ("HC01",))
+        self.assertEqual(bba_context.bba_workflow.standard.bpm1, ("BPM01",))
+        self.assertEqual(bba_context.bba_workflow.standard.bpm2, ("BPM02",))
+        self.assertEqual(bba_workflow["standard"]["control_backends"], ["vm"])
         self.assertIn("BPM02", vm_start_ids)
         self.assertEqual(vm_end_ids, ("PRF03",))
         self.assertEqual(vm_default_start, "QM13")
@@ -675,8 +877,8 @@ class MachineProfileTests(unittest.TestCase):
                 with patch.dict(
                     os.environ,
                     {
-                        "HALF_MACHINE_ID": "irfel",
-                        "HALF_CONTROL_BACKEND": "vm",
+                        "HALF_LINAC_MACHINE_ID": "irfel",
+                        "HALF_LINAC_CONTROL_BACKEND": "vm",
                     },
                 ):
                     corrector = OrbitCorrector(
@@ -1452,7 +1654,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertNotIn('configs/machines/half/machine.json', source)
 
     def test_invalid_machine_id_from_env_raises(self):
-        with patch.dict(os.environ, {"HALF_MACHINE_ID": "../escape"}):
+        with patch.dict(os.environ, {"HALF_LINAC_MACHINE_ID": "../escape"}):
             with self.assertRaises(MachineProfileError):
                 load_profile()
 

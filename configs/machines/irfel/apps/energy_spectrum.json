@@ -22,5 +22,10 @@
   "esa_quads": ["QM19", "QM20"],
   "start_elements": ["QM12", "QM19"],
   "default_start_element": "QM12",
-  "energy0_default_mev": 36
+  "energy0_default_mev": 36,
+  "real_status": "write_blocked",
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
+  }
 }

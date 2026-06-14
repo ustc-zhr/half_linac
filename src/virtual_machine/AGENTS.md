@@ -4,8 +4,13 @@
 - Applies to `src/virtual_machine/` and its subdirectories.
 
 ## Structure
-- `half_elegant/start_VM.py` watches JSON changes and refreshes elegant outputs.
-- `half_elegant/mainVM.py` and `VMgui.py` drive the VM GUI flow.
+- `common/mainVM.py` contains the shared VM GUI behavior.
+- `common/start_VM.py` watches JSON changes and refreshes elegant outputs.
+- `common/full_VM.py`, `common/simply_VM.py`, and `common/transfer_ESAline.py` contain shared VM usedline helper entrypoints.
+- `common/err_gene_VM.py` contains the shared VM error helper implementation; machine wrappers may keep it disabled until their elegant control sections are ready.
+- machine-specific `*/mainVM.py` files are thin entrypoint wrappers.
+- machine-specific `*/start_VM.py`, `*/full_VM.py`, `*/simply_VM.py`, `*/transfer_ESAline.py`, and enabled `*/err_gene_VM.py` files are thin entrypoint wrappers.
+- `half_elegant/VMgui.py` is the generated Qt UI used by the shared VM GUI.
 - `elegant_parser.py` and `lattice_parser.py` are the primary translation logic between lattice descriptions and runtime files.
 
 ## Editing Rules

@@ -36,6 +36,20 @@
         n_steps = 1
 &end
 
+&error_control
+  clear_error_settings = 1
+&end
+
+&error_element
+  name=*,
+  element_type=QUAD,
+  item=FSE,
+  amplitude=0e-5,
+  type = "gaussian",
+  cutoff=3.0,
+  bind=0
+&end
+
 &sdds_beam
   input                     ="36MeV_slitbeam_col.dat"
   !input                     ="input_dog.sdds"

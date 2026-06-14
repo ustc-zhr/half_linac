@@ -13,7 +13,7 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from half_linac.src.virtual_machine.half_elegant.start_VM import main
+from half_linac.src.virtual_machine.common.start_VM import main
 
 
 if __name__ == "__main__":

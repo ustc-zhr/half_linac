@@ -992,38 +992,72 @@ class myWindow(QWidget, Ui_Form):
     def _find_bba_preset(self, preset_id):
         return get_bba_preset(self.app_context, preset_id)
 
+    def _family_control_backends(self, family):
+        return family.control_backends or default_control_backend_choices(self.app_context.machine.id)
+
+    def _selected_family_control_backend(self, family):
+        control_backends = self._family_control_backends(family)
+        current = self.app_context.control_backend.name
+        if current in control_backends:
+            return current
+        if control_backends:
+            return control_backends[0]
+        return current
+
+    def _require_family_control_backend(self, family, backend, label):
+        allowed = self._family_control_backends(family)
+        if allowed and backend not in allowed:
+            allowed_text = ", ".join(allowed)
+            raise ValueError(f"{label} does not allow {backend!r} backend. Allowed backend(s): {allowed_text}.")
+
     def _profile_element_ids(self, *, kind, role=None, plane=None):
         return [element.id for element in list_elements(self.app_context, kind=kind, role=role, plane=plane)]
 
+    def _family_element_ids(self, configured_ids, *, kind, plane=None):
+        if not configured_ids:
+            return self._profile_element_ids(kind=kind, plane=plane)
+
+        items = []
+        for element_id in configured_ids:
+            element = self.machine_profile.get_element(element_id)
+            if element.kind != kind:
+                continue
+            if plane is not None and element.plane != plane:
+                continue
+            items.append(element.id)
+        return items
+
     def _standard_quad_items(self):
-        return self._profile_element_ids(kind="quad")
+        return self._family_element_ids(self.bba_workflow.standard.quads, kind="quad")
 
     def _standard_corrector_items(self, plane):
-        return self._profile_element_ids(
+        return self._family_element_ids(
+            self.bba_workflow.standard.correctors,
             kind="corr",
             plane=self._normalize_plane_value(plane).lower(),
         )
 
     def _standard_bpm1_items(self):
-        return self._profile_element_ids(kind="bpm")
+        return self._family_element_ids(self.bba_workflow.standard.bpm1, kind="bpm")
 
     def _standard_bpm2_items(self):
-        return self._profile_element_ids(kind="bpm")
+        return self._family_element_ids(self.bba_workflow.standard.bpm2, kind="bpm")
 
     def _bba2_quad_items(self):
-        return self._profile_element_ids(kind="quad")
+        return self._family_element_ids(self.bba_workflow.bba2.quads, kind="quad")
 
     def _bba2_corrector_items(self, plane):
-        return self._profile_element_ids(
+        return self._family_element_ids(
+            self.bba_workflow.bba2.correctors,
             kind="corr",
             plane=self._normalize_plane_value(plane).lower(),
         )
 
     def _bba2_bpm1_items(self):
-        return self._profile_element_ids(kind="bpm")
+        return self._family_element_ids(self.bba_workflow.bba2.bpm1, kind="bpm")
 
     def _bba2_bpm2_items(self):
-        return self._profile_element_ids(kind="bpm")
+        return self._family_element_ids(self.bba_workflow.bba2.bpm2, kind="bpm")
 
     def _refresh_corrector_combo(self, combo, items, preferred=None):
         current = preferred or combo.currentText()
@@ -1048,7 +1082,9 @@ class myWindow(QWidget, Ui_Form):
     def _configure_machine_profile(self):
         standard = self.bba_workflow.standard
         bba2 = self.bba_workflow.bba2
-        control_backends = bba2.control_backends or default_control_backend_choices(self.app_context.machine.id)
+        self.standard_control_backend = self._selected_family_control_backend(standard)
+        bba2_control_backends = self._family_control_backends(bba2)
+        bba2_control_backend = self._selected_family_control_backend(bba2)
 
         self._set_combo_items(self.comboBox_2, self._standard_quad_items())
         self._set_combo_items(self.comboBox_3, self._standard_bpm1_items())
@@ -1057,7 +1093,7 @@ class myWindow(QWidget, Ui_Form):
         self._set_combo_items(self.comboBox_7, self._bba2_quad_items())
         self._set_combo_items(self.comboBox_8, self._bba2_bpm1_items())
         self._set_combo_items(self.comboBox_6, self._bba2_bpm2_items())
-        self._set_combo_items(self.comboBox_11, control_backends)
+        self._set_combo_items(self.comboBox_11, bba2_control_backends)
 
         standard_default = self._find_bba_preset(standard.default_preset)
         self._set_combo_current_plane(self.comboBox_5, standard_default.plane)
@@ -1095,7 +1131,7 @@ class myWindow(QWidget, Ui_Form):
         self._set_combo_current_text(self.comboBox_6, bba2_default.bpm2)
         self._set_combo_current_control_backend(
             self.comboBox_11,
-            self.app_context.control_backend.name,
+            bba2_control_backend,
         )
         self._apply_typed_defaults(
             bba2_default.scan,
@@ -1123,7 +1159,7 @@ class myWindow(QWidget, Ui_Form):
         )
 
     def _profile_default_control_backend(self):
-        return self.app_context.control_backend.name
+        return getattr(self, "standard_control_backend", self.app_context.control_backend.name)
 
     @staticmethod
     def _bpm_logical_channel(plane):
@@ -1133,7 +1169,7 @@ class myWindow(QWidget, Ui_Form):
         return self.comboBox_5.currentText() if self.tabWidget.currentIndex() == 0 else self.comboBox_10.currentText()
 
     def _current_control_backend_text(self):
-        return "Standard" if self.tabWidget.currentIndex() == 0 else self.comboBox_11.currentText()
+        return self._profile_default_control_backend() if self.tabWidget.currentIndex() == 0 else self.comboBox_11.currentText()
 
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
@@ -1215,11 +1251,13 @@ class myWindow(QWidget, Ui_Form):
             params.plane = self._normalize_plane_value(self.comboBox_5.currentText())
 
             mode = self._profile_default_control_backend()
+            self._require_family_control_backend(self.bba_workflow.standard, mode, "BBA-1")
             bpm_channel = self._bpm_logical_channel(params.plane)
             params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", mode)
             params.quadPV = resolve_channel(self.app_context, params.quad, "k1", mode)
             params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, mode)
             params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, mode)
+            params.control_backend = mode
 
             params.corr_from = float(self.lineEdit.text())
             params.corr_end = float(self.lineEdit_2.text())
@@ -1248,6 +1286,7 @@ class myWindow(QWidget, Ui_Form):
             params.bpm2 = self.comboBox_6.currentText()
             params.plane = self._normalize_plane_value(self.comboBox_10.currentText())
             params.control_backend = self._normalize_control_backend_value(self.comboBox_11.currentText())
+            self._require_family_control_backend(self.bba_workflow.bba2, params.control_backend, "BBA-2")
             bpm_channel = self._bpm_logical_channel(params.plane)
             params.quadPV = resolve_channel(self.app_context, params.quad, "k1", params.control_backend)
             params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", params.control_backend)

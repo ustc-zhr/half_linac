@@ -1,11 +1,21 @@
 {
   "default_flag": "PRF03",
-  "flag_pixel_shape": {
-    "vm": [360, 270],
-    "real": [360, 270]
+  "flag_pixel_geometry": {
+    "default": {
+      "vm": {
+        "shape": [360, 270],
+        "pixel_width_mm": 0.02
+      },
+      "real": {
+        "shape": [360, 270],
+        "pixel_width_mm": 0.02
+      }
+    },
+    "by_flag": {}
   },
-  "flag_pixel_width_mm": {
-    "vm": 0.02,
-    "real": 0.02
+  "real_status": "write_blocked",
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
   }
 }

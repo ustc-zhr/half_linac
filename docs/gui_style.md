@@ -1,6 +1,6 @@
 # GUI Style Notes
 
-This note captures the current operator GUI direction used by the Control Room app in `src/apps/launcher/main.py` and `src/virtual_machine/half_elegant/mainVM.py`.
+This note captures the current operator GUI direction used by the Control Room app in `src/apps/launcher/main.py` and `src/virtual_machine/common/mainVM.py`.
 
 ## Core Pattern
 - Use a compact header panel with one main title, primary actions on the right, and no explanatory subtitle text.

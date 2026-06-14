@@ -36,7 +36,11 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QRegExp, Qt, QTimer
 from OrbCorgui import Ui_MainWindow
 
-from half_linac.src.shared.machine_profile import load_app_context
+from half_linac.src.shared.machine_profile import (
+    MachineProfileError,
+    load_app_context,
+    require_workflow_write_allowed,
+)
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
     request_runtime_restart,
@@ -1008,6 +1012,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.last_notice = message
         self._refresh_status()
 
+    def _require_write_allowed(self, operation):
+        try:
+            require_workflow_write_allowed(self.app_context, "orbit", operation)
+            return True
+        except MachineProfileError as exc:
+            message = str(exc)
+            self._notify(message)
+            QMessageBox.warning(self, "Orbit Correct", message)
+            return False
+
     def _selected_bpm_count(self):
         return sum(1 for cb in self.all_checkboxes if cb.isChecked())
 
@@ -1167,6 +1181,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         return bpm_target_list, bpmx_target_values, bpmy_target_values
         
     def measure_res(self): #measure response matrix
+        if not self._require_write_allowed("Response matrix measurement"):
+            return
         self.process_manager.start_process(
             key="response_matrix",
             label="Response Matrix Measurement",
@@ -1175,6 +1191,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
 
     def start_cor(self):
+        if not self._require_write_allowed("Orbit correction"):
+            return
         
         # prepare the target paras. 
         bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
@@ -1213,6 +1231,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
     # def cor_off(self):
     #     Popen("python3 correct.py cor_off", cwd=str(APP_DIR), shell=True)
     def cor_off(self):
+        if not self._require_write_allowed("Corrector reset"):
+            return
         bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
         cmd = [
             "python3", "correct.py",                  #0
@@ -1228,6 +1248,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
 
     def cor_recover(self):
+        if not self._require_write_allowed("Corrector recover"):
+            return
         # bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
         cmd = [
             "python3", "correct.py",                  #0

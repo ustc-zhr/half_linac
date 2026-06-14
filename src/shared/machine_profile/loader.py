@@ -25,6 +25,7 @@ from .models import (
     normalize_mode,
     normalize_plane,
 )
+from .pixel_geometry import resolve_flag_pixel_geometry
 
 
 SUPPORTED_APP_NAMES = {
@@ -62,6 +63,10 @@ PATHLIKE_MODEL_CONFIG_KEYS = (
     "_path",
 )
 PATHLIKE_MODEL_CONFIG_NAMES = {"working_dir"}
+MACHINE_ID_ENV = "HALF_LINAC_MACHINE_ID"
+CONTROL_BACKEND_ENV = "HALF_LINAC_CONTROL_BACKEND"
+LEGACY_MACHINE_ID_ENV = "HALF_MACHINE_ID"
+LEGACY_CONTROL_BACKEND_ENV = "HALF_CONTROL_BACKEND"
 
 
 @dataclass(frozen=True)
@@ -573,7 +578,7 @@ def list_control_backend_choices(machine_id: str | None = None) -> tuple[str, ..
 def resolve_machine_id(machine_id: str | None) -> str:
     raw_machine_id = machine_id
     if raw_machine_id is None:
-        raw_machine_id = os.environ.get("HALF_MACHINE_ID", "")
+        raw_machine_id = _runtime_env_value(MACHINE_ID_ENV, LEGACY_MACHINE_ID_ENV)
 
     profile_id = str(raw_machine_id).strip() or "half"
     if Path(profile_id).name != profile_id or profile_id in {".", ".."}:
@@ -619,8 +624,15 @@ def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
 def resolve_control_backend(control_backend: str | None, default_mode: str) -> str:
     raw_control_backend = control_backend
     if raw_control_backend is None:
-        raw_control_backend = os.environ.get("HALF_CONTROL_BACKEND", "")
+        raw_control_backend = _runtime_env_value(CONTROL_BACKEND_ENV, LEGACY_CONTROL_BACKEND_ENV)
     return normalize_mode(raw_control_backend or default_mode, "control_backend")
+
+
+def _runtime_env_value(primary_name: str, legacy_name: str) -> str:
+    primary_value = os.environ.get(primary_name, "")
+    if primary_value:
+        return primary_value
+    return os.environ.get(legacy_name, "")
 
 
 def _load_profile_for_machine_id(
@@ -975,34 +987,62 @@ def _validate_beam_monitor_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
 ) -> None:
-    required_keys = (
-        "flag_pixel_shape",
-        "flag_pixel_width_mm",
+    has_structured_geometry = "flag_pixel_geometry" in workflow
+    has_legacy_geometry = (
+        "flag_pixel_shape" in workflow and "flag_pixel_width_mm" in workflow
     )
-    missing = [key for key in required_keys if key not in workflow]
-    if missing:
+    if not has_structured_geometry and not has_legacy_geometry:
         raise MachineProfileError(
-            "workflows.beam_monitor is missing required keys: "
-            + ", ".join(sorted(missing))
+            "workflows.beam_monitor requires flag_pixel_geometry, or legacy "
+            "flag_pixel_shape plus flag_pixel_width_mm."
         )
 
-    pixel_shape = _expect_mapping(
-        workflow.get("flag_pixel_shape"),
-        "workflows.beam_monitor.flag_pixel_shape",
-    )
-    pixel_width = _expect_mapping(
-        workflow.get("flag_pixel_width_mm"),
-        "workflows.beam_monitor.flag_pixel_width_mm",
-    )
-    for backend_name in profile.control_backends:
-        shape = pixel_shape.get(backend_name)
-        if not isinstance(shape, list) or len(shape) != 2:
-            raise MachineProfileError(
-                f"workflows.beam_monitor.flag_pixel_shape.{backend_name} must be [nx, ny]."
+    flag_ids = {
+        element.id
+        for element in profile.elements
+        if element.kind == "flag" and "image" in element.channels
+    }
+    geometry = workflow.get("flag_pixel_geometry")
+    if isinstance(geometry, Mapping):
+        by_flag = geometry.get("by_flag", {})
+        if by_flag is not None:
+            by_flag = _expect_mapping(
+                by_flag,
+                "workflows.beam_monitor.flag_pixel_geometry.by_flag",
             )
-        if backend_name not in pixel_width:
-            raise MachineProfileError(
-                f"workflows.beam_monitor.flag_pixel_width_mm is missing backend {backend_name!r}."
+            unknown_flags = sorted(set(by_flag) - flag_ids)
+            if unknown_flags:
+                raise MachineProfileError(
+                    "workflows.beam_monitor.flag_pixel_geometry.by_flag contains "
+                    "unknown flag id(s): "
+                    + ", ".join(unknown_flags)
+                )
+            backend_names = set(profile.control_backends)
+            for flag_id, raw_flag_geometry in by_flag.items():
+                flag_geometry = _expect_mapping(
+                    raw_flag_geometry,
+                    f"workflows.beam_monitor.flag_pixel_geometry.by_flag.{flag_id}",
+                )
+                unknown_backends = sorted(set(flag_geometry) - backend_names)
+                if unknown_backends:
+                    raise MachineProfileError(
+                        "workflows.beam_monitor.flag_pixel_geometry.by_flag."
+                        f"{flag_id} contains unknown backend(s): "
+                        + ", ".join(unknown_backends)
+                    )
+
+    for backend_name in profile.control_backends:
+        resolve_flag_pixel_geometry(
+            workflow,
+            "workflows.beam_monitor",
+            backend_name,
+        )
+        for flag_id in flag_ids:
+            resolve_flag_pixel_geometry(
+                workflow,
+                "workflows.beam_monitor",
+                backend_name,
+                flag_id,
             )
 
 

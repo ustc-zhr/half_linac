@@ -24,7 +24,11 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from half_linac.src.shared.machine_profile import load_app_context, resolve_channel
+from half_linac.src.shared.machine_profile import (
+    load_app_context,
+    require_workflow_write_allowed,
+    resolve_channel,
+)
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     RESPONSE_MATRIX_PATH,
     load_orbit_runtime_settings,
@@ -70,6 +74,11 @@ def estimate_energy_consistency(
     interval_s: float | None = None,
 ) -> dict[str, float | str]:
     app_context = load_app_context("orbit_correct")
+    require_workflow_write_allowed(
+        app_context,
+        "orbit",
+        "Corrector energy consistency check",
+    )
     workflow = app_context.orbit_workflow
     if workflow is None:
         raise EnergyCheckError("Orbit workflow is not available in the current app context.")

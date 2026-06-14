@@ -17,6 +17,7 @@ from .compatibility import (
     describe_app_support,
     load_app_context,
     load_profile,
+    real_commissioning_status,
     resolve_virtual_machine_usedline_workflow,
 )
 
@@ -494,7 +495,26 @@ def _validate_app(profile: MachineProfile, app_name: str) -> list[MachineValidat
     elif app_name == "energy_spectrum" and contexts:
         checks.append(_validate_energy_spectrum_model_config(contexts[0].model_backend))
 
+    if profile.machine.id == "irfel":
+        checks.append(_validate_real_commissioning_status(profile, app_name))
+
     return checks
+
+
+def _validate_real_commissioning_status(
+    profile: MachineProfile,
+    app_name: str,
+) -> MachineValidationCheck:
+    try:
+        status = real_commissioning_status(profile, app_name)
+    except MachineProfileError as exc:
+        return MachineValidationCheck(f"commissioning:{app_name}", FAIL, str(exc))
+
+    return MachineValidationCheck(
+        f"commissioning:{app_name}",
+        PASS,
+        f"real_status={status}.",
+    )
 
 
 def _validate_elegant_model_backend(app_name: str, context: AppContext) -> MachineValidationCheck:
@@ -650,7 +670,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "machine_id",
         nargs="?",
         default=None,
-        help="Machine profile id under configs/machines/. Defaults to HALF_MACHINE_ID or 'half'.",
+        help=(
+            "Machine profile id under configs/machines/. Defaults to "
+            "HALF_LINAC_MACHINE_ID, then legacy HALF_MACHINE_ID, then 'half'."
+        ),
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 

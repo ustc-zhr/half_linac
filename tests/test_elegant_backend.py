@@ -100,6 +100,18 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertIn("QM01", state["lattice"])
         self.assertIn("UND", state["usedline"])
         self.assertNotIn("USE", state["lattice"])
+        self.assertEqual(
+            state["control"]["error_control"]["clear_error_settings"],
+            "1",
+        )
+        self.assertEqual(
+            state["control"]["error_element"]["element_type"],
+            "QUAD",
+        )
+        self.assertEqual(
+            state["control"]["error_element"]["amplitude"],
+            "0e-5",
+        )
         esa_state = ElegantParser(
             elegant_dir / "lattice_ini.lte",
             elegant_dir / "one_ini.ele",
@@ -118,6 +130,8 @@ class ElegantBackendTests(unittest.TestCase):
             )
             self.assertIn("ALL_MAIN: LINE", lattice_path.read_text(encoding="utf-8"))
             self.assertIn("&sdds_beam", ele_path.read_text(encoding="utf-8"))
+            self.assertIn("&error_control", ele_path.read_text(encoding="utf-8"))
+            self.assertIn("&error_element", ele_path.read_text(encoding="utf-8"))
             self.assertIn("use_beamline = ALL_MAIN", ele_path.read_text(encoding="utf-8"))
 
         self.assertEqual(lattice_path.name, "lattice.lte")

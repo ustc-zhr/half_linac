@@ -13,8 +13,8 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from half_linac.src.virtual_machine.lattice_usedline import switch_to_esa_usedline_cli
+from half_linac.src.virtual_machine.common.transfer_ESAline import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(switch_to_esa_usedline_cli())
+    raise SystemExit(main())

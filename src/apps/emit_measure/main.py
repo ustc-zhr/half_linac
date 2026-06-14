@@ -50,6 +50,7 @@ from half_linac.src.shared.machine_profile import (
     build_model_backend,
     get_emit_preset,
     load_app_context,
+    require_workflow_write_allowed,
     resolve_channel,
 )
 
@@ -1467,6 +1468,15 @@ class myWindow(QWidget,Ui_Form):
         self.paras = self.get_setting()
         if self.paras is None:
             return
+        try:
+            require_workflow_write_allowed(
+                self.app_context,
+                "emit_measure",
+                "Emit measurement scan",
+            )
+        except MachineProfileError as exc:
+            self._warn(str(exc))
+            return
         self.paras.recal = False
         self.paras.clear = False 
         self.paras.scan_metadata = self._scan_metadata_from_paras(self.paras)
@@ -1809,6 +1819,11 @@ class scanThread(QThread):
         iniK1 = None
         try:
             if self.recal == False:
+                require_workflow_write_allowed(
+                    self.app_context,
+                    "emit_measure",
+                    "Emit measurement scan",
+                )
                 k1_list = np.linspace(self.k1_from,self.k1_end,self.k1_steps)
 
                 self.k1l =[]

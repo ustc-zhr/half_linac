@@ -30,10 +30,19 @@ from PyQt5.QtWidgets import (
 )
 
 from half_linac.src.shared.machine_profile import (
+    CONTROL_BACKEND_ENV,
+    LEGACY_CONTROL_BACKEND_ENV,
+    LEGACY_MACHINE_ID_ENV,
+    MACHINE_ID_ENV,
     MachineProfileError,
+    REAL_STATUS_NOT_SUPPORTED,
+    REAL_STATUS_READ_ONLY,
+    REAL_STATUS_WRITE_BLOCKED,
     describe_app_support,
     load_profile,
     normalize_mode,
+    real_commissioning_status,
+    real_commissioning_status_label,
     resolve_machine_runtime,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
@@ -641,7 +650,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.machine_profile = load_profile()
         self.control_backend = normalize_mode(
-            os.environ.get("HALF_CONTROL_BACKEND", "") or self.machine_profile.machine.default_mode,
+            os.environ.get(CONTROL_BACKEND_ENV, "")
+            or os.environ.get(LEGACY_CONTROL_BACKEND_ENV, "")
+            or self.machine_profile.machine.default_mode,
             "control_backend",
         )
         self.process_manager = ManagedProcessGroup(notify=self._notify)
@@ -740,6 +751,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel = LauncherStatusStrip(panel)
         self.status_panel.add_item("machine", "MACHINE", self.machine_profile.machine.id)
         self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
+        self.status_panel.add_item("real_status", "REAL STATUS", "--")
         self.status_panel.add_item("active", "ACTIVE", "0 running")
         self.status_panel.add_item("core", "CORE", "Idle")
         self.status_panel.add_item("tools", "TOOLS", "Idle")
@@ -828,10 +840,34 @@ class myWindow(QMainWindow, Ui_MainWindow):
                         f"Unavailable for machine '{self.machine_profile.machine.id}': {reason}"
                     )
 
+            if supported and profile_app_name is not None:
+                tooltip = self._append_real_commissioning_tooltip(tooltip, profile_app_name)
+                if self.machine_profile.machine.id == "irfel" and self.control_backend == "real":
+                    try:
+                        real_status = real_commissioning_status(self.machine_profile, profile_app_name)
+                    except MachineProfileError as exc:
+                        supported = False
+                        reason = f"IRFEL real commissioning status is invalid: {exc}"
+                    else:
+                        if real_status == REAL_STATUS_NOT_SUPPORTED:
+                            supported = False
+                            reason = f"{spec['label']} is not supported for IRFEL real mode."
+
             self.app_support_status[key] = (supported, reason)
             button.setEnabled(supported)
             button.setToolTip(tooltip)
             self._refresh_widget_style(button)
+
+    def _append_real_commissioning_tooltip(self, tooltip, app_name):
+        if self.machine_profile.machine.id != "irfel" or self.control_backend != "real":
+            return tooltip
+
+        try:
+            status = real_commissioning_status(self.machine_profile, app_name)
+            status_text = real_commissioning_status_label(status)
+        except MachineProfileError as exc:
+            status_text = f"CONFIG ERROR: {exc}"
+        return f"{tooltip}\n\nIRFEL real status: {status_text}"
 
     def _refresh_vm_manager_launch_spec(self, spec):
         if "vm" not in self.machine_profile.control_backends:
@@ -954,8 +990,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
             QMessageBox.warning(self, "Control Room", message)
             return
 
-        os.environ["HALF_MACHINE_ID"] = next_profile.machine.id
-        os.environ["HALF_CONTROL_BACKEND"] = normalized_backend
+        os.environ[MACHINE_ID_ENV] = next_profile.machine.id
+        os.environ[CONTROL_BACKEND_ENV] = normalized_backend
+        os.environ[LEGACY_MACHINE_ID_ENV] = next_profile.machine.id
+        os.environ[LEGACY_CONTROL_BACKEND_ENV] = normalized_backend
         self.machine_profile = next_profile
         self.control_backend = normalized_backend
 
@@ -987,6 +1025,35 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "warning": "warning",
         }.get(state, "subtle")
         self.status_panel.set_item(key, text, tone=tone)
+
+    def _real_commissioning_summary(self):
+        if self.control_backend != "real":
+            return "VM mode", "idle"
+        if self.machine_profile.machine.id != "irfel":
+            return "Untracked", "idle"
+
+        statuses = []
+        for app_name in dict.fromkeys(PROFILE_MANAGED_APP_KEYS.values()):
+            try:
+                statuses.append(real_commissioning_status(self.machine_profile, app_name))
+            except MachineProfileError:
+                return "Config error", "warning"
+
+        blocked = sum(status == REAL_STATUS_WRITE_BLOCKED for status in statuses)
+        readonly = sum(status == REAL_STATUS_READ_ONLY for status in statuses)
+        unsupported = sum(status == REAL_STATUS_NOT_SUPPORTED for status in statuses)
+        if blocked or unsupported:
+            parts = []
+            if blocked:
+                parts.append(f"{blocked} blocked")
+            if readonly:
+                parts.append(f"{readonly} read")
+            if unsupported:
+                parts.append(f"{unsupported} off")
+            return " / ".join(parts), "warning"
+        if readonly:
+            return f"{readonly} read", "idle"
+        return "Commissioned", "active"
 
     def _refresh_process_state(self):
         self.process_manager.prune_finished_processes()
@@ -1033,6 +1100,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         backend_tone = "warning" if self.control_backend == "real" else "active"
         self._set_summary_value("machine", self.machine_profile.machine.id, "active")
         self._set_summary_value("backend", self.control_backend.upper(), backend_tone)
+        real_status_text, real_status_state = self._real_commissioning_summary()
+        self._set_summary_value("real_status", real_status_text, real_status_state)
 
         has_running_processes = active_count > 0
         self.shutdown_button.setEnabled(has_running_processes)

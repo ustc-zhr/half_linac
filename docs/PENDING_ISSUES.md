@@ -81,3 +81,59 @@
   - Compute flag scalar outputs from the same WATCH data or image-derived profile used by VM image publishing.
   - Publish scalars from `VmPublisher` so measurement apps do not depend on `beam_monitor` being open.
   - Keep units consistent with `emit_measure` expectations, currently millimeters.
+
+### 5. IRFEL Real Commissioning Checklist
+
+- Status: open
+- Priority: high
+- Background:
+  - IRFEL VM workflows have been brought up incrementally for orbit, beam monitor, energy spectrum, and emit measurement.
+  - IRFEL `real` backend entries exist so the profile can be validated offline, but most real-machine behavior has not been verified on site.
+  - The current rule is: VM verification is not evidence that the same app is safe or physically correct in `real` mode.
+- Offline acceptance entrypoint:
+  - Run `bash scripts/check_irfel_vm.sh` before changing IRFEL profile wiring or app workflow config.
+  - Run `bash scripts/smoke_irfel_vm_runtime.sh` for a short VM/IOC startup smoke after VM-related changes.
+- Problem:
+  - Operators can select `machine=irfel` and `backend=real`, but some real PVs, units, safety limits, and calibration constants are still placeholders or unconfirmed.
+  - Without an explicit checklist, it is easy to treat config completeness as commissioning completeness.
+- General real-mode facts to confirm:
+  - Confirm the authoritative IRFEL PV list and whether each PV is read-only, setpoint, or readback.
+  - Confirm write permission expectations for correctors, quadrupoles, bends, camera exposure, and any restore operations.
+  - Confirm physical units for every writable magnet PV: current, angle, integrated strength, or normalized `K1`.
+  - Confirm safe limits, step sizes, dwell times, and restore behavior before any app writes to real PVs.
+  - Confirm whether each app should be allowed to write in first real tests or should start in read-only observation mode.
+- `control_backends/real.json` checklist:
+  - Verify BPM `x/y/s` PV names and units for every BPM used by orbit display or orbit correction.
+  - Verify corrector setpoint/readback PV names, sign convention, response unit, and safe range.
+  - Verify quadrupole PV names and whether the app is writing physical current or an elegant-style focusing strength.
+  - Verify bend PV names for energy-spectrum use, including current setpoint/readback and rollback path.
+  - Verify flag/camera image PVs, array shape, pixel width, and whether `sigx/sigy/exposure_time` are provided by real diagnostics.
+- `orbit_display` and `orbit_correct` checklist:
+  - Run read-only BPM display smoke first.
+  - Confirm BPM ordering matches the physical beamline and profile element order.
+  - Measure or load a response matrix whose BPM/corrector dimensions match the selected profile subset.
+  - Confirm corrector sign convention before enabling global correction.
+  - Confirm `response_wait_s_by_backend.real` and `corrector_upperlimit_rad` are suitable for IRFEL hardware.
+- `beam_monitor` checklist:
+  - Confirm each real flag image PV resolves and has the configured `pixel_shape`.
+  - Confirm pixel calibration and `pixel_width_mm`.
+  - Confirm behavior when a selected flag is not in the active usedline or has no beam image.
+  - Keep fitted `sigx/sigy` publication blocked in IRFEL real mode until a deliberate write test is approved.
+- `emit_measure` checklist:
+  - Confirm the real scan PV for each quadrupole preset and whether scan values are current or model `K1`.
+  - Confirm the selected flag provides reliable `sigx/sigy` during a scan.
+  - Confirm safe scan bounds, sample count, dwell time, and restore-to-initial behavior for each preset.
+  - Confirm the model line used for each preset matches the real beam path during measurement.
+  - Confirm archived scan metadata is reviewed before using `Recalculate` for real data.
+- `energy_spectrum` checklist:
+  - Complete the dedicated `IRFEL Energy Spectrum Real Bring-up` item above before operational real-mode scans.
+  - Confirm spectrometer bend calibration, dispersion model, target flag image, and safe scan range.
+  - Confirm whether auto-find may write the bend setpoint or must remain advisory in first real tests.
+- `bba` checklist:
+  - Decide whether IRFEL BBA is in scope for the first real commissioning round.
+  - If in scope, define machine-native BBA presets rather than reusing HALF or legacy IRFEL names blindly.
+  - Confirm quad/corrector/BPM combinations, scan bounds, and rollback behavior before enabling writes.
+- Acceptance criteria:
+  - Each app has one of these explicit `real_status` values for IRFEL real: `not_supported`, `read_only`, `write_blocked`, `write_smoke_passed`, or `commissioned`.
+  - Real-mode app configs and `control_backends/real.json` are updated only after the corresponding site facts are confirmed.
+  - Any real-mode write test is run deliberately, with a known rollback path and operator approval.

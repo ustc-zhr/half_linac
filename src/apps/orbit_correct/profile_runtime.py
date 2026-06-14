@@ -31,6 +31,7 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
     workflow = get_workflow(profile, "orbit")
     backend = target.control_backend.name if isinstance(target, AppContext) else profile.machine.default_mode
     paths = resolve_orbit_runtime_paths(target)
+    corrector_limit, corrector_limit_unit = _select_corrector_upperlimit(workflow, backend)
     return {
         "response_wait_s": _select_backend_float(
             workflow,
@@ -38,10 +39,9 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
             backend,
             DEFAULT_RESPONSE_WAIT_S,
         ),
-        "corrector_upperlimit_rad": _optional_float(
-            workflow.get("corrector_upperlimit_rad"),
-            DEFAULT_CORRECTOR_UPPERLIMIT_RAD,
-        ),
+        "corrector_upperlimit": corrector_limit,
+        "corrector_upperlimit_unit": corrector_limit_unit,
+        "corrector_upperlimit_rad": corrector_limit,
         **paths,
     }
 
@@ -182,6 +182,34 @@ def _select_backend_float(
     if value is None:
         return default
     return float(value)
+
+
+def _select_corrector_upperlimit(
+    workflow: Mapping[str, Any],
+    backend: str,
+) -> tuple[float, str]:
+    raw_limits = workflow.get("corrector_upperlimit_by_backend")
+    if isinstance(raw_limits, Mapping):
+        raw_value = raw_limits.get(backend, raw_limits.get("default"))
+        if raw_value is not None:
+            return _parse_corrector_upperlimit(raw_value, backend)
+
+    legacy_value = _optional_float(
+        workflow.get("corrector_upperlimit_rad"),
+        DEFAULT_CORRECTOR_UPPERLIMIT_RAD,
+    )
+    return legacy_value, "rad"
+
+
+def _parse_corrector_upperlimit(raw_value: Any, backend: str) -> tuple[float, str]:
+    if isinstance(raw_value, Mapping):
+        value = _optional_float(raw_value.get("value"), DEFAULT_CORRECTOR_UPPERLIMIT_RAD)
+        unit = str(raw_value.get("unit", "")).strip()
+        if not unit:
+            unit = "rad" if backend == "vm" else ""
+        return value, unit
+
+    return _optional_float(raw_value, DEFAULT_CORRECTOR_UPPERLIMIT_RAD), ""
 
 
 def _optional_float(value: Any, default: float) -> float:

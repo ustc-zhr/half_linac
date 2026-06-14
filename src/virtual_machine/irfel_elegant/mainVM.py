@@ -16,7 +16,7 @@ ensure_repo_import_path(__file__)
 from PyQt5.QtWidgets import QApplication
 
 from half_linac.src.shared.machine_profile import MachineProfileError
-from half_linac.src.virtual_machine.half_elegant.mainVM import myWindow
+from half_linac.src.virtual_machine.common.mainVM import myWindow
 
 
 if __name__ == "__main__":

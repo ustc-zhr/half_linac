@@ -13,7 +13,11 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from half_linac.src.virtual_machine.common.simply_VM import main
+from half_linac.src.virtual_machine.lattice_usedline import simplify_usedline_segment_cli
+
+
+def main():
+    return simplify_usedline_segment_cli()
 
 
 if __name__ == "__main__":

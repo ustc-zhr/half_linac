@@ -51,7 +51,9 @@ from half_linac.src.shared.machine_profile import (
     get_workflow,
     list_elements,
     load_app_context,
+    require_workflow_write_allowed,
     resolve_channel,
+    workflow_writes_allowed,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
@@ -508,6 +510,7 @@ class ESAAutoTuneThread(QThread):
         remove_bg,
         bg_image,
         bend_scan,
+        app_context,
         parent=None,
     ):
         super().__init__(parent)
@@ -517,9 +520,15 @@ class ESAAutoTuneThread(QThread):
         self.remove_bg = remove_bg
         self.bg_image = bg_image
         self.bend_scan = dict(bend_scan)
+        self.app_context = app_context
 
     def run(self):
         try:
+            require_workflow_write_allowed(
+                self.app_context,
+                "energy_spectrum",
+                "ESA auto tune",
+            )
             tuner = ESA_AutoTuner(
                 flag_pv_obj=self.flag_pv_obj,
                 flag_pixel=self.flag_pixel,
@@ -882,7 +891,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.horizontalLayout_6.setSpacing(8)
         self.verticalLayout_13.setSpacing(6)
 
-        self.lineEdit_expotime.setReadOnly(self.control_backend != "real")
+        self.lineEdit_expotime.setReadOnly(self.control_backend != "real" or not self._writes_allowed())
         self.lineEdit_alpha_ESAflag.setReadOnly(True)
         self.lineEdit_beta_ESAflag.setReadOnly(True)
         self.lineEdit_eta_ESAflag.setReadOnly(True)
@@ -1039,33 +1048,45 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _auto_tune_is_running(self):
         return self.auto_tune_thread is not None and self.auto_tune_thread.isRunning()
 
+    def _writes_allowed(self):
+        return workflow_writes_allowed(self.app_context, "energy_spectrum")
+
+    def _require_write_allowed(self, operation):
+        require_workflow_write_allowed(self.app_context, "energy_spectrum", operation)
+
     def _sync_energy_control_state(self):
+        writes_allowed = self._writes_allowed()
         slider_enabled = (
             self.control_backend == "real"
             and self.energy_set_pv is not None
             and not self._auto_tune_is_running()
+            and writes_allowed
         )
         self.slider_energy.setEnabled(slider_enabled)
         if self._auto_tune_is_running():
             self.slider_energy.setToolTip("Disabled while Auto Find is scanning.")
         elif slider_enabled:
             self.slider_energy.setToolTip(f"Release to write target energy to {self.energy_set_pv}.")
+        elif self.control_backend == "real" and not writes_allowed:
+            self.slider_energy.setToolTip("Real-machine energy writes are blocked by machine profile.")
         elif self.control_backend == "vm":
             self.slider_energy.setToolTip("VM backend does not support direct energy setpoint control.")
         else:
             self.slider_energy.setToolTip("No energy_set_pv configured for the real backend.")
 
-        auto_tune_enabled = self.control_backend == "real" and not self._auto_tune_is_running()
+        auto_tune_enabled = self.control_backend == "real" and not self._auto_tune_is_running() and writes_allowed
         self.pushButton_autoFind.setEnabled(auto_tune_enabled)
         if self._auto_tune_is_running():
             self.pushButton_autoFind.setText("Scanning...")
             self.pushButton_autoFind.setToolTip("Auto Find is currently scanning the ESA bend current.")
         else:
             self.pushButton_autoFind.setText("Auto Find")
-            if self.control_backend == "real":
+            if self.control_backend == "real" and writes_allowed:
                 self.pushButton_autoFind.setToolTip(
                     f"Scan {self.bend_pv} to locate the ESA beam on {self.flag_pv}."
                 )
+            elif self.control_backend == "real":
+                self.pushButton_autoFind.setToolTip("Real-machine ESA auto tune is blocked by machine profile.")
             else:
                 self.pushButton_autoFind.setToolTip(
                     "VM backend does not provide a coupled ESA response, so Auto Find is disabled."
@@ -1393,6 +1414,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def set_expotime(self):
         if self.control_backend == "real" and self.flag_expotime_pv:
+            try:
+                self._require_write_allowed("Flag exposure write")
+            except MachineProfileError as exc:
+                self._warn(str(exc))
+                return
             try:
                 expoTime = float(self.lineEdit_expotime.text())
             except ValueError:
@@ -1791,6 +1817,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if not self.energy_set_pv:
             print("No energy setpoint PV is configured for the real backend.")
             return
+        try:
+            self._require_write_allowed("ESA target energy write")
+        except MachineProfileError as exc:
+            self._warn(str(exc))
+            self._sync_energy_control_state()
+            return
 
         try:
             caput(self.energy_set_pv, float(slider_value))
@@ -1803,6 +1835,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def run_esa_auto_tune(self):
         if self.control_backend != "real":
             print("ESA auto tune is only enabled for the real backend.")
+            return
+        try:
+            self._require_write_allowed("ESA auto tune")
+        except MachineProfileError as exc:
+            self._warn(str(exc))
+            self._sync_energy_control_state()
             return
         if self._auto_tune_is_running():
             print("ESA auto tune is already running.")
@@ -1838,6 +1876,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 remove_bg=self.remove_bg,
                 bg_image=self.bg_image,
                 bend_scan=bend_scan,
+                app_context=self.app_context,
                 parent=self,
             )
             self.auto_tune_thread.progress.connect(self._handle_auto_tune_progress)

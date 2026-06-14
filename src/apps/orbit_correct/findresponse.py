@@ -18,6 +18,7 @@ from typing import List, Tuple
 from epics import caget, caget_many, caput, caput_many
 from half_linac.src.shared.machine_profile import (
     load_app_context,
+    require_workflow_write_allowed,
     resolve_channel,
 )
 from half_linac.src.apps.orbit_correct.profile_runtime import (
@@ -50,6 +51,11 @@ class ResponseMatrixCalculator:
         """
         print('n_averages:', n_averages)
         self.app_context = load_app_context("orbit_correct")
+        require_workflow_write_allowed(
+            self.app_context,
+            "orbit",
+            "Response matrix measurement",
+        )
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
         self.machine_mode = self.app_context.control_backend.name
