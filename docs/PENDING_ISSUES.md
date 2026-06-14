@@ -122,6 +122,7 @@
 - `emit_measure` checklist:
   - Confirm the real scan PV for each quadrupole preset and whether scan values are current or model `K1`.
   - Confirm the selected flag provides reliable `sigx/sigy` during a scan.
+  - Low priority: add a local fit quality gate for saturated, clipped, high-residual, or out-of-range PRF image fits before enabling real scans.
   - Confirm safe scan bounds, sample count, dwell time, and restore-to-initial behavior for each preset.
   - Confirm the model line used for each preset matches the real beam path during measurement.
   - Confirm archived scan metadata is reviewed before using `Recalculate` for real data.

@@ -13,11 +13,11 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from half_linac.src.virtual_machine.lattice_usedline import restore_main_usedline_cli
+from half_linac.src.virtual_machine.lattice_usedline import reload_initial_runtime_state_cli
 
 
 def main():
-    return restore_main_usedline_cli()
+    return reload_initial_runtime_state_cli()
 
 
 if __name__ == "__main__":

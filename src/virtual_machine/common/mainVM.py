@@ -484,9 +484,9 @@ BUTTON_CONFIG = {
         "tooltip": "Switch the VM lattice to the selected predefined usedline.",
     },
     "pushButton_FULLline": {
-        "text": "Restore Main Line",
+        "text": "Reload Initial Lattice",
         "category": "routing",
-        "tooltip": "Restore the machine main usedline from runtime metadata.",
+        "tooltip": "Reload the VM runtime JSON from the configured lattice_ini.lte and one_ini.ele files.",
     },
     "pushButton_simply_VM": {
         "text": "Simplify Segment",
@@ -1043,9 +1043,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
 
     def back_FULL(self):
-        self._notify("Requesting main usedline restore.")
+        self._notify("Requesting full VM reload from initial lattice files.")
         self._start_vm_config(
-            label="Main usedline restore",
+            label="Initial lattice reload",
             cmd=["python3", "full_VM.py"],
         )
 

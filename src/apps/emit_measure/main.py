@@ -30,12 +30,15 @@ from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
     QAbstractItemView,
+    QCheckBox,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHeaderView,
     QHBoxLayout,
     QFileDialog,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -252,7 +255,6 @@ QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
     background: transparent;
     border: none;
 }}
@@ -348,14 +350,14 @@ QHeaderView::section {{
     font-weight: 700;
 }}
 
-QRadioButton {{
+QRadioButton, QCheckBox {{
     color: {window_fg};
     font-size: 12px;
     font-weight: 600;
     spacing: 8px;
 }}
 
-QRadioButton::indicator {{
+QRadioButton::indicator, QCheckBox::indicator {{
     width: 16px;
     height: 16px;
     border: 1px solid {panel_border};
@@ -363,7 +365,7 @@ QRadioButton::indicator {{
     background-color: {input_bg};
 }}
 
-QRadioButton::indicator:checked {{
+QRadioButton::indicator:checked, QCheckBox::indicator:checked {{
     background-color: {metric_active_fg};
     border: 2px solid {window_fg};
 }}
@@ -565,6 +567,9 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_fit_flag = None
         self.latest_beam_fit_k1 = None
         self._beam_image_auto_refresh_ready = False
+        self.beam_image_timer = QTimer(self)
+        self.beam_image_timer.setInterval(2000)
+        self.beam_image_timer.timeout.connect(self._auto_refresh_beam_image_fit)
         self._plot_wrappers = {}
         self._result_fields = []
         self._configure_window()
@@ -591,6 +596,7 @@ class myWindow(QWidget,Ui_Form):
         self._refresh_status()
         self._beam_image_auto_refresh_ready = True
         self._schedule_beam_image_refresh()
+        self._update_beam_image_auto_refresh()
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} Emit Measure")
@@ -611,8 +617,11 @@ class myWindow(QWidget,Ui_Form):
         self._build_summary_panel()
         self._style_plot_cards()
         self._style_control_cards()
+        self._arrange_main_tabs()
 
     def _attach_tab_roots(self):
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.X_Plane), "Scan")
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), "Analysis")
         if self.X_Plane.layout() is self.gridLayout:
             self.gridLayout.setContentsMargins(0, 0, 0, 0)
         if self.tab_2.layout() is None:
@@ -620,6 +629,12 @@ class myWindow(QWidget,Ui_Form):
             tab_layout.setContentsMargins(0, 0, 0, 0)
             tab_layout.setSpacing(0)
             tab_layout.addWidget(self.layoutWidget_2)
+        self.twiss_tab = QWidget()
+        self.twiss_tab.setObjectName("twissTab")
+        self.twiss_tab_layout = QGridLayout(self.twiss_tab)
+        self.twiss_tab_layout.setContentsMargins(0, 0, 6, 6)
+        self.twiss_tab_layout.setSpacing(10)
+        self.tabWidget.addTab(self.twiss_tab, "Twiss")
 
     def _build_summary_panel(self):
         panel = QFrame(self)
@@ -714,6 +729,52 @@ class myWindow(QWidget,Ui_Form):
         title.setObjectName("panelTitle")
         layout.addWidget(title)
 
+        controls = QGridLayout()
+        controls.setHorizontalSpacing(8)
+        controls.setVerticalSpacing(4)
+
+        colormap_label = QLabel("Colormap", card)
+        colormap_label.setProperty("role", "field")
+        self.beam_image_colormap_combo = QComboBox(card)
+        self.beam_image_colormap_combo.addItems(["viridis", "plasma", "inferno", "magma", "gray", "jet"])
+        self.beam_image_colormap_combo.currentTextChanged.connect(self._redraw_latest_beam_image)
+
+        vmin_label = QLabel("vmin", card)
+        vmin_label.setProperty("role", "field")
+        self.beam_image_vmin_edit = QLineEdit(card)
+        self.beam_image_vmin_edit.setPlaceholderText("auto")
+        self.beam_image_vmin_edit.returnPressed.connect(self._redraw_latest_beam_image)
+
+        vmax_label = QLabel("vmax", card)
+        vmax_label.setProperty("role", "field")
+        self.beam_image_vmax_edit = QLineEdit(card)
+        self.beam_image_vmax_edit.setPlaceholderText("auto")
+        self.beam_image_vmax_edit.returnPressed.connect(self._redraw_latest_beam_image)
+
+        self.beam_image_auto_refresh_checkbox = QCheckBox("Auto refresh", card)
+        self.beam_image_auto_refresh_checkbox.setChecked(True)
+        self.beam_image_auto_refresh_checkbox.stateChanged.connect(self._update_beam_image_auto_refresh)
+        self.beam_image_projection_checkbox = QCheckBox("Projection", card)
+        self.beam_image_projection_checkbox.setChecked(True)
+        self.beam_image_projection_checkbox.stateChanged.connect(self._redraw_latest_beam_image)
+        self.beam_image_fit_curve_checkbox = QCheckBox("Fit curve", card)
+        self.beam_image_fit_curve_checkbox.setChecked(True)
+        self.beam_image_fit_curve_checkbox.stateChanged.connect(self._redraw_latest_beam_image)
+
+        controls.addWidget(colormap_label, 0, 0)
+        controls.addWidget(self.beam_image_colormap_combo, 0, 1)
+        controls.addWidget(vmin_label, 0, 2)
+        controls.addWidget(self.beam_image_vmin_edit, 0, 3)
+        controls.addWidget(vmax_label, 0, 4)
+        controls.addWidget(self.beam_image_vmax_edit, 0, 5)
+        controls.addWidget(self.beam_image_auto_refresh_checkbox, 1, 0, 1, 2)
+        controls.addWidget(self.beam_image_projection_checkbox, 1, 2, 1, 2)
+        controls.addWidget(self.beam_image_fit_curve_checkbox, 1, 4, 1, 2)
+        controls.setColumnStretch(1, 1)
+        controls.setColumnStretch(3, 1)
+        controls.setColumnStretch(5, 1)
+        layout.addLayout(controls)
+
         self.beam_image_widget = MplWidget(card)
         layout.addWidget(self.beam_image_widget, 1)
 
@@ -746,6 +807,46 @@ class myWindow(QWidget,Ui_Form):
         self.gridLayout_2.setColumnStretch(2, 2)
         self.beam_image_card = card
         self._plot_wrappers[self.beam_image_widget] = card
+
+    @staticmethod
+    def _clear_layout_positions(layout):
+        while layout.count():
+            layout.takeAt(0)
+
+    def _arrange_main_tabs(self):
+        self._clear_layout_positions(self.gridLayout_2)
+        self._clear_layout_positions(self.gridLayout_4)
+        self._clear_layout_positions(self.twiss_tab_layout)
+
+        self.gridLayout_2.setHorizontalSpacing(10)
+        self.gridLayout_2.setVerticalSpacing(10)
+        self.gridLayout_2.addWidget(self.widget_4, 0, 0, 2, 1, Qt.AlignTop)
+        self.gridLayout_2.addWidget(self.beam_image_card, 0, 1, 1, 2)
+        self.gridLayout_2.addWidget(self._plot_wrappers[self.widget], 1, 1)
+        self.gridLayout_2.addWidget(self._plot_wrappers[self.widget_8], 1, 2)
+        self.gridLayout_2.setColumnStretch(0, 2)
+        self.gridLayout_2.setColumnStretch(1, 3)
+        self.gridLayout_2.setColumnStretch(2, 3)
+        self.gridLayout_2.setRowStretch(0, 3)
+        self.gridLayout_2.setRowStretch(1, 5)
+        self.beam_image_widget.setMinimumHeight(240)
+        for plot in (self.widget, self.widget_8):
+            plot.setMinimumHeight(300)
+            self._plot_wrappers[plot].setMinimumHeight(340)
+
+        self.gridLayout_4.setHorizontalSpacing(10)
+        self.gridLayout_4.setVerticalSpacing(10)
+        self.gridLayout_4.addWidget(self._plot_wrappers[self.widget_2], 0, 0)
+        self.gridLayout_4.addWidget(self._plot_wrappers[self.widget_9], 0, 1)
+        self.gridLayout_4.addWidget(self.widget_5, 1, 0, Qt.AlignTop)
+        self.gridLayout_4.addWidget(self.widget_10, 1, 1, Qt.AlignTop)
+        self.gridLayout_4.setColumnStretch(0, 1)
+        self.gridLayout_4.setColumnStretch(1, 1)
+        self.gridLayout_4.setRowStretch(0, 4)
+        self.gridLayout_4.setRowStretch(1, 1)
+
+        self.twiss_tab_layout.addWidget(self.widget_13, 0, 0, Qt.AlignTop)
+        self.twiss_tab_layout.setColumnStretch(0, 1)
 
     def _wrap_plot_card(self, layout, widget, title_text, row, col, parent):
         layout.removeWidget(widget)
@@ -780,6 +881,8 @@ class myWindow(QWidget,Ui_Form):
         self.label_8.setText("Twiss Transport")
         for title in (self.label_9, self.label_15, self.label_42, self.label_8):
             title.setObjectName("panelTitle")
+        for label in (self.label_19, self.label_44, self.label_49, self.label_50):
+            label.setText("gamma (1/m)")
 
         self.textEdit.hide()
         self.label_3.hide()
@@ -842,6 +945,9 @@ class myWindow(QWidget,Ui_Form):
         ]
         for widget in self._result_fields:
             widget.setReadOnly(True)
+        for widget in (self.lineEdit_16, self.lineEdit_37):
+            widget.setMinimumWidth(360)
+            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self._rebuild_panel_layouts()
 
@@ -888,8 +994,7 @@ class myWindow(QWidget,Ui_Form):
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(6)
 
-        self.pushButton_2.setParent(self.widget_4)
-        for button in (self.pushButton, self.pushButton_5, self.pushButton_3, self.pushButton_2):
+        for button in (self.pushButton, self.pushButton_5, self.pushButton_3):
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             actions.addWidget(button)
 
@@ -937,10 +1042,16 @@ class myWindow(QWidget,Ui_Form):
         point_actions = QHBoxLayout()
         point_actions.setContentsMargins(0, 0, 0, 0)
         point_actions.setSpacing(6)
+        self.pushButton_2.setParent(self.widget_4)
         self.load_points_button = QPushButton("Load Archive", self.widget_4)
         self.exclude_points_button = QPushButton("Exclude Selected", self.widget_4)
         self.restore_points_button = QPushButton("Restore All", self.widget_4)
-        for button in (self.load_points_button, self.exclude_points_button, self.restore_points_button):
+        for button in (
+            self.pushButton_2,
+            self.load_points_button,
+            self.exclude_points_button,
+            self.restore_points_button,
+        ):
             button.setProperty("compact", True)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             point_actions.addWidget(button)
@@ -1012,6 +1123,7 @@ class myWindow(QWidget,Ui_Form):
         self.layoutWidget_4.setParent(self.widget_10)
         self.layoutWidget_4.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.gridLayout_6.setVerticalSpacing(6)
+        self.gridLayout_6.addWidget(self.lineEdit_37, 6, 1, 1, 2)
         layout.addWidget(self.layoutWidget_4)
         self.widget_7.hide()
 
@@ -1105,6 +1217,37 @@ class myWindow(QWidget,Ui_Form):
             self.beam_fit_sigy_label.setText("--")
             self.beam_fit_status_label.setText("No image")
 
+    def _optional_beam_image_limit(self, edit):
+        text = edit.text().strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            edit.setText("")
+            return None
+
+    def _beam_image_display_limits(self):
+        if not hasattr(self, "beam_image_vmin_edit"):
+            return None, None
+        vmin = self._optional_beam_image_limit(self.beam_image_vmin_edit)
+        vmax = self._optional_beam_image_limit(self.beam_image_vmax_edit)
+        if vmin is not None and vmax is not None and vmax <= vmin:
+            self.beam_image_vmax_edit.setText("")
+            vmax = None
+        return vmin, vmax
+
+    def _redraw_latest_beam_image(self, *args):
+        del args
+        if self.latest_beam_image is None or self.latest_beam_fit_result is None:
+            return
+        self._display_beam_image_fit(
+            self.latest_beam_fit_flag or self.comboBox_4.currentText(),
+            self.latest_beam_image,
+            self.latest_beam_fit_result,
+            k1=self.latest_beam_fit_k1,
+        )
+
     def _display_beam_image_fit(self, flag_name, image, fit_result, *, k1=None, extent=None):
         if not hasattr(self, "beam_image_widget"):
             return
@@ -1114,24 +1257,35 @@ class myWindow(QWidget,Ui_Form):
         widget = self.beam_image_widget
         widget.axes.clear()
         self._style_axes(widget, "x (mm)", "y (mm)")
+        vmin, vmax = self._beam_image_display_limits()
         widget.axes.imshow(
             image,
-            cmap="viridis",
+            cmap=self.beam_image_colormap_combo.currentText() if hasattr(self, "beam_image_colormap_combo") else "viridis",
             origin="lower",
             extent=extent,
             aspect="auto",
+            vmin=vmin,
+            vmax=vmax,
         )
 
         height = abs(extent[3] - extent[2])
         width = abs(extent[1] - extent[0])
         x_projection = fit_result.x_projection.normalized_projection
         y_projection = fit_result.y_projection.normalized_projection
-        if x_projection is not None and y_projection is not None:
+        show_projection = (
+            not hasattr(self, "beam_image_projection_checkbox")
+            or self.beam_image_projection_checkbox.isChecked()
+        )
+        show_fit_curve = (
+            not hasattr(self, "beam_image_fit_curve_checkbox")
+            or self.beam_image_fit_curve_checkbox.isChecked()
+        )
+        if show_projection and x_projection is not None and y_projection is not None:
             denx = x_projection * height * 0.3 + extent[2] * 0.98
             deny = y_projection * width * 0.3 + extent[0] * 0.98
             widget.axes.plot(fit_result.x_axis, denx, "--c")
             widget.axes.plot(deny, fit_result.y_axis, "--c")
-        if fit_result.valid:
+        if show_fit_curve and fit_result.valid:
             fit_denx = fit_result.x_projection.fitted_projection * height * 0.3 + extent[2] * 0.98
             fit_deny = fit_result.y_projection.fitted_projection * width * 0.3 + extent[0] * 0.98
             widget.axes.plot(fit_result.x_axis, fit_denx, "--", color=palette["plot_fit"])
@@ -1515,6 +1669,8 @@ class myWindow(QWidget,Ui_Form):
         self.scan_mode = None
         self.pending_scan_metadata = None
         self._refresh_status()
+        if self._beam_image_auto_refresh_ready:
+            self._schedule_beam_image_refresh()
 
     def _on_twiss_finished(self):
         self.twissCal = None
@@ -1709,6 +1865,27 @@ class myWindow(QWidget,Ui_Form):
                 self._warn(f"Current PRF image fit is not valid ({fit_result.status}){detail}.")
             return False
         return True
+
+    def _auto_refresh_beam_image_fit(self):
+        if not self._beam_image_auto_refresh_ready:
+            return
+        if self._scan_is_running():
+            return
+        if not hasattr(self, "beam_image_auto_refresh_checkbox"):
+            return
+        if not self.beam_image_auto_refresh_checkbox.isChecked():
+            return
+        self.refresh_current_beam_image_fit(show_warning=False)
+
+    def _update_beam_image_auto_refresh(self, *args):
+        del args
+        if not hasattr(self, "beam_image_auto_refresh_checkbox"):
+            return
+        if self.beam_image_auto_refresh_checkbox.isChecked():
+            if not self.beam_image_timer.isActive():
+                self.beam_image_timer.start()
+        else:
+            self.beam_image_timer.stop()
 
     def _schedule_beam_image_refresh(self):
         QTimer.singleShot(
@@ -2003,6 +2180,7 @@ class myWindow(QWidget,Ui_Form):
         self._refresh_status()
 
     def closeEvent(self, event):
+        self.beam_image_timer.stop()
         self.stopScan()
         if self._twiss_is_running():
             if not self.twissCal.wait(3000):
@@ -2338,7 +2516,10 @@ class scanThread(QThread):
         sig22 = xx[2,0]
         
         try:
-            ex = math.sqrt(sig11*sig22-sig12**2)
+            determinant = float(sig11 * sig22 - sig12**2)
+            if not math.isfinite(determinant) or determinant <= 0:
+                raise ValueError(f"non-physical beam matrix determinant={determinant:.6g}")
+            ex = math.sqrt(determinant)
             beta  = sig11/ex
             alpha = -sig12/ex
             gamma = sig22/ex
@@ -2354,7 +2535,8 @@ class scanThread(QThread):
             tmp.alpha = round(alpha,2)
             tmp.gamma = round(gamma,2)
 
-        except (ValueError, ZeroDivisionError, np.linalg.LinAlgError):
+        except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as exc:
+            print(f"Warning: least-squares emittance solve failed: {exc}")
             tmp = structData()
             tmp.ex    = None 
             tmp.exn   = None 
@@ -2422,10 +2604,21 @@ class scanThread(QThread):
         b = popt[1]
         c = popt[2]
 
-        fac = np.sqrt(4*a*c-b**2)
+        discriminant = float(4 * a * c - b**2)
+        if not math.isfinite(discriminant) or discriminant <= 0:
+            raise RuntimeError(
+                "Parabolic fit produced a non-physical emittance discriminant "
+                f"4ac-b^2={discriminant:.6g}."
+            )
+        if m12 == 0:
+            raise RuntimeError("Parabolic fit cannot solve emittance because transfer matrix m12 is zero.")
+
+        fac = math.sqrt(discriminant)
         ex    = fac/(2*m12**2)
         alpha = (-b+2*a*m11/m12)/fac
         beta  = 2*a/fac
+        if not math.isfinite(beta) or beta == 0:
+            raise RuntimeError(f"Parabolic fit produced invalid beta={beta}.")
         gamma = (1+alpha**2)/beta
         
         gam0 = self.EnergyMeV*1e6/ELECTRON_MASS_EV

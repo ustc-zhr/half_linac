@@ -16,7 +16,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_machine_runtime,
     resolve_virtual_machine_usedline_workflow,
 )
-from half_linac.src.shared.runtime_state import read_runtime_state, update_runtime_state
+from half_linac.src.shared.runtime_state import read_runtime_state, update_runtime_state, write_runtime_state
 
 
 PREWATCH_ID = "PREW"
@@ -58,6 +58,24 @@ def restore_main_usedline() -> list[str]:
         line_name,
         success_label="main",
     )
+
+
+def reload_initial_runtime_state() -> list[str]:
+    runtime = resolve_machine_runtime()
+    parser = ElegantParser(
+        runtime.vm.bootstrap_lattice,
+        runtime.vm.bootstrap_ele,
+        runtime.vm.line_name,
+        runtime_json_path=runtime.vm.runtime_json,
+        elegant_dir=runtime.vm.bootstrap_lattice.parent,
+    )
+    state = parser.build_runtime_state()
+    write_runtime_state(runtime.vm.runtime_json, state)
+    print(
+        f"reloaded VM runtime state from {runtime.vm.bootstrap_lattice.name} "
+        f"and {runtime.vm.bootstrap_ele.name}: {len(state['usedline'])} element(s)."
+    )
+    return list(state["usedline"])
 
 
 def apply_predefined_usedline(line_name: str) -> list[str]:
@@ -167,6 +185,11 @@ def simplify_usedline_segment(
 def restore_main_usedline_cli(argv: Sequence[str] | None = None) -> int:
     del argv
     return _run_cli("restore main usedline", restore_main_usedline)
+
+
+def reload_initial_runtime_state_cli(argv: Sequence[str] | None = None) -> int:
+    del argv
+    return _run_cli("reload initial runtime state", reload_initial_runtime_state)
 
 
 def switch_to_esa_usedline_cli(argv: Sequence[str] | None = None) -> int:
@@ -381,6 +404,7 @@ __all__ = [
     "LatticeUsedlineError",
     "apply_predefined_usedline",
     "expand_lattice_line",
+    "reload_initial_runtime_state",
     "restore_main_usedline",
     "select_esa_line_name",
     "simplify_usedline_segment",

@@ -23,6 +23,8 @@ from half_linac.src.shared.elegant_backend import (
     build_vm_publish_plan,
 )
 from half_linac.src.shared.machine_profile import load_profile, resolve_machine_runtime
+from half_linac.src.shared.machine_profile.model_backend import ElegantModelBackend
+from half_linac.src.shared.machine_profile.models import ModelBackendConfig
 from half_linac.src.shared.runtime_state import read_runtime_state
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 from half_linac.src.virtual_machine.lattice_usedline import expand_lattice_line, select_esa_line_name
@@ -136,6 +138,93 @@ class ElegantBackendTests(unittest.TestCase):
 
         self.assertEqual(lattice_path.name, "lattice.lte")
         self.assertEqual(ele_path.name, "one.ele")
+
+    def test_model_backend_skips_unmatched_error_element_for_quad_to_flag_map(self):
+        class FakeSdds:
+            def __init__(self, _index):
+                self.columnData = [[[float(index)]] for index in range(48)]
+
+            def load(self, _path):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            elegant_dir = tmpdir_path / "elegant"
+            elegant_dir.mkdir()
+            source_lte = elegant_dir / "lattice_ini.lte"
+            emit_ini = elegant_dir / "emit_ini.ele"
+            emit_lte = elegant_dir / "emit.lte"
+            emit_ele = elegant_dir / "emit.ele"
+            emit_json = tmpdir_path / "emit.json"
+            emit_mat = elegant_dir / "emit.mat"
+
+            source_lte.write_text(
+                "\n".join(
+                    [
+                        "QT02: QUAD,L=0.15,K1=2.5",
+                        "D1: DRIF,L=1.0",
+                        'PRF07: WATCH,FILENAME="PRF07.out",MODE="coord",DISABLE=0',
+                        "ALL_MAIN: LINE = (QT02,D1,PRF07)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            emit_ini.write_text(
+                "\n".join(
+                    [
+                        "&run_setup",
+                        "    lattice = emit_ini.lte,",
+                        "    use_beamline = ALL_MAIN,",
+                        "&end",
+                        "&run_control",
+                        "    n_steps = 1,",
+                        "&end",
+                        "&matrix_output",
+                        "    SDDS_output = %s.mat,",
+                        "&end",
+                        "&error_control",
+                        "    clear_error_settings = 1,",
+                        "&end",
+                        "&error_element",
+                        "    name = *,",
+                        "    element_type = QUAD,",
+                        "    item = FSE,",
+                        "    amplitude = 0e-5,",
+                        "&end",
+                        "&bunched_beam",
+                        "    n_particles_per_bunch = 1,",
+                        "&end",
+                        "&track &end",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            backend = ElegantModelBackend(
+                ModelBackendConfig(
+                    name="simulation",
+                    engine="elegant",
+                    config={
+                        "working_dir": str(elegant_dir),
+                        "source_json": str(tmpdir_path / "runtime.json"),
+                        "source_lattice": str(source_lte),
+                        "emit_ini_ele": str(emit_ini),
+                        "emit_lte": str(emit_lte),
+                        "emit_ele": str(emit_ele),
+                        "emit_json": str(emit_json),
+                        "emit_mat": str(emit_mat),
+                        "emit_log": "emit.log",
+                        "line_name": "ALL_MAIN",
+                    },
+                )
+            )
+
+            with patch(
+                "half_linac.src.shared.machine_profile.model_backend.run_elegant_input",
+            ), patch("half_linac.src.shared.machine_profile.model_backend.sdds.SDDS", FakeSdds):
+                backend.get_map("QT02", "PRF07")
+
+            self.assertNotIn("&error_element", emit_ele.read_text(encoding="utf-8"))
+            self.assertNotIn("QT02", emit_lte.read_text(encoding="utf-8"))
 
     def test_lattice_usedline_helper_expands_irfel_main_and_esa_lines(self):
         runtime = resolve_machine_runtime("irfel")
@@ -433,6 +522,14 @@ class ElegantBackendTests(unittest.TestCase):
             [],
             f"HALF VM helper scripts should resolve runtime JSON through machine runtime metadata: {offenders}",
         )
+
+    def test_full_vm_command_reloads_initial_runtime_state(self):
+        source = (REPO_ROOT / "src/virtual_machine/common/full_VM.py").read_text(encoding="utf-8")
+        gui_source = (REPO_ROOT / "src/virtual_machine/common/mainVM.py").read_text(encoding="utf-8")
+
+        self.assertIn("reload_initial_runtime_state_cli", source)
+        self.assertNotIn("restore_main_usedline_cli", source)
+        self.assertIn("Reload Initial Lattice", gui_source)
 
     def test_half_compat_parser_no_longer_hardcodes_half_runtime_default_paths(self):
         source = (

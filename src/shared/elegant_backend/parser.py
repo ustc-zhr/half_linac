@@ -207,7 +207,11 @@ class ElegantParser:
 
             handle.write(f'\n{self.line_name}: LINE = ({",".join(usedline)})')
 
-        self.ele.control = lte["control"]
+        control = copy.deepcopy(lte["control"])
+        if _error_element_has_no_usedline_match(control.get("error_element"), lattice, usedline):
+            control.pop("error_element", None)
+
+        self.ele.control = control
         self.ele.control["run_setup"]["use_beamline"] = self.line_name
         self.ele.back2ele(ele_path, lattice_path)
         return lattice_path, ele_path
@@ -235,6 +239,33 @@ class ElegantParser:
         if self.runtime_json_path is None:
             raise ValueError("runtime_json_path is required for this operation.")
         return self.runtime_json_path
+
+
+def _error_element_has_no_usedline_match(
+    error_element: dict[str, str] | None,
+    lattice: dict[str, dict[str, str]],
+    usedline: list[str],
+) -> bool:
+    if error_element is None:
+        return False
+
+    name_filter = _clean_elegant_token(error_element.get("name", "*")).upper()
+    type_filter = _clean_elegant_token(error_element.get("element_type", "")).upper()
+    if not type_filter:
+        return False
+
+    for element_id in usedline:
+        element = lattice[element_id]
+        element_name = str(element.get("NAME", element_id)).strip().upper()
+        if name_filter and name_filter != "*" and name_filter not in {element_id.upper(), element_name}:
+            continue
+        if str(element.get("TYPE", "")).strip().upper() == type_filter:
+            return False
+    return True
+
+
+def _clean_elegant_token(value: object) -> str:
+    return str(value).strip().strip('"').strip("'")
 
 
 __all__ = [
