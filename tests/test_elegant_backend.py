@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -27,7 +28,11 @@ from half_linac.src.shared.machine_profile.model_backend import ElegantModelBack
 from half_linac.src.shared.machine_profile.models import ModelBackendConfig
 from half_linac.src.shared.runtime_state import read_runtime_state
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
-from half_linac.src.virtual_machine.lattice_usedline import expand_lattice_line, select_esa_line_name
+from half_linac.src.virtual_machine.lattice_usedline import (
+    expand_lattice_line,
+    reload_initial_runtime_state,
+    select_esa_line_name,
+)
 
 
 class ElegantBackendTests(unittest.TestCase):
@@ -530,6 +535,40 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertIn("reload_initial_runtime_state_cli", source)
         self.assertNotIn("restore_main_usedline_cli", source)
         self.assertIn("Reload Initial Lattice", gui_source)
+
+    def test_reload_initial_runtime_state_syncs_irfel_vm_writable_pvs(self):
+        runtime = resolve_machine_runtime("irfel")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            fake_runtime = SimpleNamespace(
+                profile=runtime.profile,
+                vm=SimpleNamespace(
+                    bootstrap_lattice=runtime.vm.bootstrap_lattice,
+                    bootstrap_ele=runtime.vm.bootstrap_ele,
+                    line_name=runtime.vm.line_name,
+                    runtime_json=tmpdir_path / "irfel.json",
+                ),
+            )
+
+            with patch(
+                "half_linac.src.virtual_machine.lattice_usedline.resolve_machine_runtime",
+                return_value=fake_runtime,
+            ), patch("epics.caput_many", return_value=[True] * 200) as caput_many_mock, patch(
+                "builtins.print"
+            ):
+                reload_initial_runtime_state()
+
+            state = read_runtime_state(fake_runtime.vm.runtime_json)
+
+        caput_many_mock.assert_called_once()
+        pv_names, pv_values = caput_many_mock.call_args.args[:2]
+        qm12_index = pv_names.index("IRFEL:VM:AP:QUAD:QM12:K1:ao")
+
+        self.assertEqual(state["lattice"]["QM12"]["K1"], "50.43989105768644")
+        self.assertEqual(pv_values[qm12_index], "50.43989105768644")
+        self.assertFalse(caput_many_mock.call_args.kwargs["wait"])
+        self.assertLessEqual(caput_many_mock.call_args.kwargs["connection_timeout"], 0.5)
 
     def test_half_compat_parser_no_longer_hardcodes_half_runtime_default_paths(self):
         source = (

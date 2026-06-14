@@ -717,9 +717,14 @@ class MachineProfileTests(unittest.TestCase):
             emit_context.emit_measure_workflow.presets_by_id["emit_qm12_prf04"].model_line,
             "ALL_DUMP",
         )
+        qm12_scan = emit_context.emit_measure_workflow.presets_by_id["emit_qm12_prf04"].scan
+        self.assertEqual(qm12_scan.k1_from, 25.0)
+        self.assertEqual(qm12_scan.k1_end, 35.0)
+        self.assertEqual(qm12_scan.k1_steps, 11)
+        self.assertEqual(qm12_scan.samples, 1)
         self.assertEqual(
-            emit_context.emit_measure_workflow.presets_by_id["emit_qm14_prf03"].model_line,
-            "ALL_MAIN",
+            emit_context.emit_measure_workflow.presets_by_id["emit_qm11_prf04"].model_line,
+            "ALL_DUMP",
         )
         self.assertEqual(emit_context.model_backend.config["line_name"], "ALL_MAIN")
         self.assertEqual(build_model_backend(emit_context, line_name="ALL_DUMP").line_name, "ALL_DUMP")

@@ -13,6 +13,7 @@ from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     get_workflow,
+    resolve_channel,
     resolve_machine_runtime,
     resolve_virtual_machine_usedline_workflow,
 )
@@ -21,6 +22,12 @@ from half_linac.src.shared.runtime_state import read_runtime_state, update_runti
 
 PREWATCH_ID = "PREW"
 PREWATCH_FILENAME = "pre.bun"
+VM_PV_SYNC_CONNECTION_TIMEOUT_S = 0.5
+VM_WRITABLE_LATTICE_FIELD_BY_CHANNEL = {
+    ("quad", "k1"): "K1",
+    ("corr", "setpoint"): "KICK",
+    ("bend", "current_set"): "ANGLE",
+}
 
 
 class LatticeUsedlineError(RuntimeError):
@@ -70,7 +77,9 @@ def reload_initial_runtime_state() -> list[str]:
         elegant_dir=runtime.vm.bootstrap_lattice.parent,
     )
     state = parser.build_runtime_state()
+    _ensure_writable_lattice_defaults(runtime, state)
     write_runtime_state(runtime.vm.runtime_json, state)
+    _sync_writable_vm_pvs(runtime, state)
     print(
         f"reloaded VM runtime state from {runtime.vm.bootstrap_lattice.name} "
         f"and {runtime.vm.bootstrap_ele.name}: {len(state['usedline'])} element(s)."
@@ -248,6 +257,100 @@ def _build_baseline_control() -> dict[str, dict[str, str]]:
         elegant_dir=runtime.vm.bootstrap_lattice.parent,
     )
     return parser.build_runtime_state()["control"]
+
+
+def _ensure_writable_lattice_defaults(runtime, state: dict[str, Any]) -> None:
+    lattice = state.get("lattice", {})
+    if not isinstance(lattice, dict):
+        return
+
+    for element in runtime.profile.elements:
+        if element.kind != "corr":
+            continue
+        element_lattice = lattice.get(element.id)
+        if isinstance(element_lattice, dict):
+            element_lattice.setdefault("KICK", "0")
+
+
+def _sync_writable_vm_pvs(runtime, state: Mapping[str, Any]) -> None:
+    pv_names, pv_values = _collect_writable_vm_pvs(runtime, state)
+    if not pv_names:
+        return
+
+    try:
+        import epics
+
+        results = epics.caput_many(
+            pv_names,
+            pv_values,
+            wait=False,
+            connection_timeout=VM_PV_SYNC_CONNECTION_TIMEOUT_S,
+        )
+    except Exception as exc:
+        print(f"runtime JSON reloaded; IOC writable PV sync skipped: {exc}", file=sys.stderr)
+        return
+
+    failed_pvs = _failed_caput_pvs(pv_names, results)
+    if failed_pvs:
+        print(
+            "runtime JSON reloaded; IOC writable PV sync reached "
+            f"{len(pv_names) - len(failed_pvs)}/{len(pv_names)} PV(s); "
+            f"first failed PV: {failed_pvs[0]}",
+            file=sys.stderr,
+        )
+        return
+
+    print(f"synchronized {len(pv_names)} VM writable PV(s) from runtime JSON.")
+
+
+def _collect_writable_vm_pvs(runtime, state: Mapping[str, Any]) -> tuple[list[str], list[Any]]:
+    lattice = state.get("lattice", {})
+    if not isinstance(lattice, Mapping):
+        return [], []
+
+    pv_names: list[str] = []
+    pv_values: list[Any] = []
+    for element in runtime.profile.elements:
+        element_lattice = lattice.get(element.id)
+        if not isinstance(element_lattice, Mapping):
+            continue
+
+        for logical_channel, field_name in _writable_channels_for_element_kind(element.kind):
+            pv_name = _resolve_vm_channel(runtime.profile, element.id, logical_channel)
+            if not pv_name or field_name not in element_lattice:
+                continue
+            pv_names.append(pv_name)
+            pv_values.append(element_lattice[field_name])
+    return pv_names, pv_values
+
+
+def _writable_channels_for_element_kind(kind: str) -> tuple[tuple[str, str], ...]:
+    writable = [
+        (logical_channel, field_name)
+        for (element_kind, logical_channel), field_name in VM_WRITABLE_LATTICE_FIELD_BY_CHANNEL.items()
+        if element_kind == kind
+    ]
+    return tuple(writable)
+
+
+def _resolve_vm_channel(profile, element_id: str, logical_channel: str) -> str | None:
+    try:
+        return resolve_channel(profile, element_id, logical_channel, "vm")
+    except MachineProfileError:
+        return None
+
+
+def _failed_caput_pvs(pv_names: Sequence[str], results) -> list[str]:
+    if results is None:
+        return []
+    if isinstance(results, bool):
+        return [] if results else list(pv_names)
+
+    failed: list[str] = []
+    for pv_name, result in zip(pv_names, results):
+        if result != 1:
+            failed.append(pv_name)
+    return failed
 
 
 def _restore_baseline_control(
