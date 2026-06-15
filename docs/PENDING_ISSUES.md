@@ -88,6 +88,7 @@
 - Priority: high
 - Background:
   - IRFEL VM workflows have been brought up incrementally for orbit, beam monitor, energy spectrum, and emit measurement.
+  - Current VM acceptance is recorded in `docs/IRFEL_VM_ACCEPTANCE.md`.
   - IRFEL `real` backend entries exist so the profile can be validated offline, but most real-machine behavior has not been verified on site.
   - The current rule is: VM verification is not evidence that the same app is safe or physically correct in `real` mode.
 - Offline acceptance entrypoint:
