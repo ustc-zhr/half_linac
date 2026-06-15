@@ -138,3 +138,20 @@
   - Each app has one of these explicit `real_status` values for IRFEL real: `not_supported`, `read_only`, `write_blocked`, `write_smoke_passed`, or `commissioned`.
   - Real-mode app configs and `control_backends/real.json` are updated only after the corresponding site facts are confirmed.
   - Any real-mode write test is run deliberately, with a known rollback path and operator approval.
+
+### 6. Emit Measure Latest Scan File Cleanup
+
+- Status: open
+- Priority: low
+- Background:
+  - `src/apps/emit_measure/scanResults.txt` is currently the latest-scan working copy.
+  - `src/apps/emit_measure/runtime/scans/<machine>/<backend>/scan_*.txt` is the timestamped archive store.
+  - The current app writes both after a scan: the latest file supports immediate recalculation, while archive files preserve history.
+- Problem:
+  - The two-file model is useful now but creates some conceptual overlap.
+  - Removing `scanResults.txt` too early would break current `Recalculate`, status display, and latest metadata paths.
+- Follow-up:
+  - Keep `scanResults.txt` for the current IRFEL VM bring-up phase.
+  - Later, make `Recalculate` use the GUI scan-point table as its primary source.
+  - Keep timestamped archives as the long-term storage and load/review path.
+  - After table-driven recalculation is complete, downgrade `scanResults.txt` to a compatibility artifact or remove it.

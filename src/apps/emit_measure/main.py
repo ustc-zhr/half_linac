@@ -7,6 +7,7 @@ import numpy as np
 import math
 from pathlib import Path
 from datetime import datetime
+from collections.abc import Mapping
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -110,6 +111,94 @@ def _load_beam_image_geometry_config(machine_id):
             "emit_measure local image fitting requires beam_monitor flag_pixel_geometry "
             f"for machine {machine_id!r}."
         ) from exc
+
+
+def _finite_float_or_none(value):
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _status_from_plane_result(result):
+    status = _read_result_field(result, "status")
+    if status:
+        return str(status)
+    return "valid" if _finite_float_or_none(_read_result_field(result, "ex")) is not None else "unresolved"
+
+
+def _read_result_field(result, key, default=None):
+    if isinstance(result, Mapping):
+        return result.get(key, default)
+    return getattr(result, key, default)
+
+
+def _plane_summary(result):
+    status = _status_from_plane_result(result)
+    summary = {
+        "status": status,
+        "message": str(_read_result_field(result, "message", "") or ""),
+    }
+    for source_key, target_key in (
+        ("ex", "emittance"),
+        ("exn", "normalized_emittance"),
+        ("beta", "beta"),
+        ("alpha", "alpha"),
+        ("gamma", "gamma"),
+        ("determinant", "determinant"),
+        ("discriminant", "discriminant"),
+    ):
+        value = _finite_float_or_none(_read_result_field(result, source_key))
+        if value is not None:
+            summary[target_key] = value
+    return summary
+
+
+def _method_fit_summary(method, xplane, yplane):
+    x_summary = _plane_summary(xplane)
+    y_summary = _plane_summary(yplane)
+    valid_count = sum(
+        1
+        for plane_summary in (x_summary, y_summary)
+        if plane_summary["status"] == "valid"
+    )
+    if valid_count == 2:
+        status = "valid"
+    elif valid_count == 1:
+        status = "partial"
+    else:
+        status = "unresolved"
+    return {
+        "method": method,
+        "status": status,
+        "xplane": x_summary,
+        "yplane": y_summary,
+    }
+
+
+def _invalid_plane_result(status, message):
+    return {
+        "status": status,
+        "message": str(message),
+        "ex": None,
+        "exn": None,
+        "beta": None,
+        "alpha": None,
+        "gamma": None,
+    }
+
+
+def _compact_status_text(message, limit=120):
+    text = str(message or "").strip()
+    if not text:
+        return "unresolved"
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..."
+
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -562,6 +651,7 @@ class myWindow(QWidget,Ui_Form):
         self.loaded_scan_metadata = None
         self.loaded_scan_results_path = None
         self.pending_scan_metadata = None
+        self.latest_emit_fit_summary = None
         self.latest_beam_image = None
         self.latest_beam_fit_result = None
         self.latest_beam_fit_flag = None
@@ -668,6 +758,7 @@ class myWindow(QWidget,Ui_Form):
         self.status_panel.add_item("scan", "SCAN", "Idle")
         self.status_panel.add_item("twiss", "TWISS", "Idle")
         self.status_panel.add_item("fit", "PRF FIT", "No image")
+        self.status_panel.add_item("emit", "EMIT", "No result")
         self.status_panel.add_item("data", "DATA", "No scan file")
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -1338,6 +1429,7 @@ class myWindow(QWidget,Ui_Form):
                 f"{self.latest_beam_fit_flag} {self.latest_beam_fit_result.status}",
                 "warning",
             )
+        self._refresh_emit_fit_status()
         if SCAN_RESULTS_PATH.exists():
             active, total = self._scan_points_counts()
             if total:
@@ -1346,6 +1438,28 @@ class myWindow(QWidget,Ui_Form):
                 self.status_panel.set_item("data", SCAN_RESULTS_PATH.name, "success")
         else:
             self.status_panel.set_item("data", "No scan file", "warning")
+
+    def _refresh_emit_fit_status(self):
+        summary = self.latest_emit_fit_summary
+        if not summary:
+            self.status_panel.set_item("emit", "No result", "subtle")
+            return
+        status = summary.get("status", "unresolved")
+        method = summary.get("method", "fit")
+        if status == "valid":
+            tone = "success"
+        elif status == "error":
+            tone = "warning"
+        else:
+            tone = "warning"
+
+        x_status = summary.get("xplane", {}).get("status", "unknown")
+        y_status = summary.get("yplane", {}).get("status", "unknown")
+        if status == "error":
+            text = _compact_status_text(summary.get("message", "error"), limit=90)
+        else:
+            text = f"{method}: {status} (x {x_status}, y {y_status})"
+        self.status_panel.set_item("emit", text, tone)
 
     def _scan_points_counts(self):
         table = self.scan_points_table
@@ -2022,6 +2136,12 @@ class myWindow(QWidget,Ui_Form):
 
     def display(self,dict):
         if "error" in dict:
+            self.latest_emit_fit_summary = {
+                "method": "scan",
+                "status": "error",
+                "message": str(dict["error"]),
+            }
+            self._refresh_status()
             self._warn(dict["error"])
             return
         if "clear" in dict:
@@ -2057,6 +2177,7 @@ class myWindow(QWidget,Ui_Form):
             self._clear_scan_points()
             self.loaded_scan_metadata = None
             self.loaded_scan_results_path = None
+            self.latest_emit_fit_summary = None
             self._refresh_status()
             
             return
@@ -2092,79 +2213,107 @@ class myWindow(QWidget,Ui_Form):
             self.widget_8.canvas.draw()
 
         elif dict["method"] == "parabolic":
-            palette = self._palette()
-            xx     = dict["xplane"]["xx"]
-            yy     = dict["xplane"]["yy"]
-            err    = dict["xplane"]["err"]
-            fit_yy = dict["xplane"]["fit_yy"]
-            a      = dict["xplane"]["a"]
-            b      = dict["xplane"]["b"]
-            c      = dict["xplane"]["c"]
-
-            self.widget_2.axes.clear()
-            self._style_axes(self.widget_2, "$-K= K_1 L_q (m^{-1})$", "$sigx^2 (mm^2)$")
-            self.widget_2.axes.errorbar(-xx, yy, err, fmt=".", color=palette["plot_point"], ecolor=palette["plot_error"], capsize=3)
-            self.widget_2.axes.plot(-xx, fit_yy, "--", color=palette["plot_fit"], label="fitting curve")
-            legend = self.widget_2.axes.legend(frameon=False)
-            if legend is not None:
-                for text in legend.get_texts():
-                    text.set_color(palette["plot_text"])
-            self.widget_2.canvas.draw()
-
-            self.lineEdit_11.setText(str(dict["xplane"]["ex"]))
-            self.lineEdit_12.setText(str(dict["xplane"]["beta"]))
-            self.lineEdit_13.setText(str(dict["xplane"]["alpha"]))
-            self.lineEdit_14.setText(str(dict["xplane"]["gamma"]))
-            self.lineEdit_15.setText(str(dict["xplane"]["exn"]))
-
-            curve = "sigx^2=" +str(a) +"K^2+" +str(b) +"K+" +str(c)
-            self.lineEdit_16.setText(curve)
-
-            #y-plane
-            xx     = dict["yplane"]["xx"]
-            yy     = dict["yplane"]["yy"]
-            err    = dict["yplane"]["err"]
-            fit_yy = dict["yplane"]["fit_yy"]
-            a      = dict["yplane"]["a"]
-            b      = dict["yplane"]["b"]
-            c      = dict["yplane"]["c"]
-
-            self.widget_9.axes.clear()
-            self._style_axes(self.widget_9, "$K= K_1 L_q (m^{-1})$", "$sigy^2 (mm^2)$")
-            self.widget_9.axes.errorbar(xx, yy, err, fmt=".", color=palette["plot_point"], ecolor=palette["plot_error"], capsize=3)
-            self.widget_9.axes.plot(xx, fit_yy, "--", color=palette["plot_fit"], label="fitting curve")
-            legend = self.widget_9.axes.legend(frameon=False)
-            if legend is not None:
-                for text in legend.get_texts():
-                    text.set_color(palette["plot_text"])
-            self.widget_9.canvas.draw()
-
-            self.lineEdit_39.setText(str(dict["yplane"]["ex"]))
-            self.lineEdit_35.setText(str(dict["yplane"]["beta"]))
-            self.lineEdit_40.setText(str(dict["yplane"]["alpha"]))
-            self.lineEdit_36.setText(str(dict["yplane"]["gamma"]))
-            self.lineEdit_38.setText(str(dict["yplane"]["exn"]))
-
-            curve = "sigy^2=" +str(a) +"K^2+" +str(b) +"K+" +str(c)
-            self.lineEdit_37.setText(curve)
+            self.latest_emit_fit_summary = dict.get("fit_summary")
+            self._display_parabolic_plane("xplane", dict["xplane"])
+            self._display_parabolic_plane("yplane", dict["yplane"])
 
         elif dict["method"] == "leastSquares":
-            self.lineEdit_4.setText(str(dict["xplane"]["ex"]))
-            self.lineEdit_5.setText(str(dict["xplane"]["exn"]))
-            self.lineEdit_20.setText(str(dict["xplane"]["beta"]))
-            self.lineEdit_19.setText(str(dict["xplane"]["alpha"]))
-            self.lineEdit_18.setText(str(dict["xplane"]["gamma"]))
-            
-            self.lineEdit_41.setText(str(dict["yplane"]["ex"]))
-            self.lineEdit_42.setText(str(dict["yplane"]["exn"]))
-            self.lineEdit_43.setText(str(dict["yplane"]["beta"]))
-            self.lineEdit_44.setText(str(dict["yplane"]["alpha"]))
-            self.lineEdit_45.setText(str(dict["yplane"]["gamma"]))
+            self.latest_emit_fit_summary = dict.get("fit_summary")
+            self._display_least_square_plane("xplane", dict["xplane"])
+            self._display_least_square_plane("yplane", dict["yplane"])
 
         else:
             print(f"Error, unexpected result method: {dict.get('method')}")
             return
         self._refresh_status()
+
+    def _display_parabolic_plane(self, plane, result):
+        palette = self._palette()
+        if plane == "xplane":
+            widget = self.widget_2
+            xlabel = "$-K= K_1 L_q (m^{-1})$"
+            ylabel = "$sigx^2 (mm^2)$"
+            plot_sign = -1
+            fields = (self.lineEdit_11, self.lineEdit_12, self.lineEdit_13, self.lineEdit_14, self.lineEdit_15)
+            text_field = self.lineEdit_16
+            curve_name = "sigx^2"
+        else:
+            widget = self.widget_9
+            xlabel = "$K= K_1 L_q (m^{-1})$"
+            ylabel = "$sigy^2 (mm^2)$"
+            plot_sign = 1
+            fields = (self.lineEdit_39, self.lineEdit_35, self.lineEdit_40, self.lineEdit_36, self.lineEdit_38)
+            text_field = self.lineEdit_37
+            curve_name = "sigy^2"
+
+        widget.axes.clear()
+        self._style_axes(widget, xlabel, ylabel)
+        if all(key in result for key in ("xx", "yy", "err")):
+            xx = result["xx"]
+            yy = result["yy"]
+            err = result["err"]
+            widget.axes.errorbar(
+                plot_sign * xx,
+                yy,
+                err,
+                fmt=".",
+                color=palette["plot_point"],
+                ecolor=palette["plot_error"],
+                capsize=3,
+            )
+            if result.get("fit_yy") is not None:
+                widget.axes.plot(
+                    plot_sign * xx,
+                    result["fit_yy"],
+                    "--",
+                    color=palette["plot_fit"],
+                    label="fitting curve",
+                )
+                legend = widget.axes.legend(frameon=False)
+                if legend is not None:
+                    for text in legend.get_texts():
+                        text.set_color(palette["plot_text"])
+        else:
+            widget.axes.text(
+                0.5,
+                0.5,
+                _compact_status_text(result.get("message", "fit failed"), limit=60),
+                transform=widget.axes.transAxes,
+                ha="center",
+                va="center",
+                color=palette["muted_fg"],
+                fontsize=10,
+            )
+        widget.canvas.draw()
+
+        if result.get("status") == "valid":
+            for field, key in zip(fields, ("ex", "beta", "alpha", "gamma", "exn")):
+                field.setText(str(result.get(key)))
+            text_field.setText(
+                f"{curve_name}={result.get('a')}K^2+{result.get('b')}K+{result.get('c')}"
+            )
+            return
+
+        fields[0].setText("unresolved")
+        for field in fields[1:]:
+            field.setText("--")
+        text_field.setText(_compact_status_text(result.get("message", result.get("status"))))
+
+    def _display_least_square_plane(self, plane, result):
+        if plane == "xplane":
+            fields = (self.lineEdit_4, self.lineEdit_5, self.lineEdit_20, self.lineEdit_19, self.lineEdit_18)
+        else:
+            fields = (self.lineEdit_41, self.lineEdit_42, self.lineEdit_43, self.lineEdit_44, self.lineEdit_45)
+
+        if result.get("status") == "valid":
+            for field, key in zip(fields, ("ex", "exn", "beta", "alpha", "gamma")):
+                field.setText(str(result.get(key)))
+            return
+
+        fields[0].setText("unresolved")
+        for field in fields[1:-1]:
+            field.setText("--")
+        fields[-1].setText(_compact_status_text(result.get("message", result.get("status"))))
 
     def showTwiss(self, dict):
         if "error" in dict:
@@ -2252,6 +2401,7 @@ class scanThread(QThread):
         self.scan_archive_dir = Path(
             getattr(paras, "scan_archive_dir", SCAN_ARCHIVE_ROOT / "unknown" / "unknown")
         )
+        self.scan_metadata_paths = []
         self.is_running = True
 
     def _sleep_or_stop(self, seconds):
@@ -2382,17 +2532,24 @@ class scanThread(QThread):
             except ValueError:
                 print("Warning: Please delete all points for a K1 value to make every step has the same samples.")
                 print("However, this would not affect least squares method.")
+                fit_summary = {
+                    "parabolic": {
+                        "method": "parabolic",
+                        "status": "skipped",
+                        "message": "scan points cannot be reshaped into equal samples per K1",
+                    }
+                }
             else:
-                try:
-                    tmp["method"] = "parabolic"
-                    tmp["xplane"] = self.parabolicfitting(k1l,sigxl,m11,m12)
-                    tmp["yplane"] = self.parabolicfitting(-k1l,sigyl,m33,m34)
-                    self.trigger.emit(tmp)
-                    if not self._sleep_or_stop(2):
-                        return
-                    print("Parabolic fitting finished")
-                except Exception as exc:
-                    print(f"Warning: parabolic fitting failed: {exc}")
+                tmp["method"] = "parabolic"
+                tmp["xplane"] = self._parabolic_plane_result(k1l, sigxl, m11, m12, "xplane")
+                tmp["yplane"] = self._parabolic_plane_result(-k1l, sigyl, m33, m34, "yplane")
+                parabolic_summary = _method_fit_summary("parabolic", tmp["xplane"], tmp["yplane"])
+                fit_summary = {"parabolic": parabolic_summary}
+                tmp["fit_summary"] = parabolic_summary
+                self.trigger.emit(tmp)
+                if not self._sleep_or_stop(2):
+                    return
+                print(f"Parabolic fitting finished: {parabolic_summary['status']}")
 
             # Least squares method
             # ========================
@@ -2401,25 +2558,20 @@ class scanThread(QThread):
             # X-plane
             tmp["method"]    = "leastSquares"
 
-            tmpxx = {}
-            tmpxx["ex"]    = tmpx.ex
-            tmpxx["exn"]   = tmpx.exn
-            tmpxx["beta"]  = tmpx.beta
-            tmpxx["alpha"] = tmpx.alpha
-            tmpxx["gamma"] = tmpx.gamma
+            tmpxx = self._plane_result_payload(tmpx)
             tmp["xplane"] = tmpxx
 
             # Y-plane
-            tmpyy = {}
-            tmpyy["ex"]    = tmpy.ex
-            tmpyy["exn"]   = tmpy.exn
-            tmpyy["beta"]  = tmpy.beta
-            tmpyy["alpha"] = tmpy.alpha
-            tmpyy["gamma"] = tmpy.gamma
+            tmpyy = self._plane_result_payload(tmpy)
             tmp["yplane"] = tmpyy
+            least_squares_summary = _method_fit_summary("leastSquares", tmpxx, tmpyy)
+            fit_summary["leastSquares"] = least_squares_summary
+            tmp["fit_summary"] = least_squares_summary
+            tmp["all_fit_summary"] = fit_summary
 
             self.trigger.emit(tmp)
-            print("leastSquare finished")
+            self._write_scan_fit_summary(fit_summary)
+            print(f"leastSquare finished: {least_squares_summary['status']}")
            
             print("Program finished !")
         except Exception as exc:
@@ -2461,8 +2613,46 @@ class scanThread(QThread):
             json.dumps(metadata, indent=2, sort_keys=True),
             encoding="utf-8",
         )
+        self.scan_metadata_paths = [SCAN_RESULTS_META_PATH, archive_meta_path]
         print(f"Saved scan results: {SCAN_RESULTS_PATH}")
         print(f"Saved scan archive: {archive_path}")
+
+    def _write_scan_fit_summary(self, fit_summary):
+        if not self.scan_metadata_paths:
+            return
+        for metadata_path in self.scan_metadata_paths:
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                metadata = {}
+            metadata["fit_summary"] = fit_summary
+            metadata["fit_summary_updated_at"] = datetime.now().isoformat(timespec="seconds")
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+
+    def _plane_result_payload(self, result):
+        payload = {
+            "status": getattr(result, "status", _status_from_plane_result(result)),
+            "message": getattr(result, "message", ""),
+            "ex": result.ex,
+            "exn": result.exn,
+            "beta": result.beta,
+            "alpha": result.alpha,
+            "gamma": result.gamma,
+        }
+        determinant = getattr(result, "determinant", None)
+        if determinant is not None:
+            payload["determinant"] = determinant
+        return payload
+
+    def _parabolic_plane_result(self, k1l, sigxl, m11, m12, plane):
+        try:
+            return self.parabolicfitting(k1l, sigxl, m11, m12)
+        except Exception as exc:
+            print(f"Warning: parabolic fitting failed for {plane}: {exc}")
+            return _invalid_plane_result("fit_failed", str(exc))
 
     def leastSquare(self):
         k1l  = np.array(self.k1l)
@@ -2503,19 +2693,20 @@ class scanThread(QThread):
         return tmpx,tmpy
 
     def _solveMat(self,A0,k1l,sigxx):
-        A = np.asmatrix( np.reshape(A0,(len(k1l),3)) )
-        b = np.asmatrix(sigxx).transpose()
-        
-        AA = A.transpose()*A
-        bb = A.transpose()*b
-        
-        xx = np.linalg.solve(AA,bb)
-        
-        sig11 = xx[0,0]
-        sig12 = xx[1,0]
-        sig22 = xx[2,0]
-        
+        determinant = None
         try:
+            A = np.asmatrix( np.reshape(A0,(len(k1l),3)) )
+            b = np.asmatrix(sigxx).transpose()
+
+            AA = A.transpose()*A
+            bb = A.transpose()*b
+
+            xx = np.linalg.solve(AA,bb)
+
+            sig11 = xx[0,0]
+            sig12 = xx[1,0]
+            sig22 = xx[2,0]
+
             determinant = float(sig11 * sig22 - sig12**2)
             if not math.isfinite(determinant) or determinant <= 0:
                 raise ValueError(f"non-physical beam matrix determinant={determinant:.6g}")
@@ -2534,6 +2725,9 @@ class scanThread(QThread):
             tmp.beta  = round(beta ,2)
             tmp.alpha = round(alpha,2)
             tmp.gamma = round(gamma,2)
+            tmp.status = "valid"
+            tmp.message = ""
+            tmp.determinant = determinant
 
         except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as exc:
             print(f"Warning: least-squares emittance solve failed: {exc}")
@@ -2543,6 +2737,9 @@ class scanThread(QThread):
             tmp.beta  = None 
             tmp.alpha = None 
             tmp.gamma = None 
+            tmp.status = "non_physical" if "non-physical" in str(exc) else "failed"
+            tmp.message = str(exc)
+            tmp.determinant = determinant
 
         return tmp
 
@@ -2604,21 +2801,37 @@ class scanThread(QThread):
         b = popt[1]
         c = popt[2]
 
+        tmp["a"] = round(a,2)
+        tmp["b"] = round(b,2)
+        tmp["c"] = round(c,2)
+
         discriminant = float(4 * a * c - b**2)
+        tmp["discriminant"] = discriminant
         if not math.isfinite(discriminant) or discriminant <= 0:
-            raise RuntimeError(
-                "Parabolic fit produced a non-physical emittance discriminant "
-                f"4ac-b^2={discriminant:.6g}."
+            tmp.update(
+                _invalid_plane_result(
+                    "non_physical",
+                    "non-physical emittance discriminant "
+                    f"4ac-b^2={discriminant:.6g}",
+                )
             )
+            return tmp
         if m12 == 0:
-            raise RuntimeError("Parabolic fit cannot solve emittance because transfer matrix m12 is zero.")
+            tmp.update(
+                _invalid_plane_result(
+                    "failed",
+                    "cannot solve emittance because transfer matrix m12 is zero",
+                )
+            )
+            return tmp
 
         fac = math.sqrt(discriminant)
         ex    = fac/(2*m12**2)
         alpha = (-b+2*a*m11/m12)/fac
         beta  = 2*a/fac
         if not math.isfinite(beta) or beta == 0:
-            raise RuntimeError(f"Parabolic fit produced invalid beta={beta}.")
+            tmp.update(_invalid_plane_result("failed", f"invalid beta={beta}"))
+            return tmp
         gamma = (1+alpha**2)/beta
         
         gam0 = self.EnergyMeV*1e6/ELECTRON_MASS_EV
@@ -2631,10 +2844,8 @@ class scanThread(QThread):
         tmp["beta"]  = round(beta ,2)
         tmp["alpha"] = round(alpha,2)
         tmp["gamma"] = round(gamma,2)
-
-        tmp["a"] = round(a,2)
-        tmp["b"] = round(b,2)
-        tmp["c"] = round(c,2)
+        tmp["status"] = "valid"
+        tmp["message"] = ""
 
         return tmp
     

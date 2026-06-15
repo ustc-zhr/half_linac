@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -502,6 +503,26 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertIn("self.flag_selec.clear()", beam_source)
         self.assertIn("self.flag_selec.addItems(self.flag_ids)", beam_source)
         self.assertIn("self._set_combo_items(self.comboBox_4, flag_items)", emit_source)
+
+    def test_emit_measure_fit_summary_marks_partial_plane_results(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import _method_fit_summary
+
+        summary = _method_fit_summary(
+            "leastSquares",
+            {"status": "valid", "ex": 0.1, "determinant": 0.01},
+            {"status": "non_physical", "message": "non-physical beam matrix determinant=-1"},
+        )
+
+        self.assertEqual(summary["status"], "partial")
+        self.assertEqual(summary["xplane"]["status"], "valid")
+        self.assertEqual(summary["yplane"]["status"], "non_physical")
+        self.assertEqual(summary["xplane"]["emittance"], 0.1)
+        self.assertIn("determinant", summary["yplane"]["message"])
 
     def test_esa_auto_tuner_demo_uses_machine_profile_instead_of_half_bend_pv(self):
         source = (REPO_ROOT / "src/apps/energy_spectrum/esa_auto_tuner.py").read_text(encoding="utf-8")
