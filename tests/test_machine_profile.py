@@ -738,6 +738,10 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(len(vm_orbit_context.orbit_workflow.bpms), 5)
         self.assertEqual(orbit_context.orbit_workflow.bpms[0], "BPM03")
         self.assertEqual(orbit_context.orbit_workflow.bpms[-1], "BPM10")
+        self.assertEqual(
+            orbit_context.orbit_workflow.default_target_bpms,
+            ("BPM03", "BPM07", "BPM08", "BPM09", "BPM10"),
+        )
         self.assertEqual(orbit_context.orbit_workflow.xcors[-1], "HC07")
         self.assertEqual(orbit_context.orbit_workflow.ycors[-1], "VC07")
         self.assertEqual(workflow["response_wait_s_by_backend"]["real"], 1.0)
@@ -751,6 +755,13 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(irfel_vm_orbit_runtime["corrector_upperlimit_unit"], "rad")
         self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit"], 5.0)
         self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit_unit"], "A")
+        self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["method"], "global")
+        self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["sampling_interval_s"], 2.0)
+        self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["accuracy_um"], 10.0)
+        self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["samples_per_step"], 1)
+        self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["global_max_iter"], 20)
+        self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["one_to_one_gain"], 1.0)
+        self.assertEqual(irfel_real_orbit_runtime["runtime_defaults"], irfel_vm_orbit_runtime["runtime_defaults"])
         self.assertEqual(beam_workflow["default_flag"], "PRF03")
         self.assertEqual(
             beam_workflow["flag_pixel_geometry"]["default"]["vm"]["shape"],
@@ -865,7 +876,37 @@ class MachineProfileTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "shape"):
                     orbit_runtime.resolve_active_response_matrix(context)
 
-    def test_orbit_global_correction_uses_selected_response_submatrix(self):
+    def test_orbit_response_matrix_quality_rejects_zero_response_columns(self):
+        from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
+
+        context = load_app_context(
+            "orbit_correct",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        matrix = np.eye(10)
+        matrix[0:5, 2] = 0.0
+        matrix[5:10, 8] = 0.0
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(orbit_runtime, "ORBIT_RUNTIME_ROOT", Path(temp_dir)):
+                paths = orbit_runtime.resolve_orbit_runtime_paths(context)
+                with self.assertRaisesRegex(ValueError, "zero-response corrector column"):
+                    orbit_runtime.write_response_matrix_snapshot(context, matrix)
+                self.assertFalse(paths["active_response_path"].exists())
+                self.assertEqual(list(paths["response_matrix_dir"].glob("response_*.json")), [])
+
+                record = orbit_runtime.write_response_matrix_snapshot(context, np.eye(10))
+                np.savetxt(record["matrix_path"], matrix)
+                with self.assertRaisesRegex(ValueError, "zero-response corrector column"):
+                    orbit_runtime.resolve_active_response_matrix(context)
+
+                rank_bad_matrix = np.eye(10)
+                rank_bad_matrix[0:5, 1] = rank_bad_matrix[0:5, 0]
+                with self.assertRaisesRegex(ValueError, "rank deficient"):
+                    orbit_runtime.validate_response_matrix_quality(context, rank_bad_matrix)
+
+    def test_orbit_global_correction_uses_selected_bpm_rows_and_all_correctors(self):
         from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
         from half_linac.src.apps.orbit_correct.correct import OrbitCorrector
 
@@ -895,8 +936,54 @@ class MachineProfileTests(unittest.TestCase):
 
         self.assertEqual(corrector.target_indices, [0, 3, 4])
         self.assertEqual(corrector.cor_x_list_target, ["HC01", "HC06", "HC07"])
-        self.assertEqual(corrector.pseudo_inverse_x.shape, (3, 3))
-        self.assertEqual(corrector.pseudo_inverse_y.shape, (3, 3))
+        self.assertEqual(corrector.pseudo_inverse_x.shape, (5, 3))
+        self.assertEqual(corrector.pseudo_inverse_y.shape, (5, 3))
+        np.testing.assert_allclose(
+            corrector.pseudo_inverse_x @ np.array([1.0, 2.0, 3.0]),
+            np.array([1.0, 0.0, 0.0, 2.0, 3.0]),
+        )
+
+    def test_orbit_global_correction_can_limit_corrector_columns(self):
+        from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
+        from half_linac.src.apps.orbit_correct.correct import OrbitCorrector
+
+        context = load_app_context(
+            "orbit_correct",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        matrix = np.eye(10)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(orbit_runtime, "ORBIT_RUNTIME_ROOT", Path(temp_dir)):
+                orbit_runtime.write_response_matrix_snapshot(context, matrix)
+                with patch.dict(
+                    os.environ,
+                    {
+                        "HALF_LINAC_MACHINE_ID": "irfel",
+                        "HALF_LINAC_CONTROL_BACKEND": "vm",
+                    },
+                ):
+                    corrector = OrbitCorrector(
+                        target_BPMlist=["BPM09", "BPM10"],
+                        target_BPMx_values=[0.0, 0.0],
+                        target_BPMy_values=[0.0, 0.0],
+                        global_xcor_list=["HC06", "HC07"],
+                        global_ycor_list=["VC06", "VC07"],
+                    )
+                    corrector._compute_svd(min_singular_value=1e-12)
+
+        self.assertEqual(corrector.target_indices, [3, 4])
+        self.assertEqual(corrector.global_xcor_list, ["HC06", "HC07"])
+        self.assertEqual(corrector.global_ycor_list, ["VC06", "VC07"])
+        self.assertEqual(corrector.global_xcor_indices, [3, 4])
+        self.assertEqual(corrector.global_ycor_indices, [3, 4])
+        self.assertEqual(corrector.pseudo_inverse_x.shape, (2, 2))
+        self.assertEqual(corrector.pseudo_inverse_y.shape, (2, 2))
+        np.testing.assert_allclose(
+            corrector.pseudo_inverse_x @ np.array([1.0, 2.0]),
+            np.array([1.0, 2.0]),
+        )
 
     def test_irfel_profile_exposes_imported_real_magnet_channels(self):
         profile = load_profile("irfel")

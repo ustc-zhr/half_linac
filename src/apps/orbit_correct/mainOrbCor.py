@@ -1,3 +1,4 @@
+import logging
 import sys
 import re
 from pathlib import Path
@@ -50,10 +51,12 @@ from half_linac.src.apps.orbit_correct.profile_runtime import (
     APP_DIR,
     get_active_response_matrix_record,
     list_response_matrix_records,
+    load_orbit_runtime_settings,
     set_active_response_matrix,
 )
 
 HEADER_ACTION_HEIGHT = 32
+logger = logging.getLogger(__name__)
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -147,6 +150,11 @@ QFrame#subCard {{
     border-radius: 12px;
 }}
 
+QFrame#parameterGroup {{
+    background-color: transparent;
+    border: none;
+}}
+
 QFrame#targetToolbar {{
     background-color: {status_strip_bg};
     border: 1px solid {status_strip_border};
@@ -199,14 +207,6 @@ QLabel#subTitle {{
     color: {summary_title_fg};
     font-size: 13px;
     font-weight: 700;
-    background: transparent;
-    border: none;
-}}
-
-QLabel#hintText {{
-    color: {muted_fg};
-    font-size: 11px;
-    font-weight: 500;
     background: transparent;
     border: none;
 }}
@@ -276,6 +276,22 @@ QLineEdit, QComboBox, QDoubleSpinBox {{
     padding: 5px 10px;
     min-height: 16px;
     selection-background-color: {metric_active_fg};
+}}
+
+QLineEdit:disabled, QComboBox:disabled, QDoubleSpinBox:disabled {{
+    background-color: {button_disabled_bg};
+    border-color: {button_disabled_border};
+    color: {button_disabled_fg};
+}}
+
+QPushButton:disabled {{
+    background-color: {button_disabled_bg};
+    border-color: {button_disabled_border};
+    color: {button_disabled_fg};
+}}
+
+QLabel:disabled {{
+    color: {button_disabled_fg};
 }}
 
 QComboBox::drop-down, QDoubleSpinBox::drop-down {{
@@ -496,6 +512,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.app_context = load_app_context("orbit_correct")
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
+        self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
+        self.runtime_defaults = self.orbit_runtime["runtime_defaults"]
         self.current_theme = "dark"
         self.last_notice = "Idle"
         self.process_manager = ManagedProcessGroup(notify=self._notify)
@@ -505,6 +523,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.all_checkboxes = []
         self._bpmx_spinboxes = []
         self._bpmy_spinboxes = []
+        self.global_xcor_checkboxes = []
+        self.global_ycor_checkboxes = []
         self._configure_window()
         self._configure_machine_profile()
         self._clear_inline_styles()
@@ -524,15 +544,32 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.load_response_matrix_button.clicked.connect(self.load_response_matrix)
         self.refresh_response_matrix_button.clicked.connect(self.refresh_response_matrices)
 
-        self.comboBox.currentIndexChanged.connect(self._refresh_status)
+        self.comboBox.currentIndexChanged.connect(self._on_correction_method_changed)
         self.tabWidget.currentChanged.connect(self._refresh_status)
         for cb in self.all_checkboxes:
             cb.stateChanged.connect(self._refresh_status)
+        for cb in self.global_xcor_checkboxes + self.global_ycor_checkboxes:
+            cb.stateChanged.connect(self._refresh_status)
 
         # initial parameters
-        self.samplingIntervalSLineEdit.setText('6') # s
-        self.correctorAccuracyUmLineEdit.setText('10') # um
-        self.sampPerStepLineEdit.setText('2') # 
+        self._apply_default_method()
+        self.samplingIntervalSLineEdit.setText(f"{float(self.runtime_defaults['sampling_interval_s']):g}")
+        self.correctorAccuracyUmLineEdit.setText(f"{float(self.runtime_defaults['accuracy_um']):g}")
+        self.sampPerStepLineEdit.setText(str(int(self.runtime_defaults["samples_per_step"])))
+        corrector_limit = float(self.orbit_runtime["corrector_upperlimit"])
+        self.correctorLimitLineEdit.setText(f"{corrector_limit:.6g}")
+        self.globalMaxIterLineEdit.setText(str(int(self.runtime_defaults["global_max_iter"])))
+        self.oneToOneMaxIterLineEdit.setText(str(int(self.runtime_defaults["one_to_one_max_iter"])))
+        self.oneToOneGainLineEdit.setText(f"{float(self.runtime_defaults['one_to_one_gain']):g}")
+        self.oneToOneMaxStepLineEdit.setText(f"{float(self.runtime_defaults['one_to_one_max_step_pct']):g}")
+        self.responseKickLineEdit.setText(
+            f"{corrector_limit * float(self.runtime_defaults['local_response_kick_fraction']):.6g}"
+        )
+        self.matrixResponseKickLineEdit.setText(
+            f"{corrector_limit * float(self.runtime_defaults['matrix_response_kick_fraction']):.6g}"
+        )
+        self.matrixWaitSLineEdit.setText(f"{float(self.orbit_runtime['response_wait_s']):.6g}")
+        self.matrixSamplesLineEdit.setText(str(int(self.runtime_defaults["matrix_samples_per_step"])))
 
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._refresh_status)
@@ -540,6 +577,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.refresh_response_matrices()
         self._apply_theme()
+        self._update_method_parameter_state()
         self._refresh_status()
 
     def _configure_window(self):
@@ -628,9 +666,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.all_checkboxes = checkbox_widgets[: len(orbit_bpms)]
         self._bpmx_spinboxes = bpmx_widgets[: len(orbit_bpms)]
         self._bpmy_spinboxes = bpmy_widgets[: len(orbit_bpms)]
+        default_target_bpms = set(self.orbit_workflow.default_target_bpms)
 
         for bpm_name, checkbox in zip(orbit_bpms, self.all_checkboxes):
             checkbox.setText(bpm_name)
+            if default_target_bpms:
+                checkbox.setChecked(bpm_name in default_target_bpms)
             checkbox.show()
             checkbox.setEnabled(True)
 
@@ -716,7 +757,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.verticalLayout_5.setContentsMargins(12, 12, 12, 12)
         self.verticalLayout_5.setSpacing(12)
-        self.verticalLayout_5.insertWidget(0, self._make_panel_title("Target BPMs", self.right_panel))
+        self.verticalLayout_5.insertWidget(0, self._make_panel_title("Selection", self.right_panel))
 
         self.horizontalLayout_9.addWidget(self.left_panel, 2)
         self.horizontalLayout_9.addWidget(self.right_panel, 3)
@@ -731,7 +772,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout_3.addLayout(self.gridLayout_2, 0, 0, 1, 1, Qt.AlignTop)
         self.gridLayout_3.setRowStretch(0, 0)
         self.gridLayout_3.setRowStretch(1, 1)
-        self._build_target_bpm_panel()
+        self._build_selection_tabs()
 
     def _build_tab_layouts(self):
         self.gridLayout_4.setHorizontalSpacing(10)
@@ -752,13 +793,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         command_layout = QVBoxLayout(self.command_pane)
         command_layout.setContentsMargins(14, 14, 14, 14)
         command_layout.setSpacing(12)
-        command_layout.addWidget(self._make_panel_title("Correction Session", self.command_pane))
-        command_layout.addWidget(
-            self._make_hint(
-                "Select target BPMs on the right, then run one-to-one correction or global correction with an active response matrix.",
-                self.command_pane,
-            )
-        )
         command_layout.addWidget(self._build_correction_parameters_card())
         command_layout.addWidget(self._build_correction_actions_card())
         command_layout.addStretch(1)
@@ -774,18 +808,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         response_layout.setContentsMargins(14, 14, 14, 14)
         response_layout.setSpacing(12)
         response_layout.addWidget(self._make_panel_title("Response Matrix", self.response_pane))
-        response_layout.addWidget(
-            self._make_hint(
-                "Measured matrices are stored per machine/backend. Loading a matrix validates metadata before global correction can use it.",
-                self.response_pane,
-            )
-        )
-        response_layout.addWidget(self._build_active_matrix_card())
         response_layout.addWidget(self._build_matrix_library_card())
         response_layout.addWidget(self._build_matrix_measure_card())
         response_layout.addStretch(2)
 
-    def _build_target_bpm_panel(self):
+    def _build_selection_tabs(self):
         self.verticalLayout_5.removeItem(self.gridLayout_5)
         for widget in (
             self.pushButton_5,
@@ -796,7 +823,19 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ):
             self.gridLayout_5.removeWidget(widget)
 
-        toolbar = QFrame(self.right_panel)
+        self.verticalLayout_5.removeWidget(self.scrollArea)
+
+        self.selection_tabs = QTabWidget(self.right_panel)
+        self.selection_tabs.setDocumentMode(True)
+        self.selection_tabs.setElideMode(False)
+        self.selection_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.target_bpm_tab = QWidget(self.selection_tabs)
+        target_layout = QVBoxLayout(self.target_bpm_tab)
+        target_layout.setContentsMargins(8, 8, 8, 8)
+        target_layout.setSpacing(10)
+
+        toolbar = QFrame(self.target_bpm_tab)
         toolbar.setObjectName("targetToolbar")
         toolbar_layout = QGridLayout(toolbar)
         toolbar_layout.setContentsMargins(12, 10, 12, 10)
@@ -820,33 +859,203 @@ class myWindow(QMainWindow, Ui_MainWindow):
         toolbar_layout.setColumnStretch(3, 1)
 
         self.target_toolbar = toolbar
-        self.verticalLayout_5.insertWidget(1, toolbar)
+        target_layout.addWidget(toolbar)
+        target_layout.addWidget(self.scrollArea, 1)
+
+        self.global_corrector_tab = QWidget(self.selection_tabs)
+        corrector_layout = QVBoxLayout(self.global_corrector_tab)
+        corrector_layout.setContentsMargins(8, 8, 8, 8)
+        corrector_layout.setSpacing(10)
+        corrector_layout.addWidget(
+            self._build_global_corrector_selector(self.global_corrector_tab),
+            0,
+            Qt.AlignTop,
+        )
+        corrector_layout.addStretch(1)
+
+        self.selection_tabs.addTab(self.target_bpm_tab, "Target BPMs")
+        self.selection_tabs.addTab(self.global_corrector_tab, "Global Correctors")
+        self.selection_tabs.currentChanged.connect(self._refresh_status)
+        self.verticalLayout_5.addWidget(self.selection_tabs, 1)
 
     def _build_correction_parameters_card(self):
-        card, layout = self._make_subcard("Correction Parameters", self.command_pane)
+        card, layout = self._make_subcard(None, self.command_pane)
+        self.correctorLimitLabel, self.correctorLimitLineEdit = self._make_parameter_field(card)
+        self.globalMaxIterLabel, self.globalMaxIterLineEdit = self._make_parameter_field(card)
+        self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit = self._make_parameter_field(card)
+        self.oneToOneGainLabel, self.oneToOneGainLineEdit = self._make_parameter_field(card)
+        self.oneToOneMaxStepLabel, self.oneToOneMaxStepLineEdit = self._make_parameter_field(card)
+        self.responseKickLabel, self.responseKickLineEdit = self._make_parameter_field(card)
+        self.activeMatrixLabel, self.activeMatrixValueLabel = self._make_parameter_display(card)
+        self.matrixSetupLabel = QLabel(card)
+        self.openResponseMatrixTabButton = QPushButton(card)
+        self.globalCorrectorsLabel, self.globalCorrectorsValueLabel = self._make_parameter_display(card)
+        self.correctorSetupLabel = QLabel(card)
+        self.editCorrectorsButton = QPushButton(card)
+
+        self.commonRuntimeGroup = self._build_parameter_group(
+            "Common Runtime",
+            (
+                (self.label_6, self.comboBox, True),
+                (self.samplingIntervalSLabel, self.samplingIntervalSLineEdit, True),
+                (self.correctorAccuracyUmLabel, self.correctorAccuracyUmLineEdit, True),
+                (self.sampPerStepLabel, self.sampPerStepLineEdit, True),
+                (self.correctorLimitLabel, self.correctorLimitLineEdit, False),
+            ),
+            card,
+        )
+        layout.addWidget(self.commonRuntimeGroup)
+
+        self.globalCorrectionGroup = self._build_parameter_group(
+            "Global Correction",
+            (
+                (self.globalMaxIterLabel, self.globalMaxIterLineEdit, False),
+                (self.activeMatrixLabel, self.activeMatrixValueLabel, False),
+                (self.matrixSetupLabel, self.openResponseMatrixTabButton, False),
+                (self.globalCorrectorsLabel, self.globalCorrectorsValueLabel, False),
+                (self.correctorSetupLabel, self.editCorrectorsButton, False),
+            ),
+            card,
+        )
+        layout.addWidget(self.globalCorrectionGroup)
+
+        self.oneToOneCorrectionGroup = self._build_parameter_group(
+            "One-to-One Correction",
+            (
+                (self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit, False),
+                (self.oneToOneGainLabel, self.oneToOneGainLineEdit, False),
+                (self.oneToOneMaxStepLabel, self.oneToOneMaxStepLineEdit, False),
+                (self.responseKickLabel, self.responseKickLineEdit, False),
+            ),
+            card,
+        )
+        layout.addWidget(self.oneToOneCorrectionGroup)
+
+        return card
+
+    def _make_parameter_field(self, parent):
+        label = QLabel(parent)
+        editor = QLineEdit(parent)
+        label.setProperty("role", "field")
+        return label, editor
+
+    def _make_parameter_display(self, parent):
+        label = QLabel(parent)
+        value = QLabel("--", parent)
+        label.setProperty("role", "field")
+        value.setProperty("role", "field")
+        value.setWordWrap(True)
+        return label, value
+
+    def _build_parameter_group(self, title, rows, parent):
+        group = QFrame(parent)
+        group.setObjectName("parameterGroup")
+        group_layout = QVBoxLayout(group)
+        group_layout.setContentsMargins(10, 10, 10, 10)
+        group_layout.setSpacing(8)
+
+        title_label = QLabel(title, group)
+        title_label.setObjectName("subTitle")
+        group_layout.addWidget(title_label)
+
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(10)
-
-        rows = (
-            (self.label_6, self.comboBox),
-            (self.samplingIntervalSLabel, self.samplingIntervalSLineEdit),
-            (self.correctorAccuracyUmLabel, self.correctorAccuracyUmLineEdit),
-            (self.sampPerStepLabel, self.sampPerStepLineEdit),
-        )
-        for row, (label, widget) in enumerate(rows):
-            self.gridLayout.removeWidget(label)
-            self.gridLayout.removeWidget(widget)
+        grid.setVerticalSpacing(8)
+        for row, (label, widget, from_legacy_grid) in enumerate(rows):
+            if from_legacy_grid:
+                self.gridLayout.removeWidget(label)
+                self.gridLayout.removeWidget(widget)
             grid.addWidget(label, row, 0)
             grid.addWidget(widget, row, 1)
         grid.setColumnStretch(0, 0)
         grid.setColumnStretch(1, 1)
-        layout.addLayout(grid)
-        return card
+        group_layout.addLayout(grid)
+        return group
+
+    def _build_global_corrector_selector(self, parent):
+        container = QFrame(parent)
+        container.setObjectName("correctorSelector")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        toolbar = QFrame(container)
+        toolbar.setObjectName("targetToolbar")
+        toolbar_layout = QGridLayout(toolbar)
+        toolbar_layout.setContentsMargins(12, 10, 12, 10)
+        toolbar_layout.setHorizontalSpacing(10)
+        toolbar_layout.setVerticalSpacing(8)
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(8)
+        all_button = QPushButton("All Correctors", container)
+        clear_button = QPushButton("Clear Correctors", container)
+        for button in (all_button, clear_button):
+            button.setProperty("compact", True)
+            button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            action_row.addWidget(button)
+        action_row.addStretch(1)
+
+        x_header = QLabel("X Correctors", toolbar)
+        y_header = QLabel("Y Correctors", toolbar)
+        for header in (x_header, y_header):
+            header.setProperty("role", "field")
+            header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.global_corrector_progress = QProgressBar(toolbar)
+        self.global_corrector_progress.setTextVisible(True)
+        self.global_corrector_progress.setFormat("%v/%m")
+
+        toolbar_layout.addLayout(action_row, 0, 0)
+        toolbar_layout.addWidget(x_header, 0, 1)
+        toolbar_layout.addWidget(y_header, 0, 2)
+        toolbar_layout.addWidget(self.global_corrector_progress, 0, 3)
+        toolbar_layout.setColumnStretch(0, 2)
+        toolbar_layout.setColumnStretch(1, 2)
+        toolbar_layout.setColumnStretch(2, 2)
+        toolbar_layout.setColumnStretch(3, 1)
+        layout.addWidget(toolbar)
+
+        scroll = QScrollArea(container)
+        scroll.setObjectName("targetsScroll")
+        scroll.setWidgetResizable(True)
+        content = QWidget(scroll)
+        content.setObjectName("targetsContent")
+        grid = QGridLayout(content)
+        grid.setContentsMargins(8, 8, 8, 8)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(6)
+        grid.setAlignment(Qt.AlignTop)
+        self._populate_corrector_columns(grid)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+
+        all_button.clicked.connect(lambda: self._set_global_correctors_checked(True))
+        clear_button.clicked.connect(lambda: self._set_global_correctors_checked(False))
+        return container
+
+    def _populate_corrector_columns(self, grid):
+        row_count = max(len(self.orbit_workflow.xcors), len(self.orbit_workflow.ycors))
+        for row in range(row_count):
+            if row < len(self.orbit_workflow.xcors):
+                checkbox = QCheckBox(self.orbit_workflow.xcors[row], grid.parentWidget())
+                checkbox.setChecked(True)
+                self.global_xcor_checkboxes.append(checkbox)
+                grid.addWidget(checkbox, row, 0)
+
+            if row < len(self.orbit_workflow.ycors):
+                checkbox = QCheckBox(self.orbit_workflow.ycors[row], grid.parentWidget())
+                checkbox.setChecked(True)
+                self.global_ycor_checkboxes.append(checkbox)
+                grid.addWidget(checkbox, row, 1)
+
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
 
     def _build_correction_actions_card(self):
-        card, layout = self._make_subcard("Execution", self.command_pane)
+        card, layout = self._make_subcard(None, self.command_pane)
 
         primary_row = QHBoxLayout()
         primary_row.setContentsMargins(0, 0, 0, 0)
@@ -866,16 +1075,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             utility_row.addWidget(button)
         layout.addLayout(utility_row)
 
-        self.notice_label = self._make_hint("Status messages appear in the header strip and terminal.", card)
-        layout.addWidget(self.notice_label)
-        return card
-
-    def _build_active_matrix_card(self):
-        card, layout = self._make_subcard("Active Matrix", self.response_pane)
-        self.active_response_matrix_label = QLabel("Active: --", card)
-        self.active_response_matrix_label.setProperty("role", "field")
-        self.active_response_matrix_label.setWordWrap(True)
-        layout.addWidget(self.active_response_matrix_label)
         return card
 
     def _build_matrix_library_card(self):
@@ -898,10 +1097,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
         return card
 
     def _build_matrix_measure_card(self):
-        card, layout = self._make_subcard("Measure New Matrix", self.response_pane)
+        card, layout = self._make_subcard("Matrix Measurement", self.response_pane)
+        self.matrixResponseKickLabel, self.matrixResponseKickLineEdit = self._make_parameter_field(card)
+        self.matrixWaitSLabel, self.matrixWaitSLineEdit = self._make_parameter_field(card)
+        self.matrixSamplesLabel, self.matrixSamplesLineEdit = self._make_parameter_field(card)
         layout.addWidget(
-            self._make_hint(
-                "A new measurement is timestamped and becomes active automatically.",
+            self._build_parameter_group(
+                "Measurement Parameters",
+                (
+                    (self.matrixResponseKickLabel, self.matrixResponseKickLineEdit, False),
+                    (self.matrixWaitSLabel, self.matrixWaitSLineEdit, False),
+                    (self.matrixSamplesLabel, self.matrixSamplesLineEdit, False),
+                ),
                 card,
             )
         )
@@ -915,13 +1122,42 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.samplingIntervalSLabel.setProperty("role", "field")
         self.correctorAccuracyUmLabel.setProperty("role", "field")
         self.sampPerStepLabel.setProperty("role", "field")
+        self.correctorLimitLabel.setProperty("role", "field")
+        self.globalMaxIterLabel.setProperty("role", "field")
+        self.oneToOneMaxIterLabel.setProperty("role", "field")
+        self.oneToOneGainLabel.setProperty("role", "field")
+        self.oneToOneMaxStepLabel.setProperty("role", "field")
+        self.responseKickLabel.setProperty("role", "field")
+        self.matrixResponseKickLabel.setProperty("role", "field")
+        self.matrixWaitSLabel.setProperty("role", "field")
+        self.matrixSamplesLabel.setProperty("role", "field")
+        self.activeMatrixLabel.setProperty("role", "field")
+        self.activeMatrixValueLabel.setProperty("role", "field")
+        self.matrixSetupLabel.setProperty("role", "field")
+        self.globalCorrectorsLabel.setProperty("role", "field")
+        self.globalCorrectorsValueLabel.setProperty("role", "field")
+        self.correctorSetupLabel.setProperty("role", "field")
         self.label_45.setProperty("role", "field")
         self.label_46.setProperty("role", "field")
 
+        limit_unit = self.orbit_runtime["corrector_upperlimit_unit"]
         self.label_6.setText("Method")
         self.samplingIntervalSLabel.setText("Sampling Interval (s)")
         self.correctorAccuracyUmLabel.setText("Accuracy (um)")
         self.sampPerStepLabel.setText("Samples / Step")
+        self.correctorLimitLabel.setText(f"Corrector Limit ({limit_unit})")
+        self.globalMaxIterLabel.setText("Global Max Iter")
+        self.oneToOneMaxIterLabel.setText("1-to-1 Max Iter / BPM")
+        self.oneToOneGainLabel.setText("1-to-1 Gain")
+        self.oneToOneMaxStepLabel.setText("1-to-1 Max Step (%)")
+        self.responseKickLabel.setText(f"Local Response Kick ({limit_unit})")
+        self.matrixResponseKickLabel.setText(f"Matrix Response Kick ({limit_unit})")
+        self.matrixWaitSLabel.setText("Matrix Wait (s)")
+        self.matrixSamplesLabel.setText("Matrix Samples / Step")
+        self.activeMatrixLabel.setText("Active Response Matrix")
+        self.matrixSetupLabel.setText("Matrix Setup")
+        self.globalCorrectorsLabel.setText("Global Correctors")
+        self.correctorSetupLabel.setText("Corrector Setup")
         self.label_45.setText("BPM X (mm)")
         self.label_46.setText("BPM Y (mm)")
         self._hide_target_bpm_unit_labels()
@@ -939,10 +1175,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.pushButton_7,
             self.load_response_matrix_button,
             self.refresh_response_matrix_button,
+            self.openResponseMatrixTabButton,
+            self.editCorrectorsButton,
         ):
             button.setProperty("compact", True)
 
         self.pushButton.setText("Measure Response")
+        self.openResponseMatrixTabButton.setText("Open Response Matrix Tab")
+        self.openResponseMatrixTabButton.clicked.connect(
+            lambda: self.tabWidget.setCurrentWidget(self.tab_2)
+        )
+        self.editCorrectorsButton.setText("Edit Correctors")
+        self.editCorrectorsButton.clicked.connect(self._open_global_correctors_tab)
         self.pushButton_4.setText("Start Correction")
         self.pushButton_3.setText("Stop Correction")
         self.pushButton_2.setText("Zero Correctors")
@@ -973,16 +1217,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         layout = QVBoxLayout(card)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
-        title_label = QLabel(title, card)
-        title_label.setObjectName("subTitle")
-        layout.addWidget(title_label)
+        if title:
+            title_label = QLabel(title, card)
+            title_label.setObjectName("subTitle")
+            layout.addWidget(title_label)
         return card, layout
-
-    def _make_hint(self, text, parent):
-        label = QLabel(text, parent)
-        label.setObjectName("hintText")
-        label.setWordWrap(True)
-        return label
 
     def _palette(self):
         return DARK_THEME if self.current_theme == "dark" else LIGHT_THEME
@@ -1008,9 +1247,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._refresh_status()
 
     def _notify(self, message):
-        print(message)
+        logger.info(message)
         self.last_notice = message
         self._refresh_status()
+
+    def _open_global_correctors_tab(self):
+        if hasattr(self, "selection_tabs") and hasattr(self, "global_corrector_tab"):
+            if self._selected_correction_method() != "global":
+                return
+            self.selection_tabs.setCurrentWidget(self.global_corrector_tab)
 
     def _require_write_allowed(self, operation):
         try:
@@ -1025,6 +1270,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _selected_bpm_count(self):
         return sum(1 for cb in self.all_checkboxes if cb.isChecked())
 
+    def _global_corrector_summary(self):
+        x_selected = sum(1 for checkbox in self.global_xcor_checkboxes if checkbox.isChecked())
+        y_selected = sum(1 for checkbox in self.global_ycor_checkboxes if checkbox.isChecked())
+        return (
+            f"X {x_selected}/{len(self.global_xcor_checkboxes)}, "
+            f"Y {y_selected}/{len(self.global_ycor_checkboxes)}"
+        )
+
     def _current_process_status(self):
         if self.process_manager.is_running("orbit_correction"):
             return "Correction Running", "success"
@@ -1035,6 +1288,53 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if self.process_manager.is_running("cor_recover"):
             return "Recovering", "warning"
         return "Idle", "subtle"
+
+    def _selected_correction_method(self):
+        return self.comboBox.currentText().strip().lower()
+
+    def _apply_default_method(self):
+        method = str(self.runtime_defaults.get("method", "")).strip()
+        if not method:
+            return
+        index = self.comboBox.findText(method)
+        if index >= 0:
+            self.comboBox.setCurrentIndex(index)
+
+    def _on_correction_method_changed(self, *_):
+        self._update_method_parameter_state()
+        self._refresh_status()
+
+    def _update_method_parameter_state(self):
+        if not hasattr(self, "globalCorrectionGroup"):
+            return
+
+        method = self._selected_correction_method()
+        known_method = method in {"global", "one-to-one"}
+        show_global = method == "global" or not known_method
+        show_one_to_one = method == "one-to-one" or not known_method
+        self.globalCorrectionGroup.setVisible(show_global)
+        self.globalCorrectionGroup.setEnabled(show_global)
+        self.oneToOneCorrectionGroup.setVisible(show_one_to_one)
+        self.oneToOneCorrectionGroup.setEnabled(show_one_to_one)
+        self._update_global_corrector_edit_state(method == "global")
+
+    def _update_global_corrector_edit_state(self, enabled):
+        if hasattr(self, "editCorrectorsButton"):
+            self.editCorrectorsButton.setEnabled(enabled)
+        if hasattr(self, "selection_tabs") and hasattr(self, "global_corrector_tab"):
+            self._set_global_correctors_tab_visible(enabled)
+
+    def _set_global_correctors_tab_visible(self, visible):
+        index = self.selection_tabs.indexOf(self.global_corrector_tab)
+        if visible:
+            if index < 0:
+                self.selection_tabs.addTab(self.global_corrector_tab, "Global Correctors")
+            return
+
+        if index >= 0:
+            if self.selection_tabs.currentIndex() == index:
+                self.selection_tabs.setCurrentWidget(self.target_bpm_tab)
+            self.selection_tabs.removeTab(index)
 
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
@@ -1055,6 +1355,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.set_item("backend", backend_name.upper(), backend_tone)
         self.status_panel.set_item("process", process_text, process_tone)
         self.progressBar.setValue(selected)
+        if hasattr(self, "globalCorrectorsValueLabel"):
+            self.globalCorrectorsValueLabel.setText(self._global_corrector_summary())
+        if hasattr(self, "global_corrector_progress"):
+            corrector_total = len(self.global_xcor_checkboxes) + len(self.global_ycor_checkboxes)
+            corrector_selected = (
+                sum(1 for checkbox in self.global_xcor_checkboxes if checkbox.isChecked())
+                + sum(1 for checkbox in self.global_ycor_checkboxes if checkbox.isChecked())
+            )
+            self.global_corrector_progress.setMaximum(corrector_total)
+            self.global_corrector_progress.setValue(corrector_selected)
 
     def _format_response_matrix_record(self, record):
         created_at = str(record.get("created_at", "--"))
@@ -1065,6 +1375,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         except (TypeError, IndexError):
             shape_text = "?x?"
         return f"{created_at}  {shape_text}  {matrix_file}"
+
+    def _set_active_response_matrix_text(self, value_text):
+        if hasattr(self, "activeMatrixValueLabel"):
+            self.activeMatrixValueLabel.setText(value_text)
 
     def refresh_response_matrices(self):
         if not hasattr(self, "response_matrix_combo"):
@@ -1089,16 +1403,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
         try:
             active = get_active_response_matrix_record(self.app_context)
         except Exception as exc:
-            self.active_response_matrix_label.setText(f"Active: invalid ({exc})")
+            self._set_active_response_matrix_text(f"invalid ({exc})")
             return
 
         if active is None:
-            self.active_response_matrix_label.setText("Active: --")
+            self._set_active_response_matrix_text("--")
             return
 
-        self.active_response_matrix_label.setText(
-            f"Active: {self._format_response_matrix_record(active)}"
-        )
+        self._set_active_response_matrix_text(self._format_response_matrix_record(active))
         active_metadata = active.get("metadata_path")
         if active_metadata:
             index = self.response_matrix_combo.findData(active_metadata)
@@ -1159,6 +1471,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def cancelall(self):
         for cb in self.all_checkboxes:
             cb.setChecked(False)
+
+    def _set_global_correctors_checked(self, checked):
+        for checkbox in self.global_xcor_checkboxes + self.global_ycor_checkboxes:
+            checkbox.setChecked(checked)
+        self._refresh_status()
     
     def all_BPM_target_value(self):
         all_bpmx_target_values = [spinbox.value() for spinbox in self._bpmx_spinboxes]
@@ -1179,14 +1496,160 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 bpmx_target_values.append(bpmx_spinbox.value())
                 bpmy_target_values.append(bpmy_spinbox.value())
         return bpm_target_list, bpmx_target_values, bpmy_target_values
+
+    def _selected_global_correctors(self):
+        xcors = [checkbox.text() for checkbox in self.global_xcor_checkboxes if checkbox.isChecked()]
+        ycors = [checkbox.text() for checkbox in self.global_ycor_checkboxes if checkbox.isChecked()]
+        return xcors, ycors
+
+    def _parse_positive_float(self, editor, label):
+        try:
+            value = float(editor.text())
+        except ValueError as exc:
+            raise ValueError(f"{label} must be numeric.") from exc
+        if value <= 0:
+            raise ValueError(f"{label} must be greater than 0.")
+        return value
+
+    def _parse_nonnegative_float(self, editor, label):
+        try:
+            value = float(editor.text())
+        except ValueError as exc:
+            raise ValueError(f"{label} must be numeric.") from exc
+        if value < 0:
+            raise ValueError(f"{label} must be >= 0.")
+        return value
+
+    def _parse_positive_int(self, editor, label):
+        try:
+            value = int(editor.text())
+        except ValueError as exc:
+            raise ValueError(f"{label} must be an integer.") from exc
+        if value <= 0:
+            raise ValueError(f"{label} must be greater than 0.")
+        return value
+
+    def _corrector_limit_value(self):
+        profile_limit = float(self.orbit_runtime["corrector_upperlimit"])
+        limit_unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        corrector_limit = self._parse_positive_float(self.correctorLimitLineEdit, "Corrector Limit")
+        if corrector_limit > profile_limit:
+            raise ValueError(
+                f"Corrector Limit cannot exceed profile limit {profile_limit:g} {limit_unit}."
+            )
+        return corrector_limit
+
+    def _bounded_kick_value(self, editor, label, upper_limit, unit):
+        response_kick = self._parse_positive_float(editor, label)
+        if response_kick > upper_limit:
+            raise ValueError(f"{label} cannot exceed {upper_limit:g} {unit}.")
+        return response_kick
+
+    def _local_response_kick_value(self, corrector_limit):
+        unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        return self._bounded_kick_value(
+            self.responseKickLineEdit,
+            "Local Response Kick",
+            corrector_limit,
+            unit,
+        )
+
+    def _matrix_measurement_args(self):
+        profile_limit = float(self.orbit_runtime["corrector_upperlimit"])
+        unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        response_kick = self._bounded_kick_value(
+            self.matrixResponseKickLineEdit,
+            "Matrix Response Kick",
+            profile_limit,
+            unit,
+        )
+        wait_s = self._parse_nonnegative_float(self.matrixWaitSLineEdit, "Matrix Wait")
+        n_averages = self._parse_positive_int(self.matrixSamplesLineEdit, "Matrix Samples / Step")
+        return response_kick, wait_s, n_averages
+
+    def _one_to_one_parameter_values(self):
+        max_iter = self._parse_positive_int(
+            self.oneToOneMaxIterLineEdit,
+            "1-to-1 Max Iter / BPM",
+        )
+        gain = self._parse_positive_float(self.oneToOneGainLineEdit, "1-to-1 Gain")
+        if gain > 1.0:
+            raise ValueError("1-to-1 Gain must be <= 1.0.")
+
+        max_step_pct = self._parse_positive_float(
+            self.oneToOneMaxStepLineEdit,
+            "1-to-1 Max Step",
+        )
+        if max_step_pct > 100.0:
+            raise ValueError("1-to-1 Max Step must be <= 100%.")
+        return max_iter, gain, max_step_pct / 100.0
+
+    def _correction_parameter_args(self):
+        method = self._selected_correction_method()
+        corrector_limit = self._corrector_limit_value()
+        global_xcors = []
+        global_ycors = []
+
+        if method == "global":
+            global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
+            one_to_one_max_iter = int(self.runtime_defaults["one_to_one_max_iter"])
+            one_to_one_gain = float(self.runtime_defaults["one_to_one_gain"])
+            one_to_one_max_step_fraction = float(self.runtime_defaults["one_to_one_max_step_pct"]) / 100.0
+            response_kick = min(
+                corrector_limit * float(self.runtime_defaults["local_response_kick_fraction"]),
+                corrector_limit,
+            )
+            global_xcors, global_ycors = self._selected_global_correctors()
+            if not global_xcors:
+                raise ValueError("Select at least one X corrector for global correction.")
+            if not global_ycors:
+                raise ValueError("Select at least one Y corrector for global correction.")
+        elif method == "one-to-one":
+            global_max_iter = int(self.runtime_defaults["global_max_iter"])
+            one_to_one_max_iter, one_to_one_gain, one_to_one_max_step_fraction = (
+                self._one_to_one_parameter_values()
+            )
+            response_kick = self._local_response_kick_value(corrector_limit)
+        else:
+            global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
+            one_to_one_max_iter, one_to_one_gain, one_to_one_max_step_fraction = (
+                self._one_to_one_parameter_values()
+            )
+            response_kick = self._local_response_kick_value(corrector_limit)
+
+        if one_to_one_gain > 1.0:
+            raise ValueError("1-to-1 Gain must be <= 1.0.")
+
+        return [
+            f"{corrector_limit:.12g}",
+            str(global_max_iter),
+            str(one_to_one_max_iter),
+            f"{one_to_one_gain:.12g}",
+            f"{one_to_one_max_step_fraction:.12g}",
+            f"{response_kick:.12g}",
+            ",".join(global_xcors),
+            ",".join(global_ycors),
+        ]
         
     def measure_res(self): #measure response matrix
         if not self._require_write_allowed("Response matrix measurement"):
             return
+        try:
+            response_kick, wait_s, n_averages = self._matrix_measurement_args()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Orbit Correct", str(exc))
+            return
+
         self.process_manager.start_process(
             key="response_matrix",
             label="Response Matrix Measurement",
-            cmd=["python3", "findresponse.py"],
+            cmd=[
+                "python3",
+                "findresponse.py",
+                f"{response_kick:.12g}",
+                str(n_averages),
+                f"{wait_s:.12g}",
+            ],
             cwd=str(APP_DIR),
         )
 
@@ -1205,6 +1668,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
             return
         bpmx_target_values = [str(i) for i in bpmx_target_values]
         bpmy_target_values = [str(i) for i in bpmy_target_values]
+        try:
+            runtime_args = self._correction_parameter_args()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Orbit Correct", str(exc))
+            return
         
         cmd = [
             "python3", "correct.py",                  #0
@@ -1215,7 +1683,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.sampPerStepLineEdit.text(),          #5   samples_perstep
             ",".join(bpm_target_list),                     #6   target_BPMlist
             ",".join(bpmx_target_values),                     #7   target_BPMlist
-            ",".join(bpmy_target_values)                     #8   target_BPMlist
+            ",".join(bpmy_target_values),                    #8   target_BPMlist
+            *runtime_args,
         ]
         self.process_manager.start_process(
             key="orbit_correction",

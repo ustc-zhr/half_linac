@@ -24,6 +24,22 @@ ORBIT_RUNTIME_ROOT = APP_DIR / "runtime"
 
 DEFAULT_RESPONSE_WAIT_S = 8.0
 DEFAULT_CORRECTOR_UPPERLIMIT_RAD = 0.001
+DEFAULT_RUNTIME_DEFAULTS: dict[str, Any] = {
+    "method": "one-to-one",
+    "sampling_interval_s": 6.0,
+    "accuracy_um": 10.0,
+    "samples_per_step": 2,
+    "global_max_iter": 20,
+    "one_to_one_max_iter": 20,
+    "one_to_one_gain": 0.5,
+    "one_to_one_max_step_pct": 25.0,
+    "local_response_kick_fraction": 0.02,
+    "matrix_response_kick_fraction": 0.02,
+    "matrix_samples_per_step": 2,
+}
+RESPONSE_MATRIX_MIN_COLUMN_NORM = 1e-12
+RESPONSE_MATRIX_RANK_TOL = 1e-12
+RESPONSE_MATRIX_MAX_CONDITION = 1e12
 
 
 def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str, Any]:
@@ -42,6 +58,7 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
         "corrector_upperlimit": corrector_limit,
         "corrector_upperlimit_unit": corrector_limit_unit,
         "corrector_upperlimit_rad": corrector_limit,
+        "runtime_defaults": _select_runtime_defaults(workflow),
         **paths,
     }
 
@@ -66,6 +83,33 @@ def expected_response_matrix_shape(target: MachineProfile | AppContext) -> tuple
     return (2 * len(bpms), 2 * len(xcors))
 
 
+def validate_response_matrix_quality(
+    target: MachineProfile | AppContext,
+    matrix,
+    *,
+    source: str = "response matrix",
+) -> None:
+    matrix_array = np.asarray(matrix, dtype=float)
+    expected_shape = expected_response_matrix_shape(target)
+    if matrix_array.shape != expected_shape:
+        raise ValueError(
+            f"Response matrix shape mismatch for {source}: "
+            f"got {matrix_array.shape}, expected {expected_shape}."
+        )
+    if not np.all(np.isfinite(matrix_array)):
+        raise ValueError(f"Response matrix quality check failed for {source}: contains NaN or Inf.")
+
+    bpms, xcors, ycors = _orbit_ids(target)
+    n_bpm = len(bpms)
+    n_xcor = len(xcors)
+    n_ycor = len(ycors)
+    x_block = matrix_array[0:n_bpm, 0:n_xcor]
+    y_block = matrix_array[n_bpm : 2 * n_bpm, n_xcor : n_xcor + n_ycor]
+
+    _validate_response_block_quality(source, "X", x_block, xcors)
+    _validate_response_block_quality(source, "Y", y_block, ycors)
+
+
 def write_response_matrix_snapshot(
     target: MachineProfile | AppContext,
     matrix,
@@ -76,12 +120,13 @@ def write_response_matrix_snapshot(
     matrix_dir = paths["response_matrix_dir"]
     matrix_dir.mkdir(parents=True, exist_ok=True)
 
-    matrix_array = np.asarray(matrix)
+    matrix_array = np.asarray(matrix, dtype=float)
     expected_shape = expected_response_matrix_shape(target)
     if matrix_array.shape != expected_shape:
         raise ValueError(
             f"Response matrix shape mismatch: got {matrix_array.shape}, expected {expected_shape}."
         )
+    validate_response_matrix_quality(target, matrix_array, source="new response matrix")
 
     created_at = created_at or datetime.now().astimezone()
     stem = _unique_response_stem(matrix_dir, created_at)
@@ -212,6 +257,29 @@ def _parse_corrector_upperlimit(raw_value: Any, backend: str) -> tuple[float, st
     return _optional_float(raw_value, DEFAULT_CORRECTOR_UPPERLIMIT_RAD), ""
 
 
+def _select_runtime_defaults(workflow: Mapping[str, Any]) -> dict[str, Any]:
+    selected = dict(DEFAULT_RUNTIME_DEFAULTS)
+    raw_defaults = workflow.get("runtime_defaults")
+    if not isinstance(raw_defaults, Mapping):
+        return selected
+
+    for key in selected:
+        if key in raw_defaults:
+            selected[key] = raw_defaults[key]
+    selected["method"] = str(selected["method"]).strip() or DEFAULT_RUNTIME_DEFAULTS["method"]
+    selected["sampling_interval_s"] = float(selected["sampling_interval_s"])
+    selected["accuracy_um"] = float(selected["accuracy_um"])
+    selected["samples_per_step"] = int(selected["samples_per_step"])
+    selected["global_max_iter"] = int(selected["global_max_iter"])
+    selected["one_to_one_max_iter"] = int(selected["one_to_one_max_iter"])
+    selected["one_to_one_gain"] = float(selected["one_to_one_gain"])
+    selected["one_to_one_max_step_pct"] = float(selected["one_to_one_max_step_pct"])
+    selected["local_response_kick_fraction"] = float(selected["local_response_kick_fraction"])
+    selected["matrix_response_kick_fraction"] = float(selected["matrix_response_kick_fraction"])
+    selected["matrix_samples_per_step"] = int(selected["matrix_samples_per_step"])
+    return selected
+
+
 def _optional_float(value: Any, default: float) -> float:
     if value is None:
         return default
@@ -291,10 +359,12 @@ def _validate_response_metadata(
         matrix_file = metadata.get("matrix_file")
         if not isinstance(matrix_file, str) or not matrix_file.strip():
             raise ValueError(f"Response matrix metadata {metadata_path} is missing matrix_file.")
-        _validate_response_matrix_shape(target, _resolve_runtime_path(target, matrix_file))
+        matrix_path = _resolve_runtime_path(target, matrix_file)
+        matrix = _validate_response_matrix_shape(target, matrix_path)
+        validate_response_matrix_quality(target, matrix, source=str(matrix_path))
 
 
-def _validate_response_matrix_shape(target: MachineProfile | AppContext, matrix_path: Path) -> None:
+def _validate_response_matrix_shape(target: MachineProfile | AppContext, matrix_path: Path) -> np.ndarray:
     if not matrix_path.is_file():
         raise FileNotFoundError(f"Response matrix file not found: {matrix_path}")
 
@@ -303,6 +373,50 @@ def _validate_response_matrix_shape(target: MachineProfile | AppContext, matrix_
     if matrix.shape != expected_shape:
         raise ValueError(
             f"Response matrix {matrix_path} has shape {matrix.shape}, expected {expected_shape}."
+        )
+    return matrix
+
+
+def _validate_response_block_quality(
+    source: str,
+    plane: str,
+    block: np.ndarray,
+    corrector_ids: list[str],
+) -> None:
+    if block.size == 0:
+        raise ValueError(f"Response matrix quality check failed for {source}: {plane} plane block is empty.")
+
+    column_norms = np.linalg.norm(block, axis=0)
+    zero_columns = [
+        f"{name} (norm={norm:.3e})"
+        for name, norm in zip(corrector_ids, column_norms)
+        if norm <= RESPONSE_MATRIX_MIN_COLUMN_NORM
+    ]
+    if zero_columns:
+        raise ValueError(
+            f"Response matrix quality check failed for {source}: "
+            f"{plane} plane has zero-response corrector column(s): "
+            f"{', '.join(zero_columns)}. Re-measure the response matrix before global correction."
+        )
+
+    singular_values = np.linalg.svd(block, compute_uv=False)
+    expected_rank = min(block.shape)
+    rank = int(np.count_nonzero(singular_values > RESPONSE_MATRIX_RANK_TOL))
+    min_singular = float(singular_values[-1]) if singular_values.size else 0.0
+    max_singular = float(singular_values[0]) if singular_values.size else 0.0
+    if rank < expected_rank:
+        raise ValueError(
+            f"Response matrix quality check failed for {source}: "
+            f"{plane} plane is rank deficient ({rank}/{expected_rank}), "
+            f"min singular value={min_singular:.3e}. Re-measure the response matrix before global correction."
+        )
+
+    condition = max_singular / min_singular if min_singular > 0 else float("inf")
+    if condition > RESPONSE_MATRIX_MAX_CONDITION:
+        raise ValueError(
+            f"Response matrix quality check failed for {source}: "
+            f"{plane} plane condition number is too large ({condition:.3e}). "
+            "Re-measure the response matrix before global correction."
         )
 
 

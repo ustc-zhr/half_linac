@@ -42,11 +42,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MIN_RESPONSE = 1e-12
+CORRECTOR_EPS = 1e-12
 
 
 def _parse_target_arg(arg: str, scale: float = 1.0) -> List[float]:
     values = [item for item in arg.split(',') if item]
     return [float(value) * scale for value in values]
+
+
+def _optional_float_arg(argv: list[str], index: int) -> float | None:
+    return float(argv[index]) if len(argv) > index and argv[index] else None
+
+
+def _optional_int_arg(argv: list[str], index: int) -> int | None:
+    return int(argv[index]) if len(argv) > index and argv[index] else None
+
+
+def _optional_csv_arg(argv: list[str], index: int) -> List[str] | None:
+    if len(argv) <= index or not argv[index].strip():
+        return None
+    return [item.strip() for item in argv[index].split(',') if item.strip()]
 
 class OrbitCorrector:
     """
@@ -67,19 +82,49 @@ class OrbitCorrector:
                 samples_perstep: Optional[int] = None,
                 target_BPMlist: Optional[List[str]] = None,
                 target_BPMx_values: Optional[List[float]] = None,
-                target_BPMy_values: Optional[List[float]] = None):
+                target_BPMy_values: Optional[List[float]] = None,
+                corrector_limit: Optional[float] = None,
+                global_max_iter: Optional[int] = None,
+                one_to_one_max_iter: Optional[int] = None,
+                one_to_one_gain: Optional[float] = None,
+                one_to_one_max_step_fraction: Optional[float] = None,
+                response_kick: Optional[float] = None,
+                global_xcor_list: Optional[List[str]] = None,
+                global_ycor_list: Optional[List[str]] = None):
         self.app_context = load_app_context("orbit_correct")
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
         self.machine_mode = self.app_context.control_backend.name
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
+        self.runtime_defaults = self.orbit_runtime["runtime_defaults"]
 
         # constant definition
         self.response_matrix_path: Path | None = None
         self.corrector_state_path = Path(self.orbit_runtime["corrector_state_path"])
-        self.d_value = 0.02 * 0.001  # step for corrector
-        self.max_value = self.orbit_runtime["corrector_upperlimit"]
+        self.profile_max_value = self.orbit_runtime["corrector_upperlimit"]
         self.max_value_unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        self.max_value = self._select_corrector_limit(corrector_limit)
+        self.d_value = self._select_response_kick(response_kick)
+        self.global_max_iter = self._select_positive_int(
+            global_max_iter,
+            int(self.runtime_defaults["global_max_iter"]),
+            "global_max_iter",
+        )
+        self.one_to_one_max_iter = self._select_positive_int(
+            one_to_one_max_iter,
+            int(self.runtime_defaults["one_to_one_max_iter"]),
+            "one_to_one_max_iter",
+        )
+        self.one_to_one_gain = self._select_fraction(
+            one_to_one_gain,
+            float(self.runtime_defaults["one_to_one_gain"]),
+            "one_to_one_gain",
+        )
+        self.one_to_one_max_step_fraction = self._select_fraction(
+            one_to_one_max_step_fraction,
+            float(self.runtime_defaults["one_to_one_max_step_pct"]) / 100.0,
+            "one_to_one_max_step_fraction",
+        )
         
         # all cor and bpm lists
         if self.orbit_workflow is None:
@@ -89,6 +134,16 @@ class OrbitCorrector:
         self.bpm_list_all = list(self.orbit_workflow.bpms)
         self.N_BPM = len(self.bpm_list_all)
         self.N_COR = len(self.cor_x_list_all)
+        self.global_xcor_list, self.global_xcor_indices = self._select_global_correctors(
+            global_xcor_list,
+            self.cor_x_list_all,
+            "X",
+        )
+        self.global_ycor_list, self.global_ycor_indices = self._select_global_correctors(
+            global_ycor_list,
+            self.cor_y_list_all,
+            "Y",
+        )
         
         # parameter initialization
         self.sample_interval = sample_interval
@@ -114,6 +169,66 @@ class OrbitCorrector:
             self.cor_y_list_target = []
             self.target_BPMx_values = []
             self.target_BPMy_values = []
+
+    def _select_corrector_limit(self, override: Optional[float]) -> float:
+        value = self.profile_max_value if override is None else float(override)
+        if value <= 0:
+            raise ValueError("corrector_limit must be greater than 0.")
+        if value > self.profile_max_value:
+            raise ValueError(
+                f"corrector_limit {value:g} {self.max_value_unit} exceeds profile limit "
+                f"{self.profile_max_value:g} {self.max_value_unit}."
+            )
+        return value
+
+    def _select_response_kick(self, override: Optional[float]) -> float:
+        if override is None:
+            value = self.max_value * float(self.runtime_defaults["local_response_kick_fraction"])
+        else:
+            value = float(override)
+        if value <= 0:
+            raise ValueError("response_kick must be greater than 0.")
+        if value > self.max_value:
+            raise ValueError("response_kick cannot exceed corrector_limit.")
+        return value
+
+    @staticmethod
+    def _select_positive_int(value: Optional[int], default: int, label: str) -> int:
+        selected = default if value is None else int(value)
+        if selected <= 0:
+            raise ValueError(f"{label} must be greater than 0.")
+        return selected
+
+    @staticmethod
+    def _select_fraction(value: Optional[float], default: float, label: str) -> float:
+        selected = default if value is None else float(value)
+        if selected <= 0 or selected > 1:
+            raise ValueError(f"{label} must be in the range (0, 1].")
+        return selected
+
+    @staticmethod
+    def _select_global_correctors(
+        requested: Optional[List[str]],
+        available: List[str],
+        plane: str,
+    ) -> tuple[List[str], List[int]]:
+        if requested is None:
+            return list(available), list(range(len(available)))
+
+        selected = []
+        seen = set()
+        for name in requested:
+            if name not in seen:
+                selected.append(name)
+                seen.add(name)
+        if not selected:
+            raise ValueError(f"Select at least one {plane} corrector for global correction.")
+
+        index_map = {name: idx for idx, name in enumerate(available)}
+        missing = [name for name in selected if name not in index_map]
+        if missing:
+            raise ValueError(f"Unknown {plane} corrector(s): {', '.join(missing)}")
+        return selected, [index_map[name] for name in selected]
         
         
         
@@ -219,10 +334,19 @@ class OrbitCorrector:
         
         return [r / self.samples_perstep for r in results]
 
-    def correct_one_to_one(self) -> None:
+    def _bounded_correction_step(self, error: float, response: float) -> float:
+        raw_step = self.one_to_one_gain * error / response
+        max_step = max(self.max_value * self.one_to_one_max_step_fraction, self.d_value)
+        return float(np.clip(raw_step, -max_step, max_step))
+
+    def _clip_corrector(self, value: float) -> float:
+        return float(np.clip(value, -self.max_value, self.max_value))
+
+    def correct_one_to_one(self) -> bool:
         """one-to-one method"""
         self._require_write_allowed("One-to-one orbit correction")
         self._require_targets()
+        failures: list[str] = []
         for j in range(len(self.bpm_list_target)):
             logger.info(f"开始校正: {self.bpm_list_target[j]}")
             
@@ -233,14 +357,29 @@ class OrbitCorrector:
                 self.pvCORx[j],
                 self.pvCORy[j]
             ])
+
+            initial_x_err = abs(self.target_BPMx_values[j] - xbpm_val0)
+            initial_y_err = abs(self.target_BPMy_values[j] - ybpm_val0)
+            if initial_x_err < self.cor_accuracy and initial_y_err < self.cor_accuracy:
+                logger.info(
+                    "%s already within one-to-one accuracy: error X=%.3e, Y=%.3e",
+                    self.bpm_list_target[j],
+                    initial_x_err,
+                    initial_y_err,
+                )
+                continue
             
-            # 微调并测量响应
-            self.pvCORx[j].put(hcorrVal + self.d_value)
-            self.pvCORy[j].put(vcorrVal + self.d_value)
-            xbpm_val1, ybpm_val1 = self._get_avg_readings([
-                self.pvBPMx[j],
-                self.pvBPMy[j]
-            ])
+            # 微调并测量响应。X/Y corrector 分开 kick，避免交叉影响响应系数。
+            try:
+                self.pvCORx[j].put(hcorrVal + self.d_value)
+                xbpm_val1 = self._get_avg_readings([self.pvBPMx[j]])[0]
+                self.pvCORx[j].put(hcorrVal)
+
+                self.pvCORy[j].put(vcorrVal + self.d_value)
+                ybpm_val1 = self._get_avg_readings([self.pvBPMy[j]])[0]
+            finally:
+                self.pvCORx[j].put(hcorrVal)
+                self.pvCORy[j].put(vcorrVal)
             
             # cal response coefficient
             Rx = (xbpm_val1 - xbpm_val0) / self.d_value
@@ -256,85 +395,124 @@ class OrbitCorrector:
                     Rx,
                     Ry,
                 )
+                failures.append(f"{self.bpm_list_target[j]} response too small")
                 continue
-            
-            # 计算新校正值
-            hcorrVal += (self.target_BPMx_values[j] - xbpm_val0) / Rx
-            vcorrVal += (self.target_BPMy_values[j] - ybpm_val0) / Ry
-            
-            # 限幅处理
-            hcorrVal = np.clip(hcorrVal, -self.max_value, self.max_value)
-            vcorrVal = np.clip(vcorrVal, -self.max_value, self.max_value)
-            
-            # 应用校正
-            self.pvCORx[j].put(hcorrVal)
-            self.pvCORy[j].put(vcorrVal)
 
-            # 验证校正结果并进行迭代校正
-            loop = 0
-            while True:
-                # xbpm_val1 = self.pvBPMx[j].get()
-                # ybpm_val1 = self.pvBPMy[j].get()
+            previous_pair: tuple[float, float] | None = None
+            converged = False
+            x_err = initial_x_err
+            y_err = initial_y_err
+            for loop in range(1, self.one_to_one_max_iter + 1):
                 xbpm_val1, ybpm_val1 = self._get_avg_readings([
                     self.pvBPMx[j],
                     self.pvBPMy[j]
                 ])
-                
-                # 检查是否满足精度要求
-                x_err = abs(self.target_BPMx_values[j] - xbpm_val1)
-                y_err = abs(self.target_BPMy_values[j] - ybpm_val1)
-                
+
+                x_delta = self.target_BPMx_values[j] - xbpm_val1
+                y_delta = self.target_BPMy_values[j] - ybpm_val1
+                x_err = abs(x_delta)
+                y_err = abs(y_delta)
+
                 if x_err < self.cor_accuracy and y_err < self.cor_accuracy:
+                    converged = True
                     break
-                    
-                # 检查校正铁是否达到限值
-                if abs(hcorrVal) >= self.max_value and abs(vcorrVal) >= self.max_value:
-                    logger.warning(f"{self.bpm_list_target[j]} 校正铁都达到限值")
+
+                logger.info(
+                    "%s one-to-one iteration %d: error X=%.3e, Y=%.3e, corrector=(%.6g, %.6g)",
+                    self.bpm_list_target[j],
+                    loop,
+                    x_err,
+                    y_err,
+                    hcorrVal,
+                    vcorrVal,
+                )
+
+                next_hcorr = self._clip_corrector(hcorrVal + self._bounded_correction_step(x_delta, Rx))
+                next_vcorr = self._clip_corrector(vcorrVal + self._bounded_correction_step(y_delta, Ry))
+
+                if previous_pair is not None and (
+                    abs(next_hcorr - previous_pair[0]) < CORRECTOR_EPS
+                    and abs(next_vcorr - previous_pair[1]) < CORRECTOR_EPS
+                ):
+                    logger.warning(
+                        "%s one-to-one correction stopped: corrector oscillation detected.",
+                        self.bpm_list_target[j],
+                    )
                     break
-                    
-                loop += 1
-                logger.info(f"校正迭代 {loop} 次: {self.bpm_list_target[j]}")
-                
-                if  abs(hcorrVal) < self.max_value and abs(vcorrVal) < self.max_value:
-                    hcorrVal += (self.target_BPMx_values[j] - xbpm_val1) / Rx
-                    vcorrVal += (self.target_BPMy_values[j] - ybpm_val1) / Ry
-                    hcorrVal = np.clip(hcorrVal, -self.max_value, self.max_value)
-                    vcorrVal = np.clip(vcorrVal, -self.max_value, self.max_value)
-                    self.pvCORx[j].put(hcorrVal)
-                    self.pvCORy[j].put(vcorrVal)
-                    time.sleep(self.sample_interval)
-                
-                if  (abs(hcorrVal) < self.max_value and abs(vcorrVal) >= self.max_value):
-                    if  x_err < self.cor_accuracy and y_err >= self.cor_accuracy:
-                        logger.warning(f"{self.bpm_list_target[j]} V校正铁达到限值")
-                        break
-                    
-                    else:
-                        vcorrVal += (self.target_BPMy_values[j] - ybpm_val1) / Ry
-                        vcorrVal = np.clip(vcorrVal, -self.max_value, self.max_value)
-                        self.pvCORy[j].put(vcorrVal)
-                        
-                if  (abs(hcorrVal) >= self.max_value and abs(vcorrVal) < self.max_value):
-                    if  x_err >= self.cor_accuracy and y_err < self.cor_accuracy:
-                        logger.warning(f"{self.bpm_list_target[j]} H校正铁达到限值")
-                        break
-                    else:
-                        hcorrVal += (self.target_BPMx_values[j] - xbpm_val1) / Rx
-                        hcorrVal = np.clip(hcorrVal, -self.max_value, self.max_value)
-                        self.pvCORx[j].put(hcorrVal)
-                
+
+                if (
+                    abs(next_hcorr - hcorrVal) < CORRECTOR_EPS
+                    and abs(next_vcorr - vcorrVal) < CORRECTOR_EPS
+                ):
+                    logger.warning(
+                        "%s one-to-one correction stopped: corrector limit reached without convergence.",
+                        self.bpm_list_target[j],
+                    )
+                    break
+
+                previous_pair = (hcorrVal, vcorrVal)
+                hcorrVal = next_hcorr
+                vcorrVal = next_vcorr
+                self.pvCORx[j].put(hcorrVal)
+                self.pvCORy[j].put(vcorrVal)
                 time.sleep(self.sample_interval)
+
+            if not converged:
+                logger.warning(
+                    "%s one-to-one correction did not converge within %d iteration(s).",
+                    self.bpm_list_target[j],
+                    self.one_to_one_max_iter,
+                )
+                failures.append(
+                    f"{self.bpm_list_target[j]} not converged: "
+                    f"error X={x_err:.3e}, Y={y_err:.3e}"
+                )
             
             logger.info(f"correction finished: {self.bpm_list_target[j]}")
             logger.info(f"corrector: ({hcorrVal:.3f}, {vcorrVal:.3f})")
             logger.info(f"BPM: ({xbpm_val1:.3e}, {ybpm_val1:.3e})")
+
+        final_failures = self._final_orbit_failures()
+        failures.extend(final_failures)
+        if failures:
+            for failure in failures:
+                logger.warning("one-to-one final status: %s", failure)
+            return False
+
+        logger.info("one-to-one correction reached requested accuracy for all target BPMs.")
+        return True
+
+    def _final_orbit_failures(self) -> list[str]:
+        xy_vals = self._get_avg_readings(self.pvBPMx + self.pvBPMy)
+        length_half = len(xy_vals) // 2
+        x_vals = xy_vals[:length_half]
+        y_vals = xy_vals[length_half:]
+        failures = []
+        for bpm, target_x, target_y, x_value, y_value in zip(
+            self.bpm_list_target,
+            self.target_BPMx_values,
+            self.target_BPMy_values,
+            x_vals,
+            y_vals,
+        ):
+            x_err = abs(target_x - x_value)
+            y_err = abs(target_y - y_value)
+            logger.info(
+                "one-to-one final check %s: error X=%.3e, Y=%.3e",
+                bpm,
+                x_err,
+                y_err,
+            )
+            if x_err >= self.cor_accuracy or y_err >= self.cor_accuracy:
+                failures.append(f"{bpm} final error X={x_err:.3e}, Y={y_err:.3e}")
+        return failures
 
 
     def _load_response_matrix(self) -> Tuple[np.ndarray, np.ndarray]:
         """加载并计算响应矩阵的逆矩阵"""
         try:
             RM = self._load_valid_response_matrix()
-            print(RM)
+            logger.debug("Loaded response matrix from %s with shape %s", self.response_matrix_path, RM.shape)
             ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
             ORM_y = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
             return np.linalg.inv(ORM_x), np.linalg.inv(ORM_y)
@@ -368,38 +546,35 @@ class OrbitCorrector:
         self._require_targets()
         RM = self._load_valid_response_matrix()
         selected = np.array(self.target_indices, dtype=int)
+        selected_xcors = np.array(self.global_xcor_indices, dtype=int)
+        selected_ycors = np.array(self.global_ycor_indices, dtype=int)
         ORM_x_full = RM[0:self.N_BPM, 0:self.N_COR]
         ORM_y_full = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
-        ORM_x = ORM_x_full[np.ix_(selected, selected)]
-        ORM_y = ORM_y_full[np.ix_(selected, selected)]
+        ORM_x = ORM_x_full[np.ix_(selected, selected_xcors)]
+        ORM_y = ORM_y_full[np.ix_(selected, selected_ycors)]
         logger.info(
-            "global correction uses %sx%s response submatrix for BPMs: %s",
+            "global correction uses %sx%s X and %sx%s Y response submatrices for BPMs: %s; "
+            "X correctors: %s; Y correctors: %s",
             ORM_x.shape[0],
             ORM_x.shape[1],
+            ORM_y.shape[0],
+            ORM_y.shape[1],
             ", ".join(self.bpm_list_target),
+            ", ".join(self.global_xcor_list),
+            ", ".join(self.global_ycor_list),
         )
-            
-        U_x, s_x, Vt_x = svd(ORM_x, full_matrices=False)
-        # self.svd_components_x = (U_x, s_x, Vt_x)
-        
-        # 创建截断的伪逆矩阵
-        s_inv_x = np.zeros_like(s_x)
-        for i, val in enumerate(s_x):
-            if abs(val) > min_singular_value:
-                s_inv_x[i] = 1 / val
-        
-        self.pseudo_inverse_x = Vt_x.T @ np.diag(s_inv_x) @ U_x.T
 
-        U_y, s_y, Vt_y = svd(ORM_y, full_matrices=False)
-        # self.svd_components_y = (U_y, s_y, Vt_y)
-        
-        # 创建截断的伪逆矩阵
-        s_inv_y = np.zeros_like(s_y)
-        for i, val in enumerate(s_y):
-            if abs(val) > min_singular_value:
-                s_inv_y[i] = 1 / val
-        
-        self.pseudo_inverse_y = Vt_y.T @ np.diag(s_inv_y) @ U_y.T
+        self.pseudo_inverse_x = self._truncated_pseudo_inverse(ORM_x, min_singular_value)
+        self.pseudo_inverse_y = self._truncated_pseudo_inverse(ORM_y, min_singular_value)
+
+    @staticmethod
+    def _truncated_pseudo_inverse(matrix: np.ndarray, min_singular_value: float) -> np.ndarray:
+        U, singular_values, Vt = svd(matrix, full_matrices=False)
+        s_inv = np.zeros_like(singular_values)
+        for i, value in enumerate(singular_values):
+            if abs(value) > min_singular_value:
+                s_inv[i] = 1 / value
+        return Vt.T @ np.diag(s_inv) @ U.T
 
     def _get_avg_readings2(self, pv_list: List[str]) -> List[float]:
         """同时获取多个PV的多次采样平均值"""
@@ -417,15 +592,18 @@ class OrbitCorrector:
         
         return [r / self.samples_perstep for r in results]
      
-    def correct_global(self, max_iter: int = 20) -> bool:
+    def correct_global(self, max_iter: int | None = None) -> bool:
         """全局校正方法"""
         self._require_write_allowed("Global orbit correction")
         self._require_targets()
+        max_iter = self.global_max_iter if max_iter is None else max_iter
 
         # 加载响应矩阵
         # self.ORMx_n, self.ORMy_n = self._load_response_matrix()
-        print('svd method')
+        logger.info("global correction uses SVD pseudo-inverse")
         self._compute_svd()
+        pvname_corx = [self._cor_pv(cor) for cor in self.global_xcor_list]
+        pvname_cory = [self._cor_pv(cor) for cor in self.global_ycor_list]
 
         for iteration in range(0, max_iter):
             # 获取当前轨道数据
@@ -458,8 +636,8 @@ class OrbitCorrector:
 
 
             # 应用校正
-            hcor_vals = caget_many(self.pvnameCORx)
-            vcor_vals = caget_many(self.pvnameCORy)
+            hcor_vals = caget_many(pvname_corx)
+            vcor_vals = caget_many(pvname_cory)
             new_hcor = np.clip(
                 np.array(hcor_vals) + delt_corrh,
                 -1*self.max_value, 1*self.max_value
@@ -469,8 +647,8 @@ class OrbitCorrector:
                 -1*self.max_value, 1*self.max_value
             )
             
-            caput_many(self.pvnameCORx, new_hcor)
-            caput_many(self.pvnameCORy, new_vcor)
+            caput_many(pvname_corx, new_hcor)
+            caput_many(pvname_cory, new_vcor)
 
 
             # 检查是否达到限值
@@ -515,7 +693,7 @@ class OrbitCorrector:
 
         corx = cor[:, 0]
         cory = cor[:, 1]
-        print(corx, cory)
+        logger.debug("Recovering correctors from %s: X=%s, Y=%s", cor_path, corx, cory)
 
         self.pvCORx = []
         self.pvCORy = []
@@ -540,10 +718,26 @@ if __name__ == '__main__':
             target_BPMlist = [item for item in sys.argv[6].split(',') if item]
             target_BPMx_values = _parse_target_arg(sys.argv[7], scale=1e-3)
             target_BPMy_values = _parse_target_arg(sys.argv[8], scale=1e-3)
+            corrector_limit = _optional_float_arg(sys.argv, 9)
+            global_max_iter = _optional_int_arg(sys.argv, 10)
+            one_to_one_max_iter = _optional_int_arg(sys.argv, 11)
+            one_to_one_gain = _optional_float_arg(sys.argv, 12)
+            one_to_one_max_step_fraction = _optional_float_arg(sys.argv, 13)
+            response_kick = _optional_float_arg(sys.argv, 14)
+            global_xcor_list = _optional_csv_arg(sys.argv, 15)
+            global_ycor_list = _optional_csv_arg(sys.argv, 16)
             
             corrector = OrbitCorrector(
                 samp_interval, cor_accuracy, samples_perstep,
-                target_BPMlist, target_BPMx_values, target_BPMy_values
+                target_BPMlist, target_BPMx_values, target_BPMy_values,
+                corrector_limit=corrector_limit,
+                global_max_iter=global_max_iter,
+                one_to_one_max_iter=one_to_one_max_iter,
+                one_to_one_gain=one_to_one_gain,
+                one_to_one_max_step_fraction=one_to_one_max_step_fraction,
+                response_kick=response_kick,
+                global_xcor_list=global_xcor_list,
+                global_ycor_list=global_ycor_list,
             )
             corrector._require_targets()
             corrector.init_BPM_pv()
@@ -552,9 +746,13 @@ if __name__ == '__main__':
 
             
             if method == "one-to-one":
-                corrector.correct_one_to_one()
+                if not corrector.correct_one_to_one():
+                    sys.exit(2)
             elif method == "global":
-                corrector.correct_global()
+                if not corrector.correct_global():
+                    sys.exit(2)
+            else:
+                raise ValueError(f"Unknown correction method: {method}")
         
         elif sys.argv[1] == "cor_off":
             target_BPMlist = [item for item in sys.argv[2].split(',') if item] if len(sys.argv) > 2 else []

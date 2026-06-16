@@ -6,6 +6,13 @@
     "BPM09",
     "BPM10"
   ],
+  "default_target_bpms": [
+    "BPM03",
+    "BPM07",
+    "BPM08",
+    "BPM09",
+    "BPM10"
+  ],
   "xcors": [
     "HC01",
     "HC02",
@@ -33,6 +40,19 @@
       "value": 5.0,
       "unit": "A"
     }
+  },
+  "runtime_defaults": {
+    "method": "global",
+    "sampling_interval_s": 2.0,
+    "accuracy_um": 10.0,
+    "samples_per_step": 1,
+    "global_max_iter": 20,
+    "one_to_one_max_iter": 20,
+    "one_to_one_gain": 1,
+    "one_to_one_max_step_pct": 100,
+    "local_response_kick_fraction": 0.02,
+    "matrix_response_kick_fraction": 0.02,
+    "matrix_samples_per_step": 2
   },
   "real_status": {
     "orbit_correct": "write_blocked",

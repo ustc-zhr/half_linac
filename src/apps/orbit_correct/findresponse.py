@@ -39,7 +39,8 @@ class ResponseMatrixCalculator:
     """Calculate accelerator response matrix using corrector kicks."""
     
     def __init__(self, n_bpm: int | None = None, n_cor: int | None = None, 
-                 d_value: float = 1e-5, n_averages: int = 2):
+                 d_value: float = 1e-5, n_averages: int = 2,
+                 wait_s: float | None = None):
         """
         Initialize response matrix calculator.
         
@@ -48,8 +49,8 @@ class ResponseMatrixCalculator:
             n_cor: Number of correctors
             d_value: Kick amplitude [rad]
             n_averages: Number of measurement averages
+            wait_s: Settling time after each corrector update [s]
         """
-        print('n_averages:', n_averages)
         self.app_context = load_app_context("orbit_correct")
         require_workflow_write_allowed(
             self.app_context,
@@ -62,15 +63,21 @@ class ResponseMatrixCalculator:
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
         if self.orbit_workflow is None:
             raise ValueError("Orbit workflow is not available in the current app context.")
+        self.profile_max_value = self.orbit_runtime["corrector_upperlimit"]
+        self.max_value_unit = self.orbit_runtime["corrector_upperlimit_unit"]
         self.bpm_ids = list(self.orbit_workflow.bpms)
         self.xcor_ids = list(self.orbit_workflow.xcors)
         self.ycor_ids = list(self.orbit_workflow.ycors)
 
         self.N_BPM = len(self.bpm_ids) if n_bpm is None else len(self.bpm_ids)
         self.N_COR = len(self.xcor_ids) if n_cor is None else len(self.xcor_ids)
-        self.d_value = d_value
-        self.n_averages = n_averages
-        self.timer_interval = self.orbit_runtime["response_wait_s"]
+        self.d_value = self._select_response_kick(d_value)
+        self.n_averages = self._select_positive_int(n_averages, "n_averages")
+        default_wait_s = self.orbit_runtime["response_wait_s"]
+        self.timer_interval = self._select_nonnegative_float(
+            default_wait_s if wait_s is None else wait_s,
+            "wait_s",
+        )
         
         # Initialize PV lists
         self.pvBPMx: List[str] = []
@@ -81,7 +88,38 @@ class ResponseMatrixCalculator:
         # Initialize matrix storage
         self.response_matrix: np.ndarray = np.zeros((2*self.N_BPM, 2*self.N_COR))
         
-        logger.info("ResponseMatrixCalculator initialized")
+        logger.info(
+            "ResponseMatrixCalculator initialized: kick=%s, averages=%s, wait_s=%s, shape=%s",
+            self.d_value,
+            self.n_averages,
+            self.timer_interval,
+            self.response_matrix.shape,
+        )
+
+    def _select_response_kick(self, value: float) -> float:
+        selected = float(value)
+        if selected <= 0:
+            raise ValueError("response kick must be greater than 0.")
+        if selected > self.profile_max_value:
+            raise ValueError(
+                f"response kick {selected:g} {self.max_value_unit} exceeds profile limit "
+                f"{self.profile_max_value:g} {self.max_value_unit}."
+            )
+        return selected
+
+    @staticmethod
+    def _select_positive_int(value: int, label: str) -> int:
+        selected = int(value)
+        if selected <= 0:
+            raise ValueError(f"{label} must be greater than 0.")
+        return selected
+
+    @staticmethod
+    def _select_nonnegative_float(value: float, label: str) -> float:
+        selected = float(value)
+        if selected < 0:
+            raise ValueError(f"{label} must be >= 0.")
+        return selected
 
     def init_BPM_pv(self) -> None:
         """Initialize BPM PV names."""
@@ -181,16 +219,27 @@ class ResponseMatrixCalculator:
             for i, cor_pv in enumerate(self.pvCORx):
                 logger.info(f"Processing X corrector {i+1}/{len(self.pvCORx)}: {cor_pv}")
                 response = self._measure_response(cor_pv, True)
-                print(response)
                 self.response_matrix[:, i] = response
-                print(self.response_matrix)
+                logger.debug(
+                    "Filled response matrix column %d/%d from %s; response norm=%.6g",
+                    i + 1,
+                    2 * self.N_COR,
+                    cor_pv,
+                    np.linalg.norm(response),
+                )
             
             # Process Y correctors (offset by N_COR in matrix)
             for i, cor_pv in enumerate(self.pvCORy):
                 logger.info(f"Processing Y corrector {i+1}/{len(self.pvCORy)}: {cor_pv}")
                 response = self._measure_response(cor_pv, False)
-                print(response)
                 self.response_matrix[:, i + self.N_COR] = response
+                logger.debug(
+                    "Filled response matrix column %d/%d from %s; response norm=%.6g",
+                    i + self.N_COR + 1,
+                    2 * self.N_COR,
+                    cor_pv,
+                    np.linalg.norm(response),
+                )
                 
             logger.info("Response matrix calculation completed")
             
@@ -219,7 +268,14 @@ class ResponseMatrixCalculator:
 
 if __name__ == '__main__':
     try:
-        calculator = ResponseMatrixCalculator(n_averages=1)
+        d_value = float(sys.argv[1]) if len(sys.argv) > 1 else 1e-5
+        n_averages = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        wait_s = float(sys.argv[3]) if len(sys.argv) > 3 else None
+        calculator = ResponseMatrixCalculator(
+            d_value=d_value,
+            n_averages=n_averages,
+            wait_s=wait_s,
+        )
         calculator.init_BPM_pv()
         calculator.init_COR_pv()
         calculator.calculate_response_matrix()
