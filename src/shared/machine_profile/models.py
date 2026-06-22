@@ -155,6 +155,7 @@ class OrbitWorkflowConfig:
     bpms: tuple[str, ...]
     xcors: tuple[str, ...]
     ycors: tuple[str, ...]
+    default_target_bpms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -213,6 +214,7 @@ class BBAAnalysisConfig(_OptionalFieldMapping):
     bx_formula: str | None = None
     leff_by: float | None = None
     leff_bx: float | None = None
+    quad_leff: float | None = None
 
 
 @dataclass(frozen=True)
@@ -466,6 +468,22 @@ def _validate_orbit_workflow(
     _validate_element_refs(bpms, elements_by_id, "workflows.orbit.bpms", expected_kind="bpm")
     _validate_element_refs(xcors, elements_by_id, "workflows.orbit.xcors", expected_kind="corr")
     _validate_element_refs(ycors, elements_by_id, "workflows.orbit.ycors", expected_kind="corr")
+    default_target_bpms = _expect_optional_string_list(
+        workflow.get("default_target_bpms"),
+        "workflows.orbit.default_target_bpms",
+    )
+    _validate_element_refs(
+        default_target_bpms,
+        elements_by_id,
+        "workflows.orbit.default_target_bpms",
+        expected_kind="bpm",
+    )
+    unknown_defaults = [bpm for bpm in default_target_bpms if bpm not in bpms]
+    if unknown_defaults:
+        raise MachineProfileError(
+            "workflows.orbit.default_target_bpms must be a subset of workflows.orbit.bpms; "
+            f"unknown default target(s): {', '.join(unknown_defaults)}."
+        )
 
 
 def _validate_bba_workflow(
@@ -488,6 +506,15 @@ def _validate_bba_workflow(
         _validate_element_ref(preset.get("bpm2"), elements_by_id, f"{location}.bpm2", expected_kind="bpm")
         if "mode" in preset:
             normalize_mode(preset.get("mode"), f"{location}.mode")
+        analysis = _expect_optional_mapping(preset.get("analysis"), f"{location}.analysis")
+        quad_leff = analysis.get("quad_leff")
+        if quad_leff is not None:
+            try:
+                quad_leff_value = float(quad_leff)
+            except (TypeError, ValueError) as exc:
+                raise MachineProfileError(f"{location}.analysis.quad_leff must be numeric.") from exc
+            if quad_leff_value <= 0:
+                raise MachineProfileError(f"{location}.analysis.quad_leff must be positive.")
 
     standard = _expect_optional_mapping(workflow.get("standard"), "workflows.bba.standard")
     _validate_bba_family(standard, elements_by_id, "workflows.bba.standard")

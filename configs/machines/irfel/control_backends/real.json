@@ -254,17 +254,20 @@
       "image": "IRFEL:VM:FLAG:PRF02:image1:ArrayData"
     },
     "PRF03": {
-      "image": "IRFEL:VM:FLAG:PRF03:image1:ArrayData",
+      "image": "IRFEL:BD:FLAG3:image1:ArrayData",
+      "exposure_time": "IRFEL:BD:FLAG3:cam1:AcquireTime",
       "sigx": "IRFEL:VM:FLAG:PRF03:sigx",
       "sigy": "IRFEL:VM:FLAG:PRF03:sigy"
     },
     "PRF04": {
-      "image": "IRFEL:VM:FLAG:PRF04:image1:ArrayData",
+      "image": "IRFEL:BD:FLAG4:image1:ArrayData",
+      "exposure_time": "IRFEL:BD:FLAG4:cam1:AcquireTime",
       "sigx": "IRFEL:VM:FLAG:PRF04:sigx",
       "sigy": "IRFEL:VM:FLAG:PRF04:sigy"
     },
     "PRFESA": {
-      "image": "IRFEL:VM:FLAG:PRFESA:image1:ArrayData"
+      "image": "IRFEL:BD:FLAG5:image1:ArrayData",
+      "exposure_time": "IRFEL:BD:FLAG5:cam1:AcquireTime"
     }
   }
 }

@@ -12,6 +12,7 @@ class ManagedProcessGroup:
         self.start_timeout_s = start_timeout_s
         self.stop_timeout_s = stop_timeout_s
         self.processes = {}
+        self.process_labels = {}
         self._is_shutting_down = False
 
     def install_signal_handlers(self):
@@ -28,6 +29,9 @@ class ManagedProcessGroup:
         for key, proc in list(self.processes.items()):
             if proc.poll() is not None:
                 self.processes.pop(key, None)
+                label = self.process_labels.pop(key, key)
+                if proc.returncode:
+                    self.notify(f"{label} exited with code {proc.returncode}.")
 
     def is_running(self, key):
         proc = self.processes.get(key)
@@ -48,12 +52,14 @@ class ManagedProcessGroup:
 
         if not expect_running:
             self.processes[key] = proc
+            self.process_labels[key] = label
             return proc
 
         try:
             proc.wait(timeout=self.start_timeout_s)
         except TimeoutExpired:
             self.processes[key] = proc
+            self.process_labels[key] = label
             return proc
 
         self.notify(f"Failed to start {label} (exit code {proc.returncode}).")
@@ -91,6 +97,7 @@ class ManagedProcessGroup:
                 self._signal_process_group(proc, signal.SIGKILL)
 
         self.processes.clear()
+        self.process_labels.clear()
 
     def shutdown(self):
         if self._is_shutting_down:

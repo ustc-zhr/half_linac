@@ -263,6 +263,29 @@ class MachineProfileTests(unittest.TestCase):
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
 
+    def test_bba_runtime_paths_are_machine_backend_scoped(self):
+        from half_linac.src.apps.bba.profile_runtime import (
+            new_bba_scan_archive_dir,
+            resolve_bba_runtime_paths,
+        )
+
+        context = load_app_context("bba", machine_id="irfel", control_backend="vm")
+        paths = resolve_bba_runtime_paths(context)
+
+        self.assertTrue(str(paths["runtime_dir"]).endswith("src/apps/bba/runtime/irfel/vm"))
+        self.assertEqual(paths["latest_dir"], paths["runtime_dir"] / "latest")
+        self.assertEqual(paths["archive_dir"], paths["runtime_dir"] / "scans")
+        self.assertEqual(paths["bba1_data_path"], paths["latest_dir"] / "m1S.txt")
+        self.assertEqual(paths["bba1_quad_scan_path"], paths["latest_dir"] / "bba1_quad_scan.txt")
+        self.assertEqual(paths["bba1_metadata_path"], paths["latest_dir"] / "metadata.json")
+        self.assertEqual(paths["bba2_quad_scan_path"], paths["latest_dir"] / "bba2_k1Lqm2.txt")
+        self.assertEqual(paths["bba2_bpm1_path"], paths["latest_dir"] / "bba2_m1.txt")
+        self.assertEqual(paths["bba2_corrector_scan_path"], paths["latest_dir"] / "bba2_thetam2.txt")
+        self.assertEqual(paths["bba2_metadata_path"], paths["latest_dir"] / "bba2_metadata.json")
+        archive_dir = new_bba_scan_archive_dir(context, "bba2")
+        self.assertEqual(archive_dir.parent, paths["archive_dir"])
+        self.assertIn("_bba2", archive_dir.name)
+
     def test_load_emit_measure_app_context(self):
         context = load_app_context("emit_measure")
         self.assertIsInstance(context, AppContext)
@@ -419,6 +442,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(preset.analysis["energy_mev"], 2200)
         self.assertEqual(preset.analysis["bpm1_samples"], 1)
         self.assertEqual(preset.analysis.leff_by, 0.058287)
+        self.assertEqual(preset.analysis.quad_leff, 0.15)
 
     def test_context_preset_helpers_support_default_emit_preset(self):
         emit_context = load_app_context("emit_measure")
@@ -636,6 +660,11 @@ class MachineProfileTests(unittest.TestCase):
             machine_id="irfel",
             control_backend="vm",
         )
+        real_bba_context = load_app_context(
+            "bba",
+            machine_id="irfel",
+            control_backend="real",
+        )
         real_energy_context = load_app_context(
             "energy_spectrum",
             machine_id="irfel",
@@ -694,11 +723,16 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(workflow_writes_allowed(emit_context, "emit_measure"))
         self.assertFalse(workflow_writes_allowed(real_energy_context, "energy_spectrum"))
         self.assertTrue(workflow_writes_allowed(energy_context, "energy_spectrum"))
+        self.assertFalse(workflow_writes_allowed(real_bba_context, "bba"))
+        self.assertTrue(workflow_writes_allowed(bba_context, "bba"))
         with self.assertRaisesRegex(MachineProfileError, "blocked"):
             require_workflow_write_allowed(orbit_context, "orbit", "test write")
         with self.assertRaisesRegex(MachineProfileError, "blocked"):
             require_workflow_write_allowed(real_beam_context, "beam_monitor", "test write")
+        with self.assertRaisesRegex(MachineProfileError, "blocked"):
+            require_workflow_write_allowed(real_bba_context, "bba", "test write")
         require_workflow_write_allowed(vm_orbit_context, "orbit", "test write")
+        require_workflow_write_allowed(bba_context, "bba", "test write")
         self.assertEqual(beam_context.app_name, "beam_monitor")
         self.assertEqual(energy_context.app_name, "energy_spectrum")
         self.assertEqual(energy_context.control_backend.name, "vm")
@@ -816,11 +850,12 @@ class MachineProfileTests(unittest.TestCase):
         assert bba_context.bba_workflow is not None
         self.assertEqual(bba_context.bba_workflow.standard.control_backends, ("vm",))
         self.assertEqual(bba_context.bba_workflow.bba2.control_backends, ("vm",))
-        self.assertEqual(bba_context.bba_workflow.standard.quads, ("QM01",))
-        self.assertEqual(bba_context.bba_workflow.standard.correctors, ("HC01",))
-        self.assertEqual(bba_context.bba_workflow.standard.bpm1, ("BPM01",))
-        self.assertEqual(bba_context.bba_workflow.standard.bpm2, ("BPM02",))
+        self.assertEqual(bba_context.bba_workflow.standard.quads, ())
+        self.assertEqual(bba_context.bba_workflow.standard.correctors, ())
+        self.assertEqual(bba_context.bba_workflow.standard.bpm1, ())
+        self.assertEqual(bba_context.bba_workflow.standard.bpm2, ())
         self.assertEqual(bba_workflow["standard"]["control_backends"], ["vm"])
+        self.assertEqual(bba_workflow["write_control"]["real"], "blocked")
         self.assertIn("BPM02", vm_start_ids)
         self.assertEqual(vm_end_ids, ("PRF03",))
         self.assertEqual(vm_default_start, "QM13")

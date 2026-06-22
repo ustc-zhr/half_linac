@@ -43,25 +43,22 @@
         "by_formula": "current",
         "bx_formula": "current",
         "leff_by": 1.0,
-        "leff_bx": 1.0
+        "leff_bx": 1.0,
+        "quad_leff": 0.05
       }
     }
   ],
   "standard": {
-    "quads": ["QM01"],
-    "correctors": ["HC01"],
-    "bpm1": ["BPM01"],
-    "bpm2": ["BPM02"],
     "control_backends": ["vm"],
     "default_preset": "irfel_bba_standard_qm01_hc01"
   },
   "bba2": {
-    "quads": ["QM01"],
-    "correctors": ["HC01"],
-    "bpm1": ["BPM01"],
-    "bpm2": ["BPM02"],
     "control_backends": ["vm"],
     "default_preset": "irfel_bba2_qm01_hc01"
   },
-  "real_status": "not_supported"
+  "real_status": "not_supported",
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
+  }
 }

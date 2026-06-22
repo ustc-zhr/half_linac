@@ -10,6 +10,7 @@
             "always_change_p0": "1",
             "tracking_updates": "1"
         },
+        "end": {},
         "run_control": {
             "n_steps": "1",
             "reset_rf_for_each_step": "1",
@@ -44,421 +45,381 @@
         },
         "bunched_beam": {
             "n_particles_per_bunch": "1"
-        }
+        },
+        "track": {}
     },
     "lattice": {
         "QL01": {
             "NAME": "QL01",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "6.345664",
-            "AP": "HALF:IN:QUAD:QL01:K1"
+            "K1": "6.345664"
         },
         "QL02": {
             "NAME": "QL02",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-10.88725",
-            "AP": "HALF:IN:QUAD:QL02:K1"
+            "K1": "-10.88725"
         },
         "QL03": {
             "NAME": "QL03",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "10.13887",
-            "AP": "HALF:IN:QUAD:QL03:K1"
+            "K1": "10.13887"
         },
         "QL04": {
             "NAME": "QL04",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "10.13887",
-            "AP": "HALF:IN:QUAD:QL04:K1"
+            "K1": "10.13887"
         },
         "QL05": {
             "NAME": "QL05",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-10.88725",
-            "AP": "HALF:IN:QUAD:QL05:K1"
+            "K1": "-10.88725"
         },
         "QL06": {
             "NAME": "QL06",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "6.345664",
-            "AP": "HALF:IN:QUAD:QL06:K1"
+            "K1": "6.345664"
         },
         "QL07": {
             "NAME": "QL07",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "3.88939",
-            "AP": "HALF:IN:QUAD:QL07:K1"
+            "K1": "3.88939"
         },
         "QL08": {
             "NAME": "QL08",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-2.046863",
-            "AP": "HALF:IN:QUAD:QL08:K1"
+            "K1": "-2.046863"
         },
         "QL09": {
             "NAME": "QL09",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.4677693",
-            "AP": "HALF:IN:QUAD:QL09:K1"
+            "K1": "0.4677693"
         },
         "QL10": {
             "NAME": "QL10",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-2.753931",
-            "AP": "HALF:IN:QUAD:QL10:K1"
+            "K1": "-2.753931"
         },
         "QL11": {
             "NAME": "QL11",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-1.069225",
-            "AP": "HALF:IN:QUAD:QL11:K1"
+            "K1": "-1.069225"
         },
         "QL12": {
             "NAME": "QL12",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "1.214364",
-            "AP": "HALF:IN:QUAD:QL12:K1"
+            "K1": "1.214364"
         },
         "QL13": {
             "NAME": "QL13",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-4.968432",
-            "AP": "HALF:IN:QUAD:QL13:K1"
+            "K1": "-4.968432"
         },
         "QL14": {
             "NAME": "QL14",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "4.052411",
-            "AP": "HALF:IN:QUAD:QL14:K1"
+            "K1": "4.052411"
         },
         "QL15": {
             "NAME": "QL15",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "1.387017",
-            "AP": "HALF:IN:QUAD:QL15:K1"
+            "K1": "1.387017"
         },
         "QL16": {
             "NAME": "QL16",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-2.73906",
-            "AP": "HALF:IN:QUAD:QL16:K1"
+            "K1": "-2.73906"
         },
         "QL17": {
             "NAME": "QL17",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "1.473873",
-            "AP": "HALF:IN:QUAD:QL17:K1"
+            "K1": "1.473873"
         },
         "QL18": {
             "NAME": "QL18",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.5071771",
-            "AP": "HALF:IN:QUAD:QL18:K1"
+            "K1": "-0.5071771"
         },
         "QL19": {
             "NAME": "QL19",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL19:K1"
+            "K1": "-0.5812314"
         },
         "QL20": {
             "NAME": "QL20",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.5812314",
-            "AP": "HALF:IN:QUAD:QL20:K1"
+            "K1": "0.5812314"
         },
         "QL21": {
             "NAME": "QL21",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL21:K1"
+            "K1": "-0.5812314"
         },
         "QL22": {
             "NAME": "QL22",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.5812314",
-            "AP": "HALF:IN:QUAD:QL22:K1"
+            "K1": "0.5812314"
         },
         "QL23": {
             "NAME": "QL23",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL23:K1"
+            "K1": "-0.5812314"
         },
         "QL24": {
             "NAME": "QL24",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.5812314",
-            "AP": "HALF:IN:QUAD:QL24:K1"
+            "K1": "0.5812314"
         },
         "QL25": {
             "NAME": "QL25",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL25:K1"
+            "K1": "-0.5812314"
         },
         "QL26": {
             "NAME": "QL26",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.5812314",
-            "AP": "HALF:IN:QUAD:QL26:K1"
+            "K1": "0.5812314"
         },
         "QL27": {
             "NAME": "QL27",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.5812314",
-            "AP": "HALF:IN:QUAD:QL27:K1"
+            "K1": "-0.5812314"
         },
         "QT01": {
             "NAME": "QT01",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-1.315043",
-            "AP": "HALF:IN:QUAD:QT01:K1"
+            "K1": "-1.315043"
         },
         "QT02": {
             "NAME": "QT02",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "2.5",
-            "AP": "HALF:IN:QUAD:QT02:K1"
+            "K1": "2.5"
         },
         "QT03": {
             "NAME": "QT03",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-1.339706",
-            "AP": "HALF:IN:QUAD:QT03:K1"
+            "K1": "-1.339706"
         },
         "QT04": {
             "NAME": "QT04",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.8841496",
-            "AP": "HALF:IN:QUAD:QT04:K1"
+            "K1": "0.8841496"
         },
         "QHL1": {
             "NAME": "QHL1",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "2.308226",
-            "AP": "HALF:IN:QUAD:QHL1:K1"
+            "K1": "2.308226"
         },
         "QHL2": {
             "NAME": "QHL2",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "-1.975459",
-            "AP": "HALF:IN:QUAD:QHL2:K1"
+            "K1": "-1.975459"
         },
         "QHL3": {
             "NAME": "QHL3",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "2.832848",
-            "AP": "HALF:IN:QUAD:QHL3:K1"
+            "K1": "2.832848"
         },
         "QHL4": {
             "NAME": "QHL4",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "-2.158739",
-            "AP": "HALF:IN:QUAD:QHL4:K1"
+            "K1": "-2.158739"
         },
         "QT13": {
             "NAME": "QT13",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.9463534",
-            "AP": "HALF:IN:QUAD:QT13:K1"
+            "K1": "0.9463534"
         },
         "QT14": {
             "NAME": "QT14",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-1.247343",
-            "AP": "HALF:IN:QUAD:QT14:K1"
+            "K1": "-1.247343"
         },
         "QT15": {
             "NAME": "QT15",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.177407",
-            "AP": "HALF:IN:QUAD:QT15:K1"
+            "K1": "0.177407"
         },
         "QT16": {
             "NAME": "QT16",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.3573785",
-            "AP": "HALF:IN:QUAD:QT16:K1"
+            "K1": "-0.3573785"
         },
         "QTR1": {
             "NAME": "QTR1",
             "TYPE": "QUAD",
             "L": "0.075",
-            "K1": "0.6594606",
-            "AP": "HALF:IN:QUAD:QTR1:K1"
+            "K1": "0.6594606"
         },
         "QT18": {
             "NAME": "QT18",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.6594606",
-            "AP": "HALF:IN:QUAD:QT18:K1"
+            "K1": "-0.6594606"
         },
         "QT19": {
             "NAME": "QT19",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.6594606",
-            "AP": "HALF:IN:QUAD:QT19:K1"
+            "K1": "0.6594606"
         },
         "QT20": {
             "NAME": "QT20",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.6594606",
-            "AP": "HALF:IN:QUAD:QT20:K1"
+            "K1": "-0.6594606"
         },
         "QT21": {
             "NAME": "QT21",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.6594606",
-            "AP": "HALF:IN:QUAD:QT21:K1"
+            "K1": "0.6594606"
         },
         "QT22": {
             "NAME": "QT22",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.6594606",
-            "AP": "HALF:IN:QUAD:QT22:K1"
+            "K1": "-0.6594606"
         },
         "QT23": {
             "NAME": "QT23",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "0.6594606",
-            "AP": "HALF:IN:QUAD:QT23:K1"
+            "K1": "0.6594606"
         },
         "QT24": {
             "NAME": "QT24",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "1.557907",
-            "AP": "HALF:IN:QUAD:QT24:K1"
+            "K1": "1.557907"
         },
         "QT25": {
             "NAME": "QT25",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "-2.509871",
-            "AP": "HALF:IN:QUAD:QT25:K1"
+            "K1": "-2.509871"
         },
         "QT26": {
             "NAME": "QT26",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "-0.05559521",
-            "AP": "HALF:IN:QUAD:QT26:K1"
+            "K1": "-0.05559521"
         },
         "QT27": {
             "NAME": "QT27",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "2.493402",
-            "AP": "HALF:IN:QUAD:QT27:K1"
+            "K1": "2.493402"
         },
         "QT28": {
             "NAME": "QT28",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "-3.42673",
-            "AP": "HALF:IN:QUAD:QT28:K1"
+            "K1": "-3.42673"
         },
         "QT29": {
             "NAME": "QT29",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "1.127802",
-            "AP": "HALF:IN:QUAD:QT29:K1"
+            "K1": "1.127802"
         },
         "QT30": {
             "NAME": "QT30",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "-2.960617",
-            "AP": "HALF:IN:QUAD:QT30:K1"
+            "K1": "-2.960617"
         },
         "QT31": {
             "NAME": "QT31",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "3.334709",
-            "AP": "HALF:IN:QUAD:QT31:K1"
+            "K1": "3.334709"
         },
         "QT32": {
             "NAME": "QT32",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "-3.457488",
-            "AP": "HALF:IN:QUAD:QT32:K1"
+            "K1": "-3.457488"
         },
         "QT33": {
             "NAME": "QT33",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "-3.457488",
-            "AP": "HALF:IN:QUAD:QT33:K1"
+            "K1": "-3.457488"
         },
         "QT34": {
             "NAME": "QT34",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "3.334709",
-            "AP": "HALF:IN:QUAD:QT34:K1"
+            "K1": "3.334709"
         },
         "QT35": {
             "NAME": "QT35",
             "TYPE": "QUAD",
             "L": "0.3",
-            "K1": "-2.960617",
-            "AP": "HALF:IN:QUAD:QT35:K1"
+            "K1": "-2.960617"
         },
         "QT36": {
             "NAME": "QT36",
             "TYPE": "QUAD",
             "L": "0.15",
-            "K1": "1.127802",
-            "AP": "HALF:IN:QUAD:QT36:K1"
+            "K1": "1.127802"
+        },
+        "QE01": {
+            "NAME": "QE01",
+            "TYPE": "QUAD",
+            "L": "0.3",
+            "K1": "-2.330012"
+        },
+        "QE02": {
+            "NAME": "QE02",
+            "TYPE": "QUAD",
+            "L": "0.3",
+            "K1": "2.530042"
+        },
+        "QE03": {
+            "NAME": "QE03",
+            "TYPE": "QUAD",
+            "L": "0.3",
+            "K1": "0"
         },
         "DHOTGUN0A": {
             "NAME": "DHOTGUN0A",
@@ -864,6 +825,41 @@
             "NAME": "DMO6",
             "TYPE": "DRIF",
             "L": "0.3"
+        },
+        "DQ0": {
+            "NAME": "DQ0",
+            "TYPE": "DRIFT",
+            "L": "4.0"
+        },
+        "DQ1": {
+            "NAME": "DQ1",
+            "TYPE": "DRIFT",
+            "L": "0.5"
+        },
+        "DQ2": {
+            "NAME": "DQ2",
+            "TYPE": "DRIFT",
+            "L": "0.5"
+        },
+        "DQ3": {
+            "NAME": "DQ3",
+            "TYPE": "DRIFT",
+            "L": "0.5"
+        },
+        "DQ4": {
+            "NAME": "DQ4",
+            "TYPE": "DRIFT",
+            "L": "4.2"
+        },
+        "DQ5": {
+            "NAME": "DQ5",
+            "TYPE": "DRIFT",
+            "L": "5"
+        },
+        "DB": {
+            "NAME": "DB",
+            "TYPE": "DRIFT",
+            "L": "0.23"
         },
         "XC03": {
             "NAME": "XC03",
@@ -1594,6 +1590,20 @@
             "MODE": "coord",
             "DISABLE": "1"
         },
+        "PRFLO": {
+            "NAME": "PRFLO",
+            "TYPE": "WATCH",
+            "FILENAME": "PRFLO.out",
+            "MODE": "coord",
+            "DISABLE": "1"
+        },
+        "PRFESA": {
+            "NAME": "PRFESA",
+            "TYPE": "WATCH",
+            "FILENAME": "PRFESA.out",
+            "MODE": "coord",
+            "DISABLE": "0"
+        },
         "MALIN": {
             "NAME": "MALIN",
             "TYPE": "MALIGN"
@@ -1608,8 +1618,7 @@
             "N_SLICES": "150",
             "EDGE_ORDER": "2",
             "INTEGRATION_ORDER": "2",
-            "FSE_CORRECTION": "1",
-            "AP": "HALF:IN:BEND:BL01A:ANGLE"
+            "FSE_CORRECTION": "1"
         },
         "BL01B": {
             "NAME": "BL01B",
@@ -1621,8 +1630,7 @@
             "N_SLICES": "150",
             "EDGE_ORDER": "2",
             "INTEGRATION_ORDER": "2",
-            "FSE_CORRECTION": "1",
-            "AP": "HALF:IN:BEND:BL01B:ANGLE"
+            "FSE_CORRECTION": "1"
         },
         "C": {
             "NAME": "C",
@@ -1642,8 +1650,7 @@
             "BINS": "500",
             "SG_HALFWIDTH": "20",
             "SGDERIV_HALFWIDTH": "20",
-            "ISR": "1",
-            "AP": "HALF:IN:BEND:BH01:ANGLE"
+            "ISR": "1"
         },
         "BH02": {
             "NAME": "BH02",
@@ -1658,8 +1665,7 @@
             "BINS": "500",
             "SG_HALFWIDTH": "20",
             "SGDERIV_HALFWIDTH": "20",
-            "ISR": "1",
-            "AP": "HALF:IN:BEND:BH02:ANGLE"
+            "ISR": "1"
         },
         "BH03": {
             "NAME": "BH03",
@@ -1674,8 +1680,7 @@
             "BINS": "500",
             "SG_HALFWIDTH": "20",
             "SGDERIV_HALFWIDTH": "20",
-            "ISR": "1",
-            "AP": "HALF:IN:BEND:BH03:ANGLE"
+            "ISR": "1"
         },
         "BH04": {
             "NAME": "BH04",
@@ -1689,8 +1694,23 @@
             "BINS": "500",
             "SG_HALFWIDTH": "20",
             "SGDERIV_HALFWIDTH": "20",
-            "ISR": "1",
-            "AP": "HALF:IN:BEND:BH04:ANGLE"
+            "ISR": "1"
+        },
+        "SM": {
+            "NAME": "SM",
+            "TYPE": "CSRCSBEND",
+            "L": "2.7271",
+            "ANGLE": "0.4363323129985824",
+            "E1": "0.2181661564992912",
+            "E2": "0.2181661564992912",
+            "TILT": "0",
+            "HGAP": "0.015",
+            "N_SLICES": "100",
+            "SYNCH_RAD": "1",
+            "BINS": "500",
+            "SG_HALFWIDTH": "20",
+            "SGDERIV_HALFWIDTH": "20",
+            "ISR": "1"
         },
         "BV01": {
             "NAME": "BV01",
@@ -1706,8 +1726,7 @@
             "BINS": "500",
             "SG_HALFWIDTH": "20",
             "SGDERIV_HALFWIDTH": "20",
-            "ISR": "1",
-            "AP": "HALF:IN:BEND:BV01:ANGLE"
+            "ISR": "1"
         },
         "BV02": {
             "NAME": "BV02",
@@ -1723,8 +1742,7 @@
             "BINS": "500",
             "SG_HALFWIDTH": "20",
             "SGDERIV_HALFWIDTH": "20",
-            "ISR": "1",
-            "AP": "HALF:IN:BEND:BV02:ANGLE"
+            "ISR": "1"
         },
         "SEP2": {
             "NAME": "SEP2",
@@ -1739,8 +1757,7 @@
             "BINS": "500",
             "SG_HALFWIDTH": "20",
             "SGDERIV_HALFWIDTH": "20",
-            "ISR": "1",
-            "AP": "HALF:IN:BEND:SEP2:ANGLE"
+            "ISR": "1"
         },
         "SEP1": {
             "NAME": "SEP1",
@@ -1754,8 +1771,7 @@
             "BINS": "500",
             "SG_HALFWIDTH": "20",
             "SGDERIV_HALFWIDTH": "20",
-            "ISR": "1",
-            "AP": "HALF:IN:BEND:SEP1:ANGLE"
+            "ISR": "1"
         },
         "DS1": {
             "NAME": "DS1",
@@ -1902,536 +1918,25 @@
             "MODE": "ABSDEV",
             "TLIMIT": "2.5e-11"
         },
-        "ALL": {
-            "NAME": "ALL",
+        "ALL_MAIN": {
+            "NAME": "ALL_MAIN",
             "TYPE": "LINE",
-            "LINE": [
-                "C",
-                "MALIN",
-                "CCC",
-                "W00",
-                "DHOTGUN0A",
-                "ICT01S",
-                "BPM02",
-                "XC03",
-                "YC03",
-                "DHOTGUN0B",
-                "BL01A",
-                "DHOTGUN0",
-                "DHOTGUN1",
-                "QL01",
-                "DHOTGUN2",
-                "ES01",
-                "DHOTGUN2A",
-                "PRF02S",
-                "DHOTGUN2B",
-                "QL02",
-                "BPM03",
-                "XC04",
-                "YC04",
-                "DHOTGUN3",
-                "QL03",
-                "DHOTGUN4",
-                "DHOTGUN4",
-                "BPM04",
-                "XC05",
-                "YC05",
-                "QL04",
-                "DHOTGUN3",
-                "QL05",
-                "DHOTGUN2B",
-                "DHOTGUN2A",
-                "ES02",
-                "DHOTGUN2",
-                "BPM05",
-                "XC06",
-                "YC06",
-                "QL06",
-                "DHOTGUN1",
-                "DHOTGUN0",
-                "BL01B",
-                "DTH4A",
-                "BPM06",
-                "XC07",
-                "YC07",
-                "QL07",
-                "DTH5",
-                "QL08",
-                "DTH6",
-                "QL09",
-                "DTH7",
-                "QL10",
-                "DTH8",
-                "FODO00",
-                "DL00A",
-                "PRF02",
-                "DL00A1",
-                "QL11",
-                "DL00B",
-                "QL12",
-                "BPM07",
-                "XC08",
-                "YC08",
-                "DL00C",
-                "DA1",
-                "L1",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L1",
-                "DA1",
-                "COLLI",
-                "DL00D",
-                "DL00D",
-                "L1X",
-                "DLB1A",
-                "QL13",
-                "BPM08",
-                "XC09",
-                "YC09",
-                "DLB1B",
-                "QL14",
-                "DLB1C",
-                "BC11",
-                "DB11",
-                "BC12",
-                "DB12",
-                "BPME01",
-                "DB12",
-                "ES03",
-                "DB13",
-                "PRF03",
-                "DB13",
-                "BC13",
-                "DB14",
-                "BC14",
-                "DLB1D",
-                "QL15",
-                "BPM09",
-                "XC10",
-                "YC10",
-                "DLB1E",
-                "QL16",
-                "DLB1F",
-                "PRF04",
-                "DLB1F1",
-                "BPM10",
-                "XC11",
-                "YC11",
-                "QL17",
-                "DLB1G",
-                "QL18",
-                "DLB1H",
-                "QL19",
-                "FODO02",
-                "BPM11",
-                "XC12",
-                "YC12",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "FODO01",
-                "DAQ1",
-                "QL20",
-                "BPM12",
-                "XC13",
-                "YC13",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DAQ1",
-                "QL21",
-                "BPM13",
-                "XC14",
-                "YC14",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DAQ1",
-                "QL22",
-                "BPM14",
-                "XC15",
-                "YC15",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DAQ1",
-                "QL23",
-                "BPM15",
-                "XC16",
-                "YC16",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2A",
-                "PRF05",
-                "DA2A",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DAQ1",
-                "QL24",
-                "BPM16",
-                "XC17",
-                "YC17",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DAQ1",
-                "QL25",
-                "BPM17",
-                "XC18",
-                "YC18",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DAQ1",
-                "QL26",
-                "BPM18",
-                "XC19",
-                "YC19",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DAQ1",
-                "QL27",
-                "FODO03",
-                "BPM19",
-                "XC20",
-                "YC20",
-                "DAQ1",
-                "DA1",
-                "L2",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L2",
-                "DA1",
-                "COLLI",
-                "DA2",
-                "DA1",
-                "L4",
-                "DA1",
-                "DACC",
-                "DA1",
-                "L4",
-                "DA1",
-                "COLLI",
-                "DAQ1",
-                "FODO04",
-                "DMTA",
-                "QT01",
-                "BPM20",
-                "XC21",
-                "YC21",
-                "DMTB",
-                "QT02",
-                "DMTC1",
-                "PRF06",
-                "DMTC2",
-                "PRF07",
-                "DMTC3",
-                "PRF08",
-                "DMTC4",
-                "QT03",
-                "DMTD",
-                "QT04",
-                "BPM21",
-                "XC22",
-                "YC22",
-                "DMTE",
-                "ICT02",
-                "DMTE1",
-                "PRF09",
-                "DMTE2",
-                "FODO05",
-                "QHL1",
-                "DHL1",
-                "QHL2",
-                "BPM22",
-                "XC23",
-                "YC23",
-                "DHL2",
-                "BH01",
-                "DHL3",
-                "DHL3A",
-                "QHL3",
-                "DHL4",
-                "BPME02",
-                "DHL4A",
-                "QHL4",
-                "BPM23",
-                "XC24",
-                "YC24",
-                "DHL5",
-                "BH02",
-                "DHL5",
-                "QHL4",
-                "BPM24",
-                "XC25",
-                "YC25",
-                "DHL4A",
-                "ES04",
-                "DHL4",
-                "QHL3",
-                "DHL3A",
-                "PRF10",
-                "DHL3",
-                "BH03",
-                "DHL2",
-                "QHL2",
-                "BPM25",
-                "XC26",
-                "YC26",
-                "DHL1",
-                "QHL1",
-                "WB1",
-                "DMF1",
-                "QT13",
-                "DMF2",
-                "QT14",
-                "BPM26",
-                "XC27",
-                "YC27",
-                "DMF3",
-                "QT15",
-                "DMF4",
-                "DT1",
-                "PRF11",
-                "DT1A",
-                "QT16",
-                "DT1B",
-                "QTR1",
-                "W01",
-                "BPM27",
-                "XC28",
-                "YC28",
-                "QTR1",
-                "DT2",
-                "QT18",
-                "BPM28",
-                "XC29",
-                "YC29",
-                "DT3",
-                "QT19",
-                "BPM29",
-                "XC30",
-                "YC30",
-                "DT4",
-                "QT20",
-                "BPM30",
-                "XC31",
-                "YC31",
-                "DT5",
-                "QT21",
-                "BPM31",
-                "XC32",
-                "YC32",
-                "DT6",
-                "QT22",
-                "BPM32",
-                "XC33",
-                "YC33",
-                "DT7",
-                "QT23",
-                "BPM33",
-                "XC34",
-                "YC34",
-                "DT8",
-                "DMO1",
-                "QT24",
-                "DMO2",
-                "QT25",
-                "BPM34",
-                "XC35",
-                "YC35",
-                "DMO3",
-                "QT26",
-                "BPM35",
-                "XC36",
-                "YC36",
-                "DMO4",
-                "ICT03",
-                "DMO4A",
-                "PRF12",
-                "DMO4B",
-                "QT27",
-                "DMO5",
-                "QT28",
-                "BPM36",
-                "XC37",
-                "YC37",
-                "DMO6",
-                "WB2",
-                "BH04",
-                "DS1",
-                "QT29",
-                "BPM37",
-                "XC38",
-                "YC38",
-                "DHR1",
-                "BV01",
-                "F5",
-                "QT30",
-                "BPM38",
-                "XC39",
-                "YC39",
-                "F2",
-                "QT31",
-                "F3",
-                "QT32",
-                "BPM39",
-                "XC40",
-                "YC40",
-                "F4",
-                "PRF13",
-                "F4",
-                "QT33",
-                "BPM40",
-                "XC41",
-                "YC41",
-                "F3",
-                "QT34",
-                "F2",
-                "QT35",
-                "BPM41",
-                "XC42",
-                "YC42",
-                "F5",
-                "BV02",
-                "DHR1",
-                "QT36",
-                "BPM42",
-                "XC43",
-                "YC43",
-                "DS1A",
-                "ICT04",
-                "DS1B",
-                "PRF14",
-                "BPM43",
-                "DS1C",
-                "DSEP1",
-                "SEP2",
-                "DSEP",
-                "SEP1",
-                "WSEP1"
-            ]
+            "LINE": "C,MALIN,CCC,W00,DHOTGUN0A,ICT01S,BPM02,XC03,YC03,DHOTGUN0B,BL01A,DHOTGUN0,DHOTGUN1,QL01,DHOTGUN2,ES01,DHOTGUN2A,PRF02S,DHOTGUN2B,QL02,BPM03,XC04,YC04,DHOTGUN3,QL03,DHOTGUN4,DHOTGUN4,BPM04,XC05,YC05,QL04,DHOTGUN3,QL05,DHOTGUN2B,DHOTGUN2A,ES02,DHOTGUN2,BPM05,XC06,YC06,QL06,DHOTGUN1,DHOTGUN0,BL01B,DTH4A,BPM06,XC07,YC07,QL07,DTH5,QL08,DTH6,QL09,DTH7,QL10,DTH8,FODO00,DL00A,PRF02,DL00A1,QL11,DL00B,QL12,BPM07,XC08,YC08,DL00C,DA1,L1,DA1,DACC,DA1,L1,DA1,COLLI,DL00D,DL00D,L1X,DLB1A,QL13,BPM08,XC09,YC09,DLB1B,QL14,DLB1C,BC11,DB11,BC12,DB12,BPME01,DB12,ES03,DB13,PRF03,DB13,BC13,DB14,BC14,DLB1D,QL15,BPM09,XC10,YC10,DLB1E,QL16,DLB1F,PRF04,DLB1F1,BPM10,XC11,YC11,QL17,DLB1G,QL18,DLB1H,QL19,FODO02,BPM11,XC12,YC12,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,FODO01,DAQ1,QL20,BPM12,XC13,YC13,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL21,BPM13,XC14,YC14,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL22,BPM14,XC15,YC15,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL23,BPM15,XC16,YC16,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2A,PRF05,DA2A,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL24,BPM16,XC17,YC17,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL25,BPM17,XC18,YC18,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL26,BPM18,XC19,YC19,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL27,FODO03,BPM19,XC20,YC20,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L4,DA1,DACC,DA1,L4,DA1,COLLI,DAQ1,FODO04,DMTA,PRFLO,QT01,BPM20,XC21,YC21,DMTB,QT02,DMTC1,PRF06,DMTC2,PRF07,DMTC3,PRF08,DMTC4,QT03,DMTD,QT04,BPM21,XC22,YC22,DMTE,ICT02,DMTE1,PRF09,DMTE2,FODO05,QHL1,DHL1,QHL2,BPM22,XC23,YC23,DHL2,BH01,DHL3,DHL3A,QHL3,DHL4,BPME02,DHL4A,QHL4,BPM23,XC24,YC24,DHL5,BH02,DHL5,QHL4,BPM24,XC25,YC25,DHL4A,ES04,DHL4,QHL3,DHL3A,PRF10,DHL3,BH03,DHL2,QHL2,BPM25,XC26,YC26,DHL1,QHL1,WB1,DMF1,QT13,DMF2,QT14,BPM26,XC27,YC27,DMF3,QT15,DMF4,DT1,PRF11,DT1A,QT16,DT1B,QTR1,W01,BPM27,XC28,YC28,QTR1,DT2,QT18,BPM28,XC29,YC29,DT3,QT19,BPM29,XC30,YC30,DT4,QT20,BPM30,XC31,YC31,DT5,QT21,BPM31,XC32,YC32,DT6,QT22,BPM32,XC33,YC33,DT7,QT23,BPM33,XC34,YC34,DT8,DMO1,QT24,DMO2,QT25,BPM34,XC35,YC35,DMO3,QT26,BPM35,XC36,YC36,DMO4,ICT03,DMO4A,PRF12,DMO4B,QT27,DMO5,QT28,BPM36,XC37,YC37,DMO6,WB2,BH04,DS1,QT29,BPM37,XC38,YC38,DHR1,BV01,F5,QT30,BPM38,XC39,YC39,F2,QT31,F3,QT32,BPM39,XC40,YC40,F4,PRF13,F4,QT33,BPM40,XC41,YC41,F3,QT34,F2,QT35,BPM41,XC42,YC42,F5,BV02,DHR1,QT36,BPM42,XC43,YC43,DS1A,ICT04,DS1B,PRF14,BPM43,DS1C,DSEP1,SEP2,DSEP,SEP1,WSEP1"
+        },
+        "ALL_ESA": {
+            "NAME": "ALL_ESA",
+            "TYPE": "LINE",
+            "LINE": "C,MALIN,CCC,W00,DHOTGUN0A,ICT01S,BPM02,XC03,YC03,DHOTGUN0B,BL01A,DHOTGUN0,DHOTGUN1,QL01,DHOTGUN2,ES01,DHOTGUN2A,PRF02S,DHOTGUN2B,QL02,BPM03,XC04,YC04,DHOTGUN3,QL03,DHOTGUN4,DHOTGUN4,BPM04,XC05,YC05,QL04,DHOTGUN3,QL05,DHOTGUN2B,DHOTGUN2A,ES02,DHOTGUN2,BPM05,XC06,YC06,QL06,DHOTGUN1,DHOTGUN0,BL01B,DTH4A,BPM06,XC07,YC07,QL07,DTH5,QL08,DTH6,QL09,DTH7,QL10,DTH8,FODO00,DL00A,PRF02,DL00A1,QL11,DL00B,QL12,BPM07,XC08,YC08,DL00C,DA1,L1,DA1,DACC,DA1,L1,DA1,COLLI,DL00D,DL00D,L1X,DLB1A,QL13,BPM08,XC09,YC09,DLB1B,QL14,DLB1C,BC11,DB11,BC12,DB12,BPME01,DB12,ES03,DB13,PRF03,DB13,BC13,DB14,BC14,DLB1D,QL15,BPM09,XC10,YC10,DLB1E,QL16,DLB1F,PRF04,DLB1F1,BPM10,XC11,YC11,QL17,DLB1G,QL18,DLB1H,QL19,FODO02,BPM11,XC12,YC12,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,FODO01,DAQ1,QL20,BPM12,XC13,YC13,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL21,BPM13,XC14,YC14,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL22,BPM14,XC15,YC15,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL23,BPM15,XC16,YC16,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2A,PRF05,DA2A,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL24,BPM16,XC17,YC17,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL25,BPM17,XC18,YC18,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL26,BPM18,XC19,YC19,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DAQ1,QL27,FODO03,BPM19,XC20,YC20,DAQ1,DA1,L2,DA1,DACC,DA1,L2,DA1,COLLI,DA2,DA1,L4,DA1,DACC,DA1,L4,DA1,COLLI,DAQ1,FODO04,DMTA,PRFLO,QT01,BPM20,XC21,YC21,DMTB,QT02,DMTC1,PRF06,DMTC2,PRF07,DMTC3,PRF08,DMTC4,QT03,DMTD,QT04,BPM21,XC22,YC22,DMTE,ICT02,DMTE1,PRF09,DMTE2,FODO05,QHL1,DHL1,QHL2,BPM22,XC23,YC23,DHL2,DQ0,SM,DQ1,QE01,DQ2,QE02,DQ3,QE03,DQ4,PRFESA"
+        },
+        "ESALOCAL": {
+            "NAME": "ESALOCAL",
+            "TYPE": "LINE",
+            "LINE": "SM,DQ1,QE01,DQ2,QE02,DQ3,QE03,DQ4"
+        },
+        "ENERGYS": {
+            "NAME": "ENERGYS",
+            "TYPE": "LINE",
+            "LINE": "C,MALIN,CCC,QT01,BPM20,XC21,YC21,DMTB,QT02,DMTC1,PRF06,DMTC2,PRF07,DMTC3,PRF08,DMTC4,QT03,DMTD,QT04,BPM21,XC22,YC22,DMTE,ICT02,DMTE1,PRF09,DMTE2,FODO05,QHL1,DHL1,QHL2,BPM22,XC23,YC23,DHL2,DQ0,SM,DQ1,QE01,DQ2,QE02,DQ3,QE03,DQ4,PRFESA"
         },
         "EMIT_QL27_PRF06": {
             "NAME": "EMIT_QL27_PRF06",

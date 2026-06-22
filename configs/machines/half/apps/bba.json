@@ -43,7 +43,8 @@
         "by_formula": "-0.4813*current-0.7747",
         "bx_formula": "-0.4968*current-0.3153",
         "leff_by": 0.058287,
-        "leff_bx": 0.052513
+        "leff_bx": 0.052513,
+        "quad_leff": 0.15
       }
     }
   ]

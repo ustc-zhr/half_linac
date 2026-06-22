@@ -1,6 +1,8 @@
+import json
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -17,13 +19,20 @@ import epics
 import numpy as np
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
+    QAbstractItemView,
     QApplication,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
+    QPushButton,
     QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -36,6 +45,8 @@ from half_linac.src.shared.machine_profile import (
     get_bba_preset,
     list_elements,
     load_app_context,
+    MachineProfileError,
+    require_workflow_write_allowed,
     resolve_channel,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
@@ -43,15 +54,25 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
     default_control_backend_choices,
     request_runtime_restart,
 )
+from half_linac.src.apps.bba.profile_runtime import (
+    new_bba_scan_archive_dir,
+    resolve_bba_runtime_paths,
+)
 
-
-BBA_DIR = Path(__file__).resolve().parent
-M1S_PATH = BBA_DIR / "m1S.txt"
-BBA2_K1LQM2_PATH = BBA_DIR / "bba2_k1Lqm2.txt"
-BBA2_M1_PATH = BBA_DIR / "bba2_m1.txt"
-BBA2_THETAM2_PATH = BBA_DIR / "bba2_thetam2.txt"
 K1LQ_FACTOR = 0.15
 HEADER_ACTION_HEIGHT = 32
+BBA1_QUAD_X_LABEL = "$K_1$"
+BBA1_SLOPE_LABEL = "dBPM2/dK1"
+BBA2_QUAD_X_LABEL = "$K_1L_q$"
+BBA1_SCAN_POINT_COLUMNS = ("Use", "Corrector", "K1", "BPM1 (mm)", "BPM2 (mm)")
+BBA1_TOOLTIP = (
+    "BBA-1 scans quad K1 at several COR settings, fits dBPM2/dK1 versus BPM1, "
+    "and reports the BPM1 reading at the quad center."
+)
+BBA2_TOOLTIP = (
+    "BBA-2 fits BPM2 versus quad K1Leff and corrector kick, then reports "
+    "quad-center reading minus BPM1 average."
+)
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -448,8 +469,19 @@ class ScanParameters:
     bx_formula: str = ""
     leff_by: float = 0.0
     leff_bx: float = 0.0
+    quad_leff: float = K1LQ_FACTOR
     control_backend: str = ""
     app_context: object | None = None
+    bba1_data_path: Path | None = None
+    bba1_quad_scan_path: Path | None = None
+    bba1_metadata_path: Path | None = None
+    bba1_source_dir: Path | None = None
+    bba1_recal_points: list[tuple[float, float, float, float]] | None = None
+    bba2_quad_scan_path: Path | None = None
+    bba2_bpm1_path: Path | None = None
+    bba2_corrector_scan_path: Path | None = None
+    bba2_metadata_path: Path | None = None
+    archive_dir: Path | None = None
 
 
 class myWindow(QWidget, Ui_Form):
@@ -484,6 +516,14 @@ class myWindow(QWidget, Ui_Form):
         self.resize(1600, 960)
         self.setMinimumSize(1320, 860)
         self.tabWidget.setCurrentIndex(0)
+        bba1_tab_index = self.tabWidget.indexOf(self.tab)
+        if bba1_tab_index >= 0:
+            self.tabWidget.setTabToolTip(bba1_tab_index, BBA1_TOOLTIP)
+        self.tab.setToolTip(BBA1_TOOLTIP)
+        bba2_tab_index = self.tabWidget.indexOf(self.tab_2)
+        if bba2_tab_index >= 0:
+            self.tabWidget.setTabToolTip(bba2_tab_index, BBA2_TOOLTIP)
+        self.tab_2.setToolTip(BBA2_TOOLTIP)
 
     def _setup_defaults(self):
         self.lineEdit_10.clear()
@@ -682,12 +722,30 @@ class myWindow(QWidget, Ui_Form):
         form.setHorizontalSpacing(8)
         form.setVerticalSpacing(6)
 
+        form.addWidget(self._make_field_label("Plane", self.frame), 0, 0)
+        self.comboBox_5.setParent(self.frame)
+        self.comboBox_5.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        form.addWidget(self.comboBox_5, 0, 1, 1, 3)
+
+        setup_inputs = (
+            self.lineEdit,
+            self.lineEdit_2,
+            self.lineEdit_3,
+            self.lineEdit_4,
+            self.lineEdit_5,
+            self.lineEdit_6,
+            self.lineEdit_7,
+            self.lineEdit_8,
+        )
+        for widget in setup_inputs:
+            widget.setFixedWidth(96)
+
         rows = [
-            ("Corrector", self.comboBox, "From", self.lineEdit, "To", self.lineEdit_2, "Steps", self.lineEdit_3),
+            ("COR", self.comboBox, "From", self.lineEdit, "To", self.lineEdit_2, "Steps", self.lineEdit_3),
             ("Quad", self.comboBox_2, "From", self.lineEdit_6, "To", self.lineEdit_4, "Steps", self.lineEdit_5),
             ("BPM1", self.comboBox_3, "BPM2", self.comboBox_4, "Scan freq", self.lineEdit_7, "Samples/step", self.lineEdit_8),
         ]
-        for row, items in enumerate(rows):
+        for row, items in enumerate(rows, start=1):
             for col in range(0, len(items), 2):
                 form.addWidget(self._make_field_label(items[col], self.frame), row, col * 2)
                 widget = items[col + 1]
@@ -695,7 +753,7 @@ class myWindow(QWidget, Ui_Form):
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 form.addWidget(widget, row, col * 2 + 1)
 
-        for column in (1, 3, 5, 7):
+        for column in (1, 3, 5, 7, 9):
             form.setColumnStretch(column, 1)
 
         layout.addLayout(form)
@@ -711,19 +769,63 @@ class myWindow(QWidget, Ui_Form):
         controls = QHBoxLayout()
         controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(8)
-        self.comboBox_5.setParent(self.frame_2)
-        self.comboBox_5.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        controls.addWidget(self.comboBox_5)
-        for button in (self.pushButton, self.pushButton_2, self.pushButton_4, self.pushButton_3):
+        for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
             button.setParent(self.frame_2)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             controls.addWidget(button)
         layout.addLayout(controls)
 
+        points_header = QHBoxLayout()
+        points_header.setContentsMargins(0, 4, 0, 0)
+        points_header.setSpacing(6)
+        points_title = QLabel("Scan Points", self.frame_2)
+        points_title.setObjectName("panelTitle")
+        points_header.addWidget(points_title)
+        points_header.addStretch(1)
+        self.bba1_scan_points_summary_label = QLabel("0 active / 0 total", self.frame_2)
+        self.bba1_scan_points_summary_label.setProperty("role", "field")
+        points_header.addWidget(self.bba1_scan_points_summary_label)
+        layout.addLayout(points_header)
+
+        self.bba1_scan_points_table = QTableWidget(0, len(BBA1_SCAN_POINT_COLUMNS), self.frame_2)
+        self.bba1_scan_points_table.setHorizontalHeaderLabels(BBA1_SCAN_POINT_COLUMNS)
+        self.bba1_scan_points_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.bba1_scan_points_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.bba1_scan_points_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.bba1_scan_points_table.setMaximumHeight(170)
+        self.bba1_scan_points_table.verticalHeader().setVisible(False)
+        header = self.bba1_scan_points_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        for column in range(1, len(BBA1_SCAN_POINT_COLUMNS)):
+            header.setSectionResizeMode(column, QHeaderView.Stretch)
+        self.bba1_scan_points_table.itemChanged.connect(self._on_bba1_scan_point_item_changed)
+        layout.addWidget(self.bba1_scan_points_table)
+
+        point_actions = QHBoxLayout()
+        point_actions.setContentsMargins(0, 0, 0, 0)
+        point_actions.setSpacing(6)
+        self.pushButton_3.setParent(self.frame_2)
+        self.bba1_load_points_button = QPushButton("Load Archive", self.frame_2)
+        self.bba1_exclude_points_button = QPushButton("Exclude Selected", self.frame_2)
+        self.bba1_restore_points_button = QPushButton("Restore All", self.frame_2)
+        for button in (
+            self.pushButton_3,
+            self.bba1_load_points_button,
+            self.bba1_exclude_points_button,
+            self.bba1_restore_points_button,
+        ):
+            button.setProperty("compact", True)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            point_actions.addWidget(button)
+        self.bba1_load_points_button.clicked.connect(self._load_bba1_scan_archive)
+        self.bba1_exclude_points_button.clicked.connect(self._exclude_selected_bba1_scan_points)
+        self.bba1_restore_points_button.clicked.connect(self._restore_all_bba1_scan_points)
+        layout.addLayout(point_actions)
+
         result_row = QGridLayout()
         result_row.setHorizontalSpacing(8)
         result_row.setVerticalSpacing(6)
-        result_row.addWidget(self._make_field_label("Offset of BPM1-Quad (mm)", self.frame_2), 0, 0)
+        result_row.addWidget(self._make_field_label("BPM1 Reading at Quad Center (mm)", self.frame_2), 0, 0)
         self.lineEdit_10.setParent(self.frame_2)
         self.lineEdit_10.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         result_row.addWidget(self.lineEdit_10, 0, 1)
@@ -792,7 +894,14 @@ class myWindow(QWidget, Ui_Form):
         self.lineEdit_24.setParent(self.frame_3)
         self.lineEdit_25.setParent(self.frame_3)
         self.lineEdit_26.setParent(self.frame_3)
-        for widget in (self.lineEdit_23, self.lineEdit_24, self.lineEdit_25, self.lineEdit_26):
+        self.bba2_quad_leff_edit = QLineEdit(self.frame_3)
+        for widget in (
+            self.lineEdit_23,
+            self.lineEdit_24,
+            self.lineEdit_25,
+            self.lineEdit_26,
+            self.bba2_quad_leff_edit,
+        ):
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         model_grid.addWidget(self._make_field_label("By (Gauss)", self.frame_3), 0, 0)
@@ -803,6 +912,8 @@ class myWindow(QWidget, Ui_Form):
         model_grid.addWidget(self.lineEdit_25, 2, 1)
         model_grid.addWidget(self._make_field_label("Leff Bx (m)", self.frame_3), 2, 2)
         model_grid.addWidget(self.lineEdit_26, 2, 3)
+        model_grid.addWidget(self._make_field_label("Quad Leff (m)", self.frame_3), 3, 0)
+        model_grid.addWidget(self.bba2_quad_leff_edit, 3, 1)
         model_grid.setColumnStretch(1, 1)
         model_grid.setColumnStretch(3, 1)
         layout.addLayout(model_grid)
@@ -836,7 +947,7 @@ class myWindow(QWidget, Ui_Form):
         items = [
             ("Average of BPM1 (mm)", self.lineEdit_21),
             ("Response matrix R12 (m)", self.lineEdit_19),
-            ("Offset of BPM1-Quad (mm)", self.lineEdit_18),
+            ("Quad Center - BPM1 Reading (mm)", self.lineEdit_18),
         ]
         for row, (text, widget) in enumerate(items):
             results.addWidget(self._make_field_label(text, self.frame_4), row, 0)
@@ -902,17 +1013,17 @@ class myWindow(QWidget, Ui_Form):
         widget.canvas.draw()
 
     def _draw_placeholder_plots(self):
-        self._draw_placeholder(self.widget, "$K_1L_q$", "BPM2 (mm)", "Waiting for BBA-1 scan points")
-        self._draw_placeholder(self.widget_2, "BPM1 (mm)", "S", "Waiting for BBA-1 fit")
-        self._draw_placeholder(self.widget_3, "$K_1L_q$", "BPM2 (mm)", "Waiting for BBA-2 quad scan")
+        self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-1 scan points")
+        self._draw_placeholder(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL, "Waiting for BBA-1 fit")
+        self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-2 quad scan")
         self._draw_placeholder(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)", "Waiting for BBA-2 corrector scan")
 
     def _restyle_current_plots(self):
         palette = self._palette()
         plot_specs = (
-            (self.widget, "$K_1L_q$", "BPM2 (mm)"),
-            (self.widget_2, "BPM1 (mm)", "S"),
-            (self.widget_3, "$K_1L_q$", "BPM2 (mm)"),
+            (self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)"),
+            (self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL),
+            (self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)"),
             (self.widget_4, "corrector kick (mrad)", "BPM2 (mm)"),
         )
         if not any(plot.axes.lines for plot, _, _ in plot_specs):
@@ -1120,6 +1231,8 @@ class myWindow(QWidget, Ui_Form):
         )
 
         bba2_default = self._find_bba_preset(bba2.default_preset)
+        self.bba2_quad_leff = bba2_default.analysis.quad_leff or K1LQ_FACTOR
+        self._set_line_edit_value(self.bba2_quad_leff_edit, self.bba2_quad_leff)
         self._set_combo_current_plane(self.comboBox_10, bba2_default.plane)
         self._set_combo_current_text(self.comboBox_7, bba2_default.quad)
         self._refresh_corrector_combo(
@@ -1157,6 +1270,7 @@ class myWindow(QWidget, Ui_Form):
                 "leff_bx": self.lineEdit_26,
             },
         )
+        self._load_latest_bba1_data_into_table()
 
     def _profile_default_control_backend(self):
         return getattr(self, "standard_control_backend", self.app_context.control_backend.name)
@@ -1197,6 +1311,256 @@ class myWindow(QWidget, Ui_Form):
     def _warn(self, message):
         print(message)
         QMessageBox.warning(self, "BBA", message)
+
+    def _require_write_allowed(self, operation, mode):
+        try:
+            require_workflow_write_allowed(self.app_context, "bba", operation, mode=mode)
+            return True
+        except MachineProfileError as exc:
+            self._warn(str(exc))
+            return False
+
+    def _bba_runtime_paths(self, mode):
+        context = load_app_context(
+            "bba",
+            machine_id=self.machine_profile.machine.id,
+            control_backend=mode,
+        )
+        return resolve_bba_runtime_paths(context)
+
+    @staticmethod
+    def _load_bba_metadata(path):
+        try:
+            with Path(path).open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _latest_bba1_data_dir(self):
+        return self._bba_runtime_paths(self._profile_default_control_backend())["latest_dir"]
+
+    def _bba1_scan_points_counts(self):
+        table = getattr(self, "bba1_scan_points_table", None)
+        if table is None:
+            return 0, 0
+        total = table.rowCount()
+        active = 0
+        for row in range(total):
+            item = table.item(row, 0)
+            if item is not None and item.checkState() == Qt.Checked:
+                active += 1
+        return active, total
+
+    def _update_bba1_scan_points_summary(self):
+        label = getattr(self, "bba1_scan_points_summary_label", None)
+        if label is None:
+            return
+        active, total = self._bba1_scan_points_counts()
+        label.setText(f"{active} active / {total} total")
+
+    def _on_bba1_scan_point_item_changed(self, item):
+        if item.column() != 0:
+            return
+        self._update_bba1_scan_points_summary()
+        self._redraw_bba1_scan_points_from_table()
+
+    def _clear_bba1_scan_points(self):
+        table = getattr(self, "bba1_scan_points_table", None)
+        if table is None:
+            return
+        table.blockSignals(True)
+        table.setRowCount(0)
+        table.blockSignals(False)
+        self._update_bba1_scan_points_summary()
+
+    def _append_bba1_scan_point(self, corr, quad_k1, bpm1, bpm2, *, enabled=True):
+        table = getattr(self, "bba1_scan_points_table", None)
+        if table is None:
+            return
+
+        table.blockSignals(True)
+        row = table.rowCount()
+        table.insertRow(row)
+
+        use_item = QTableWidgetItem("")
+        use_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
+        use_item.setCheckState(Qt.Checked if enabled else Qt.Unchecked)
+        use_item.setTextAlignment(Qt.AlignCenter)
+        table.setItem(row, 0, use_item)
+
+        values = (corr, quad_k1, bpm1, bpm2)
+        display_values = (corr, quad_k1, bpm1 * 1e3, bpm2 * 1e3)
+        for column, (value, display_value) in enumerate(zip(values, display_values), start=1):
+            numeric_value = float(value)
+            data_item = QTableWidgetItem(f"{float(display_value):.6g}")
+            data_item.setData(Qt.UserRole, numeric_value)
+            data_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            data_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            table.setItem(row, column, data_item)
+
+        table.blockSignals(False)
+        self._update_bba1_scan_points_summary()
+
+    def _bba1_scan_point_value(self, row, column):
+        item = self.bba1_scan_points_table.item(row, column)
+        if item is None:
+            raise ValueError(f"BBA-1 scan point row {row + 1} is incomplete.")
+        value = item.data(Qt.UserRole)
+        if value is None:
+            value = item.text()
+        return float(value)
+
+    def _enabled_bba1_scan_points(self):
+        table = getattr(self, "bba1_scan_points_table", None)
+        if table is None:
+            return []
+        points = []
+        for row in range(table.rowCount()):
+            use_item = table.item(row, 0)
+            if use_item is None or use_item.checkState() != Qt.Checked:
+                continue
+            points.append((
+                self._bba1_scan_point_value(row, 1),
+                self._bba1_scan_point_value(row, 2),
+                self._bba1_scan_point_value(row, 3),
+                self._bba1_scan_point_value(row, 4),
+            ))
+        return points
+
+    def _load_bba1_scan_points_from_path(self, raw_path):
+        raw_path = Path(raw_path)
+        if not raw_path.exists():
+            raise RuntimeError(f"{raw_path} not found.")
+        data = np.loadtxt(raw_path, ndmin=2)
+        if data.ndim != 2 or data.shape[1] < 4:
+            raise RuntimeError(f"{raw_path.name} must contain corrector, K1, BPM1 and BPM2 columns.")
+        self._clear_bba1_scan_points()
+        for corr, quad_k1, bpm1, bpm2 in data[:, :4]:
+            self._append_bba1_scan_point(corr, quad_k1, bpm1, bpm2)
+        self._redraw_bba1_scan_points_from_table()
+
+    def _load_latest_bba1_data_into_table(self):
+        if not hasattr(self, "bba1_scan_points_table"):
+            return
+        source_dir = self._latest_bba1_data_dir()
+        raw_path = source_dir / "bba1_quad_scan.txt"
+        if not raw_path.exists():
+            self._clear_bba1_scan_points()
+            return
+        try:
+            self._load_bba1_scan_points_from_path(raw_path)
+        except RuntimeError as exc:
+            self._warn(str(exc))
+
+    def _load_bba1_scan_archive(self):
+        if self._scan_is_running():
+            self._warn("Stop the current BBA scan before loading archived data.")
+            return
+        archive_dir = self._bba_runtime_paths(self._profile_default_control_backend())["archive_dir"]
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load BBA-1 Scan Archive",
+            str(archive_dir),
+            "BBA-1 raw scan data (bba1_quad_scan.txt);;Text files (*.txt);;All files (*)",
+        )
+        if not path:
+            return
+        try:
+            self._load_bba1_scan_points_from_path(Path(path))
+        except RuntimeError as exc:
+            self._warn(str(exc))
+
+    def _exclude_selected_bba1_scan_points(self):
+        table = getattr(self, "bba1_scan_points_table", None)
+        if table is None:
+            return
+        rows = sorted({index.row() for index in table.selectedIndexes()})
+        if not rows:
+            return
+        table.blockSignals(True)
+        for row in rows:
+            item = table.item(row, 0)
+            if item is not None:
+                item.setCheckState(Qt.Unchecked)
+        table.blockSignals(False)
+        self._update_bba1_scan_points_summary()
+        self._redraw_bba1_scan_points_from_table()
+
+    def _restore_all_bba1_scan_points(self):
+        table = getattr(self, "bba1_scan_points_table", None)
+        if table is None:
+            return
+        table.blockSignals(True)
+        for row in range(table.rowCount()):
+            item = table.item(row, 0)
+            if item is not None:
+                item.setCheckState(Qt.Checked)
+        table.blockSignals(False)
+        self._update_bba1_scan_points_summary()
+        self._redraw_bba1_scan_points_from_table()
+
+    def _redraw_bba1_scan_points_from_table(self):
+        table = getattr(self, "bba1_scan_points_table", None)
+        if table is None or table.rowCount() == 0:
+            return
+
+        active = []
+        excluded = []
+        for row in range(table.rowCount()):
+            point = (
+                self._bba1_scan_point_value(row, 1),
+                self._bba1_scan_point_value(row, 2),
+                self._bba1_scan_point_value(row, 3),
+                self._bba1_scan_point_value(row, 4),
+            )
+            use_item = table.item(row, 0)
+            if use_item is not None and use_item.checkState() == Qt.Checked:
+                active.append(point)
+            else:
+                excluded.append(point)
+
+        self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-1 scan points")
+        palette = self._palette()
+        if active:
+            data = np.asarray(active, dtype=float)
+            self.widget.axes.plot(
+                data[:, 1],
+                data[:, 3] * 1e3,
+                marker="x",
+                linestyle="None",
+                color=palette["plot_point"],
+            )
+        if excluded:
+            data = np.asarray(excluded, dtype=float)
+            self.widget.axes.plot(
+                data[:, 1],
+                data[:, 3] * 1e3,
+                marker="x",
+                linestyle="None",
+                color=palette["muted_fg"],
+                alpha=0.45,
+            )
+        self.widget.canvas.draw()
+
+    def _apply_runtime_paths(self, params, family):
+        paths = self._bba_runtime_paths(params.control_backend)
+        params.bba1_data_path = paths["bba1_data_path"]
+        params.bba1_quad_scan_path = paths["bba1_quad_scan_path"]
+        params.bba1_metadata_path = paths["bba1_metadata_path"]
+        params.bba2_quad_scan_path = paths["bba2_quad_scan_path"]
+        params.bba2_bpm1_path = paths["bba2_bpm1_path"]
+        params.bba2_corrector_scan_path = paths["bba2_corrector_scan_path"]
+        params.bba2_metadata_path = paths["bba2_metadata_path"]
+        params.bba1_source_dir = paths["latest_dir"]
+        if not params.recal:
+            context = load_app_context(
+                "bba",
+                machine_id=self.machine_profile.machine.id,
+                control_backend=params.control_backend,
+            )
+            params.archive_dir = new_bba_scan_archive_dir(context, family)
 
     def _apply_runtime_selection(self, machine_id, control_backend):
         if self._scan_is_running():
@@ -1258,6 +1622,7 @@ class myWindow(QWidget, Ui_Form):
             params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, mode)
             params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, mode)
             params.control_backend = mode
+            params.app_context = self.app_context
 
             params.corr_from = float(self.lineEdit.text())
             params.corr_end = float(self.lineEdit_2.text())
@@ -1307,6 +1672,7 @@ class myWindow(QWidget, Ui_Form):
             params.bx_formula = self.lineEdit_24.text()
             params.leff_by = float(self.lineEdit_25.text())
             params.leff_bx = float(self.lineEdit_26.text())
+            params.quad_leff = float(self.bba2_quad_leff_edit.text())
             params.app_context = self.app_context
 
             self._validate_positive_int(params.quad_steps, "Quad steps")
@@ -1316,6 +1682,8 @@ class myWindow(QWidget, Ui_Form):
             self._validate_non_negative_float(params.sleeptime, "Sleep time")
             if params.energy_mev <= 0:
                 raise ValueError("Energy must be positive.")
+            if params.quad_leff <= 0:
+                raise ValueError("BBA-2 quad effective length must be positive.")
             return params
         except ValueError as exc:
             self._warn(str(exc))
@@ -1330,8 +1698,13 @@ class myWindow(QWidget, Ui_Form):
         if params is None:
             return
 
+        if not self._require_write_allowed("BBA-1 scan", params.control_backend):
+            return
+
         self.clearPlot()
+        self._clear_bba1_scan_points()
         params.recal = False
+        self._apply_runtime_paths(params, "bba1")
         self.scan_mode = "scan"
         self.scan_family = "bba1"
         self._attach_scan(BBAScanThread(params), self.display)
@@ -1345,8 +1718,12 @@ class myWindow(QWidget, Ui_Form):
         if params is None:
             return
 
+        if not self._require_write_allowed("BBA-2 scan", params.control_backend):
+            return
+
         self.clearPlot_bba2()
         params.recal = False
+        self._apply_runtime_paths(params, "bba2")
         self.scan_mode = "scan"
         self.scan_family = "bba2"
         self._attach_scan(BBAScanThreadBBA2(params), self.display_bba2)
@@ -1372,6 +1749,21 @@ class myWindow(QWidget, Ui_Form):
             return
 
         params.recal = True
+        self._apply_runtime_paths(params, "bba1")
+        source_dir = self._latest_bba1_data_dir()
+        params.bba1_source_dir = source_dir
+        params.bba1_data_path = source_dir / "m1S.txt"
+        params.bba1_quad_scan_path = source_dir / "bba1_quad_scan.txt"
+        params.bba1_metadata_path = source_dir / "metadata.json"
+        if hasattr(self, "bba1_scan_points_table"):
+            if self.bba1_scan_points_table.rowCount() == 0:
+                self._load_latest_bba1_data_into_table()
+            if self.bba1_scan_points_table.rowCount() > 0:
+                points = self._enabled_bba1_scan_points()
+                if len(points) < 2:
+                    self._warn("At least 2 active BBA-1 scan points are required for recalculation.")
+                    return
+                params.bba1_recal_points = points
         self.scan_mode = "recalculate"
         self.scan_family = "bba1"
         self._attach_scan(BBAScanThread(params), self.display)
@@ -1387,6 +1779,7 @@ class myWindow(QWidget, Ui_Form):
 
         self.clearPlot_bba2()
         params.recal = True
+        self._apply_runtime_paths(params, "bba2")
         self.scan_mode = "recalculate"
         self.scan_family = "bba2"
         self._attach_scan(BBAScanThreadBBA2(params), self.display_bba2)
@@ -1403,45 +1796,63 @@ class myWindow(QWidget, Ui_Form):
             return
 
         if "clear" in data:
-            self._draw_placeholder(self.widget, "$K_1L_q$", "BPM2 (mm)", "Waiting for BBA-1 scan points")
-            self._draw_placeholder(self.widget_2, "BPM1 (mm)", "S", "Waiting for BBA-1 fit")
+            self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-1 scan points")
+            self._draw_placeholder(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL, "Waiting for BBA-1 fit")
             self.lineEdit_10.setText("")
+            if data.get("clear_points"):
+                self._clear_bba1_scan_points()
             self._refresh_status()
             return
 
         palette = self._palette()
         show_type = data.get("show")
+        if show_type == "scan_point":
+            self._append_bba1_scan_point(
+                data["corr"],
+                data["quad_k1"],
+                data["bpm1"],
+                data["bpm2"],
+            )
+            self._refresh_status()
+            return
         if show_type == "k1m2":
             if not self.widget.axes.lines:
                 self.widget.axes.clear()
-                self._style_axes(self.widget, "$K_1L_q$", "BPM2 (mm)")
+                self._style_axes(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)")
             self.widget.axes.plot(
-                data["K1Lq"],
-                data["m2"],
+                data["quad_k1"],
+                np.asarray(data["m2"]) * 1e3,
                 marker="x",
                 linestyle="None",
                 color=palette["plot_point"],
             )
             self.widget.canvas.draw()
         elif show_type == "fit_k1m2":
-            self.widget.axes.plot(data["x"], data["y"], linestyle="--", color=palette["plot_fit"])
+            self.widget.axes.plot(data["x"], np.asarray(data["y"]) * 1e3, linestyle="--", color=palette["plot_fit"])
             self.widget.canvas.draw()
 
             m1 = data["m1"]
-            slope = data["S"]
+            slope = data["slope_k1"]
             mm1 = data["mm1"]
             self.widget_2.axes.clear()
-            self._style_axes(self.widget_2, "BPM1 (mm)", "S")
-            self.widget_2.axes.plot(mm1, np.ones(len(mm1)) * slope, marker="x", linestyle="None", color=palette["plot_point"])
-            self.widget_2.axes.plot(m1, slope, marker="o", linestyle="None", color=palette["plot_fit"])
+            self._style_axes(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL)
+            self.widget_2.axes.plot(
+                np.asarray(mm1) * 1e3,
+                np.ones(len(mm1)) * slope,
+                marker="x",
+                linestyle="None",
+                color=palette["plot_point"],
+            )
+            self.widget_2.axes.plot(m1 * 1e3, slope, marker="o", linestyle="None", color=palette["plot_fit"])
             self.widget_2.canvas.draw()
         elif show_type == "m1S":
             self.widget_2.axes.clear()
-            self._style_axes(self.widget_2, "BPM1 (mm)", "S")
-            self.widget_2.axes.plot(data["m1"], data["S"], marker="o", linestyle="None", color=palette["plot_point"])
-            self.widget_2.axes.plot(data["m1"], data["yvals"], linestyle="-", color=palette["plot_fit"])
+            self._style_axes(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL)
+            m1_mm = np.asarray(data["m1"]) * 1e3
+            self.widget_2.axes.plot(m1_mm, data["slope_k1"], marker="o", linestyle="None", color=palette["plot_point"])
+            self.widget_2.axes.plot(m1_mm, data["yvals"], linestyle="-", color=palette["plot_fit"])
             self.widget_2.canvas.draw()
-            self.lineEdit_10.setText(str(round(data["offset"], 1)))
+            self.lineEdit_10.setText(f"{data['offset'] * 1e3:.4f}")
         self._refresh_status()
 
     def display_bba2(self, data):
@@ -1450,7 +1861,7 @@ class myWindow(QWidget, Ui_Form):
             return
 
         if "clear" in data:
-            self._draw_placeholder(self.widget_3, "$K_1L_q$", "BPM2 (mm)", "Waiting for BBA-2 quad scan")
+            self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-2 quad scan")
             self._draw_placeholder(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)", "Waiting for BBA-2 corrector scan")
             self.lineEdit_18.setText("")
             self.lineEdit_19.setText("")
@@ -1464,7 +1875,7 @@ class myWindow(QWidget, Ui_Form):
         if show_type == "k1m2":
             if not self.widget_3.axes.lines:
                 self.widget_3.axes.clear()
-                self._style_axes(self.widget_3, "$K_1L_q$", "BPM2 (mm)")
+                self._style_axes(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)")
             self.widget_3.axes.plot(
                 data["K1Lq"],
                 np.asarray(data["m2"]) * 1e3,
@@ -1559,6 +1970,43 @@ class BBABaseThread(QThread):
         data = np.atleast_1d(np.loadtxt(path))
         return np.asarray(data, dtype=float)
 
+    def _require_path(self, path, label):
+        if path is None:
+            raise RuntimeError(f"{label} runtime path is not configured.")
+        return Path(path)
+
+    def _save_array(self, path, data, *, archive_dir=None, archive_name=None, header=""):
+        target = self._require_path(path, "BBA data")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        np.savetxt(target, data, fmt="%.6e", header=header)
+        if archive_dir is None:
+            return
+        archive_path = Path(archive_dir) / (archive_name or target.name)
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        np.savetxt(archive_path, data, fmt="%.6e", header=header)
+
+    def _save_json(self, path, data, *, archive_dir=None, archive_name=None):
+        target = self._require_path(path, "BBA metadata")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        if archive_dir is None:
+            return
+        archive_path = Path(archive_dir) / (archive_name or target.name)
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        with archive_path.open("w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+
+    def _load_json(self, path):
+        target = self._require_path(path, "BBA metadata")
+        if not target.exists():
+            return {}
+        with target.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+
 
 class BBAScanThread(BBABaseThread):
     def __init__(self, params):
@@ -1568,7 +2016,16 @@ class BBAScanThread(BBABaseThread):
     def run(self):
         try:
             if self.params.recal:
-                x, y = self._load_two_column(M1S_PATH, "BBA-1 recalculation data")
+                self._emit({"clear": True})
+                if self.params.bba1_recal_points is not None:
+                    recalculated = self._recalculate_from_points(self.params.bba1_recal_points)
+                else:
+                    recalculated = self._recalculate_from_quad_scan()
+                if recalculated is None:
+                    data_path = self._require_path(self.params.bba1_data_path, "BBA-1 recalculation data")
+                    x, y = self._load_two_column(data_path, "BBA-1 recalculation data")
+                else:
+                    x, y = recalculated
             else:
                 scan_result = self._perform_scan()
                 if scan_result is None:
@@ -1586,12 +2043,110 @@ class BBAScanThread(BBABaseThread):
             self._emit({
                 "show": "m1S",
                 "m1": x,
-                "S": y,
+                "slope_k1": y,
                 "yvals": fit(x),
-                "offset": coeff[1] / coeff[0],
+                "offset": -coeff[1] / coeff[0],
             })
         except Exception as exc:
             self._emit({"error": str(exc)})
+
+    def _recalculate_from_quad_scan(self):
+        quad_scan_path = self._require_path(self.params.bba1_quad_scan_path, "BBA-1 quad scan data")
+        if not quad_scan_path.exists():
+            return None
+
+        data = np.loadtxt(quad_scan_path, ndmin=2)
+        if data.shape[1] < 4:
+            raise RuntimeError(f"BBA-1 quad scan data is malformed: {quad_scan_path}")
+        return self._recalculate_from_points(data[:, :4])
+
+    def _recalculate_from_points(self, points):
+        data = np.asarray(points, dtype=float)
+        if data.ndim != 2 or data.shape[1] < 4:
+            raise RuntimeError("BBA-1 scan points must contain corrector, K1, BPM1 and BPM2 columns.")
+        kick_values = np.asarray(data[:, 0], dtype=float)
+        quad_k1_values = np.asarray(data[:, 1], dtype=float)
+        bpm1_values = np.asarray(data[:, 2], dtype=float)
+        bpm2_values = np.asarray(data[:, 3], dtype=float)
+        self._emit({
+            "show": "k1m2",
+            "quad_k1": quad_k1_values,
+            "m2": bpm2_values,
+        })
+
+        m1_results = []
+        slope_results = []
+        for kick in self._ordered_unique(kick_values):
+            kick_mask = kick_values == kick
+            group_quad_k1 = quad_k1_values[kick_mask]
+            group_bpm1 = bpm1_values[kick_mask]
+            group_bpm2 = bpm2_values[kick_mask]
+
+            quad_means = []
+            bpm2_means = []
+            for quad_k1 in self._ordered_unique(group_quad_k1):
+                quad_mask = group_quad_k1 == quad_k1
+                quad_means.append(float(np.mean(group_quad_k1[quad_mask])))
+                bpm2_means.append(float(np.mean(group_bpm2[quad_mask])))
+
+            if len(quad_means) < 2:
+                raise RuntimeError("Need at least two K1 points per corrector setting to recalculate BBA-1.")
+
+            quad_means = np.asarray(quad_means, dtype=float)
+            bpm2_means = np.asarray(bpm2_means, dtype=float)
+            coeff = np.polyfit(quad_means, bpm2_means, deg=1)
+            fit = np.poly1d(coeff)
+
+            bpm1_mean = float(np.mean(group_bpm1))
+            slope = float(coeff[0])
+            m1_results.append(bpm1_mean)
+            slope_results.append(slope)
+            self._emit({
+                "show": "fit_k1m2",
+                "x": quad_means,
+                "y": fit(quad_means),
+                "m1": bpm1_mean,
+                "slope_k1": slope,
+                "mm1": group_bpm1,
+            })
+
+        return np.asarray(m1_results, dtype=float), np.asarray(slope_results, dtype=float)
+
+    @staticmethod
+    def _ordered_unique(values):
+        unique = []
+        for value in values:
+            item = float(value)
+            if item not in unique:
+                unique.append(item)
+        return unique
+
+    def _metadata(self):
+        return {
+            "family": "bba1",
+            "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "machine": getattr(getattr(self.params.app_context, "machine", None), "id", None),
+            "backend": self.params.control_backend,
+            "plane": self.params.plane,
+            "corr": self.params.corr,
+            "quad": self.params.quad,
+            "bpm1": self.params.bpm1,
+            "bpm2": self.params.bpm2,
+            "scan": {
+                "corr_from": self.params.corr_from,
+                "corr_end": self.params.corr_end,
+                "corr_steps": self.params.corr_steps,
+                "quad_from": self.params.quad_from,
+                "quad_end": self.params.quad_end,
+                "quad_steps": self.params.quad_steps,
+                "samples": self.params.samples,
+                "sleeptime": self.params.sleeptime,
+            },
+            "files": {
+                "raw": "bba1_quad_scan.txt",
+                "summary": "m1S.txt",
+            },
+        }
 
     def _perform_scan(self):
         cor = epics.PV(self.params.corrPV)
@@ -1609,6 +2164,7 @@ class BBAScanThread(BBABaseThread):
 
         m1_results = []
         slope_results = []
+        quad_scan_rows = []
 
         try:
             for kick in kick_values:
@@ -1632,10 +2188,19 @@ class BBAScanThread(BBABaseThread):
                         bpm1_value = self._safe_get(bpm1, self.params.bpm1PV)
                         bpm2_samples.append(bpm2_value)
                         bpm1_samples.append(bpm1_value)
+                        quad_k1 = k1 * sign
+                        quad_scan_rows.append((kick, quad_k1, bpm1_value, bpm2_value))
 
                         self._emit({
+                            "show": "scan_point",
+                            "corr": kick,
+                            "quad_k1": quad_k1,
+                            "bpm1": bpm1_value,
+                            "bpm2": bpm2_value,
+                        })
+                        self._emit({
                             "show": "k1m2",
-                            "K1Lq": k1 * sign * K1LQ_FACTOR,
+                            "quad_k1": quad_k1,
                             "m2": bpm2_value,
                         })
                         if not self._sleep_or_stop(1):
@@ -1645,7 +2210,7 @@ class BBAScanThread(BBABaseThread):
                 bpm2_mean = np.mean(bpm2_matrix, axis=1)
                 bpm1_mean = float(np.mean(np.asarray(bpm1_samples, dtype=float)))
 
-                x = sign * k1_values * K1LQ_FACTOR
+                x = sign * k1_values
                 coeff = np.polyfit(x, bpm2_mean, deg=1)
                 fit = np.poly1d(coeff)
 
@@ -1658,13 +2223,29 @@ class BBAScanThread(BBABaseThread):
                     "x": x,
                     "y": fit(x),
                     "m1": bpm1_mean,
-                    "S": slope,
+                    "slope_k1": slope,
                     "mm1": np.asarray(bpm1_samples, dtype=float),
                 })
                 if not self._sleep_or_stop(1):
                     return None
 
-            np.savetxt(M1S_PATH, np.column_stack((m1_results, slope_results)), fmt="%.6e")
+            self._save_array(
+                self.params.bba1_data_path,
+                np.column_stack((m1_results, slope_results)),
+                archive_dir=self.params.archive_dir,
+                header="bpm1_mean_m slope_dBPM2_dK1",
+            )
+            self._save_array(
+                self.params.bba1_quad_scan_path,
+                np.asarray(quad_scan_rows, dtype=float),
+                archive_dir=self.params.archive_dir,
+                header="corrector_setpoint quad_k1 bpm1_m bpm2_m",
+            )
+            self._save_json(
+                self.params.bba1_metadata_path,
+                self._metadata(),
+                archive_dir=self.params.archive_dir,
+            )
             print("Scan finished, corrector and quad are back to initial values.")
             return np.asarray(m1_results, dtype=float), np.asarray(slope_results, dtype=float)
         finally:
@@ -1686,6 +2267,9 @@ class BBAScanThreadBBA2(BBABaseThread):
 
     def run(self):
         try:
+            if self.params.recal:
+                self._apply_recal_metadata()
+
             cor = epics.PV(self.params.corrPV)
             quad = epics.PV(self.params.quadPV)
             bpm1 = epics.PV(self.params.bpm1PV)
@@ -1702,7 +2286,11 @@ class BBAScanThreadBBA2(BBABaseThread):
             angle_values = self._calculate_kick_angles(kick_values)
 
             if self.params.recal:
-                k1_lq, quad_m2 = self._load_two_column(BBA2_K1LQM2_PATH, "BBA-2 quad scan data")
+                quad_scan_path = self._require_path(
+                    self.params.bba2_quad_scan_path,
+                    "BBA-2 quad scan data",
+                )
+                k1_lq, quad_m2 = self._load_two_column(quad_scan_path, "BBA-2 quad scan data")
                 self._emit({"show": "k1m2", "K1Lq": k1_lq, "m2": quad_m2})
                 if not self._sleep_or_stop(1):
                     return
@@ -1718,7 +2306,8 @@ class BBAScanThreadBBA2(BBABaseThread):
                 return
 
             if self.params.recal:
-                bpm1_values = self._load_one_column(BBA2_M1_PATH, "BBA-2 BPM1 data")
+                bpm1_path = self._require_path(self.params.bba2_bpm1_path, "BBA-2 BPM1 data")
+                bpm1_values = self._load_one_column(bpm1_path, "BBA-2 BPM1 data")
             else:
                 bpm1_values = self._measure_bpm1(bpm1)
                 if bpm1_values is None:
@@ -1727,7 +2316,11 @@ class BBAScanThreadBBA2(BBABaseThread):
             print("m1_ave=", self.m1_ave * 1e3, "mm")
 
             if self.params.recal:
-                theta, corr_m2 = self._load_two_column(BBA2_THETAM2_PATH, "BBA-2 corrector scan data")
+                corrector_scan_path = self._require_path(
+                    self.params.bba2_corrector_scan_path,
+                    "BBA-2 corrector scan data",
+                )
+                theta, corr_m2 = self._load_two_column(corrector_scan_path, "BBA-2 corrector scan data")
                 self._emit({"show": "thetam2", "theta": theta, "m2": corr_m2})
                 if not self._sleep_or_stop(1):
                     return
@@ -1740,8 +2333,90 @@ class BBAScanThreadBBA2(BBABaseThread):
             self._emit(self._fit_corrector_scan(theta, corr_m2))
             if not self._sleep_or_stop(1):
                 return
+            if not self.params.recal:
+                self._save_json(
+                    self.params.bba2_metadata_path,
+                    self._metadata(),
+                    archive_dir=self.params.archive_dir,
+                    archive_name="metadata.json",
+                )
         except Exception as exc:
             self._emit({"error": str(exc)})
+
+    def _apply_recal_metadata(self):
+        metadata = self._load_json(self.params.bba2_metadata_path)
+        if metadata.get("family") != "bba2":
+            return
+
+        self.params.plane = str(metadata.get("plane") or self.params.plane)
+        self.params.quad = str(metadata.get("quad") or self.params.quad)
+        self.params.corr = str(metadata.get("corr") or self.params.corr)
+        self.params.bpm1 = str(metadata.get("bpm1") or self.params.bpm1)
+        self.params.bpm2 = str(metadata.get("bpm2") or self.params.bpm2)
+
+        scan = metadata.get("scan") if isinstance(metadata.get("scan"), dict) else {}
+        analysis = metadata.get("analysis") if isinstance(metadata.get("analysis"), dict) else {}
+        initial = metadata.get("initial") if isinstance(metadata.get("initial"), dict) else {}
+
+        self.params.samples = int(scan.get("samples") or self.params.samples)
+        self.params.bpm1_samples = int(analysis.get("bpm1_samples") or self.params.bpm1_samples)
+        self.params.energy_mev = float(analysis.get("energy_mev") or self.params.energy_mev)
+        self.params.by_formula = str(analysis.get("by_formula") or self.params.by_formula)
+        self.params.bx_formula = str(analysis.get("bx_formula") or self.params.bx_formula)
+        self.params.leff_by = float(analysis.get("leff_by") or self.params.leff_by)
+        self.params.leff_bx = float(analysis.get("leff_bx") or self.params.leff_bx)
+        self.params.quad_leff = float(analysis.get("quad_leff") or self.params.quad_leff)
+        if initial.get("quad_k1") is not None:
+            self.initial_quad_k1 = float(initial["quad_k1"])
+
+    def _metadata(self):
+        return {
+            "family": "bba2",
+            "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "machine": getattr(getattr(self.params.app_context, "machine", None), "id", None),
+            "backend": self.params.control_backend,
+            "plane": self.params.plane,
+            "quad": self.params.quad,
+            "corr": self.params.corr,
+            "bpm1": self.params.bpm1,
+            "bpm2": self.params.bpm2,
+            "scan": {
+                "quad_from": self.params.quad_from,
+                "quad_end": self.params.quad_end,
+                "quad_steps": self.params.quad_steps,
+                "corr_from": self.params.corr_from,
+                "corr_end": self.params.corr_end,
+                "corr_steps": self.params.corr_steps,
+                "samples": self.params.samples,
+                "sleeptime": self.params.sleeptime,
+            },
+            "analysis": {
+                "energy_mev": self.params.energy_mev,
+                "bpm1_samples": self.params.bpm1_samples,
+                "by_formula": self.params.by_formula,
+                "bx_formula": self.params.bx_formula,
+                "leff_by": self.params.leff_by,
+                "leff_bx": self.params.leff_bx,
+                "quad_leff": self.params.quad_leff,
+                "S": self.S,
+                "R12": self.R12,
+                "model_R12": self.model_r12,
+                "model_R12_error": self.model_r12_error,
+                "offset_quad_center_minus_bpm1_m": (
+                    self.S / self.R12 - self.m1_ave
+                    if self.S is not None and self.R12 is not None and self.m1_ave is not None
+                    else None
+                ),
+            },
+            "initial": {
+                "quad_k1": self.initial_quad_k1,
+            },
+            "files": {
+                "quad_scan": "bba2_k1Lqm2.txt",
+                "bpm1": "bba2_m1.txt",
+                "corrector_scan": "bba2_thetam2.txt",
+            },
+        }
 
     def _perform_quad_scan(self, quad, bpm2, sign):
         k1_values = np.linspace(self.params.quad_from, self.params.quad_end, self.params.quad_steps)
@@ -1770,15 +2445,19 @@ class BBAScanThreadBBA2(BBABaseThread):
 
                     self._emit({
                         "show": "k1m2",
-                        "K1Lq": k1 * sign * K1LQ_FACTOR,
+                        "K1Lq": k1 * sign * self.params.quad_leff,
                         "m2": bpm2_value,
                     })
                     if not self._sleep_or_stop(1):
                         return None
 
-            k1_lq = sign * np.asarray(k1_samples, dtype=float) * K1LQ_FACTOR
+            k1_lq = sign * np.asarray(k1_samples, dtype=float) * self.params.quad_leff
             m2 = np.asarray(bpm2_samples, dtype=float)
-            np.savetxt(BBA2_K1LQM2_PATH, np.column_stack((k1_lq, m2)), fmt="%.6e")
+            self._save_array(
+                self.params.bba2_quad_scan_path,
+                np.column_stack((k1_lq, m2)),
+                archive_dir=self.params.archive_dir,
+            )
             print("First scan finished, quad is back to initial values,", initial_quad)
             return k1_lq, m2
         finally:
@@ -1811,7 +2490,11 @@ class BBAScanThreadBBA2(BBABaseThread):
             print("BPM1 m1=", value * 1e3, "mm")
             if not self._sleep_or_stop(2):
                 return None
-        np.savetxt(BBA2_M1_PATH, np.asarray(samples, dtype=float), fmt="%.6e")
+        self._save_array(
+            self.params.bba2_bpm1_path,
+            np.asarray(samples, dtype=float),
+            archive_dir=self.params.archive_dir,
+        )
         return np.asarray(samples, dtype=float)
 
     def _perform_corrector_scan(self, cor, bpm2, kick_values, angle_values):
@@ -1843,7 +2526,11 @@ class BBAScanThreadBBA2(BBABaseThread):
 
             theta = np.asarray(theta_samples, dtype=float)
             m2 = np.asarray(bpm2_samples, dtype=float)
-            np.savetxt(BBA2_THETAM2_PATH, np.column_stack((theta, m2)), fmt="%.6e")
+            self._save_array(
+                self.params.bba2_corrector_scan_path,
+                np.column_stack((theta, m2)),
+                archive_dir=self.params.archive_dir,
+            )
             print("Second scan finished, corrector is back to initial values.")
             return theta, m2
         finally:

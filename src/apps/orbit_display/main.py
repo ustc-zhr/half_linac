@@ -1,5 +1,6 @@
 import os
 import sys
+import colorsys
 from subprocess import Popen
 from pathlib import Path
 
@@ -19,9 +20,10 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QApplication,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
-    QLayout,
+    QLineEdit,
     QMainWindow,
     QPushButton,
     QSizePolicy,
@@ -45,6 +47,7 @@ APP_DIR = Path(__file__).resolve().parent
 
 
 HEADER_ACTION_HEIGHT = 32
+TRACE_COLOR_GOLDEN_RATIO = 0.618033988749895
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -421,6 +424,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.is_y_running = False
         self._pv_available = False
         self._pv_error = None
+        self._x_trace_count = 0
+        self._y_trace_count = 0
+        self.refresh_interval_ms = 1000
 
         self._configure_window()
         self._configure_controls()
@@ -447,8 +453,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.stop_1.clicked.connect(self.stop1_btn)
         self.start_2.clicked.connect(self.start2_btn)
         self.stop_2.clicked.connect(self.stop2_btn)
-        self.hold_1.toggled.connect(self._refresh_status)
-        self.hold_2.toggled.connect(self._refresh_status)
+        self.hold_1.toggled.connect(lambda checked: self._handle_hold_toggled("x", checked))
+        self.hold_2.toggled.connect(lambda checked: self._handle_hold_toggled("y", checked))
         self.bPMSLineEdit.textChanged.connect(self._refresh_status)
         self.bPMELineEdit.textChanged.connect(self._refresh_status)
         self.bPMSLineEdit_2.textChanged.connect(self._refresh_status)
@@ -476,6 +482,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.frame_3.setMinimumWidth(210)
         self.frame_2.setMaximumWidth(220)
         self.frame_3.setMaximumWidth(220)
+        self.frame_2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self.frame_3.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
         self.verticalLayout.setContentsMargins(12, 12, 12, 12)
         self.verticalLayout_2.setContentsMargins(12, 12, 12, 12)
@@ -530,19 +538,34 @@ class myWindow(QMainWindow, Ui_MainWindow):
             label.setProperty("role", "field")
 
     def _build_plot_panel(self):
-        self.verticalLayout_4.setSizeConstraint(QLayout.SetDefaultConstraint)
-        self.verticalLayout_4.setContentsMargins(0, 0, 0, 0)
-        self.verticalLayout_4.setSpacing(12)
-
-        self._build_summary_panel()
-
+        self.verticalLayout_3.removeWidget(self.frame_2)
+        self.verticalLayout_3.removeWidget(self.frame_3)
         self.verticalLayout_4.removeWidget(self.graphWidget_1)
         self.verticalLayout_4.removeWidget(self.graphWidget_2)
-        self.verticalLayout_4.addWidget(self._build_plot_card("Horizontal Orbit", self.graphWidget_1))
-        self.verticalLayout_4.addWidget(self._build_plot_card("Vertical Orbit", self.graphWidget_2))
 
-        self.horizontalLayout_2.setStretch(0, 2)
-        self.horizontalLayout_2.setStretch(1, 8)
+        while self.horizontalLayout.count():
+            self.horizontalLayout.takeAt(0)
+
+        self.page_layout = QVBoxLayout()
+        self.page_layout.setContentsMargins(0, 0, 0, 0)
+        self.page_layout.setSpacing(12)
+        self.horizontalLayout.addLayout(self.page_layout)
+
+        self.page_layout.addWidget(self._build_summary_panel())
+
+        content_grid = QGridLayout()
+        content_grid.setContentsMargins(0, 0, 0, 0)
+        content_grid.setHorizontalSpacing(12)
+        content_grid.setVerticalSpacing(12)
+        content_grid.addWidget(self.frame_2, 0, 0)
+        content_grid.addWidget(self._build_plot_card("Horizontal Orbit", self.graphWidget_1), 0, 1)
+        content_grid.addWidget(self.frame_3, 1, 0)
+        content_grid.addWidget(self._build_plot_card("Vertical Orbit", self.graphWidget_2), 1, 1)
+        content_grid.setColumnStretch(0, 0)
+        content_grid.setColumnStretch(1, 1)
+        content_grid.setRowStretch(0, 1)
+        content_grid.setRowStretch(1, 1)
+        self.page_layout.addLayout(content_grid, 1)
 
     def _build_summary_panel(self):
         panel = QFrame(self.centralwidget)
@@ -570,6 +593,19 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
         header_layout.addWidget(self.runtime_selector)
 
+        refresh_label = QLabel("Refresh (s)", panel)
+        refresh_label.setProperty("role", "field")
+        header_layout.addWidget(refresh_label)
+
+        self.refresh_interval_edit = QLineEdit(panel)
+        self.refresh_interval_edit.setText("1.0")
+        self.refresh_interval_edit.setFixedWidth(72)
+        self.refresh_interval_edit.setFixedHeight(HEADER_ACTION_HEIGHT)
+        self.refresh_interval_edit.setToolTip("Refresh interval in seconds.")
+        self.refresh_interval_edit.returnPressed.connect(self._apply_refresh_interval)
+        self.refresh_interval_edit.editingFinished.connect(self._apply_refresh_interval)
+        header_layout.addWidget(self.refresh_interval_edit)
+
         self.detail_button = QPushButton("BPM Detail", panel)
         self.detail_button.setObjectName("headerButton")
         self.detail_button.setFixedHeight(HEADER_ACTION_HEIGHT)
@@ -590,6 +626,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.add_item("x", "X ORBIT", "Idle")
         self.status_panel.add_item("y", "Y ORBIT", "Idle")
         self.status_panel.add_item("hold", "HOLD", "Off")
+        self.status_panel.add_item("refresh", "REFRESH", "1.0 s")
         self.status_panel.add_item("view", "BPM VIEW", f"1-{len(self.bpm_ids)} default")
         self.status_panel.finish()
         self.status_panel.apply_theme(self._palette())
@@ -598,7 +635,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._update_theme_toggle_button()
 
         outer_layout.addWidget(self.status_panel)
-        self.verticalLayout_4.addWidget(panel)
+        return panel
 
     def _build_plot_card(self, title_text, plot_widget):
         card = QFrame(self.centralwidget)
@@ -642,6 +679,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _toggle_theme(self):
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
         self._apply_theme()
+        self._reset_trace_sequence("x")
+        self._reset_trace_sequence("y")
         self._refresh_status()
         self._prepare_empty_plot(self.graphWidget_1.canvas.axes, self.graphWidget_1.canvas.figure, "Horizontal Orbit")
         self._prepare_empty_plot(self.graphWidget_2.canvas.axes, self.graphWidget_2.canvas.figure, "Vertical Orbit")
@@ -651,6 +690,95 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _notify(self, message):
         self.statusBar().showMessage(message, 5000)
+
+    def _apply_refresh_interval(self):
+        if not hasattr(self, "refresh_interval_edit"):
+            return
+        raw_text = self.refresh_interval_edit.text().strip()
+        try:
+            interval_s = float(raw_text)
+        except ValueError:
+            self._restore_refresh_interval_text()
+            self._notify("Refresh interval must be numeric seconds.")
+            return
+        if interval_s <= 0:
+            self._restore_refresh_interval_text()
+            self._notify("Refresh interval must be greater than 0 seconds.")
+            return
+
+        new_interval_ms = max(100, int(round(interval_s * 1000)))
+        if new_interval_ms == self.refresh_interval_ms:
+            self._restore_refresh_interval_text()
+            return
+
+        self.refresh_interval_ms = new_interval_ms
+        self._restore_refresh_interval_text()
+        if self.is_x_running:
+            self.timer_1.start(self.refresh_interval_ms)
+        if self.is_y_running:
+            self.timer_2.start(self.refresh_interval_ms)
+        self._notify(f"Orbit refresh interval set to {self._format_refresh_interval()}.")
+        self._refresh_status()
+
+    def _restore_refresh_interval_text(self):
+        if hasattr(self, "refresh_interval_edit"):
+            self.refresh_interval_edit.setText(f"{self.refresh_interval_ms / 1000:.1f}")
+
+    def _format_refresh_interval(self):
+        interval_s = self.refresh_interval_ms / 1000
+        if interval_s.is_integer():
+            return f"{int(interval_s)} s"
+        return f"{interval_s:.1f} s"
+
+    def _handle_hold_toggled(self, plane, checked):
+        del checked
+        self._reset_trace_sequence(plane)
+        self._clear_orbit_plot(plane)
+        self._refresh_status()
+
+    def _reset_trace_sequence(self, plane):
+        if plane == "x":
+            self._x_trace_count = 0
+        elif plane == "y":
+            self._y_trace_count = 0
+
+    def _clear_orbit_plot(self, plane):
+        if plane == "x":
+            self._prepare_empty_plot(
+                self.graphWidget_1.canvas.axes,
+                self.graphWidget_1.canvas.figure,
+                "Horizontal Orbit",
+            )
+        elif plane == "y":
+            self._prepare_empty_plot(
+                self.graphWidget_2.canvas.axes,
+                self.graphWidget_2.canvas.figure,
+                "Vertical Orbit",
+            )
+
+    def _next_trace_color(self, plane):
+        if plane == "x":
+            shot_index = self._x_trace_count
+            self._x_trace_count += 1
+        else:
+            shot_index = self._y_trace_count
+            self._y_trace_count += 1
+        return self._trace_color(shot_index)
+
+    def _trace_color(self, shot_index):
+        hue = (shot_index * TRACE_COLOR_GOLDEN_RATIO) % 1.0
+        if self.current_theme == "dark":
+            lightness = 0.64
+            saturation = 0.78
+        else:
+            lightness = 0.42
+            saturation = 0.76
+        red, green, blue = colorsys.hls_to_rgb(hue, lightness, saturation)
+        return "#{:02x}{:02x}{:02x}".format(
+            int(red * 255),
+            int(green * 255),
+            int(blue * 255),
+        )
 
     def _refresh_status(self):
         self.status_panel.set_item("machine", self.machine_profile.machine.id, "subtle")
@@ -664,12 +792,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         hold_states = []
         if self.hold_1.isChecked():
-            hold_states.append("X")
+            hold_states.append(f"X {self._x_trace_count}")
         if self.hold_2.isChecked():
-            hold_states.append("Y")
+            hold_states.append(f"Y {self._y_trace_count}")
         hold_text = " + ".join(hold_states) if hold_states else "Off"
         hold_tone = "warning" if hold_states else "subtle"
         self.status_panel.set_item("hold", hold_text, hold_tone)
+        self.status_panel.set_item("refresh", self._format_refresh_interval(), "success")
 
         if not self._pv_available:
             self.status_panel.set_item("view", "Offline shell", "warning")
@@ -717,7 +846,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 self._notify("PV connection unavailable. Orbit Display is in offline shell mode.")
 
     def start1_btn(self):
-        self.timer_1.start(1000)
+        if self.hold_1.isChecked():
+            self._reset_trace_sequence("x")
+            self._clear_orbit_plot("x")
+        self._apply_refresh_interval()
+        self.timer_1.start(self.refresh_interval_ms)
         self.is_x_running = True
         self.start_1.setEnabled(False)
         self.stop_1.setEnabled(True)
@@ -733,7 +866,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._refresh_status()
 
     def start2_btn(self):
-        self.timer_2.start(1000)
+        if self.hold_2.isChecked():
+            self._reset_trace_sequence("y")
+            self._clear_orbit_plot("y")
+        self._apply_refresh_interval()
+        self.timer_2.start(self.refresh_interval_ms)
         self.is_y_running = True
         self.start_2.setEnabled(False)
         self.stop_2.setEnabled(True)
@@ -783,8 +920,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ax = self.graphWidget_1.canvas.axes
         fig = self.graphWidget_1.canvas.figure
 
-        if not self.hold_1.isChecked():
+        hold_trace = self.hold_1.isChecked()
+        if not hold_trace:
             ax.clear()
+            self._reset_trace_sequence("x")
 
         self._style_plot_axes(ax, fig)
 
@@ -814,12 +953,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
             pass
 
         x = np.linspace(1, len(pvl_val), len(pvl_val))
+        trace_color = self._next_trace_color("x") if hold_trace else palette["orbit_x"]
         ax.plot(
             x,
             pvl_val,
             "-o",
-            color=palette["orbit_x"],
-            markerfacecolor=palette["orbit_x"],
+            color=trace_color,
+            markerfacecolor=trace_color,
             markeredgecolor=palette["plot_bg"],
             markersize=4,
             linewidth=1.5,
@@ -827,6 +967,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Cx (mm)", fontweight="bold")
         self.graphWidget_1.canvas.draw()
+        self._refresh_status()
 
     def plotorbit_y(self):
         self.init_pv()
@@ -836,8 +977,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ax = self.graphWidget_2.canvas.axes
         fig = self.graphWidget_2.canvas.figure
 
-        if not self.hold_2.isChecked():
+        hold_trace = self.hold_2.isChecked()
+        if not hold_trace:
             ax.clear()
+            self._reset_trace_sequence("y")
 
         self._style_plot_axes(ax, fig)
 
@@ -867,12 +1010,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
             pass
 
         x = np.linspace(1, len(pvl_val), len(pvl_val))
+        trace_color = self._next_trace_color("y") if hold_trace else palette["orbit_y"]
         ax.plot(
             x,
             pvl_val,
             "-o",
-            color=palette["orbit_y"],
-            markerfacecolor=palette["orbit_y"],
+            color=trace_color,
+            markerfacecolor=trace_color,
             markeredgecolor=palette["plot_bg"],
             markersize=4,
             linewidth=1.5,
@@ -880,6 +1024,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Cy (mm)", fontweight="bold")
         self.graphWidget_2.canvas.draw()
+        self._refresh_status()
 
     def start_bpmvalue_btn(self):
         self._notify("Opening BPM detail window.")

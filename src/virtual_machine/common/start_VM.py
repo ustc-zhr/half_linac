@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -26,6 +27,7 @@ from half_linac.src.shared.runtime_state import ensure_runtime_state, read_runti
 
 
 JSON_POLL_INTERVAL_S = 2.0
+MISSING_LIBRARY_MARKER = "error while loading shared libraries:"
 
 _stop_requested = False
 
@@ -36,11 +38,31 @@ def _handle_shutdown_signal(signum, frame):
 
 
 def _run_elegant(elegant_dir):
-    subprocess.run(
+    result = subprocess.run(
         ["./one"],
         cwd=str(elegant_dir),
-        check=True,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode == 0:
+        return
+
+    elegant_path = shutil.which("elegant") or "elegant"
+    message = f"elegant failed with exit code {result.returncode}."
+    if MISSING_LIBRARY_MARKER in result.stderr:
+        missing_detail = result.stderr.strip().split(MISSING_LIBRARY_MARKER, 1)[1].strip()
+        message = (
+            f"{message} Missing runtime library for {elegant_path}: {missing_detail}\n"
+            "Install the matching GSL runtime library or rebuild elegant against the GSL "
+            "version available in this environment."
+        )
+    raise RuntimeError(message)
 
 
 def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
@@ -106,7 +128,11 @@ def main():
         return 1
     last_modified = jsonpath.stat().st_mtime
 
-    _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath)
+    try:
+        _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath)
+    except Exception as exc:
+        print(f"failed to start VM runtime: {exc}", file=sys.stderr)
+        return 1
     print("VM is waiting for lattice changes.")
 
     while not _stop_requested:

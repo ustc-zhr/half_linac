@@ -28,7 +28,8 @@
       "bpm1": "BPM01",
       "bpm2": "BPM02",
       "analysis": {
-        "energy_mev": 100.0
+        "energy_mev": 100.0,
+        "quad_leff": 0.15
       }
     }
   ]

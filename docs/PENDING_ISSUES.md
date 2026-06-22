@@ -156,3 +156,22 @@
   - Later, make `Recalculate` use the GUI scan-point table as its primary source.
   - Keep timestamped archives as the long-term storage and load/review path.
   - After table-driven recalculation is complete, downgrade `scanResults.txt` to a compatibility artifact or remove it.
+
+### 7. Orbit Correct Global Damping Controls
+
+- Status: open
+- Priority: low
+- Background:
+  - `orbit_correct` global correction uses the active response matrix and SVD pseudo-inverse.
+  - The global path now supports selected BPM rows with all correctors participating.
+  - Current exposed global controls are `Global Max Iter`, `Corrector Limit`, and the active response matrix selection.
+  - The SVD singular-value cutoff is still a fixed code value.
+- Problem:
+  - If global correction overshoots, oscillates, or becomes sensitive to poorly conditioned response matrices, operators do not yet have dedicated global damping controls.
+  - The existing `1-to-1 Gain` and `1-to-1 Max Step (%)` controls are intentionally scoped to one-to-one correction and should not be reused implicitly for global correction.
+- Follow-up:
+  - Add independent `Global Gain` for scaling the pseudo-inverse correction vector.
+  - Add independent `Global Max Step (%)` to limit each corrector's per-iteration delta.
+  - Consider exposing `SVD Min Singular Value` or a small preset selector for singular-value truncation.
+  - Keep defaults equivalent to current behavior until VM tests show a need to tune them.
+  - Validate with IRFEL VM global correction before considering any real-mode use.

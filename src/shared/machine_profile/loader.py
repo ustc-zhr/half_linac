@@ -170,6 +170,12 @@ def load_orbit_workflow(profile: MachineProfile) -> OrbitWorkflowConfig:
         bpms=tuple(_expect_string_list(workflow.get("bpms"), "workflows.orbit.bpms")),
         xcors=tuple(_expect_string_list(workflow.get("xcors"), "workflows.orbit.xcors")),
         ycors=tuple(_expect_string_list(workflow.get("ycors"), "workflows.orbit.ycors")),
+        default_target_bpms=tuple(
+            _expect_optional_string_list(
+                workflow.get("default_target_bpms"),
+                "workflows.orbit.default_target_bpms",
+            )
+        ),
     )
 
 
@@ -1273,6 +1279,7 @@ def _parse_bba_analysis_config(raw_analysis: Mapping[str, Any]) -> BBAAnalysisCo
         bx_formula=_optional_string(raw_analysis, "bx_formula"),
         leff_by=_optional_float(raw_analysis, "leff_by"),
         leff_bx=_optional_float(raw_analysis, "leff_bx"),
+        quad_leff=_optional_float(raw_analysis, "quad_leff"),
     )
 
 
