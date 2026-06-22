@@ -861,12 +861,22 @@ class myWindow(QWidget, Ui_Form):
         form = QGridLayout()
         form.setHorizontalSpacing(8)
         form.setVerticalSpacing(6)
+        self.bba2_quad_leff_edit = QLineEdit(self.frame_3)
 
         rows = [
             ("Quad", self.comboBox_7, "From", self.lineEdit_14, "To", self.lineEdit_17, "Steps", self.lineEdit_16),
             ("Corrector", self.comboBox_9, "From", self.lineEdit_11, "To", self.lineEdit_13, "Steps", self.lineEdit_12),
             ("1st BPM", self.comboBox_8, "2nd BPM", self.comboBox_6, "BPM1 samples", self.lineEdit_22, "", None),
-            ("Energy@corrector", self.lineEdit_20, "Scan freq", self.lineEdit_15, "Samples/step", self.lineEdit_9, "", None),
+            (
+                "Energy@corrector",
+                self.lineEdit_20,
+                "Scan freq",
+                self.lineEdit_15,
+                "Samples/step",
+                self.lineEdit_9,
+                "Quad Leff (m)",
+                self.bba2_quad_leff_edit,
+            ),
         ]
         for row, items in enumerate(rows):
             for col in range(0, len(items), 2):
@@ -879,7 +889,7 @@ class myWindow(QWidget, Ui_Form):
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 form.addWidget(widget, row, col * 2 + 1)
 
-        for column in (1, 3, 5):
+        for column in (1, 3, 5, 7):
             form.setColumnStretch(column, 1)
 
         layout.addLayout(form)
@@ -894,13 +904,11 @@ class myWindow(QWidget, Ui_Form):
         self.lineEdit_24.setParent(self.frame_3)
         self.lineEdit_25.setParent(self.frame_3)
         self.lineEdit_26.setParent(self.frame_3)
-        self.bba2_quad_leff_edit = QLineEdit(self.frame_3)
         for widget in (
             self.lineEdit_23,
             self.lineEdit_24,
             self.lineEdit_25,
             self.lineEdit_26,
-            self.bba2_quad_leff_edit,
         ):
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
@@ -912,8 +920,6 @@ class myWindow(QWidget, Ui_Form):
         model_grid.addWidget(self.lineEdit_25, 2, 1)
         model_grid.addWidget(self._make_field_label("Leff Bx (m)", self.frame_3), 2, 2)
         model_grid.addWidget(self.lineEdit_26, 2, 3)
-        model_grid.addWidget(self._make_field_label("Quad Leff (m)", self.frame_3), 3, 0)
-        model_grid.addWidget(self.bba2_quad_leff_edit, 3, 1)
         model_grid.setColumnStretch(1, 1)
         model_grid.setColumnStretch(3, 1)
         layout.addLayout(model_grid)
