@@ -45,3 +45,9 @@ echo "Rebuilding softIOC in $IOC_DIR"
 echo "Using EPICS_BASE=$EPICS_BASE"
 
 make -C "$IOC_DIR" rebuild
+
+ST_CMD="$IOC_DIR/iocBoot/ioctarget/st.cmd"
+if [[ -f "$ST_CMD" ]]; then
+  chmod +x "$ST_CMD"
+  echo "Ensured IOC startup script is executable: $ST_CMD"
+fi
