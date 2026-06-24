@@ -500,6 +500,9 @@
     "QT02": {
       "k1": "IN:MG:L002:QUAD:QT02:K1"
     },
+    "QT04": {
+      "k1": "IN:MG:L002:QUAD:QT04:K1"
+    },
     "QE01": {
       "k1": "HALF:IN:QUAD:QE01:K1"
     },

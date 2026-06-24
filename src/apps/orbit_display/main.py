@@ -37,10 +37,6 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     resolve_channel,
 )
-from half_linac.src.shared.machine_profile.runtime_selector import (
-    RuntimeSelectorWidget,
-    request_runtime_restart,
-)
 from gui import Ui_MainWindow
 
 APP_DIR = Path(__file__).resolve().parent
@@ -585,13 +581,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        self.runtime_selector = RuntimeSelectorWidget(
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.control_backend,
-            parent=panel,
-        )
-        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
-        header_layout.addWidget(self.runtime_selector)
+        for text in (
+            f"Machine: {self.machine_profile.machine.display_name}",
+            f"Backend: {self.control_backend.upper()}",
+        ):
+            runtime_label = QLabel(text, panel)
+            runtime_label.setProperty("role", "field")
+            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            header_layout.addWidget(runtime_label)
 
         refresh_label = QLabel("Refresh (s)", panel)
         refresh_label.setProperty("role", "field")
@@ -1033,17 +1030,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             cwd=str(APP_DIR),
             shell=False,
         )
-
-    def _apply_runtime_selection(self, machine_id, control_backend):
-        request_runtime_restart(
-            self,
-            app_label="Orbit Display",
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.control_backend,
-            machine_id=machine_id,
-            control_backend=control_backend,
-        )
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

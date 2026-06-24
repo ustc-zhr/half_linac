@@ -16,8 +16,8 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from typing import List, Optional, Tuple
-from epics import caput_many, PV, caget_many
+from typing import List, Optional
+from epics import PV, caget_many, caput
 from scipy.linalg import svd
 from half_linac.src.shared.machine_profile import (
     load_app_context,
@@ -26,7 +26,7 @@ from half_linac.src.shared.machine_profile import (
 )
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     CORRECT_LOG_PATH,
-    RESPONSE_MATRIX_PATH,
+    display_unit,
     load_orbit_runtime_settings,
     resolve_active_response_matrix,
 )
@@ -104,7 +104,7 @@ class OrbitCorrector:
         self.response_matrix_path: Path | None = None
         self.corrector_state_path = Path(self.orbit_runtime["corrector_state_path"])
         self.profile_max_value = self.orbit_runtime["corrector_upperlimit"]
-        self.max_value_unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        self.max_value_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         self.max_value = self._select_corrector_limit(corrector_limit)
         self.d_value = self._select_response_kick(response_kick)
         self.global_max_iter = self._select_positive_int(
@@ -231,14 +231,6 @@ class OrbitCorrector:
         if missing:
             raise ValueError(f"Unknown {plane} corrector(s): {', '.join(missing)}")
         return selected, [index_map[name] for name in selected]
-        
-        
-        
-        # PV连接
-        self.pvBPMx: List[PV] = []
-        self.pvBPMy: List[PV] = []
-        self.pvCORx: List[PV] = []
-        self.pvCORy: List[PV] = []
 
     def _bpm_pv(self, bpm_name: str, plane: str) -> str:
         return resolve_channel(self.app_context, bpm_name, plane)
@@ -262,6 +254,54 @@ class OrbitCorrector:
 
     def _require_write_allowed(self, operation: str) -> None:
         require_workflow_write_allowed(self.app_context, "orbit", operation)
+
+    @staticmethod
+    def _validate_values(values, expected_count: int, label: str) -> np.ndarray:
+        if values is None:
+            raise ValueError(f"Failed to read {label}.")
+        if len(values) != expected_count:
+            raise ValueError(
+                f"{label} read count mismatch: got {len(values)}, expected {expected_count}."
+            )
+        if any(value is None for value in values):
+            raise ValueError(f"{label} contains unreadable PV values.")
+        array = np.asarray(values, dtype=float)
+        if not np.all(np.isfinite(array)):
+            raise ValueError(f"{label} contains NaN or Inf.")
+        return array
+
+    def _read_many_pvs(self, pv_names: List[str], label: str) -> np.ndarray:
+        return self._validate_values(caget_many(pv_names), len(pv_names), label)
+
+    @staticmethod
+    def _read_pv(pv: PV, label: str) -> float:
+        value = pv.get()
+        if value is None:
+            raise ValueError(f"Failed to read {label}: {pv.pvname}")
+        value = float(value)
+        if not np.isfinite(value):
+            raise ValueError(f"{label} returned NaN or Inf: {pv.pvname}")
+        return value
+
+    @staticmethod
+    def _write_pv(pv: PV, value: float, label: str) -> None:
+        status = pv.put(float(value), wait=True, timeout=2.0)
+        if status is False:
+            raise ValueError(f"Failed to write {label}: {pv.pvname} = {value:g}")
+
+    @staticmethod
+    def _write_many_pvs(pv_names: List[str], values, label: str) -> None:
+        array = np.asarray(values, dtype=float)
+        if len(pv_names) != len(array):
+            raise ValueError(
+                f"{label} write count mismatch: got {len(array)} values for {len(pv_names)} PVs."
+            )
+        if not np.all(np.isfinite(array)):
+            raise ValueError(f"{label} write values contain NaN or Inf.")
+        for pv_name, value in zip(pv_names, array):
+            status = caput(pv_name, float(value), wait=True, timeout=2.0)
+            if not status:
+                raise ValueError(f"Failed to write {label}: {pv_name} = {value:g}")
     
     
     def init_BPM_pv(self) -> None:
@@ -277,7 +317,6 @@ class OrbitCorrector:
             self.pvBPMy.append(PV(bpm_y_pv))
             self.pvnameBPMx.append(bpm_x_pv)
             self.pvnameBPMy.append(bpm_y_pv)
-        # print('BPMxPVNAME:', self.pvnameBPMx)
 
     def init_COR_pv(self) -> None:
         """初始化校正铁的PV连接"""
@@ -298,30 +337,25 @@ class OrbitCorrector:
         all_pvname_corx = [self._cor_pv(corx) for corx in self.cor_x_list_all]
         all_pvname_cory = [self._cor_pv(cory) for cory in self.cor_y_list_all]
 
-        hcor_vals = caget_many(all_pvname_corx)
-        vcor_vals = caget_many(all_pvname_cory)
+        expected_count = len(self.cor_x_list_all)
+        hcor_array = self._validate_values(
+            caget_many(all_pvname_corx),
+            expected_count,
+            "X corrector backup",
+        )
+        vcor_array = self._validate_values(
+            caget_many(all_pvname_cory),
+            expected_count,
+            "Y corrector backup",
+        )
         
         self.corrector_state_path.parent.mkdir(parents=True, exist_ok=True)
         with self.corrector_state_path.open('w', encoding='utf-8') as file:
-            for item1, item2 in zip(hcor_vals, vcor_vals):
+            for item1, item2 in zip(hcor_array, vcor_array):
                 file.write(f"{item1}\t{item2}\n")
 
 
 
-        
-    
-       
-    # def _get_avg_readings(self, pv_groups: List[List[PV]]) -> List[float]:
-    #     """同时获取多组PV的多次采样平均值"""
-    #     results = [0.0] * len(pv_groups)
-        
-    #     for _ in range(self.samples_perstep):
-    #         time.sleep(self.sample_interval)
-    #         for i, pvs in enumerate(pv_groups):
-    #             results[i] += sum(pv.get() for pv in pvs)
-        
-    #     return [r / (len(pvs) * self.samples_perstep) for r, pvs in zip(results, pv_groups)]
-    
     def _get_avg_readings(self, pv_list: List[PV]) -> List[float]:
         """同时获取多个PV的多次采样平均值"""
         if not pv_list or self.samples_perstep is None or self.samples_perstep <= 0:
@@ -332,7 +366,7 @@ class OrbitCorrector:
         for _ in range(self.samples_perstep):
             time.sleep(self.sample_interval)
             for i, pv in enumerate(pv_list):
-                results[i] += pv.get() 
+                results[i] += self._read_pv(pv, "orbit correction sample")
         
         return [r / self.samples_perstep for r in results]
 
@@ -373,15 +407,15 @@ class OrbitCorrector:
             
             # 微调并测量响应。X/Y corrector 分开 kick，避免交叉影响响应系数。
             try:
-                self.pvCORx[j].put(hcorrVal + self.d_value)
+                self._write_pv(self.pvCORx[j], hcorrVal + self.d_value, "X corrector response kick")
                 xbpm_val1 = self._get_avg_readings([self.pvBPMx[j]])[0]
-                self.pvCORx[j].put(hcorrVal)
+                self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
 
-                self.pvCORy[j].put(vcorrVal + self.d_value)
+                self._write_pv(self.pvCORy[j], vcorrVal + self.d_value, "Y corrector response kick")
                 ybpm_val1 = self._get_avg_readings([self.pvBPMy[j]])[0]
             finally:
-                self.pvCORx[j].put(hcorrVal)
-                self.pvCORy[j].put(vcorrVal)
+                self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
+                self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
             
             # cal response coefficient
             Rx = (xbpm_val1 - xbpm_val0) / self.d_value
@@ -389,8 +423,8 @@ class OrbitCorrector:
             logger.info(f"response coefficient: Rx={Rx:.3f}, Ry={Ry:.3f}")
 
             if abs(Rx) < MIN_RESPONSE or abs(Ry) < MIN_RESPONSE:
-                self.pvCORx[j].put(hcorrVal)
-                self.pvCORy[j].put(vcorrVal)
+                self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
+                self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
                 logger.warning(
                     "%s response is too small for stable one-to-one correction: Rx=%s, Ry=%s",
                     self.bpm_list_target[j],
@@ -455,8 +489,8 @@ class OrbitCorrector:
                 previous_pair = (hcorrVal, vcorrVal)
                 hcorrVal = next_hcorr
                 vcorrVal = next_vcorr
-                self.pvCORx[j].put(hcorrVal)
-                self.pvCORy[j].put(vcorrVal)
+                self._write_pv(self.pvCORx[j], hcorrVal, "X corrector correction")
+                self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector correction")
                 time.sleep(self.sample_interval)
 
             if not converged:
@@ -509,29 +543,12 @@ class OrbitCorrector:
                 failures.append(f"{bpm} final error X={x_err:.3e}, Y={y_err:.3e}")
         return failures
 
-
-    def _load_response_matrix(self) -> Tuple[np.ndarray, np.ndarray]:
-        """加载并计算响应矩阵的逆矩阵"""
-        try:
-            RM = self._load_valid_response_matrix()
-            logger.debug("Loaded response matrix from %s with shape %s", self.response_matrix_path, RM.shape)
-            ORM_x = RM[0:self.N_BPM, 0:self.N_COR]
-            ORM_y = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
-            return np.linalg.inv(ORM_x), np.linalg.inv(ORM_y)
-        except Exception as e:
-            logger.error(f"加载响应矩阵失败: {e}")
-            raise
-
     def _expected_response_shape(self) -> tuple[int, int]:
         return (2 * self.N_BPM, 2 * self.N_COR)
 
     def _load_valid_response_matrix(self) -> np.ndarray:
         expected_shape = self._expected_response_shape()
-        legacy_path = RESPONSE_MATRIX_PATH if self.machine_profile.machine.id == "half" else None
-        matrix_path = resolve_active_response_matrix(
-            self.app_context,
-            legacy_matrix_path=legacy_path,
-        )
+        matrix_path = resolve_active_response_matrix(self.app_context)
         self.response_matrix_path = matrix_path
         matrix = np.loadtxt(matrix_path)
         if matrix.shape != expected_shape:
@@ -583,16 +600,13 @@ class OrbitCorrector:
         if not pv_list or self.samples_perstep <= 0:
             return [0.0] * len(pv_list)
             
-        results = [0.0] * len(pv_list)
+        results = np.zeros(len(pv_list), dtype=float)
         
         for _ in range(self.samples_perstep):
             time.sleep(self.sample_interval)
-            readings = caget_many(pv_list)
-            # print(readings)
-            if readings:  # 确保readings不是None
-                results = [r1 + r2 for r1, r2 in zip(results, readings)]
+            results += self._read_many_pvs(pv_list, "orbit readings")
         
-        return [r / self.samples_perstep for r in results]
+        return list(results / self.samples_perstep)
      
     def correct_global(self, max_iter: int | None = None) -> bool:
         """全局校正方法"""
@@ -600,8 +614,6 @@ class OrbitCorrector:
         self._require_targets()
         max_iter = self.global_max_iter if max_iter is None else max_iter
 
-        # 加载响应矩阵
-        # self.ORMx_n, self.ORMy_n = self._load_response_matrix()
         logger.info("global correction uses SVD pseudo-inverse")
         self._compute_svd()
         pvname_corx = [self._cor_pv(cor) for cor in self.global_xcor_list]
@@ -613,63 +625,86 @@ class OrbitCorrector:
             length_half = len(xy_vals) // 2
             x_vals = xy_vals[:length_half]
             y_vals = xy_vals[length_half:]
-            # print("获取当前x轨道数据", x_vals)
             
             # 计算误差
             x_err = [tx - x for tx, x in zip(self.target_BPMx_values, x_vals)]
             y_err = [ty - y for ty, y in zip(self.target_BPMy_values, y_vals)]
-            # print("获取x目标轨道差距", x_err)
             
             # 检查收敛
-            max_x_err = max(abs(e) for e in x_err)
-            max_y_err = max(abs(e) for e in y_err)
+            x_err_abs = [abs(e) for e in x_err]
+            y_err_abs = [abs(e) for e in y_err]
+            max_x_err = max(x_err_abs)
+            max_y_err = max(y_err_abs)
+            max_x_err_index = int(np.argmax(x_err_abs))
+            max_y_err_index = int(np.argmax(y_err_abs))
+            x_abs = [abs(x) for x in x_vals]
+            y_abs = [abs(y) for y in y_vals]
+            max_x_abs_index = int(np.argmax(x_abs))
+            max_y_abs_index = int(np.argmax(y_abs))
             
             logger.info(f"iteration {iteration}: max error X={max_x_err:.3e} , Y={max_y_err:.3e}")
+            logger.info(
+                "iteration %s: max target error X=%s %.3e m (%.3f mm), "
+                "Y=%s %.3e m (%.3f mm)",
+                iteration,
+                self.bpm_list_target[max_x_err_index],
+                max_x_err,
+                max_x_err * 1e3,
+                self.bpm_list_target[max_y_err_index],
+                max_y_err,
+                max_y_err * 1e3,
+            )
+            logger.info(
+                "iteration %s: max absolute orbit X=%s %.3e m (%.3f mm), "
+                "Y=%s %.3e m (%.3f mm)",
+                iteration,
+                self.bpm_list_target[max_x_abs_index],
+                x_vals[max_x_abs_index],
+                x_vals[max_x_abs_index] * 1e3,
+                self.bpm_list_target[max_y_abs_index],
+                y_vals[max_y_abs_index],
+                y_vals[max_y_abs_index] * 1e3,
+            )
 
             if max_x_err < self.cor_accuracy and max_y_err < self.cor_accuracy:
                 logger.info(f"correction is finished at iteration: {iteration}")
                 return True
             
-            # 计算校正量
-            # delt_corrh = np.dot(self.ORMx_n, np.array(x_err))
-            # delt_corrv = np.dot(self.ORMy_n, np.array(y_err))
             delt_corrh = np.dot(self.pseudo_inverse_x, np.array(x_err))
             delt_corrv = np.dot(self.pseudo_inverse_y, np.array(y_err))
 
 
             # 应用校正
-            hcor_vals = caget_many(pvname_corx)
-            vcor_vals = caget_many(pvname_cory)
+            hcor_vals = self._read_many_pvs(pvname_corx, "X corrector setpoints")
+            vcor_vals = self._read_many_pvs(pvname_cory, "Y corrector setpoints")
             new_hcor = np.clip(
-                np.array(hcor_vals) + delt_corrh,
+                hcor_vals + delt_corrh,
                 -1*self.max_value, 1*self.max_value
             )
             new_vcor = np.clip(
-                np.array(vcor_vals) + delt_corrv,
+                vcor_vals + delt_corrv,
                 -1*self.max_value, 1*self.max_value
             )
+            saturated_x = int(np.count_nonzero(np.isclose(np.abs(new_hcor), self.max_value)))
+            saturated_y = int(np.count_nonzero(np.isclose(np.abs(new_vcor), self.max_value)))
+            if saturated_x or saturated_y:
+                logger.warning(
+                    "iteration %s: corrector limit reached: X %s/%s, Y %s/%s at +/-%.3e %s",
+                    iteration,
+                    saturated_x,
+                    len(new_hcor),
+                    saturated_y,
+                    len(new_vcor),
+                    self.max_value,
+                    self.max_value_unit,
+                )
             
-            caput_many(pvname_corx, new_hcor)
-            caput_many(pvname_cory, new_vcor)
-
-
-            # 检查是否达到限值
-            # if (np.abs(new_hcor) >= self.max_value*0.99).all() and \
-            #    (np.abs(new_vcor) >= self.max_value*0.99).all():
-            #     logger.warning("水平和垂直校正铁均达到调节限值")
-            #     return False
+            self._write_many_pvs(pvname_corx, new_hcor, "X corrector setpoints")
+            self._write_many_pvs(pvname_cory, new_vcor, "Y corrector setpoints")
         
         logger.info(f"reach the max iteration: {max_iter}")
         return False
     
-    # def reset_cor(self) -> None:
-    #     """重置所有校正铁为零"""
-    #     values = [0.0] * len(self.pvCORx)
-    #     caput_many([pv.pvname for pv in self.pvCORx], values)
-    #     caput_many([pv.pvname for pv in self.pvCORy], values)
-    #     logger.info("所有校正铁已重置为零")
-
-
     def reset_cor(self) -> None:
         """Reset the selected correctors, or all of them if no selection is provided."""
         self._require_write_allowed("Corrector reset")
@@ -679,8 +714,8 @@ class OrbitCorrector:
         pv_corx = [self._cor_pv(name) for name in cor_x_list]
         pv_cory = [self._cor_pv(name) for name in cor_y_list]
         values = [0.0] * len(pv_corx)
-        caput_many(pv_corx, values)
-        caput_many(pv_cory, values) 
+        self._write_many_pvs(pv_corx, values, "X corrector reset")
+        self._write_many_pvs(pv_cory, values, "Y corrector reset") 
 
     def cor_recover(self) -> None:
         """recvoer all corrector to the value before cor"""
@@ -692,6 +727,13 @@ class OrbitCorrector:
         cor = np.loadtxt(cor_path, ndmin=2)
         if cor.shape[1] != 2:
             raise ValueError(f"Unexpected corrector backup shape: {cor.shape}")
+        expected_count = len(self.cor_x_list_all)
+        if cor.shape[0] != expected_count:
+            raise ValueError(
+                f"Corrector backup row count mismatch: got {cor.shape[0]}, expected {expected_count}."
+            )
+        if not np.all(np.isfinite(cor)):
+            raise ValueError(f"Corrector backup contains NaN or Inf: {cor_path}")
 
         corx = cor[:, 0]
         cory = cor[:, 1]
@@ -705,8 +747,8 @@ class OrbitCorrector:
         for j in self.cor_y_list_all:  
             pv_CORy = self._cor_pv(j)
             self.pvCORy.append(pv_CORy)
-        caput_many(self.pvCORx, corx)
-        caput_many(self.pvCORy, cory) 
+        self._write_many_pvs(self.pvCORx, corx, "X corrector recover")
+        self._write_many_pvs(self.pvCORy, cory, "Y corrector recover") 
 
 if __name__ == '__main__':
     try:

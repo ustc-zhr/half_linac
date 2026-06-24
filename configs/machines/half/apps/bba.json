@@ -4,32 +4,32 @@
       "id": "bba1_default",
       "family": "standard",
       "plane": "X",
-      "quad": "QL03",
-      "corr": "HC01",
-      "bpm1": "BPM03",
-      "bpm2": "BPM07",
+      "quad": "QT04",
+      "corr": "XC21",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22",
       "scan": {
         "corr_from": -0.001,
         "corr_end": 0.001,
         "corr_steps": 5,
-        "quad_from": 45,
-        "quad_end": 60,
+        "quad_from": -5,
+        "quad_end": 5,
         "quad_steps": 5,
         "samples": 1,
-        "sleeptime": 6
+        "sleeptime": 8
       }
     },
     {
       "id": "bba2_default",
       "family": "bba2",
       "plane": "X",
-      "quad": "QT01",
-      "corr": "XC21",
-      "bpm1": "BPM20",
-      "bpm2": "BPM21",
+      "quad": "QT04",
+      "corr": "XC22",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22",
       "scan": {
-        "quad_from": -3,
-        "quad_end": 0,
+        "quad_from": -5,
+        "quad_end": 5,
         "quad_steps": 5,
         "corr_from": -0.001,
         "corr_end": 0.001,
@@ -47,5 +47,11 @@
         "quad_leff": 0.15
       }
     }
-  ]
+  ],
+  "bba1": {
+    "default_preset": "bba1_default"
+  },
+    "bba2": {
+    "default_preset": "bba2_default"
+  }
 }

@@ -1,6 +1,6 @@
 &run_setup
     lattice = esa.lte,
-    use_beamline = USEDLINE,
+    use_beamline = ESAlocal,
     combine_bunch_statistics = 0,
     default_order = 3,
     random_number_seed = 9876543210,

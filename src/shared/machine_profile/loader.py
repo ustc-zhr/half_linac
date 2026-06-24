@@ -93,6 +93,7 @@ class VirtualMachineUsedlineWorkflow:
     default_usedline: str
     local_segments: tuple[VirtualMachineLocalSegment, ...]
     default_segment_id: str
+    segment_wait_s: float
 
 
 def load_profile(machine_id: str | None = None) -> MachineProfile:
@@ -344,12 +345,19 @@ def _parse_virtual_machine_usedline_workflow(
         raise MachineProfileError(
             "workflows.virtual_machine.default_segment_id must belong to local_segments."
         )
+    segment_wait_s = _optional_nonnegative_float(
+        workflow,
+        "segment_wait_s",
+        default=8.0,
+        location="workflows.virtual_machine.segment_wait_s",
+    )
 
     return VirtualMachineUsedlineWorkflow(
         predefined_usedlines=predefined,
         default_usedline=default_usedline,
         local_segments=local_segments,
         default_segment_id=default_segment_id,
+        segment_wait_s=segment_wait_s,
     )
 
 
@@ -487,6 +495,12 @@ def _parse_legacy_virtual_machine_workflow(
         default_usedline=main_line_id,
         local_segments=(local_segment,),
         default_segment_id=local_segment.id,
+        segment_wait_s=_optional_nonnegative_float(
+            workflow,
+            "segment_wait_s",
+            default=8.0,
+            location="workflows.virtual_machine.segment_wait_s",
+        ),
     )
 
 
@@ -517,6 +531,7 @@ def _infer_virtual_machine_usedline_workflow(profile: MachineProfile) -> Virtual
         default_usedline=main_line_id,
         local_segments=(local_segment,),
         default_segment_id=local_segment.id,
+        segment_wait_s=8.0,
     )
 
 
@@ -537,6 +552,23 @@ def _require_unique_ids(values: tuple[str, ...], location: str) -> None:
         raise MachineProfileError(
             f"{location} contains duplicate id(s): {', '.join(sorted(set(duplicates)))}."
         )
+
+
+def _optional_nonnegative_float(
+    raw_mapping: Mapping[str, Any],
+    key: str,
+    *,
+    default: float,
+    location: str,
+) -> float:
+    raw_value = raw_mapping.get(key, default)
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise MachineProfileError(f"{location} must be numeric.") from exc
+    if value < 0:
+        raise MachineProfileError(f"{location} must be >= 0.")
+    return value
 
 
 def repo_root() -> Path:

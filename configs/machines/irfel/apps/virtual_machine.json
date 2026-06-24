@@ -17,6 +17,7 @@
     }
   ],
   "default_usedline": "ALL_MAIN",
+  "segment_wait_s": 3.0,
   "local_segments": [
     {
       "id": "main_segment",

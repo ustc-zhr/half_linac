@@ -42,32 +42,17 @@ class ElegantBackendTests(unittest.TestCase):
         self.lattice_file = self.elegant_dir / "lattice_ini.lte"
         self.ele_file = self.elegant_dir / "one_ini.ele"
 
-    def test_shared_runtime_state_matches_half_wrapper_except_ap(self):
+    def test_shared_runtime_state_matches_half_wrapper(self):
         shared_parser = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN")
         compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL_MAIN")
 
         shared_state = shared_parser.build_runtime_state()
         compat_state = compat_parser.build_runtime_state()
 
-        self.assertEqual(shared_state["control"], compat_state["control"])
-        self.assertEqual(shared_state["usedline"], compat_state["usedline"])
-
-        stripped_compat_lattice = {
-            element_id: {
-                key: value
-                for key, value in element.items()
-                if key != "AP"
-            }
-            for element_id, element in compat_state["lattice"].items()
-        }
-        self.assertEqual(shared_state["lattice"], stripped_compat_lattice)
-        self.assertTrue(
-            any("AP" in element for element in compat_state["lattice"].values()),
-            "HALF compatibility wrapper should still provide AP fields.",
-        )
+        self.assertEqual(shared_state, compat_state)
         self.assertFalse(
-            any("AP" in element for element in shared_state["lattice"].values()),
-            "Shared elegant backend must stay free of HALF-specific AP fields.",
+            any("AP" in element for element in compat_state["lattice"].values()),
+            "HALF compatibility wrapper should no longer inject AP fields.",
         )
 
     def test_json_to_lte_ele_matches_half_wrapper_output(self):

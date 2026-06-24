@@ -43,10 +43,6 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
     resolve_flag_pixel_geometry,
 )
-from half_linac.src.shared.machine_profile.runtime_selector import (
-    RuntimeSelectorWidget,
-    request_runtime_restart,
-)
 
 
 HEADER_ACTION_HEIGHT = 32
@@ -470,13 +466,14 @@ class myWindow(QWidget, Ui_Form):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        self.runtime_selector = RuntimeSelectorWidget(
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.control_backend,
-            parent=panel,
-        )
-        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
-        header_layout.addWidget(self.runtime_selector)
+        for text in (
+            f"Machine: {self.machine_profile.machine.display_name}",
+            f"Backend: {self.control_backend.upper()}",
+        ):
+            runtime_label = QLabel(text, panel)
+            runtime_label.setProperty("role", "field")
+            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            header_layout.addWidget(runtime_label)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -797,16 +794,6 @@ class myWindow(QWidget, Ui_Form):
                 self._notify(message)
             return False
         return True
-
-    def _apply_runtime_selection(self, machine_id, control_backend):
-        request_runtime_restart(
-            self,
-            app_label="Beam Monitor",
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.control_backend,
-            machine_id=machine_id,
-            control_backend=control_backend,
-        )
 
     def _draw_placeholder_plot(self, title):
         palette = self._palette()

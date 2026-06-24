@@ -1,17 +1,10 @@
 from __future__ import annotations
-
-import copy
 from pathlib import Path
 
-import half_linac.runtime_config as st
 from half_linac.src.shared.elegant_backend import EleParser, ElegantParser
 from half_linac.src.shared.machine_profile import resolve_machine_runtime
 from half_linac.src.shared.runtime_state import read_runtime_state, write_runtime_state
 from half_linac.src.virtual_machine.half_elegant.vm_publish import HalfVmPublisher
-
-
-BEND_TYPES = {"CSRCSBEND", "CSBEND", "BEND", "SBEN", "SBEND"}
-COR_TYPES = {"HKICK", "VKICK"}
 
 
 class elegant_parser:
@@ -81,10 +74,7 @@ class elegant_parser:
 
     def build_runtime_state(self):
         state = self._shared.build_runtime_state()
-        lattice = copy.deepcopy(state["lattice"])
-        self._add_channel(lattice)
-        state["lattice"] = lattice
-        self.lattice = lattice
+        self.lattice = state["lattice"]
         self.control = state["control"]
         self.trackline_names_list = state["usedline"]
         return state
@@ -98,15 +88,6 @@ class elegant_parser:
         if json_path is None:
             return self.dump2json()
         return self.dump2json(str(json_path))
-
-    def _add_channel(self, lattice):
-        for element_id, element in lattice.items():
-            if element["TYPE"] == "QUAD":
-                element["AP"] = st.pv_prefix_quad + element_id + st.pv_suffix_quad
-            elif element["TYPE"] in BEND_TYPES:
-                element["AP"] = st.pv_prefix_bend + element_id + st.pv_suffix_bend
-            elif element["TYPE"] in COR_TYPES:
-                element["AP"] = st.pv_prefix_cor + element_id + st.pv_suffix_cor
 
     def json2lte_ele(self, lat_f=None, ele_f=None, j_file=None):
         runtime_json_path = self._resolve_runtime_json_path(j_file)

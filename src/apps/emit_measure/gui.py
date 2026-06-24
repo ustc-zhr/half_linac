@@ -445,7 +445,7 @@ class Ui_Form(object):
         self.label_12.setText(_translate("Form", "To"))
         self.label_20.setText(_translate("Form", "K1"))
         self.label_10.setText(_translate("Form", "which quad:"))
-        self.label_14.setText(_translate("Form", "How many samples per step:"))
+        self.label_14.setText(_translate("Form", "Samples/step"))
         self.label_11.setText(_translate("Form", "From"))
         self.comboBox.setItemText(0, _translate("Form", "QL27"))
         self.comboBox.setItemText(1, _translate("Form", "QT01"))

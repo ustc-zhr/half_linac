@@ -134,16 +134,16 @@
   },
   "corrector_upperlimit_rad": 0.001,
   "runtime_defaults": {
-    "method": "one-to-one",
-    "sampling_interval_s": 6.0,
-    "accuracy_um": 10.0,
-    "samples_per_step": 2,
+    "method": "global",
+    "sampling_interval_s": 8.0,
+    "accuracy_um": 5.0,
+    "samples_per_step": 1,
     "global_max_iter": 20,
     "one_to_one_max_iter": 20,
     "one_to_one_gain": 0.5,
     "one_to_one_max_step_pct": 25.0,
     "local_response_kick_fraction": 0.02,
-    "matrix_response_kick_fraction": 0.02,
-    "matrix_samples_per_step": 2
+    "matrix_response_kick_fraction": 0.04,
+    "matrix_samples_per_step": 1
   }
 }

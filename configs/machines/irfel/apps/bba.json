@@ -20,22 +20,60 @@
       }
     },
     {
-      "id": "irfel_bba2_qm01_hc01",
+      "id": "irfel_bba_standard_qm04_hc02",
+      "family": "standard",
+      "plane": "X",
+      "quad": "QM04",
+      "corr": "HC02",
+      "bpm1": "BPM03",
+      "bpm2": "BPM07",
+      "scan": {
+        "corr_from": -0.001,
+        "corr_end": 0.001,
+        "corr_steps": 5,
+        "quad_from": -80.0,
+        "quad_end": -60.0,
+        "quad_steps": 5,
+        "samples": 1,
+        "sleeptime": 3.0
+      }
+    },
+    {
+      "id": "irfel_bba_standard_qm04_vc01",
+      "family": "standard",
+      "plane": "Y",
+      "quad": "QM04",
+      "corr": "VC01",
+      "bpm1": "BPM03",
+      "bpm2": "BPM07",
+      "scan": {
+        "corr_from": -0.001,
+        "corr_end": 0.001,
+        "corr_steps": 5,
+        "quad_from": -80.0,
+        "quad_end": -60.0,
+        "quad_steps": 5,
+        "samples": 1,
+        "sleeptime": 3.0
+      }
+    },
+    {
+      "id": "irfel_bba2_qm04_hc02",
       "family": "bba2",
       "plane": "X",
-      "quad": "QM01",
-      "corr": "HC01",
-      "bpm1": "BPM01",
-      "bpm2": "BPM02",
+      "quad": "QM04",
+      "corr": "HC02",
+      "bpm1": "BPM03",
+      "bpm2": "BPM07",
       "scan": {
-        "quad_from": -1.0,
-        "quad_end": 1.0,
+        "quad_from": -80.0,
+        "quad_end": -60.0,
         "quad_steps": 5,
         "corr_from": -0.001,
         "corr_end": 0.001,
         "corr_steps": 5,
         "samples": 1,
-        "sleeptime": 1.0
+        "sleeptime": 3.0
       },
       "analysis": {
         "energy_mev": 36.0,
@@ -54,7 +92,7 @@
   },
   "bba2": {
     "control_backends": ["vm"],
-    "default_preset": "irfel_bba2_qm01_hc01"
+    "default_preset": "irfel_bba2_qm04_hc02"
   },
   "real_status": "not_supported",
   "write_control": {

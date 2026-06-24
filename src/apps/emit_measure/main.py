@@ -299,10 +299,18 @@ QFrame#plotCard, QWidget#controlCard, QWidget#resultCard {{
 }}
 
 QTabWidget::pane {{
-    border: 1px solid {panel_border};
+    border-left: 1px solid {panel_border};
+    border-right: 1px solid {panel_border};
+    border-bottom: 1px solid {panel_border};
     border-radius: 14px;
     background: {panel_bg};
     top: -1px;
+}}
+
+QTabBar::base {{
+    border: none;
+    background: transparent;
+    height: 0px;
 }}
 
 QTabBar::tab {{
@@ -321,6 +329,7 @@ QTabBar::tab {{
 QTabBar::tab:selected {{
     background: {panel_bg};
     color: {summary_title_fg};
+    border-bottom-color: {panel_bg};
 }}
 
 QTabBar::tab:hover:!selected {{
@@ -696,7 +705,8 @@ class myWindow(QWidget,Ui_Form):
     def _build_shell(self):
         self.verticalLayout.setContentsMargins(10, 10, 10, 10)
         self.verticalLayout.setSpacing(12)
-        self.tabWidget.setDocumentMode(True)
+        self.tabWidget.setDocumentMode(False)
+        self.tabWidget.tabBar().setDrawBase(False)
         self.tabWidget.setElideMode(Qt.ElideNone)
         self._attach_tab_roots()
         self.gridLayout_2.setRowStretch(0, 4)
@@ -743,6 +753,15 @@ class myWindow(QWidget,Ui_Form):
         title.setObjectName("summaryTitle")
         header_layout.addWidget(title)
         header_layout.addStretch(1)
+
+        for text in (
+            f"Machine: {self.machine_profile.machine.display_name}",
+            f"Backend: {self.machine_type.upper()}",
+        ):
+            runtime_label = QLabel(text, panel)
+            runtime_label.setProperty("role", "field")
+            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            header_layout.addWidget(runtime_label)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")

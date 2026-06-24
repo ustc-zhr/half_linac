@@ -2197,6 +2197,20 @@
       ]
     },
     {
+      "id": "QT04",
+      "kind": "quad",
+      "display_name": "QT04",
+      "order": 153,
+      "tags": [
+        "bba",
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "k1"
+      ]
+    },
+    {
       "id": "QE01",
       "kind": "quad",
       "display_name": "QE01",

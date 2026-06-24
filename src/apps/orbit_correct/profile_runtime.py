@@ -16,7 +16,6 @@ from half_linac.src.shared.machine_profile import (
 
 
 APP_DIR = Path(__file__).resolve().parent
-RESPONSE_MATRIX_PATH = APP_DIR / "response.txt"
 CORRECTOR_STATE_PATH = APP_DIR / "cor_temp.txt"
 CORRECT_LOG_PATH = APP_DIR / "correct.log"
 FINDRESPONSE_LOG_PATH = APP_DIR / "findresponse.log"
@@ -57,10 +56,18 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
         ),
         "corrector_upperlimit": corrector_limit,
         "corrector_upperlimit_unit": corrector_limit_unit,
-        "corrector_upperlimit_rad": corrector_limit,
         "runtime_defaults": _select_runtime_defaults(workflow),
         **paths,
     }
+
+
+def display_unit(unit: str) -> str:
+    normalized = str(unit).strip()
+    if normalized.lower() == "rad":
+        return "rad"
+    if normalized.lower() == "a":
+        return "A"
+    return normalized
 
 
 def resolve_orbit_runtime_paths(target: MachineProfile | AppContext) -> dict[str, Path]:
@@ -72,6 +79,7 @@ def resolve_orbit_runtime_paths(target: MachineProfile | AppContext) -> dict[str
         "response_matrix_path": runtime_dir / "response.txt",
         "response_matrix_dir": runtime_dir / "matrices",
         "active_response_path": runtime_dir / "active_response.json",
+        "response_progress_path": runtime_dir / "response_progress.json",
         "corrector_state_path": runtime_dir / "cor_temp.txt",
         "correct_log_path": runtime_dir / "correct.log",
         "findresponse_log_path": runtime_dir / "findresponse.log",
@@ -191,20 +199,10 @@ def set_active_response_matrix(
     return _enrich_response_metadata(target, metadata, metadata_path)
 
 
-def resolve_active_response_matrix(
-    target: MachineProfile | AppContext,
-    *,
-    legacy_matrix_path: str | Path | None = None,
-) -> Path:
+def resolve_active_response_matrix(target: MachineProfile | AppContext) -> Path:
     active = get_active_response_matrix_record(target)
     if active is not None:
         return _resolve_runtime_path(target, active["matrix_file"])
-
-    if legacy_matrix_path is not None:
-        legacy_path = Path(legacy_matrix_path)
-        if legacy_path.is_file():
-            _validate_response_matrix_shape(target, legacy_path)
-            return legacy_path
 
     paths = resolve_orbit_runtime_paths(target)
     raise FileNotFoundError(

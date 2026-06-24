@@ -29,6 +29,9 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -50,9 +53,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
-    RuntimeSelectorWidget,
     default_control_backend_choices,
-    request_runtime_restart,
 )
 from half_linac.src.apps.bba.profile_runtime import (
     new_bba_scan_archive_dir,
@@ -61,17 +62,27 @@ from half_linac.src.apps.bba.profile_runtime import (
 
 K1LQ_FACTOR = 0.15
 HEADER_ACTION_HEIGHT = 32
-BBA1_QUAD_X_LABEL = "$K_1$"
+BBA1_QUAD_X_LABEL = "$K_1 (m^{-2})$"
 BBA1_SLOPE_LABEL = "dBPM2/dK1"
-BBA2_QUAD_X_LABEL = "$K_1L_q$"
+BBA2_QUAD_X_LABEL = "$K_1L_q (m^{-1})$"
 BBA1_SCAN_POINT_COLUMNS = ("Use", "Corrector", "K1", "BPM1 (mm)", "BPM2 (mm)")
+BBA2_SCAN_POINT_COLUMNS = {
+    "quad": ("Use", "K1Leff", "BPM2 (mm)"),
+    "bpm1": ("Use", "BPM1 (mm)"),
+    "corrector": ("Use", "COR", "theta", "BPM2 (mm)"),
+}
+BBA2_SCAN_POINT_LABELS = {
+    "quad": "Quad Scan",
+    "bpm1": "BPM1 Samples",
+    "corrector": "COR Scan",
+}
 BBA1_TOOLTIP = (
     "BBA-1 scans quad K1 at several COR settings, fits dBPM2/dK1 versus BPM1, "
     "and reports the BPM1 reading at the quad center."
 )
 BBA2_TOOLTIP = (
     "BBA-2 fits BPM2 versus quad K1Leff and corrector kick, then reports "
-    "quad-center reading minus BPM1 average."
+    "the BPM1 reading at the quad center."
 )
 
 DARK_THEME = {
@@ -171,10 +182,18 @@ QFrame#plotCard, QFrame#controlCard, QFrame#resultCard {{
 }}
 
 QTabWidget::pane {{
-    border: 1px solid {panel_border};
+    border-left: 1px solid {panel_border};
+    border-right: 1px solid {panel_border};
+    border-bottom: 1px solid {panel_border};
     border-radius: 14px;
     background: {panel_bg};
     top: -1px;
+}}
+
+QTabBar::base {{
+    border: none;
+    background: transparent;
+    height: 0px;
 }}
 
 QTabBar::tab {{
@@ -481,6 +500,9 @@ class ScanParameters:
     bba2_bpm1_path: Path | None = None
     bba2_corrector_scan_path: Path | None = None
     bba2_metadata_path: Path | None = None
+    bba2_recal_quad_points: list[tuple[float, float]] | None = None
+    bba2_recal_bpm1_points: list[float] | None = None
+    bba2_recal_corrector_points: list[tuple[float, float]] | None = None
     archive_dir: Path | None = None
 
 
@@ -500,6 +522,7 @@ class myWindow(QWidget, Ui_Form):
         self.scan_family = None
         self._plot_wrappers = {}
         self._result_fields = []
+        self.bba2_scan_points = {key: [] for key in BBA2_SCAN_POINT_COLUMNS}
 
         self._configure_window()
         self._setup_defaults()
@@ -507,6 +530,7 @@ class myWindow(QWidget, Ui_Form):
         self._build_shell()
         self._configure_form_content()
         self._configure_machine_profile()
+        self._normalize_display_units()
         self._apply_theme()
         self._draw_placeholder_plots()
         self._refresh_status()
@@ -516,14 +540,33 @@ class myWindow(QWidget, Ui_Form):
         self.resize(1600, 960)
         self.setMinimumSize(1320, 860)
         self.tabWidget.setCurrentIndex(0)
+
+    def _normalize_display_units(self):
+        def normalize(text):
+            return (
+                text.replace("MEV", "MeV")
+                .replace("Mev", "MeV")
+                .replace("MM", "mm")
+                .replace("(M)", "(m)")
+                .replace("/M", "/m")
+            )
+
+        for label in self.findChildren(QLabel):
+            label.setText(normalize(label.text()))
+
+        for button_type in (QPushButton, QToolButton):
+            for button in self.findChildren(button_type):
+                button.setText(normalize(button.text()))
+
+        for combo in self.findChildren(QComboBox):
+            for index in range(combo.count()):
+                combo.setItemText(index, normalize(combo.itemText(index)))
         bba1_tab_index = self.tabWidget.indexOf(self.tab)
         if bba1_tab_index >= 0:
             self.tabWidget.setTabToolTip(bba1_tab_index, BBA1_TOOLTIP)
-        self.tab.setToolTip(BBA1_TOOLTIP)
         bba2_tab_index = self.tabWidget.indexOf(self.tab_2)
         if bba2_tab_index >= 0:
             self.tabWidget.setTabToolTip(bba2_tab_index, BBA2_TOOLTIP)
-        self.tab_2.setToolTip(BBA2_TOOLTIP)
 
     def _setup_defaults(self):
         self.lineEdit_10.clear()
@@ -531,6 +574,8 @@ class myWindow(QWidget, Ui_Form):
         self.lineEdit_19.clear()
         self.lineEdit_19.setToolTip("")
         self.lineEdit_21.clear()
+        if hasattr(self, "bba2_model_r12_edit"):
+            self.bba2_model_r12_edit.clear()
 
     def _connect_buttons(self):
         self.pushButton.clicked.connect(self.startScan)
@@ -571,6 +616,7 @@ class myWindow(QWidget, Ui_Form):
         self.gridLayout_3.setColumnStretch(0, 1)
         self.gridLayout_3.setColumnStretch(1, 1)
         self.gridLayout_3.setHorizontalSpacing(14)
+        self.gridLayout_3.setVerticalSpacing(14)
 
         self._style_plot_cards()
         self._style_control_cards()
@@ -593,13 +639,22 @@ class myWindow(QWidget, Ui_Form):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        self.runtime_selector = RuntimeSelectorWidget(
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.app_context.control_backend.name,
-            parent=panel,
+        runtime_state = QHBoxLayout()
+        runtime_state.setContentsMargins(0, 0, 0, 0)
+        runtime_state.setSpacing(6)
+        runtime_state.addWidget(
+            self._make_runtime_state_label(
+                f"Machine: {self.machine_profile.machine.display_name}",
+                panel,
+            )
         )
-        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
-        header_layout.addWidget(self.runtime_selector)
+        runtime_state.addWidget(
+            self._make_runtime_state_label(
+                f"Backend: {self.app_context.control_backend.name.upper()}",
+                panel,
+            )
+        )
+        header_layout.addLayout(runtime_state)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -699,6 +754,12 @@ class myWindow(QWidget, Ui_Form):
         label.setProperty("role", "field")
         return label
 
+    def _make_runtime_state_label(self, text, parent):
+        label = QLabel(text, parent)
+        label.setProperty("role", "field")
+        label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        return label
+
     def _rebuild_bba1_setup_panel(self):
         layout = QVBoxLayout(self.frame)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -722,10 +783,15 @@ class myWindow(QWidget, Ui_Form):
         form.setHorizontalSpacing(8)
         form.setVerticalSpacing(6)
 
-        form.addWidget(self._make_field_label("Plane", self.frame), 0, 0)
+        self.bba1_preset_combo = QComboBox(self.frame)
+        self.bba1_preset_combo.currentIndexChanged.connect(self._apply_selected_bba1_preset)
+        form.addWidget(self._make_field_label("Preset", self.frame), 0, 0)
+        form.addWidget(self.bba1_preset_combo, 0, 1, 1, 7)
+
+        form.addWidget(self._make_field_label("Plane", self.frame), 1, 0)
         self.comboBox_5.setParent(self.frame)
         self.comboBox_5.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        form.addWidget(self.comboBox_5, 0, 1, 1, 3)
+        form.addWidget(self.comboBox_5, 1, 1, 1, 3)
 
         setup_inputs = (
             self.lineEdit,
@@ -745,7 +811,7 @@ class myWindow(QWidget, Ui_Form):
             ("Quad", self.comboBox_2, "From", self.lineEdit_6, "To", self.lineEdit_4, "Steps", self.lineEdit_5),
             ("BPM1", self.comboBox_3, "BPM2", self.comboBox_4, "Scan freq", self.lineEdit_7, "Samples/step", self.lineEdit_8),
         ]
-        for row, items in enumerate(rows, start=1):
+        for row, items in enumerate(rows, start=2):
             for col in range(0, len(items), 2):
                 form.addWidget(self._make_field_label(items[col], self.frame), row, col * 2)
                 widget = items[col + 1]
@@ -863,22 +929,42 @@ class myWindow(QWidget, Ui_Form):
         form.setVerticalSpacing(6)
         self.bba2_quad_leff_edit = QLineEdit(self.frame_3)
 
+        form.addWidget(self._make_field_label("Plane", self.frame_3), 0, 0)
+        self.comboBox_10.setParent(self.frame_3)
+        self.comboBox_10.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        form.addWidget(self.comboBox_10, 0, 1, 1, 3)
+
         rows = [
             ("Quad", self.comboBox_7, "From", self.lineEdit_14, "To", self.lineEdit_17, "Steps", self.lineEdit_16),
-            ("Corrector", self.comboBox_9, "From", self.lineEdit_11, "To", self.lineEdit_13, "Steps", self.lineEdit_12),
+            ("COR", self.comboBox_9, "From", self.lineEdit_11, "To", self.lineEdit_13, "Steps", self.lineEdit_12),
             ("1st BPM", self.comboBox_8, "2nd BPM", self.comboBox_6, "BPM1 samples", self.lineEdit_22, "", None),
             (
-                "Energy@corrector",
-                self.lineEdit_20,
                 "Scan freq",
                 self.lineEdit_15,
                 "Samples/step",
                 self.lineEdit_9,
                 "Quad Leff (m)",
                 self.bba2_quad_leff_edit,
+                "",
+                None,
             ),
         ]
-        for row, items in enumerate(rows):
+        setup_inputs = (
+            self.lineEdit_14,
+            self.lineEdit_17,
+            self.lineEdit_16,
+            self.lineEdit_11,
+            self.lineEdit_13,
+            self.lineEdit_12,
+            self.lineEdit_22,
+            self.lineEdit_15,
+            self.lineEdit_9,
+            self.bba2_quad_leff_edit,
+        )
+        for widget in setup_inputs:
+            widget.setFixedWidth(96)
+
+        for row, items in enumerate(rows, start=1):
             for col in range(0, len(items), 2):
                 text = items[col]
                 widget = items[col + 1]
@@ -894,35 +980,36 @@ class myWindow(QWidget, Ui_Form):
 
         layout.addLayout(form)
 
-        model_title = QLabel("Corrector model", self.frame_3)
-        layout.addWidget(model_title)
+        self.bba2_corrector_model_widget = QWidget(self.frame_3)
+        model_layout = QHBoxLayout(self.bba2_corrector_model_widget)
+        model_layout.setContentsMargins(0, 0, 0, 0)
+        model_layout.setSpacing(8)
 
-        model_grid = QGridLayout()
-        model_grid.setHorizontalSpacing(8)
-        model_grid.setVerticalSpacing(6)
-        self.lineEdit_23.setParent(self.frame_3)
-        self.lineEdit_24.setParent(self.frame_3)
-        self.lineEdit_25.setParent(self.frame_3)
-        self.lineEdit_26.setParent(self.frame_3)
+        model_title = QLabel("Corrector model", self.bba2_corrector_model_widget)
+        model_title.setObjectName("panelTitle")
+        model_layout.addWidget(model_title)
+        self.bba2_corrector_model_summary_label = QLabel("", self.bba2_corrector_model_widget)
+        self.bba2_corrector_model_summary_label.setProperty("role", "field")
+        self.bba2_corrector_model_summary_label.setWordWrap(True)
+        self.bba2_corrector_model_summary_label.setMinimumWidth(0)
+        self.bba2_corrector_model_summary_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        model_layout.addWidget(self.bba2_corrector_model_summary_label, 1)
+        self.bba2_corrector_model_edit_button = QPushButton("Edit...", self.bba2_corrector_model_widget)
+        self.bba2_corrector_model_edit_button.setProperty("compact", True)
+        self.bba2_corrector_model_edit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.bba2_corrector_model_edit_button.clicked.connect(self._open_bba2_corrector_model_dialog)
+        model_layout.addWidget(self.bba2_corrector_model_edit_button)
+
         for widget in (
+            self.lineEdit_20,
             self.lineEdit_23,
             self.lineEdit_24,
             self.lineEdit_25,
             self.lineEdit_26,
         ):
-            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        model_grid.addWidget(self._make_field_label("By (Gauss)", self.frame_3), 0, 0)
-        model_grid.addWidget(self.lineEdit_23, 0, 1, 1, 3)
-        model_grid.addWidget(self._make_field_label("Bx (Gauss)", self.frame_3), 1, 0)
-        model_grid.addWidget(self.lineEdit_24, 1, 1, 1, 3)
-        model_grid.addWidget(self._make_field_label("Leff By (m)", self.frame_3), 2, 0)
-        model_grid.addWidget(self.lineEdit_25, 2, 1)
-        model_grid.addWidget(self._make_field_label("Leff Bx (m)", self.frame_3), 2, 2)
-        model_grid.addWidget(self.lineEdit_26, 2, 3)
-        model_grid.setColumnStretch(1, 1)
-        model_grid.setColumnStretch(3, 1)
-        layout.addLayout(model_grid)
+            widget.setParent(self.frame_3)
+            widget.hide()
+        layout.addWidget(self.bba2_corrector_model_widget)
 
     def _rebuild_bba2_run_panel(self):
         layout = QVBoxLayout(self.frame_4)
@@ -936,31 +1023,80 @@ class myWindow(QWidget, Ui_Form):
         controls = QHBoxLayout()
         controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(8)
-        for widget in (self.comboBox_10, self.comboBox_11):
-            widget.setParent(self.frame_4)
-            widget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-            controls.addWidget(widget)
-        controls.addStretch(1)
-        for button in (self.pushButton_5, self.pushButton_8, self.pushButton_6, self.pushButton_7):
+        self.comboBox_11.hide()
+        for button in (self.pushButton_5, self.pushButton_8, self.pushButton_6):
             button.setParent(self.frame_4)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             controls.addWidget(button)
         layout.addLayout(controls)
 
+        points_header = QHBoxLayout()
+        points_header.setContentsMargins(0, 4, 0, 0)
+        points_header.setSpacing(6)
+        points_title = QLabel("Scan Points", self.frame_4)
+        points_title.setObjectName("panelTitle")
+        points_header.addWidget(points_title)
+        self.bba2_scan_points_type_combo = QComboBox(self.frame_4)
+        for key, label in BBA2_SCAN_POINT_LABELS.items():
+            self.bba2_scan_points_type_combo.addItem(label, key)
+        self.bba2_scan_points_type_combo.currentIndexChanged.connect(self._render_bba2_scan_points_table)
+        points_header.addWidget(self.bba2_scan_points_type_combo)
+        points_header.addStretch(1)
+        self.bba2_scan_points_summary_label = QLabel("0 active / 0 total", self.frame_4)
+        self.bba2_scan_points_summary_label.setProperty("role", "field")
+        points_header.addWidget(self.bba2_scan_points_summary_label)
+        layout.addLayout(points_header)
+
+        self.bba2_scan_points_table = QTableWidget(0, 0, self.frame_4)
+        self.bba2_scan_points_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.bba2_scan_points_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.bba2_scan_points_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.bba2_scan_points_table.setMaximumHeight(150)
+        self.bba2_scan_points_table.verticalHeader().setVisible(False)
+        self.bba2_scan_points_table.itemChanged.connect(self._on_bba2_scan_point_item_changed)
+        layout.addWidget(self.bba2_scan_points_table)
+
+        point_actions = QHBoxLayout()
+        point_actions.setContentsMargins(0, 0, 0, 0)
+        point_actions.setSpacing(6)
+        self.bba2_load_points_button = QPushButton("Load Archive", self.frame_4)
+        self.bba2_exclude_points_button = QPushButton("Exclude Selected", self.frame_4)
+        self.bba2_restore_points_button = QPushButton("Restore All", self.frame_4)
+        self.pushButton_7.setParent(self.frame_4)
+        for button in (
+            self.pushButton_7,
+            self.bba2_load_points_button,
+            self.bba2_exclude_points_button,
+            self.bba2_restore_points_button,
+        ):
+            button.setProperty("compact", True)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            point_actions.addWidget(button)
+        self.bba2_load_points_button.clicked.connect(self._load_bba2_scan_archive)
+        self.bba2_exclude_points_button.clicked.connect(self._exclude_selected_bba2_scan_points)
+        self.bba2_restore_points_button.clicked.connect(self._restore_all_bba2_scan_points)
+        layout.addLayout(point_actions)
+        self._render_bba2_scan_points_table()
+
         results = QGridLayout()
         results.setHorizontalSpacing(8)
         results.setVerticalSpacing(6)
-        items = [
-            ("Average of BPM1 (mm)", self.lineEdit_21),
-            ("Response matrix R12 (m)", self.lineEdit_19),
-            ("Quad Center - BPM1 Reading (mm)", self.lineEdit_18),
-        ]
-        for row, (text, widget) in enumerate(items):
-            results.addWidget(self._make_field_label(text, self.frame_4), row, 0)
+        self.bba2_model_r12_edit = QLineEdit(self.frame_4)
+        self.bba2_model_r12_edit.setReadOnly(True)
+        for widget in (self.lineEdit_19, self.bba2_model_r12_edit, self.lineEdit_18):
             widget.setParent(self.frame_4)
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            results.addWidget(widget, row, 1)
+        results.addWidget(self._make_field_label("Measured R12 (m)", self.frame_4), 0, 0)
+        results.addWidget(self.lineEdit_19, 0, 1)
+        results.addWidget(self._make_field_label("Model R12 (m)", self.frame_4), 0, 2)
+        results.addWidget(self.bba2_model_r12_edit, 0, 3)
+        results.addWidget(self._make_field_label("BPM1 Reading at Quad Center (mm)", self.frame_4), 1, 0)
+        results.addWidget(self.lineEdit_18, 1, 1, 1, 3)
+        for hidden_widget in (self.lineEdit_21,):
+            hidden_widget.setParent(self.frame_4)
+            hidden_widget.hide()
         results.setColumnStretch(1, 1)
+        results.setColumnStretch(3, 1)
         layout.addLayout(results)
 
     def _palette(self):
@@ -1068,6 +1204,73 @@ class myWindow(QWidget, Ui_Form):
             if value is not None:
                 self._set_line_edit_value(widget, value)
 
+    def _refresh_bba2_corrector_model_summary(self):
+        label = getattr(self, "bba2_corrector_model_summary_label", None)
+        if label is None:
+            return
+        label.setText(
+            "E={energy} MeV | By={by} | Bx={bx} | Leff(By/Bx)={leff_by}/{leff_bx} m".format(
+                energy=self.lineEdit_20.text().strip() or "-",
+                by=self.lineEdit_23.text().strip() or "-",
+                bx=self.lineEdit_24.text().strip() or "-",
+                leff_by=self.lineEdit_25.text().strip() or "-",
+                leff_bx=self.lineEdit_26.text().strip() or "-",
+            )
+        )
+
+    def _open_bba2_corrector_model_dialog(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Corrector Model")
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        fields = {
+            "energy": QLineEdit(self.lineEdit_20.text(), dialog),
+            "by": QLineEdit(self.lineEdit_23.text(), dialog),
+            "leff_by": QLineEdit(self.lineEdit_25.text(), dialog),
+            "bx": QLineEdit(self.lineEdit_24.text(), dialog),
+            "leff_bx": QLineEdit(self.lineEdit_26.text(), dialog),
+        }
+
+        grid.addWidget(self._make_field_label("Energy@COR (MeV)", dialog), 0, 0)
+        grid.addWidget(fields["energy"], 0, 1, 1, 3)
+        x_title = QLabel("X Plane", dialog)
+        x_title.setObjectName("panelTitle")
+        grid.addWidget(x_title, 1, 0, 1, 4)
+        grid.addWidget(self._make_field_label("By formula (Gauss)", dialog), 2, 0)
+        grid.addWidget(fields["by"], 2, 1)
+        grid.addWidget(self._make_field_label("Leff By (m)", dialog), 2, 2)
+        grid.addWidget(fields["leff_by"], 2, 3)
+        y_title = QLabel("Y Plane", dialog)
+        y_title.setObjectName("panelTitle")
+        grid.addWidget(y_title, 3, 0, 1, 4)
+        grid.addWidget(self._make_field_label("Bx formula (Gauss)", dialog), 4, 0)
+        grid.addWidget(fields["bx"], 4, 1)
+        grid.addWidget(self._make_field_label("Leff Bx (m)", dialog), 4, 2)
+        grid.addWidget(fields["leff_bx"], 4, 3)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+        layout.addLayout(grid)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        self.lineEdit_20.setText(fields["energy"].text())
+        self.lineEdit_23.setText(fields["by"].text())
+        self.lineEdit_25.setText(fields["leff_by"].text())
+        self.lineEdit_24.setText(fields["bx"].text())
+        self.lineEdit_26.setText(fields["leff_bx"].text())
+        self._refresh_bba2_corrector_model_summary()
+
     @staticmethod
     def _normalize_plane_value(value):
         text = str(value).strip().lower()
@@ -1108,6 +1311,68 @@ class myWindow(QWidget, Ui_Form):
 
     def _find_bba_preset(self, preset_id):
         return get_bba_preset(self.app_context, preset_id)
+
+    def _bba_presets_for_family(self, family_name):
+        return tuple(
+            preset for preset in self.bba_workflow.presets
+            if preset.family == family_name
+        )
+
+    @staticmethod
+    def _bba_preset_label(preset):
+        return f"{preset.plane}: {preset.quad} + {preset.corr} / {preset.bpm1}->{preset.bpm2}"
+
+    def _set_bba_preset_combo_items(self, combo, presets):
+        combo.blockSignals(True)
+        combo.clear()
+        for preset in presets:
+            combo.addItem(self._bba_preset_label(preset), preset.id)
+        combo.blockSignals(False)
+
+    @staticmethod
+    def _set_bba_preset_combo_current(combo, preset_id):
+        for index in range(combo.count()):
+            if combo.itemData(index) == preset_id:
+                combo.setCurrentIndex(index)
+                return
+
+    def _apply_bba1_preset(self, preset):
+        self._set_combo_current_plane(self.comboBox_5, preset.plane)
+        self._refresh_corrector_combo(
+            self.comboBox,
+            self._standard_corrector_items(preset.plane),
+            preferred=preset.corr,
+        )
+        self._set_combo_current_text(self.comboBox_2, preset.quad)
+        self._set_combo_current_text(self.comboBox_3, preset.bpm1)
+        self._set_combo_current_text(self.comboBox_4, preset.bpm2)
+        self._apply_typed_defaults(
+            preset.scan,
+            {
+                "corr_from": self.lineEdit,
+                "corr_end": self.lineEdit_2,
+                "corr_steps": self.lineEdit_3,
+                "quad_end": self.lineEdit_4,
+                "quad_steps": self.lineEdit_5,
+                "quad_from": self.lineEdit_6,
+                "sleeptime": self.lineEdit_7,
+                "samples": self.lineEdit_8,
+            },
+        )
+        self._refresh_status()
+
+    def _apply_selected_bba1_preset(self, *_):
+        if not hasattr(self, "bba1_preset_combo") or self.bba1_preset_combo.count() == 0:
+            return
+        preset_id = self.bba1_preset_combo.currentData()
+        if not preset_id:
+            return
+        try:
+            preset = self._find_bba_preset(preset_id)
+        except MachineProfileError as exc:
+            self._warn(str(exc))
+            return
+        self._apply_bba1_preset(preset)
 
     def _family_control_backends(self, family):
         return family.control_backends or default_control_backend_choices(self.app_context.machine.id)
@@ -1213,28 +1478,12 @@ class myWindow(QWidget, Ui_Form):
         self._set_combo_items(self.comboBox_11, bba2_control_backends)
 
         standard_default = self._find_bba_preset(standard.default_preset)
-        self._set_combo_current_plane(self.comboBox_5, standard_default.plane)
-        self._refresh_corrector_combo(
-            self.comboBox,
-            self._standard_corrector_items(standard_default.plane),
-            preferred=standard_default.corr,
+        self._set_bba_preset_combo_items(
+            self.bba1_preset_combo,
+            self._bba_presets_for_family("standard"),
         )
-        self._set_combo_current_text(self.comboBox_2, standard_default.quad)
-        self._set_combo_current_text(self.comboBox_3, standard_default.bpm1)
-        self._set_combo_current_text(self.comboBox_4, standard_default.bpm2)
-        self._apply_typed_defaults(
-            standard_default.scan,
-            {
-                "corr_from": self.lineEdit,
-                "corr_end": self.lineEdit_2,
-                "corr_steps": self.lineEdit_3,
-                "quad_end": self.lineEdit_4,
-                "quad_steps": self.lineEdit_5,
-                "quad_from": self.lineEdit_6,
-                "sleeptime": self.lineEdit_7,
-                "samples": self.lineEdit_8,
-            },
-        )
+        self._set_bba_preset_combo_current(self.bba1_preset_combo, standard_default.id)
+        self._apply_bba1_preset(standard_default)
 
         bba2_default = self._find_bba_preset(bba2.default_preset)
         self.bba2_quad_leff = bba2_default.analysis.quad_leff or K1LQ_FACTOR
@@ -1276,7 +1525,9 @@ class myWindow(QWidget, Ui_Form):
                 "leff_bx": self.lineEdit_26,
             },
         )
+        self._refresh_bba2_corrector_model_summary()
         self._load_latest_bba1_data_into_table()
+        self._load_latest_bba2_data_into_table()
 
     def _profile_default_control_backend(self):
         return getattr(self, "standard_control_backend", self.app_context.control_backend.name)
@@ -1345,6 +1596,9 @@ class myWindow(QWidget, Ui_Form):
 
     def _latest_bba1_data_dir(self):
         return self._bba_runtime_paths(self._profile_default_control_backend())["latest_dir"]
+
+    def _latest_bba2_data_dir(self):
+        return self._bba_runtime_paths(self.comboBox_11.currentText())["latest_dir"]
 
     def _bba1_scan_points_counts(self):
         table = getattr(self, "bba1_scan_points_table", None)
@@ -1550,6 +1804,263 @@ class myWindow(QWidget, Ui_Form):
             )
         self.widget.canvas.draw()
 
+    def _current_bba2_point_type(self):
+        combo = getattr(self, "bba2_scan_points_type_combo", None)
+        if combo is None:
+            return "quad"
+        return combo.currentData() or "quad"
+
+    def _bba2_point_counts(self, point_type=None):
+        point_type = point_type or self._current_bba2_point_type()
+        rows = self.bba2_scan_points.get(point_type, [])
+        total = len(rows)
+        active = sum(1 for row in rows if row.get("enabled", True))
+        return active, total
+
+    def _update_bba2_scan_points_summary(self):
+        label = getattr(self, "bba2_scan_points_summary_label", None)
+        if label is None:
+            return
+        active, total = self._bba2_point_counts()
+        label.setText(f"{active} active / {total} total")
+
+    def _bba2_display_values(self, point_type, values):
+        if point_type == "quad":
+            return (values[0], values[1] * 1e3)
+        if point_type == "bpm1":
+            return (values[0] * 1e3,)
+        if point_type == "corrector":
+            return (values[0], values[1], values[2] * 1e3)
+        raise ValueError(f"Unknown BBA-2 point type: {point_type}")
+
+    def _append_bba2_scan_point(self, point_type, values, *, enabled=True, render=True):
+        if point_type not in BBA2_SCAN_POINT_COLUMNS:
+            return
+        self.bba2_scan_points.setdefault(point_type, []).append({
+            "enabled": bool(enabled),
+            "values": tuple(float(value) for value in values),
+        })
+        if render and self._current_bba2_point_type() == point_type:
+            self._render_bba2_scan_points_table()
+        else:
+            self._update_bba2_scan_points_summary()
+
+    def _set_bba2_scan_points(self, point_type, rows):
+        self.bba2_scan_points[point_type] = [
+            {"enabled": bool(enabled), "values": tuple(float(value) for value in values)}
+            for values, enabled in rows
+        ]
+        if self._current_bba2_point_type() == point_type:
+            self._render_bba2_scan_points_table()
+        else:
+            self._update_bba2_scan_points_summary()
+
+    def _clear_bba2_scan_points(self):
+        self.bba2_scan_points = {key: [] for key in BBA2_SCAN_POINT_COLUMNS}
+        self._render_bba2_scan_points_table()
+
+    def _on_bba2_scan_point_item_changed(self, item):
+        if item.column() != 0:
+            return
+        point_type = self._current_bba2_point_type()
+        rows = self.bba2_scan_points.get(point_type, [])
+        if 0 <= item.row() < len(rows):
+            rows[item.row()]["enabled"] = item.checkState() == Qt.Checked
+        self._update_bba2_scan_points_summary()
+        self._redraw_bba2_scan_points_from_table(point_type)
+
+    def _render_bba2_scan_points_table(self, *_):
+        table = getattr(self, "bba2_scan_points_table", None)
+        if table is None:
+            return
+        point_type = self._current_bba2_point_type()
+        columns = BBA2_SCAN_POINT_COLUMNS[point_type]
+        rows = self.bba2_scan_points.get(point_type, [])
+
+        table.blockSignals(True)
+        table.clear()
+        table.setColumnCount(len(columns))
+        table.setHorizontalHeaderLabels(columns)
+        table.setRowCount(0)
+        for row_index, row_data in enumerate(rows):
+            table.insertRow(row_index)
+            use_item = QTableWidgetItem("")
+            use_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
+            use_item.setCheckState(Qt.Checked if row_data.get("enabled", True) else Qt.Unchecked)
+            use_item.setTextAlignment(Qt.AlignCenter)
+            table.setItem(row_index, 0, use_item)
+
+            values = row_data["values"]
+            display_values = self._bba2_display_values(point_type, values)
+            for column, (value, display_value) in enumerate(zip(values, display_values), start=1):
+                item = QTableWidgetItem(f"{float(display_value):.6g}")
+                item.setData(Qt.UserRole, float(value))
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                table.setItem(row_index, column, item)
+
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        for column in range(1, len(columns)):
+            header.setSectionResizeMode(column, QHeaderView.Stretch)
+        table.blockSignals(False)
+        self._update_bba2_scan_points_summary()
+        self._redraw_bba2_scan_points_from_table(point_type)
+
+    def _enabled_bba2_scan_points(self, point_type):
+        return [
+            tuple(row["values"])
+            for row in self.bba2_scan_points.get(point_type, [])
+            if row.get("enabled", True)
+        ]
+
+    def _load_bba2_scan_points_from_dir(self, source_dir):
+        source_dir = Path(source_dir)
+        if not source_dir.exists():
+            raise RuntimeError(f"{source_dir} not found.")
+
+        metadata = self._load_bba_metadata(source_dir / "metadata.json")
+        scan = metadata.get("scan") if isinstance(metadata.get("scan"), dict) else {}
+
+        quad_data = np.loadtxt(source_dir / "bba2_k1Lqm2.txt", ndmin=2)
+        if quad_data.ndim != 2 or quad_data.shape[1] < 2:
+            raise RuntimeError("bba2_k1Lqm2.txt must contain K1Leff and BPM2 columns.")
+        self.bba2_scan_points["quad"] = [
+            {"enabled": True, "values": (float(k1_lq), float(bpm2))}
+            for k1_lq, bpm2 in quad_data[:, :2]
+        ]
+
+        bpm1_data = np.loadtxt(source_dir / "bba2_m1.txt", ndmin=1)
+        self.bba2_scan_points["bpm1"] = [
+            {"enabled": True, "values": (float(value),)}
+            for value in np.asarray(bpm1_data, dtype=float).reshape(-1)
+        ]
+
+        corrector_data = np.loadtxt(source_dir / "bba2_thetam2.txt", ndmin=2)
+        if corrector_data.ndim != 2 or corrector_data.shape[1] < 2:
+            raise RuntimeError("bba2_thetam2.txt must contain theta and BPM2 columns.")
+        corr_values = None
+        try:
+            corr_steps = int(scan.get("corr_steps") or 0)
+            samples = int(scan.get("samples") or 1)
+            if corr_steps > 0:
+                corr_base = np.linspace(float(scan["corr_from"]), float(scan["corr_end"]), corr_steps)
+                corr_values = np.repeat(corr_base, samples)
+        except (KeyError, TypeError, ValueError):
+            corr_values = None
+        if corr_values is None or len(corr_values) != len(corrector_data):
+            corr_values = np.full(len(corrector_data), np.nan)
+        self.bba2_scan_points["corrector"] = [
+            {"enabled": True, "values": (float(corr), float(theta), float(bpm2))}
+            for corr, (theta, bpm2) in zip(corr_values, corrector_data[:, :2])
+        ]
+
+        self._render_bba2_scan_points_table()
+        self._redraw_bba2_scan_points_from_table("quad")
+        self._redraw_bba2_scan_points_from_table("corrector")
+
+    def _load_latest_bba2_data_into_table(self):
+        if not hasattr(self, "bba2_scan_points_table"):
+            return
+        source_dir = self._latest_bba2_data_dir()
+        required = ("bba2_k1Lqm2.txt", "bba2_m1.txt", "bba2_thetam2.txt")
+        if not all((source_dir / name).exists() for name in required):
+            self._clear_bba2_scan_points()
+            return
+        try:
+            self._load_bba2_scan_points_from_dir(source_dir)
+        except RuntimeError as exc:
+            self._warn(str(exc))
+
+    def _load_bba2_scan_archive(self):
+        if self._scan_is_running():
+            self._warn("Stop the current BBA scan before loading archived data.")
+            return
+        archive_dir = self._bba_runtime_paths(self.comboBox_11.currentText())["archive_dir"]
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "Load BBA-2 Scan Archive",
+            str(archive_dir),
+        )
+        if not path:
+            return
+        try:
+            self._load_bba2_scan_points_from_dir(Path(path))
+        except RuntimeError as exc:
+            self._warn(str(exc))
+
+    def _exclude_selected_bba2_scan_points(self):
+        table = getattr(self, "bba2_scan_points_table", None)
+        if table is None:
+            return
+        point_type = self._current_bba2_point_type()
+        rows = self.bba2_scan_points.get(point_type, [])
+        selected_rows = sorted({index.row() for index in table.selectedIndexes()})
+        if not selected_rows:
+            return
+        for row in selected_rows:
+            if 0 <= row < len(rows):
+                rows[row]["enabled"] = False
+        self._render_bba2_scan_points_table()
+
+    def _restore_all_bba2_scan_points(self):
+        point_type = self._current_bba2_point_type()
+        for row in self.bba2_scan_points.get(point_type, []):
+            row["enabled"] = True
+        self._render_bba2_scan_points_table()
+
+    def _redraw_bba2_scan_points_from_table(self, point_type=None):
+        point_type = point_type or self._current_bba2_point_type()
+        if point_type == "quad":
+            self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-2 quad scan")
+            axes = self.widget_3.axes
+            x_index, y_index = 0, 1
+            canvas = self.widget_3.canvas
+        elif point_type == "corrector":
+            self._draw_placeholder(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)", "Waiting for BBA-2 corrector scan")
+            axes = self.widget_4.axes
+            x_index, y_index = 1, 2
+            canvas = self.widget_4.canvas
+        else:
+            return
+
+        palette = self._palette()
+        active = []
+        excluded = []
+        for row in self.bba2_scan_points.get(point_type, []):
+            if row.get("enabled", True):
+                active.append(row["values"])
+            else:
+                excluded.append(row["values"])
+
+        if active:
+            data = np.asarray(active, dtype=float)
+            x_values = data[:, x_index]
+            if point_type == "corrector":
+                x_values = x_values * 1e3
+            axes.plot(
+                x_values,
+                data[:, y_index] * 1e3,
+                marker="x",
+                linestyle="None",
+                color=palette["plot_point"],
+            )
+        if excluded:
+            data = np.asarray(excluded, dtype=float)
+            x_values = data[:, x_index]
+            if point_type == "corrector":
+                x_values = x_values * 1e3
+            axes.plot(
+                x_values,
+                data[:, y_index] * 1e3,
+                marker="x",
+                linestyle="None",
+                color=palette["muted_fg"],
+                alpha=0.45,
+            )
+        canvas.draw()
+
     def _apply_runtime_paths(self, params, family):
         paths = self._bba_runtime_paths(params.control_backend)
         params.bba1_data_path = paths["bba1_data_path"]
@@ -1567,20 +2078,6 @@ class myWindow(QWidget, Ui_Form):
                 control_backend=params.control_backend,
             )
             params.archive_dir = new_bba_scan_archive_dir(context, family)
-
-    def _apply_runtime_selection(self, machine_id, control_backend):
-        if self._scan_is_running():
-            self._warn("Stop the current BBA scan before switching machine or backend.")
-            return
-
-        request_runtime_restart(
-            self,
-            app_label="BBA",
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.app_context.control_backend.name,
-            machine_id=machine_id,
-            control_backend=control_backend,
-        )
 
     def _scan_is_running(self):
         return self.scan is not None and self.scan.isRunning()
@@ -1728,6 +2225,7 @@ class myWindow(QWidget, Ui_Form):
             return
 
         self.clearPlot_bba2()
+        self._clear_bba2_scan_points()
         params.recal = False
         self._apply_runtime_paths(params, "bba2")
         self.scan_mode = "scan"
@@ -1786,6 +2284,28 @@ class myWindow(QWidget, Ui_Form):
         self.clearPlot_bba2()
         params.recal = True
         self._apply_runtime_paths(params, "bba2")
+        if hasattr(self, "bba2_scan_points_table"):
+            if all(len(rows) == 0 for rows in self.bba2_scan_points.values()):
+                self._load_latest_bba2_data_into_table()
+            quad_points = self._enabled_bba2_scan_points("quad")
+            bpm1_points = self._enabled_bba2_scan_points("bpm1")
+            corrector_points = self._enabled_bba2_scan_points("corrector")
+            if len(quad_points) < 2:
+                self._warn("At least 2 active BBA-2 quad scan points are required for recalculation.")
+                return
+            if len(bpm1_points) < 1:
+                self._warn("At least 1 active BBA-2 BPM1 sample is required for recalculation.")
+                return
+            if len(corrector_points) < 2:
+                self._warn("At least 2 active BBA-2 COR scan points are required for recalculation.")
+                return
+            params.bba2_recal_quad_points = [(k1_lq, bpm2) for k1_lq, bpm2 in quad_points]
+            params.bba2_recal_bpm1_points = [bpm1 for (bpm1,) in bpm1_points]
+            params.bba2_recal_corrector_points = [
+                (theta, bpm2)
+                for _corr, theta, bpm2 in corrector_points
+            ]
+            params.samples = 1
         self.scan_mode = "recalculate"
         self.scan_family = "bba2"
         self._attach_scan(BBAScanThreadBBA2(params), self.display_bba2)
@@ -1873,12 +2393,20 @@ class myWindow(QWidget, Ui_Form):
             self.lineEdit_19.setText("")
             self.lineEdit_19.setToolTip("")
             self.lineEdit_21.setText("")
+            self.bba2_model_r12_edit.setText("")
+            self.bba2_model_r12_edit.setToolTip("")
+            if data.get("clear_points"):
+                self._clear_bba2_scan_points()
             self._refresh_status()
             return
 
         palette = self._palette()
         show_type = data.get("show")
         if show_type == "k1m2":
+            if self.scan_mode == "scan":
+                for k1_lq, bpm2 in zip(np.atleast_1d(data["K1Lq"]), np.atleast_1d(data["m2"])):
+                    self._append_bba2_scan_point("quad", (float(k1_lq), float(bpm2)), render=False)
+                self._update_bba2_scan_points_summary()
             if not self.widget_3.axes.lines:
                 self.widget_3.axes.clear()
                 self._style_axes(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)")
@@ -1893,7 +2421,25 @@ class myWindow(QWidget, Ui_Form):
         elif show_type == "fit_k1m2":
             self.widget_3.axes.plot(data["x"], np.asarray(data["y"]) * 1e3, linestyle="--", color=palette["plot_fit"])
             self.widget_3.canvas.draw()
+        elif show_type == "bpm1_sample":
+            if self.scan_mode == "scan":
+                for bpm1 in np.atleast_1d(data["bpm1"]):
+                    self._append_bba2_scan_point("bpm1", (float(bpm1),), render=False)
+                self._update_bba2_scan_points_summary()
         elif show_type == "thetam2":
+            if self.scan_mode == "scan":
+                corr_values = np.atleast_1d(data.get("corr", np.nan))
+                theta_values = np.atleast_1d(data["theta"])
+                bpm2_values = np.atleast_1d(data["m2"])
+                if len(corr_values) == 1 and len(theta_values) > 1:
+                    corr_values = np.repeat(corr_values[0], len(theta_values))
+                for corr, theta, bpm2 in zip(corr_values, theta_values, bpm2_values):
+                    self._append_bba2_scan_point(
+                        "corrector",
+                        (float(corr), float(theta), float(bpm2)),
+                        render=False,
+                    )
+                self._update_bba2_scan_points_summary()
             if not self.widget_4.axes.lines:
                 self.widget_4.axes.clear()
                 self._style_axes(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)")
@@ -1915,14 +2461,17 @@ class myWindow(QWidget, Ui_Form):
             self.widget_4.canvas.draw()
             self.lineEdit_21.setText(str(data["m1_ave"] * 1e3))
             self.lineEdit_19.setText(str(data["R12"]))
-            tooltip_lines = [f"Measured R12: {data['R12']:.6g} m"]
+            self.lineEdit_19.setToolTip(f"Measured R12: {data['R12']:.6g} m")
             model_r12 = data.get("model_R12")
             if model_r12 is not None:
-                tooltip_lines.append(f"Model R12: {model_r12:.6g} m")
+                self.bba2_model_r12_edit.setText(str(model_r12))
+                self.bba2_model_r12_edit.setToolTip(f"Model R12: {model_r12:.6g} m")
+            else:
+                self.bba2_model_r12_edit.setText("")
+                self.bba2_model_r12_edit.setToolTip("")
             model_r12_error = data.get("model_R12_error")
             if model_r12_error:
-                tooltip_lines.append(f"Model R12 unavailable: {model_r12_error}")
-            self.lineEdit_19.setToolTip("\n".join(tooltip_lines))
+                self.bba2_model_r12_edit.setToolTip(f"Model R12 unavailable: {model_r12_error}")
             self.lineEdit_18.setText(str(data["b1q1"] * 1e3))
         self._refresh_status()
 
@@ -2275,28 +2824,33 @@ class BBAScanThreadBBA2(BBABaseThread):
         try:
             if self.params.recal:
                 self._apply_recal_metadata()
+                if (
+                    self.params.bba2_recal_quad_points is not None
+                    or self.params.bba2_recal_corrector_points is not None
+                ):
+                    self.params.samples = 1
 
             cor = epics.PV(self.params.corrPV)
             quad = epics.PV(self.params.quadPV)
             bpm1 = epics.PV(self.params.bpm1PV)
             bpm2 = epics.PV(self.params.bpm2PV)
             print(cor, quad, bpm1, bpm2)
-            if self.params.app_context is not None:
-                self.model_backend = build_model_backend(
-                    self.params.app_context,
-                    energy_mev=self.params.energy_mev,
-                )
+            self._try_build_model_backend()
 
             sign = -1 if self.params.plane == "X" else 1
             kick_values = np.linspace(self.params.corr_from, self.params.corr_end, self.params.corr_steps)
             angle_values = self._calculate_kick_angles(kick_values)
 
             if self.params.recal:
-                quad_scan_path = self._require_path(
-                    self.params.bba2_quad_scan_path,
-                    "BBA-2 quad scan data",
-                )
-                k1_lq, quad_m2 = self._load_two_column(quad_scan_path, "BBA-2 quad scan data")
+                if self.params.bba2_recal_quad_points is not None:
+                    recal_quad = np.asarray(self.params.bba2_recal_quad_points, dtype=float)
+                    k1_lq, quad_m2 = recal_quad[:, 0], recal_quad[:, 1]
+                else:
+                    quad_scan_path = self._require_path(
+                        self.params.bba2_quad_scan_path,
+                        "BBA-2 quad scan data",
+                    )
+                    k1_lq, quad_m2 = self._load_two_column(quad_scan_path, "BBA-2 quad scan data")
                 self._emit({"show": "k1m2", "K1Lq": k1_lq, "m2": quad_m2})
                 if not self._sleep_or_stop(1):
                     return
@@ -2312,8 +2866,11 @@ class BBAScanThreadBBA2(BBABaseThread):
                 return
 
             if self.params.recal:
-                bpm1_path = self._require_path(self.params.bba2_bpm1_path, "BBA-2 BPM1 data")
-                bpm1_values = self._load_one_column(bpm1_path, "BBA-2 BPM1 data")
+                if self.params.bba2_recal_bpm1_points is not None:
+                    bpm1_values = np.asarray(self.params.bba2_recal_bpm1_points, dtype=float)
+                else:
+                    bpm1_path = self._require_path(self.params.bba2_bpm1_path, "BBA-2 BPM1 data")
+                    bpm1_values = self._load_one_column(bpm1_path, "BBA-2 BPM1 data")
             else:
                 bpm1_values = self._measure_bpm1(bpm1)
                 if bpm1_values is None:
@@ -2322,11 +2879,15 @@ class BBAScanThreadBBA2(BBABaseThread):
             print("m1_ave=", self.m1_ave * 1e3, "mm")
 
             if self.params.recal:
-                corrector_scan_path = self._require_path(
-                    self.params.bba2_corrector_scan_path,
-                    "BBA-2 corrector scan data",
-                )
-                theta, corr_m2 = self._load_two_column(corrector_scan_path, "BBA-2 corrector scan data")
+                if self.params.bba2_recal_corrector_points is not None:
+                    recal_corrector = np.asarray(self.params.bba2_recal_corrector_points, dtype=float)
+                    theta, corr_m2 = recal_corrector[:, 0], recal_corrector[:, 1]
+                else:
+                    corrector_scan_path = self._require_path(
+                        self.params.bba2_corrector_scan_path,
+                        "BBA-2 corrector scan data",
+                    )
+                    theta, corr_m2 = self._load_two_column(corrector_scan_path, "BBA-2 corrector scan data")
                 self._emit({"show": "thetam2", "theta": theta, "m2": corr_m2})
                 if not self._sleep_or_stop(1):
                     return
@@ -2408,6 +2969,11 @@ class BBAScanThreadBBA2(BBABaseThread):
                 "R12": self.R12,
                 "model_R12": self.model_r12,
                 "model_R12_error": self.model_r12_error,
+                "bpm1_reading_at_quad_center_m": (
+                    self.m1_ave - self.S / self.R12
+                    if self.S is not None and self.R12 is not None and self.m1_ave is not None
+                    else None
+                ),
                 "offset_quad_center_minus_bpm1_m": (
                     self.S / self.R12 - self.m1_ave
                     if self.S is not None and self.R12 is not None and self.m1_ave is not None
@@ -2494,6 +3060,10 @@ class BBAScanThreadBBA2(BBABaseThread):
             value = self._safe_get(bpm1, self.params.bpm1PV)
             samples.append(value)
             print("BPM1 m1=", value * 1e3, "mm")
+            self._emit({
+                "show": "bpm1_sample",
+                "bpm1": value,
+            })
             if not self._sleep_or_stop(2):
                 return None
         self._save_array(
@@ -2524,6 +3094,7 @@ class BBAScanThreadBBA2(BBABaseThread):
 
                     self._emit({
                         "show": "thetam2",
+                        "corr": kick,
                         "theta": angle_values[idx],
                         "m2": bpm2_value,
                     })
@@ -2551,13 +3122,12 @@ class BBAScanThreadBBA2(BBABaseThread):
         coeff = np.polyfit(theta_mean, m2_mean, deg=1)
         self.R12 = float(coeff[0])
         if np.isclose(self.R12, 0.0):
-            raise RuntimeError("BBA-2 corrector fit slope is zero; cannot compute offset.")
+            raise RuntimeError("BBA-2 corrector fit slope is zero; cannot compute BPM1 reading at quad center.")
         if self.S is None or self.m1_ave is None:
             raise RuntimeError("BBA-2 fit inputs are incomplete.")
 
         self.model_r12 = self._calculate_model_r12()
-        b1q1 = self.S / self.R12 - self.m1_ave
-        print(self.S, self.R12, self.m1_ave)
+        b1q1 = self.m1_ave - self.S / self.R12
         result = {
             "show": "fit_thetam2",
             "x": theta_mean,
@@ -2590,7 +3160,8 @@ class BBAScanThreadBBA2(BBABaseThread):
 
     def _calculate_model_r12(self):
         if self.model_backend is None:
-            self.model_r12_error = "model backend is not configured"
+            if not self.model_r12_error:
+                self.model_r12_error = "model backend is not configured"
             return None
 
         if self.params.plane == "X":
@@ -2615,6 +3186,20 @@ class BBAScanThreadBBA2(BBABaseThread):
         except Exception as exc:
             self.model_r12_error = str(exc)
             return None
+
+    def _try_build_model_backend(self):
+        if self.params.app_context is None:
+            self.model_r12_error = "app context is not configured"
+            return
+        try:
+            self.model_backend = build_model_backend(
+                self.params.app_context,
+                energy_mev=self.params.energy_mev,
+            )
+            self.model_r12_error = None
+        except Exception as exc:
+            self.model_backend = None
+            self.model_r12_error = str(exc)
 
     def _evaluate_formula(self, formula, current_values):
         try:

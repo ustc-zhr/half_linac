@@ -79,14 +79,12 @@ class ManagedProcessGroup:
             else:
                 proc.terminate()
 
-    def stop_all(self):
-        self.prune_finished_processes()
-        procs = list(self.processes.values())
-
+    def _stop_processes(self, procs, stop_timeout_s=None):
+        timeout_s = self.stop_timeout_s if stop_timeout_s is None else float(stop_timeout_s)
         for proc in procs:
             self._signal_process_group(proc, signal.SIGTERM)
 
-        deadline = time.time() + self.stop_timeout_s
+        deadline = time.time() + timeout_s
         while time.time() < deadline:
             if all(proc.poll() is not None for proc in procs):
                 break
@@ -96,6 +94,22 @@ class ManagedProcessGroup:
             if proc.poll() is None:
                 self._signal_process_group(proc, signal.SIGKILL)
 
+    def stop_process(self, key, stop_timeout_s=None):
+        self.prune_finished_processes()
+        proc = self.processes.get(key)
+        if proc is None:
+            return False
+
+        self._stop_processes([proc], stop_timeout_s=stop_timeout_s)
+        self.processes.pop(key, None)
+        self.process_labels.pop(key, None)
+        return True
+
+    def stop_all(self):
+        self.prune_finished_processes()
+        procs = list(self.processes.values())
+
+        self._stop_processes(procs)
         self.processes.clear()
         self.process_labels.clear()
 

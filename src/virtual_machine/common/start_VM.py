@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -39,19 +38,9 @@ def _handle_shutdown_signal(signum, frame):
 
 
 def _run_elegant(elegant_dir):
-    cleanup_script = elegant_dir / "cleanUp"
-    if cleanup_script.exists():
-        subprocess.run(
-            ["./cleanUp"],
-            cwd=str(elegant_dir),
-            check=False,
-            text=True,
-        )
-
-    log_path = elegant_dir / f"{datetime.now():%Y%m%d}.log"
     try:
         result = subprocess.run(
-            ["elegant", "one.ele"],
+            ["./one"],
             cwd=str(elegant_dir),
             check=False,
             text=True,
@@ -59,9 +48,8 @@ def _run_elegant(elegant_dir):
             stderr=subprocess.PIPE,
         )
     except FileNotFoundError as exc:
-        raise RuntimeError("elegant executable is not available in PATH.") from exc
+        raise RuntimeError(f"VM elegant runner is missing: {elegant_dir / 'one'}") from exc
 
-    log_path.write_text(result.stdout + result.stderr, encoding="utf-8")
     if result.stdout:
         print(result.stdout, end="")
     if result.stderr:

@@ -1,6 +1,7 @@
 import logging
 import sys
 import re
+import json
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -42,13 +43,10 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     require_workflow_write_allowed,
 )
-from half_linac.src.shared.machine_profile.runtime_selector import (
-    RuntimeSelectorWidget,
-    request_runtime_restart,
-)
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     APP_DIR,
+    display_unit,
     get_active_response_matrix_record,
     list_response_matrix_records,
     load_orbit_runtime_settings,
@@ -162,10 +160,18 @@ QFrame#targetToolbar {{
 }}
 
 QTabWidget::pane {{
-    border: 1px solid {panel_border};
+    border-left: 1px solid {panel_border};
+    border-right: 1px solid {panel_border};
+    border-bottom: 1px solid {panel_border};
     border-radius: 14px;
     background: {panel_bg};
     top: -1px;
+}}
+
+QTabBar::base {{
+    border: none;
+    background: transparent;
+    height: 0px;
 }}
 
 QTabBar::tab {{
@@ -184,6 +190,7 @@ QTabBar::tab {{
 QTabBar::tab:selected {{
     background: {panel_bg};
     color: {summary_title_fg};
+    border-bottom-color: {panel_bg};
 }}
 
 QTabBar::tab:hover:!selected {{
@@ -215,7 +222,6 @@ QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
     background: transparent;
     border: none;
 }}
@@ -514,6 +520,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.orbit_workflow = self.app_context.orbit_workflow
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
         self.runtime_defaults = self.orbit_runtime["runtime_defaults"]
+        self.response_progress_path = Path(self.orbit_runtime["response_progress_path"])
         self.current_theme = "dark"
         self.last_notice = "Idle"
         self.process_manager = ManagedProcessGroup(notify=self._notify)
@@ -533,6 +540,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         # connect button
         self.pushButton.clicked.connect(self.measure_res)
+        self.stop_response_button.clicked.connect(self.stop_measure_res)
         self.pushButton_4.clicked.connect(self.start_cor)
         self.pushButton_2.clicked.connect(self.cor_off)
         self.pushButton_3.clicked.connect(self.stop_cor)
@@ -542,7 +550,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_5.clicked.connect(self.selectall)
         self.pushButton_6.clicked.connect(self.cancelall)
         self.load_response_matrix_button.clicked.connect(self.load_response_matrix)
-        self.refresh_response_matrix_button.clicked.connect(self.refresh_response_matrices)
 
         self.comboBox.currentIndexChanged.connect(self._on_correction_method_changed)
         self.tabWidget.currentChanged.connect(self._refresh_status)
@@ -672,6 +679,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
             checkbox.setText(bpm_name)
             if default_target_bpms:
                 checkbox.setChecked(bpm_name in default_target_bpms)
+            else:
+                checkbox.setChecked(True)
             checkbox.show()
             checkbox.setEnabled(True)
 
@@ -712,13 +721,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        self.runtime_selector = RuntimeSelectorWidget(
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.app_context.control_backend.name,
-            parent=panel,
-        )
-        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
-        header_layout.addWidget(self.runtime_selector)
+        for text in (
+            f"Machine: {self.machine_profile.machine.display_name}",
+            f"Backend: {self.app_context.control_backend.name}",
+        ):
+            runtime_label = QLabel(text, panel)
+            runtime_label.setProperty("role", "field")
+            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            header_layout.addWidget(runtime_label)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -728,11 +738,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = OrbitStatusStrip(panel)
-        self.status_panel.add_item("tab", "TAB", "Run Correct")
-        self.status_panel.add_item("method", "METHOD", self.comboBox.currentText())
-        self.status_panel.add_item("targets", "TARGETS", "0/0")
-        self.status_panel.add_item("backend", "BACKEND", self.app_context.control_backend.name.upper())
-        self.status_panel.add_item("process", "PROCESS", "Idle")
+        self.status_panel.add_item("tab", "Tab", "Run Correct")
+        self.status_panel.add_item("method", "Method", self.comboBox.currentText())
+        self.status_panel.add_item("targets", "Targets", "0/0")
+        self.status_panel.add_item("backend", "Backend", self.app_context.control_backend.name)
+        self.status_panel.add_item("process", "Process", "Idle")
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
@@ -762,7 +772,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.horizontalLayout_9.addWidget(self.left_panel, 2)
         self.horizontalLayout_9.addWidget(self.right_panel, 3)
 
-        self.tabWidget.setDocumentMode(True)
+        self.tabWidget.setDocumentMode(False)
+        self.tabWidget.tabBar().setDrawBase(False)
         self.tabWidget.setElideMode(False)
 
         self.scrollArea.setObjectName("targetsScroll")
@@ -807,7 +818,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         response_layout = QVBoxLayout(self.response_pane)
         response_layout.setContentsMargins(14, 14, 14, 14)
         response_layout.setSpacing(12)
-        response_layout.addWidget(self._make_panel_title("Response Matrix", self.response_pane))
         response_layout.addWidget(self._build_matrix_library_card())
         response_layout.addWidget(self._build_matrix_measure_card())
         response_layout.addStretch(2)
@@ -826,7 +836,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.verticalLayout_5.removeWidget(self.scrollArea)
 
         self.selection_tabs = QTabWidget(self.right_panel)
-        self.selection_tabs.setDocumentMode(True)
+        self.selection_tabs.setDocumentMode(False)
+        self.selection_tabs.tabBar().setDrawBase(False)
         self.selection_tabs.setElideMode(False)
         self.selection_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -954,9 +965,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         group_layout.setContentsMargins(10, 10, 10, 10)
         group_layout.setSpacing(8)
 
-        title_label = QLabel(title, group)
-        title_label.setObjectName("subTitle")
-        group_layout.addWidget(title_label)
+        if title:
+            title_label = QLabel(title, group)
+            title_label.setObjectName("subTitle")
+            group_layout.addWidget(title_label)
 
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
@@ -1087,8 +1099,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         matrix_action_row.setContentsMargins(0, 0, 0, 0)
         matrix_action_row.setSpacing(10)
         self.load_response_matrix_button = QPushButton("Load Selected Matrix", card)
-        self.refresh_response_matrix_button = QPushButton("Refresh List", card)
-        for button in (self.load_response_matrix_button, self.refresh_response_matrix_button):
+        for button in (self.load_response_matrix_button,):
             button.setProperty("compact", True)
             button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
             matrix_action_row.addWidget(button)
@@ -1103,7 +1114,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.matrixSamplesLabel, self.matrixSamplesLineEdit = self._make_parameter_field(card)
         layout.addWidget(
             self._build_parameter_group(
-                "Measurement Parameters",
+                None,
                 (
                     (self.matrixResponseKickLabel, self.matrixResponseKickLineEdit, False),
                     (self.matrixWaitSLabel, self.matrixWaitSLineEdit, False),
@@ -1112,9 +1123,25 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 card,
             )
         )
+        measure_row = QHBoxLayout()
+        measure_row.setContentsMargins(0, 0, 0, 0)
+        measure_row.setSpacing(10)
         self.pushButton.setParent(card)
         self.pushButton.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        layout.addWidget(self.pushButton, 0)
+        measure_row.addWidget(self.pushButton, 0)
+        self.stop_response_button = QPushButton(card)
+        self.stop_response_button.setProperty("compact", True)
+        self.stop_response_button.setProperty("danger", True)
+        self.stop_response_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        measure_row.addWidget(self.stop_response_button, 0)
+        self.response_matrix_progress = QProgressBar(card)
+        self.response_matrix_progress.setRange(0, 100)
+        self.response_matrix_progress.setValue(0)
+        self.response_matrix_progress.setTextVisible(True)
+        self.response_matrix_progress.setFormat("Idle")
+        self.response_matrix_progress.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        measure_row.addWidget(self.response_matrix_progress, 1)
+        layout.addLayout(measure_row)
         return card
 
     def _configure_form_content(self):
@@ -1140,7 +1167,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.label_45.setProperty("role", "field")
         self.label_46.setProperty("role", "field")
 
-        limit_unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        limit_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         self.label_6.setText("Method")
         self.samplingIntervalSLabel.setText("Sampling Interval (s)")
         self.correctorAccuracyUmLabel.setText("Accuracy (um)")
@@ -1151,9 +1178,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.oneToOneGainLabel.setText("1-to-1 Gain")
         self.oneToOneMaxStepLabel.setText("1-to-1 Max Step (%)")
         self.responseKickLabel.setText(f"Local Response Kick ({limit_unit})")
-        self.matrixResponseKickLabel.setText(f"Matrix Response Kick ({limit_unit})")
-        self.matrixWaitSLabel.setText("Matrix Wait (s)")
-        self.matrixSamplesLabel.setText("Matrix Samples / Step")
+        self.matrixResponseKickLabel.setText(f"Kick Step ({limit_unit})")
+        self.matrixWaitSLabel.setText("Wait (s)")
+        self.matrixSamplesLabel.setText("Samples/step")
         self.activeMatrixLabel.setText("Active Response Matrix")
         self.matrixSetupLabel.setText("Matrix Setup")
         self.globalCorrectorsLabel.setText("Global Correctors")
@@ -1174,13 +1201,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.pushButton_6,
             self.pushButton_7,
             self.load_response_matrix_button,
-            self.refresh_response_matrix_button,
             self.openResponseMatrixTabButton,
             self.editCorrectorsButton,
         ):
             button.setProperty("compact", True)
 
-        self.pushButton.setText("Measure Response")
+        self.pushButton.setText("Start Measurement")
+        self.stop_response_button.setText("Stop Measurement")
         self.openResponseMatrixTabButton.setText("Open Response Matrix Tab")
         self.openResponseMatrixTabButton.clicked.connect(
             lambda: self.tabWidget.setCurrentWidget(self.tab_2)
@@ -1199,6 +1226,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.progressBar.setRange(0, len(self.all_checkboxes))
         self.progressBar.setTextVisible(True)
         self.progressBar.setFormat("%v/%m")
+        self._set_response_progress(0, "Idle")
 
     def _hide_target_bpm_unit_labels(self):
         for label in self.scrollAreaWidgetContents_2.findChildren(QLabel):
@@ -1340,6 +1368,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if not hasattr(self, "status_panel"):
             return
         response_running = self.process_manager.is_running("response_matrix")
+        correction_running = self.process_manager.is_running("orbit_correction")
         if self._response_scan_was_running and not response_running:
             self.refresh_response_matrices()
         self._response_scan_was_running = response_running
@@ -1352,8 +1381,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.set_item("targets", f"{selected}/{total}", "success" if selected else "warning")
         backend_name = self.app_context.control_backend.name
         backend_tone = "warning" if backend_name == "real" else "success"
-        self.status_panel.set_item("backend", backend_name.upper(), backend_tone)
+        self.status_panel.set_item("backend", backend_name, backend_tone)
         self.status_panel.set_item("process", process_text, process_tone)
+        self._refresh_response_progress(response_running)
+        if hasattr(self, "stop_response_button"):
+            self.pushButton.setEnabled(not response_running)
+            self.stop_response_button.setEnabled(response_running)
+        self.pushButton_3.setEnabled(correction_running)
         self.progressBar.setValue(selected)
         if hasattr(self, "globalCorrectorsValueLabel"):
             self.globalCorrectorsValueLabel.setText(self._global_corrector_summary())
@@ -1437,28 +1471,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._notify(f"Loaded response matrix: {Path(active['matrix_file']).name}")
         self.refresh_response_matrices()
 
-    def _apply_runtime_selection(self, machine_id, control_backend):
-        active_processes = (
-            self.process_manager.is_running("orbit_correction")
-            or self.process_manager.is_running("response_matrix")
-            or self.process_manager.is_running("cor_off")
-            or self.process_manager.is_running("cor_recover")
-        )
-        if active_processes:
-            message = "Stop orbit-correction subprocesses before switching machine or backend."
-            self._notify(message)
-            QMessageBox.warning(self, "Orbit Correct", message)
-            return
-
-        request_runtime_restart(
-            self,
-            app_label="Orbit Correction",
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.app_context.control_backend.name,
-            machine_id=machine_id,
-            control_backend=control_backend,
-        )
-
     def _extract_number(self, s):
         # 提取字符串中的第一个连续数字并转为整数
         match = re.search(r'\d+', s)
@@ -1531,7 +1543,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _corrector_limit_value(self):
         profile_limit = float(self.orbit_runtime["corrector_upperlimit"])
-        limit_unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        limit_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         corrector_limit = self._parse_positive_float(self.correctorLimitLineEdit, "Corrector Limit")
         if corrector_limit > profile_limit:
             raise ValueError(
@@ -1546,7 +1558,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         return response_kick
 
     def _local_response_kick_value(self, corrector_limit):
-        unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         return self._bounded_kick_value(
             self.responseKickLineEdit,
             "Local Response Kick",
@@ -1556,16 +1568,60 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _matrix_measurement_args(self):
         profile_limit = float(self.orbit_runtime["corrector_upperlimit"])
-        unit = self.orbit_runtime["corrector_upperlimit_unit"]
+        unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         response_kick = self._bounded_kick_value(
             self.matrixResponseKickLineEdit,
-            "Matrix Response Kick",
+            "Kick Step",
             profile_limit,
             unit,
         )
-        wait_s = self._parse_nonnegative_float(self.matrixWaitSLineEdit, "Matrix Wait")
-        n_averages = self._parse_positive_int(self.matrixSamplesLineEdit, "Matrix Samples / Step")
+        wait_s = self._parse_nonnegative_float(self.matrixWaitSLineEdit, "Wait")
+        n_averages = self._parse_positive_int(self.matrixSamplesLineEdit, "Samples/step")
         return response_kick, wait_s, n_averages
+
+    def _set_response_progress(self, percent, text):
+        if not hasattr(self, "response_matrix_progress"):
+            return
+        self.response_matrix_progress.setRange(0, 100)
+        self.response_matrix_progress.setValue(max(0, min(100, int(percent))))
+        self.response_matrix_progress.setFormat(text)
+
+    def _read_response_progress(self):
+        try:
+            return json.loads(self.response_progress_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _refresh_response_progress(self, response_running):
+        if not hasattr(self, "response_matrix_progress"):
+            return
+
+        progress = self._read_response_progress()
+        if progress is None:
+            if response_running:
+                self._set_response_progress(0, "Starting...")
+            return
+
+        completed = int(progress.get("completed", 0))
+        total = int(progress.get("total", 0))
+        percent = int(progress.get("percent", 0))
+        status = str(progress.get("status", "running"))
+        current = str(progress.get("current", "")).strip()
+
+        if total > 0:
+            text = f"{completed}/{total} ({percent}%)"
+        else:
+            text = f"{percent}%"
+        if current and status not in {"completed", "failed"}:
+            text = f"{text} - {current}"
+        elif status == "completed":
+            text = "Completed (100%)"
+        elif status == "failed":
+            text = "Failed"
+
+        self._set_response_progress(percent, text)
 
     def _one_to_one_parameter_values(self):
         max_iter = self._parse_positive_int(
@@ -1634,13 +1690,28 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def measure_res(self): #measure response matrix
         if not self._require_write_allowed("Response matrix measurement"):
             return
+        if self.process_manager.is_running("orbit_correction"):
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "Stop orbit correction before measuring the response matrix.",
+            )
+            return
         try:
             response_kick, wait_s, n_averages = self._matrix_measurement_args()
         except ValueError as exc:
             QMessageBox.warning(self, "Orbit Correct", str(exc))
             return
 
-        self.process_manager.start_process(
+        try:
+            self.response_progress_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        self._set_response_progress(0, "Starting...")
+
+        proc = self.process_manager.start_process(
             key="response_matrix",
             label="Response Matrix Measurement",
             cmd=[
@@ -1652,9 +1723,32 @@ class myWindow(QMainWindow, Ui_MainWindow):
             ],
             cwd=str(APP_DIR),
         )
+        if proc is None:
+            self._set_response_progress(0, "Failed to start")
+
+    def stop_measure_res(self):
+        stopped = self.process_manager.stop_process("response_matrix", stop_timeout_s=5.0)
+        if stopped:
+            try:
+                self.response_progress_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+            self._set_response_progress(0, "Stopped")
+        else:
+            self._notify("Response Matrix Measurement is not running.")
+        self._refresh_status()
 
     def start_cor(self):
         if not self._require_write_allowed("Orbit correction"):
+            return
+        if self.process_manager.is_running("response_matrix"):
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "Stop response matrix measurement before starting orbit correction.",
+            )
             return
         
         # prepare the target paras. 
@@ -1693,14 +1787,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
             cwd=str(APP_DIR),
         )
  
-
-
-
-    # cor_off
-    # def cor_off(self):
-    #     Popen("python3 correct.py cor_off", cwd=str(APP_DIR), shell=True)
     def cor_off(self):
         if not self._require_write_allowed("Corrector reset"):
+            return
+        if self.process_manager.is_running("response_matrix") or self.process_manager.is_running("orbit_correction"):
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "Stop active measurement or correction before zeroing correctors.",
+            )
             return
         bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
         cmd = [
@@ -1719,6 +1814,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def cor_recover(self):
         if not self._require_write_allowed("Corrector recover"):
             return
+        if self.process_manager.is_running("response_matrix") or self.process_manager.is_running("orbit_correction"):
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "Stop active measurement or correction before recovering correctors.",
+            )
+            return
         # bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
         cmd = [
             "python3", "correct.py",                  #0
@@ -1736,7 +1838,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     # stop_cor
     def stop_cor(self):
-        self.process_manager.stop_all()
+        stopped = self.process_manager.stop_process("orbit_correction")
+        if not stopped:
+            self._notify("Orbit Correction is not running.")
+        self._refresh_status()
     
     # 窗口关闭事件
     def closeEvent(self, event):

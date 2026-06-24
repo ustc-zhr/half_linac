@@ -55,11 +55,6 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
     workflow_writes_allowed,
 )
-from half_linac.src.shared.machine_profile.runtime_selector import (
-    RuntimeSelectorWidget,
-    request_runtime_restart,
-)
-
 # 会使用到VM计算η和twiss (不具有一般性)
 
 
@@ -769,13 +764,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        self.runtime_selector = RuntimeSelectorWidget(
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.control_backend,
-            parent=panel,
-        )
-        self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
-        header_layout.addWidget(self.runtime_selector)
+        for text in (
+            f"Machine: {self.machine_profile.machine.display_name}",
+            f"Backend: {self.control_backend.upper()}",
+        ):
+            runtime_label = QLabel(text, panel)
+            runtime_label.setProperty("role", "field")
+            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            header_layout.addWidget(runtime_label)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -1027,19 +1023,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.slider_energy.valueChanged.connect(self._update_energy_slider_label)
         self.slider_energy.sliderReleased.connect(self.set_bend_quad)
         self.pushButton_autoFind.clicked.connect(self.run_esa_auto_tune)
-
-    def _apply_runtime_selection(self, machine_id, control_backend):
-        if self._auto_tune_is_running():
-            self._warn("Stop ESA auto tuning before switching machine or backend.")
-            return
-        request_runtime_restart(
-            self,
-            app_label="Energy Spectrum",
-            current_machine_id=self.machine_profile.machine.id,
-            current_control_backend=self.app_context.control_backend.name,
-            machine_id=machine_id,
-            control_backend=control_backend,
-        )
 
     def _warn(self, message):
         print(message)

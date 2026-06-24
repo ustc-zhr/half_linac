@@ -7,8 +7,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-import half_linac.runtime_config as st
-
 from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
@@ -120,7 +118,11 @@ def simplify_usedline_segment(
     start_element = _require_line_name(start_element)
     end_element = _require_line_name(end_element)
     runtime = resolve_machine_runtime()
-    wait_s = st.runtime_vmmachine if wait_s is None else float(wait_s)
+    if wait_s is None:
+        workflow = resolve_virtual_machine_usedline_workflow(runtime.profile)
+        wait_s = workflow.segment_wait_s
+    else:
+        wait_s = float(wait_s)
 
     state = read_runtime_state(runtime.vm.runtime_json)
     baseline_control = _build_baseline_control()

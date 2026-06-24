@@ -97,7 +97,6 @@ class MachineProfileTests(unittest.TestCase):
             REPO_ROOT / "src/apps/orbit_correct/mainOrbCor.py",
             REPO_ROOT / "src/apps/orbit_correct/correct.py",
             REPO_ROOT / "src/apps/orbit_correct/findresponse.py",
-            REPO_ROOT / "src/apps/orbit_correct/cor_E.py",
             REPO_ROOT / "src/apps/orbit_correct/profile_runtime.py",
             REPO_ROOT / "src/apps/orbit_display/main.py",
             REPO_ROOT / "src/apps/orbit_display/submain.py",
@@ -230,6 +229,7 @@ class MachineProfileTests(unittest.TestCase):
             ("ALL_MAIN", "ALL_ESA"),
         )
         self.assertEqual(workflow.default_usedline, "ALL_MAIN")
+        self.assertEqual(workflow.segment_wait_s, 8.0)
         self.assertEqual(segment.parent_usedline, "ALL_MAIN")
         self.assertEqual(segment.start_ids, ("QL27", "QT01", "QT02", "QL15", "QL16"))
         self.assertEqual(segment.end_ids, ("PRF04", "PRF06", "PRF07", "PRF08"))
@@ -864,6 +864,7 @@ class MachineProfileTests(unittest.TestCase):
             tuple(choice.id for choice in vm_workflow.predefined_usedlines),
             ("ALL_MAIN", "ALL_ESA", "ALL_DUMP"),
         )
+        self.assertEqual(vm_workflow.segment_wait_s, 8.0)
         self.assertEqual(vm_workflow.local_segments[1].parent_usedline, "ALL_ESA")
         self.assertEqual(vm_workflow.local_segments[1].end_ids, ("PRFESA",))
         self.assertEqual(vm_workflow.local_segments[2].parent_usedline, "ALL_DUMP")

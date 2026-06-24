@@ -5,11 +5,11 @@
       "quad": "QL27",
       "flag": "PRF06",
       "scan": {
-        "k1_from": 0,
-        "k1_end": 5,
+        "k1_from": 1.5,
+        "k1_end": 2.5,
         "k1_steps": 15,
-        "samples": 5,
-        "sleeptime": 5
+        "samples": 1,
+        "sleeptime": 8
       },
       "energy_mev": 2200
     },
@@ -47,12 +47,26 @@
       "id": "emit_qt02_prf06",
       "quad": "QT02",
       "flag": "PRF06",
+      "scan": {
+        "k1_from": 1.5,
+        "k1_end": 2.5,
+        "k1_steps": 15,
+        "samples": 1,
+        "sleeptime": 8
+      },
       "energy_mev": 2200
     },
     {
       "id": "emit_qt02_prf07",
       "quad": "QT02",
       "flag": "PRF07",
+      "scan": {
+        "k1_from": 1.5,
+        "k1_end": 2.5,
+        "k1_steps": 15,
+        "samples": 1,
+        "sleeptime": 8
+      },
       "energy_mev": 2200
     },
     {
@@ -73,5 +87,6 @@
       "flag": "PRF04",
       "energy_mev": 220
     }
-  ]
+  ],
+  "default_preset": "emit_qt02_prf07"
 }
