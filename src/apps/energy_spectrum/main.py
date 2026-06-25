@@ -59,6 +59,7 @@ from half_linac.src.shared.machine_profile import (
 
 
 HEADER_ACTION_HEIGHT = 32
+DEFAULT_DESIGN_ETA = 0.7484210850804714  # [m]
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -464,7 +465,7 @@ class SpectrumStatusStrip(QWidget):
         for container, value_label in self._items.values():
             self._refresh_tone(container, value_label)
 
-    def set_item(self, key, text, tone="subtle"):
+    def set_item(self, key, text, tone="subtle", tooltip=None):
         item = self._items.get(key)
         if item is None:
             return
@@ -472,6 +473,8 @@ class SpectrumStatusStrip(QWidget):
         container.setProperty("tone", tone)
         value_label.setProperty("tone", tone)
         value_label.setText(text)
+        container.setToolTip(tooltip or "")
+        value_label.setToolTip(tooltip or "")
         self._refresh_tone(container, value_label)
 
     @staticmethod
@@ -566,7 +569,20 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
         self.energy_config = self._load_energy_spectrum_config()
-        self.energy_model_config = self._load_energy_model_config()
+        self._pv_available = False
+        self._pv_error = None
+        self._model_error = None
+        self._model_text = "Waiting"
+        self._model_tone = "subtle"
+        self._model_tooltip = None
+        try:
+            self.energy_model_config = self._load_energy_model_config()
+        except MachineProfileError as exc:
+            self.energy_model_config = None
+            self._model_error = str(exc)
+            self._model_text = "Unavailable"
+            self._model_tone = "warning"
+            self._model_tooltip = f"Model backend unavailable: {self._model_error}"
         self.start_elements = self._build_start_elements()
         self.energy_set_pv = self._load_energy_set_pv()
         self.esa_quad_ids = tuple(self.energy_config["esa_quads"])
@@ -581,10 +597,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
 
         self.current_theme = "dark"
-        self._pv_available = False
-        self._pv_error = None
-        self._model_text = "Waiting"
-        self._model_tone = "subtle"
         self._auto_tune_text = "Idle"
         self._auto_tune_tone = "subtle"
 
@@ -612,9 +624,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.eta_flag = 0
 
         self._connect_signals()
+        self._refresh_model_controls()
         self._draw_placeholder_views()
-        self._refresh_status()
-        self.cal_disp()
+        if self._model_available():
+            self.cal_disp()
+        else:
+            self._use_design_eta(tooltip=self._model_tooltip)
+            self._refresh_status()
         self.fit_method = self.comboBox_fitmethod.currentText()
         self.ESA_running()
 
@@ -704,7 +720,42 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             raise MachineProfileError(f"{location} is missing backend {mode!r}.") from exc
 
     def _energy_model_path(self, key):
+        if self.energy_model_config is None:
+            raise MachineProfileError(self._model_error or "energy_spectrum model backend is unavailable.")
         return Path(self.energy_model_config[key])
+
+    def _model_available(self):
+        return self.energy_model_config is not None
+
+    def _model_unavailable_message(self):
+        return self._model_error or "energy_spectrum model backend is unavailable."
+
+    def _refresh_model_controls(self):
+        available = self._model_available()
+        if available:
+            self.pushButton_cal_disp.setEnabled(True)
+            self.pushButton_cal_disp.setToolTip("Calculate ESA dispersion with the configured model backend.")
+            self.pushButton_cal_twiss_disp.setEnabled(True)
+            self.pushButton_cal_twiss_disp.setToolTip("Calculate ESA optics with the configured model backend.")
+        else:
+            message = f"Model backend unavailable: {self._model_unavailable_message()}"
+            self.pushButton_cal_disp.setEnabled(False)
+            self.pushButton_cal_disp.setToolTip(message)
+            self.pushButton_cal_twiss_disp.setEnabled(False)
+            self.pushButton_cal_twiss_disp.setToolTip(message)
+            self._update_model_status("Unavailable", "warning", message)
+
+        for button in (self.pushButton_cal_disp, self.pushButton_cal_twiss_disp):
+            self._refresh_widget_style(button)
+
+    def _use_design_eta(self, status_text=None, tooltip=None):
+        self.eta_flag = DEFAULT_DESIGN_ETA
+        self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag, 5)))
+        self._update_model_status(
+            status_text or f"design eta {self.eta_flag:.4f} m",
+            "warning",
+            tooltip,
+        )
 
     def _get_esa_quad_values(self):
         values = {}
@@ -1196,9 +1247,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._pv_error = error_text
             print("PV connection unavailable. Energy Spectrum is in offline shell mode.")
 
-    def _update_model_status(self, text, tone):
+    def _update_model_status(self, text, tone, tooltip=None):
         self._model_text = text
         self._model_tone = tone
+        self._model_tooltip = tooltip
 
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
@@ -1214,7 +1266,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.status_panel.set_item("connection", "Offline shell", "warning")
 
         self.status_panel.set_item("fit", self.comboBox_fitmethod.currentText(), "subtle")
-        self.status_panel.set_item("model", self._model_text, self._model_tone)
+        self.status_panel.set_item("model", self._model_text, self._model_tone, self._model_tooltip)
         self.status_panel.set_item("tune", self._auto_tune_text, self._auto_tune_tone)
 
         energy_text = self.label_energy.text().strip()
@@ -1608,6 +1660,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._refresh_status()
 
     def cal_disp(self):
+        if not self._model_available():
+            message = f"Model backend unavailable: {self._model_unavailable_message()}"
+            print(message)
+            self._use_design_eta(tooltip=message)
+            self._refresh_status()
+            return
+
         try:
             # 根据ESA的弯铁SM(L, angle)和Q铁QE01 QE02 QE03(k,L) 漂移段(L)参数计算eta    变量仅为Q_k
             # 采用elegant计算
@@ -1670,7 +1729,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         
         except Exception as e:
             print(f"Error in cal_disp: {e}")
-            self.eta_flag = 0.7484210850804714  # 理论设计值
+            self.eta_flag = DEFAULT_DESIGN_ETA  # 理论设计值
             print('default dispersion: ',self.eta_flag, 'm')
             self._update_model_status(f"design eta {self.eta_flag:.4f} m", "warning")
             
@@ -1679,6 +1738,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def cal_twiss_disp(self):
         """calculate the twiss @ ESA flag according the twiss @ in"""
+        if not self._model_available():
+            message = f"Model backend unavailable: {self._model_unavailable_message()}"
+            print(message)
+            self._update_model_status("Unavailable", "warning", message)
+            self._refresh_status()
+            return
+
         # get twiss @ in
         alpha_in = self.doubleSpinBox_alpha_in.value() #    -16.2@QT02
         beta_in = self.doubleSpinBox_beta_in.value() # m     88.6@QT02

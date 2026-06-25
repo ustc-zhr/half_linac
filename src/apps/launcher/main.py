@@ -38,6 +38,7 @@ from half_linac.src.shared.machine_profile import (
     REAL_STATUS_NOT_SUPPORTED,
     REAL_STATUS_READ_ONLY,
     REAL_STATUS_WRITE_BLOCKED,
+    describe_app_model_support,
     describe_app_support,
     load_profile,
     normalize_mode,
@@ -81,11 +82,12 @@ DARK_THEME = {
     "group_bg": "#172027",
     "group_border": "#24333d",
     "group_title_fg": "#e7edf1",
-    "button_bg": "#11191f",
-    "button_border": "#2b3d48",
+    "group_title_accent_fg": "#7dd7c5",
+    "button_bg": "#22313a",
+    "button_border": "#48606e",
     "button_fg": "#edf3f7",
-    "button_hover_bg": "#18242c",
-    "button_pressed_bg": "#0c1217",
+    "button_hover_bg": "#2b3f4b",
+    "button_pressed_bg": "#19262e",
     "button_running_bg": "#193238",
     "button_running_border": "#45d0bc",
     "button_running_fg": "#f3fbf8",
@@ -128,6 +130,7 @@ LIGHT_THEME = {
     "group_bg": "#fffdf9",
     "group_border": "#d7cec1",
     "group_title_fg": "#2d3940",
+    "group_title_accent_fg": "#2d7f6d",
     "button_bg": "#f8f3eb",
     "button_border": "#d9d0c3",
     "button_fg": "#2c3942",
@@ -228,8 +231,8 @@ QGroupBox {{
     border: 1px solid {group_border};
     border-radius: 14px;
     margin-top: 0px;
-    padding-top: 26px;
-    font-size: 15px;
+    padding-top: 30px;
+    font-size: 14px;
     font-weight: 700;
 }}
 
@@ -237,11 +240,13 @@ QGroupBox::title {{
     subcontrol-origin: padding;
     subcontrol-position: top left;
     left: 16px;
-    top: 6px;
+    top: 7px;
     padding: 0px;
     background-color: transparent;
-    color: {group_title_fg};
+    color: {group_title_accent_fg};
     border: none;
+    font-size: 15px;
+    font-weight: 800;
 }}
 
 QPushButton {{
@@ -250,7 +255,7 @@ QPushButton {{
     border-radius: 12px;
     color: {button_fg};
     padding: 10px 12px;
-    min-height: 44px;
+    min-height: 52px;
     font-size: 12px;
     font-weight: 700;
     text-align: center;
@@ -282,6 +287,19 @@ QPushButton:disabled {{
     color: {button_disabled_fg};
     border-color: {button_disabled_border};
     background-color: {button_disabled_bg};
+}}
+
+QPushButton[realStatus="read_only"] {{
+    border-color: {status_item_idle_bar};
+}}
+
+QPushButton[realStatus="write_blocked"] {{
+    border-color: {metric_warning_fg};
+}}
+
+QPushButton[realStatus="write_smoke_passed"],
+QPushButton[realStatus="commissioned"] {{
+    border-color: {metric_active_fg};
 }}
 
 QPushButton#shutdownButton {{
@@ -519,7 +537,7 @@ class LauncherStatusStrip(QWidget):
         for container, value_label in self._items.values():
             self._refresh_tone(container, value_label)
 
-    def set_item(self, key, text, tone="subtle"):
+    def set_item(self, key, text, tone="subtle", tooltip=None):
         item = self._items.get(key)
         if item is None:
             return
@@ -527,6 +545,9 @@ class LauncherStatusStrip(QWidget):
         container.setProperty("tone", tone)
         value_label.setProperty("tone", tone)
         value_label.setText(text)
+        if tooltip is not None:
+            container.setToolTip(tooltip)
+            value_label.setToolTip(tooltip)
         self._refresh_tone(container, value_label)
 
     @staticmethod
@@ -544,7 +565,7 @@ APP_DEFINITIONS = {
         "category": "core",
         "button_text": "Virtual Accelerator",
         "label": "Virtual Accelerator",
-        "description": "Open the VM control room and manage the VM plus softIOC workflow.",
+        "description": "Manage the virtual machine and softIOC workflow.",
         "cmd": ["python3", "mainVM.py"],
         "cwd": ROOT / "src/virtual_machine/half_elegant",
     },
@@ -553,7 +574,7 @@ APP_DEFINITIONS = {
         "category": "core",
         "button_text": "Optimization",
         "label": "Optimization",
-        "description": "Start the optimization launcher in the vendored GOTAcc workspace.",
+        "description": "Open the GOTAcc optimization workflow.",
         "cmd": ["python3", "mainOPT.py"],
         "cwd": ROOT / "src/optimization",
     },
@@ -562,7 +583,7 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Orbit Display",
         "label": "Orbit Display",
-        "description": "Visualize BPM orbit data from the VM-safe launcher environment.",
+        "description": "View BPM orbit readings for the selected machine/backend.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/orbit_display",
     },
@@ -571,8 +592,8 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Beam Monitor",
         "label": "Beam Monitor",
-        "description": "Open the beam monitor in VM mode.",
-        "cmd": ["python3", "main.py", "vm"],
+        "description": "View beam images and monitor profile diagnostics.",
+        "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/beam_monitor",
     },
     "jitter": {
@@ -580,7 +601,7 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Jitter Analysis",
         "label": "Jitter Analysis",
-        "description": "Launch the newer jitter analysis application.",
+        "description": "Analyze shot-to-shot beam and signal jitter.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/jitter_analysis",
     },
@@ -589,7 +610,7 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Energy Spectrum",
         "label": "Energy Spectrum",
-        "description": "Inspect the energy spectrum workflow with the current machine/backend runtime.",
+        "description": "Analyze the ESA energy spectrum workflow.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/energy_spectrum",
     },
@@ -598,7 +619,7 @@ APP_DEFINITIONS = {
         "category": "control",
         "button_text": "BBA",
         "label": "BBA",
-        "description": "Start the beam-based alignment tool.",
+        "description": "Run beam-based alignment scans and recalculation.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/bba",
     },
@@ -607,31 +628,41 @@ APP_DEFINITIONS = {
         "category": "control",
         "button_text": "Orbit Correct",
         "label": "Orbit Correct",
-        "description": "Open the orbit correction control panel.",
+        "description": "Measure response matrices and apply orbit correction.",
         "cmd": ["python3", "mainOrbCor.py"],
         "cwd": ROOT / "src/apps/orbit_correct",
     },
     "emitmeasure": {
         "button_name": "emitmeasure",
         "category": "control",
-        "button_text": "Emit Measure",
-        "label": "Emit Measure",
-        "description": "Launch the emittance measurement workflow.",
+        "button_text": "Emittance",
+        "label": "Emittance",
+        "description": "Run quadrupole-scan emittance measurement and Twiss analysis.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/emit_measure",
     },
-}
-
-DIAGNOSTIC_KEYS = {
-    "orbitdisplay",
-    "beammonitor",
-    "jitter",
-    "energy_spectrum",
-}
-CONTROL_KEYS = {
-    "bba",
-    "orbit_correct",
-    "emitmeasure",
+    "energy_feedback": {
+        "button_name": "energy_feedback_button",
+        "category": "control",
+        "button_text": "Energy Feedback",
+        "label": "Energy Feedback",
+        "description": "Reserved launcher entry for energy feedback control.",
+        "reserved": True,
+        "reserved_reason": "Energy feedback GUI is not connected yet.",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/energy_feedback",
+    },
+    "hv_feedback": {
+        "button_name": "hv_feedback_button",
+        "category": "control",
+        "button_text": "HV Feedback",
+        "label": "HV Feedback",
+        "description": "Reserved launcher entry for high-voltage feedback control.",
+        "reserved": True,
+        "reserved_reason": "High-voltage feedback GUI is not connected yet.",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/hv_feedback",
+    },
 }
 
 PROFILE_MANAGED_APP_KEYS = {
@@ -661,6 +692,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.current_theme = "dark"
         self.managed_buttons = {}
         self.app_support_status = {}
+        self.app_real_status = {}
         self.group_button_specs = []
 
         self._configure_window()
@@ -681,10 +713,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} Control Room")
-        self.resize(1120, 800)
-        self.setMinimumSize(820, 720)
+        self.resize(1240, 800)
+        self.setMinimumSize(940, 720)
         self._apply_theme()
         self.textEdit.hide()
+        self.textEdit.setMaximumHeight(160)
         self.textEdit.setReadOnly(True)
         self.textEdit.setAcceptRichText(False)
         self.textEdit.setUndoRedoEnabled(False)
@@ -738,11 +771,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.theme_toggle_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.theme_toggle_button.clicked.connect(self._toggle_theme)
 
+        self.logs_button = QPushButton("Logs", panel)
+        self.logs_button.setObjectName("logToggleButton")
+        self.logs_button.setCheckable(True)
+        self.logs_button.setProperty("compact", True)
+        self.logs_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.logs_button.setMinimumWidth(72)
+        self.logs_button.setFixedHeight(HEADER_ACTION_HEIGHT)
+        self.logs_button.setToolTip("Show or hide the current launcher activity log.")
+        self.logs_button.toggled.connect(self._toggle_activity_log)
+
         self.shutdown_button = QPushButton("Shutdown Apps", panel)
         self.shutdown_button.setObjectName("shutdownButton")
         self.shutdown_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        self.shutdown_button.setMinimumWidth(142)
+        self.shutdown_button.setMinimumWidth(132)
         self.shutdown_button.setFixedHeight(HEADER_ACTION_HEIGHT)
+        header_layout.addWidget(self.logs_button)
         header_layout.addWidget(self.shutdown_button)
         header_layout.addWidget(self.theme_toggle_button)
 
@@ -751,22 +795,21 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel = LauncherStatusStrip(panel)
         self.status_panel.add_item("machine", "MACHINE", self.machine_profile.machine.id)
         self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
-        self.status_panel.add_item("real_status", "REAL STATUS", "--")
-        self.status_panel.add_item("active", "ACTIVE", "0 running")
-        self.status_panel.add_item("core", "CORE", "Idle")
-        self.status_panel.add_item("tools", "TOOLS", "Idle")
+        self.status_panel.add_item("real_access", "REAL ACCESS", "--")
+        self.status_panel.add_item("running", "RUNNING", "0 apps")
         self.status_panel.finish()
         self.status_panel.apply_theme(DARK_THEME if self.current_theme == "dark" else LIGHT_THEME)
-        self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
+        self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self._update_theme_toggle_button()
 
         outer_layout.addWidget(self.status_panel)
         self.verticalLayout.insertWidget(1, panel)
+        self.verticalLayout.removeWidget(self.textEdit)
+        self.verticalLayout.insertWidget(1, self.textEdit)
 
     def _configure_groups(self):
-        self.groupBox_4.setTitle("Diagnostic")
-        self.groupBox_5.setTitle("Beam Control")
+        self.groupBox_4.setTitle("Diagnostics")
+        self.groupBox_5.setTitle("Beam Tuning")
         self.groupBox_3.setTitle("Core Systems")
 
     def _configure_group_panel(self):
@@ -793,17 +836,33 @@ class myWindow(QMainWindow, Ui_MainWindow):
             group_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
             group_box.layout().setContentsMargins(10, 12, 10, 10)
 
+        self.energy_feedback_button = QPushButton(self.groupBox_5)
+        self.energy_feedback_button.setObjectName("energy_feedback_button")
+        self.hv_feedback_button = QPushButton(self.groupBox_5)
+        self.hv_feedback_button.setObjectName("hv_feedback_button")
+
         self.group_button_specs = [
             (self.gridLayout_3, self.groupBox_3, [self.vmbtn, self.online_opt], 1),
-            (self.gridLayout_2, self.groupBox_4, [self.orbitdisplay, self.beammonitor, self.jitter_plot, self.energy_spectrum], 1),
-            (self.gridLayout_4, self.groupBox_5, [self.BBA, self.emitmeasure, self.orbit_correct], 1),
+            (self.gridLayout_2, self.groupBox_4, [self.beammonitor, self.orbitdisplay, self.energy_spectrum, self.jitter_plot], 1),
+            (
+                self.gridLayout_4,
+                self.groupBox_5,
+                [
+                    self.orbit_correct,
+                    self.BBA,
+                    self.emitmeasure,
+                    self.energy_feedback_button,
+                    self.hv_feedback_button,
+                ],
+                1,
+            ),
         ]
         self._schedule_group_button_layout_update()
 
     def _configure_app_buttons(self):
         for key, spec in APP_DEFINITIONS.items():
             button = getattr(self, spec["button_name"])
-            button.setText(spec["button_text"])
+            button.setText(self._button_display_text(key))
             button.setToolTip(spec["description"])
             button.setProperty("category", spec["category"])
             button.setProperty("running", False)
@@ -813,6 +872,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _refresh_machine_capabilities(self):
         self.app_support_status = {}
+        self.app_real_status = {}
         for key, spec in APP_DEFINITIONS.items():
             button = self.managed_buttons.get(key)
             if button is None:
@@ -821,6 +881,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
             tooltip = spec["description"]
             supported = True
             reason = None
+            if spec.get("reserved"):
+                supported = False
+                reason = spec.get("reserved_reason", "This launcher entry is reserved for future implementation.")
+                tooltip = f"{tooltip}\n\nReserved: {reason}"
             if key == "vm_manager":
                 supported, reason = self._refresh_vm_manager_launch_spec(spec)
                 if not supported and reason:
@@ -841,10 +905,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
                     )
 
             if supported and profile_app_name is not None:
+                model_supported, model_reason = describe_app_model_support(
+                    self.machine_profile.machine.id,
+                    profile_app_name,
+                )
+                if not model_supported and model_reason:
+                    tooltip = (
+                        f"{tooltip}\n\n"
+                        f"Model backend unavailable for machine '{self.machine_profile.machine.id}': {model_reason}"
+                    )
+
+            if supported and profile_app_name is not None:
                 tooltip = self._append_real_commissioning_tooltip(tooltip, profile_app_name)
                 if self.machine_profile.machine.id == "irfel" and self.control_backend == "real":
                     try:
                         real_status = real_commissioning_status(self.machine_profile, profile_app_name)
+                        self.app_real_status[key] = real_status
                     except MachineProfileError as exc:
                         supported = False
                         reason = f"IRFEL real commissioning status is invalid: {exc}"
@@ -855,6 +931,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
             self.app_support_status[key] = (supported, reason)
             button.setEnabled(supported)
+            button.setText(self._button_display_text(key))
+            button.setProperty("realStatus", self.app_real_status.get(key, "none"))
             button.setToolTip(tooltip)
             self._refresh_widget_style(button)
 
@@ -880,10 +958,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
         spec["cwd"] = runtime.vm.root
         return True, None
 
+    def _button_display_text(self, key, running=False):
+        spec = APP_DEFINITIONS[key]
+        if running:
+            return f"{spec['button_text']}\nrunning"
+        return spec["button_text"]
+
     def _configure_session_buttons(self):
-        self.groupBox.hide()
-        self.energy_feedback.hide()
-        self.pushButton_5.hide()
         self.shutdown_button.setText("Shutdown Apps")
         self.shutdown_button.setToolTip("Terminate all subprocesses started from this Control Room window.")
         self.shutdown_button.setProperty("category", "session")
@@ -915,11 +996,21 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._apply_theme()
         self._refresh_process_state()
 
+    def _toggle_activity_log(self, visible):
+        self.textEdit.setVisible(visible)
+        self.logs_button.setText("Hide Logs" if visible else "Logs")
+        if visible:
+            scrollbar = self.textEdit.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+
     def _append_log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
         line = f"[{timestamp}] {message}"
         print(line)
         self.textEdit.append(line)
+        if self.textEdit.isVisible():
+            scrollbar = self.textEdit.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
 
     def _notify(self, message):
         self._append_log(message)
@@ -935,6 +1026,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _launch_app(self, key):
         spec = APP_DEFINITIONS[key]
+        if spec.get("reserved"):
+            self._notify(f"{spec['label']} is reserved but not connected yet.")
+            return
         supported, reason = self.app_support_status.get(key, (True, None))
         if not supported:
             message = reason or (
@@ -945,7 +1039,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._refresh_process_state()
             return
         if self.process_manager.is_running(key):
-            self._notify(f"{spec['label']} is already running.")
+            self._handle_running_app(key)
             self._refresh_process_state()
             return
 
@@ -959,6 +1053,28 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if proc is not None:
             self._notify(f"{spec['label']} started.")
         self._refresh_process_state()
+
+    def _handle_running_app(self, key):
+        spec = APP_DEFINITIONS[key]
+        prompt = QMessageBox(self)
+        prompt.setIcon(QMessageBox.Question)
+        prompt.setWindowTitle(spec["label"])
+        prompt.setText(f"{spec['label']} is already running.")
+        stop_button = prompt.addButton("Stop", QMessageBox.AcceptRole)
+        cancel_button = prompt.addButton("Cancel", QMessageBox.RejectRole)
+        prompt.setDefaultButton(cancel_button)
+        prompt.exec_()
+
+        if prompt.clickedButton() is not stop_button:
+            self._notify(f"{spec['label']} is already running.")
+            return
+
+        self._notify(f"Stopping {spec['label']}.")
+        stopped = self.process_manager.stop_process(key)
+        if stopped:
+            self._notify(f"{spec['label']} stopped.")
+        else:
+            self._notify(f"{spec['label']} was not running.")
 
     def _apply_runtime_selection(self, machine_id, control_backend):
         self.process_manager.prune_finished_processes()
@@ -1018,17 +1134,17 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._refresh_process_state()
         self._notify("All managed subprocesses have been stopped.")
 
-    def _set_summary_value(self, key, text, state):
+    def _set_summary_value(self, key, text, state, tooltip=None):
         tone = {
             "idle": "subtle",
             "active": "success",
             "warning": "warning",
         }.get(state, "subtle")
-        self.status_panel.set_item(key, text, tone=tone)
+        self.status_panel.set_item(key, text, tone=tone, tooltip=tooltip)
 
     def _real_commissioning_summary(self):
         if self.control_backend != "real":
-            return "VM mode", "idle"
+            return "--", "idle"
         if self.machine_profile.machine.id != "irfel":
             return "Untracked", "idle"
 
@@ -1063,45 +1179,24 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ]
 
         for key, button in self.managed_buttons.items():
-            button.setProperty("running", self.process_manager.is_running(key))
+            running = self.process_manager.is_running(key)
+            button.setProperty("running", running)
+            button.setProperty("realStatus", self.app_real_status.get(key, "none"))
+            button.setText(self._button_display_text(key, running=running))
             self._refresh_widget_style(button)
 
         active_count = len(running_keys)
         self._set_summary_value(
-            "active",
-            f"{active_count} running" if active_count else "0 running",
+            "running",
+            f"{active_count} apps" if active_count else "0 apps",
             "active" if active_count else "idle",
         )
-
-        core_online = "vm_manager" in running_keys or "optimization" in running_keys
-        core_labels = [
-            APP_DEFINITIONS[key]["label"]
-            for key in ("vm_manager", "optimization")
-            if key in running_keys
-        ]
-        self._set_summary_value(
-            "core",
-            ", ".join(core_labels) if core_labels else "Idle",
-            "active" if core_online else "idle",
-        )
-
-        tool_count = sum(key in DIAGNOSTIC_KEYS or key in CONTROL_KEYS for key in running_keys)
-        if tool_count:
-            diag_count = sum(key in DIAGNOSTIC_KEYS for key in running_keys)
-            ctrl_count = sum(key in CONTROL_KEYS for key in running_keys)
-            self._set_summary_value(
-                "tools",
-                f"{tool_count} live ({diag_count} diag / {ctrl_count} control)",
-                "active",
-            )
-        else:
-            self._set_summary_value("tools", "Idle", "idle")
 
         backend_tone = "warning" if self.control_backend == "real" else "active"
         self._set_summary_value("machine", self.machine_profile.machine.id, "active")
         self._set_summary_value("backend", self.control_backend.upper(), backend_tone)
         real_status_text, real_status_state = self._real_commissioning_summary()
-        self._set_summary_value("real_status", real_status_text, real_status_state)
+        self._set_summary_value("real_access", real_status_text, real_status_state)
 
         has_running_processes = active_count > 0
         self.shutdown_button.setEnabled(has_running_processes)
@@ -1191,7 +1286,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 row = index // columns
                 column = index % columns
                 button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                button.setMinimumHeight(44)
+                button.setMinimumHeight(52)
                 button.setMaximumWidth(16777215)
                 layout.addWidget(button, row, column)
 

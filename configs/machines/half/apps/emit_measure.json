@@ -9,7 +9,8 @@
         "k1_end": 2.5,
         "k1_steps": 15,
         "samples": 1,
-        "sleeptime": 8
+        "settle_time": 8,
+        "sample_interval": 0.5
       },
       "energy_mev": 2200
     },
@@ -52,7 +53,8 @@
         "k1_end": 2.5,
         "k1_steps": 15,
         "samples": 1,
-        "sleeptime": 8
+        "settle_time": 8,
+        "sample_interval": 0.5
       },
       "energy_mev": 2200
     },
@@ -65,7 +67,8 @@
         "k1_end": 2.5,
         "k1_steps": 15,
         "samples": 1,
-        "sleeptime": 8
+        "settle_time": 8,
+        "sample_interval": 8
       },
       "energy_mev": 2200
     },

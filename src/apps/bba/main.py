@@ -45,6 +45,7 @@ from gui import Ui_Form
 
 from half_linac.src.shared.machine_profile import (
     build_model_backend,
+    describe_app_model_support,
     get_bba_preset,
     list_elements,
     load_app_context,
@@ -442,7 +443,7 @@ class BBAStatusStrip(QWidget):
         for container, value_label in self._items.values():
             self._refresh_tone(container, value_label)
 
-    def set_item(self, key, text, tone="subtle"):
+    def set_item(self, key, text, tone="subtle", tooltip=None):
         item = self._items.get(key)
         if item is None:
             return
@@ -450,6 +451,8 @@ class BBAStatusStrip(QWidget):
         container.setProperty("tone", tone)
         value_label.setProperty("tone", tone)
         value_label.setText(text)
+        container.setToolTip(tooltip or "")
+        value_label.setToolTip(tooltip or "")
         self._refresh_tone(container, value_label)
 
     @staticmethod
@@ -523,6 +526,10 @@ class myWindow(QWidget, Ui_Form):
         self._plot_wrappers = {}
         self._result_fields = []
         self.bba2_scan_points = {key: [] for key in BBA2_SCAN_POINT_COLUMNS}
+        self._model_backend_available, self._model_backend_error = describe_app_model_support(
+            self.machine_profile.machine.id,
+            "bba",
+        )
 
         self._configure_window()
         self._setup_defaults()
@@ -668,6 +675,7 @@ class myWindow(QWidget, Ui_Form):
         self.status_panel.add_item("plane", "PLANE", self.comboBox_5.currentText())
         self.status_panel.add_item("scan", "SCAN", "Idle")
         self.status_panel.add_item("backend", "BACKEND", "Standard")
+        self.status_panel.add_item("model", "MODEL", self._model_backend_status_text())
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
@@ -732,13 +740,19 @@ class myWindow(QWidget, Ui_Form):
             button.setProperty("compact", True)
 
         self.pushButton.setText("Start Scan")
-        self.pushButton_2.setText("Clear")
+        self.pushButton_2.setText("Clear View")
         self.pushButton_3.setText("Recalculate")
         self.pushButton_4.setText("Stop Scan")
         self.pushButton_5.setText("Start Scan")
         self.pushButton_6.setText("Stop Scan")
         self.pushButton_7.setText("Recalculate")
-        self.pushButton_8.setText("Clear")
+        self.pushButton_8.setText("Clear View")
+        clear_view_tooltip = (
+            "Clear plots and displayed results. "
+            "Does not restore PVs or delete scan points."
+        )
+        self.pushButton_2.setToolTip(clear_view_tooltip)
+        self.pushButton_8.setToolTip(clear_view_tooltip)
 
         self._result_fields = [self.lineEdit_10, self.lineEdit_18, self.lineEdit_19, self.lineEdit_21]
         for field in self._result_fields:
@@ -828,18 +842,8 @@ class myWindow(QWidget, Ui_Form):
         layout = QVBoxLayout(self.frame_2)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
-        layout.addWidget(self._make_panel_title("Run & Readout", self.frame_2))
 
         self.label_13.hide()
-
-        controls = QHBoxLayout()
-        controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(8)
-        for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
-            button.setParent(self.frame_2)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            controls.addWidget(button)
-        layout.addLayout(controls)
 
         points_header = QHBoxLayout()
         points_header.setContentsMargins(0, 4, 0, 0)
@@ -871,9 +875,9 @@ class myWindow(QWidget, Ui_Form):
         point_actions.setContentsMargins(0, 0, 0, 0)
         point_actions.setSpacing(6)
         self.pushButton_3.setParent(self.frame_2)
-        self.bba1_load_points_button = QPushButton("Load Archive", self.frame_2)
+        self.bba1_load_points_button = QPushButton("Load Points", self.frame_2)
         self.bba1_exclude_points_button = QPushButton("Exclude Selected", self.frame_2)
-        self.bba1_restore_points_button = QPushButton("Restore All", self.frame_2)
+        self.bba1_restore_points_button = QPushButton("Use All Points", self.frame_2)
         for button in (
             self.pushButton_3,
             self.bba1_load_points_button,
@@ -887,6 +891,17 @@ class myWindow(QWidget, Ui_Form):
         self.bba1_exclude_points_button.clicked.connect(self._exclude_selected_bba1_scan_points)
         self.bba1_restore_points_button.clicked.connect(self._restore_all_bba1_scan_points)
         layout.addLayout(point_actions)
+
+        layout.addWidget(self._make_panel_title("Run & Readout", self.frame_2))
+
+        controls = QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(8)
+        for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
+            button.setParent(self.frame_2)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            controls.addWidget(button)
+        layout.addLayout(controls)
 
         result_row = QGridLayout()
         result_row.setHorizontalSpacing(8)
@@ -1015,20 +1030,9 @@ class myWindow(QWidget, Ui_Form):
         layout = QVBoxLayout(self.frame_4)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
-        layout.addWidget(self._make_panel_title("Run & Readout", self.frame_4))
 
         for label in (self.label_20, self.label_21, self.label_23):
             label.hide()
-
-        controls = QHBoxLayout()
-        controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(8)
-        self.comboBox_11.hide()
-        for button in (self.pushButton_5, self.pushButton_8, self.pushButton_6):
-            button.setParent(self.frame_4)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            controls.addWidget(button)
-        layout.addLayout(controls)
 
         points_header = QHBoxLayout()
         points_header.setContentsMargins(0, 4, 0, 0)
@@ -1059,9 +1063,9 @@ class myWindow(QWidget, Ui_Form):
         point_actions = QHBoxLayout()
         point_actions.setContentsMargins(0, 0, 0, 0)
         point_actions.setSpacing(6)
-        self.bba2_load_points_button = QPushButton("Load Archive", self.frame_4)
+        self.bba2_load_points_button = QPushButton("Load Points", self.frame_4)
         self.bba2_exclude_points_button = QPushButton("Exclude Selected", self.frame_4)
-        self.bba2_restore_points_button = QPushButton("Restore All", self.frame_4)
+        self.bba2_restore_points_button = QPushButton("Use All Points", self.frame_4)
         self.pushButton_7.setParent(self.frame_4)
         for button in (
             self.pushButton_7,
@@ -1078,26 +1082,45 @@ class myWindow(QWidget, Ui_Form):
         layout.addLayout(point_actions)
         self._render_bba2_scan_points_table()
 
-        results = QGridLayout()
-        results.setHorizontalSpacing(8)
-        results.setVerticalSpacing(6)
+        layout.addWidget(self._make_panel_title("Run & Readout", self.frame_4))
+
+        controls = QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(8)
+        self.comboBox_11.hide()
+        for button in (self.pushButton_5, self.pushButton_8, self.pushButton_6):
+            button.setParent(self.frame_4)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            controls.addWidget(button)
+        layout.addLayout(controls)
+
+        r12_results = QGridLayout()
+        r12_results.setHorizontalSpacing(8)
+        r12_results.setVerticalSpacing(6)
         self.bba2_model_r12_edit = QLineEdit(self.frame_4)
         self.bba2_model_r12_edit.setReadOnly(True)
         for widget in (self.lineEdit_19, self.bba2_model_r12_edit, self.lineEdit_18):
             widget.setParent(self.frame_4)
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        results.addWidget(self._make_field_label("Measured R12 (m)", self.frame_4), 0, 0)
-        results.addWidget(self.lineEdit_19, 0, 1)
-        results.addWidget(self._make_field_label("Model R12 (m)", self.frame_4), 0, 2)
-        results.addWidget(self.bba2_model_r12_edit, 0, 3)
-        results.addWidget(self._make_field_label("BPM1 Reading at Quad Center (mm)", self.frame_4), 1, 0)
-        results.addWidget(self.lineEdit_18, 1, 1, 1, 3)
+        r12_results.addWidget(self._make_field_label("Measured R12 (m)", self.frame_4), 0, 0)
+        r12_results.addWidget(self.lineEdit_19, 0, 1)
+        r12_results.addWidget(self._make_field_label("Model R12 (m)", self.frame_4), 0, 2)
+        r12_results.addWidget(self.bba2_model_r12_edit, 0, 3)
+        r12_results.setColumnStretch(1, 1)
+        r12_results.setColumnStretch(3, 1)
+        layout.addLayout(r12_results)
+
+        bpm_readout = QGridLayout()
+        bpm_readout.setHorizontalSpacing(8)
+        bpm_readout.setVerticalSpacing(6)
+        bpm_readout.addWidget(self._make_field_label("BPM1 Reading at Quad Center (mm)", self.frame_4), 0, 0)
+        bpm_readout.addWidget(self.lineEdit_18, 0, 1)
+        bpm_readout.setColumnStretch(1, 1)
+        layout.addLayout(bpm_readout)
         for hidden_widget in (self.lineEdit_21,):
             hidden_widget.setParent(self.frame_4)
             hidden_widget.hide()
-        results.setColumnStretch(1, 1)
-        results.setColumnStretch(3, 1)
-        layout.addLayout(results)
+        self._reset_bba2_model_r12_readout()
 
     def _palette(self):
         return DARK_THEME if self.current_theme == "dark" else LIGHT_THEME
@@ -1217,6 +1240,28 @@ class myWindow(QWidget, Ui_Form):
                 leff_bx=self.lineEdit_26.text().strip() or "-",
             )
         )
+
+    def _model_backend_status_text(self):
+        return "Ready" if self._model_backend_available else "Unavailable"
+
+    def _model_backend_status_tone(self):
+        return "success" if self._model_backend_available else "warning"
+
+    def _model_backend_status_tooltip(self):
+        if self._model_backend_available:
+            return "Model backend is available for optional BBA-2 Model R12 calculation."
+        return f"Model backend unavailable: {self._model_backend_error}"
+
+    def _reset_bba2_model_r12_readout(self):
+        if not hasattr(self, "bba2_model_r12_edit"):
+            return
+        self.bba2_model_r12_edit.setText("")
+        if self._model_backend_available:
+            self.bba2_model_r12_edit.setToolTip(
+                "BBA-2 Model R12 is calculated after the corrector scan."
+            )
+        else:
+            self.bba2_model_r12_edit.setToolTip(self._model_backend_status_tooltip())
 
     def _open_bba2_corrector_model_dialog(self):
         dialog = QDialog(self)
@@ -1564,6 +1609,12 @@ class myWindow(QWidget, Ui_Form):
             "warning" if normalized_backend == "real" else "success" if normalized_backend == "vm" else "subtle"
         )
         self.status_panel.set_item("backend", backend_text, backend_tone)
+        self.status_panel.set_item(
+            "model",
+            self._model_backend_status_text(),
+            self._model_backend_status_tone(),
+            self._model_backend_status_tooltip(),
+        )
 
     def _warn(self, message):
         print(message)
@@ -2393,8 +2444,7 @@ class myWindow(QWidget, Ui_Form):
             self.lineEdit_19.setText("")
             self.lineEdit_19.setToolTip("")
             self.lineEdit_21.setText("")
-            self.bba2_model_r12_edit.setText("")
-            self.bba2_model_r12_edit.setToolTip("")
+            self._reset_bba2_model_r12_readout()
             if data.get("clear_points"):
                 self._clear_bba2_scan_points()
             self._refresh_status()
@@ -2467,8 +2517,7 @@ class myWindow(QWidget, Ui_Form):
                 self.bba2_model_r12_edit.setText(str(model_r12))
                 self.bba2_model_r12_edit.setToolTip(f"Model R12: {model_r12:.6g} m")
             else:
-                self.bba2_model_r12_edit.setText("")
-                self.bba2_model_r12_edit.setToolTip("")
+                self._reset_bba2_model_r12_readout()
             model_r12_error = data.get("model_R12_error")
             if model_r12_error:
                 self.bba2_model_r12_edit.setToolTip(f"Model R12 unavailable: {model_r12_error}")

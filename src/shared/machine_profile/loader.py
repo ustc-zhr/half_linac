@@ -1321,7 +1321,8 @@ def _parse_emit_scan_config(raw_scan: Mapping[str, Any]) -> EmitScanConfig:
         k1_end=_optional_float(raw_scan, "k1_end"),
         k1_steps=_optional_int(raw_scan, "k1_steps"),
         samples=_optional_int(raw_scan, "samples"),
-        sleeptime=_optional_float(raw_scan, "sleeptime"),
+        settle_time=_optional_float(raw_scan, "settle_time"),
+        sample_interval=_optional_float(raw_scan, "sample_interval"),
     )
 
 

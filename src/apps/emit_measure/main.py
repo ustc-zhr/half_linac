@@ -54,6 +54,7 @@ from half_linac.src.shared.beam_diagnostics import fit_beam_image
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     build_model_backend,
+    describe_app_model_support,
     get_emit_preset,
     get_workflow,
     load_app_context,
@@ -66,11 +67,11 @@ from half_linac.src.shared.machine_profile import (
 nest_dict    = lambda: defaultdict(nest_dict)
 
 ELECTRON_MASS_EV = 0.51099895000e6
-SCAN_RESULTS_PATH    = Path(__file__).resolve().parent / "scanResults.txt"
-SCAN_RESULTS_META_PATH = Path(__file__).resolve().parent / "scanResults.meta.json"
+SCAN_RESULTS_FILENAME = "scanResults.txt"
+SCAN_RESULTS_META_FILENAME = "scanResults.meta.json"
 SCAN_ARCHIVE_ROOT = Path(__file__).resolve().parent / "runtime" / "scans"
 SCAN_DATA_SCHEMA_VERSION = "emit_scan_v1"
-SCAN_POINT_COLUMNS = ("Use", "K1", "sigx", "sigy")
+SCAN_POINT_COLUMNS = ("Use", "K1", "sigx (mm)", "sigy (mm)")
 
 HEADER_ACTION_HEIGHT = 32
 
@@ -425,12 +426,11 @@ QComboBox QAbstractItemView {{
 
 QTableWidget {{
     background-color: {input_bg};
+    alternate-background-color: {panel_bg};
     border: 1px solid {input_border};
     border-radius: 10px;
     color: {input_fg};
     gridline-color: {panel_border};
-    selection-background-color: {button_hover_bg};
-    selection-color: {input_fg};
 }}
 
 QTableWidget::item {{
@@ -604,7 +604,7 @@ class EmitStatusStrip(QWidget):
         for container, value_label in self._items.values():
             self._refresh_tone(container, value_label)
 
-    def set_item(self, key, text, tone="subtle"):
+    def set_item(self, key, text, tone="subtle", tooltip=None):
         item = self._items.get(key)
         if item is None:
             return
@@ -612,6 +612,8 @@ class EmitStatusStrip(QWidget):
         container.setProperty("tone", tone)
         value_label.setProperty("tone", tone)
         value_label.setText(text)
+        container.setToolTip(tooltip or "")
+        value_label.setToolTip(tooltip or "")
         self._refresh_tone(container, value_label)
 
     @staticmethod
@@ -646,7 +648,7 @@ class myWindow(QWidget,Ui_Form):
         # default settings 
         # ----------------
         self.lineEdit_2.setText("2200") # energy=2200MeV
-        self.lineEdit_24.setText("5") # freq time=5s
+        self.lineEdit_24.setText("5") # settle time=5s
         self.lineEdit_7.setText("0")  # K1-start
         self.lineEdit_8.setText("5")  # K1-end 
         self.lineEdit_9.setText("15") # steps=15
@@ -655,6 +657,8 @@ class myWindow(QWidget,Ui_Form):
         self.scan = None
         self.twissCal = None
         self.clear = None
+        self.sample_interval_edit = None
+        self.sample_interval_label = None
         self.scan_points_table = None
         self.scan_points_summary_label = None
         self.loaded_scan_metadata = None
@@ -666,6 +670,10 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_fit_flag = None
         self.latest_beam_fit_k1 = None
         self._beam_image_auto_refresh_ready = False
+        self._model_backend_available, self._model_backend_error = describe_app_model_support(
+            self.machine_profile.machine.id,
+            "emit_measure",
+        )
         self.beam_image_timer = QTimer(self)
         self.beam_image_timer.setInterval(2000)
         self.beam_image_timer.timeout.connect(self._auto_refresh_beam_image_fit)
@@ -690,6 +698,7 @@ class myWindow(QWidget,Ui_Form):
         # self.pushButton_7.clicked.connect(self.full_VM)
 
         self._configure_machine_profile()
+        self._refresh_model_controls()
         self._apply_theme()
         self._draw_placeholder_plots()
         self._refresh_status()
@@ -698,9 +707,9 @@ class myWindow(QWidget,Ui_Form):
         self._update_beam_image_auto_refresh()
 
     def _configure_window(self):
-        self.setWindowTitle(f"{self.machine_profile.machine.display_name} Emit Measure")
-        self.resize(1600, 940)
-        self.setMinimumSize(1320, 820)
+        self.setWindowTitle(f"{self.machine_profile.machine.display_name} Emittance Measurement")
+        self.resize(1600, 1020)
+        self.setMinimumSize(1320, 880)
 
     def _build_shell(self):
         self.verticalLayout.setContentsMargins(10, 10, 10, 10)
@@ -749,7 +758,7 @@ class myWindow(QWidget,Ui_Form):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
 
-        title = QLabel("Emit Measure", panel)
+        title = QLabel("Emittance Measurement", panel)
         title.setObjectName("summaryTitle")
         header_layout.addWidget(title)
         header_layout.addStretch(1)
@@ -773,7 +782,7 @@ class myWindow(QWidget,Ui_Form):
 
         self.status_panel = EmitStatusStrip(panel)
         self.status_panel.add_item("mode", "MODE", self.machine_type.upper())
-        self.status_panel.add_item("tab", "TAB", self.tabWidget.tabText(self.tabWidget.currentIndex()))
+        self.status_panel.add_item("model", "MODEL", self._model_backend_status_text())
         self.status_panel.add_item("scan", "SCAN", "Idle")
         self.status_panel.add_item("twiss", "TWISS", "Idle")
         self.status_panel.add_item("fit", "PRF FIT", "No image")
@@ -835,30 +844,35 @@ class myWindow(QWidget,Ui_Form):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(6)
+
         title = QLabel("Current PRF Image", card)
         title.setObjectName("panelTitle")
-        layout.addWidget(title)
-
-        controls = QGridLayout()
-        controls.setHorizontalSpacing(8)
-        controls.setVerticalSpacing(4)
+        title.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        header.addWidget(title)
+        header.addStretch(1)
 
         colormap_label = QLabel("Colormap", card)
         colormap_label.setProperty("role", "field")
         self.beam_image_colormap_combo = QComboBox(card)
         self.beam_image_colormap_combo.addItems(["viridis", "plasma", "inferno", "magma", "gray", "jet"])
+        self.beam_image_colormap_combo.setMaximumWidth(105)
         self.beam_image_colormap_combo.currentTextChanged.connect(self._redraw_latest_beam_image)
 
         vmin_label = QLabel("vmin", card)
         vmin_label.setProperty("role", "field")
         self.beam_image_vmin_edit = QLineEdit(card)
         self.beam_image_vmin_edit.setPlaceholderText("auto")
+        self.beam_image_vmin_edit.setMaximumWidth(68)
         self.beam_image_vmin_edit.returnPressed.connect(self._redraw_latest_beam_image)
 
         vmax_label = QLabel("vmax", card)
         vmax_label.setProperty("role", "field")
         self.beam_image_vmax_edit = QLineEdit(card)
         self.beam_image_vmax_edit.setPlaceholderText("auto")
+        self.beam_image_vmax_edit.setMaximumWidth(68)
         self.beam_image_vmax_edit.returnPressed.connect(self._redraw_latest_beam_image)
 
         self.beam_image_auto_refresh_checkbox = QCheckBox("Auto refresh", card)
@@ -871,19 +885,25 @@ class myWindow(QWidget,Ui_Form):
         self.beam_image_fit_curve_checkbox.setChecked(True)
         self.beam_image_fit_curve_checkbox.stateChanged.connect(self._redraw_latest_beam_image)
 
-        controls.addWidget(colormap_label, 0, 0)
-        controls.addWidget(self.beam_image_colormap_combo, 0, 1)
-        controls.addWidget(vmin_label, 0, 2)
-        controls.addWidget(self.beam_image_vmin_edit, 0, 3)
-        controls.addWidget(vmax_label, 0, 4)
-        controls.addWidget(self.beam_image_vmax_edit, 0, 5)
-        controls.addWidget(self.beam_image_auto_refresh_checkbox, 1, 0, 1, 2)
-        controls.addWidget(self.beam_image_projection_checkbox, 1, 2, 1, 2)
-        controls.addWidget(self.beam_image_fit_curve_checkbox, 1, 4, 1, 2)
-        controls.setColumnStretch(1, 1)
-        controls.setColumnStretch(3, 1)
-        controls.setColumnStretch(5, 1)
-        layout.addLayout(controls)
+        self.preview_fit_button = QPushButton("Check PRF Fit", card)
+        self.preview_fit_button.setProperty("compact", True)
+        self.preview_fit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.preview_fit_button.clicked.connect(lambda: self.refresh_current_beam_image_fit())
+
+        for widget in (
+            colormap_label,
+            self.beam_image_colormap_combo,
+            vmin_label,
+            self.beam_image_vmin_edit,
+            vmax_label,
+            self.beam_image_vmax_edit,
+            self.beam_image_auto_refresh_checkbox,
+            self.beam_image_projection_checkbox,
+            self.beam_image_fit_curve_checkbox,
+            self.preview_fit_button,
+        ):
+            header.addWidget(widget)
+        layout.addLayout(header)
 
         self.beam_image_widget = MplWidget(card)
         layout.addWidget(self.beam_image_widget, 1)
@@ -1004,9 +1024,10 @@ class myWindow(QWidget,Ui_Form):
     def _configure_form_content(self):
         self.pushButton.setText("Start Scan")
         self.pushButton_2.setText("Recalculate")
-        self.pushButton_3.setText("Clear")
+        self.pushButton_3.setText("Clear View")
         self.pushButton_4.setText("Calculate")
         self.pushButton_5.setText("Stop Scan")
+        self.label_32.setText("Settle time (s)")
         self.radioButton.setText("Inverse Map")
         self.radioButton_2.setText("Y Plane")
 
@@ -1060,6 +1081,26 @@ class myWindow(QWidget,Ui_Form):
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self._rebuild_panel_layouts()
+        self._configure_tooltips()
+
+    def _configure_tooltips(self):
+        self.pushButton.setToolTip("Start a new emittance scan after validating the PRF image and write access.")
+        self.pushButton_2.setToolTip("Recalculate emittance from the active scan points.")
+        self.pushButton_3.setToolTip(
+            "Clear plots, result fields, and the current scan point table. Saved archives are not deleted."
+        )
+        self.pushButton_4.setToolTip("Calculate Twiss transport with the configured model backend.")
+        self.pushButton_5.setToolTip("Request the running scan to stop and restore the quadrupole setting.")
+        self.preview_fit_button.setToolTip("Read the selected PRF image PV and update the local beam-size fit.")
+        self.load_points_button.setToolTip("Open an archived emittance scan for review or recalculation.")
+        self.exclude_points_button.setToolTip("Disable the selected scan points without deleting the rows.")
+        self.restore_points_button.setToolTip("Enable all scan points in the table.")
+        self.lineEdit_24.setToolTip("Wait time after each K1 change before taking the first sample.")
+        self.label_32.setToolTip(self.lineEdit_24.toolTip())
+        self.sample_interval_edit.setToolTip("Wait time between repeated PRF image samples at the same K1.")
+        self.sample_interval_label.setToolTip(self.sample_interval_edit.toolTip())
+        self.lineEdit_10.setToolTip("Number of PRF image samples collected at each K1 value.")
+        self.label_14.setToolTip(self.lineEdit_10.toolTip())
 
     def _rebuild_panel_layouts(self):
         self._rebuild_scan_control_panel()
@@ -1096,6 +1137,12 @@ class myWindow(QWidget,Ui_Form):
         form.addWidget(self.lineEdit_9, 3, 1)
         form.addWidget(self.label_14, 3, 2)
         form.addWidget(self.lineEdit_10, 3, 3)
+        self.sample_interval_label = QLabel("Sample interval (s)", self.widget_4)
+        self.sample_interval_label.setProperty("role", "field")
+        self.sample_interval_edit = QLineEdit(self.widget_4)
+        self.sample_interval_edit.setText("0.5")
+        form.addWidget(self.sample_interval_label, 4, 0)
+        form.addWidget(self.sample_interval_edit, 4, 1)
         form.setColumnStretch(1, 1)
         form.setColumnStretch(3, 1)
         layout.addLayout(form)
@@ -1109,16 +1156,6 @@ class myWindow(QWidget,Ui_Form):
             actions.addWidget(button)
 
         layout.addLayout(actions)
-
-        preview_actions = QHBoxLayout()
-        preview_actions.setContentsMargins(0, 0, 0, 0)
-        preview_actions.setSpacing(6)
-        self.preview_fit_button = QPushButton("Update PRF Image", self.widget_4)
-        self.preview_fit_button.setProperty("compact", True)
-        self.preview_fit_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.preview_fit_button.clicked.connect(lambda: self.refresh_current_beam_image_fit())
-        preview_actions.addWidget(self.preview_fit_button)
-        layout.addLayout(preview_actions)
 
         points_header = QHBoxLayout()
         points_header.setContentsMargins(0, 4, 0, 0)
@@ -1139,7 +1176,7 @@ class myWindow(QWidget,Ui_Form):
         self.scan_points_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.scan_points_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.scan_points_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.scan_points_table.setAlternatingRowColors(False)
+        self.scan_points_table.setAlternatingRowColors(True)
         self.scan_points_table.setMaximumHeight(170)
         self.scan_points_table.verticalHeader().setVisible(False)
         header = self.scan_points_table.horizontalHeader()
@@ -1153,9 +1190,9 @@ class myWindow(QWidget,Ui_Form):
         point_actions.setContentsMargins(0, 0, 0, 0)
         point_actions.setSpacing(6)
         self.pushButton_2.setParent(self.widget_4)
-        self.load_points_button = QPushButton("Load Archive", self.widget_4)
+        self.load_points_button = QPushButton("Load Points", self.widget_4)
         self.exclude_points_button = QPushButton("Exclude Selected", self.widget_4)
-        self.restore_points_button = QPushButton("Restore All", self.widget_4)
+        self.restore_points_button = QPushButton("Use All Points", self.widget_4)
         for button in (
             self.pushButton_2,
             self.load_points_button,
@@ -1307,11 +1344,14 @@ class myWindow(QWidget,Ui_Form):
         widget.canvas.draw()
 
     def _draw_placeholder_plots(self):
+        self._draw_scan_fit_placeholder_plots()
+        self._draw_beam_image_placeholder()
+
+    def _draw_scan_fit_placeholder_plots(self):
         self._draw_placeholder(self.widget, "$K_1 (m^{-2})$", "sigx (mm)", "Waiting for scan points")
         self._draw_placeholder(self.widget_2, "$-K= K_1 L_q (m^{-1})$", "$sigx^2 (mm^2)$", "Waiting for fit")
         self._draw_placeholder(self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)", "Waiting for scan points")
         self._draw_placeholder(self.widget_9, "$K= K_1 L_q (m^{-1})$", "$sigy^2 (mm^2)$", "Waiting for fit")
-        self._draw_beam_image_placeholder()
 
     def _draw_beam_image_placeholder(self, note="Update PRF image before scan"):
         if not hasattr(self, "beam_image_widget"):
@@ -1425,11 +1465,24 @@ class myWindow(QWidget,Ui_Form):
             return
         mode_tone = "warning" if self.machine_type == "real" else "success"
         self.status_panel.set_item("mode", self.machine_type.upper(), mode_tone)
-        self.status_panel.set_item("tab", self.tabWidget.tabText(self.tabWidget.currentIndex()), "subtle")
+        self.status_panel.set_item(
+            "model",
+            self._model_backend_status_text(),
+            self._model_backend_status_tone(),
+            self._model_backend_status_tooltip(),
+        )
 
         if self._scan_is_running():
-            scan_text = "Recalculate" if self.scan_mode == "recalculate" else "Running"
-            self.status_panel.set_item("scan", scan_text, "success")
+            if self.scan_mode == "recalculate":
+                scan_text = "Recalculate"
+                scan_tone = "success"
+            elif self.scan_mode == "stopping":
+                scan_text = "Stopping"
+                scan_tone = "warning"
+            else:
+                scan_text = "Running"
+                scan_tone = "success"
+            self.status_panel.set_item("scan", scan_text, scan_tone)
         else:
             self.status_panel.set_item("scan", "Idle", "subtle")
 
@@ -1449,12 +1502,13 @@ class myWindow(QWidget,Ui_Form):
                 "warning",
             )
         self._refresh_emit_fit_status()
-        if SCAN_RESULTS_PATH.exists():
+        scan_results_path = self._latest_scan_results_path()
+        if scan_results_path.exists():
             active, total = self._scan_points_counts()
             if total:
                 self.status_panel.set_item("data", f"{active}/{total} points", "success")
             else:
-                self.status_panel.set_item("data", SCAN_RESULTS_PATH.name, "success")
+                self.status_panel.set_item("data", "runtime latest", "success")
         else:
             self.status_panel.set_item("data", "No scan file", "warning")
 
@@ -1479,6 +1533,50 @@ class myWindow(QWidget,Ui_Form):
         else:
             text = f"{method}: {status} (x {x_status}, y {y_status})"
         self.status_panel.set_item("emit", text, tone)
+
+    def _model_backend_status_text(self):
+        return "Ready" if self._model_backend_available else "Unavailable"
+
+    def _model_backend_status_tone(self):
+        return "success" if self._model_backend_available else "warning"
+
+    def _model_backend_status_tooltip(self):
+        if self._model_backend_available:
+            return "Model backend is available for emittance and Twiss calculations."
+        return f"Model backend unavailable: {self._model_backend_error}"
+
+    @staticmethod
+    def _refresh_widget_style(widget):
+        style = widget.style()
+        style.unpolish(widget)
+        style.polish(widget)
+        widget.update()
+
+    def _refresh_model_controls(self):
+        if self._model_backend_available:
+            self.pushButton.setEnabled(True)
+            self.pushButton.setToolTip("Start a new emittance scan after validating the PRF image and write access.")
+            self.pushButton_2.setEnabled(True)
+            self.pushButton_2.setToolTip("Recalculate emittance from the active scan points.")
+            self.pushButton_4.setEnabled(True)
+            self.pushButton_4.setToolTip("Calculate Twiss transport with the configured model backend.")
+        else:
+            message = self._model_backend_status_tooltip()
+            self.pushButton.setEnabled(False)
+            self.pushButton.setToolTip(message)
+            self.pushButton_2.setEnabled(False)
+            self.pushButton_2.setToolTip(message)
+            self.pushButton_4.setEnabled(False)
+            self.pushButton_4.setToolTip(message)
+
+        for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
+            self._refresh_widget_style(button)
+
+    def _require_model_backend_available(self, operation):
+        if self._model_backend_available:
+            return True
+        self._warn(f"{operation} requires the model backend. {self._model_backend_status_tooltip()}")
+        return False
 
     def _scan_points_counts(self):
         table = self.scan_points_table
@@ -1538,7 +1636,7 @@ class myWindow(QWidget,Ui_Form):
         table.blockSignals(False)
         if self.loaded_scan_metadata is None and self.pending_scan_metadata is not None:
             self.loaded_scan_metadata = dict(self.pending_scan_metadata)
-            self.loaded_scan_results_path = SCAN_RESULTS_PATH
+            self.loaded_scan_results_path = self._latest_scan_results_path()
         self._update_scan_points_summary()
 
     def _scan_point_value(self, row, column):
@@ -1598,6 +1696,12 @@ class myWindow(QWidget,Ui_Form):
     def _scan_archive_dir(self):
         return SCAN_ARCHIVE_ROOT / self.machine_profile.machine.id / self.machine_type
 
+    def _scan_latest_dir(self):
+        return self._scan_archive_dir() / "latest"
+
+    def _latest_scan_results_path(self):
+        return self._scan_latest_dir() / SCAN_RESULTS_FILENAME
+
     def _scan_metadata_from_paras(self, paras):
         return {
             "schema_version": SCAN_DATA_SCHEMA_VERSION,
@@ -1614,12 +1718,14 @@ class myWindow(QWidget,Ui_Form):
             "k1_end": paras.k1_end,
             "k1_steps": paras.k1_steps,
             "samples": paras.samples,
+            "settle_time": paras.settle_time,
+            "sample_interval": paras.sample_interval,
         }
 
     def _metadata_path_for_results(self, results_path):
         results_path = Path(results_path)
-        if results_path.resolve() == SCAN_RESULTS_PATH.resolve():
-            return SCAN_RESULTS_META_PATH
+        if results_path.name == SCAN_RESULTS_FILENAME:
+            return results_path.parent / SCAN_RESULTS_META_FILENAME
         return results_path.with_suffix(".json")
 
     def _read_scan_metadata(self, results_path):
@@ -1660,7 +1766,9 @@ class myWindow(QWidget,Ui_Form):
             detail = "; ".join(mismatches)
             raise RuntimeError(f"{source_label} does not match current emit settings: {detail}.")
 
-    def _load_scan_results_into_table(self, results_path=SCAN_RESULTS_PATH, *, expected_metadata=None):
+    def _load_scan_results_into_table(self, results_path=None, *, expected_metadata=None):
+        if results_path is None:
+            results_path = self._latest_scan_results_path()
         results_path = Path(results_path)
         if not results_path.exists():
             raise RuntimeError(f"{results_path} not found. Run a scan or load an archive before recalculating.")
@@ -1789,7 +1897,7 @@ class myWindow(QWidget,Ui_Form):
 
     def _warn(self, message):
         print(message)
-        QMessageBox.warning(self, "Emit Measure", message)
+        QMessageBox.warning(self, "Emittance Measurement", message)
 
     def _scan_is_running(self):
         return self.scan is not None and self.scan.isRunning()
@@ -1912,8 +2020,10 @@ class myWindow(QWidget,Ui_Form):
             self.lineEdit_9.setText(str(scan.k1_steps))
         if scan.samples is not None:
             self.lineEdit_10.setText(str(scan.samples))
-        if scan.sleeptime is not None:
-            self.lineEdit_24.setText(str(scan.sleeptime))
+        if scan.settle_time is not None:
+            self.lineEdit_24.setText(str(scan.settle_time))
+        if scan.sample_interval is not None and self.sample_interval_edit is not None:
+            self.sample_interval_edit.setText(str(scan.sample_interval))
 
     def _handle_emit_flag_changed(self, index):
         del index
@@ -1961,7 +2071,11 @@ class myWindow(QWidget,Ui_Form):
             para.k1_steps = self._parse_positive_int(self.lineEdit_9.text(), "K1 steps")
             para.samples  = self._parse_positive_int(self.lineEdit_10.text(), "Samples per step")
             para.EnergyMeV = float(self.lineEdit_2.text())
-            para.sleeptime = self._parse_non_negative_float(self.lineEdit_24.text(), "Sleep time")
+            para.settle_time = self._parse_non_negative_float(self.lineEdit_24.text(), "Settle time")
+            para.sample_interval = self._parse_non_negative_float(
+                self.sample_interval_edit.text(),
+                "Sample interval",
+            )
             if para.EnergyMeV <= 0:
                 raise ValueError("Energy must be positive.")
             return para
@@ -2027,16 +2141,14 @@ class myWindow(QWidget,Ui_Form):
         )
  
     def startScan(self):
+        if not self._require_model_backend_available("Emit measurement scan"):
+            return
         if self._scan_is_running():
             print("Scan is already running. Stop it before starting a new scan.")
             return
 
-        self.display({"clear": True})
-
         self.paras = self.get_setting()
         if self.paras is None:
-            return
-        if not self.refresh_current_beam_image_fit(self.paras):
             return
         try:
             require_workflow_write_allowed(
@@ -2047,9 +2159,13 @@ class myWindow(QWidget,Ui_Form):
         except MachineProfileError as exc:
             self._warn(str(exc))
             return
+        if not self.refresh_current_beam_image_fit(self.paras):
+            return
+        self.display({"clear": True, "preserve_beam_image": True})
         self.paras.recal = False
         self.paras.clear = False 
         self.paras.scan_metadata = self._scan_metadata_from_paras(self.paras)
+        self.paras.scan_latest_dir = self._scan_latest_dir()
         self.paras.scan_archive_dir = self._scan_archive_dir()
         self.pending_scan_metadata = dict(self.paras.scan_metadata)
         self.scan_mode = "scan"
@@ -2061,14 +2177,20 @@ class myWindow(QWidget,Ui_Form):
 
     def stopScan(self):
         if self._scan_is_running():
+            self.scan_mode = "stopping"
+            self._refresh_status()
             self.scan.stop()
             if not self.scan.wait(3000):
-                print("Timed out waiting for scan thread to stop.")
-            print("Scan thread is stopped.")
+                print("Timed out waiting for scan thread to stop; scan is still stopping.")
+                self._refresh_status()
+                return
+            print("Scan thread stopped.")
         self.scan_mode = None
         self._refresh_status()
 
     def recalculate(self):
+        if not self._require_model_backend_available("Emit recalculation"):
+            return
         if self._scan_is_running():
             print("Scan is already running. Stop it before recalculating.")
             return
@@ -2101,6 +2223,7 @@ class myWindow(QWidget,Ui_Form):
         self.paras.recal = True 
         self.paras.clear = False 
         self.paras.recal_points = recal_points if recal_points else None
+        self.paras.scan_latest_dir = self._scan_latest_dir()
         self.scan_mode = "recalculate"
         self.scan = scanThread(self.paras)
         self.scan.trigger.connect(self.display)
@@ -2114,6 +2237,8 @@ class myWindow(QWidget,Ui_Form):
         self.clear.start()
 
     def start_twissCalc(self):
+        if not self._require_model_backend_available("Twiss calculation"):
+            return
         if self._twiss_is_running():
             self._warn("Twiss calculation is already running.")
             return
@@ -2165,7 +2290,10 @@ class myWindow(QWidget,Ui_Form):
             return
         if "clear" in dict:
             # clear all the results
-            self._draw_placeholder_plots()
+            if dict.get("preserve_beam_image"):
+                self._draw_scan_fit_placeholder_plots()
+            else:
+                self._draw_placeholder_plots()
 
             self.lineEdit_11.setText("")
             self.lineEdit_12.setText("")
@@ -2409,7 +2537,8 @@ class scanThread(QThread):
         self.k1_steps   = paras.k1_steps  
         self.samples    = paras.samples   
         self.EnergyMeV  = paras.EnergyMeV
-        self.sleeptime  = paras.sleeptime
+        self.settle_time = paras.settle_time
+        self.sample_interval = paras.sample_interval
         self.model_line = paras.model_line
         self.app_context = paras.app_context
         self.quad_length = None
@@ -2420,6 +2549,11 @@ class scanThread(QThread):
         self.scan_archive_dir = Path(
             getattr(paras, "scan_archive_dir", SCAN_ARCHIVE_ROOT / "unknown" / "unknown")
         )
+        self.scan_latest_dir = Path(
+            getattr(paras, "scan_latest_dir", self.scan_archive_dir / "latest")
+        )
+        self.scan_results_path = self.scan_latest_dir / SCAN_RESULTS_FILENAME
+        self.scan_results_meta_path = self.scan_latest_dir / SCAN_RESULTS_META_FILENAME
         self.scan_metadata_paths = []
         self.is_running = True
 
@@ -2457,13 +2591,13 @@ class scanThread(QThread):
                         print("Stop scan, quad is back to initial values, K1=",iniK1)
                         return
                     epics.caput(self.quadPV,k1)
-                    if not self._sleep_or_stop(self.sleeptime):
+                    if not self._sleep_or_stop(self.settle_time):
                         print("Stop scan, quad is back to initial values, K1=",iniK1)
                         return
                     for j in range(self.samples):
                         if self.is_running == True:
                             print("Quad K1=",k1)
-                            if not self._sleep_or_stop(self.sleeptime):
+                            if j > 0 and not self._sleep_or_stop(self.sample_interval):
                                 print("Stop scan, quad is back to initial values, K1=",iniK1)
                                 return
                             
@@ -2512,10 +2646,11 @@ class scanThread(QThread):
                     print(f"Loading {len(self.recal_points)} enabled scan points from table ...")
                     data = np.asarray(self.recal_points, dtype=float)
                 else:
-                    print(f"Loading {SCAN_RESULTS_PATH.name} ...")
-                    if not SCAN_RESULTS_PATH.exists():
-                        raise RuntimeError(f"{SCAN_RESULTS_PATH} not found. Run a scan before recalculating.")
-                    with open(SCAN_RESULTS_PATH,"r") as f:
+                    source_path = self.scan_results_path
+                    print(f"Loading {source_path} ...")
+                    if not source_path.exists():
+                        raise RuntimeError(f"{source_path} not found. Run a scan before recalculating.")
+                    with open(source_path,"r") as f:
                         data = np.loadtxt(f, ndmin=2)
                 if data.ndim != 2 or data.shape[1] < 3:
                     raise RuntimeError("Scan data must contain K1, sigx and sigy columns.")
@@ -2618,8 +2753,9 @@ class scanThread(QThread):
             }
         )
 
-        np.savetxt(SCAN_RESULTS_PATH, data, fmt="%.6e")
-        SCAN_RESULTS_META_PATH.write_text(
+        self.scan_latest_dir.mkdir(parents=True, exist_ok=True)
+        np.savetxt(self.scan_results_path, data, fmt="%.6e")
+        self.scan_results_meta_path.write_text(
             json.dumps(metadata, indent=2, sort_keys=True),
             encoding="utf-8",
         )
@@ -2632,8 +2768,8 @@ class scanThread(QThread):
             json.dumps(metadata, indent=2, sort_keys=True),
             encoding="utf-8",
         )
-        self.scan_metadata_paths = [SCAN_RESULTS_META_PATH, archive_meta_path]
-        print(f"Saved scan results: {SCAN_RESULTS_PATH}")
+        self.scan_metadata_paths = [self.scan_results_meta_path, archive_meta_path]
+        print(f"Saved latest scan results: {self.scan_results_path}")
         print(f"Saved scan archive: {archive_path}")
 
     def _write_scan_fit_summary(self, fit_summary):
@@ -2683,13 +2819,13 @@ class scanThread(QThread):
         
         A0_x = []
         A0_y = []
+        trans = transfer(
+            self.EnergyMeV,
+            app_context=self.app_context,
+            model_line=self.model_line,
+        )
         for k1 in k1l:
             # get the transfer map 
-            trans = transfer(
-                self.EnergyMeV,
-                app_context=self.app_context,
-                model_line=self.model_line,
-            )
             mat = trans.get_map(self.quad_name,self.flag_name,k1=k1,seq="ent2exit")
             
             # X-plane

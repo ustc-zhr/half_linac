@@ -9,7 +9,8 @@
         "k1_end": 1.0,
         "k1_steps": 5,
         "samples": 3,
-        "sleeptime": 0.5
+        "settle_time": 0.5,
+        "sample_interval": 0.5
       },
       "analysis": {
         "energy_mev": 100.0

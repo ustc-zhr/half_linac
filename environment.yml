@@ -1,4 +1,4 @@
-name: base
+name: half_linac
 channels:
   - defaults
   - conda-forge
@@ -207,6 +207,7 @@ dependencies:
   - ruamel.yaml=0.18.10=py311h5eee18b_0
   - ruamel.yaml.clib=0.2.12=py311h5eee18b_0
   - ruamel_yaml=0.17.21=py311h5eee18b_0
+  - scikit-image
   - scikit-learn=1.7.1=py311hc3e1efb_0
   - scipy=1.15.3=py311h525edd1_0
   - setuptools=72.1.0=py311h06a4308_0
@@ -254,4 +255,3 @@ dependencies:
       - pyqt5-qt5==5.15.2
       - pyqtwebengine==5.12
       - sdds==0.4.0
-prefix: /home/zhanghaoran/anaconda3

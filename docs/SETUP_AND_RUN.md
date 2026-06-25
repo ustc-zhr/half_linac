@@ -69,25 +69,54 @@ softIoc
 
 ```bash
 conda env create -f environment.yml
-conda activate base
+conda activate half_linac
+python3 --version
 ```
+
+确认 `python3 --version` 显示 Python 3.10 或更高版本，推荐使用 Python 3.11。Python 3.9 或更低版本不支持本仓库中使用的 `dataclass(slots=True)` 和 `type | None` 类型写法，会导致 Jitter Analysis、BBA 等应用在导入阶段报错。
 
 如果你不想直接复用这份环境文件，至少需要这些依赖：
 
-- Python 3
+- Python >=3.10，推荐 3.11
 - PyQt5
 - pyepics
 - numpy
 - scipy
 - matplotlib
+- scikit-image
+- pyqtgraph
+- pandas
+- h5py
 - sdds Python 模块
 
 示例安装命令：
 
 ```bash
-conda install pyqt matplotlib scipy numpy
+conda install -c conda-forge python=3.11 pyqt matplotlib scipy numpy scikit-image pyqtgraph pandas h5py
 pip install pyepics
 conda install soliday::sdds
+```
+
+注意：Energy Spectrum 代码中导入名是 `skimage`，实际安装包名是 `scikit-image`。
+
+完成安装后，可以先做一次 Python 依赖自检：
+
+```bash
+python3 - <<'PY'
+import sys
+assert sys.version_info >= (3, 10), sys.version
+import PyQt5
+import epics
+import h5py
+import matplotlib
+import numpy
+import pandas
+import pyqtgraph
+import scipy
+import skimage
+import sdds
+print("Python environment OK:", sys.version)
+PY
 ```
 
 ## 4. elegant 与 SDDS

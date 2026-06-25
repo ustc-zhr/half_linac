@@ -249,7 +249,8 @@ class EmitScanConfig(_OptionalFieldMapping):
     k1_end: float | None = None
     k1_steps: int | None = None
     samples: int | None = None
-    sleeptime: float | None = None
+    settle_time: float | None = None
+    sample_interval: float | None = None
 
 
 @dataclass(frozen=True)

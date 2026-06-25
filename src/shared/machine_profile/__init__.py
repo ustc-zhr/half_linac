@@ -75,6 +75,7 @@ from .runtime_selector import (
 from .validation import (
     MachineValidationCheck,
     MachineValidationReport,
+    describe_app_model_support,
     validate_machine_profile,
 )
 from .write_control import (
@@ -134,6 +135,7 @@ __all__ = [
     "build_model_backend",
     "default_control_backend_choices",
     "describe_app_support",
+    "describe_app_model_support",
     "get_bba_preset",
     "get_emit_preset",
     "get_workflow",

@@ -31,7 +31,8 @@ HALF 直线加速器上层物理应用软件仓库，包含：
 
 ```bash
 conda env create -f environment.yml
-conda activate base
+conda activate half_linac
+python3 --version
 bash scripts/runMe
 ```
 
@@ -39,10 +40,11 @@ bash scripts/runMe
 
 如果 `environment.yml` 不能直接复用，请至少保证以下依赖可用：
 
-- Python 3
+- Python >=3.10，推荐 3.11；Python 3.9 或更低版本不能运行本仓库的部分应用
 - PyQt5
 - pyepics
-- numpy / scipy / matplotlib
+- numpy / scipy / matplotlib / scikit-image
+- pyqtgraph / pandas / h5py
 - sdds Python 模块
 - 系统可执行的 `elegant`
 - 已安装并可运行的 EPICS base / `softIoc`

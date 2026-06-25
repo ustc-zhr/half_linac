@@ -25,6 +25,7 @@ from half_linac.src.shared.machine_profile import (
     REAL_STATUS_READ_ONLY,
     REAL_STATUS_WRITE_BLOCKED,
     build_model_backend,
+    describe_app_model_support,
     describe_app_support,
     get_bba_preset,
     get_emit_preset,
@@ -157,6 +158,17 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(context.control_backend.name, "vm")
         self.assertIsNone(context.model_backend)
         self.assertIsNone(context.emit_measure_workflow)
+
+    def test_describe_app_model_support_reports_model_app_readiness(self):
+        for machine_id in ("half", "irfel"):
+            for app_name in ("bba", "emit_measure", "energy_spectrum"):
+                supported, reason = describe_app_model_support(machine_id, app_name)
+                self.assertTrue(supported, f"{machine_id} {app_name}: {reason}")
+                self.assertIsNone(reason)
+
+        supported, reason = describe_app_model_support("half", "orbit_correct")
+        self.assertTrue(supported)
+        self.assertIsNone(reason)
 
     def test_half_beam_monitor_workflow_keeps_backend_image_geometry(self):
         profile = load_profile("half")

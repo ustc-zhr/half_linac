@@ -517,6 +517,28 @@ def _validate_real_commissioning_status(
     )
 
 
+MODEL_VALIDATED_APP_NAMES = frozenset({"bba", "emit_measure", "energy_spectrum"})
+
+
+def describe_app_model_support(machine_id: str | None, app_name: str) -> tuple[bool, str | None]:
+    if app_name not in MODEL_VALIDATED_APP_NAMES:
+        return True, None
+
+    try:
+        context = load_app_context(app_name, machine_id=machine_id)
+    except MachineProfileError as exc:
+        return False, str(exc)
+
+    if app_name in {"bba", "emit_measure"}:
+        check = _validate_elegant_model_backend(app_name, context)
+    else:
+        check = _validate_energy_spectrum_model_config(context.model_backend)
+
+    if check.ok:
+        return True, None
+    return False, check.detail
+
+
 def _validate_elegant_model_backend(app_name: str, context: AppContext) -> MachineValidationCheck:
     try:
         backend = build_model_backend(context)

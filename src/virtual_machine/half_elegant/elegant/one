@@ -1,0 +1,10 @@
+#!/bin/bash
+
+./cleanUp
+
+logfile=$(date +%Y%m%d)
+
+elegant one.ele > $logfile.log 
+#elegant one.ele 
+
+
