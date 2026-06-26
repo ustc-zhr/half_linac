@@ -91,9 +91,21 @@ class ElegantModelBackend:
         plane: str = "xplane",
         inverse: bool = False,
     ) -> Mapping[str, float]:
-        mat = self.get_map(quad1, quad2, seq="ent2exit")
+        id1, id2 = self._usedline_index_pair(quad1, quad2)
         if inverse:
-            mat = np.linalg.inv(mat)
+            if id1 < id2:
+                raise MachineProfileError(
+                    "Backward Twiss transport requires From to be downstream of To. "
+                    "Choose Forward or swap From/To."
+                )
+            mat = np.linalg.inv(self.get_map(quad2, quad1, seq="ent2exit"))
+        else:
+            if id2 < id1:
+                raise MachineProfileError(
+                    "Forward Twiss transport requires To to be downstream of From. "
+                    "Choose Backward or swap From/To."
+                )
+            mat = self.get_map(quad1, quad2, seq="ent2exit")
 
         if plane == "xplane":
             m11 = mat[0, 0]
@@ -110,7 +122,11 @@ class ElegantModelBackend:
         alpha0 = twiss0["alpha0"]
         gamma0 = twiss0["gamma0"]
         beta = m11**2 * beta0 - 2 * m11 * m12 * alpha0 + m12**2 * gamma0
-        alpha = -m11 * m21 * beta0 + (2 * m12 * m21 + 1) * alpha0 - m12 * m22 * gamma0
+        alpha = (
+            -m11 * m21 * beta0
+            + (m11 * m22 + m12 * m21) * alpha0
+            - m12 * m22 * gamma0
+        )
         gamma = m21**2 * beta0 - 2 * m21 * m22 * alpha0 + m22**2 * gamma0
         return {
             "beta": beta,
@@ -151,16 +167,30 @@ class ElegantModelBackend:
                 )
             element["K1"] = str(float(override))
 
-        if seq == "exit2exit":
+        try:
             id1 = usedline.index(elem1)
             id2 = usedline.index(elem2)
+        except ValueError as exc:
+            missing = elem1 if elem1 not in usedline else elem2
+            raise MachineProfileError(
+                f"Model backend line {self.line_name!r} does not contain element {missing!r}."
+            ) from exc
+        if id2 < id1:
+            raise MachineProfileError(
+                f"Model backend cannot build a forward map from {elem1!r} to {elem2!r}: "
+                f"{elem2!r} is upstream of {elem1!r}."
+            )
+
+        if seq == "exit2exit":
             scanline = usedline[id1 + 1 : id2 + 1]
         elif seq == "ent2exit":
-            id1 = usedline.index(elem1)
-            id2 = usedline.index(elem2)
             scanline = usedline[id1 : id2 + 1]
         else:
             raise ValueError(f"Unsupported transfer sequence: {seq}")
+        if not scanline:
+            raise MachineProfileError(
+                f"Model backend generated an empty map line from {elem1!r} to {elem2!r}."
+            )
 
         for elem in usedline:
             if "DX" in lattice[elem] or "DY" in lattice[elem]:
@@ -228,6 +258,18 @@ class ElegantModelBackend:
             runtime_json_path=self.emit_json,
             elegant_dir=self.working_dir,
         )
+
+    def _usedline_index_pair(self, elem1: str, elem2: str) -> tuple[int, int]:
+        parser = self._new_parser()
+        runtime_state = parser.build_runtime_state()
+        usedline = runtime_state["usedline"]
+        try:
+            return usedline.index(elem1), usedline.index(elem2)
+        except ValueError as exc:
+            missing = elem1 if elem1 not in usedline else elem2
+            raise MachineProfileError(
+                f"Model backend line {self.line_name!r} does not contain element {missing!r}."
+            ) from exc
 
 
 def build_model_backend(

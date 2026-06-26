@@ -45,6 +45,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -69,6 +70,7 @@ nest_dict    = lambda: defaultdict(nest_dict)
 ELECTRON_MASS_EV = 0.51099895000e6
 SCAN_RESULTS_FILENAME = "scanResults.txt"
 SCAN_RESULTS_META_FILENAME = "scanResults.meta.json"
+TWISS_RESULTS_FILENAME = "twissResults.jsonl"
 SCAN_ARCHIVE_ROOT = Path(__file__).resolve().parent / "runtime" / "scans"
 SCAN_DATA_SCHEMA_VERSION = "emit_scan_v1"
 SCAN_POINT_COLUMNS = ("Use", "K1", "sigx (mm)", "sigy (mm)")
@@ -199,6 +201,55 @@ def _compact_status_text(message, limit=120):
     if len(text) <= limit:
         return text
     return text[: limit - 3].rstrip() + "..."
+
+
+def _twiss_from_transfer_matrix(matrix, twiss0, plane="xplane"):
+    if plane == "xplane":
+        m11 = matrix[0, 0]
+        m12 = matrix[0, 1]
+        m21 = matrix[1, 0]
+        m22 = matrix[1, 1]
+    else:
+        m11 = matrix[2, 2]
+        m12 = matrix[2, 3]
+        m21 = matrix[3, 2]
+        m22 = matrix[3, 3]
+
+    beta0 = twiss0["beta0"]
+    alpha0 = twiss0["alpha0"]
+    gamma0 = twiss0["gamma0"]
+    beta = m11**2 * beta0 - 2 * m11 * m12 * alpha0 + m12**2 * gamma0
+    alpha = (
+        -m11 * m21 * beta0
+        + (m11 * m22 + m12 * m21) * alpha0
+        - m12 * m22 * gamma0
+    )
+    gamma = m21**2 * beta0 - 2 * m21 * m22 * alpha0 + m22**2 * gamma0
+    return {
+        "beta": beta,
+        "alpha": alpha,
+        "gamma": gamma,
+    }
+
+
+def _plane_transfer_matrix_summary(matrix, plane="xplane"):
+    if plane == "xplane":
+        entries = (matrix[0, 0], matrix[0, 1], matrix[1, 0], matrix[1, 1])
+    else:
+        entries = (matrix[2, 2], matrix[2, 3], matrix[3, 2], matrix[3, 3])
+    return {
+        key: float(value)
+        for key, value in zip(("r11", "r12", "r21", "r22"), entries)
+    }
+
+
+def _format_matrix_summary(matrix_summary):
+    if not matrix_summary:
+        return ""
+    return (
+        f"[ {matrix_summary['r11']:.6g}  {matrix_summary['r12']:.6g} ]\n"
+        f"[ {matrix_summary['r21']:.6g}  {matrix_summary['r22']:.6g} ]"
+    )
 
 
 DARK_THEME = {
@@ -358,6 +409,15 @@ QLabel[role="field"] {{
     border: none;
 }}
 
+QLabel[role="sectionTitle"] {{
+    color: {summary_title_fg};
+    font-size: 12px;
+    font-weight: 700;
+    background: transparent;
+    border: none;
+    padding: 2px 0px 4px 0px;
+}}
+
 QLabel {{
     color: {window_fg};
     font-size: 12px;
@@ -407,7 +467,7 @@ QLineEdit, QComboBox, QTextEdit {{
     selection-background-color: {metric_active_fg};
 }}
 
-QLineEdit[readOnly="true"] {{
+QLineEdit[readOnly="true"], QTextEdit[readOnly="true"] {{
     color: {summary_title_fg};
     font-weight: 600;
 }}
@@ -659,12 +719,25 @@ class myWindow(QWidget,Ui_Form):
         self.clear = None
         self.sample_interval_edit = None
         self.sample_interval_label = None
+        self.use_latest_fit_button = QPushButton("Use Latest Fit", self)
+        self.twiss_initial_title = QLabel("Initial Twiss at From", self)
+        self.twiss_result_title = QLabel("Computed Twiss at To", self)
+        self.twiss_direction_label = QLabel("Direction", self)
+        self.twiss_direction_combo = QComboBox(self)
+        self.twiss_plane_label = QLabel("Plane", self)
+        self.twiss_plane_combo = QComboBox(self)
+        self.twiss_status_label = QLabel("Status", self)
+        self.twiss_status_edit = QLineEdit(self)
+        self.twiss_map_label = QLabel("Transfer Map", self)
+        self.twiss_map_edit = QTextEdit(self)
         self.scan_points_table = None
         self.scan_points_summary_label = None
         self.loaded_scan_metadata = None
         self.loaded_scan_results_path = None
         self.pending_scan_metadata = None
         self.latest_emit_fit_summary = None
+        self.latest_twiss_summary = None
+        self.twiss_initial_source = {"kind": "manual"}
         self.latest_beam_image = None
         self.latest_beam_fit_result = None
         self.latest_beam_fit_flag = None
@@ -689,10 +762,18 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_3.clicked.connect(self.clearPlot)
         self.pushButton_4.clicked.connect(self.start_twissCalc)
         self.pushButton_5.clicked.connect(self.stopScan)
+        self.use_latest_fit_button.clicked.connect(self._use_latest_fit_for_twiss)
 
         # other function
         self.comboBox.currentIndexChanged.connect(self.updateComboBox4)
         self.comboBox_4.currentIndexChanged.connect(self._handle_emit_flag_changed)
+        self.comboBox_2.currentIndexChanged.connect(self._update_twiss_path_status)
+        self.comboBox_3.currentIndexChanged.connect(self._update_twiss_path_status)
+        self.twiss_direction_combo.currentIndexChanged.connect(self._update_twiss_path_status)
+        self.twiss_plane_combo.currentIndexChanged.connect(self._update_twiss_path_status)
+        self.lineEdit.textEdited.connect(self._mark_twiss_initial_manual)
+        self.lineEdit_3.textEdited.connect(self._mark_twiss_initial_manual)
+        self.lineEdit_6.textEdited.connect(self._mark_twiss_initial_manual)
         self.tabWidget.currentChanged.connect(self._refresh_status)
         # self.pushButton_6.clicked.connect(self.simply_VM)
         # self.pushButton_7.clicked.connect(self.full_VM)
@@ -975,7 +1056,7 @@ class myWindow(QWidget,Ui_Form):
         self.gridLayout_4.setRowStretch(0, 4)
         self.gridLayout_4.setRowStretch(1, 1)
 
-        self.twiss_tab_layout.addWidget(self.widget_13, 0, 0, Qt.AlignTop)
+        self.twiss_tab_layout.addWidget(self.widget_13, 0, 0, Qt.AlignTop | Qt.AlignLeft)
         self.twiss_tab_layout.setColumnStretch(0, 1)
 
     def _wrap_plot_card(self, layout, widget, title_text, row, col, parent):
@@ -1004,6 +1085,7 @@ class myWindow(QWidget,Ui_Form):
         self.widget_10.setObjectName("resultCard")
         for widget in (self.widget_4, self.widget_5, self.widget_10, self.widget_13):
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.widget_13.setMaximumWidth(900)
 
         self.label_9.setText("Scan Control")
         self.label_15.setText("X Plane Results")
@@ -1011,6 +1093,8 @@ class myWindow(QWidget,Ui_Form):
         self.label_8.setText("Twiss Transport")
         for title in (self.label_9, self.label_15, self.label_42, self.label_8):
             title.setObjectName("panelTitle")
+        for title in (self.twiss_initial_title, self.twiss_result_title):
+            title.setProperty("role", "sectionTitle")
         for label in (self.label_19, self.label_44, self.label_49, self.label_50):
             label.setText("gamma (1/m)")
 
@@ -1025,13 +1109,35 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton.setText("Start Scan")
         self.pushButton_2.setText("Recalculate")
         self.pushButton_3.setText("Clear View")
-        self.pushButton_4.setText("Calculate")
+        self.pushButton_4.setText("Calculate Twiss")
         self.pushButton_5.setText("Stop Scan")
+        self.use_latest_fit_button.setText("Use Latest Fit")
         self.label_32.setText("Settle time (s)")
-        self.radioButton.setText("Inverse Map")
-        self.radioButton_2.setText("Y Plane")
+        self.label_4.setText("From")
+        self.label_7.setText("To")
+        self.twiss_initial_title.setText("Initial Twiss at From")
+        self.twiss_result_title.setText("Computed Twiss at To")
+        self.twiss_direction_label.setText("Direction")
+        self.twiss_plane_label.setText("Plane")
+        self.twiss_status_label.setText("Status")
+        self.twiss_map_label.setText("Transfer Map")
+        self.radioButton.hide()
+        self.radioButton_2.hide()
+        self.twiss_direction_combo.clear()
+        self.twiss_direction_combo.addItem("Forward", False)
+        self.twiss_direction_combo.addItem("Backward", True)
+        self.twiss_plane_combo.clear()
+        self.twiss_plane_combo.addItem("X Plane", "xplane")
+        self.twiss_plane_combo.addItem("Y Plane", "yplane")
 
-        for button in (self.pushButton, self.pushButton_2, self.pushButton_3, self.pushButton_4, self.pushButton_5):
+        for button in (
+            self.pushButton,
+            self.pushButton_2,
+            self.pushButton_3,
+            self.pushButton_4,
+            self.pushButton_5,
+            self.use_latest_fit_button,
+        ):
             button.setProperty("compact", True)
 
         for label in (
@@ -1064,15 +1170,26 @@ class myWindow(QWidget,Ui_Form):
             self.label_50,
             self.label_51,
             self.label_52,
+            self.twiss_direction_label,
+            self.twiss_plane_label,
+            self.twiss_status_label,
+            self.twiss_map_label,
         ):
             label.setProperty("role", "field")
+
+        self.twiss_status_edit.setReadOnly(True)
+        self.twiss_status_edit.setText("Idle")
+        self.twiss_map_edit.setReadOnly(True)
+        self.twiss_map_edit.setPlainText("No Twiss calculation yet")
+        self.twiss_map_edit.setFixedHeight(58)
+        self.twiss_map_edit.setLineWrapMode(QTextEdit.NoWrap)
 
         self._result_fields = [
             self.lineEdit_11, self.lineEdit_12, self.lineEdit_13, self.lineEdit_14, self.lineEdit_15, self.lineEdit_16,
             self.lineEdit_39, self.lineEdit_35, self.lineEdit_40, self.lineEdit_36, self.lineEdit_38, self.lineEdit_37,
             self.lineEdit_4, self.lineEdit_5, self.lineEdit_20, self.lineEdit_19, self.lineEdit_18,
             self.lineEdit_41, self.lineEdit_42, self.lineEdit_43, self.lineEdit_44, self.lineEdit_45,
-            self.lineEdit_17, self.lineEdit_21, self.lineEdit_22,
+            self.lineEdit_17, self.lineEdit_21, self.lineEdit_22, self.twiss_status_edit,
         ]
         for widget in self._result_fields:
             widget.setReadOnly(True)
@@ -1089,8 +1206,11 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_3.setToolTip(
             "Clear plots, result fields, and the current scan point table. Saved archives are not deleted."
         )
-        self.pushButton_4.setToolTip("Calculate Twiss transport with the configured model backend.")
+        self.pushButton_4.setToolTip("Calculate Twiss transport from the selected From element to the selected To element.")
         self.pushButton_5.setToolTip("Request the running scan to stop and restore the quadrupole setting.")
+        self.use_latest_fit_button.setToolTip(
+            "Copy beta, alpha and gamma from the latest valid emittance fit for the selected Twiss plane."
+        )
         self.preview_fit_button.setToolTip("Read the selected PRF image PV and update the local beam-size fit.")
         self.load_points_button.setToolTip("Open an archived emittance scan for review or recalculation.")
         self.exclude_points_button.setToolTip("Disable the selected scan points without deleting the rows.")
@@ -1101,6 +1221,18 @@ class myWindow(QWidget,Ui_Form):
         self.sample_interval_label.setToolTip(self.sample_interval_edit.toolTip())
         self.lineEdit_10.setToolTip("Number of PRF image samples collected at each K1 value.")
         self.label_14.setToolTip(self.lineEdit_10.toolTip())
+        self.comboBox_2.setToolTip("Start element for Twiss transport.")
+        self.label_4.setToolTip(self.comboBox_2.toolTip())
+        self.comboBox_3.setToolTip("End element for Twiss transport.")
+        self.label_7.setToolTip(self.comboBox_3.toolTip())
+        self.twiss_direction_combo.setToolTip("Choose forward transport or the inverse transfer map from To back to From.")
+        self.twiss_direction_label.setToolTip(self.twiss_direction_combo.toolTip())
+        self.twiss_plane_combo.setToolTip("Choose the Twiss plane to calculate.")
+        self.twiss_plane_label.setToolTip(self.twiss_plane_combo.toolTip())
+        self.twiss_status_edit.setToolTip("Latest Twiss calculation state or error message.")
+        self.twiss_status_label.setToolTip(self.twiss_status_edit.toolTip())
+        self.twiss_map_edit.setToolTip("2x2 transfer matrix block used by the latest Twiss calculation.")
+        self.twiss_map_label.setToolTip(self.twiss_map_edit.toolTip())
 
     def _rebuild_panel_layouts(self):
         self._rebuild_scan_control_panel()
@@ -1219,45 +1351,94 @@ class myWindow(QWidget,Ui_Form):
 
     def _rebuild_twiss_control_panel(self):
         layout = QVBoxLayout(self.widget_13)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(12)
 
         self.label_8.setParent(self.widget_13)
         layout.addWidget(self.label_8)
 
         top_row = QGridLayout()
-        top_row.setHorizontalSpacing(6)
+        top_row.setHorizontalSpacing(10)
         top_row.setVerticalSpacing(5)
+        self.twiss_direction_label.setParent(self.widget_13)
+        self.twiss_direction_combo.setParent(self.widget_13)
+        self.twiss_plane_label.setParent(self.widget_13)
+        self.twiss_plane_combo.setParent(self.widget_13)
         top_row.addWidget(self.label_4, 0, 0)
-        top_row.addWidget(self.comboBox_2, 0, 1)
-        top_row.addWidget(self.label_7, 0, 2)
-        top_row.addWidget(self.comboBox_3, 0, 3)
-        top_row.setColumnStretch(1, 1)
+        top_row.addWidget(self.label_7, 0, 1)
+        top_row.addWidget(self.twiss_direction_label, 0, 2)
+        top_row.addWidget(self.twiss_plane_label, 0, 3)
+        top_row.addWidget(self.comboBox_2, 1, 0)
+        top_row.addWidget(self.comboBox_3, 1, 1)
+        top_row.addWidget(self.twiss_direction_combo, 1, 2)
+        top_row.addWidget(self.twiss_plane_combo, 1, 3)
+        top_row.setColumnStretch(0, 3)
+        top_row.setColumnStretch(1, 3)
+        top_row.setColumnStretch(2, 1)
         top_row.setColumnStretch(3, 1)
+        self.twiss_direction_combo.setMinimumWidth(126)
+        self.twiss_plane_combo.setMinimumWidth(126)
         layout.addLayout(top_row)
 
         grids_row = QHBoxLayout()
         grids_row.setContentsMargins(0, 0, 0, 0)
-        grids_row.setSpacing(8)
+        grids_row.setSpacing(18)
         self.gridLayoutWidget.setParent(self.widget_13)
         self.gridLayoutWidget_2.setParent(self.widget_13)
+        self.twiss_initial_title.setParent(self.widget_13)
+        self.twiss_result_title.setParent(self.widget_13)
         self.gridLayoutWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.gridLayoutWidget_2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.gridLayout_5.setVerticalSpacing(6)
         self.gridLayout_7.setVerticalSpacing(6)
-        grids_row.addWidget(self.gridLayoutWidget, 1)
-        grids_row.addWidget(self.gridLayoutWidget_2, 1)
+        self.gridLayout_5.setHorizontalSpacing(8)
+        self.gridLayout_7.setHorizontalSpacing(8)
+        self.gridLayout_5.setColumnStretch(1, 1)
+        self.gridLayout_7.setColumnStretch(1, 1)
+        initial_layout = QVBoxLayout()
+        initial_layout.setContentsMargins(0, 0, 0, 0)
+        initial_layout.setSpacing(4)
+        initial_layout.addWidget(self.twiss_initial_title)
+        initial_layout.addWidget(self.gridLayoutWidget)
+        result_layout = QVBoxLayout()
+        result_layout.setContentsMargins(0, 0, 0, 0)
+        result_layout.setSpacing(4)
+        result_layout.addWidget(self.twiss_result_title)
+        result_layout.addWidget(self.gridLayoutWidget_2)
+        grids_row.addLayout(initial_layout, 1)
+        grids_row.addLayout(result_layout, 1)
         layout.addLayout(grids_row)
+
+        status_row = QGridLayout()
+        status_row.setHorizontalSpacing(6)
+        status_row.setVerticalSpacing(5)
+        self.twiss_status_label.setParent(self.widget_13)
+        self.twiss_status_edit.setParent(self.widget_13)
+        status_row.addWidget(self.twiss_status_label, 0, 0)
+        status_row.addWidget(self.twiss_status_edit, 0, 1)
+        status_row.setColumnStretch(1, 1)
+        layout.addLayout(status_row)
+
+        detail_row = QGridLayout()
+        detail_row.setHorizontalSpacing(6)
+        detail_row.setVerticalSpacing(5)
+        self.twiss_map_label.setParent(self.widget_13)
+        self.twiss_map_edit.setParent(self.widget_13)
+        detail_row.addWidget(self.twiss_map_label, 0, 0)
+        detail_row.addWidget(self.twiss_map_edit, 0, 1)
+        detail_row.setColumnStretch(1, 1)
+        layout.addLayout(detail_row)
 
         footer = QHBoxLayout()
         footer.setContentsMargins(0, 0, 0, 0)
         footer.setSpacing(8)
         self.radioButton.setParent(self.widget_13)
         self.radioButton_2.setParent(self.widget_13)
+        self.use_latest_fit_button.setParent(self.widget_13)
         self.pushButton_4.setParent(self.widget_13)
-        footer.addWidget(self.radioButton)
-        footer.addWidget(self.radioButton_2)
         footer.addStretch(1)
+        self.use_latest_fit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        footer.addWidget(self.use_latest_fit_button)
         self.pushButton_4.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         footer.addWidget(self.pushButton_4)
         layout.addLayout(footer)
@@ -1486,7 +1667,27 @@ class myWindow(QWidget,Ui_Form):
         else:
             self.status_panel.set_item("scan", "Idle", "subtle")
 
-        self.status_panel.set_item("twiss", "Running" if self._twiss_is_running() else "Idle", "success" if self._twiss_is_running() else "subtle")
+        if self._twiss_is_running():
+            twiss_summary = self.latest_twiss_summary or {}
+            text = self._format_twiss_status_text(twiss_summary, default="Running")
+            tooltip = self._format_twiss_status_tooltip(twiss_summary)
+            self.status_panel.set_item("twiss", text, "success", tooltip)
+        elif self.latest_twiss_summary is None:
+            self.status_panel.set_item("twiss", "Idle", "subtle")
+        elif self.latest_twiss_summary.get("status") == "error":
+            self.status_panel.set_item(
+                "twiss",
+                "Error",
+                "warning",
+                self._format_twiss_status_tooltip(self.latest_twiss_summary),
+            )
+        else:
+            self.status_panel.set_item(
+                "twiss",
+                self._format_twiss_status_text(self.latest_twiss_summary),
+                "success",
+                self._format_twiss_status_tooltip(self.latest_twiss_summary),
+            )
         if self.latest_beam_fit_result is None:
             self.status_panel.set_item("fit", "No image", "subtle")
         elif self.latest_beam_fit_result.valid:
@@ -1534,6 +1735,36 @@ class myWindow(QWidget,Ui_Form):
             text = f"{method}: {status} (x {x_status}, y {y_status})"
         self.status_panel.set_item("emit", text, tone)
 
+    @staticmethod
+    def _format_twiss_plane_label(plane):
+        return "Y" if plane == "yplane" else "X"
+
+    def _format_twiss_status_text(self, summary, default="Idle"):
+        if not summary:
+            return default
+        plane_label = self._format_twiss_plane_label(summary.get("plane"))
+        direction = summary.get("direction")
+        if direction:
+            return f"{plane_label} {direction}"
+        return plane_label
+
+    def _format_twiss_status_tooltip(self, summary):
+        if not summary:
+            return ""
+        plane_label = self._format_twiss_plane_label(summary.get("plane"))
+        direction = summary.get("direction", "")
+        from_element = summary.get("from_element", "")
+        to_element = summary.get("to_element", "")
+        status = summary.get("status", "")
+        parts = [f"{plane_label} plane"]
+        if direction:
+            parts.append(direction)
+        if from_element and to_element:
+            parts.append(f"{from_element} -> {to_element}")
+        if status == "error":
+            parts.append(_compact_status_text(summary.get("message", "error"), limit=100))
+        return ", ".join(parts)
+
     def _model_backend_status_text(self):
         return "Ready" if self._model_backend_available else "Unavailable"
 
@@ -1559,7 +1790,9 @@ class myWindow(QWidget,Ui_Form):
             self.pushButton_2.setEnabled(True)
             self.pushButton_2.setToolTip("Recalculate emittance from the active scan points.")
             self.pushButton_4.setEnabled(True)
-            self.pushButton_4.setToolTip("Calculate Twiss transport with the configured model backend.")
+            self.pushButton_4.setToolTip(
+                "Calculate Twiss transport from the selected From element to the selected To element."
+            )
         else:
             message = self._model_backend_status_tooltip()
             self.pushButton.setEnabled(False)
@@ -1572,10 +1805,12 @@ class myWindow(QWidget,Ui_Form):
         for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
             self._refresh_widget_style(button)
 
-    def _require_model_backend_available(self, operation):
+    def _require_model_backend_available(self, operation, *, title="Emittance Measurement"):
         if self._model_backend_available:
             return True
-        self._warn(f"{operation} requires the model backend. {self._model_backend_status_tooltip()}")
+        message = f"{operation} requires the model backend. {self._model_backend_status_tooltip()}"
+        print(message)
+        QMessageBox.warning(self, title, message)
         return False
 
     def _scan_points_counts(self):
@@ -1702,6 +1937,11 @@ class myWindow(QWidget,Ui_Form):
     def _latest_scan_results_path(self):
         return self._scan_latest_dir() / SCAN_RESULTS_FILENAME
 
+    def _twiss_results_path(self):
+        if self.loaded_scan_results_path is not None:
+            return Path(self.loaded_scan_results_path).parent / TWISS_RESULTS_FILENAME
+        return self._scan_latest_dir() / TWISS_RESULTS_FILENAME
+
     def _scan_metadata_from_paras(self, paras):
         return {
             "schema_version": SCAN_DATA_SCHEMA_VERSION,
@@ -1783,6 +2023,10 @@ class myWindow(QWidget,Ui_Form):
             self._append_scan_point(k1, sigx, sigy)
         self.loaded_scan_metadata = metadata
         self.loaded_scan_results_path = results_path
+        if isinstance(metadata, Mapping) and isinstance(metadata.get("fit_summary"), Mapping):
+            fit_summary = metadata["fit_summary"]
+            preferred_method = "leastSquares" if "leastSquares" in fit_summary else "parabolic"
+            self.latest_emit_fit_summary = fit_summary.get(preferred_method)
         self._redraw_scan_points_from_table()
 
     def _load_scan_archive(self):
@@ -1806,6 +2050,51 @@ class myWindow(QWidget,Ui_Form):
             )
         except RuntimeError as exc:
             self._warn(str(exc))
+
+    def _latest_twiss_initial_source(self):
+        if isinstance(self.twiss_initial_source, Mapping):
+            source = dict(self.twiss_initial_source)
+            source.setdefault("source_quad", self.comboBox_2.currentText() or None)
+            return source
+        return {
+            "kind": "manual",
+            "source_quad": self.comboBox_2.currentText() or None,
+        }
+
+    def _append_twiss_result_log(self, result):
+        path = self._twiss_results_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "schema_version": "twiss_result_v1",
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "machine_id": self.machine_profile.machine.id,
+            "machine_display_name": self.machine_profile.machine.display_name,
+            "backend": self.machine_type,
+            "plane": result.get("plane"),
+            "direction": result.get("direction"),
+            "from_element": result.get("from_element"),
+            "to_element": result.get("to_element"),
+            "energy_mev": _finite_float_or_none(result.get("energy_mev")),
+            "initial_source": self._latest_twiss_initial_source(),
+            "initial_twiss": {
+                "beta": _finite_float_or_none(result.get("beta0")),
+                "alpha": _finite_float_or_none(result.get("alpha0")),
+                "gamma": _finite_float_or_none(result.get("gamma0")),
+            },
+            "result_twiss": {
+                "beta": _finite_float_or_none(result.get("beta")),
+                "alpha": _finite_float_or_none(result.get("alpha")),
+                "gamma": _finite_float_or_none(result.get("gamma")),
+            },
+            "transfer_matrix": result.get("matrix"),
+        }
+        if self.loaded_scan_results_path is not None:
+            record["scan_results_path"] = str(Path(self.loaded_scan_results_path))
+        elif self.loaded_scan_metadata or self.pending_scan_metadata:
+            record["scan_results_path"] = str(self._latest_scan_results_path())
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        return path
 
     def _redraw_scan_points_from_table(self):
         table = self.scan_points_table
@@ -1899,6 +2188,10 @@ class myWindow(QWidget,Ui_Form):
         print(message)
         QMessageBox.warning(self, "Emittance Measurement", message)
 
+    def _warn_twiss(self, message):
+        print(message)
+        QMessageBox.warning(self, "Twiss Calculation", message)
+
     def _scan_is_running(self):
         return self.scan is not None and self.scan.isRunning()
 
@@ -1916,6 +2209,112 @@ class myWindow(QWidget,Ui_Form):
     def _on_twiss_finished(self):
         self.twissCal = None
         self._refresh_status()
+
+    def _selected_twiss_inverse_map(self):
+        return bool(self.twiss_direction_combo.currentData())
+
+    def _selected_twiss_plane(self):
+        return self.twiss_plane_combo.currentData() or "xplane"
+
+    def _twiss_element_index(self, element_id):
+        index = self.comboBox_3.findText(element_id)
+        return index if index >= 0 else None
+
+    def _twiss_path_validation_message(self):
+        from_element = self.comboBox_2.currentText()
+        to_element = self.comboBox_3.currentText()
+        if not from_element or not to_element:
+            return "Select From and To elements."
+        if from_element == to_element:
+            return "From and To must be different."
+
+        from_index = self._twiss_element_index(from_element)
+        to_index = self._twiss_element_index(to_element)
+        if from_index is None or to_index is None:
+            return "Path order is unavailable for the selected elements."
+
+        if self._selected_twiss_inverse_map():
+            if from_index <= to_index:
+                return "Backward expects To to be upstream of From. Swap elements or choose Forward."
+        elif to_index <= from_index:
+            return "Forward expects To to be downstream of From. Swap elements or choose Backward."
+        return None
+
+    def _format_twiss_path_status(self):
+        from_element = self.comboBox_2.currentText() or "--"
+        to_element = self.comboBox_3.currentText() or "--"
+        direction = "backward" if self._selected_twiss_inverse_map() else "forward"
+        plane = self._format_twiss_plane_label(self._selected_twiss_plane())
+        return f"Ready: {plane} plane, {direction}, {from_element} -> {to_element}"
+
+    def _update_twiss_path_status(self):
+        if not hasattr(self, "twiss_status_edit") or self._twiss_is_running():
+            return
+        message = self._twiss_path_validation_message()
+        self.twiss_status_edit.setText(message or self._format_twiss_path_status())
+
+    def _mark_twiss_initial_manual(self):
+        self.twiss_initial_source = {
+            "kind": "manual",
+            "source_quad": self.comboBox_2.currentText() or None,
+        }
+
+    def _latest_fit_source_quad(self):
+        for source in (
+            self.latest_emit_fit_summary,
+            self.loaded_scan_metadata,
+            self.pending_scan_metadata,
+        ):
+            if not isinstance(source, Mapping):
+                continue
+            quad = source.get("source_quad") or source.get("quad")
+            if quad:
+                return str(quad)
+        current_quad = self.comboBox.currentText()
+        return current_quad or None
+
+    def _use_latest_fit_for_twiss(self):
+        if not self.latest_emit_fit_summary:
+            self._warn_twiss("No emittance fit is available. Run a scan or recalculate first.")
+            return
+
+        plane = self._selected_twiss_plane()
+        plane_summary = self.latest_emit_fit_summary.get(plane)
+        if not isinstance(plane_summary, Mapping):
+            self._warn_twiss(f"No latest fit summary is available for {self._format_twiss_plane_label(plane)} plane.")
+            return
+        if plane_summary.get("status") != "valid":
+            message = plane_summary.get("message") or plane_summary.get("status") or "unresolved"
+            self._warn_twiss(
+                f"Latest {self._format_twiss_plane_label(plane)} plane fit is not valid: "
+                f"{_compact_status_text(message)}"
+            )
+            return
+
+        beta = _finite_float_or_none(plane_summary.get("beta"))
+        alpha = _finite_float_or_none(plane_summary.get("alpha"))
+        gamma = _finite_float_or_none(plane_summary.get("gamma"))
+        if beta is None or alpha is None or gamma is None:
+            self._warn_twiss(f"Latest {self._format_twiss_plane_label(plane)} plane fit has incomplete Twiss values.")
+            return
+
+        self.lineEdit.setText(f"{beta:.8g}")
+        self.lineEdit_3.setText(f"{alpha:.8g}")
+        self.lineEdit_6.setText(f"{gamma:.8g}")
+        source_quad = self._latest_fit_source_quad()
+        if source_quad and not self._set_combo_current_text(self.comboBox_2, source_quad):
+            self._warn_twiss(f"Latest fit source element {source_quad} is not available in the Twiss From list.")
+            return
+        self.twiss_initial_source = {
+            "kind": "latest_fit",
+            "method": self.latest_emit_fit_summary.get("method"),
+            "plane": plane,
+            "source_quad": source_quad,
+        }
+        source_text = f" from {source_quad}" if source_quad else ""
+        self.twiss_status_edit.setText(
+            f"Loaded latest {self._format_twiss_plane_label(plane)} plane fit{source_text}."
+        )
 
     def _parse_positive_int(self, text, field_name):
         try:
@@ -1947,6 +2346,8 @@ class myWindow(QWidget,Ui_Form):
         index = combo.findText(value)
         if index >= 0:
             combo.setCurrentIndex(index)
+            return True
+        return False
 
     def _emit_presets_by_quad(self):
         grouped = defaultdict(list)
@@ -1977,7 +2378,7 @@ class myWindow(QWidget,Ui_Form):
     def _current_flag_image_extent(self, flag_name=None):
         return _image_extent_from_geometry(self._current_flag_pixel_geometry(flag_name))
 
-    def _twiss_quad_choices(self):
+    def _twiss_from_choices(self):
         if self.emit_workflow.twiss_quads:
             return list(self.emit_workflow.twiss_quads)
 
@@ -1987,23 +2388,48 @@ class myWindow(QWidget,Ui_Form):
                 choices.append(preset.quad)
         return choices
 
+    def _twiss_to_choices(self):
+        choices = [
+            element.id
+            for element in self.machine_profile.elements
+            if element.kind == "quad"
+        ]
+        return choices or self._twiss_from_choices()
+
     def _configure_machine_profile(self):
         presets_by_quad = self._emit_presets_by_quad()
         quad_items = list(presets_by_quad)
         self._set_combo_items(self.comboBox, quad_items)
 
-        twiss_quads = self._twiss_quad_choices()
-        self._set_combo_items(self.comboBox_2, twiss_quads)
-        self._set_combo_items(self.comboBox_3, twiss_quads)
+        twiss_from_quads = self._twiss_from_choices()
+        twiss_to_quads = self._twiss_to_choices()
+        self._set_combo_items(self.comboBox_2, twiss_from_quads)
+        self._set_combo_items(self.comboBox_3, twiss_to_quads)
 
         default_preset = self._find_emit_preset(self.emit_workflow.default_preset)
         self._set_combo_current_text(self.comboBox, default_preset.quad)
         self.updateComboBox4(self.comboBox.currentIndex())
         self._set_combo_current_text(self.comboBox_4, default_preset.flag)
-        if twiss_quads:
-            self._set_combo_current_text(self.comboBox_2, twiss_quads[0])
-            self._set_combo_current_text(self.comboBox_3, twiss_quads[0])
+        default_from = twiss_from_quads[0] if twiss_from_quads else None
+        if twiss_from_quads:
+            self._set_combo_current_text(self.comboBox_2, default_from)
+        if twiss_to_quads:
+            from_index = (
+                twiss_to_quads.index(default_from)
+                if default_from in twiss_to_quads
+                else -1
+            )
+            default_to = next(
+                (
+                    quad
+                    for index, quad in enumerate(twiss_to_quads)
+                    if index > from_index and quad != default_from
+                ),
+                next((quad for quad in twiss_to_quads if quad != default_from), twiss_to_quads[0]),
+            )
+            self._set_combo_current_text(self.comboBox_3, default_to)
         self._sync_emit_preset_defaults()
+        self._update_twiss_path_status()
 
     def _sync_emit_preset_defaults(self):
         preset = self._current_emit_preset()
@@ -2237,10 +2663,16 @@ class myWindow(QWidget,Ui_Form):
         self.clear.start()
 
     def start_twissCalc(self):
-        if not self._require_model_backend_available("Twiss calculation"):
+        if not self._require_model_backend_available("Twiss calculation", title="Twiss Calculation"):
             return
         if self._twiss_is_running():
-            self._warn("Twiss calculation is already running.")
+            self._warn_twiss("Twiss calculation is already running.")
+            return
+
+        path_error = self._twiss_path_validation_message()
+        if path_error is not None:
+            self.twiss_status_edit.setText("Invalid path")
+            self._warn_twiss(path_error)
             return
 
         try:
@@ -2249,29 +2681,69 @@ class myWindow(QWidget,Ui_Form):
             gamma0 = float(self.lineEdit_6.text())
             energy = float(self.lineEdit_2.text())
         except ValueError:
-            self._warn("Twiss input values must be numeric.")
+            self.twiss_status_edit.setText("Invalid input")
+            self._warn_twiss("Twiss input values must be numeric.")
             return
         if energy <= 0:
-            self._warn("Energy must be positive.")
+            self.twiss_status_edit.setText("Invalid input")
+            self._warn_twiss("Energy must be positive.")
+            return
+        if beta0 <= 0:
+            self.twiss_status_edit.setText("Invalid input")
+            self._warn_twiss("Initial beta must be positive.")
+            return
+        if gamma0 <= 0:
+            self.twiss_status_edit.setText("Invalid input")
+            self._warn_twiss("Initial gamma must be positive.")
             return
 
         para = {}
         para["quad1"] = self.comboBox_2.currentText()
         para["quad2"] = self.comboBox_3.currentText()
-        
-        para["inverse_map"] = self.radioButton.isChecked()
 
-        if self.radioButton_2.isChecked() == True:
-            para["plane"] = "yplane"
-        else:
-            para["plane"] = "xplane"
+        expected_gamma = (1.0 + alpha0**2) / beta0
+        gamma_delta = abs(gamma0 - expected_gamma)
+        gamma_scale = max(1.0, abs(expected_gamma))
+        if gamma_delta / gamma_scale > 0.05:
+            QMessageBox.warning(
+                self,
+                "Twiss Calculation",
+                (
+                    "Initial gamma is not consistent with beta and alpha. "
+                    f"Expected gamma is about {expected_gamma:.6g} 1/m."
+                ),
+            )
+        
+        para["inverse_map"] = self._selected_twiss_inverse_map()
+        para["direction"] = "backward" if para["inverse_map"] else "forward"
+
+        para["plane"] = self._selected_twiss_plane()
         
         para["beta0"] = beta0
         para["alpha0"] = alpha0
         para["gamma0"] = gamma0
         para["EnergyMeV"] = energy
         para["app_context"] = self.app_context
+        para["from_element"] = para["quad1"]
+        para["to_element"] = para["quad2"]
 
+        self.latest_twiss_summary = {
+            "status": "running",
+            "plane": para["plane"],
+            "direction": para["direction"],
+            "from_element": para["from_element"],
+            "to_element": para["to_element"],
+            "energy_mev": energy,
+            "beta0": beta0,
+            "alpha0": alpha0,
+            "gamma0": gamma0,
+        }
+        for field in (self.lineEdit_17, self.lineEdit_21, self.lineEdit_22):
+            field.setText("")
+        self.twiss_map_edit.setPlainText("Calculating transfer map...")
+        self.twiss_status_edit.setText(
+            f"Running: {self._format_twiss_status_tooltip(self.latest_twiss_summary)}"
+        )
         self.twissCal = twissCalThread(para)
         self.twissCal.trigger.connect(self.showTwiss)
         self.twissCal.finished.connect(self._on_twiss_finished)
@@ -2321,10 +2793,18 @@ class myWindow(QWidget,Ui_Form):
             self.lineEdit_44.setText("")
             self.lineEdit_45.setText("")
 
+            self.lineEdit_17.setText("")
+            self.lineEdit_21.setText("")
+            self.lineEdit_22.setText("")
+            self.twiss_status_edit.setText("Idle")
+            self.twiss_map_edit.setPlainText("No Twiss calculation yet")
+
             self._clear_scan_points()
             self.loaded_scan_metadata = None
             self.loaded_scan_results_path = None
             self.latest_emit_fit_summary = None
+            self.latest_twiss_summary = None
+            self.twiss_initial_source = {"kind": "manual"}
             self._refresh_status()
             
             return
@@ -2464,15 +2944,55 @@ class myWindow(QWidget,Ui_Form):
 
     def showTwiss(self, dict):
         if "error" in dict:
-            self._warn(dict["error"])
+            message = str(dict["error"])
+            self.latest_twiss_summary = {
+                "status": "error",
+                "plane": dict.get("plane"),
+                "direction": dict.get("direction"),
+                "from_element": dict.get("from_element"),
+                "to_element": dict.get("to_element"),
+                "message": message,
+            }
+            self.lineEdit_17.setText("--")
+            self.lineEdit_21.setText("--")
+            self.lineEdit_22.setText("--")
+            self.twiss_map_edit.setPlainText("--")
+            self.twiss_status_edit.setText("Error")
+            self._refresh_status()
+            self._warn_twiss(message)
             return
-        beta  = round(dict["beta"], 2)
-        alpha = round(dict["alpha"],2)
-        gamma = round(dict["gamma"],2)
+        beta = round(dict["beta"], 2)
+        alpha = round(dict["alpha"], 2)
+        gamma = round(dict["gamma"], 2)
+        matrix_summary = dict.get("matrix")
 
+        self.latest_twiss_summary = {
+            "status": "valid",
+            "plane": dict.get("plane"),
+            "direction": dict.get("direction"),
+            "from_element": dict.get("from_element"),
+            "to_element": dict.get("to_element"),
+            "energy_mev": dict.get("energy_mev"),
+            "beta0": dict.get("beta0"),
+            "alpha0": dict.get("alpha0"),
+            "gamma0": dict.get("gamma0"),
+            "beta": beta,
+            "alpha": alpha,
+            "gamma": gamma,
+            "matrix": matrix_summary,
+        }
         self.lineEdit_17.setText(str(beta))
         self.lineEdit_21.setText(str(alpha))
         self.lineEdit_22.setText(str(gamma))
+        self.twiss_map_edit.setPlainText(_format_matrix_summary(matrix_summary) or "No transfer map returned")
+        status_text = self._format_twiss_status_tooltip(self.latest_twiss_summary)
+        try:
+            log_path = self._append_twiss_result_log(dict)
+        except Exception as exc:
+            print(f"Warning: failed to write Twiss result log: {exc}")
+        else:
+            status_text = f"{status_text}; logged to {log_path.name}"
+        self.twiss_status_edit.setText(status_text)
         self._refresh_status()
 
     def closeEvent(self, event):
@@ -2504,6 +3024,13 @@ class twissCalThread(QThread):
         try:
             quad1 = self.input["quad1"]
             quad2 = self.input["quad2"]
+            context = {
+                "plane": self.input.get("plane"),
+                "direction": self.input.get("direction"),
+                "from_element": self.input.get("from_element", quad1),
+                "to_element": self.input.get("to_element", quad2),
+                "energy_mev": self.input.get("EnergyMeV"),
+            }
 
             twiss0={}
             twiss0["beta0"]  = self.input["beta0"]
@@ -2514,11 +3041,27 @@ class twissCalThread(QThread):
             inverse = self.input["inverse_map"]
 
             trans = transfer(self.input["EnergyMeV"], app_context=self.input["app_context"])
-            twiss1 = trans.getTwiss1(quad1,quad2,twiss0,plane=plane,inverse=inverse)
+            if inverse:
+                matrix = np.linalg.inv(trans.get_map(quad2, quad1, seq="ent2exit"))
+            else:
+                matrix = trans.get_map(quad1, quad2, seq="ent2exit")
+            twiss1 = _twiss_from_transfer_matrix(matrix, twiss0, plane=plane)
+            twiss1.update(context)
+            twiss1["beta0"] = twiss0["beta0"]
+            twiss1["alpha0"] = twiss0["alpha0"]
+            twiss1["gamma0"] = twiss0["gamma0"]
+            twiss1["matrix"] = _plane_transfer_matrix_summary(matrix, plane=plane)
 
             self.trigger.emit(twiss1)
         except Exception as exc:
-            self.trigger.emit({"error": str(exc)})
+            error_payload = {
+                "error": str(exc),
+                "plane": self.input.get("plane"),
+                "direction": self.input.get("direction"),
+                "from_element": self.input.get("from_element"),
+                "to_element": self.input.get("to_element"),
+            }
+            self.trigger.emit(error_payload)
 
 class scanThread(QThread):
 

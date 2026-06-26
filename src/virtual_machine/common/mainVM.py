@@ -473,6 +473,16 @@ BUTTON_CONFIG = {
         "category": "runtime",
         "tooltip": "Start the elegant-based VM watcher after softIOC is online.",
     },
+    "sim2real": {
+        "text": "sim2real",
+        "category": "runtime",
+        "tooltip": "Placeholder button. No action is implemented yet.",
+    },
+    "real2sim": {
+        "text": "real2sim",
+        "category": "runtime",
+        "tooltip": "Placeholder button. No action is implemented yet.",
+    },
     "shutdown_VM": {
         "text": "Stop VM Session",
         "category": "session",
@@ -1167,14 +1177,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout_3.setVerticalSpacing(10)
 
         if width < 340:
-            self.groupBox.setMinimumHeight(150)
+            self.groupBox.setMinimumHeight(250)
             self.gridLayout_3.addWidget(self.start_ioc, 0, 0)
             self.gridLayout_3.addWidget(self.start_vm, 1, 0)
+            self.gridLayout_3.addWidget(self.sim2real, 2, 0)
+            self.gridLayout_3.addWidget(self.real2sim, 3, 0)
             return
 
-        self.groupBox.setMinimumHeight(106)
+        self.groupBox.setMinimumHeight(164)
         self.gridLayout_3.addWidget(self.start_ioc, 0, 0)
         self.gridLayout_3.addWidget(self.start_vm, 0, 1)
+        self.gridLayout_3.addWidget(self.sim2real, 1, 0)
+        self.gridLayout_3.addWidget(self.real2sim, 1, 1)
         self.gridLayout_3.setColumnStretch(0, 1)
         self.gridLayout_3.setColumnStretch(1, 1)
 
