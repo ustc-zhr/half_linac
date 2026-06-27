@@ -1,7 +1,7 @@
 import time
 import numpy as np
 from skimage import measure
-from epics import caput
+from epics import caget, caput
 
 
 class ESA_AutoTuner:
@@ -20,7 +20,9 @@ class ESA_AutoTuner:
                  mode="find_beam",
                  progress_callback=None,
                  remove_bg=False,
-                 bg_image=None):
+                 bg_image=None,
+                 settle_time_s=0.5,
+                 restore_initial_on_failure=True):
         """
         Parameters
         ----------
@@ -39,8 +41,11 @@ class ESA_AutoTuner:
         self.progress_callback = progress_callback
         self.remove_bg = remove_bg
         self.bg_image = bg_image
+        self.settle_time_s = float(settle_time_s)
+        self.restore_initial_on_failure = bool(restore_initial_on_failure)
 
         self.best_current = None
+        self.initial_current = None
         self.status = "IDLE"
 
         # parameters for center lock
@@ -51,7 +56,19 @@ class ESA_AutoTuner:
     # ==========================================================
     def _set_bend(self, current):
         caput(self.bend_pv, float(current))
-        time.sleep(0.5)
+        time.sleep(max(self.settle_time_s, 0.0))
+
+    def _read_bend(self):
+        value = caget(self.bend_pv)
+        if value is None:
+            return None
+        return float(value)
+
+    def _restore_initial_bend(self):
+        if self.initial_current is None:
+            return
+        self._set_bend(self.initial_current)
+        self._report_progress("restore", self.initial_current, has_beam=False, score=None)
 
     def _get_flag_image(self):
         tmp = self.flag_pv_obj.get()
@@ -188,10 +205,13 @@ class ESA_AutoTuner:
         One-button ESA auto tuning
         """
         self.status = "RUNNING"
+        self.initial_current = self._read_bend()
 
         interval = self.coarse_scan(B_min, B_max, coarse_steps)
         if interval is None:
             self.status = "FAILED"
+            if self.restore_initial_on_failure:
+                self._restore_initial_bend()
             return None
 
         B1, B2 = interval
@@ -199,6 +219,8 @@ class ESA_AutoTuner:
 
         if best_B is None:
             self.status = "FAILED"
+            if self.restore_initial_on_failure:
+                self._restore_initial_bend()
             return None
 
         self._set_bend(best_B)

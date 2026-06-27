@@ -25,6 +25,7 @@ from scipy.optimize import curve_fit
 from epics import caget, caget_many, caput, caput_many, PV
 
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -33,6 +34,7 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QListView,
     QMainWindow,
     QMessageBox,
     QSizePolicy,
@@ -60,6 +62,10 @@ from half_linac.src.shared.machine_profile import (
 
 HEADER_ACTION_HEIGHT = 32
 DEFAULT_DESIGN_ETA = 0.7484210850804714  # [m]
+
+
+class ESAQuadK1Error(RuntimeError):
+    """Raised when an ESA quadrupole K1 PV cannot provide a usable model value."""
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -217,7 +223,6 @@ QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
     background: transparent;
     border: none;
 }}
@@ -288,12 +293,25 @@ QComboBox::drop-down {{
     width: 20px;
 }}
 
-QComboBox QAbstractItemView {{
-    background-color: {input_bg};
-    color: {input_fg};
-    border: 1px solid {input_border};
-    selection-background-color: {button_hover_bg};
-}}
+    QComboBox QAbstractItemView {{
+        background-color: {input_bg};
+        color: {input_fg};
+        border: 1px solid {input_border};
+        selection-background-color: {metric_active_fg};
+        selection-color: {window_bg};
+        outline: none;
+    }}
+
+    QComboBox QAbstractItemView::item {{
+        color: {input_fg};
+        background-color: {input_bg};
+        min-height: 22px;
+    }}
+
+    QComboBox QAbstractItemView::item:selected {{
+        color: {window_bg};
+        background-color: {metric_active_fg};
+    }}
 
 QCheckBox {{
     color: {window_fg};
@@ -534,6 +552,8 @@ class ESAAutoTuneThread(QThread):
                 progress_callback=self.progress.emit,
                 remove_bg=self.remove_bg,
                 bg_image=self.bg_image,
+                settle_time_s=float(self.bend_scan.get("settle_time_s", 0.5)),
+                restore_initial_on_failure=bool(self.bend_scan.get("restore_initial_on_failure", True)),
             )
             best_current = tuner.run(
                 B_min=float(self.bend_scan.get("min", 0)),
@@ -590,6 +610,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             element_id: resolve_channel(self.app_context, element_id, "k1")
             for element_id in self.esa_quad_ids
         }
+        self.pushButton_sample_bg = self.pushButton_sapmles
         self.bend_pv = resolve_channel(
             self.app_context,
             self.energy_config["bend_element"],
@@ -599,6 +620,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.current_theme = "dark"
         self._auto_tune_text = "Idle"
         self._auto_tune_tone = "subtle"
+        self._fit_text = "Waiting"
+        self._fit_tone = "subtle"
+        self._fit_tooltip = None
+        self._readout_text = None
+        self._readout_tone = None
+        self._readout_tooltip = None
 
         self.colorbar = None
         self.sigx = None
@@ -757,14 +784,30 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             tooltip,
         )
 
-    def _get_esa_quad_values(self):
+    def _get_esa_quad_k1_values(self):
         values = {}
         for element_id, pv_name in self.esa_quad_pvs.items():
-            value = caget(pv_name)
-            if value is None:
-                raise RuntimeError(f"{pv_name} returned no value for {element_id}.")
+            raw_value = caget(pv_name)
+            if raw_value is None:
+                raise ESAQuadK1Error(f"{element_id} K1 PV {pv_name} returned no value.")
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError) as exc:
+                raise ESAQuadK1Error(
+                    f"{element_id} K1 PV {pv_name} returned non-numeric value {raw_value!r}."
+                ) from exc
+            if not math.isfinite(value):
+                raise ESAQuadK1Error(f"{element_id} K1 PV {pv_name} returned invalid value {raw_value!r}.")
             values[element_id] = value
         return values
+
+    def _twiss_target_element(self):
+        """Return the model element where ESA optics/readout values are reported."""
+        for key in ("twiss_target_element", "vm_watch_element", "flag_element"):
+            value = str(self.energy_config.get(key, "")).strip()
+            if value:
+                return value
+        raise MachineProfileError("energy_spectrum requires a Twiss target element.")
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} Energy Spectrum")
@@ -880,7 +923,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.groupBox_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.groupBox_4.setTitle("Acquisition")
         self.groupBox_5.setTitle("Readout")
-        self.groupBox_6.setTitle("Transport Model")
+        self.groupBox_6.setTitle("Optics Model")
         self.groupBox_8.setTitle("Energy Tuning")
         self.groupBox_7.setTitle("Background Reference")
 
@@ -891,17 +934,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.label_10.setText("Fit Method")
         self.label_4.setText("Energy (MeV)")
         self.label_6.setText("Spread (%)")
-        self.label_9.setText("Start @")
-        self.label_11.setText("ESA flag")
-        self.label_14.setText("Energy (MeV)")
+        self.label_9.setText("Input @")
+        self.label_11.setText("Target")
+        self.label_14.setText("Target (MeV)")
         self.pushButton_cal_disp.setText("Update eta")
         self.pushButton_cal_twiss_disp.setText("Update optics")
         self.pushButton_autoFind.setText("Auto Find")
-        self.pushButton_sapmles.setText("Sample Background")
-        self.pushButton_save.setText("Save Background")
-        self.pushButton_load.setText("Load Background")
-        self.checkBox_emit.setText("Include emit")
-        self.checkBox_bg.setText("Remove background")
+        self.pushButton_sample_bg.setText("Sample BG")
+        self.pushButton_save.setText("Save BG")
+        self.pushButton_load.setText("Load BG")
+        self.checkBox_emit.setText("Subtract emit")
+        self.checkBox_bg.setText("Subtract background")
+        self._name_operator_controls()
 
         for label in (
             self.label,
@@ -1028,14 +1072,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.pushButton_cal_disp,
             self.pushButton_cal_twiss_disp,
             self.pushButton_autoFind,
-            self.pushButton_sapmles,
+            self.pushButton_sample_bg,
             self.pushButton_save,
             self.pushButton_load,
         ):
             button.setProperty("tight", True)
             self._refresh_widget_style(button)
 
-        self.gridLayout_4.removeWidget(self.pushButton_sapmles)
+        self.gridLayout_4.removeWidget(self.pushButton_sample_bg)
         self.gridLayout_4.removeWidget(self.lineEdit_samples)
         self.gridLayout_4.removeWidget(self.pushButton_save)
         self.gridLayout_4.removeWidget(self.pushButton_load)
@@ -1045,7 +1089,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.lineEdit_3.hide()
         self.gridLayout_4.setHorizontalSpacing(7)
         self.gridLayout_4.setVerticalSpacing(5)
-        self.gridLayout_4.addWidget(self.pushButton_sapmles, 0, 0)
+        self.gridLayout_4.addWidget(self.pushButton_sample_bg, 0, 0)
         self.gridLayout_4.addWidget(self.lineEdit_samples, 0, 1)
         self.gridLayout_4.addWidget(self.pushButton_save, 1, 0, 1, 2)
         self.gridLayout_4.addWidget(self.pushButton_load, 2, 0, 1, 2)
@@ -1059,14 +1103,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _connect_signals(self):
         self.lineEdit_expotime.returnPressed.connect(self.set_expotime)
         self.lineEdit_refresh.returnPressed.connect(self.set_refresh)
-        self.comboBox_fitmethod.currentTextChanged.connect(self._refresh_status)
+        self.comboBox_fitmethod.currentTextChanged.connect(self._handle_fit_method_change)
         self.comboBox_colormap.currentTextChanged.connect(self._handle_colormap_change)
 
         self.checkBox_emit.clicked.connect(lambda: self.emit_withornot(self.checkBox_emit.isChecked()))
         self.pushButton_cal_disp.clicked.connect(self.cal_disp)
         self.pushButton_cal_twiss_disp.clicked.connect(self.cal_twiss_disp)
 
-        self.pushButton_sapmles.clicked.connect(self.background_samples)
+        self.pushButton_sample_bg.clicked.connect(self.background_samples)
         self.pushButton_save.clicked.connect(self.save_bgfile)
         self.pushButton_load.clicked.connect(self.load_bgfile)
         self.checkBox_bg.clicked.connect(lambda: self.bg_removeornot(self.checkBox_bg.isChecked()))
@@ -1074,6 +1118,99 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.slider_energy.valueChanged.connect(self._update_energy_slider_label)
         self.slider_energy.sliderReleased.connect(self.set_bend_quad)
         self.pushButton_autoFind.clicked.connect(self.run_esa_auto_tune)
+
+    def _name_operator_controls(self):
+        self.pushButton_sample_bg.setObjectName("pushButton_sample_bg")
+        self.lineEdit_samples.setObjectName("lineEdit_bg_samples")
+        self.lineEdit.setObjectName("lineEdit_bg_save_path_legacy")
+        self.lineEdit_3.setObjectName("lineEdit_bg_load_path_legacy")
+
+        names = {
+            self.lineEdit_expotime: "Exposure time input",
+            self.lineEdit_refresh: "Refresh interval input",
+            self.comboBox_colormap: "Image color map selector",
+            self.comboBox_fitmethod: "Spectrum fit method selector",
+            self.label_energy: "Energy center readout",
+            self.label_energyspread: "Energy spread readout",
+            self.checkBox_emit: "Subtract emittance contribution toggle",
+            self.checkBox_bg: "Subtract background image toggle",
+            self.comboBox_start_element: "Optics input element selector",
+            self.doubleSpinBox_alpha_in: "Input alpha x",
+            self.doubleSpinBox_beta_in: "Input beta x",
+            self.doubleSpinBox_emi_in: "Input emittance x",
+            self.lineEdit_alpha_ESAflag: "Target alpha x readout",
+            self.lineEdit_beta_ESAflag: "Target beta x readout",
+            self.lineEdit_eta_ESAflag: "Target eta x readout",
+            self.pushButton_cal_disp: "Update dispersion button",
+            self.pushButton_cal_twiss_disp: "Update optics button",
+            self.slider_energy: "Target energy slider",
+            self.label_sliderenergy: "Target energy value",
+            self.pushButton_autoFind: "Bend scan button",
+            self.background_plot: "Background preview plot",
+            self.lineEdit_samples: "Background sample count input",
+            self.pushButton_sample_bg: "Sample background button",
+            self.pushButton_save: "Save background button",
+            self.pushButton_load: "Load background button",
+        }
+        for widget, name in names.items():
+            widget.setAccessibleName(name)
+
+    def _apply_combo_palette(self):
+        palette = self._palette()
+        qt_palette = QPalette()
+        qt_palette.setColor(QPalette.Base, QColor(palette["input_bg"]))
+        qt_palette.setColor(QPalette.Text, QColor(palette["input_fg"]))
+        qt_palette.setColor(QPalette.Button, QColor(palette["input_bg"]))
+        qt_palette.setColor(QPalette.ButtonText, QColor(palette["input_fg"]))
+        qt_palette.setColor(QPalette.Highlight, QColor(palette["metric_active_fg"]))
+        qt_palette.setColor(QPalette.HighlightedText, QColor(palette["window_bg"]))
+        combo_style = f"""
+            QComboBox {{
+                background-color: {palette["input_bg"]};
+                color: {palette["input_fg"]};
+                border: 1px solid {palette["input_border"]};
+                border-radius: 10px;
+                padding: 5px 8px;
+                min-height: 14px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {palette["input_bg"]};
+                color: {palette["input_fg"]};
+                selection-background-color: {palette["metric_active_fg"]};
+                selection-color: {palette["window_bg"]};
+            }}
+        """
+        view_style = f"""
+            QListView {{
+                background-color: {palette["input_bg"]};
+                color: {palette["input_fg"]};
+                border: 1px solid {palette["input_border"]};
+                outline: 0;
+            }}
+            QListView::item {{
+                background-color: {palette["input_bg"]};
+                color: {palette["input_fg"]};
+                min-height: 24px;
+                padding: 3px 8px;
+            }}
+            QListView::item:selected {{
+                background-color: {palette["metric_active_fg"]};
+                color: {palette["window_bg"]};
+            }}
+            QListView::item:hover {{
+                background-color: {palette["button_hover_bg"]};
+                color: {palette["input_fg"]};
+            }}
+        """
+        for combo in (self.comboBox_colormap, self.comboBox_fitmethod, self.comboBox_start_element):
+            if not isinstance(combo.view(), QListView):
+                combo.setView(QListView(combo))
+            combo.setPalette(qt_palette)
+            combo.setStyleSheet(combo_style)
+            view = combo.view()
+            if view is not None:
+                view.setPalette(qt_palette)
+                view.setStyleSheet(view_style)
 
     def _warn(self, message):
         print(message)
@@ -1098,7 +1235,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.slider_energy.setEnabled(slider_enabled)
         if self._auto_tune_is_running():
-            self.slider_energy.setToolTip("Disabled while Auto Find is scanning.")
+            self.slider_energy.setToolTip("Disabled while bend scan is running.")
         elif slider_enabled:
             self.slider_energy.setToolTip(f"Release to write target energy to {self.energy_set_pv}.")
         elif self.control_backend == "real" and not writes_allowed:
@@ -1112,7 +1249,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.pushButton_autoFind.setEnabled(auto_tune_enabled)
         if self._auto_tune_is_running():
             self.pushButton_autoFind.setText("Scanning...")
-            self.pushButton_autoFind.setToolTip("Auto Find is currently scanning the ESA bend current.")
+            self.pushButton_autoFind.setToolTip("Bend scan is currently scanning the ESA bend current.")
         else:
             self.pushButton_autoFind.setText("Auto Find")
             if self.control_backend == "real" and writes_allowed:
@@ -1120,10 +1257,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                     f"Scan {self.bend_pv} to locate the ESA beam on {self.flag_pv}."
                 )
             elif self.control_backend == "real":
-                self.pushButton_autoFind.setToolTip("Real-machine ESA auto tune is blocked by machine profile.")
+                self.pushButton_autoFind.setToolTip("Real-machine bend scan is blocked by machine profile.")
             else:
                 self.pushButton_autoFind.setToolTip(
-                    "VM backend does not provide a coupled ESA response, so Auto Find is disabled."
+                    "VM backend does not provide a coupled ESA response, so bend scan is disabled."
                 )
 
     def _apply_theme(self):
@@ -1133,6 +1270,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.status_panel.apply_theme(palette)
             self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
         self._update_theme_toggle_button()
+        self._apply_combo_palette()
         self._style_all_plots()
 
     def _palette(self):
@@ -1143,10 +1281,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
         if self.current_theme == "dark":
             self.theme_toggle_button.setText("\u2600")
-            self.theme_toggle_button.setToolTip("Switch to light theme.")
+            self.theme_toggle_button.setToolTip("switch to light theme.")
         else:
             self.theme_toggle_button.setText("\u263D")
-            self.theme_toggle_button.setToolTip("Switch to dark theme.")
+            self.theme_toggle_button.setToolTip("switch to dark theme.")
 
     def _toggle_theme(self):
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
@@ -1164,6 +1302,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         else:
             self._draw_placeholder_views()
         self._refresh_background_preview()
+
+    def _handle_fit_method_change(self):
+        self._update_fit_status(self.comboBox_fitmethod.currentText())
+        self._refresh_status()
 
     @staticmethod
     def _refresh_widget_style(widget):
@@ -1252,6 +1394,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._model_tone = tone
         self._model_tooltip = tooltip
 
+    def _update_fit_status(self, text, tone="subtle", tooltip=None):
+        self._fit_text = text
+        self._fit_tone = tone
+        self._fit_tooltip = tooltip
+
+    def _set_readout_status(self, text, tone, tooltip=None):
+        self._readout_text = text
+        self._readout_tone = tone
+        self._readout_tooltip = tooltip
+
+    def _clear_readout_status(self):
+        self._readout_text = None
+        self._readout_tone = None
+        self._readout_tooltip = None
+
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
@@ -1265,13 +1422,20 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         else:
             self.status_panel.set_item("connection", "Offline shell", "warning")
 
-        self.status_panel.set_item("fit", self.comboBox_fitmethod.currentText(), "subtle")
+        self.status_panel.set_item("fit", self._fit_text, self._fit_tone, self._fit_tooltip)
         self.status_panel.set_item("model", self._model_text, self._model_tone, self._model_tooltip)
         self.status_panel.set_item("tune", self._auto_tune_text, self._auto_tune_tone)
 
         energy_text = self.label_energy.text().strip()
         spread_text = self.label_energyspread.text().strip()
-        if energy_text and energy_text != "N/A" and spread_text and spread_text != "N/A":
+        if self._readout_text is not None:
+            self.status_panel.set_item(
+                "readout",
+                self._readout_text,
+                self._readout_tone or "subtle",
+                self._readout_tooltip,
+            )
+        elif energy_text and energy_text != "N/A" and spread_text and spread_text != "N/A":
             self.status_panel.set_item("readout", f"{energy_text} MeV / {spread_text}%", "success")
         elif self._pv_available:
             self.status_panel.set_item("readout", "Waiting", "subtle")
@@ -1301,13 +1465,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return round(interval_s * 1000)
 
     def _set_energy_outputs(self, energy_center, energy_spread):
+        self._clear_readout_status()
         self.label_energy.setText("{:.4f}".format(energy_center))
         self.label_energyspread.setText("{:.4f}".format(energy_spread * 1e2))
         self._refresh_status()
 
-    def _set_energy_unavailable(self):
-        self.label_energy.setText("N/A")
+    def _set_energy_unavailable(self, status_text=None, tooltip=None, *, energy_center=None):
+        if energy_center is None:
+            self.label_energy.setText("N/A")
+        else:
+            self.label_energy.setText("{:.4f}".format(energy_center))
         self.label_energyspread.setText("N/A")
+        if status_text:
+            self._set_readout_status(status_text, "warning", tooltip)
+        else:
+            self._clear_readout_status()
         self._refresh_status()
 
 
@@ -1472,6 +1644,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def ESA_running(self):
         palette = self._palette()
         self.fit_method = self.comboBox_fitmethod.currentText()
+        self._update_fit_status(self.fit_method)
+        self._clear_readout_status()
 
         # clear previous image
         self.ESAflag_image.axes.clear()
@@ -1487,7 +1661,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._mark_pv_unavailable(RuntimeError(f"{self.flag_pv} returned no image data"))
             print(f"Warning: {self.flag_pv} returned no image data.")
             self._draw_placeholder_views()
-            self._set_energy_unavailable()
+            self._set_energy_unavailable("No image", f"{self.flag_pv} returned no image data.")
             self._refresh_status()
             return
         self._mark_pv_available()
@@ -1500,7 +1674,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._mark_pv_unavailable(exc)
             print(f"Warning: flag image reshape failed: {exc}")
             self._draw_placeholder_views()
-            self._set_energy_unavailable()
+            self._set_energy_unavailable("Bad image shape", str(exc))
             self._refresh_status()
             return
         # subtract background if needed
@@ -1534,7 +1708,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             print("Warning: ESA projection is empty; skipping spectrum update.")
             self.ESAflag_image.canvas.draw()
             self._draw_placeholder_plot(self.energy_plot, "Energy Spectrum", "E (MeV)", "Spectrum (arb. units)")
-            self._set_energy_unavailable()
+            self._update_fit_status("No beam", "warning", "Projection inside the selected image region is empty.")
+            self._set_energy_unavailable("No beam", "Projection inside the selected image region is empty.")
             self._refresh_status()
             return
 
@@ -1557,11 +1732,19 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             max_amp = np.max(amp)  # 最大值
             max_index = np.argmax(amp)  # 最大值对应的索引
             x0_initial = x[max_index]  # 对应的x坐标作为x0初始值
-            initial_guess = [max_amp, x0_initial, 1.0] # 对应高斯函数参数 [A, μ, σ, C] 的初始值
-            popt,pcov = curve_fit(Gauss_func, x, amp, p0=initial_guess) 
+            sigma_initial = max(np.std(x), np.ptp(x) / 10.0, 1e-6)
+            initial_guess = [max_amp, x0_initial, sigma_initial] # 对应高斯函数参数 [A, μ, σ] 的初始值
+            sigma_max = max(np.ptp(x), sigma_initial, 1e-6)
+            popt,pcov = curve_fit(
+                Gauss_func,
+                x,
+                amp,
+                p0=initial_guess,
+                bounds=([0.0, float(np.min(x)), 1e-6], [np.inf, float(np.max(x)), sigma_max]),
+            )
             return popt
         fit_norm_denx = norm_denx
-        if fit_method in ("Gauss", "Gauss fit"):
+        if fit_method.lower() in ("gauss", "gauss fit"):
             try:
                 popt = gauss_fit(x, norm_denx)
                 fit_norm_denx = Gauss_func(x,popt[0],popt[1],popt[2])
@@ -1570,12 +1753,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 self.meanx = round(popt[1], 3)
                 self.sigx = abs(round(popt[2],3))
                 self.sigy = None
+                self._update_fit_status("Gauss OK", "success")
             except (RuntimeError, ValueError, ZeroDivisionError, FloatingPointError) as exc:
                 print(f"Gauss fit failed, falling back to direct moments: {exc}")
+                self._update_fit_status("Direct fallback", "warning", f"Gauss fit failed: {exc}")
                 fit_method = "direct"
 
         # 不拟合直接计算投影分布的方差
         if fit_method == "direct":
+            if self._fit_text == self.comboBox_fitmethod.currentText():
+                self._update_fit_status("Direct", "success")
             # 直接计算投影分布的方差
             total_denx = np.sum(denx0)
             probabilities = denx0 / total_denx
@@ -1625,33 +1812,58 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if np.isclose(self.eta_flag, 0.0):
             print("Warning: eta_flag is zero; skipping energy calculation.")
             self._draw_placeholder_plot(self.energy_plot, "Energy Spectrum", "E (MeV)", "Spectrum (arb. units)")
-            self._set_energy_unavailable()
+            self._set_energy_unavailable("No eta", "ESA dispersion is zero. Run Update eta or Update optics.")
             self._refresh_status()
             return
 
         # energy_center and energy_spread calculation and display 
         energy_center = energy0 * (self.meanx - 0)*1e-3 / self.eta_flag + energy0 # MeV
+        energy_all = [energy0 * (xi - 0)*1e-3 / self.eta_flag + energy0 for xi in x]
 
-        if self.with_emit == True: # 不考虑发射度贡献
+        if self.with_emit and (self.beta_flag <= 0 or self.emi_flag <= 0):
+            message = "Include emit is enabled, but optics/emittance at the ESA flag are not available."
+            print(f"Warning: {message}")
+            self._set_energy_unavailable(
+                "Update optics first",
+                message,
+                energy_center=energy_center,
+            )
+            self.energy_plot.axes.clear()
+            self._style_axes(self.energy_plot, "E (MeV)", "Spectrum (arb. units)")
+            self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="projection")
+            self.energy_plot.canvas.draw()
+            self._refresh_status()
+            return
+
+        if self.with_emit == True: # 考虑发射度贡献
             spread_term = (((self.sigx*1e-3)**2 - self.beta_flag * self.emi_flag) / self.eta_flag ** 2)
-        elif self.with_emit == False: # 考虑发射度贡献 
+        elif self.with_emit == False: # 不考虑发射度贡献
             spread_term = (((self.sigx*1e-3)**2 - 0 * 0) / self.eta_flag ** 2)
         if spread_term < 0:
             print(f"Warning: negative energy spread term {spread_term}; clamping to zero.")
-            spread_term = 0.0
+            self._set_energy_unavailable(
+                "Invalid spread",
+                "Projected beam size is smaller than the emittance term; check optics, eta, and image calibration.",
+                energy_center=energy_center,
+            )
+            self.energy_plot.axes.clear()
+            self._style_axes(self.energy_plot, "E (MeV)", "Spectrum (arb. units)")
+            self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="projection")
+            self.energy_plot.canvas.draw()
+            self._refresh_status()
+            return
         energy_spread = math.sqrt(spread_term) * energy0 / energy_center
         
         self._set_energy_outputs(energy_center, energy_spread)
 
         # plot energy profile in another figure
-        enregy_all = [energy0 * (xi - 0)*1e-3 / self.eta_flag + energy0 for xi in x]
         self.energy_plot.axes.clear()
         self._style_axes(self.energy_plot, "E (MeV)", "Spectrum (arb. units)")
-        self.energy_plot.axes.plot(enregy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="projection")
+        self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="projection")
         if fit_method == "direct":
-            self.energy_plot.axes.plot(enregy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="spline fit")
-        elif fit_method in ("Gauss", "Gauss fit"):
-            self.energy_plot.axes.plot(enregy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="Gauss fit")
+            self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="spline fit")
+        elif fit_method.lower() in ("gauss", "gauss fit"):
+            self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="Gauss fit")
         legend = self.energy_plot.axes.legend(frameon=False)
         if legend is not None:
             for text in legend.get_texts():
@@ -1671,8 +1883,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             # 根据ESA的弯铁SM(L, angle)和Q铁QE01 QE02 QE03(k,L) 漂移段(L)参数计算eta    变量仅为Q_k
             # 采用elegant计算
 
-            # 获取当前ESA三块Q铁强度 这里假设获得的是强度k
-            quad_values = self._get_esa_quad_values()
+            quad_k1_values = self._get_esa_quad_k1_values()
 
             #
             lattice_file = self._energy_model_path("source_lattice")
@@ -1699,7 +1910,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             lattice  = lte["lattice"]
 
             contl['run_setup']['lattice'] = esa_lte_file.name
-            for element_id, k_value in quad_values.items():
+            for element_id, k_value in quad_k1_values.items():
                 lattice[element_id]['K1'] = str(k_value)
 
             lte["control"]  = contl
@@ -1725,8 +1936,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
             self.eta_flag = Rj[0, -1] 
             print('dispersion of ESA updates: ',self.eta_flag, 'm')
-            self._update_model_status(f"eta {self.eta_flag:.4f} m", "success")
+            self._update_model_status(f"eta {self.eta_flag:.4f} m, K1 from PV", "success")
         
+        except ESAQuadK1Error as e:
+            print(f"Error in cal_disp: {e}")
+            self._update_model_status("K1 PV invalid", "warning", str(e))
+            self._refresh_status()
+            return
         except Exception as e:
             print(f"Error in cal_disp: {e}")
             self.eta_flag = DEFAULT_DESIGN_ETA  # 理论设计值
@@ -1750,7 +1966,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         beta_in = self.doubleSpinBox_beta_in.value() # m     88.6@QT02
         emi_in = self.doubleSpinBox_emi_in.value()*1e-9 # m  ~43nm@QT02
         start_element = self.comboBox_start_element.currentText() 
-        quad_values = self._get_esa_quad_values()
+        try:
+            quad_k1_values = self._get_esa_quad_k1_values()
+        except ESAQuadK1Error as e:
+            print(f"Error in cal_twiss_disp: {e}")
+            self._update_model_status("K1 PV invalid", "warning", str(e))
+            self._refresh_status()
+            return
 
         if beta_in <= 0:
             print("wrong beta in")
@@ -1786,16 +2008,22 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             lattice  = lte["lattice"]
             usedline = lte["usedline"]
 
-            for element_id, k_value in quad_values.items():
+            for element_id, k_value in quad_k1_values.items():
                 lattice[element_id]['K1'] = str(k_value)
 
             contl['run_setup']['lattice'] = esa_lte_file.name
             contl['twiss_output']['beta_x'] = str(beta_in)
             contl['twiss_output']['alpha_x'] = str(alpha_in)
 
-            # map of entrance of elem1 => end
+            # Map from the entrance of start_element to the configured flag/watch element.
+            target_element = self._twiss_target_element()
             id1 = usedline.index(start_element)
-            scanline = usedline[id1:-1]
+            id2 = usedline.index(target_element)
+            if id2 < id1:
+                raise MachineProfileError(
+                    f"Twiss target {target_element!r} is upstream of start element {start_element!r}."
+                )
+            scanline = usedline[id1 : id2 + 1]
 
             # update json with new lte and new control
             lte["control"]  = contl
@@ -1839,7 +2067,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.lineEdit_beta_ESAflag.setText(str(round(self.beta_flag,5)))
         # self.lineEdit_emi_ESAflag.setText(str(self.emi_flag*1e9))
         self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag,5)))
-        self._update_model_status(f"eta {self.eta_flag:.4f} m", "success")
+        self._update_model_status(f"@ {self._twiss_target_element()} eta {self.eta_flag:.4f} m, K1 from PV", "success")
         self._refresh_status()
 
     def emit_withornot(self, state):
@@ -1955,6 +2183,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             prefix = "Fine"
         elif stage == "final":
             prefix = "Final"
+        elif stage == "restore":
+            prefix = "Restore"
         else:
             prefix = "Scan"
 

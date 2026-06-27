@@ -47,7 +47,7 @@ APP_WORKFLOW_FILES = {
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
-    "orbit_display": (),
+    "orbit_display": ("orbit",),
     "beam_monitor": ("beam_monitor",),
     "energy_spectrum": ("energy_spectrum",),
     "bba": ("bba",),

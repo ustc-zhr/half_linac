@@ -1,7 +1,5 @@
-import time
 import sys
 from pathlib import Path
-from subprocess import Popen
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -16,6 +14,7 @@ ensure_repo_import_path(__file__)
 import numpy as np
 
 from half_linac.src.shared.machine_profile import (
+    get_workflow,
     list_elements,
     load_app_context,
     resolve_channel,
@@ -24,7 +23,7 @@ from subgui import Ui_Form
 from PyQt5.QtWidgets import QApplication, QLabel, QLineEdit, QMainWindow
 from PyQt5.QtCore import QTimer
 
-from epics import caget, caget_many
+from epics import caget_many
 
 class myWindow(QMainWindow, Ui_Form):
     def __init__(self):
@@ -33,21 +32,32 @@ class myWindow(QMainWindow, Ui_Form):
         self.app_context = load_app_context("orbit_display")
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
+        self.bpm_position_scale_to_mm = self._resolve_bpm_position_scale_to_mm()
         self.bpm_elements = list_elements(self.app_context, kind="bpm")
         self.bpm_ids = [element.id for element in self.bpm_elements]
         self.bpm_x_pvs = [resolve_channel(self.app_context, bpm_id, "x") for bpm_id in self.bpm_ids]
         self.bpm_y_pvs = [resolve_channel(self.app_context, bpm_id, "y") for bpm_id in self.bpm_ids]
+        self.pvlx_val = [None] * len(self.bpm_x_pvs)
+        self.pvly_val = [None] * len(self.bpm_y_pvs)
         self._configure_bpm_widgets()
-        
-        # init pv
-        # self.init_pv()
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.bpmvalue_dis)
-        self.timer.start(1000) #every 1s
+        self.timer.start(1000)
+        self.bpmvalue_dis()
+
+    def _resolve_bpm_position_scale_to_mm(self):
+        workflow = get_workflow(self.machine_profile, "orbit")
+        scale_by_backend = workflow.get("bpm_position_scale_to_mm", {})
+        if isinstance(scale_by_backend, dict):
+            try:
+                return float(scale_by_backend.get(self.control_backend, 1000.0))
+            except (TypeError, ValueError):
+                pass
+        return 1000.0
 
     def _configure_bpm_widgets(self):
-        self.setWindowTitle(f"{self.machine_profile.machine.display_name} BPM Detail")
+        self.setWindowTitle(f"{self.machine_profile.machine.display_name} BPM Detail (mm)")
         self.x_value_widgets = []
         self.y_value_widgets = []
         self.x_label_widgets = []
@@ -68,8 +78,8 @@ class myWindow(QMainWindow, Ui_Form):
 
         visible_count = min(len(self.bpm_ids), len(self.x_label_widgets))
         for index, bpm_id in enumerate(self.bpm_ids[:visible_count]):
-            self.x_label_widgets[index].setText(f"{bpm_id} X")
-            self.y_label_widgets[index].setText(f"{bpm_id} Y")
+            self.x_label_widgets[index].setText(f"{bpm_id} x (mm)")
+            self.y_label_widgets[index].setText(f"{bpm_id} y (mm)")
             self.x_label_widgets[index].show()
             self.y_label_widgets[index].show()
             self.x_value_widgets[index].show()
@@ -107,23 +117,39 @@ class myWindow(QMainWindow, Ui_Form):
         self.x_value_widgets.append(x_value)
         self.y_value_widgets.append(y_value)
         
+    def _format_bpm_value(self, value):
+        if value is None:
+            return "--"
+        try:
+            scaled_value = float(value) * self.bpm_position_scale_to_mm
+        except (TypeError, ValueError):
+            return "--"
+        if not np.isfinite(scaled_value):
+            return "--"
+        return f"{scaled_value:.3f}"
+
     def bpmvalue_dis(self):
-        # init pv
         self.init_pv()
 
-        self.pvlx_val = [round(num*1000, 3) for num in self.pvlx_val]
-        self.pvly_val = [round(num*1000, 3) for num in self.pvly_val]
-        visible_count = min(len(self.bpm_ids), len(self.x_value_widgets))
+        visible_count = min(
+            len(self.bpm_ids),
+            len(self.x_value_widgets),
+            len(self.pvlx_val),
+            len(self.pvly_val),
+        )
         for index in range(visible_count):
-            self.x_value_widgets[index].setText(str(self.pvlx_val[index]))
-            self.y_value_widgets[index].setText(str(self.pvly_val[index]))
-
+            self.x_value_widgets[index].setText(self._format_bpm_value(self.pvlx_val[index]))
+            self.y_value_widgets[index].setText(self._format_bpm_value(self.pvly_val[index]))
 
     def init_pv(self):
-        # get the values
-        self.pvlx_val = caget_many(self.bpm_x_pvs) 
-        self.pvly_val = caget_many(self.bpm_y_pvs) 
-
+        try:
+            self.pvlx_val = caget_many(self.bpm_x_pvs)
+            self.pvly_val = caget_many(self.bpm_y_pvs)
+            self.statusBar().clearMessage()
+        except Exception:
+            self.pvlx_val = [None] * len(self.bpm_x_pvs)
+            self.pvly_val = [None] * len(self.bpm_y_pvs)
+            self.statusBar().showMessage("PV connection unavailable.", 5000)
 
 
 if __name__ == '__main__':

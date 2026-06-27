@@ -14,6 +14,7 @@
   "bend_element": "SM",
   "bend_channel": "current_set",
   "model_backend": "simulation",
+  "twiss_target_element": "PRFESA",
   "energy_set_pv": {
     "real": "HALF:IN:ESA:PRF01:EnergySet"
   },
@@ -21,7 +22,9 @@
     "min": 0,
     "max": 200,
     "coarse_steps": 40,
-    "fine_steps": 15
+    "fine_steps": 15,
+    "settle_time_s": 0.5,
+    "restore_initial_on_failure": true
   },
   "esa_quads": ["QE01", "QE02", "QE03"],
   "start_element_tag": "esa_start",

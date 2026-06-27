@@ -1,7 +1,5 @@
-import os
 import sys
 import colorsys
-from subprocess import Popen
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -33,17 +31,17 @@ from PyQt5.QtWidgets import (
 )
 
 from half_linac.src.shared.machine_profile import (
+    get_workflow,
     list_elements,
     load_app_context,
     resolve_channel,
 )
 from gui import Ui_MainWindow
 
-APP_DIR = Path(__file__).resolve().parent
-
 
 HEADER_ACTION_HEIGHT = 32
 TRACE_COLOR_GOLDEN_RATIO = 0.618033988749895
+MAX_HOLD_TRACES = 3600
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -164,7 +162,6 @@ QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
 }}
 
 QPushButton {{
@@ -410,6 +407,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.app_context = load_app_context("orbit_display")
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
+        self.bpm_position_scale_to_mm = self._resolve_bpm_position_scale_to_mm()
         self.bpm_elements = list_elements(self.app_context, kind="bpm")
         self.bpm_ids = [element.id for element in self.bpm_elements]
         self.bpm_x_pvs = [resolve_channel(self.app_context, bpm_id, "x") for bpm_id in self.bpm_ids]
@@ -422,6 +420,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._pv_error = None
         self._x_trace_count = 0
         self._y_trace_count = 0
+        self._bpm_detail_window = None
         self.refresh_interval_ms = 1000
 
         self._configure_window()
@@ -430,20 +429,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.init_pv()
 
-        self.cxmin = None
-        self.cxmax = None
-        self.cymin = None
-        self.cymax = None
-
-        self.BPMxstart = None
-        self.BPMxend = None
-        self.BPMystart = None
-        self.BPMyend = None
-
-        self.timer_1 = QTimer(self)
-        self.timer_1.timeout.connect(self.plotorbit_x)
-        self.timer_2 = QTimer(self)
-        self.timer_2.timeout.connect(self.plotorbit_y)
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self._refresh_running_orbits)
 
         self.start_1.clicked.connect(self.start1_btn)
         self.stop_1.clicked.connect(self.stop1_btn)
@@ -458,6 +445,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self._prepare_empty_plot(self.graphWidget_1.canvas.axes, self.graphWidget_1.canvas.figure, "Horizontal Orbit")
         self._prepare_empty_plot(self.graphWidget_2.canvas.axes, self.graphWidget_2.canvas.figure, "Vertical Orbit")
+        self._start_default_refresh()
         self._refresh_status()
 
     def _configure_window(self):
@@ -503,10 +491,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.stop_1.setEnabled(False)
         self.stop_2.setEnabled(False)
 
-        self.label_5.setText("Y Min")
-        self.label_6.setText("Y Max")
-        self.label_7.setText("Y Min")
-        self.label_8.setText("Y Max")
+        self.label_5.setText("Min (mm)")
+        self.label_6.setText("Max (mm)")
+        self.label_7.setText("Min (mm)")
+        self.label_8.setText("Max (mm)")
         self.bPMSLabel.setText("BPM Start")
         self.bPMELabel.setText("BPM End")
         self.bPMSLabel_2.setText("BPM Start")
@@ -583,7 +571,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         for text in (
             f"Machine: {self.machine_profile.machine.display_name}",
-            f"Backend: {self.control_backend.upper()}",
+            f"Backend: {self._format_backend_name()}",
         ):
             runtime_label = QLabel(text, panel)
             runtime_label.setProperty("role", "field")
@@ -618,13 +606,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = OrbitStatusStrip(panel)
-        self.status_panel.add_item("machine", "MACHINE", self.machine_profile.machine.id)
-        self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
-        self.status_panel.add_item("x", "X ORBIT", "Idle")
-        self.status_panel.add_item("y", "Y ORBIT", "Idle")
-        self.status_panel.add_item("hold", "HOLD", "Off")
-        self.status_panel.add_item("refresh", "REFRESH", "1.0 s")
-        self.status_panel.add_item("view", "BPM VIEW", f"1-{len(self.bpm_ids)} default")
+        self.status_panel.add_item("machine", "Machine", self.machine_profile.machine.id)
+        self.status_panel.add_item("backend", "Backend", self._format_backend_name())
+        self.status_panel.add_item("x", "X Orbit", "Idle")
+        self.status_panel.add_item("y", "Y Orbit", "Idle")
+        self.status_panel.add_item("hold", "Hold", "Off")
+        self.status_panel.add_item("refresh", "Refresh", "1.0 s")
+        self.status_panel.add_item("view", "BPM View", f"1-{len(self.bpm_ids)} default")
         self.status_panel.finish()
         self.status_panel.apply_theme(self._palette())
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -688,6 +676,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _notify(self, message):
         self.statusBar().showMessage(message, 5000)
 
+    def _format_backend_name(self):
+        return self.control_backend
+
     def _apply_refresh_interval(self):
         if not hasattr(self, "refresh_interval_edit"):
             return
@@ -711,9 +702,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.refresh_interval_ms = new_interval_ms
         self._restore_refresh_interval_text()
         if self.is_x_running:
-            self.timer_1.start(self.refresh_interval_ms)
+            self._start_refresh_timer()
         if self.is_y_running:
-            self.timer_2.start(self.refresh_interval_ms)
+            self._start_refresh_timer()
         self._notify(f"Orbit refresh interval set to {self._format_refresh_interval()}.")
         self._refresh_status()
 
@@ -781,7 +772,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.set_item("machine", self.machine_profile.machine.id, "subtle")
         self.status_panel.set_item(
             "backend",
-            self.control_backend.upper(),
+            self._format_backend_name(),
             "warning" if self.control_backend == "real" else "success",
         )
         self.status_panel.set_item("x", "Running" if self.is_x_running else "Idle", "success" if self.is_x_running else "subtle")
@@ -801,6 +792,32 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.status_panel.set_item("view", "Offline shell", "warning")
         else:
             self.status_panel.set_item("view", self._format_bpm_view(), "warning" if self._has_custom_view() else "subtle")
+
+    def _start_refresh_timer(self):
+        if self.is_x_running or self.is_y_running:
+            self.refresh_timer.start(self.refresh_interval_ms)
+
+    def _start_default_refresh(self):
+        self.is_x_running = True
+        self.is_y_running = True
+        self.start_1.setEnabled(False)
+        self.stop_1.setEnabled(True)
+        self.start_2.setEnabled(False)
+        self.stop_2.setEnabled(True)
+        self._start_refresh_timer()
+        self._refresh_running_orbits()
+        self._notify("Orbit refresh started.")
+
+    def _stop_refresh_timer_if_idle(self):
+        if not self.is_x_running and not self.is_y_running:
+            self.refresh_timer.stop()
+
+    def _refresh_running_orbits(self):
+        self.init_pv()
+        if self.is_x_running:
+            self.plotorbit_x(read_pv=False)
+        if self.is_y_running:
+            self.plotorbit_y(read_pv=False)
 
     def _has_custom_view(self):
         return any(
@@ -847,16 +864,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._reset_trace_sequence("x")
             self._clear_orbit_plot("x")
         self._apply_refresh_interval()
-        self.timer_1.start(self.refresh_interval_ms)
         self.is_x_running = True
+        self._start_refresh_timer()
         self.start_1.setEnabled(False)
         self.stop_1.setEnabled(True)
         self._notify("Horizontal orbit refresh started.")
         self._refresh_status()
 
     def stop1_btn(self):
-        self.timer_1.stop()
         self.is_x_running = False
+        self._stop_refresh_timer_if_idle()
         self.start_1.setEnabled(True)
         self.stop_1.setEnabled(False)
         self._notify("Horizontal orbit refresh stopped.")
@@ -867,24 +884,38 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._reset_trace_sequence("y")
             self._clear_orbit_plot("y")
         self._apply_refresh_interval()
-        self.timer_2.start(self.refresh_interval_ms)
         self.is_y_running = True
+        self._start_refresh_timer()
         self.start_2.setEnabled(False)
         self.stop_2.setEnabled(True)
         self._notify("Vertical orbit refresh started.")
         self._refresh_status()
 
     def stop2_btn(self):
-        self.timer_2.stop()
         self.is_y_running = False
+        self._stop_refresh_timer_if_idle()
         self.start_2.setEnabled(True)
         self.stop_2.setEnabled(False)
         self._notify("Vertical orbit refresh stopped.")
         self._refresh_status()
 
-    @staticmethod
-    def _scale_bpm_values(values):
-        return [float(value) * 1000 if value is not None else np.nan for value in values]
+    def _resolve_bpm_position_scale_to_mm(self):
+        workflow = get_workflow(self.machine_profile, "orbit")
+        scale_by_backend = workflow.get("bpm_position_scale_to_mm", {})
+        if isinstance(scale_by_backend, dict):
+            try:
+                return float(scale_by_backend.get(self.control_backend, 1000.0))
+            except (TypeError, ValueError):
+                pass
+        return 1000.0
+
+    def _scale_bpm_values(self, values):
+        return [
+            float(value) * self.bpm_position_scale_to_mm
+            if value is not None
+            else np.nan
+            for value in values
+        ]
 
     def _style_plot_axes(self, ax, fig):
         palette = self._palette()
@@ -909,8 +940,66 @@ class myWindow(QMainWindow, Ui_MainWindow):
         fig.tight_layout()
         fig.canvas.draw()
 
-    def plotorbit_x(self):
-        self.init_pv()
+    def _read_float_field(self, field, label):
+        text = field.text().strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            self._notify(f"{label} must be numeric.")
+            return None
+
+    def _read_bpm_limit_field(self, field, label):
+        text = field.text().strip()
+        if not text:
+            return None
+        try:
+            value = int(text)
+        except ValueError:
+            self._notify(f"{label} must be an integer BPM index.")
+            return None
+        if value < 1 or value > len(self.bpm_ids):
+            self._notify(f"{label} must be between 1 and {len(self.bpm_ids)}.")
+            return None
+        return value
+
+    def _apply_plot_limits(self, ax, *, plane):
+        if plane == "x":
+            y_min = self._read_float_field(self.QL_cxmin, "X plot min")
+            y_max = self._read_float_field(self.QL_cxmax, "X plot max")
+            bpm_start = self._read_bpm_limit_field(self.bPMSLineEdit, "X BPM start")
+            bpm_end = self._read_bpm_limit_field(self.bPMELineEdit, "X BPM end")
+        else:
+            y_min = self._read_float_field(self.QL_cymin, "Y plot min")
+            y_max = self._read_float_field(self.QL_cymax, "Y plot max")
+            bpm_start = self._read_bpm_limit_field(self.bPMSLineEdit_2, "Y BPM start")
+            bpm_end = self._read_bpm_limit_field(self.bPMYLineEdit, "Y BPM end")
+
+        if y_min is not None and y_max is not None and y_min >= y_max:
+            self._notify(f"{plane.upper()} plot min must be smaller than plot max.")
+        else:
+            if y_min is not None:
+                ax.set_ylim(bottom=y_min)
+            if y_max is not None:
+                ax.set_ylim(top=y_max)
+
+        if bpm_start is not None and bpm_end is not None and bpm_start >= bpm_end:
+            self._notify(f"{plane.upper()} BPM start must be smaller than BPM end.")
+        else:
+            if bpm_start is not None:
+                ax.set_xlim(left=bpm_start)
+            if bpm_end is not None:
+                ax.set_xlim(right=bpm_end)
+
+    @staticmethod
+    def _trim_hold_traces(ax):
+        while len(ax.lines) > MAX_HOLD_TRACES:
+            ax.lines[0].remove()
+
+    def plotorbit_x(self, read_pv=True):
+        if read_pv:
+            self.init_pv()
         pvl_val = self._scale_bpm_values(self.pvlx_val)
         palette = self._palette()
 
@@ -932,22 +1021,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._refresh_status()
             return
 
-        try:
-            if self.QL_cxmin.text():
-                self.cxmin = float(self.QL_cxmin.text())
-                ax.set_ylim(bottom=self.cxmin)
-            if self.QL_cxmax.text():
-                self.cxmax = float(self.QL_cxmax.text())
-                ax.set_ylim(top=self.cxmax)
-
-            if self.bPMSLineEdit.text():
-                self.BPMxstart = int(self.bPMSLineEdit.text())
-                ax.set_xlim(left=self.BPMxstart)
-            if self.bPMELineEdit.text():
-                self.BPMxend = int(self.bPMELineEdit.text())
-                ax.set_xlim(right=self.BPMxend)
-        except ValueError:
-            pass
+        self._apply_plot_limits(ax, plane="x")
 
         x = np.linspace(1, len(pvl_val), len(pvl_val))
         trace_color = self._next_trace_color("x") if hold_trace else palette["orbit_x"]
@@ -963,11 +1037,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Cx (mm)", fontweight="bold")
+        if hold_trace:
+            self._trim_hold_traces(ax)
         self.graphWidget_1.canvas.draw()
         self._refresh_status()
 
-    def plotorbit_y(self):
-        self.init_pv()
+    def plotorbit_y(self, read_pv=True):
+        if read_pv:
+            self.init_pv()
         pvl_val = self._scale_bpm_values(self.pvly_val)
         palette = self._palette()
 
@@ -989,22 +1066,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._refresh_status()
             return
 
-        try:
-            if self.QL_cymin.text():
-                self.cymin = float(self.QL_cymin.text())
-                ax.set_ylim(bottom=self.cymin)
-            if self.QL_cymax.text():
-                self.cymax = float(self.QL_cymax.text())
-                ax.set_ylim(top=self.cymax)
-
-            if self.bPMSLineEdit_2.text():
-                self.BPMystart = int(self.bPMSLineEdit_2.text())
-                ax.set_xlim(left=self.BPMystart)
-            if self.bPMYLineEdit.text():
-                self.BPMyend = int(self.bPMYLineEdit.text())
-                ax.set_xlim(right=self.BPMyend)
-        except ValueError:
-            pass
+        self._apply_plot_limits(ax, plane="y")
 
         x = np.linspace(1, len(pvl_val), len(pvl_val))
         trace_color = self._next_trace_color("y") if hold_trace else palette["orbit_y"]
@@ -1020,16 +1082,24 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Cy (mm)", fontweight="bold")
+        if hold_trace:
+            self._trim_hold_traces(ax)
         self.graphWidget_2.canvas.draw()
         self._refresh_status()
 
     def start_bpmvalue_btn(self):
-        self._notify("Opening BPM detail window.")
-        Popen(
-            ["python3", "submain.py"],
-            cwd=str(APP_DIR),
-            shell=False,
-        )
+        if self._bpm_detail_window is None:
+            from submain import myWindow as BpmDetailWindow
+
+            self._bpm_detail_window = BpmDetailWindow()
+            self._bpm_detail_window.setAttribute(Qt.WA_DeleteOnClose, True)
+            self._bpm_detail_window.destroyed.connect(
+                lambda *_: setattr(self, "_bpm_detail_window", None)
+            )
+        self._bpm_detail_window.show()
+        self._bpm_detail_window.raise_()
+        self._bpm_detail_window.activateWindow()
+        self._notify("BPM detail window opened.")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

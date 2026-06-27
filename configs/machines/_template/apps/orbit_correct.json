@@ -3,5 +3,9 @@
     "vm": 8,
     "real": 8
   },
+  "bpm_position_scale_to_mm": {
+    "vm": 1000.0,
+    "real": 1.0
+  },
   "corrector_upperlimit_rad": 0.001
 }

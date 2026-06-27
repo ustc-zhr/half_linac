@@ -204,11 +204,11 @@
       "readback": "IRFEL:PS:QM18:current:ai"
     },
     "QM19": {
-      "k1": "IRFEL:PS:QM19:current:ao",
+      "k1": "IRFEL:AP:QUAD:QM19:K1:ao",
       "readback": "IRFEL:PS:QM19:current:ai"
     },
     "QM20": {
-      "k1": "IRFEL:PS:QM20:current:ao",
+      "k1": "IRFEL:AP:QUAD:QM20:K1:ao",
       "readback": "IRFEL:PS:QM20:current:ai"
     },
     "BM01": {

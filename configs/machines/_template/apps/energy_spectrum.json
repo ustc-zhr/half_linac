@@ -2,6 +2,7 @@
   "flag_element": "PRF01",
   "flag_image_channel": "esa_image",
   "vm_watch_element": "PRFESA",
+  "twiss_target_element": "PRFESA",
   "flag_exposure_channel": "exposure_time",
   "flag_pixel_shape": {
     "vm": [720, 270],
@@ -20,7 +21,9 @@
     "min": 0,
     "max": 200,
     "coarse_steps": 40,
-    "fine_steps": 15
+    "fine_steps": 15,
+    "settle_time_s": 0.5,
+    "restore_initial_on_failure": true
   },
   "esa_quads": ["QE01", "QE02", "QE03"],
   "start_element_tag": "esa_start",

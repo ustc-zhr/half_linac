@@ -1,5 +1,6 @@
 import sys
 import time
+import math
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -42,6 +43,7 @@ from half_linac.src.shared.machine_profile import (
     require_workflow_write_allowed,
     resolve_channel,
     resolve_flag_pixel_geometry,
+    workflow_writes_allowed,
 )
 
 
@@ -164,7 +166,6 @@ QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
 }}
 
 QPushButton {{
@@ -405,9 +406,15 @@ class myWindow(QWidget, Ui_Form):
         self._pv_available = False
         self._pv_error = None
         self._profile_warning = None
+        self._profile_status_text = "Waiting"
+        self._profile_status_tone = "subtle"
         self._write_block_notice = None
         self.tmppv = self.flag_ids[0] if self.flag_ids else ""
         self._pixel_geometry_flag_id = None
+        self._image_pv = None
+        self._image_pv_name = None
+        self._view_offset_x = 0.0
+        self._view_offset_y = 0.0
 
         self.h = None
         self.colorbar = None
@@ -602,9 +609,9 @@ class myWindow(QWidget, Ui_Form):
         for label in (self.label_3, self.label_4):
             label.setProperty("role", "field")
 
-        move_x_label = QLabel("Move X", self.view_card)
+        move_x_label = QLabel("Delta X (mm)", self.view_card)
         move_x_label.setProperty("role", "field")
-        move_y_label = QLabel("Move Y", self.view_card)
+        move_y_label = QLabel("Delta Y (mm)", self.view_card)
         move_y_label.setProperty("role", "field")
 
         grid.addWidget(self.label_3, 0, 0)
@@ -618,11 +625,22 @@ class myWindow(QWidget, Ui_Form):
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
 
-        self.pushButton_3.setText("Apply Offset")
+        self.pushButton_3.setText("Apply Delta")
         self.pushButton_3.setProperty("compact", True)
         self.pushButton_3.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._refresh_widget_style(self.pushButton_3)
-        layout.addWidget(self.pushButton_3)
+
+        self.reset_view_button = QPushButton("Reset View", self.view_card)
+        self.reset_view_button.setProperty("compact", True)
+        self.reset_view_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._refresh_widget_style(self.reset_view_button)
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(10)
+        action_row.addWidget(self.pushButton_3)
+        action_row.addWidget(self.reset_view_button)
+        layout.addLayout(action_row)
 
     def _populate_profile_card(self):
         layout = self.profile_card.layout()
@@ -672,6 +690,8 @@ class myWindow(QWidget, Ui_Form):
         self.lineEdit_9.setText("1")
         self.lineEdit_5.setText("--")
         self.lineEdit_6.setText("--")
+        self._update_exposure_edit_hint()
+        self._read_exposure_time()
 
     def _pick_default_flag_id(self):
         default_flag = str(self.beam_monitor_config.get("default_flag", "")).strip()
@@ -689,6 +709,7 @@ class myWindow(QWidget, Ui_Form):
         self.pushButton.clicked.connect(self.start1_btn)
         self.pushButton_2.clicked.connect(self.stop1_btn)
         self.pushButton_3.clicked.connect(self.moveaxis)
+        self.reset_view_button.clicked.connect(self.reset_view)
         self.lineEdit.returnPressed.connect(self.setExpoTime)
         self.lineEdit_9.textChanged.connect(self.change_interval)
         self.flag_selec.currentTextChanged.connect(self._handle_flag_changed)
@@ -696,6 +717,8 @@ class myWindow(QWidget, Ui_Form):
     def _handle_flag_changed(self, flag_id):
         self.tmppv = flag_id
         self._configure_pixel_geometry(flag_id)
+        self._update_exposure_edit_hint()
+        self._read_exposure_time()
         self._draw_placeholder_plot("Beam Profile")
         self._refresh_status()
 
@@ -742,7 +765,8 @@ class myWindow(QWidget, Ui_Form):
         )
         if not self._pv_available:
             self.status_panel.set_item("acq", "Running shell" if self.is_timer_running else "Stopped shell", "warning")
-            self.status_panel.set_item("profile", "Waiting for PV", "warning")
+            profile_text = self._profile_status_text if self._profile_status_text != "Waiting" else "Waiting for PV"
+            self.status_panel.set_item("profile", profile_text, "warning")
             return
 
         self.status_panel.set_item("acq", "Running" if self.is_timer_running else "Stopped", "success" if self.is_timer_running else "subtle")
@@ -750,7 +774,11 @@ class myWindow(QWidget, Ui_Form):
         if self.sigx is not None and self.sigy is not None:
             self.status_panel.set_item("profile", f"\u03c3x {self.sigx:.3f} / \u03c3y {self.sigy:.3f}", "success")
         else:
-            self.status_panel.set_item("profile", "Waiting", "subtle")
+            self.status_panel.set_item("profile", self._profile_status_text, self._profile_status_tone)
+
+    def _set_profile_status(self, text, tone="subtle"):
+        self._profile_status_text = text
+        self._profile_status_tone = tone
 
     def _update_control_workspace_layout(self):
         if not hasattr(self, "control_grid"):
@@ -784,6 +812,11 @@ class myWindow(QWidget, Ui_Form):
     def _notify(self, message):
         print(message)
 
+    def _warn_once(self, message):
+        if message and message != self._profile_warning:
+            print(message)
+            self._profile_warning = message
+
     def _writes_allowed(self, operation):
         try:
             require_workflow_write_allowed(self.app_context, "beam_monitor", operation)
@@ -794,6 +827,25 @@ class myWindow(QWidget, Ui_Form):
                 self._notify(message)
             return False
         return True
+
+    def _update_exposure_edit_hint(self):
+        if self._current_mode() == "vm":
+            self.lineEdit.setReadOnly(True)
+            self.lineEdit.setToolTip("Exposure time is not writable in VM mode.")
+            return
+
+        if self._resolve_optional_channel(self.tmppv, "exposure_time") is None:
+            self.lineEdit.setReadOnly(True)
+            self.lineEdit.setToolTip("The selected flag does not provide an exposure time PV.")
+            return
+
+        if not workflow_writes_allowed(self.app_context, "beam_monitor"):
+            self.lineEdit.setReadOnly(True)
+            self.lineEdit.setToolTip("Exposure time writes are blocked by the beam monitor workflow policy.")
+            return
+
+        self.lineEdit.setReadOnly(False)
+        self.lineEdit.setToolTip("Press Enter to write exposure time to the selected flag camera.")
 
     def _draw_placeholder_plot(self, title):
         palette = self._palette()
@@ -820,6 +872,7 @@ class myWindow(QWidget, Ui_Form):
     def _clear_profile_stats(self):
         self.sigx = None
         self.sigy = None
+        self._set_profile_status("Waiting")
         if hasattr(self, "lineEdit_5"):
             self.lineEdit_5.setText("--")
         if hasattr(self, "lineEdit_6"):
@@ -833,11 +886,11 @@ class myWindow(QWidget, Ui_Form):
             self.h = None
         return axes
 
-    def _show_profile_placeholder(self, title, warning=None):
-        if warning and warning != self._profile_warning:
-            print(warning)
-            self._profile_warning = warning
+    def _show_profile_placeholder(self, title, warning=None, status_text=None, status_tone="warning"):
+        self._warn_once(warning)
         self._draw_placeholder_plot(title)
+        if status_text:
+            self._set_profile_status(status_text, status_tone)
         self._refresh_status()
 
     def _style_plot_axes(self):
@@ -877,34 +930,94 @@ class myWindow(QWidget, Ui_Form):
         pixel_width = geometry.pixel_width_mm
         self.width = self.pixel[0] * pixel_width
         self.height = self.pixel[1] * pixel_width
+        self._reset_view_limits()
+        self._image_pv = None
+        self._image_pv_name = None
+
+    def _reset_view_limits(self):
         self.xlim = (-0.5 * self.width, 0.5 * self.width)
         self.ylim = (-0.5 * self.height, 0.5 * self.height)
         self.extent = self.xlim + self.ylim
+        self._view_offset_x = 0.0
+        self._view_offset_y = 0.0
 
     def _get_refresh_interval_ms(self):
         text = self.lineEdit_9.text().strip()
         if not text:
             return None
         try:
-            interval_ms = round(float(text)) * 1000
+            interval_ms = round(float(text) * 1000)
         except ValueError:
             return None
         return interval_ms if interval_ms > 0 else None
 
+    def _resolve_intensity_limits(self, data):
+        data_min = float(np.min(data))
+        data_max = float(np.max(data))
+
+        def parse_limit(line_edit, fallback):
+            text = line_edit.text().strip()
+            if not text:
+                line_edit.setText(f"{fallback:.6g}")
+                return fallback
+            try:
+                value = float(text)
+            except ValueError:
+                line_edit.setText(f"{fallback:.6g}")
+                return fallback
+            if not math.isfinite(value):
+                line_edit.setText(f"{fallback:.6g}")
+                return fallback
+            return value
+
+        vmin = parse_limit(self.lineEdit_4, data_min)
+        vmax = parse_limit(self.lineEdit_3, data_max)
+        if not vmin < vmax:
+            self._warn_once(
+                f"Warning: invalid intensity range for {self.tmppv}: vmin {vmin} must be smaller than vmax {vmax}."
+            )
+            self._set_profile_status("Bad intensity range", "warning")
+            vmin = data_min
+            vmax = data_max
+            if not vmin < vmax:
+                vmax = vmin + 1.0
+            self.lineEdit_4.setText(f"{vmin:.6g}")
+            self.lineEdit_3.setText(f"{vmax:.6g}")
+        return vmin, vmax
+
+    def _parse_delta_input(self, line_edit, axis_name):
+        text = line_edit.text().strip()
+        if not text:
+            return 0.0, True
+        try:
+            value = float(text)
+        except ValueError:
+            self._warn_once(f"Warning: {axis_name} delta must be numeric.")
+            self._set_profile_status("Bad view delta", "warning")
+            line_edit.setText("0")
+            return 0.0, False
+        if not math.isfinite(value):
+            self._warn_once(f"Warning: {axis_name} delta must be finite.")
+            self._set_profile_status("Bad view delta", "warning")
+            line_edit.setText("0")
+            return 0.0, False
+        return value, True
+
     def moveaxis(self):
-        if self.lineEdit_7.text() != "":
-            offx = float(self.lineEdit_7.text())
-        else:
-            offx = 0
+        offx, valid_x = self._parse_delta_input(self.lineEdit_7, "X")
+        offy, valid_y = self._parse_delta_input(self.lineEdit_8, "Y")
+        if not valid_x or not valid_y:
+            self._refresh_status()
+            return
+        self._view_offset_x += offx
+        self._view_offset_y += offy
 
-        if self.lineEdit_8.text() != "":
-            offy = float(self.lineEdit_8.text())
-        else:
-            offy = 0
-
-        tmp1 = tuple(np.array(self.extent)[0:2] - offx)
-        tmp2 = tuple(np.array(self.extent)[2:4] - offy)
+        tmp1 = tuple(np.array(self.xlim)[0:2] - offx)
+        tmp2 = tuple(np.array(self.ylim)[0:2] - offy)
+        self.xlim = tmp1
+        self.ylim = tmp2
         self.extent = tmp1 + tmp2
+        self._set_profile_status(f"Offset x={self._view_offset_x:.3g}, y={self._view_offset_y:.3g}", "subtle")
 
         axes = self._active_image_axes()
         if axes is not None:
@@ -912,27 +1025,56 @@ class myWindow(QWidget, Ui_Form):
             axes.set_ylim(tmp2)
             self.widget.canvas.draw()
 
-    def init_realOrVM(self):
+        self._refresh_status()
+
+    def reset_view(self):
+        self._reset_view_limits()
+        self.lineEdit_7.setText("0")
+        self.lineEdit_8.setText("0")
+        self._set_profile_status("View reset", "subtle")
+
+        axes = self._active_image_axes()
+        if axes is not None:
+            axes.set_xlim(self.xlim)
+            axes.set_ylim(self.ylim)
+            self.widget.canvas.draw()
+        self._refresh_status()
+
+    def _configure_active_channels(self):
         mode = self._current_mode()
         self.pv = resolve_channel(self.app_context, self.tmppv, "image")
         self.expoTimePV = self._resolve_optional_channel(self.tmppv, "exposure_time")
 
-        if mode == "real":
-            if self.expoTimePV is not None:
-                try:
-                    expoTime = caget(self.expoTimePV)
-                    if expoTime is not None:
-                        self.lineEdit.setText(str(expoTime))
-                except Exception as exc:
-                    self._mark_pv_unavailable(exc)
-            else:
-                self.lineEdit.setText("--")
-        elif mode == "vm":
-            self.lineEdit.setText("VM")
-        else:
+        if mode not in ("real", "vm"):
             print("Error, usage: python main.py [real|vm]")
             return False
+        if self.pv != self._image_pv_name:
+            self._image_pv = PV(self.pv)
+            self._image_pv_name = self.pv
         return True
+
+    def _read_exposure_time(self):
+        if not hasattr(self, "expoTimePV"):
+            self._configure_active_channels()
+
+        mode = self._current_mode()
+        if mode == "vm":
+            self.lineEdit.setText("VM")
+            return
+
+        if self.expoTimePV is None:
+            self.lineEdit.setText("--")
+            return
+
+        if self.lineEdit.hasFocus():
+            return
+
+        try:
+            expoTime = caget(self.expoTimePV)
+            if expoTime is not None:
+                self.lineEdit.setText(str(expoTime))
+        except Exception as exc:
+            self._mark_pv_unavailable(exc)
 
     def init_sigxy_pv(self):
         sigx_pv = self._resolve_optional_channel(self.tmppv, "sigx")
@@ -985,6 +1127,8 @@ class myWindow(QWidget, Ui_Form):
             try:
                 caput(self.expoTimePV, expoTime)
                 self._mark_pv_available()
+                self.lineEdit.clearFocus()
+                self._read_exposure_time()
             except Exception as exc:
                 self._mark_pv_unavailable(exc)
 
@@ -995,32 +1139,33 @@ class myWindow(QWidget, Ui_Form):
         self.tmppv = self.flag_selec.currentText()
         if self.tmppv != self._pixel_geometry_flag_id:
             self._configure_pixel_geometry(self.tmppv)
-        if not self.init_realOrVM():
+        if not self._configure_active_channels():
             return
         self.init_sigxy_pv()
 
         try:
-            tmppv1 = PV(self.pv)
-            tmp = tmppv1.get()
+            tmp = self._image_pv.get()
             self._mark_pv_available()
         except Exception as exc:
             self._mark_pv_unavailable(exc)
-            self._show_profile_placeholder("Beam Profile / Offline")
+            self._show_profile_placeholder("Beam Profile / Offline", status_text="PV offline")
             return
 
         if tmp is None:
             self._show_profile_placeholder(
                 f"{self.tmppv} / No Data",
                 warning=f"Warning: {self.pv} has no image data.",
+                status_text="No data",
             )
             return
 
         try:
             data_ini = list(map(float, tmp))
-        except TypeError as exc:
+        except (TypeError, ValueError) as exc:
             self._show_profile_placeholder(
                 f"{self.tmppv} / Invalid Data",
-                warning=f"Warning: beam profile data is not array-like: {exc}",
+                warning=f"Warning: beam profile data is not numeric array-like data: {exc}",
+                status_text="Invalid data",
             )
             return
 
@@ -1038,7 +1183,8 @@ class myWindow(QWidget, Ui_Form):
                     f"Warning: beam profile data length mismatch for {self.tmppv}: "
                     f"got {len(data_ini)}, expected {expected_size}."
                 )
-            self._show_profile_placeholder(title, warning=warning)
+            status_text = "No VM data" if len(data_ini) == 0 else "Invalid shape"
+            self._show_profile_placeholder(title, warning=warning, status_text=status_text)
             return
 
         data = np.reshape(data_ini, (self.pixel[1], self.pixel[0]))
@@ -1054,25 +1200,7 @@ class myWindow(QWidget, Ui_Form):
         self.widget.axes.clear()
         self._style_plot_axes()
 
-        if self.lineEdit_4.text() != "":
-            try:
-                vmin = float(self.lineEdit_4.text())
-            except ValueError:
-                vmin = float(np.min(data))
-                self.lineEdit_4.setText(str(vmin))
-        else:
-            vmin = float(np.min(data))
-            self.lineEdit_4.setText(str(vmin))
-
-        if self.lineEdit_3.text() != "":
-            try:
-                vmax = float(self.lineEdit_3.text())
-            except ValueError:
-                vmax = float(np.max(data))
-                self.lineEdit_3.setText(str(vmax))
-        else:
-            vmax = float(np.max(data))
-            self.lineEdit_3.setText(str(vmax))
+        vmin, vmax = self._resolve_intensity_limits(data)
 
         vnorm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
         colormap = self.comboBox_2.currentText()
@@ -1107,6 +1235,7 @@ class myWindow(QWidget, Ui_Form):
         )
 
         if not fit_result.has_signal:
+            self._set_profile_status("Low signal", "warning")
             self.widget.canvas.draw()
             self._refresh_status()
             return
@@ -1132,7 +1261,8 @@ class myWindow(QWidget, Ui_Form):
             self.sigy = round(fit_result.sigy_mm, 3)
             self.lineEdit_6.setText(str(self.sigy))
         elif fit_result.status == "fit_failed":
-            print(f"Warning: beam profile Gaussian fitting skipped: {fit_result.message}")
+            self._warn_once(f"Warning: beam profile Gaussian fitting skipped: {fit_result.message}")
+            self._set_profile_status("Fit failed", "warning")
             self.lineEdit_5.setText("--")
             self.lineEdit_6.setText("--")
 
