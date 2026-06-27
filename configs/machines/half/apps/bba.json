@@ -16,7 +16,8 @@
         "quad_end": 5,
         "quad_steps": 5,
         "samples": 1,
-        "sleeptime": 8
+        "sleeptime": 8,
+        "sample_interval": 0.5
       }
     },
     {
@@ -35,7 +36,8 @@
         "corr_end": 0.001,
         "corr_steps": 5,
         "samples": 1,
-        "sleeptime": 8
+        "sleeptime": 8,
+        "sample_interval": 0.5
       },
       "analysis": {
         "energy_mev": 2200,
@@ -53,5 +55,9 @@
   },
     "bba2": {
     "default_preset": "bba2_default"
+  },
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
   }
 }

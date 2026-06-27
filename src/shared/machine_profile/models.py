@@ -204,6 +204,7 @@ class BBAScanConfig(_OptionalFieldMapping):
     quad_steps: int | None = None
     samples: int | None = None
     sleeptime: float | None = None
+    sample_interval: float | None = None
 
 
 @dataclass(frozen=True)

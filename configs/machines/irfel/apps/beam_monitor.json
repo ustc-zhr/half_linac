@@ -13,9 +13,9 @@
     },
     "by_flag": {}
   },
-  "real_status": "write_blocked",
+  "real_status": "commissioned",
   "write_control": {
     "vm": "allowed",
-    "real": "blocked"
+    "real": "allowed"
   }
 }

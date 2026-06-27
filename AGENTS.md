@@ -16,7 +16,7 @@
 - Default to the smallest safe change.
 - Preserve unrelated local changes in the worktree.
 - Prefer repo-relative scripts under `scripts/` instead of absolute home-directory paths.
-- Prefer `half_linac.runtime_config` for shared runtime/config imports.
+- Prefer `src/shared/machine_profile/` helpers for shared machine runtime/config imports.
 - Treat `src/optimization/GOTAcc/` and `src/apps/jitter_analysis/` as externally maintained integration code: prefer launcher, wrapper, config, or compatibility fixes around them, and avoid large functional changes inside those vendored subtrees unless the user explicitly asks.
 - Keep `src/apps/jitter_analysis/` outside the current machine-profile generalization scope unless the user explicitly asks to integrate it. Treat it like `GOTAcc`: it may keep its own runtime logic for now.
 - Keep architectural or workflow notes short in `AGENTS.md`; deeper explanations belong in `docs/` or `README.md`.

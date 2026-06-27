@@ -10,7 +10,7 @@ from pathlib import Path
 def find_repo_root(entry_file: str) -> Path:
     entry_path = Path(entry_file).resolve()
     for candidate in entry_path.parents:
-        if (candidate / "runtime_config.py").is_file() and (candidate / "src").is_dir():
+        if (candidate / "repo_bootstrap.py").is_file() and (candidate / "src").is_dir():
             return candidate
 
     raise RuntimeError(f"Could not locate HALF repository root from {entry_file!r}.")

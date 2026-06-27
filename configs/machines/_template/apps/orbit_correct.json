@@ -3,6 +3,10 @@
     "vm": 8,
     "real": 8
   },
+  "response_sample_interval_s_by_backend": {
+    "vm": 0.5,
+    "real": 0.5
+  },
   "bpm_position_scale_to_mm": {
     "vm": 1000.0,
     "real": 1.0

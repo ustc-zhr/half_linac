@@ -16,7 +16,8 @@
         "quad_end": 1.0,
         "quad_steps": 5,
         "samples": 1,
-        "sleeptime": 1.0
+        "sleeptime": 1.0,
+        "sample_interval": 0.5
       }
     },
     {
@@ -35,7 +36,8 @@
         "quad_end": -60.0,
         "quad_steps": 5,
         "samples": 1,
-        "sleeptime": 3.0
+        "sleeptime": 3.0,
+        "sample_interval": 0.5
       }
     },
     {
@@ -54,7 +56,8 @@
         "quad_end": -60.0,
         "quad_steps": 5,
         "samples": 1,
-        "sleeptime": 3.0
+        "sleeptime": 3.0,
+        "sample_interval": 0.5
       }
     },
     {
@@ -73,7 +76,8 @@
         "corr_end": 0.001,
         "corr_steps": 5,
         "samples": 1,
-        "sleeptime": 3.0
+        "sleeptime": 3.0,
+        "sample_interval": 0.5
       },
       "analysis": {
         "energy_mev": 36.0,

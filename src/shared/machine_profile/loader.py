@@ -1300,6 +1300,7 @@ def _parse_bba_scan_config(raw_scan: Mapping[str, Any]) -> BBAScanConfig:
         quad_steps=_optional_int(raw_scan, "quad_steps"),
         samples=_optional_int(raw_scan, "samples"),
         sleeptime=_optional_float(raw_scan, "sleeptime"),
+        sample_interval=_optional_float(raw_scan, "sample_interval"),
     )
 
 

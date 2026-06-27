@@ -576,6 +576,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
             f"{corrector_limit * float(self.runtime_defaults['matrix_response_kick_fraction']):.6g}"
         )
         self.matrixWaitSLineEdit.setText(f"{float(self.orbit_runtime['response_wait_s']):.6g}")
+        self.matrixSampleIntervalSLineEdit.setText(
+            f"{float(self.orbit_runtime['response_sample_interval_s']):.6g}"
+        )
         self.matrixSamplesLineEdit.setText(str(int(self.runtime_defaults["matrix_samples_per_step"])))
 
         self.status_timer = QTimer(self)
@@ -723,7 +726,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         for text in (
             f"Machine: {self.machine_profile.machine.display_name}",
-            f"Backend: {self.app_context.control_backend.name}",
+            f"Backend: {self._format_header_backend_name()}",
         ):
             runtime_label = QLabel(text, panel)
             runtime_label.setProperty("role", "field")
@@ -748,6 +751,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         outer_layout.addWidget(self.status_panel)
 
         self.verticalLayout_2.insertWidget(0, panel)
+
+    def _format_header_backend_name(self):
+        backend_name = self.app_context.control_backend.name
+        return "VM" if backend_name == "vm" else backend_name
 
     def _wrap_main_sections(self):
         self.horizontalLayout_9.removeItem(self.verticalLayout_4)
@@ -1111,6 +1118,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         card, layout = self._make_subcard("Matrix Measurement", self.response_pane)
         self.matrixResponseKickLabel, self.matrixResponseKickLineEdit = self._make_parameter_field(card)
         self.matrixWaitSLabel, self.matrixWaitSLineEdit = self._make_parameter_field(card)
+        self.matrixSampleIntervalSLabel, self.matrixSampleIntervalSLineEdit = self._make_parameter_field(card)
         self.matrixSamplesLabel, self.matrixSamplesLineEdit = self._make_parameter_field(card)
         layout.addWidget(
             self._build_parameter_group(
@@ -1118,6 +1126,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 (
                     (self.matrixResponseKickLabel, self.matrixResponseKickLineEdit, False),
                     (self.matrixWaitSLabel, self.matrixWaitSLineEdit, False),
+                    (self.matrixSampleIntervalSLabel, self.matrixSampleIntervalSLineEdit, False),
                     (self.matrixSamplesLabel, self.matrixSamplesLineEdit, False),
                 ),
                 card,
@@ -1157,6 +1166,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.responseKickLabel.setProperty("role", "field")
         self.matrixResponseKickLabel.setProperty("role", "field")
         self.matrixWaitSLabel.setProperty("role", "field")
+        self.matrixSampleIntervalSLabel.setProperty("role", "field")
         self.matrixSamplesLabel.setProperty("role", "field")
         self.activeMatrixLabel.setProperty("role", "field")
         self.activeMatrixValueLabel.setProperty("role", "field")
@@ -1179,7 +1189,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.oneToOneMaxStepLabel.setText("1-to-1 Max Step (%)")
         self.responseKickLabel.setText(f"Local Response Kick ({limit_unit})")
         self.matrixResponseKickLabel.setText(f"Kick Step ({limit_unit})")
-        self.matrixWaitSLabel.setText("Wait (s)")
+        self.matrixWaitSLabel.setText("Settle Time (s)")
+        self.matrixSampleIntervalSLabel.setText("Sample Interval (s)")
         self.matrixSamplesLabel.setText("Samples/step")
         self.activeMatrixLabel.setText("Active Response Matrix")
         self.matrixSetupLabel.setText("Matrix Setup")
@@ -1575,9 +1586,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
             profile_limit,
             unit,
         )
-        wait_s = self._parse_nonnegative_float(self.matrixWaitSLineEdit, "Wait")
+        wait_s = self._parse_nonnegative_float(self.matrixWaitSLineEdit, "Settle Time")
+        sample_interval_s = self._parse_nonnegative_float(
+            self.matrixSampleIntervalSLineEdit,
+            "Sample Interval",
+        )
         n_averages = self._parse_positive_int(self.matrixSamplesLineEdit, "Samples/step")
-        return response_kick, wait_s, n_averages
+        return response_kick, wait_s, sample_interval_s, n_averages
 
     def _set_response_progress(self, percent, text):
         if not hasattr(self, "response_matrix_progress"):
@@ -1698,7 +1713,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             )
             return
         try:
-            response_kick, wait_s, n_averages = self._matrix_measurement_args()
+            response_kick, wait_s, sample_interval_s, n_averages = self._matrix_measurement_args()
         except ValueError as exc:
             QMessageBox.warning(self, "Orbit Correct", str(exc))
             return
@@ -1720,6 +1735,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 f"{response_kick:.12g}",
                 str(n_averages),
                 f"{wait_s:.12g}",
+                f"{sample_interval_s:.12g}",
             ],
             cwd=str(APP_DIR),
         )

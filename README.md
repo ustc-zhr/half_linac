@@ -9,7 +9,7 @@ HALF 直线加速器上层物理应用软件仓库，包含：
 
 当前仓库同时包含源码、生成文件、实验运行产物和少量历史备份文件。为了让 Codex 或人工审查更高效，项目入口已经收敛到本文档、`AGENTS.md` 和 `docs/`。
 
-仓库根目录的运行时公共配置现在以 `half_linac.runtime_config` 作为规范导入入口。
+运行时机器配置现在统一来自 `configs/machines/` 下的 machine profile。
 
 ## 仓库地图
 

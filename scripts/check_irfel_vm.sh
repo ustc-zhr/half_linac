@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from half_linac.src.shared.elegant_backend.publisher import build_vm_publish_plan
 from half_linac.src.shared.machine_profile import (
+    REAL_STATUS_COMMISSIONED,
     REAL_STATUS_NOT_SUPPORTED,
     REAL_STATUS_READ_ONLY,
-    REAL_STATUS_WRITE_BLOCKED,
     MachineProfileError,
     get_workflow,
     load_app_context,
@@ -83,15 +83,13 @@ real_contexts = {
 }
 for workflow_name, context in real_contexts.items():
     require(
-        not workflow_writes_allowed(context, workflow_name),
-        f"IRFEL real {workflow_name} writes are unexpectedly allowed",
+        workflow_writes_allowed(context, workflow_name),
+        f"IRFEL real {workflow_name} writes are unexpectedly blocked",
     )
     try:
         require_workflow_write_allowed(context, workflow_name, "acceptance write probe")
-    except MachineProfileError:
-        pass
-    else:
-        raise SystemExit(f"IRFEL VM acceptance failed: real {workflow_name} write probe did not fail")
+    except MachineProfileError as exc:
+        raise SystemExit(f"IRFEL VM acceptance failed: real {workflow_name} write probe failed: {exc}") from exc
 
 bba_workflow = get_workflow(profile, "bba")
 require(
@@ -105,10 +103,10 @@ require(
 
 expected_statuses = {
     "orbit_display": REAL_STATUS_READ_ONLY,
-    "orbit_correct": REAL_STATUS_WRITE_BLOCKED,
-    "beam_monitor": REAL_STATUS_WRITE_BLOCKED,
-    "energy_spectrum": REAL_STATUS_WRITE_BLOCKED,
-    "emit_measure": REAL_STATUS_WRITE_BLOCKED,
+    "orbit_correct": REAL_STATUS_COMMISSIONED,
+    "beam_monitor": REAL_STATUS_COMMISSIONED,
+    "energy_spectrum": REAL_STATUS_COMMISSIONED,
+    "emit_measure": REAL_STATUS_COMMISSIONED,
     "bba": REAL_STATUS_NOT_SUPPORTED,
 }
 for app_name, expected in expected_statuses.items():
@@ -118,5 +116,5 @@ for app_name, expected in expected_statuses.items():
 print("IRFEL VM acceptance passed.")
 print(f"  apps: {', '.join(contexts)}")
 print(f"  publish plan: {len(plan.bpm_specs)} BPM specs, {len(plan.watch_image_specs)} watch-image specs")
-print("  real write policy: blocked for orbit, beam_monitor, energy_spectrum, emit_measure")
+print("  real write policy: allowed for orbit, beam_monitor, energy_spectrum, emit_measure")
 PY

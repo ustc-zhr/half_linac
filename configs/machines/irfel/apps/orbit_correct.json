@@ -35,6 +35,10 @@
     "vm": 3.0,
     "real": 1.0
   },
+  "response_sample_interval_s_by_backend": {
+    "vm": 0.5,
+    "real": 0.5
+  },
   "corrector_upperlimit_by_backend": {
     "vm": {
       "value": 0.001,
@@ -59,11 +63,11 @@
     "matrix_samples_per_step": 2
   },
   "real_status": {
-    "orbit_correct": "write_blocked",
+    "orbit_correct": "commissioned",
     "orbit_display": "read_only"
   },
   "write_control": {
     "vm": "allowed",
-    "real": "blocked"
+    "real": "allowed"
   }
 }

@@ -16,7 +16,8 @@
         "quad_end": 1.0,
         "quad_steps": 5,
         "samples": 3,
-        "sleeptime": 0.5
+        "sleeptime": 0.5,
+        "sample_interval": 0.5
       }
     },
     {

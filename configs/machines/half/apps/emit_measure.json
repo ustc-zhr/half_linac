@@ -91,5 +91,9 @@
       "energy_mev": 220
     }
   ],
-  "default_preset": "emit_qt02_prf07"
+  "default_preset": "emit_qt02_prf07",
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
+  }
 }

@@ -236,7 +236,6 @@ QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
     background: transparent;
     border: none;
 }}
@@ -484,6 +483,7 @@ class ScanParameters:
     quad_steps: int = 0
     samples: int = 0
     sleeptime: float = 0.0
+    sample_interval: float = 0.0
     recal: bool = False
     energy_mev: float = 0.0
     bpm1_samples: int = 0
@@ -657,7 +657,7 @@ class myWindow(QWidget, Ui_Form):
         )
         runtime_state.addWidget(
             self._make_runtime_state_label(
-                f"Backend: {self.app_context.control_backend.name.upper()}",
+                f"Backend: {self._format_header_backend_name()}",
                 panel,
             )
         )
@@ -671,16 +671,20 @@ class myWindow(QWidget, Ui_Form):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = BBAStatusStrip(panel)
-        self.status_panel.add_item("tab", "TAB", self.tabWidget.tabText(self.tabWidget.currentIndex()))
-        self.status_panel.add_item("plane", "PLANE", self.comboBox_5.currentText())
-        self.status_panel.add_item("scan", "SCAN", "Idle")
-        self.status_panel.add_item("backend", "BACKEND", "Standard")
-        self.status_panel.add_item("model", "MODEL", self._model_backend_status_text())
+        self.status_panel.add_item("tab", "Tab", self.tabWidget.tabText(self.tabWidget.currentIndex()))
+        self.status_panel.add_item("plane", "Plane", self.comboBox_5.currentText())
+        self.status_panel.add_item("scan", "Scan", "Idle")
+        self.status_panel.add_item("backend", "Backend", self._profile_default_control_backend())
+        self.status_panel.add_item("model", "Model", self._model_backend_status_text())
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
 
         self.gridLayout.addWidget(panel, 0, 0, 1, 1)
+
+    def _format_header_backend_name(self):
+        backend_name = self.app_context.control_backend.name
+        return "VM" if backend_name == "vm" else backend_name
 
     def _style_plot_cards(self):
         self._wrap_plot_card(self.gridLayout_2, self.widget, "BBA-1 Quad Sweep", 0, 0, self.tab)
@@ -807,6 +811,7 @@ class myWindow(QWidget, Ui_Form):
         self.comboBox_5.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         form.addWidget(self.comboBox_5, 1, 1, 1, 3)
 
+        self.bba1_sample_interval_edit = QLineEdit(self.frame)
         setup_inputs = (
             self.lineEdit,
             self.lineEdit_2,
@@ -815,6 +820,7 @@ class myWindow(QWidget, Ui_Form):
             self.lineEdit_5,
             self.lineEdit_6,
             self.lineEdit_7,
+            self.bba1_sample_interval_edit,
             self.lineEdit_8,
         )
         for widget in setup_inputs:
@@ -823,12 +829,16 @@ class myWindow(QWidget, Ui_Form):
         rows = [
             ("COR", self.comboBox, "From", self.lineEdit, "To", self.lineEdit_2, "Steps", self.lineEdit_3),
             ("Quad", self.comboBox_2, "From", self.lineEdit_6, "To", self.lineEdit_4, "Steps", self.lineEdit_5),
-            ("BPM1", self.comboBox_3, "BPM2", self.comboBox_4, "Scan freq", self.lineEdit_7, "Samples/step", self.lineEdit_8),
+            ("BPM1", self.comboBox_3, "BPM2", self.comboBox_4, "Settle Time (s)", self.lineEdit_7, "Samples/step", self.lineEdit_8),
+            ("Sample Interval (s)", self.bba1_sample_interval_edit, "", None, "", None, "", None),
         ]
         for row, items in enumerate(rows, start=2):
             for col in range(0, len(items), 2):
-                form.addWidget(self._make_field_label(items[col], self.frame), row, col * 2)
+                text = items[col]
                 widget = items[col + 1]
+                if not text or widget is None:
+                    continue
+                form.addWidget(self._make_field_label(text, self.frame), row, col * 2)
                 widget.setParent(self.frame)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 form.addWidget(widget, row, col * 2 + 1)
@@ -949,17 +959,28 @@ class myWindow(QWidget, Ui_Form):
         self.comboBox_10.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         form.addWidget(self.comboBox_10, 0, 1, 1, 3)
 
+        self.bba2_sample_interval_edit = QLineEdit(self.frame_3)
         rows = [
             ("Quad", self.comboBox_7, "From", self.lineEdit_14, "To", self.lineEdit_17, "Steps", self.lineEdit_16),
             ("COR", self.comboBox_9, "From", self.lineEdit_11, "To", self.lineEdit_13, "Steps", self.lineEdit_12),
             ("1st BPM", self.comboBox_8, "2nd BPM", self.comboBox_6, "BPM1 samples", self.lineEdit_22, "", None),
             (
-                "Scan freq",
+                "Settle Time (s)",
                 self.lineEdit_15,
                 "Samples/step",
                 self.lineEdit_9,
+                "Sample Interval (s)",
+                self.bba2_sample_interval_edit,
+                "",
+                None,
+            ),
+            (
                 "Quad Leff (m)",
                 self.bba2_quad_leff_edit,
+                "",
+                None,
+                "",
+                None,
                 "",
                 None,
             ),
@@ -974,6 +995,7 @@ class myWindow(QWidget, Ui_Form):
             self.lineEdit_22,
             self.lineEdit_15,
             self.lineEdit_9,
+            self.bba2_sample_interval_edit,
             self.bba2_quad_leff_edit,
         )
         for widget in setup_inputs:
@@ -1014,6 +1036,7 @@ class myWindow(QWidget, Ui_Form):
         self.bba2_corrector_model_edit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.bba2_corrector_model_edit_button.clicked.connect(self._open_bba2_corrector_model_dialog)
         model_layout.addWidget(self.bba2_corrector_model_edit_button)
+        layout.addWidget(self.bba2_corrector_model_widget)
 
         for widget in (
             self.lineEdit_20,
@@ -1024,7 +1047,6 @@ class myWindow(QWidget, Ui_Form):
         ):
             widget.setParent(self.frame_3)
             widget.hide()
-        layout.addWidget(self.bba2_corrector_model_widget)
 
     def _rebuild_bba2_run_panel(self):
         layout = QVBoxLayout(self.frame_4)
@@ -1227,6 +1249,14 @@ class myWindow(QWidget, Ui_Form):
             if value is not None:
                 self._set_line_edit_value(widget, value)
 
+    @staticmethod
+    def _scan_sample_interval_default(scan):
+        if scan.sample_interval is not None:
+            return scan.sample_interval
+        if scan.sleeptime is not None:
+            return scan.sleeptime
+        return 0.5
+
     def _refresh_bba2_corrector_model_summary(self):
         label = getattr(self, "bba2_corrector_model_summary_label", None)
         if label is None:
@@ -1404,6 +1434,10 @@ class myWindow(QWidget, Ui_Form):
                 "samples": self.lineEdit_8,
             },
         )
+        self._set_line_edit_value(
+            self.bba1_sample_interval_edit,
+            self._scan_sample_interval_default(preset.scan),
+        )
         self._refresh_status()
 
     def _apply_selected_bba1_preset(self, *_):
@@ -1559,6 +1593,10 @@ class myWindow(QWidget, Ui_Form):
                 "samples": self.lineEdit_9,
             },
         )
+        self._set_line_edit_value(
+            self.bba2_sample_interval_edit,
+            self._scan_sample_interval_default(bba2_default.scan),
+        )
         self._apply_typed_defaults(
             bba2_default.analysis,
             {
@@ -1587,6 +1625,13 @@ class myWindow(QWidget, Ui_Form):
     def _current_control_backend_text(self):
         return self._profile_default_control_backend() if self.tabWidget.currentIndex() == 0 else self.comboBox_11.currentText()
 
+    def _current_control_backend_display_text(self):
+        backend_text = self._current_control_backend_text()
+        try:
+            return self._normalize_control_backend_value(backend_text)
+        except ValueError:
+            return str(backend_text).strip()
+
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
@@ -1600,7 +1645,7 @@ class myWindow(QWidget, Ui_Form):
         else:
             self.status_panel.set_item("scan", "Idle", "subtle")
 
-        backend_text = self._current_control_backend_text()
+        backend_text = self._current_control_backend_display_text()
         try:
             normalized_backend = self._normalize_control_backend_value(backend_text)
         except ValueError:
@@ -2186,11 +2231,13 @@ class myWindow(QWidget, Ui_Form):
             params.quad_steps = int(self.lineEdit_5.text())
             params.samples = int(self.lineEdit_8.text())
             params.sleeptime = float(self.lineEdit_7.text())
+            params.sample_interval = float(self.bba1_sample_interval_edit.text())
 
             self._validate_positive_int(params.corr_steps, "Corrector steps")
             self._validate_positive_int(params.quad_steps, "Quad steps")
             self._validate_positive_int(params.samples, "Samples per step")
-            self._validate_non_negative_float(params.sleeptime, "Sleep time")
+            self._validate_non_negative_float(params.sleeptime, "Settle time")
+            self._validate_non_negative_float(params.sample_interval, "Sample interval")
             return params
         except ValueError as exc:
             self._warn(str(exc))
@@ -2220,6 +2267,7 @@ class myWindow(QWidget, Ui_Form):
             params.corr_steps = int(self.lineEdit_12.text())
             params.samples = int(self.lineEdit_9.text())
             params.sleeptime = float(self.lineEdit_15.text())
+            params.sample_interval = float(self.bba2_sample_interval_edit.text())
             params.energy_mev = float(self.lineEdit_20.text())
             params.bpm1_samples = int(self.lineEdit_22.text())
             params.by_formula = self.lineEdit_23.text()
@@ -2233,7 +2281,8 @@ class myWindow(QWidget, Ui_Form):
             self._validate_positive_int(params.corr_steps, "Corrector steps")
             self._validate_positive_int(params.samples, "Samples per step")
             self._validate_positive_int(params.bpm1_samples, "BPM1 sample count")
-            self._validate_non_negative_float(params.sleeptime, "Sleep time")
+            self._validate_non_negative_float(params.sleeptime, "Settle time")
+            self._validate_non_negative_float(params.sample_interval, "Sample interval")
             if params.energy_mev <= 0:
                 raise ValueError("Energy must be positive.")
             if params.quad_leff <= 0:
@@ -2745,6 +2794,7 @@ class BBAScanThread(BBABaseThread):
                 "quad_steps": self.params.quad_steps,
                 "samples": self.params.samples,
                 "sleeptime": self.params.sleeptime,
+                "sample_interval": self.params.sample_interval,
             },
             "files": {
                 "raw": "bba1_quad_scan.txt",
@@ -2782,10 +2832,12 @@ class BBAScanThread(BBABaseThread):
                     if not self.is_running:
                         return None
                     self._safe_put(quad, k1)
+                    if not self._sleep_or_stop(self.params.sleeptime):
+                        return None
 
-                    for _ in range(self.params.samples):
+                    for sample_index in range(self.params.samples):
                         print("cor-kick,K1=", kick, k1)
-                        if not self._sleep_or_stop(self.params.sleeptime):
+                        if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                             return None
 
                         bpm2_value = self._safe_get(bpm2, self.params.bpm2PV)
@@ -2807,8 +2859,6 @@ class BBAScanThread(BBABaseThread):
                             "quad_k1": quad_k1,
                             "m2": bpm2_value,
                         })
-                        if not self._sleep_or_stop(1):
-                            return None
 
                 bpm2_matrix = np.asarray(bpm2_samples, dtype=float).reshape(self.params.quad_steps, self.params.samples)
                 bpm2_mean = np.mean(bpm2_matrix, axis=1)
@@ -2975,6 +3025,12 @@ class BBAScanThreadBBA2(BBABaseThread):
         initial = metadata.get("initial") if isinstance(metadata.get("initial"), dict) else {}
 
         self.params.samples = int(scan.get("samples") or self.params.samples)
+        self.params.sleeptime = float(scan.get("sleeptime") or self.params.sleeptime)
+        self.params.sample_interval = float(
+            scan.get("sample_interval")
+            if scan.get("sample_interval") is not None
+            else self.params.sample_interval
+        )
         self.params.bpm1_samples = int(analysis.get("bpm1_samples") or self.params.bpm1_samples)
         self.params.energy_mev = float(analysis.get("energy_mev") or self.params.energy_mev)
         self.params.by_formula = str(analysis.get("by_formula") or self.params.by_formula)
@@ -3005,6 +3061,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 "corr_steps": self.params.corr_steps,
                 "samples": self.params.samples,
                 "sleeptime": self.params.sleeptime,
+                "sample_interval": self.params.sample_interval,
             },
             "analysis": {
                 "energy_mev": self.params.energy_mev,
@@ -3055,9 +3112,11 @@ class BBAScanThreadBBA2(BBABaseThread):
                 if not self.is_running:
                     return None
                 self._safe_put(quad, k1)
+                if not self._sleep_or_stop(self.params.sleeptime):
+                    return None
 
-                for _ in range(self.params.samples):
-                    if not self._sleep_or_stop(self.params.sleeptime):
+                for sample_index in range(self.params.samples):
+                    if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                         return None
                     bpm2_value = self._safe_get(bpm2, self.params.bpm2PV)
                     print("K1=", k1, "bpm2=", bpm2_value)
@@ -3069,8 +3128,6 @@ class BBAScanThreadBBA2(BBABaseThread):
                         "K1Lq": k1 * sign * self.params.quad_leff,
                         "m2": bpm2_value,
                     })
-                    if not self._sleep_or_stop(1):
-                        return None
 
             k1_lq = sign * np.asarray(k1_samples, dtype=float) * self.params.quad_leff
             m2 = np.asarray(bpm2_samples, dtype=float)
@@ -3102,9 +3159,11 @@ class BBAScanThreadBBA2(BBABaseThread):
     def _measure_bpm1(self, bpm1):
         samples = []
         print("get average BPM1 <m1> now:")
-        for _ in range(self.params.bpm1_samples):
+        for sample_index in range(self.params.bpm1_samples):
             if not self.is_running:
                 print("BPM1 scan stop.")
+                return None
+            if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                 return None
             value = self._safe_get(bpm1, self.params.bpm1PV)
             samples.append(value)
@@ -3113,8 +3172,6 @@ class BBAScanThreadBBA2(BBABaseThread):
                 "show": "bpm1_sample",
                 "bpm1": value,
             })
-            if not self._sleep_or_stop(2):
-                return None
         self._save_array(
             self.params.bba2_bpm1_path,
             np.asarray(samples, dtype=float),
@@ -3133,8 +3190,10 @@ class BBAScanThreadBBA2(BBABaseThread):
                 if not self.is_running:
                     return None
                 self._safe_put(cor, kick)
-                for _ in range(self.params.samples):
-                    if not self._sleep_or_stop(self.params.sleeptime):
+                if not self._sleep_or_stop(self.params.sleeptime):
+                    return None
+                for sample_index in range(self.params.samples):
+                    if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                         return None
                     bpm2_value = self._safe_get(bpm2, self.params.bpm2PV)
                     print("corrector=", kick, "bpm2=", bpm2_value)
@@ -3147,8 +3206,6 @@ class BBAScanThreadBBA2(BBABaseThread):
                         "theta": angle_values[idx],
                         "m2": bpm2_value,
                     })
-                    if not self._sleep_or_stop(1):
-                        return None
 
             theta = np.asarray(theta_samples, dtype=float)
             m2 = np.asarray(bpm2_samples, dtype=float)

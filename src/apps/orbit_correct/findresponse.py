@@ -49,7 +49,8 @@ class ResponseMatrixCalculator:
     """Calculate accelerator response matrix using corrector kicks."""
     
     def __init__(self, d_value: float = 1e-5, n_averages: int = 2,
-                 wait_s: float | None = None):
+                 wait_s: float | None = None,
+                 sample_interval_s: float | None = None):
         """
         Initialize response matrix calculator.
         
@@ -57,6 +58,7 @@ class ResponseMatrixCalculator:
             d_value: Kick amplitude [rad]
             n_averages: Number of measurement averages
             wait_s: Settling time after each corrector update [s]
+            sample_interval_s: Wait time between repeated BPM samples [s]
         """
         self.app_context = load_app_context("orbit_correct")
         require_workflow_write_allowed(
@@ -86,6 +88,11 @@ class ResponseMatrixCalculator:
             default_wait_s if wait_s is None else wait_s,
             "wait_s",
         )
+        default_sample_interval_s = self.orbit_runtime["response_sample_interval_s"]
+        self.sample_interval = self._select_nonnegative_float(
+            default_sample_interval_s if sample_interval_s is None else sample_interval_s,
+            "sample_interval_s",
+        )
         
         # Initialize PV lists
         self.pvBPMx: List[str] = []
@@ -99,10 +106,12 @@ class ResponseMatrixCalculator:
         signal.signal(signal.SIGINT, self._handle_shutdown_signal)
         
         logger.info(
-            "ResponseMatrixCalculator initialized: kick=%s, averages=%s, wait_s=%s, shape=%s",
+            "ResponseMatrixCalculator initialized: kick=%s, averages=%s, wait_s=%s, "
+            "sample_interval_s=%s, shape=%s",
             self.d_value,
             self.n_averages,
             self.timer_interval,
+            self.sample_interval,
             self.response_matrix.shape,
         )
 
@@ -244,7 +253,7 @@ class ResponseMatrixCalculator:
                 bpm_x_plus[i] = self._read_bpm_values(self.pvBPMx, "X")
                 bpm_y_plus[i] = self._read_bpm_values(self.pvBPMy, "Y")
                 if i < self.n_averages - 1:
-                    time.sleep(self.timer_interval)
+                    time.sleep(self.sample_interval)
             
             # Baseline measurement at the original setpoint.
             self._write_scalar_pv(cor_pv, original_value)
@@ -254,7 +263,7 @@ class ResponseMatrixCalculator:
                 bpm_x_minus[i] = self._read_bpm_values(self.pvBPMx, "X")
                 bpm_y_minus[i] = self._read_bpm_values(self.pvBPMy, "Y")
                 if i < self.n_averages - 1:
-                    time.sleep(self.timer_interval)
+                    time.sleep(self.sample_interval)
             
             # Calculate response
             mean_x_plus = np.mean(bpm_x_plus, axis=0)
@@ -396,10 +405,12 @@ if __name__ == '__main__':
         d_value = float(sys.argv[1]) if len(sys.argv) > 1 else 1e-5
         n_averages = int(sys.argv[2]) if len(sys.argv) > 2 else 1
         wait_s = float(sys.argv[3]) if len(sys.argv) > 3 else None
+        sample_interval_s = float(sys.argv[4]) if len(sys.argv) > 4 else None
         calculator = ResponseMatrixCalculator(
             d_value=d_value,
             n_averages=n_averages,
             wait_s=wait_s,
+            sample_interval_s=sample_interval_s,
         )
         calculator.init_BPM_pv()
         calculator.init_COR_pv()

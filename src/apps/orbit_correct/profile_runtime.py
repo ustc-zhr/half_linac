@@ -54,6 +54,10 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
             backend,
             DEFAULT_RESPONSE_WAIT_S,
         ),
+        "response_sample_interval_s": _select_response_sample_interval_s(
+            workflow,
+            backend,
+        ),
         "corrector_upperlimit": corrector_limit,
         "corrector_upperlimit_unit": corrector_limit_unit,
         "runtime_defaults": _select_runtime_defaults(workflow),
@@ -225,6 +229,24 @@ def _select_backend_float(
     if value is None:
         return default
     return float(value)
+
+
+def _select_response_sample_interval_s(
+    workflow: Mapping[str, Any],
+    backend: str,
+) -> float:
+    settle_time_s = _select_backend_float(
+        workflow,
+        "response_wait_s_by_backend",
+        backend,
+        DEFAULT_RESPONSE_WAIT_S,
+    )
+    return _select_backend_float(
+        workflow,
+        "response_sample_interval_s_by_backend",
+        backend,
+        settle_time_s,
+    )
 
 
 def _select_corrector_upperlimit(

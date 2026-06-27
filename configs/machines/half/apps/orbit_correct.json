@@ -136,6 +136,10 @@
     "vm": 8,
     "real": 8
   },
+  "response_sample_interval_s_by_backend": {
+    "vm": 0.5,
+    "real": 0.5
+  },
   "corrector_upperlimit_rad": 0.001,
   "runtime_defaults": {
     "method": "global",
@@ -149,5 +153,9 @@
     "local_response_kick_fraction": 0.02,
     "matrix_response_kick_fraction": 0.04,
     "matrix_samples_per_step": 1
+  },
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
   }
 }

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/common.sh"
 
-python3 -m compileall "$HALF_LINAC_ROOT/runtime_config.py" "$HALF_LINAC_ROOT/src"
+python3 -m compileall "$HALF_LINAC_ROOT/src"
 bash -n "$HALF_LINAC_ROOT/scripts/common.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/setup.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/runMe"

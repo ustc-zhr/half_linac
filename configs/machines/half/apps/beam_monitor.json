@@ -7,5 +7,9 @@
   "flag_pixel_width_mm": {
     "vm": 0.02,
     "real": 0.02
+  },
+  "write_control": {
+    "vm": "allowed",
+    "real": "blocked"
   }
 }

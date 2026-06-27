@@ -190,7 +190,7 @@ bash scripts/check.sh
 
 这一步会：
 
-- 对 `runtime_config.py` 和 `src/` 做 `compileall`
+- 对 `src/` 做 `compileall`
 - 检查仓库内脚本的 shell 语法
 - 不启动长进程
 
@@ -236,7 +236,7 @@ cd src/softIOC/halflinac/iocBoot/ioctarget
 
 ## 10. 常见注意事项
 
-- 当前根目录的 [`runtime_config.py`](../runtime_config.py) 是运行时常量配置入口。
+- 运行时机器配置现在统一来自 `configs/machines/` 下的 machine profile。
 - 仓库中存在不少生成物和历史运行产物，不要默认把它们当成手工维护源码。
 - GUI `gui.py` 文件很多是由 `.ui` 生成的；如果要改布局，最好同步考虑 `.ui` 文件。
 - `real` 和 `vm` 模式是两套不同假设。默认优先在 `vm` 模式下验证。

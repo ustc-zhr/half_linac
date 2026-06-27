@@ -216,7 +216,7 @@ def _build_algo_section(algo_mode: str):
         2) description
         3) backend_kwargs_patch
         4) optimizer_config
-        5) runtime_config
+        5) run-time option patch
 
     这样整个 task_config() 只需要把公共部分 + 算法特定部分拼起来。
     """
