@@ -28,6 +28,7 @@ REAL_COMMISSIONING_WORKFLOWS_BY_APP = {
     "energy_spectrum": "energy_spectrum",
     "bba": "bba",
     "emit_measure": "emit_measure",
+    "solenoid_centering": "solenoid_centering",
 }
 
 _REAL_STATUS_LABELS = {

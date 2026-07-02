@@ -1,0 +1,34 @@
+# Python caches and build outputs
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local environments
+.venv/
+venv/
+env/
+.conda/
+
+# IDE and local agent state
+.vscode/
+.idea/
+.codex
+
+# Runtime data. Keep the index/notes file, but do not commit large HDF5 runs.
+runs/*
+!runs/README.md
+saved_setups/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from gotacc.configs.loader import load_task_config
-from gotacc.runners.optimize import run_task
+from gotacc.runners.task_runner import run_task
 
 
 # =============================================================================

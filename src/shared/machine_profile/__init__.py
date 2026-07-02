@@ -30,6 +30,7 @@ from .loader import (
     VirtualMachineLocalSegment,
     VirtualMachinePredefinedUsedline,
     VirtualMachineUsedlineWorkflow,
+    load_solenoid_centering_workflow,
 )
 from .model_backend import BeamModelBackend, ElegantModelBackend, build_model_backend
 from .models import (
@@ -53,6 +54,9 @@ from .models import (
     MachineVmRuntimeConfig,
     ModelBackendConfig,
     OrbitWorkflowConfig,
+    SolenoidCenteringPreset,
+    SolenoidCenteringScanRange,
+    SolenoidCenteringWorkflowConfig,
     normalize_mode,
     normalize_plane,
 )
@@ -115,6 +119,9 @@ __all__ = [
     "MachineVmRuntimeConfig",
     "ModelBackendConfig",
     "OrbitWorkflowConfig",
+    "SolenoidCenteringPreset",
+    "SolenoidCenteringScanRange",
+    "SolenoidCenteringWorkflowConfig",
     "REAL_COMMISSIONING_STATUSES",
     "REAL_STATUS_COMMISSIONED",
     "REAL_STATUS_NOT_SUPPORTED",
@@ -143,6 +150,7 @@ __all__ = [
     "list_machine_choices",
     "load_app_context",
     "load_profile",
+    "load_solenoid_centering_workflow",
     "normalize_mode",
     "normalize_plane",
     "real_commissioning_status",

@@ -13,13 +13,17 @@ except ImportError:  # pragma: no cover
     from PyQt5 import sip
 from PyQt5.QtWidgets import (
     QAbstractItemView,
-    QActionGroup,
     QApplication,
-    QDialog,
     QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QTableWidgetItem,
+    QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -38,6 +42,7 @@ try:
     from .ui_run_monitor import Ui_RunMonitorPage
     from .run_session import RunSession
     from .view_adapter import GuiViewAdapter
+    from .tool_dialogs import PVMonitorDialog
 except ImportError:  # pragma: no cover - local script fallback
     CURRENT_DIR = Path(__file__).resolve().parent
     if str(CURRENT_DIR) not in sys.path:
@@ -49,12 +54,21 @@ except ImportError:  # pragma: no cover - local script fallback
     from ui_run_monitor import Ui_RunMonitorPage
     from run_session import RunSession
     from view_adapter import GuiViewAdapter
+    from tool_dialogs import PVMonitorDialog
 
 # -----------------------------------------------------------------------------
 # Service/worker imports
 # -----------------------------------------------------------------------------
 try:
-    from ..theme import apply_theme, current_theme_key, save_theme_key, theme_label
+    from ..theme import (
+        DARK_THEME_KEY,
+        LIGHT_THEME_KEY,
+        apply_theme,
+        current_theme_key,
+        save_theme_key,
+        theme_label,
+        theme_palette,
+    )
     from ..state import GuiSessionState
     from ..services.task_service import TaskService
     from .controllers import (
@@ -67,7 +81,6 @@ try:
         RunSessionPresenter,
         RuntimeStatusController,
         TaskBuilderController,
-        TemplatesController,
     )
 except ImportError:  # pragma: no cover - local script fallback
     CURRENT_DIR = Path(__file__).resolve().parent
@@ -75,7 +88,15 @@ except ImportError:  # pragma: no cover - local script fallback
     for path in (CURRENT_DIR, GUI_ROOT, GUI_ROOT / "services"):
         if str(path) not in sys.path:
             sys.path.insert(0, str(path))
-    from theme import apply_theme, current_theme_key, save_theme_key, theme_label
+    from theme import (
+        DARK_THEME_KEY,
+        LIGHT_THEME_KEY,
+        apply_theme,
+        current_theme_key,
+        save_theme_key,
+        theme_label,
+        theme_palette,
+    )
     from state import GuiSessionState
     from task_service import TaskService
     from controllers import (
@@ -88,7 +109,6 @@ except ImportError:  # pragma: no cover - local script fallback
         RunSessionPresenter,
         RuntimeStatusController,
         TaskBuilderController,
-        TemplatesController,
     )
 
 
@@ -102,6 +122,7 @@ class SimpleMatplotlibCanvas(FigureCanvas):
         self.setParent(parent)
         # Avoid backend_qt negative/near-zero resize crashes during early layout.
         self.setMinimumSize(160, 120)
+        self.apply_theme_to_axes(self.axes)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         size = event.size()
@@ -121,7 +142,42 @@ class SimpleMatplotlibCanvas(FigureCanvas):
         ax.text(0.5, 0.5, message, ha="center", va="center", transform=ax.transAxes)
         ax.set_xticks([])
         ax.set_yticks([])
+        self.apply_theme_to_axes(ax)
         self.draw_idle()
+
+    def apply_theme_to_axes(self, ax) -> None:
+        app = QApplication.instance()
+        theme_key = current_theme_key(app)
+        palette = theme_palette(theme_key)
+        figure_bg = palette.get("panel_bg", "#ffffff")
+        axes_bg = palette.get("input_bg", figure_bg)
+        text_color = palette.get("text_main", "#202020")
+        muted_color = palette.get("header_text", text_color)
+        grid_color = palette.get("table_grid", "#d0d0d0")
+        accent = palette.get("accent", text_color)
+
+        self.figure.patch.set_facecolor(figure_bg)
+        ax.set_facecolor(axes_bg)
+        ax.title.set_color(text_color)
+        ax.xaxis.label.set_color(muted_color)
+        ax.yaxis.label.set_color(muted_color)
+        ax.tick_params(axis="both", colors=muted_color, labelcolor=muted_color)
+        for spine in ax.spines.values():
+            spine.set_color(grid_color)
+        for text in ax.texts:
+            text.set_color(muted_color)
+        for line in [*ax.get_xgridlines(), *ax.get_ygridlines()]:
+            line.set_color(grid_color)
+            line.set_alpha(0.55)
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.get_frame().set_facecolor(figure_bg)
+            legend.get_frame().set_edgecolor(grid_color)
+            for text in legend.get_texts():
+                text.set_color(text_color)
+        for collection in ax.collections:
+            if not collection.get_facecolor().size:
+                collection.set_facecolor(accent)
 
 
 class TaskBuilderPageWidget(QWidget):
@@ -160,7 +216,6 @@ class MainWindow(QMainWindow):
 
     PAGE_TASK_BUILDER = 101
     PAGE_MACHINE = 102
-    PAGE_TEMPLATES = 103
     PAGE_OFFLINE = 104
     PAGE_RUN_MONITOR = 201
     PAGE_RESULTS = 202
@@ -189,23 +244,26 @@ class MainWindow(QMainWindow):
         self.run_session_presenter = RunSessionPresenter(self)
         self.run_controller = RunController(self)
         self.runtime_status_controller = RuntimeStatusController(self)
-        self.templates_controller = TemplatesController(self)
-        self._theme_action_group: QActionGroup | None = None
-        self._theme_actions: dict[str, object] = {}
+        self.workspace_shell_layout: QVBoxLayout | None = None
+        self.log_toggle_button: QToolButton | None = None
+        self.theme_toggle_button: QToolButton | None = None
 
         self._suppress_autofill = False
 
         self._compose_pages_from_generated_ui()
+        self._init_workspace_header()
         self._init_basic_state()
+        self._apply_half_linac_shell_conventions()
         self._init_plot_canvases()
         self._init_tables()
         self.machine_controller.init_machine_page()
+        self._configure_tab_text_sizing()
         self._init_dashboard()
-        self._init_theme_menu()
-        self._init_template_library_menu_action()
-        self._init_templates_page()
+        self._init_theme_toggle()
+        self._simplify_menu_bar()
         self._init_results_page()
         self._connect_signals()
+        self.set_embedded_mode(os.environ.get("GOTACC_EMBEDDED", "").strip() in {"1", "true", "yes", "on"})
         self._reset_layout()
         self._refresh_task_preview()
         self._sync_status_panels()
@@ -236,8 +294,6 @@ class MainWindow(QMainWindow):
         self._remove_stacked_page(self.ui.page_taskBuilder)
         self._remove_stacked_page(self.ui.page_machineInterface)
         self._remove_stacked_page(self.ui.page_runMonitor)
-        self._remove_stacked_page(self.ui.page_templates)
-        self._init_template_library_dialog()
         self._move_stacked_page_to_tab(
             self.ui.page_results,
             self.ui.tabWidget_runWorkspace,
@@ -261,14 +317,109 @@ class MainWindow(QMainWindow):
             self.run_monitor_page,
         )
 
-    def _init_template_library_dialog(self) -> None:
-        self.template_library_dialog = QDialog(self)
-        self.template_library_dialog.setWindowTitle("Template Library")
-        self.template_library_dialog.resize(1120, 760)
-        layout = QVBoxLayout(self.template_library_dialog)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.addWidget(self.ui.page_templates)
-        self.ui.page_templates.show()
+    def _init_workspace_header(self) -> None:
+        self.workspace_shell = QWidget(self.ui.centralwidget)
+        shell_layout = QVBoxLayout(self.workspace_shell)
+        self.workspace_shell_layout = shell_layout
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(6)
+
+        self.ui.horizontalLayout_main.removeWidget(self.ui.splitter_main)
+        self.ui.horizontalLayout_main.addWidget(self.workspace_shell)
+
+        self.frame_workspace_header = QFrame(self.workspace_shell)
+        self.frame_workspace_header.setObjectName("summaryPanel")
+        self.frame_workspace_header.setFixedHeight(90)
+        self.frame_workspace_header.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        outer_layout = QVBoxLayout(self.frame_workspace_header)
+        outer_layout.setContentsMargins(12, 7, 10, 7)
+        outer_layout.setSpacing(5)
+
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(10)
+
+        title_column = QWidget(self.frame_workspace_header)
+        title_layout = QVBoxLayout(title_column)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(1)
+
+        self.label_workspace_title = QLabel("GOTAcc Studio", title_column)
+        self.label_workspace_title.setObjectName("summaryTitle")
+        self.label_workspace_subtitle = QLabel("", title_column)
+        self.label_workspace_subtitle.setObjectName("summarySubtitle")
+        self.label_workspace_subtitle.setVisible(False)
+        title_layout.addWidget(self.label_workspace_title)
+
+        self.log_toggle_button = QToolButton(self.frame_workspace_header)
+        self.log_toggle_button.setObjectName("logToggleButton")
+        self.log_toggle_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.log_toggle_button.setFixedSize(44, 32)
+        self.log_toggle_button.setText("Log")
+        self.log_toggle_button.setToolTip("Show log panel.")
+        self.log_toggle_button.clicked.connect(self._toggle_log_panel)
+
+        self.theme_toggle_button = QToolButton(self.frame_workspace_header)
+        self.theme_toggle_button.setObjectName("themeToggleButton")
+        self.theme_toggle_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.theme_toggle_button.setFixedSize(32, 32)
+        self.theme_toggle_button.clicked.connect(self._toggle_gui_theme)
+
+        header_layout.addWidget(title_column, 1)
+        header_layout.addWidget(self.log_toggle_button, 0, Qt.AlignRight | Qt.AlignVCenter)
+        header_layout.addWidget(self.theme_toggle_button, 0, Qt.AlignRight | Qt.AlignVCenter)
+        outer_layout.addLayout(header_layout)
+
+        self.frame_workspace_status = QFrame(self.frame_workspace_header)
+        self.frame_workspace_status.setObjectName("statusStrip")
+        status_layout = QHBoxLayout(self.frame_workspace_status)
+        status_layout.setContentsMargins(8, 4, 8, 4)
+        status_layout.setSpacing(0)
+        self._workspace_status_layout = status_layout
+
+        task_item, self.label_workspace_task = self._status_strip_item("TASK", "Untitled Task")
+        mode_item, self.label_workspace_mode = self._status_strip_item("MODE", "Offline")
+        algorithm_item, self.label_workspace_algorithm = self._status_strip_item("ALGORITHM", "BO")
+        backend_item, self.label_workspace_backend = self._status_strip_item("EPICS", "Disconnected")
+        best_item, self.label_workspace_best = self._status_strip_item("BEST", "--")
+        self._add_status_strip_items(task_item, mode_item, algorithm_item, backend_item, best_item)
+        outer_layout.addWidget(self.frame_workspace_status)
+
+        shell_layout.addWidget(self.frame_workspace_header)
+        shell_layout.addWidget(self.ui.splitter_main, 1)
+        self._promote_bottom_log_panel()
+
+    def _status_strip_item(self, title: str, value: str) -> tuple[QFrame, QLabel]:
+        item = QFrame(self.frame_workspace_status)
+        item.setObjectName("statusItem")
+        item.setProperty("tone", "subtle")
+        item.setMinimumWidth(102)
+        layout = QVBoxLayout(item)
+        layout.setContentsMargins(10, 0, 8, 0)
+        layout.setSpacing(2)
+        title_label = QLabel(title, item)
+        title_label.setProperty("role", "title")
+        value_label = QLabel(value, item)
+        value_label.setProperty("role", "value")
+        value_label.setProperty("tone", "subtle")
+        value_label.setWordWrap(True)
+        value_label.setMinimumWidth(40)
+        value_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout.addWidget(title_label)
+        layout.addWidget(value_label)
+        return item, value_label
+
+    def _add_status_strip_items(self, *items: QFrame) -> None:
+        for index, item in enumerate(items):
+            if index:
+                separator = QFrame(self.frame_workspace_status)
+                separator.setObjectName("statusSeparator")
+                separator.setFrameShape(QFrame.VLine)
+                separator.setFrameShadow(QFrame.Plain)
+                self._workspace_status_layout.addWidget(separator)
+            self._workspace_status_layout.addWidget(item)
+        self._workspace_status_layout.addStretch(1)
 
     def _remove_stacked_page(self, page: QWidget) -> None:
         stacked = self.ui.stackedWidget_pages
@@ -323,6 +474,16 @@ class MainWindow(QMainWindow):
         label.setParent(self.offline_ui.groupBox_benchmark)
         combo.setParent(self.offline_ui.groupBox_benchmark)
         offline_form.addRow(label, combo)
+        self.offline_ui.frame_offlineHero.setVisible(False)
+        self.offline_ui.frame_offlinePlaceholder.setVisible(False)
+        self.offline_ui.groupBox_benchmark.setTitle("Benchmark")
+        self.offline_ui.label_offlineHint.setText(
+            "Used only for Offline mode. Choose tradeoff for multi-objective smoke tests."
+        )
+        self.offline_ui.verticalLayout_main.setContentsMargins(0, 0, 0, 0)
+        self.offline_ui.verticalLayout_main.setSpacing(8)
+        self.offline_ui.verticalLayout_benchmark.setContentsMargins(10, 14, 10, 10)
+        self.offline_ui.verticalLayout_benchmark.setSpacing(6)
 
     # ------------------------------------------------------------------
     # Initialization
@@ -332,11 +493,11 @@ class MainWindow(QMainWindow):
         self.ui.listWidget_navPages.setCurrentRow(self.PAGE_OVERVIEW)
         self.ui.stackedWidget_pages.setCurrentIndex(self.PAGE_OVERVIEW)
         self.ui.listWidget_navPages.setSpacing(8)
+        self.ui.label_appTitle.setVisible(False)
         self.ui.label_appSubtitle.setVisible(False)
         self.ui.tabWidget_configure.setCurrentIndex(self.CONFIGURE_TAB_TASK_BUILDER)
         self.ui.tabWidget_runWorkspace.setCurrentIndex(self.RUN_TAB_LIVE)
-        self.ui.actionToggleRuntimeDock.setCheckable(True)
-        self.ui.actionToggleRuntimeDock.setChecked(False)
+        self._retire_runtime_status_dock()
 
         self.ui.progressBar_run.setRange(0, 100)
         self.ui.progressBar_run.setValue(0)
@@ -353,7 +514,9 @@ class MainWindow(QMainWindow):
         self.ui.label_statusBestValue.setText("--")
 
         self.task_ui.lineEdit_taskName.setText("demo_task")
-        self.task_ui.lineEdit_workdir.setText(str(Path.cwd()))
+        runs_dir = Path(__file__).resolve().parents[4] / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        self.task_ui.lineEdit_workdir.setText(str(runs_dir))
         self.task_ui.comboBox_testFunction.setCurrentText("rosenbrock")
 
         self.machine_ui.lineEdit_caAddress.setText("")
@@ -379,9 +542,325 @@ class MainWindow(QMainWindow):
         self.state.last_test_read_status = "Not checked"
         self.state.last_test_read_detail = ""
 
+    def _apply_half_linac_shell_conventions(self) -> None:
+        self.ui.frame_leftNav.setMinimumWidth(220)
+        self.ui.frame_leftNav.setMaximumWidth(250)
+        self.ui.verticalLayout_leftNav.setContentsMargins(8, 8, 8, 8)
+        self.ui.verticalLayout_leftNav.setSpacing(8)
+        self.ui.verticalLayout_primaryNav.setContentsMargins(8, 10, 8, 8)
+        self.ui.verticalLayout_quickActions.setContentsMargins(10, 12, 10, 10)
+        self.ui.verticalLayout_quickActions.setSpacing(8)
+        self.ui.verticalLayout_leftTools.setContentsMargins(0, 8, 0, 0)
+        self.ui.verticalLayout_leftTools.setSpacing(8)
+        self.ui.gridLayout_runActions.setContentsMargins(10, 12, 10, 10)
+        self.ui.gridLayout_runActions.setHorizontalSpacing(8)
+        self.ui.gridLayout_runActions.setVerticalSpacing(8)
+        self._clarify_project_task_actions()
+        self._simplify_bottom_output_tabs()
+        self._simplify_task_builder_table_tabs()
+        self._compact_task_builder_inline_actions()
+        self._compact_task_builder_footer_actions()
+        self._compact_run_monitor_actions()
+        self._configure_tab_text_sizing()
+        self._compact_overview_panels()
+
+        for button in (
+            self.ui.pushButton_newOfflineTask,
+            self.ui.pushButton_newOnlineTask,
+            self.ui.pushButton_openConfig,
+            self.ui.pushButton_saveProject,
+            self.ui.pushButton_validateTask,
+            self.ui.pushButton_startRun,
+            self.ui.pushButton_pauseRun,
+            self.ui.pushButton_stopRun,
+            self.ui.pushButton_checkEnvironment,
+        ):
+            button.setProperty("compact", True)
+
+        for button in (self.ui.pushButton_startRun,):
+            button.setProperty("primary", True)
+        self.ui.pushButton_stopRun.setProperty("danger", True)
+
+        for widget in (
+            self.ui.pushButton_newOfflineTask,
+            self.ui.pushButton_newOnlineTask,
+            self.ui.pushButton_openConfig,
+            self.ui.pushButton_saveProject,
+            self.ui.pushButton_validateTask,
+            self.ui.pushButton_startRun,
+            self.ui.pushButton_pauseRun,
+            self.ui.pushButton_stopRun,
+            self.ui.pushButton_checkEnvironment,
+            self.task_ui.pushButton_browseWorkdir,
+            self.task_ui.pushButton_openAlgorithmDetail,
+            self.task_ui.pushButton_openBoundsTools,
+            self.task_ui.pushButton_preview,
+            self.task_ui.pushButton_validate,
+            self.task_ui.pushButton_export,
+            self.run_ui.pushButton_abortRestore,
+            self.run_ui.pushButton_restoreInitial,
+            self.run_ui.pushButton_setBest,
+        ):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+
+    def _clarify_project_task_actions(self) -> None:
+        self.ui.pushButton_newOfflineTask.setText("New Task")
+        self.ui.pushButton_newOfflineTask.setToolTip("Create a new Online task. Change Mode in Task Builder if Offline is needed.")
+        self.ui.pushButton_newOnlineTask.setVisible(False)
+        self.ui.pushButton_newOnlineTask.setEnabled(False)
+        self.ui.pushButton_openConfig.setText("Open Project")
+        self.ui.pushButton_openConfig.setToolTip("Load a saved GOTAcc Studio project.")
+        self.ui.pushButton_saveProject.setText("Save Project")
+        self.ui.pushButton_saveProject.setToolTip("Save the current GUI project for later editing.")
+        self.ui.actionNewTask.setText("New Task")
+        self.ui.actionOpenConfig.setText("Open Project")
+        self.ui.actionSaveProject.setText("Save Project")
+
+    def _simplify_bottom_output_tabs(self) -> None:
+        bottom_tabs = self.ui.tabWidget_bottomOutput
+        bottom_tabs.setTabText(bottom_tabs.indexOf(self.ui.tab_consoleLog), "Log")
+
+        for tab in (self.ui.tab_warningError, self.ui.tab_pvLog, self.ui.tab_runHistory):
+            index = bottom_tabs.indexOf(tab)
+            if index >= 0:
+                bottom_tabs.removeTab(index)
+            tab.setVisible(False)
+
+    def _simplify_task_builder_table_tabs(self) -> None:
+        tabs = self.task_ui.tabWidget_tables
+        labels = (
+            (self.task_ui.tab_variables, "Variables"),
+            (self.task_ui.tab_objectives, "Objectives"),
+            (self.task_ui.tab_constraints, "Constraints"),
+        )
+        for widget, label in labels:
+            index = tabs.indexOf(widget)
+            if index >= 0:
+                tabs.setTabText(index, label)
+                tabs.setTabToolTip(index, label)
+
+    def _compact_task_builder_inline_actions(self) -> None:
+        for button in (
+            self.task_ui.pushButton_browseWorkdir,
+            self.task_ui.pushButton_openAlgorithmDetail,
+            self.task_ui.pushButton_openBoundsTools,
+        ):
+            button.setProperty("inlineAction", True)
+            button.setFixedHeight(24)
+            button.setFixedWidth(88)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        self.task_ui.horizontalLayout_workdir.setSpacing(6)
+        self.task_ui.horizontalLayout_algorithmDetail.setSpacing(6)
+        self.task_ui.pushButton_openBoundsTools.setText("Bounds")
+        self.task_ui.pushButton_openBoundsTools.setToolTip("Open Bounds Tools.")
+        self.task_ui.horizontalLayout_variablesToolbar.takeAt(0)
+        self.task_ui.horizontalLayout_variablesToolbar.setContentsMargins(8, 3, 8, 3)
+        self.task_ui.horizontalLayout_variablesToolbar.setSpacing(6)
+        self.task_ui.horizontalLayout_variablesToolbarActions.setSpacing(6)
+        self.task_ui.horizontalLayout_variablesToolbar.addStretch(1)
+        self.task_ui.frame_variablesToolbar.setMaximumHeight(34)
+
+    def _compact_task_builder_footer_actions(self) -> None:
+        actions = (
+            self.task_ui.pushButton_preview,
+            self.task_ui.pushButton_validate,
+            self.task_ui.pushButton_export,
+        )
+        for button in actions:
+            button.setProperty("inlineAction", True)
+            button.setFixedHeight(24)
+            button.setFixedWidth(88)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        self.task_ui.pushButton_export.setText("Export Task")
+        self.task_ui.pushButton_export.setToolTip("Export a runnable TaskConfig.")
+
+        layout = self.task_ui.horizontalLayout_actionBar
+        layout.setContentsMargins(0, 3, 0, 0)
+        layout.setSpacing(6)
+        layout.removeWidget(self.task_ui.pushButton_export)
+        layout.insertWidget(2, self.task_ui.pushButton_export)
+
+    def _compact_run_monitor_actions(self) -> None:
+        self._run_primary_actions_in_sidebar = True
+        self.run_ui.frame_runHero.setVisible(False)
+        self._compact_run_snapshot()
+        self.run_ui.groupBox_actions.setTitle("Machine Actions")
+        self.run_ui.verticalLayout_actionsBox.setContentsMargins(8, 10, 8, 8)
+        self.run_ui.verticalLayout_actionsBox.setSpacing(4)
+        self.run_ui.horizontalLayout_actions.setSpacing(6)
+
+        for button in (
+            self.run_ui.pushButton_start,
+            self.run_ui.pushButton_pause,
+            self.run_ui.pushButton_resume,
+            self.run_ui.pushButton_stop,
+        ):
+            button.setVisible(False)
+
+        for button in (
+            self.run_ui.pushButton_abortRestore,
+            self.run_ui.pushButton_restoreInitial,
+            self.run_ui.pushButton_setBest,
+        ):
+            button.setProperty("inlineAction", True)
+            button.setFixedHeight(24)
+            button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+
+        self.run_ui.pushButton_abortRestore.setProperty("danger", True)
+        self.run_ui.groupBox_actions.setMaximumHeight(54)
+
+    def _compact_run_snapshot(self) -> None:
+        self.run_ui.groupBox_runtime.setMaximumHeight(94)
+        self.run_ui.groupBox_runtime.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.run_ui.gridLayout_runtime.setContentsMargins(10, 22, 10, 8)
+        self.run_ui.gridLayout_runtime.setHorizontalSpacing(0)
+        self.run_ui.gridLayout_runtime.setVerticalSpacing(0)
+
+        frames = (
+            self.run_ui.frame_eval,
+            self.run_ui.frame_elapsed,
+            self.run_ui.frame_best,
+            self.run_ui.frame_feasibility,
+            self.run_ui.frame_phase,
+        )
+        separators = []
+        for index, frame in enumerate(frames):
+            frame.setObjectName("statusItem")
+            frame.setProperty("tone", "subtle")
+            frame.setMinimumHeight(42)
+            frame.setMaximumHeight(44)
+            frame.setMinimumWidth(102)
+            frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            if index:
+                separator = QFrame(self.run_ui.groupBox_runtime)
+                separator.setObjectName("statusSeparator")
+                separator.setFrameShape(QFrame.VLine)
+                separator.setFrameShadow(QFrame.Plain)
+                self.run_ui.gridLayout_runtime.addWidget(separator, 0, index * 2 - 1, 1, 1)
+                separators.append(separator)
+            self.run_ui.gridLayout_runtime.addWidget(frame, 0, index * 2, 1, 1)
+
+        layouts = (
+            self.run_ui.verticalLayout_eval,
+            self.run_ui.verticalLayout_elapsed,
+            self.run_ui.verticalLayout_best,
+            self.run_ui.verticalLayout_feasibility,
+            self.run_ui.verticalLayout_phase,
+        )
+        for layout in layouts:
+            layout.setContentsMargins(10, 0, 8, 0)
+            layout.setSpacing(2)
+
+        title_labels = (
+            self.run_ui.label_evalTitle,
+            self.run_ui.label_elapsedTitle,
+            self.run_ui.label_bestTitle,
+            self.run_ui.label_feasibilityTitle,
+            self.run_ui.label_phaseTitle,
+        )
+        for label in title_labels:
+            label.setProperty("role", "title")
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            label.setMaximumHeight(14)
+
+        value_labels = (
+            self.run_ui.label_evalValue,
+            self.run_ui.label_elapsedValue,
+            self.run_ui.label_bestValue,
+            self.run_ui.label_feasibilityValue,
+            self.run_ui.label_phaseValue,
+        )
+        for label in value_labels:
+            label.setProperty("role", "value")
+            label.setProperty("tone", "subtle")
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            label.setMaximumHeight(20)
+
+        for widget in (*frames, *separators, *title_labels, *value_labels):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+
+    def _promote_bottom_log_panel(self) -> None:
+        if self.workspace_shell_layout is None:
+            return
+        bottom_tabs = self.ui.tabWidget_bottomOutput
+        bottom_tabs.setParent(self.workspace_shell)
+        bottom_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        bottom_tabs.setFixedHeight(132)
+        self.workspace_shell_layout.addWidget(bottom_tabs, 0)
+        self._set_log_panel_visible(False)
+
+    def _set_log_panel_visible(self, visible: bool) -> None:
+        self.ui.tabWidget_bottomOutput.setVisible(visible)
+        self._sync_log_toggle()
+
+    def _toggle_log_panel(self) -> None:
+        self._set_log_panel_visible(not self.ui.tabWidget_bottomOutput.isVisible())
+
+    def _sync_log_toggle(self) -> None:
+        if self.log_toggle_button is None:
+            return
+        visible = self.ui.tabWidget_bottomOutput.isVisible()
+        self.log_toggle_button.setProperty("active", visible)
+        self.log_toggle_button.setToolTip("Hide log panel." if visible else "Show log panel.")
+        self.log_toggle_button.style().unpolish(self.log_toggle_button)
+        self.log_toggle_button.style().polish(self.log_toggle_button)
+
+    def _compact_overview_panels(self) -> None:
+        self.ui.groupBox_dashboardSummary.setMaximumHeight(170)
+        self.ui.gridLayout_dashboardSummary.setContentsMargins(10, 12, 10, 10)
+        self.ui.gridLayout_dashboardSummary.setHorizontalSpacing(8)
+        self.ui.gridLayout_dashboardSummary.setVerticalSpacing(8)
+
+        for frame in (
+            self.ui.frame_cardCurrentTask,
+            self.ui.frame_cardMode,
+            self.ui.frame_cardAlgorithm,
+            self.ui.frame_cardStatus,
+        ):
+            frame.setMinimumHeight(82)
+            frame.setMaximumHeight(108)
+            frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        for label in (
+            self.ui.label_cardCurrentTaskValue,
+            self.ui.label_cardModeValue,
+            self.ui.label_cardAlgorithmValue,
+            self.ui.label_cardStatusValue,
+        ):
+            label.setWordWrap(True)
+            label.setToolTip(label.text())
+
+        self.ui.groupBox_environmentStatus.setVisible(False)
+        self.ui.groupBox_recentProjects.setMinimumWidth(0)
+        self.ui.splitter_dashboardLower.setSizes([1, 0])
+
+    def _configure_tab_text_sizing(self) -> None:
+        primary_tab_widgets: tuple[QTabWidget, ...] = (
+            self.ui.tabWidget_configure,
+            self.ui.tabWidget_runWorkspace,
+            self.ui.tabWidget_resultsViews,
+            self.ui.tabWidget_bottomOutput,
+            self.task_ui.tabWidget_tables,
+            self.machine_ui.tabWidget_machine,
+            self.run_ui.tabWidget_plots,
+        )
+        tab_widgets = list(dict.fromkeys((*primary_tab_widgets, *self.findChildren(QTabWidget))))
+        for tab_widget in tab_widgets:
+            tab_widget.setElideMode(Qt.ElideNone)
+            tab_widget.setUsesScrollButtons(True)
+            tab_widget.tabBar().setElideMode(Qt.ElideNone)
+            tab_widget.tabBar().setUsesScrollButtons(True)
+            tab_widget.tabBar().setExpanding(False)
+            for index in range(tab_widget.count()):
+                tab_widget.setTabToolTip(index, tab_widget.tabText(index))
+
     def _configure_navigation_cards(self) -> None:
         entries = [
-            ("Overview", "Dashboard, run readiness and current task summary."),
+            ("Overview", "Dashboard, current task summary and recent activity."),
             ("Configure", "Build the task and wire machine settings."),
             ("Run", "Start the run and inspect outputs."),
         ]
@@ -396,7 +875,7 @@ class MainWindow(QMainWindow):
             item.setText(text)
             item.setToolTip(tooltip)
             item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            item.setSizeHint(QSize(0, 76))
+            item.setSizeHint(QSize(0, 40))
 
     def _init_tables(self) -> None:
         self._init_task_builder_tables()
@@ -494,8 +973,9 @@ class MainWindow(QMainWindow):
         self.task_builder_controller.refresh_constraint_policy_editors()
 
     def _init_run_tables(self) -> None:
-        recent_headers = ["Eval ID", "Timestamp", "Status", "X Summary", "Y Summary", "Constraint Summary"]
+        recent_headers = ["Eval", "Time", "Status", "X", "Y", "Constraints"]
         self._setup_table(self.run_ui.tableWidget_recent, recent_headers, 0)
+        self._configure_recent_eval_table(self.run_ui.tableWidget_recent)
 
     def _init_main_window_tables(self) -> None:
         self._setup_table(
@@ -505,8 +985,9 @@ class MainWindow(QMainWindow):
         )
         self._update_recent_activity_empty_state()
 
-        self._setup_table(self.ui.tableWidget_runHistory, ["Run ID", "Task", "Mode", "Algorithm", "Status", "Timestamp"], 0)
-        self._setup_table(self.ui.tableWidget_recentEvaluations, ["Eval ID", "Timestamp", "Status", "X Summary", "Y Summary", "Constraint Summary"], 0)
+        self._setup_table(self.ui.tableWidget_runHistory, ["Run", "Task", "Mode", "Algorithm", "Status", "Time"], 0)
+        self._setup_table(self.ui.tableWidget_recentEvaluations, ["Eval", "Time", "Status", "X", "Y", "Constraints"], 0)
+        self._configure_recent_eval_table(self.ui.tableWidget_recentEvaluations)
         self._setup_table(self.ui.tableWidget_solutionInspector, ["Field", "Value"], 4)
         self._set_table_row(self.ui.tableWidget_solutionInspector, 0, ["Run", "None"])
         self._set_table_row(self.ui.tableWidget_solutionInspector, 1, ["Point", "None"])
@@ -558,36 +1039,31 @@ class MainWindow(QMainWindow):
         self.ui.label_readinessHint.setVisible(False)
         self.ui.label_recentActivityEmpty.setText("No recent activity.")
 
-    def _init_theme_menu(self) -> None:
-        self._theme_action_group = QActionGroup(self)
-        self._theme_action_group.setExclusive(True)
-        self._theme_actions = {
-            "warm_studio": self.ui.actionThemeWarmStudio,
-            "crisp_lab": self.ui.actionThemeCrispLab,
-            "ocean_blueprint": self.ui.actionThemeOceanBlueprint,
-        }
-        for theme_key, action in self._theme_actions.items():
-            self._theme_action_group.addAction(action)
-            action.triggered.connect(
-                lambda checked, key=theme_key: self._set_gui_theme(key) if checked else None
-            )
-        self._sync_theme_actions(current_theme_key(QApplication.instance()))
+    def _init_theme_toggle(self) -> None:
+        self.ui.menuView.removeAction(self.ui.menuTheme.menuAction())
+        active_theme = current_theme_key(QApplication.instance())
+        if active_theme not in {LIGHT_THEME_KEY, DARK_THEME_KEY}:
+            self._set_gui_theme(DARK_THEME_KEY, persist=True, log_change=False)
+        else:
+            self._sync_theme_toggle(active_theme)
 
-    def _init_templates_page(self) -> None:
-        self.templates_controller.init_templates_page()
+    def _simplify_menu_bar(self) -> None:
+        self.ui.menuView.removeAction(self.ui.actionResetLayout)
+        self.ui.menuView.removeAction(self.ui.actionToggleRuntimeDock)
+        if not self.ui.menuTools.actions() or not self.ui.menuTools.actions()[-1].isSeparator():
+            self.ui.menuTools.addSeparator()
+        self.ui.menuTools.addAction(self.ui.actionResetLayout)
+        self.ui.menubar.removeAction(self.ui.menuView.menuAction())
 
-    def _init_template_library_menu_action(self) -> None:
-        action = self.ui.menuFile.addAction("Open Template Library...")
-        self.ui.menuFile.removeAction(action)
-        self.ui.menuFile.insertAction(self.ui.actionOpenConfig, action)
-        self.actionOpenTemplateLibraryMenu = action
-        self.actionOpenTemplateLibraryMenu.setToolTip(
-            "Browse and apply built-in task templates."
-        )
-        self.actionOpenTemplateLibraryMenu.setStatusTip(
-            "Open the built-in template library."
-        )
-        self.actionOpenTemplateLibraryMenu.triggered.connect(self._open_template_library)
+    def _retire_runtime_status_dock(self) -> None:
+        self.removeDockWidget(self.ui.dockWidget_runtimeStatus)
+        self.ui.dockWidget_runtimeStatus.hide()
+        self.ui.actionToggleRuntimeDock.setVisible(False)
+
+    def set_embedded_mode(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        self.ui.menubar.setVisible(not enabled)
+        self.statusBar().setVisible(not enabled)
 
     def _init_results_page(self) -> None:
         self.results_controller.init_results_page()
@@ -598,8 +1074,7 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         self.ui.listWidget_navPages.currentRowChanged.connect(self._on_nav_changed)
 
-        self.ui.pushButton_newOfflineTask.clicked.connect(self._create_new_offline_task)
-        self.ui.pushButton_newOnlineTask.clicked.connect(self._create_new_online_task)
+        self.ui.pushButton_newOfflineTask.clicked.connect(self._create_new_task)
         self.ui.pushButton_openConfig.clicked.connect(self._open_config)
         self.ui.pushButton_saveProject.clicked.connect(self._save_project)
         self.ui.pushButton_validateTask.clicked.connect(self.validate_task)
@@ -608,7 +1083,7 @@ class MainWindow(QMainWindow):
         self.ui.pushButton_stopRun.clicked.connect(self.stop_run)
         self.ui.pushButton_checkEnvironment.clicked.connect(self._check_environment)
 
-        self.ui.actionNewTask.triggered.connect(self._create_new_offline_task)
+        self.ui.actionNewTask.triggered.connect(self._create_new_task)
         self.ui.actionOpenConfig.triggered.connect(self._open_config)
         self.ui.actionSaveProject.triggered.connect(self._save_project)
         self.ui.actionExportResults.triggered.connect(self.export_results)
@@ -622,8 +1097,6 @@ class MainWindow(QMainWindow):
         self.ui.actionPVMonitor.triggered.connect(self._show_pv_monitor_stub)
         self.ui.actionPolicyEditor.triggered.connect(self._show_policy_editor_stub)
         self.ui.actionResetLayout.triggered.connect(self._reset_layout)
-        self.ui.actionToggleRuntimeDock.toggled.connect(self._set_runtime_dock_visible)
-        self.ui.dockWidget_runtimeStatus.visibilityChanged.connect(self._sync_runtime_dock_action)
         self.ui.actionAboutGOTAcc.triggered.connect(self._show_about)
 
         self.task_ui.lineEdit_taskName.textChanged.connect(self._refresh_task_preview)
@@ -689,12 +1162,8 @@ class MainWindow(QMainWindow):
         self.run_ui.pushButton_restoreInitial.clicked.connect(self.restore_initial_to_machine)
         self.run_ui.pushButton_setBest.clicked.connect(self.set_best_to_machine)
 
-        self.ui.treeWidget_templates.itemSelectionChanged.connect(self._update_template_details)
         self.ui.treeWidget_runList.itemDoubleClicked.connect(self._open_selected_result_item)
         self.ui.treeWidget_runList.itemSelectionChanged.connect(self._on_results_tree_selection_changed)
-        self.ui.pushButton_applyTemplate.clicked.connect(self._apply_selected_template)
-        self.ui.pushButton_cloneTemplate.clicked.connect(self._clone_template_stub)
-        self.ui.pushButton_exportTemplate.clicked.connect(self._export_template_stub)
 
         if hasattr(self.ui, "tableWidget_history"):
             self.ui.tableWidget_history.cellClicked.connect(
@@ -717,6 +1186,17 @@ class MainWindow(QMainWindow):
         header.setStretchLastSection(True)
         for idx in range(len(headers) - 1):
             header.setSectionResizeMode(idx, header.Stretch)
+
+    def _configure_recent_eval_table(self, table) -> None:
+        table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        header = table.horizontalHeader()
+        widths = (46, 76, 62, 90, 72, 104)
+        for idx, width in enumerate(widths):
+            if idx >= table.columnCount():
+                break
+            header.setSectionResizeMode(idx, header.Interactive)
+            table.setColumnWidth(idx, width)
+        header.setStretchLastSection(True)
 
     def _add_table_row(self, table, values=None) -> int:
         row = table.rowCount()
@@ -819,9 +1299,6 @@ class MainWindow(QMainWindow):
     def _living_tables(self, *tables):
         return [table for table in tables if self._qobj_alive(table)]
 
-    def _algorithm_template_key(self, algorithm_text: str) -> str:
-        return self.task_builder_controller.algorithm_template_key(algorithm_text)
-
     def _dynamic_table_records(self):
         return self.task_builder_controller.dynamic_table_records()
 
@@ -860,10 +1337,14 @@ class MainWindow(QMainWindow):
         self.ui.plainTextEdit_consoleLog.appendPlainText(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
 
     def _log_warning(self, message: str) -> None:
-        self.ui.plainTextEdit_warningError.appendPlainText(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
+        line = f"[{datetime.now().strftime('%H:%M:%S')}] [WARN] {message}"
+        self.ui.plainTextEdit_consoleLog.appendPlainText(line)
+        self.ui.plainTextEdit_warningError.appendPlainText(line)
 
     def _log_pv(self, message: str) -> None:
-        self.ui.plainTextEdit_pvLog.appendPlainText(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
+        line = f"[{datetime.now().strftime('%H:%M:%S')}] [PV] {message}"
+        self.ui.plainTextEdit_consoleLog.appendPlainText(line)
+        self.ui.plainTextEdit_pvLog.appendPlainText(line)
 
     def _log_event(self, message: str) -> None:
         self.run_ui.plainTextEdit_events.appendPlainText(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
@@ -946,17 +1427,14 @@ class MainWindow(QMainWindow):
 
         detail_parts: list[str] = []
         if online_task:
-            gui_ca = self.machine_ui.lineEdit_caAddress.text().strip()
             inherited_ca = os.environ.get("EPICS_CA_ADDR_LIST", "").strip()
             auto_discovery = os.environ.get("EPICS_CA_AUTO_ADDR_LIST", "").strip()
-            if gui_ca:
-                detail_parts.append(f"CA: {gui_ca}")
-            elif inherited_ca:
+            if inherited_ca:
                 detail_parts.append(f"CA: {inherited_ca}")
             elif auto_discovery:
                 detail_parts.append(f"CA auto: {auto_discovery}")
             else:
-                detail_parts.append("CA: default/network discovery")
+                detail_parts.append("CA: EPICS defaults/network discovery")
         else:
             detail_parts.append("Offline task. Machine optional.")
 
@@ -966,9 +1444,6 @@ class MainWindow(QMainWindow):
 
     def _current_task(self) -> dict:
         return TaskService.collect_task_data(self.task_ui, self.machine_ui)
-
-    def _selected_template_definition(self):
-        return self.templates_controller.selected_template_definition()
 
     def _apply_task_payload(self, task: dict, *, source_label: str | None = None, goto_builder: bool = True) -> None:
         self.task_builder_controller.apply_task_payload(
@@ -1005,7 +1480,7 @@ class MainWindow(QMainWindow):
             self.ui.listWidget_navPages.setCurrentRow(self.PAGE_OVERVIEW)
             return
 
-        if page_index in {self.PAGE_CONFIGURE, self.PAGE_TASK_BUILDER, self.PAGE_MACHINE, self.PAGE_TEMPLATES, self.PAGE_OFFLINE}:
+        if page_index in {self.PAGE_CONFIGURE, self.PAGE_TASK_BUILDER, self.PAGE_MACHINE, self.PAGE_OFFLINE}:
             task = self._current_task()
             online_task = self._is_online_task(task)
             self.ui.listWidget_navPages.setCurrentRow(self.PAGE_CONFIGURE)
@@ -1020,8 +1495,6 @@ class MainWindow(QMainWindow):
                     return
                 self.ui.tabWidget_configure.setCurrentIndex(self.CONFIGURE_TAB_OFFLINE)
             elif page_index in {self.PAGE_CONFIGURE, self.PAGE_TASK_BUILDER}:
-                self.ui.tabWidget_configure.setCurrentIndex(self.CONFIGURE_TAB_TASK_BUILDER)
-            elif page_index == self.PAGE_TEMPLATES:
                 self.ui.tabWidget_configure.setCurrentIndex(self.CONFIGURE_TAB_TASK_BUILDER)
             return
 
@@ -1038,6 +1511,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Task builder actions
     # ------------------------------------------------------------------
+    def _create_new_task(self) -> None:
+        self.task_builder_controller.create_new_online_task()
+
     def _create_new_offline_task(self) -> None:
         self.task_builder_controller.create_new_offline_task()
 
@@ -1058,24 +1534,20 @@ class MainWindow(QMainWindow):
         online_task = self._is_online_task(task)
         machine_enabled = online_task
         offline_enabled = not online_task
-        self.ui.tabWidget_configure.setTabEnabled(self.CONFIGURE_TAB_MACHINE, machine_enabled)
-        self.ui.tabWidget_configure.setTabEnabled(self.CONFIGURE_TAB_OFFLINE, offline_enabled)
-        self.offline_ui.groupBox_benchmark.setEnabled(offline_enabled)
-        self.offline_ui.frame_offlinePlaceholder.setEnabled(offline_enabled)
-        if offline_enabled:
-            self.offline_ui.label_offlineSummary.setText(
-                "Configure benchmark-function inputs for offline validation and local smoke tests."
-            )
-        else:
-            self.offline_ui.label_offlineSummary.setText(
-                "Offline Setup is only available when Mode is set to Offline."
-            )
-
         current_index = self.ui.tabWidget_configure.currentIndex()
+        self._set_configure_tab_available(self.CONFIGURE_TAB_MACHINE, machine_enabled)
+        self._set_configure_tab_available(self.CONFIGURE_TAB_OFFLINE, offline_enabled)
+        self.offline_ui.groupBox_benchmark.setEnabled(offline_enabled)
+
         if online_task and current_index == self.CONFIGURE_TAB_OFFLINE:
             self.ui.tabWidget_configure.setCurrentIndex(self.CONFIGURE_TAB_MACHINE)
         elif not online_task and current_index == self.CONFIGURE_TAB_MACHINE:
             self.ui.tabWidget_configure.setCurrentIndex(self.CONFIGURE_TAB_OFFLINE)
+
+    def _set_configure_tab_available(self, index: int, available: bool) -> None:
+        self.ui.tabWidget_configure.setTabEnabled(index, available)
+        if hasattr(self.ui.tabWidget_configure, "setTabVisible"):
+            self.ui.tabWidget_configure.setTabVisible(index, available)
 
     def _show_task_preview(self) -> None:
         self.task_builder_controller.show_task_preview()
@@ -1207,6 +1679,12 @@ class MainWindow(QMainWindow):
 
     def _sync_status_panels(self) -> None:
         self.runtime_status_controller.sync_status_panels()
+        if hasattr(self, "label_workspace_mode"):
+            self.label_workspace_task.setText(self.ui.label_statusTaskValue.text())
+            self.label_workspace_mode.setText(self.ui.label_cardModeValue.text())
+            self.label_workspace_algorithm.setText(self.ui.label_cardAlgorithmValue.text())
+            self.label_workspace_backend.setText(self.ui.label_statusConnectionValue.text())
+            self.label_workspace_best.setText(self.ui.label_statusBestValue.text())
 
     def _summarize_x_values(self, x_values: dict | None) -> str:
         return self.results_controller.summarize_x_values(x_values)
@@ -1236,63 +1714,83 @@ class MainWindow(QMainWindow):
         self.runtime_status_controller.sync_run_workspace()
 
     # ------------------------------------------------------------------
-    # Templates / tools / dialogs
+    # Tools / dialogs
     # ------------------------------------------------------------------
-    def _update_template_details(self) -> None:
-        self.templates_controller.update_template_details()
 
-    def _apply_selected_template(self) -> None:
-        self.templates_controller.apply_selected_template()
-
-    def _open_template_library(self) -> None:
-        self.templates_controller.open_template_library()
-
-    def _sync_theme_actions(self, theme_key: str) -> None:
-        for key, action in self._theme_actions.items():
-            action.blockSignals(True)
-            action.setChecked(key == theme_key)
-            action.blockSignals(False)
+    def _sync_theme_toggle(self, theme_key: str) -> None:
+        if self.theme_toggle_button is None:
+            return
+        if theme_key == DARK_THEME_KEY:
+            self.theme_toggle_button.setText("☀")
+            self.theme_toggle_button.setToolTip("Switch to light theme.")
+        else:
+            self.theme_toggle_button.setText("☾")
+            self.theme_toggle_button.setToolTip("Switch to dark theme.")
 
     def _set_gui_theme(self, theme_key: str, *, persist: bool = True, log_change: bool = True) -> None:
         app = QApplication.instance()
         active_theme = apply_theme(app, theme_key)
         if persist:
             save_theme_key(active_theme)
-        self._sync_theme_actions(active_theme)
+        self._sync_theme_toggle(active_theme)
+        if hasattr(self, "results_controller"):
+            try:
+                self._redraw_plots()
+            except Exception:
+                pass
         if log_change:
             self._log_console(f"Theme changed to: {theme_label(active_theme)}")
             self.statusBar().showMessage(f"Theme: {theme_label(active_theme)}", 4000)
 
-    def _clone_template_stub(self) -> None:
-        self.templates_controller.clone_template()
-
-    def _export_template_stub(self) -> None:
-        self.templates_controller.export_template()
+    def _toggle_gui_theme(self) -> None:
+        active_theme = current_theme_key(QApplication.instance())
+        next_theme = LIGHT_THEME_KEY if active_theme == DARK_THEME_KEY else DARK_THEME_KEY
+        self._set_gui_theme(next_theme)
 
     def _check_environment(self) -> None:
-        self.templates_controller.check_environment()
+        self._refresh_overview_readiness()
+        summary = (
+            f"Python: {self.ui.label_readinessPythonValue.text()}\n"
+            f"GUI: {self.ui.label_readinessGuiValue.text()}\n"
+            f"pyepics: {self.ui.label_readinessEpicsValue.text()}\n"
+            f"Machine: {self.ui.label_readinessMachineValue.text()}\n"
+            f"Last Test Read: {self.ui.label_readinessTestReadValue.text()}"
+        )
+        self._append_overview_activity("Check", status="Refreshed run readiness.")
+        self._log_console("Run readiness refreshed.")
+        QMessageBox.information(self, "Run Readiness", summary)
 
     def _show_pv_monitor_stub(self) -> None:
-        self.templates_controller.show_pv_monitor()
+        dialog = PVMonitorDialog(
+            self._current_task,
+            timeout_provider=lambda: float(self.machine_ui.doubleSpinBox_timeout.value()),
+            parent=self,
+        )
+        dialog.exec_()
 
     def _show_policy_editor_stub(self) -> None:
-        self.templates_controller.show_policy_editor()
-
-    def _set_runtime_dock_visible(self, visible: bool) -> None:
-        self.ui.dockWidget_runtimeStatus.setVisible(bool(visible))
-
-    def _sync_runtime_dock_action(self, visible: bool) -> None:
-        action = self.ui.actionToggleRuntimeDock
-        old_state = action.blockSignals(True)
-        try:
-            action.setChecked(bool(visible))
-        finally:
-            action.blockSignals(old_state)
+        self.ui.tabWidget_configure.setCurrentIndex(self.CONFIGURE_TAB_MACHINE)
+        if hasattr(self.machine_ui, "tab_advancedMachine"):
+            self.machine_ui.tabWidget_machine.setCurrentWidget(self.machine_ui.tab_advancedMachine)
+            self.machine_ui.tabWidget_machineAdvanced.setCurrentWidget(self.machine_ui.tab_objectivePolicy)
+            location = "Machine Setup -> Advanced -> Objective Policy"
+        else:
+            self.machine_ui.tabWidget_machine.setCurrentWidget(self.machine_ui.tab_objectivePolicy)
+            location = "Machine Setup -> Objective Policy"
+        QMessageBox.information(
+            self,
+            "Policy Editor",
+            f"Objective policies are now edited directly in {location}.",
+        )
+        self.go_to_page(self.PAGE_MACHINE)
+        self._log_console(f"Opened {location}.")
 
     def _reset_layout(self) -> None:
-        self.ui.dockWidget_runtimeStatus.hide()
-        self.ui.splitter_main.setSizes([260, 1340])
-        self.ui.splitter_centerVertical.setSizes([760, 220])
+        self.ui.splitter_main.setSizes([230, 1370])
+        if self.ui.splitter_centerVertical.count() > 1:
+            self.ui.splitter_centerVertical.setSizes([760, 220])
+        else:
+            self.ui.splitter_centerVertical.setSizes([1])
         if hasattr(self.ui, "splitter_dashboardLower"):
             self.ui.splitter_dashboardLower.setSizes([780, 560])
         if hasattr(self.ui, "splitter_configureMain"):
@@ -1303,8 +1801,10 @@ class MainWindow(QMainWindow):
             self.ui.splitter_resultsRight.setSizes([480, 280])
         if hasattr(self.ui, "splitter_convergencePlots"):
             self.ui.splitter_convergencePlots.setSizes([320, 240])
-        if hasattr(self.ui, "splitter_templatesMain"):
-            self.ui.splitter_templatesMain.setSizes([280, 620])
+        if hasattr(self.run_ui, "splitter_main"):
+            self.run_ui.splitter_main.setSizes([790, 540])
+        if hasattr(self.run_ui, "splitter_runRight"):
+            self.run_ui.splitter_runRight.setSizes([130, 330])
         self.statusBar().showMessage("Layout reset")
 
     def _show_about(self) -> None:

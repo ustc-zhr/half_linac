@@ -33,6 +33,7 @@ from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
     load_profile,
+    load_solenoid_centering_workflow,
     real_commissioning_status,
     require_workflow_write_allowed,
     resolve_channel,
@@ -158,6 +159,37 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(context.control_backend.name, "vm")
         self.assertIsNone(context.model_backend)
         self.assertIsNone(context.emit_measure_workflow)
+
+    def test_load_solenoid_centering_app_context(self):
+        context = load_app_context("solenoid_centering")
+        self.assertIsInstance(context, AppContext)
+        self.assertEqual(context.machine.id, "half")
+        self.assertEqual(context.control_backend.name, "vm")
+        self.assertIsNone(context.model_backend)
+        self.assertIsNotNone(context.solenoid_centering_workflow)
+        assert context.solenoid_centering_workflow is not None
+        workflow = load_solenoid_centering_workflow(context.profile)
+        self.assertEqual(workflow.default_preset, "ls_centering")
+        self.assertEqual(workflow.presets_by_id["ls_centering"].hcorr, "LS:HC")
+        self.assertFalse(workflow_writes_allowed(context, "solenoid_centering"))
+
+    def test_load_irfel_solenoid_centering_app_context(self):
+        context = load_app_context(
+            "solenoid_centering",
+            machine_id="irfel",
+            control_backend="real",
+        )
+        self.assertEqual(context.machine.id, "irfel")
+        self.assertEqual(context.control_backend.name, "real")
+        self.assertIsNone(context.model_backend)
+        assert context.solenoid_centering_workflow is not None
+        workflow = context.solenoid_centering_workflow
+        self.assertEqual(workflow.default_preset, "ms01_centering")
+        self.assertEqual(workflow.presets_by_id["ms01_centering"].hcorr, "MSHC")
+        self.assertEqual(workflow.presets_by_id["ls01_centering"].vcorr, "VC01")
+        self.assertTrue(workflow_writes_allowed(context, "solenoid_centering"))
+        self.assertFalse(workflow_writes_allowed(context, "solenoid_centering", mode="vm"))
+        self.assertEqual(real_commissioning_status(context), "write_smoke_passed")
 
     def test_describe_app_model_support_reports_model_app_readiness(self):
         for machine_id in ("half", "irfel"):

@@ -5,8 +5,6 @@ GOTAcc is a General Optimization Toolkit for Accelerator Applications.
 It supports offline benchmark optimization, ASTRA/Elegant simulation optimization, and EPICS-based online accelerator optimization.
 
 ## Architecture rules
-- This vendored GOTAcc subtree is primarily maintained outside `half_linac`; within this repo, prefer the smallest compatibility or integration change needed to keep it running normally.
-- Avoid large feature work, deep refactors, or behavior changes inside GOTAcc unless the user explicitly asks for GOTAcc-focused development in this repo.
 - Do not introduce legacy config formats.
 - All task definitions should go through task_config().
 - Policy behavior should be controlled by policy_kwargs / objective_policy_kwargs.

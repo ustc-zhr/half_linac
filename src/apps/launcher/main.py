@@ -603,7 +603,7 @@ APP_DEFINITIONS = {
         "label": "Jitter Analysis",
         "description": "Analyze shot-to-shot beam and signal jitter.",
         "cmd": ["python3", "main.py"],
-        "cwd": ROOT / "src/apps/jitter_analysis",
+        "cwd": ROOT / "src/apps/jitter",
     },
     "energy_spectrum": {
         "button_name": "energy_spectrum",
@@ -631,6 +631,15 @@ APP_DEFINITIONS = {
         "description": "Measure response matrices and apply orbit correction.",
         "cmd": ["python3", "mainOrbCor.py"],
         "cwd": ROOT / "src/apps/orbit_correct",
+    },
+    "solenoid_centering": {
+        "button_name": "solenoid_centering_button",
+        "category": "control",
+        "button_text": "Solenoid Centering",
+        "label": "Solenoid Centering",
+        "description": "Find corrector settings that minimize BPM sensitivity to solenoid scans.",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/solenoid_centering",
     },
     "emitmeasure": {
         "button_name": "emitmeasure",
@@ -671,6 +680,7 @@ PROFILE_MANAGED_APP_KEYS = {
     "energy_spectrum": "energy_spectrum",
     "bba": "bba",
     "orbit_correct": "orbit_correct",
+    "solenoid_centering": "solenoid_centering",
     "emitmeasure": "emit_measure",
 }
 
@@ -840,6 +850,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.energy_feedback_button.setObjectName("energy_feedback_button")
         self.hv_feedback_button = QPushButton(self.groupBox_5)
         self.hv_feedback_button.setObjectName("hv_feedback_button")
+        self.solenoid_centering_button = QPushButton(self.groupBox_5)
+        self.solenoid_centering_button.setObjectName("solenoid_centering_button")
 
         self.group_button_specs = [
             (self.gridLayout_3, self.groupBox_3, [self.vmbtn, self.online_opt], 1),
@@ -849,6 +861,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 self.groupBox_5,
                 [
                     self.orbit_correct,
+                    self.solenoid_centering_button,
                     self.BBA,
                     self.emitmeasure,
                     self.energy_feedback_button,

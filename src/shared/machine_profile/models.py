@@ -120,6 +120,10 @@ class MachineProfile:
         _validate_orbit_workflow(workflows.get("orbit"), elements_by_id)
         _validate_bba_workflow(workflows.get("bba"), elements_by_id)
         _validate_emit_measure_workflow(workflows.get("emit_measure"), elements_by_id)
+        _validate_solenoid_centering_workflow(
+            workflows.get("solenoid_centering"),
+            elements_by_id,
+        )
 
         return cls(
             schema_version=schema_version,
@@ -282,6 +286,37 @@ class EmitMeasureWorkflowConfig:
 
 
 @dataclass(frozen=True)
+class SolenoidCenteringScanRange:
+    relative_from: float
+    relative_to: float
+    steps: int
+
+
+@dataclass(frozen=True)
+class SolenoidCenteringPreset:
+    id: str
+    display_name: str
+    solenoid_setpoint_pv: str
+    solenoid_readback_pv: str | None
+    hcorr: str
+    vcorr: str
+    bpm: str
+    solenoid_scan: SolenoidCenteringScanRange
+    corrector_scan: SolenoidCenteringScanRange
+    samples_per_point: int
+    settle_time_s: float
+    sample_interval_s: float
+    max_rounds: int
+
+
+@dataclass(frozen=True)
+class SolenoidCenteringWorkflowConfig:
+    presets: tuple[SolenoidCenteringPreset, ...]
+    presets_by_id: Mapping[str, SolenoidCenteringPreset]
+    default_preset: str
+
+
+@dataclass(frozen=True)
 class AppContext:
     app_name: str
     profile: MachineProfile
@@ -290,6 +325,7 @@ class AppContext:
     orbit_workflow: OrbitWorkflowConfig | None = None
     bba_workflow: BBAWorkflowConfig | None = None
     emit_measure_workflow: EmitMeasureWorkflowConfig | None = None
+    solenoid_centering_workflow: SolenoidCenteringWorkflowConfig | None = None
     selected_preset_id: str | None = None
 
     @property
@@ -617,6 +653,77 @@ def _validate_emit_measure_workflow(
         "workflows.emit_measure.twiss_quads",
         expected_kind="quad",
     )
+
+
+def _validate_solenoid_centering_workflow(
+    raw_workflow: Any,
+    elements_by_id: Mapping[str, ElementConfig],
+) -> None:
+    if raw_workflow is None:
+        return
+    workflow = _expect_mapping(raw_workflow, "workflows.solenoid_centering")
+    presets = _expect_list(workflow.get("presets"), "workflows.solenoid_centering.presets")
+    if not presets:
+        raise MachineProfileError("workflows.solenoid_centering.presets must not be empty.")
+    _validate_unique_ids(presets, "workflows.solenoid_centering.presets")
+    for index, raw_preset in enumerate(presets):
+        location = f"workflows.solenoid_centering.presets[{index}]"
+        preset = _expect_mapping(raw_preset, location)
+        _expect_non_empty_string(preset.get("id"), f"{location}.id")
+        _expect_non_empty_string(preset.get("display_name"), f"{location}.display_name")
+        _expect_non_empty_string(
+            preset.get("solenoid_setpoint_pv"),
+            f"{location}.solenoid_setpoint_pv",
+        )
+        if preset.get("solenoid_readback_pv") is not None:
+            _expect_non_empty_string(
+                preset.get("solenoid_readback_pv"),
+                f"{location}.solenoid_readback_pv",
+            )
+        _validate_element_ref(preset.get("hcorr"), elements_by_id, f"{location}.hcorr", expected_kind="corr")
+        _validate_element_ref(preset.get("vcorr"), elements_by_id, f"{location}.vcorr", expected_kind="corr")
+        _validate_element_ref(preset.get("bpm"), elements_by_id, f"{location}.bpm", expected_kind="bpm")
+        _validate_scan_range(preset.get("solenoid_scan"), f"{location}.solenoid_scan")
+        _validate_scan_range(preset.get("corrector_scan"), f"{location}.corrector_scan")
+        _validate_positive_int(preset.get("samples_per_point"), f"{location}.samples_per_point")
+        _validate_nonnegative_float(preset.get("settle_time_s"), f"{location}.settle_time_s")
+        _validate_nonnegative_float(preset.get("sample_interval_s"), f"{location}.sample_interval_s")
+        _validate_positive_int(preset.get("max_rounds"), f"{location}.max_rounds")
+
+    if "default_preset" in workflow:
+        _validate_preset_ref(
+            workflow.get("default_preset"),
+            presets,
+            "workflows.solenoid_centering.default_preset",
+        )
+
+
+def _validate_scan_range(raw_scan: Any, location: str) -> None:
+    scan = _expect_mapping(raw_scan, location)
+    relative_from = _expect_float(scan.get("relative_from"), f"{location}.relative_from")
+    relative_to = _expect_float(scan.get("relative_to"), f"{location}.relative_to")
+    if relative_from == relative_to:
+        raise MachineProfileError(f"{location}.relative_from and relative_to must differ.")
+    _validate_positive_int(scan.get("steps"), f"{location}.steps")
+
+
+def _validate_positive_int(value: Any, location: str) -> int:
+    if not isinstance(value, int) or value <= 0:
+        raise MachineProfileError(f"{location} must be a positive integer.")
+    return value
+
+
+def _validate_nonnegative_float(value: Any, location: str) -> float:
+    selected = _expect_float(value, location)
+    if selected < 0:
+        raise MachineProfileError(f"{location} must be >= 0.")
+    return selected
+
+
+def _expect_float(value: Any, location: str) -> float:
+    if not isinstance(value, (int, float)):
+        raise MachineProfileError(f"{location} must be numeric.")
+    return float(value)
 
 
 def _validate_unique_ids(items: list[Any], location: str) -> None:

@@ -22,6 +22,9 @@ from .models import (
     MachineProfileError,
     ModelBackendConfig,
     OrbitWorkflowConfig,
+    SolenoidCenteringPreset,
+    SolenoidCenteringScanRange,
+    SolenoidCenteringWorkflowConfig,
     normalize_mode,
     normalize_plane,
 )
@@ -35,6 +38,7 @@ SUPPORTED_APP_NAMES = {
     "energy_spectrum",
     "bba",
     "emit_measure",
+    "solenoid_centering",
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum"}
 APP_WORKFLOW_FILES = {
@@ -43,6 +47,7 @@ APP_WORKFLOW_FILES = {
     "energy_spectrum": "energy_spectrum.json",
     "bba": "bba.json",
     "emit_measure": "emit_measure.json",
+    "solenoid_centering": "solenoid_centering.json",
     "virtual_machine": "virtual_machine.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
@@ -52,6 +57,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "energy_spectrum": ("energy_spectrum",),
     "bba": ("bba",),
     "emit_measure": ("emit_measure",),
+    "solenoid_centering": ("solenoid_centering",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",
@@ -141,14 +147,17 @@ def load_app_context(
     orbit_workflow = None
     bba_workflow = None
     emit_measure_workflow = None
+    solenoid_centering_workflow = None
     if app_name == "orbit_correct":
         orbit_workflow = load_orbit_workflow(profile)
     elif app_name == "bba":
         bba_workflow = load_bba_workflow(profile)
     elif app_name == "emit_measure":
         emit_measure_workflow = load_emit_measure_workflow(profile)
+    elif app_name == "solenoid_centering":
+        solenoid_centering_workflow = load_solenoid_centering_workflow(profile)
 
-    if app_name == "orbit_correct":
+    if app_name in {"orbit_correct", "solenoid_centering"}:
         selected_model_backend = None
 
     return AppContext(
@@ -159,6 +168,7 @@ def load_app_context(
         orbit_workflow=orbit_workflow,
         bba_workflow=bba_workflow,
         emit_measure_workflow=emit_measure_workflow,
+        solenoid_centering_workflow=solenoid_centering_workflow,
         selected_preset_id=preset_id,
     )
 
@@ -239,6 +249,34 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
         default_preset=_expect_non_empty_string(
             workflow.get("default_preset") or _infer_emit_default_preset(presets),
             "workflows.emit_measure.default_preset",
+        ),
+    )
+
+
+def load_solenoid_centering_workflow(profile: MachineProfile) -> SolenoidCenteringWorkflowConfig:
+    workflow = _expect_mapping(
+        profile.workflows.get("solenoid_centering"),
+        "workflows.solenoid_centering",
+    )
+    presets_raw = _expect_list(
+        workflow.get("presets"),
+        "workflows.solenoid_centering.presets",
+    )
+
+    presets: list[SolenoidCenteringPreset] = []
+    presets_by_id: dict[str, SolenoidCenteringPreset] = {}
+    for index, raw_preset in enumerate(presets_raw):
+        location = f"workflows.solenoid_centering.presets[{index}]"
+        preset = _parse_solenoid_centering_preset(raw_preset, location)
+        presets.append(preset)
+        presets_by_id[preset.id] = preset
+
+    return SolenoidCenteringWorkflowConfig(
+        presets=tuple(presets),
+        presets_by_id=presets_by_id,
+        default_preset=_expect_non_empty_string(
+            workflow.get("default_preset") or _infer_solenoid_centering_default_preset(presets),
+            "workflows.solenoid_centering.default_preset",
         ),
     )
 
@@ -656,6 +694,15 @@ def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
                 "energy_spectrum requires apps/energy_spectrum.json."
             )
         _validate_energy_spectrum_workflow(profile, workflow)
+        return
+
+    if app_name == "solenoid_centering":
+        workflow = profile.workflows.get("solenoid_centering")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError(
+                "solenoid_centering requires apps/solenoid_centering.json."
+            )
+        load_solenoid_centering_workflow(profile)
         return
 
 
@@ -1290,6 +1337,55 @@ def _parse_emit_preset(raw_preset: Any, location: str) -> EmitPreset:
     )
 
 
+def _parse_solenoid_centering_preset(
+    raw_preset: Any,
+    location: str,
+) -> SolenoidCenteringPreset:
+    preset = _expect_mapping(raw_preset, location)
+    return SolenoidCenteringPreset(
+        id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
+        display_name=_expect_non_empty_string(
+            preset.get("display_name"),
+            f"{location}.display_name",
+        ),
+        solenoid_setpoint_pv=_expect_non_empty_string(
+            preset.get("solenoid_setpoint_pv"),
+            f"{location}.solenoid_setpoint_pv",
+        ),
+        solenoid_readback_pv=(
+            _expect_non_empty_string(
+                preset.get("solenoid_readback_pv"),
+                f"{location}.solenoid_readback_pv",
+            )
+            if preset.get("solenoid_readback_pv") is not None
+            else None
+        ),
+        hcorr=_expect_non_empty_string(preset.get("hcorr"), f"{location}.hcorr"),
+        vcorr=_expect_non_empty_string(preset.get("vcorr"), f"{location}.vcorr"),
+        bpm=_expect_non_empty_string(preset.get("bpm"), f"{location}.bpm"),
+        solenoid_scan=_parse_solenoid_centering_scan_range(
+            _expect_mapping(preset.get("solenoid_scan"), f"{location}.solenoid_scan"),
+        ),
+        corrector_scan=_parse_solenoid_centering_scan_range(
+            _expect_mapping(preset.get("corrector_scan"), f"{location}.corrector_scan"),
+        ),
+        samples_per_point=int(preset.get("samples_per_point")),
+        settle_time_s=float(preset.get("settle_time_s")),
+        sample_interval_s=float(preset.get("sample_interval_s")),
+        max_rounds=int(preset.get("max_rounds")),
+    )
+
+
+def _parse_solenoid_centering_scan_range(
+    raw_scan: Mapping[str, Any],
+) -> SolenoidCenteringScanRange:
+    return SolenoidCenteringScanRange(
+        relative_from=float(raw_scan.get("relative_from")),
+        relative_to=float(raw_scan.get("relative_to")),
+        steps=int(raw_scan.get("steps")),
+    )
+
+
 def _parse_bba_scan_config(raw_scan: Mapping[str, Any]) -> BBAScanConfig:
     return BBAScanConfig(
         corr_from=_optional_float(raw_scan, "corr_from"),
@@ -1345,6 +1441,14 @@ def _infer_bba_default_preset(presets: list[BBAPreset], family_name: str) -> str
 def _infer_emit_default_preset(presets: list[EmitPreset]) -> str:
     if not presets:
         raise MachineProfileError("workflows.emit_measure.presets must contain at least one preset.")
+    return presets[0].id
+
+
+def _infer_solenoid_centering_default_preset(
+    presets: list[SolenoidCenteringPreset],
+) -> str:
+    if not presets:
+        raise MachineProfileError("workflows.solenoid_centering.presets must contain at least one preset.")
     return presets[0].id
 
 

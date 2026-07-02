@@ -1,0 +1,55 @@
+{
+  "default_preset": "ls_centering",
+  "presets": [
+    {
+      "id": "ls_centering",
+      "display_name": "LS Centering",
+      "solenoid_setpoint_pv": "IN:PS:LE07:SL01:current:ao",
+      "solenoid_readback_pv": "IN:PS:LE07:SL01:current:ai",
+      "hcorr": "LS:HC",
+      "vcorr": "LS:VC",
+      "bpm": "BPM03",
+      "solenoid_scan": {
+        "relative_from": -0.05,
+        "relative_to": 0.05,
+        "steps": 5
+      },
+      "corrector_scan": {
+        "relative_from": -0.0002,
+        "relative_to": 0.0002,
+        "steps": 5
+      },
+      "samples_per_point": 3,
+      "settle_time_s": 2.0,
+      "sample_interval_s": 0.2,
+      "max_rounds": 2
+    },
+    {
+      "id": "ms_centering",
+      "display_name": "MS Centering",
+      "solenoid_setpoint_pv": "IN:PS:LE07:SM01:current:ao",
+      "solenoid_readback_pv": "IN:PS:LE07:SM01:current:ai",
+      "hcorr": "MS:HC",
+      "vcorr": "MS:VC",
+      "bpm": "BPM03",
+      "solenoid_scan": {
+        "relative_from": -0.05,
+        "relative_to": 0.05,
+        "steps": 5
+      },
+      "corrector_scan": {
+        "relative_from": -0.0002,
+        "relative_to": 0.0002,
+        "steps": 5
+      },
+      "samples_per_point": 3,
+      "settle_time_s": 2.0,
+      "sample_interval_s": 0.2,
+      "max_rounds": 2
+    }
+  ],
+  "write_control": {
+    "vm": "blocked",
+    "real": "blocked"
+  }
+}

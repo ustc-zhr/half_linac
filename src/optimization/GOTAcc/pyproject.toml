@@ -84,9 +84,6 @@ include = ["gotacc*"]
 
 [tool.setuptools.package-data]
 gotacc = [
-  "configs/pv_lists/*.json",
-  "configs/yaml_cfg/*.yaml",
-  "configs/yaml_cfg/*.yml",
   "gui/*.json",
   "gui/ui/*.ui"
 ]
