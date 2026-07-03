@@ -6,8 +6,8 @@
       "display_name": "LS Centering",
       "solenoid_setpoint_pv": "IN:PS:LE07:SL01:current:ao",
       "solenoid_readback_pv": "IN:PS:LE07:SL01:current:ai",
-      "hcorr": "LS:HC",
-      "vcorr": "LS:VC",
+      "hcorr": "SL01-DX",
+      "vcorr": "SL01-DY",
       "bpm": "BPM03",
       "solenoid_scan": {
         "relative_from": -0.05,
@@ -29,8 +29,8 @@
       "display_name": "MS Centering",
       "solenoid_setpoint_pv": "IN:PS:LE07:SM01:current:ao",
       "solenoid_readback_pv": "IN:PS:LE07:SM01:current:ai",
-      "hcorr": "MS:HC",
-      "vcorr": "MS:VC",
+      "hcorr": "SM01-DX",
+      "vcorr": "SM01-DY",
       "bpm": "BPM03",
       "solenoid_scan": {
         "relative_from": -0.05,

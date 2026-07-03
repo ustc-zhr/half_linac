@@ -145,9 +145,9 @@ def validate_machine_profile(machine_id: str | None = None) -> MachineValidation
 def _validate_channel_resolution(profile: MachineProfile) -> MachineValidationCheck:
     resolved_count = 0
     try:
-        for backend_name in profile.control_backends:
-            for element in profile.elements:
-                for logical_channel in element.channels:
+        for element in profile.elements:
+            for logical_channel, channel_modes in element.channels.items():
+                for backend_name in channel_modes:
                     resolve_channel(profile, element.id, logical_channel, backend_name)
                     resolved_count += 1
     except MachineProfileError as exc:
@@ -156,7 +156,7 @@ def _validate_channel_resolution(profile: MachineProfile) -> MachineValidationCh
     return MachineValidationCheck(
         "channels",
         PASS,
-        f"resolved {resolved_count} logical channel mapping(s) across "
+        f"resolved {resolved_count} declared logical channel mapping(s) across "
         f"{len(profile.control_backends)} backend(s).",
     )
 

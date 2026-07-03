@@ -6,7 +6,7 @@
   },
   "flag_pixel_width_mm": {
     "vm": 0.02,
-    "real": 0.02
+    "real": 0.00345
   },
   "write_control": {
     "vm": "allowed",

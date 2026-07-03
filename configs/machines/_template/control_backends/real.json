@@ -16,16 +16,16 @@
       "setpoint": "TEMPLATE:REAL:YC01:SET"
     },
     "Q01": {
-      "k1": "TEMPLATE:REAL:Q01:K1"
+      "K1": "TEMPLATE:REAL:Q01:K1"
     },
     "QE01": {
-      "k1": "TEMPLATE:REAL:QE01:K1"
+      "K1": "TEMPLATE:REAL:QE01:K1"
     },
     "QE02": {
-      "k1": "TEMPLATE:REAL:QE02:K1"
+      "K1": "TEMPLATE:REAL:QE02:K1"
     },
     "QE03": {
-      "k1": "TEMPLATE:REAL:QE03:K1"
+      "K1": "TEMPLATE:REAL:QE03:K1"
     },
     "BEND01": {
       "current_set": "TEMPLATE:REAL:BEND01:CURRENT_SET"

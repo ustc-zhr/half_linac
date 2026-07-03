@@ -768,15 +768,21 @@ def _load_directory_profile_raw(
         for logical_channel in logical_channels:
             channel_modes: dict[str, str] = {}
             for backend_name, backend_mapping in backend_channels.items():
+                raw_element_channels = backend_mapping.get(element_id)
+                if raw_element_channels is None:
+                    continue
                 element_channels = _expect_mapping(
-                    backend_mapping.get(element_id),
+                    raw_element_channels,
                     f"control_backends.{backend_name}.channels.{element_id}",
                 )
+                if logical_channel not in element_channels:
+                    continue
                 channel_modes[backend_name] = _expect_non_empty_string(
                     element_channels.get(logical_channel),
                     f"control_backends.{backend_name}.channels.{element_id}.{logical_channel}",
                 )
-            channels[logical_channel] = channel_modes
+            if channel_modes:
+                channels[logical_channel] = channel_modes
 
         elements.append(
             {
@@ -1002,9 +1008,9 @@ def _validate_energy_spectrum_workflow(
         raise MachineProfileError("workflows.energy_spectrum.esa_quads must not be empty.")
     for element_id in esa_quads:
         element = profile.get_element(element_id)
-        if "k1" not in element.channels:
+        if "K1" not in element.channels and "k1" not in element.channels:
             raise MachineProfileError(
-                f"Element {element_id} is missing logical channel 'k1' required by "
+                f"Element {element_id} is missing logical channel 'K1' required by "
                 "workflows.energy_spectrum.esa_quads."
             )
 

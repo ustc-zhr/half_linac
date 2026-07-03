@@ -175,3 +175,22 @@
   - Consider exposing `SVD Min Singular Value` or a small preset selector for singular-value truncation.
   - Keep defaults equivalent to current behavior until VM tests show a need to tune them.
   - Validate with IRFEL VM global correction before considering any real-mode use.
+
+### 8. Model Snapshot And Real-to-VM Mirroring
+
+- Status: open
+- Priority: high
+- Background:
+  - Real machine and virtual accelerator are control objects: they accept control writes and produce diagnostic readbacks.
+  - The elegant model backend is a calculation object: it should calculate optics from an explicit machine-state snapshot.
+  - Current model calculations mostly start from configured design lattice files and only apply the few parameter overrides passed by each app.
+- Problem:
+  - For real-machine use, model-dependent apps such as `energy_spectrum`, `emit_measure`, and BBA auxiliary model checks need model parameters aligned with current machine state.
+  - Treating VM state as the implicit source of truth would couple the model backend to a specific control object and could disturb an active VM session.
+  - Some real PVs expose current while elegant expects `K1`, kick, bend angle, or another model-native quantity.
+- Follow-up:
+  - Define a `model_snapshot` path as the primary accuracy mechanism: read selected real/VM/design values, convert them to model-native fields, record the source, and pass the snapshot into the model backend.
+  - Keep `real-to-VM mirroring` as a separate debug/commissioning feature that copies real-machine state into the VM control object when explicitly requested.
+  - Do not require real-to-VM mirroring before model calculations; the model backend should be able to consume a snapshot directly.
+  - Add metadata to model-driven results that records whether the calculation used `design`, `live_from_real`, `live_from_vm`, or a saved snapshot.
+  - Require explicit unit/conversion definitions before using current-based magnet PVs as elegant `K1`, kick, or bend-angle values.

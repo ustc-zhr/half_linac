@@ -14,6 +14,12 @@ from .models import (
 )
 
 
+_LOGICAL_CHANNEL_ALIASES = {
+    "k1": ("K1",),
+    "K1": ("k1",),
+}
+
+
 def resolve_channel(
     target: MachineProfile | AppContext,
     element_id: str,
@@ -28,8 +34,9 @@ def resolve_channel(
         fallback_mode = profile.machine.default_mode
 
     element = profile.get_element(element_id)
+    resolved_logical_channel = _resolve_logical_channel_name(element, logical_channel)
     try:
-        channel_modes = element.channels[logical_channel]
+        channel_modes = element.channels[resolved_logical_channel]
     except KeyError as exc:
         raise MachineProfileError(
             f"Element {element_id} does not define logical channel {logical_channel!r}."
@@ -40,13 +47,24 @@ def resolve_channel(
         pv_name = channel_modes[normalized_mode]
     except KeyError as exc:
         raise MachineProfileError(
-            f"Element {element_id} channel {logical_channel!r} is missing {normalized_mode!r} mapping."
+            f"Element {element_id} channel {resolved_logical_channel!r} is missing "
+            f"{normalized_mode!r} mapping."
         ) from exc
     if not pv_name:
         raise MachineProfileError(
-            f"Element {element_id} channel {logical_channel!r} has an empty {normalized_mode!r} PV."
+            f"Element {element_id} channel {resolved_logical_channel!r} has an empty "
+            f"{normalized_mode!r} PV."
         )
     return pv_name
+
+
+def _resolve_logical_channel_name(element: ElementConfig, logical_channel: str) -> str:
+    if logical_channel in element.channels:
+        return logical_channel
+    for alias in _LOGICAL_CHANNEL_ALIASES.get(logical_channel, ()):
+        if alias in element.channels:
+            return alias
+    return logical_channel
 
 
 def list_elements(
@@ -66,7 +84,11 @@ def list_elements(
     if normalized_plane is not None:
         elements = [element for element in elements if element.plane == normalized_plane]
     if logical_channel is not None:
-        elements = [element for element in elements if logical_channel in element.channels]
+        elements = [
+            element
+            for element in elements
+            if _resolve_logical_channel_name(element, logical_channel) in element.channels
+        ]
     return elements
 
 
