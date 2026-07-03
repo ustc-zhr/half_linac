@@ -132,6 +132,14 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(profile.machine.default_mode, "vm")
         self.assertEqual(profile.schema_version, "1")
 
+    def test_half_vm_pvs_are_covered_by_softioc_contract(self):
+        report = validate_machine_profile("half")
+        check = report.get_check("vm_softioc_contract")
+        self.assertIsNotNone(check)
+        assert check is not None
+        self.assertTrue(check.ok, check.detail)
+        self.assertIn("all", check.detail)
+
     def test_load_orbit_correct_app_context(self):
         context = load_app_context("orbit_correct")
         self.assertIsInstance(context, AppContext)

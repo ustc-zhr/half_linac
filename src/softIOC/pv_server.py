@@ -22,11 +22,10 @@ from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     list_elements,
     load_profile,
-    resolve_bend_write_channel,
     resolve_channel,
-    resolve_corrector_write_channel,
     resolve_machine_runtime,
 )
+from half_linac.src.shared.machine_profile.softioc_contract import resolve_softioc_vm_alias
 from half_linac.src.shared.runtime_state import (
     ensure_runtime_state,
     read_runtime_state,
@@ -93,14 +92,12 @@ class pv_server:
         element_kind: str,
         logical_channel: str,
     ) -> str | None:
-        try:
-            if element_kind == "corr" and logical_channel == "kick":
-                return resolve_corrector_write_channel(self.machine_profile, element_id, "vm")
-            if element_kind == "bend" and logical_channel == "angle":
-                return resolve_bend_write_channel(self.machine_profile, element_id, "vm")
-            return resolve_channel(self.machine_profile, element_id, logical_channel, "vm")
-        except MachineProfileError:
-            return None
+        return resolve_softioc_vm_alias(
+            self.machine_profile,
+            element_id,
+            element_kind,
+            logical_channel,
+        )
 
     def _flag_record_name(self, element_id: str, logical_channel: str) -> str:
         return self._internal_record_name("FLAG", element_id, logical_channel.upper())

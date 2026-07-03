@@ -13,6 +13,7 @@ from .model_backend import ElegantModelBackend, build_model_backend
 from .models import AppContext, MachineProfile, MachineProfileError, ModelBackendConfig
 from .resolver import resolve_channel
 from .runtime_resolver import resolve_machine_runtime
+from .softioc_contract import iter_softioc_vm_aliases
 from .compatibility import (
     describe_app_support,
     load_app_context,
@@ -116,11 +117,19 @@ def validate_machine_profile(machine_id: str | None = None) -> MachineValidation
         )
 
     if "vm" in profile.control_backends:
+        checks.append(_validate_vm_softioc_contract(profile))
         plan_check, parser = _validate_vm_publish_plan(profile, runtime)
         checks.append(plan_check)
         if parser is not None:
             checks.append(_validate_vm_publish_sources(profile, runtime, parser))
     else:
+        checks.append(
+            MachineValidationCheck(
+                "vm_softioc_contract",
+                SKIP,
+                "profile does not declare a vm backend.",
+            )
+        )
         checks.append(
             MachineValidationCheck(
                 "vm_publish_plan",
@@ -158,6 +167,51 @@ def _validate_channel_resolution(profile: MachineProfile) -> MachineValidationCh
         PASS,
         f"resolved {resolved_count} declared logical channel mapping(s) across "
         f"{len(profile.control_backends)} backend(s).",
+    )
+
+
+def _validate_vm_softioc_contract(profile: MachineProfile) -> MachineValidationCheck:
+    vm_mappings: list[tuple[str, str, str]] = []
+    for element in profile.elements:
+        for logical_channel, channel_modes in element.channels.items():
+            pv_name = channel_modes.get("vm")
+            if pv_name:
+                vm_mappings.append((element.id, logical_channel, pv_name))
+
+    softioc_aliases = iter_softioc_vm_aliases(profile)
+    softioc_pvs = {alias.pv_name for alias in softioc_aliases}
+    uncovered = [
+        f"{element_id}.{logical_channel} -> {pv_name}"
+        for element_id, logical_channel, pv_name in vm_mappings
+        if pv_name not in softioc_pvs
+    ]
+
+    if uncovered and profile.machine.id == "half":
+        sample = "; ".join(uncovered[:8])
+        extra = "" if len(uncovered) <= 8 else f"; ... {len(uncovered) - 8} more"
+        return MachineValidationCheck(
+            "vm_softioc_contract",
+            FAIL,
+            "HALF vm.json declares PV(s) that the softIOC generator does not cover: "
+            f"{sample}{extra}.",
+        )
+
+    if uncovered:
+        sample = "; ".join(uncovered[:5])
+        extra = "" if len(uncovered) <= 5 else f"; ... {len(uncovered) - 5} more"
+        return MachineValidationCheck(
+            "vm_softioc_contract",
+            PASS,
+            f"validated {len(softioc_pvs)} softIOC-managed VM PV alias(es); "
+            f"{len(uncovered)} legacy/non-softIOC VM PV mapping(s) are not enforced: "
+            f"{sample}{extra}.",
+        )
+
+    return MachineValidationCheck(
+        "vm_softioc_contract",
+        PASS,
+        f"all {len(vm_mappings)} VM PV mapping(s) are covered by "
+        f"{len(softioc_pvs)} softIOC-generated alias(es).",
     )
 
 
