@@ -17,6 +17,20 @@ from .models import (
 _LOGICAL_CHANNEL_ALIASES = {
     "k1": ("K1",),
     "K1": ("k1",),
+    "current_set": ("setpoint",),
+    "setpoint": ("current_set",),
+    "current_readback": ("readback",),
+    "readback": ("current_readback",),
+}
+
+_CORRECTOR_WRITE_CHANNEL_BY_BACKEND = {
+    "vm": "kick",
+    "real": "current_set",
+}
+
+_BEND_WRITE_CHANNEL_BY_BACKEND = {
+    "vm": "angle",
+    "real": "current_set",
 }
 
 
@@ -56,6 +70,56 @@ def resolve_channel(
             f"{normalized_mode!r} PV."
         )
     return pv_name
+
+
+def resolve_corrector_write_channel(
+    target: MachineProfile | AppContext,
+    element_id: str,
+    mode: str | None = None,
+) -> str:
+    if isinstance(target, AppContext):
+        profile = target.profile
+        fallback_mode = target.control_backend.name
+    else:
+        profile = target
+        fallback_mode = profile.machine.default_mode
+
+    normalized_mode = normalize_mode(mode or fallback_mode, "mode")
+    preferred = _CORRECTOR_WRITE_CHANNEL_BY_BACKEND.get(normalized_mode, "current_set")
+    for logical_channel in (preferred, "current_set", "kick", "setpoint"):
+        try:
+            return resolve_channel(profile, element_id, logical_channel, normalized_mode)
+        except MachineProfileError:
+            continue
+    raise MachineProfileError(
+        f"Element {element_id} does not define a writable corrector channel "
+        f"for {normalized_mode!r} backend."
+    )
+
+
+def resolve_bend_write_channel(
+    target: MachineProfile | AppContext,
+    element_id: str,
+    mode: str | None = None,
+) -> str:
+    if isinstance(target, AppContext):
+        profile = target.profile
+        fallback_mode = target.control_backend.name
+    else:
+        profile = target
+        fallback_mode = profile.machine.default_mode
+
+    normalized_mode = normalize_mode(mode or fallback_mode, "mode")
+    preferred = _BEND_WRITE_CHANNEL_BY_BACKEND.get(normalized_mode, "current_set")
+    for logical_channel in (preferred, "current_set", "angle"):
+        try:
+            return resolve_channel(profile, element_id, logical_channel, normalized_mode)
+        except MachineProfileError:
+            continue
+    raise MachineProfileError(
+        f"Element {element_id} does not define a writable bend channel "
+        f"for {normalized_mode!r} backend."
+    )
 
 
 def _resolve_logical_channel_name(element: ElementConfig, logical_channel: str) -> str:

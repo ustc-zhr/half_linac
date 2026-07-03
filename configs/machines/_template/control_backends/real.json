@@ -10,10 +10,12 @@
       "y": "TEMPLATE:REAL:BPM02:Y"
     },
     "XC01": {
-      "setpoint": "TEMPLATE:REAL:XC01:SET"
+      "current_set": "TEMPLATE:REAL:XC01:SET",
+      "current_readback": "TEMPLATE:REAL:XC01:RB"
     },
     "YC01": {
-      "setpoint": "TEMPLATE:REAL:YC01:SET"
+      "current_set": "TEMPLATE:REAL:YC01:SET",
+      "current_readback": "TEMPLATE:REAL:YC01:RB"
     },
     "Q01": {
       "K1": "TEMPLATE:REAL:Q01:K1"
@@ -28,7 +30,8 @@
       "K1": "TEMPLATE:REAL:QE03:K1"
     },
     "BEND01": {
-      "current_set": "TEMPLATE:REAL:BEND01:CURRENT_SET"
+      "current_set": "TEMPLATE:REAL:BEND01:CURRENT_SET",
+      "current_readback": "TEMPLATE:REAL:BEND01:CURRENT_RB"
     },
     "PRF01": {
       "image": "TEMPLATE:REAL:PRF01:IMAGE",

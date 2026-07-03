@@ -946,7 +946,6 @@ def _validate_energy_spectrum_workflow(
         "flag_image_channel",
         "vm_watch_element",
         "bend_element",
-        "bend_channel",
         "esa_quads",
         "flag_pixel_shape",
         "flag_pixel_width_mm",
@@ -990,14 +989,21 @@ def _validate_energy_spectrum_workflow(
     bend_element = profile.get_element(
         _expect_non_empty_string(workflow.get("bend_element"), "workflows.energy_spectrum.bend_element")
     )
-    bend_channel = _expect_non_empty_string(
-        workflow.get("bend_channel"),
-        "workflows.energy_spectrum.bend_channel",
-    )
-    if bend_channel not in bend_element.channels:
+    bend_channel = workflow.get("bend_channel")
+    if bend_channel:
+        bend_channel_name = _expect_non_empty_string(
+            bend_channel,
+            "workflows.energy_spectrum.bend_channel",
+        )
+        if bend_channel_name not in bend_element.channels:
+            raise MachineProfileError(
+                f"Element {bend_element.id} is missing logical channel {bend_channel_name!r} "
+                "required by workflows.energy_spectrum.bend_channel."
+            )
+    elif not any(channel in bend_element.channels for channel in ("angle", "current_set", "current_readback")):
         raise MachineProfileError(
-            f"Element {bend_element.id} is missing logical channel {bend_channel!r} "
-            "required by workflows.energy_spectrum.bend_channel."
+            f"Element {bend_element.id} must define angle, current_set, or current_readback "
+            "for workflows.energy_spectrum.bend_element."
         )
 
     esa_quads = _expect_string_list(

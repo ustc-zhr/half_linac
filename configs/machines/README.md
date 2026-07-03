@@ -44,8 +44,15 @@ Backends may expose different channel subsets. For example, a real quadrupole ma
 current setpoint, current readback, writable `K1`/`K1_adj` physics channels, and a read-only
 computed `K1_total`, while the VM may only expose `K1`. Application code should resolve
 logical channels through the machine-profile loader instead of hardcoding PV names.
-For current-controlled correctors, prefer `current_set` and `current_readback`; keep
-`setpoint` only as a compatibility alias when existing apps still resolve that channel.
+For correctors, keep backend units explicit. A real-machine backend may expose
+`current_set` and `current_readback` in amperes, while a VM backend may expose `kick`
+in radians when it writes the elegant `KICK` field. The resolver still treats legacy
+`setpoint` as an alias for `current_set` when loading older profiles.
+
+For bends, keep the same distinction. A real-machine backend may expose bend power-supply
+`current_set` and `current_readback` in amperes, while a VM backend may expose `angle`
+in radians when it writes the elegant `ANGLE` field. Do not treat VM bend angle as a
+magnet current unless a separate current-to-angle calibration is defined.
 
 `real.json` is the source of truth for real-machine PV names. Keep it accurate because real
 machine operation has no softIOC fallback.

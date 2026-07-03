@@ -24,6 +24,8 @@ from .compatibility import (
     resolve_virtual_machine_segment_choices,
     resolve_virtual_machine_usedline_workflow,
     resolve_channel,
+    resolve_bend_write_channel,
+    resolve_corrector_write_channel,
     resolve_flag_pixel_geometry,
 )
 from .loader import (
@@ -163,6 +165,8 @@ __all__ = [
     "resolve_vm_runtime",
     "request_runtime_restart",
     "resolve_channel",
+    "resolve_bend_write_channel",
+    "resolve_corrector_write_channel",
     "resolve_flag_pixel_geometry",
     "require_workflow_write_allowed",
     "validate_machine_profile",

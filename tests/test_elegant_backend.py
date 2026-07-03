@@ -513,7 +513,13 @@ class ElegantBackendTests(unittest.TestCase):
         source = (REPO_ROOT / "src/apps/energy_spectrum/esa_auto_tuner.py").read_text(encoding="utf-8")
         self.assertNotIn("HALF:IN:ESA:PRF01:CurrentSet", source)
         self.assertIn("load_profile()", source)
-        self.assertIn("resolve_channel(profile", source)
+        self.assertIn("resolve_bend_write_channel(", source)
+
+    def test_softioc_bend_substitutions_use_angle_channel(self):
+        source = (REPO_ROOT / "src/softIOC/pv_server.py").read_text(encoding="utf-8")
+        self.assertIn('_resolve_vm_writable_channel(element.id, element.kind, "angle")', source)
+        self.assertIn("ANGLEALIAS", source)
+        self.assertNotIn('_resolve_vm_writable_channel(element.id, element.kind, "kick")', source)
 
     def test_half_vm_helper_scripts_use_runtime_resolver_for_paths(self):
         helper_paths = [

@@ -241,6 +241,7 @@ if __name__=='__main__':
         get_workflow,
         load_profile,
         resolve_channel,
+        resolve_bend_write_channel,
     )
 
     profile = load_profile()
@@ -257,10 +258,9 @@ if __name__=='__main__':
             "workflows.energy_spectrum.flag_pixel_shape must provide [nx, ny] for the selected backend."
         )
     flag_pv = resolve_channel(profile, flag_element, flag_channel, preferred_backend)
-    bend_pv = resolve_channel(
+    bend_pv = resolve_bend_write_channel(
         profile,
         str(workflow["bend_element"]),
-        str(workflow["bend_channel"]),
         preferred_backend,
     )
     esa_tuner = ESA_AutoTuner(

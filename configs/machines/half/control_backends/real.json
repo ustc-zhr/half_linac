@@ -174,462 +174,370 @@
       "y": "IN:BD:LE20:DBPM:43:BPM_Y"
     },
     "SM01-DX": {
-      "setpoint": "IN:PS:LE07:SM01-DX:current:ao",
       "current_set": "IN:PS:LE07:SM01-DX:current:ao",
       "current_readback": "IN:PS:LE07:SM01-DX:current:ai"
     },
     "SM01-DY": {
-      "setpoint": "IN:PS:LE07:SM01-DY:current:ao",
       "current_set": "IN:PS:LE07:SM01-DY:current:ao",
       "current_readback": "IN:PS:LE07:SM01-DY:current:ai"
     },
     "SL01-DX": {
-      "setpoint": "IN:PS:LE07:SL01-DX:current:ao",
       "current_set": "IN:PS:LE07:SL01-DX:current:ao",
       "current_readback": "IN:PS:LE07:SL01-DX:current:ai"
     },
     "SL01-DY": {
-      "setpoint": "IN:PS:LE07:SL01-DY:current:ao",
       "current_set": "IN:PS:LE07:SL01-DY:current:ao",
       "current_readback": "IN:PS:LE07:SL01-DY:current:ai"
     },
     "XC00": {
-      "setpoint": "IN:PS:LE07:XC00:current:ao",
       "current_set": "IN:PS:LE07:XC00:current:ao",
       "current_readback": "IN:PS:LE07:XC00:current:ai"
     },
     "XC01": {
-      "setpoint": "IN:PS:LE07:XC01:current:ao",
       "current_set": "IN:PS:LE07:XC01:current:ao",
       "current_readback": "IN:PS:LE07:XC01:current:ai"
     },
     "XC02": {
-      "setpoint": "IN:PS:LE07:XC02:current:ao",
       "current_set": "IN:PS:LE07:XC02:current:ao",
       "current_readback": "IN:PS:LE07:XC02:current:ai"
     },
     "XC03": {
-      "setpoint": "IN:PS:LE07:XC03:current:ao",
       "current_set": "IN:PS:LE07:XC03:current:ao",
       "current_readback": "IN:PS:LE07:XC03:current:ai"
     },
     "XC04": {
-      "setpoint": "IN:PS:LE07:XC04:current:ao",
       "current_set": "IN:PS:LE07:XC04:current:ao",
       "current_readback": "IN:PS:LE07:XC04:current:ai"
     },
     "XC05": {
-      "setpoint": "IN:PS:LE07:XC05:current:ao",
       "current_set": "IN:PS:LE07:XC05:current:ao",
       "current_readback": "IN:PS:LE07:XC05:current:ai"
     },
     "XC06": {
-      "setpoint": "IN:PS:LE07:XC06:current:ao",
       "current_set": "IN:PS:LE07:XC06:current:ao",
       "current_readback": "IN:PS:LE07:XC06:current:ai"
     },
     "XC07": {
-      "setpoint": "IN:PS:LE07:XC07:current:ao",
       "current_set": "IN:PS:LE07:XC07:current:ao",
       "current_readback": "IN:PS:LE07:XC07:current:ai"
     },
     "XC08": {
-      "setpoint": "IN:PS:LE07:XC08:current:ao",
       "current_set": "IN:PS:LE07:XC08:current:ao",
       "current_readback": "IN:PS:LE07:XC08:current:ai"
     },
     "XC09": {
-      "setpoint": "IN:PS:LE07:XC09:current:ao",
       "current_set": "IN:PS:LE07:XC09:current:ao",
       "current_readback": "IN:PS:LE07:XC09:current:ai"
     },
     "XC10": {
-      "setpoint": "IN:PS:LE07:XC10:current:ao",
       "current_set": "IN:PS:LE07:XC10:current:ao",
       "current_readback": "IN:PS:LE07:XC10:current:ai"
     },
     "XC11": {
-      "setpoint": "IN:PS:LE07:XC11:current:ao",
       "current_set": "IN:PS:LE07:XC11:current:ao",
       "current_readback": "IN:PS:LE07:XC11:current:ai"
     },
     "XC12": {
-      "setpoint": "IN:PS:LE07:XC12:current:ao",
       "current_set": "IN:PS:LE07:XC12:current:ao",
       "current_readback": "IN:PS:LE07:XC12:current:ai"
     },
     "XC13": {
-      "setpoint": "IN:PS:LE07:XC13:current:ao",
       "current_set": "IN:PS:LE07:XC13:current:ao",
       "current_readback": "IN:PS:LE07:XC13:current:ai"
     },
     "XC14": {
-      "setpoint": "IN:PS:LE07:XC14:current:ao",
       "current_set": "IN:PS:LE07:XC14:current:ao",
       "current_readback": "IN:PS:LE07:XC14:current:ai"
     },
     "XC15": {
-      "setpoint": "IN:PS:LE07:XC15:current:ao",
       "current_set": "IN:PS:LE07:XC15:current:ao",
       "current_readback": "IN:PS:LE07:XC15:current:ai"
     },
     "XC16": {
-      "setpoint": "IN:PS:LE07:XC16:current:ao",
       "current_set": "IN:PS:LE07:XC16:current:ao",
       "current_readback": "IN:PS:LE07:XC16:current:ai"
     },
     "XC17": {
-      "setpoint": "IN:PS:LE07:XC17:current:ao",
       "current_set": "IN:PS:LE07:XC17:current:ao",
       "current_readback": "IN:PS:LE07:XC17:current:ai"
     },
     "XC18": {
-      "setpoint": "IN:PS:LE07:XC18:current:ao",
       "current_set": "IN:PS:LE07:XC18:current:ao",
       "current_readback": "IN:PS:LE07:XC18:current:ai"
     },
     "XC19": {
-      "setpoint": "IN:PS:LE07:XC19:current:ao",
       "current_set": "IN:PS:LE07:XC19:current:ao",
       "current_readback": "IN:PS:LE07:XC19:current:ai"
     },
     "XC20": {
-      "setpoint": "IN:PS:LE07:XC20:current:ao",
       "current_set": "IN:PS:LE07:XC20:current:ao",
       "current_readback": "IN:PS:LE07:XC20:current:ai"
     },
     "XC21": {
-      "setpoint": "IN:PS:LE16:XC21:current:ao",
       "current_set": "IN:PS:LE16:XC21:current:ao",
       "current_readback": "IN:PS:LE16:XC21:current:ai"
     },
     "XC22": {
-      "setpoint": "IN:PS:LE16:XC22:current:ao",
       "current_set": "IN:PS:LE16:XC22:current:ao",
       "current_readback": "IN:PS:LE16:XC22:current:ai"
     },
     "XC23": {
-      "setpoint": "IN:PS:LE16:XC23:current:ao",
       "current_set": "IN:PS:LE16:XC23:current:ao",
       "current_readback": "IN:PS:LE16:XC23:current:ai"
     },
     "XC24": {
-      "setpoint": "IN:PS:LE16:XC24:current:ao",
       "current_set": "IN:PS:LE16:XC24:current:ao",
       "current_readback": "IN:PS:LE16:XC24:current:ai"
     },
     "XC25": {
-      "setpoint": "IN:PS:LE16:XC25:current:ao",
       "current_set": "IN:PS:LE16:XC25:current:ao",
       "current_readback": "IN:PS:LE16:XC25:current:ai"
     },
     "XC26": {
-      "setpoint": "IN:PS:LE16:XC26:current:ao",
       "current_set": "IN:PS:LE16:XC26:current:ao",
       "current_readback": "IN:PS:LE16:XC26:current:ai"
     },
     "XC27": {
-      "setpoint": "IN:PS:LE16:XC27:current:ao",
       "current_set": "IN:PS:LE16:XC27:current:ao",
       "current_readback": "IN:PS:LE16:XC27:current:ai"
     },
     "XC28": {
-      "setpoint": "IN:PS:LE16:XC28:current:ao",
       "current_set": "IN:PS:LE16:XC28:current:ao",
       "current_readback": "IN:PS:LE16:XC28:current:ai"
     },
     "XC29": {
-      "setpoint": "IN:PS:LE16:XC29:current:ao",
       "current_set": "IN:PS:LE16:XC29:current:ao",
       "current_readback": "IN:PS:LE16:XC29:current:ai"
     },
     "XC30": {
-      "setpoint": "IN:PS:LE16:XC30:current:ao",
       "current_set": "IN:PS:LE16:XC30:current:ao",
       "current_readback": "IN:PS:LE16:XC30:current:ai"
     },
     "XC31": {
-      "setpoint": "IN:PS:LE16:XC31:current:ao",
       "current_set": "IN:PS:LE16:XC31:current:ao",
       "current_readback": "IN:PS:LE16:XC31:current:ai"
     },
     "XC32": {
-      "setpoint": "IN:PS:LE16:XC32:current:ao",
       "current_set": "IN:PS:LE16:XC32:current:ao",
       "current_readback": "IN:PS:LE16:XC32:current:ai"
     },
     "XC33": {
-      "setpoint": "IN:PS:LE16:XC33:current:ao",
       "current_set": "IN:PS:LE16:XC33:current:ao",
       "current_readback": "IN:PS:LE16:XC33:current:ai"
     },
     "XC34": {
-      "setpoint": "IN:PS:LE16:XC34:current:ao",
       "current_set": "IN:PS:LE16:XC34:current:ao",
       "current_readback": "IN:PS:LE16:XC34:current:ai"
     },
     "XC35": {
-      "setpoint": "IN:PS:LE16:XC35:current:ao",
       "current_set": "IN:PS:LE16:XC35:current:ao",
       "current_readback": "IN:PS:LE16:XC35:current:ai"
     },
     "XC36": {
-      "setpoint": "IN:PS:LE16:XC36:current:ao",
       "current_set": "IN:PS:LE16:XC36:current:ao",
       "current_readback": "IN:PS:LE16:XC36:current:ai"
     },
     "XC37": {
-      "setpoint": "IN:PS:LE16:XC37:current:ao",
       "current_set": "IN:PS:LE16:XC37:current:ao",
       "current_readback": "IN:PS:LE16:XC37:current:ai"
     },
     "XC38": {
-      "setpoint": "IN:PS:LE16:XC38:current:ao",
       "current_set": "IN:PS:LE16:XC38:current:ao",
       "current_readback": "IN:PS:LE16:XC38:current:ai"
     },
     "XC39": {
-      "setpoint": "IN:PS:LE16:XC39:current:ao",
       "current_set": "IN:PS:LE16:XC39:current:ao",
       "current_readback": "IN:PS:LE16:XC39:current:ai"
     },
     "XC40": {
-      "setpoint": "IN:PS:LE16:XC40:current:ao",
       "current_set": "IN:PS:LE16:XC40:current:ao",
       "current_readback": "IN:PS:LE16:XC40:current:ai"
     },
     "XC41": {
-      "setpoint": "IN:PS:LE16:XC41:current:ao",
       "current_set": "IN:PS:LE16:XC41:current:ao",
       "current_readback": "IN:PS:LE16:XC41:current:ai"
     },
     "XC42": {
-      "setpoint": "IN:PS:LE16:XC42:current:ao",
       "current_set": "IN:PS:LE16:XC42:current:ao",
       "current_readback": "IN:PS:LE16:XC42:current:ai"
     },
     "XC43": {
-      "setpoint": "IN:PS:LE16:XC43:current:ao",
       "current_set": "IN:PS:LE16:XC43:current:ao",
       "current_readback": "IN:PS:LE16:XC43:current:ai"
     },
     "YC00": {
-      "setpoint": "IN:PS:LE07:YC00:current:ao",
       "current_set": "IN:PS:LE07:YC00:current:ao",
       "current_readback": "IN:PS:LE07:YC00:current:ai"
     },
     "YC01": {
-      "setpoint": "IN:PS:LE07:YC01:current:ao",
       "current_set": "IN:PS:LE07:YC01:current:ao",
       "current_readback": "IN:PS:LE07:YC01:current:ai"
     },
     "YC02": {
-      "setpoint": "IN:PS:LE07:YC02:current:ao",
       "current_set": "IN:PS:LE07:YC02:current:ao",
       "current_readback": "IN:PS:LE07:YC02:current:ai"
     },
     "YC03": {
-      "setpoint": "IN:PS:LE07:YC03:current:ao",
       "current_set": "IN:PS:LE07:YC03:current:ao",
       "current_readback": "IN:PS:LE07:YC03:current:ai"
     },
     "YC04": {
-      "setpoint": "IN:PS:LE07:YC04:current:ao",
       "current_set": "IN:PS:LE07:YC04:current:ao",
       "current_readback": "IN:PS:LE07:YC04:current:ai"
     },
     "YC05": {
-      "setpoint": "IN:PS:LE07:YC05:current:ao",
       "current_set": "IN:PS:LE07:YC05:current:ao",
       "current_readback": "IN:PS:LE07:YC05:current:ai"
     },
     "YC06": {
-      "setpoint": "IN:PS:LE07:YC06:current:ao",
       "current_set": "IN:PS:LE07:YC06:current:ao",
       "current_readback": "IN:PS:LE07:YC06:current:ai"
     },
     "YC07": {
-      "setpoint": "IN:PS:LE07:YC07:current:ao",
       "current_set": "IN:PS:LE07:YC07:current:ao",
       "current_readback": "IN:PS:LE07:YC07:current:ai"
     },
     "YC08": {
-      "setpoint": "IN:PS:LE07:YC08:current:ao",
       "current_set": "IN:PS:LE07:YC08:current:ao",
       "current_readback": "IN:PS:LE07:YC08:current:ai"
     },
     "YC09": {
-      "setpoint": "IN:PS:LE07:YC09:current:ao",
       "current_set": "IN:PS:LE07:YC09:current:ao",
       "current_readback": "IN:PS:LE07:YC09:current:ai"
     },
     "YC10": {
-      "setpoint": "IN:PS:LE07:YC10:current:ao",
       "current_set": "IN:PS:LE07:YC10:current:ao",
       "current_readback": "IN:PS:LE07:YC10:current:ai"
     },
     "YC11": {
-      "setpoint": "IN:PS:LE07:YC11:current:ao",
       "current_set": "IN:PS:LE07:YC11:current:ao",
       "current_readback": "IN:PS:LE07:YC11:current:ai"
     },
     "YC12": {
-      "setpoint": "IN:PS:LE07:YC12:current:ao",
       "current_set": "IN:PS:LE07:YC12:current:ao",
       "current_readback": "IN:PS:LE07:YC12:current:ai"
     },
     "YC13": {
-      "setpoint": "IN:PS:LE07:YC13:current:ao",
       "current_set": "IN:PS:LE07:YC13:current:ao",
       "current_readback": "IN:PS:LE07:YC13:current:ai"
     },
     "YC14": {
-      "setpoint": "IN:PS:LE07:YC14:current:ao",
       "current_set": "IN:PS:LE07:YC14:current:ao",
       "current_readback": "IN:PS:LE07:YC14:current:ai"
     },
     "YC15": {
-      "setpoint": "IN:PS:LE07:YC15:current:ao",
       "current_set": "IN:PS:LE07:YC15:current:ao",
       "current_readback": "IN:PS:LE07:YC15:current:ai"
     },
     "YC16": {
-      "setpoint": "IN:PS:LE07:YC16:current:ao",
       "current_set": "IN:PS:LE07:YC16:current:ao",
       "current_readback": "IN:PS:LE07:YC16:current:ai"
     },
     "YC17": {
-      "setpoint": "IN:PS:LE07:YC17:current:ao",
       "current_set": "IN:PS:LE07:YC17:current:ao",
       "current_readback": "IN:PS:LE07:YC17:current:ai"
     },
     "YC18": {
-      "setpoint": "IN:PS:LE07:YC18:current:ao",
       "current_set": "IN:PS:LE07:YC18:current:ao",
       "current_readback": "IN:PS:LE07:YC18:current:ai"
     },
     "YC19": {
-      "setpoint": "IN:PS:LE07:YC19:current:ao",
       "current_set": "IN:PS:LE07:YC19:current:ao",
       "current_readback": "IN:PS:LE07:YC19:current:ai"
     },
     "YC20": {
-      "setpoint": "IN:PS:LE07:YC20:current:ao",
       "current_set": "IN:PS:LE07:YC20:current:ao",
       "current_readback": "IN:PS:LE07:YC20:current:ai"
     },
     "YC21": {
-      "setpoint": "IN:PS:LE16:YC21:current:ao",
       "current_set": "IN:PS:LE16:YC21:current:ao",
       "current_readback": "IN:PS:LE16:YC21:current:ai"
     },
     "YC22": {
-      "setpoint": "IN:PS:LE16:YC22:current:ao",
       "current_set": "IN:PS:LE16:YC22:current:ao",
       "current_readback": "IN:PS:LE16:YC22:current:ai"
     },
     "YC23": {
-      "setpoint": "IN:PS:LE16:YC23:current:ao",
       "current_set": "IN:PS:LE16:YC23:current:ao",
       "current_readback": "IN:PS:LE16:YC23:current:ai"
     },
     "YC24": {
-      "setpoint": "IN:PS:LE16:YC24:current:ao",
       "current_set": "IN:PS:LE16:YC24:current:ao",
       "current_readback": "IN:PS:LE16:YC24:current:ai"
     },
     "YC25": {
-      "setpoint": "IN:PS:LE16:YC25:current:ao",
       "current_set": "IN:PS:LE16:YC25:current:ao",
       "current_readback": "IN:PS:LE16:YC25:current:ai"
     },
     "YC26": {
-      "setpoint": "IN:PS:LE16:YC26:current:ao",
       "current_set": "IN:PS:LE16:YC26:current:ao",
       "current_readback": "IN:PS:LE16:YC26:current:ai"
     },
     "YC27": {
-      "setpoint": "IN:PS:LE16:YC27:current:ao",
       "current_set": "IN:PS:LE16:YC27:current:ao",
       "current_readback": "IN:PS:LE16:YC27:current:ai"
     },
     "YC28": {
-      "setpoint": "IN:PS:LE16:YC28:current:ao",
       "current_set": "IN:PS:LE16:YC28:current:ao",
       "current_readback": "IN:PS:LE16:YC28:current:ai"
     },
     "YC29": {
-      "setpoint": "IN:PS:LE16:YC29:current:ao",
       "current_set": "IN:PS:LE16:YC29:current:ao",
       "current_readback": "IN:PS:LE16:YC29:current:ai"
     },
     "YC30": {
-      "setpoint": "IN:PS:LE16:YC30:current:ao",
       "current_set": "IN:PS:LE16:YC30:current:ao",
       "current_readback": "IN:PS:LE16:YC30:current:ai"
     },
     "YC31": {
-      "setpoint": "IN:PS:LE16:YC31:current:ao",
       "current_set": "IN:PS:LE16:YC31:current:ao",
       "current_readback": "IN:PS:LE16:YC31:current:ai"
     },
     "YC32": {
-      "setpoint": "IN:PS:LE16:YC32:current:ao",
       "current_set": "IN:PS:LE16:YC32:current:ao",
       "current_readback": "IN:PS:LE16:YC32:current:ai"
     },
     "YC33": {
-      "setpoint": "IN:PS:LE16:YC33:current:ao",
       "current_set": "IN:PS:LE16:YC33:current:ao",
       "current_readback": "IN:PS:LE16:YC33:current:ai"
     },
     "YC34": {
-      "setpoint": "IN:PS:LE16:YC34:current:ao",
       "current_set": "IN:PS:LE16:YC34:current:ao",
       "current_readback": "IN:PS:LE16:YC34:current:ai"
     },
     "YC35": {
-      "setpoint": "IN:PS:LE16:YC35:current:ao",
       "current_set": "IN:PS:LE16:YC35:current:ao",
       "current_readback": "IN:PS:LE16:YC35:current:ai"
     },
     "YC36": {
-      "setpoint": "IN:PS:LE16:YC36:current:ao",
       "current_set": "IN:PS:LE16:YC36:current:ao",
       "current_readback": "IN:PS:LE16:YC36:current:ai"
     },
     "YC37": {
-      "setpoint": "IN:PS:LE16:YC37:current:ao",
       "current_set": "IN:PS:LE16:YC37:current:ao",
       "current_readback": "IN:PS:LE16:YC37:current:ai"
     },
     "YC38": {
-      "setpoint": "IN:PS:LE16:YC38:current:ao",
       "current_set": "IN:PS:LE16:YC38:current:ao",
       "current_readback": "IN:PS:LE16:YC38:current:ai"
     },
     "YC39": {
-      "setpoint": "IN:PS:LE16:YC39:current:ao",
       "current_set": "IN:PS:LE16:YC39:current:ao",
       "current_readback": "IN:PS:LE16:YC39:current:ai"
     },
     "YC40": {
-      "setpoint": "IN:PS:LE16:YC40:current:ao",
       "current_set": "IN:PS:LE16:YC40:current:ao",
       "current_readback": "IN:PS:LE16:YC40:current:ai"
     },
     "YC41": {
-      "setpoint": "IN:PS:LE16:YC41:current:ao",
       "current_set": "IN:PS:LE16:YC41:current:ao",
       "current_readback": "IN:PS:LE16:YC41:current:ai"
     },
     "YC42": {
-      "setpoint": "IN:PS:LE16:YC42:current:ao",
       "current_set": "IN:PS:LE16:YC42:current:ao",
       "current_readback": "IN:PS:LE16:YC42:current:ai"
     },
     "YC43": {
-      "setpoint": "IN:PS:LE16:YC43:current:ao",
       "current_set": "IN:PS:LE16:YC43:current:ao",
       "current_readback": "IN:PS:LE16:YC43:current:ai"
     },
@@ -1052,31 +960,40 @@
       "K1": "IN:PS:LE16:QDU02:current:ao"
     },
     "BL01A": {
-      "current_set": "IN:PS:LE07:BL01A:current:ao"
+      "current_set": "IN:PS:LE07:BL01A:current:ao",
+      "current_readback": "IN:PS:LE07:BL01A:current:ai"
     },
     "BL01B": {
-      "current_set": "IN:PS:LE07:BL01B:current:ao"
+      "current_set": "IN:PS:LE07:BL01B:current:ao",
+      "current_readback": "IN:PS:LE07:BL01B:current:ai"
     },
     "BH01": {
-      "current_set": "IN:PS:LE16:BH01:current:ao"
+      "current_set": "IN:PS:LE16:BH01:current:ao",
+      "current_readback": "IN:PS:LE16:BH01:current:ai"
     },
     "BH02": {
-      "current_set": "IN:PS:LE16:BH02:current:ao"
+      "current_set": "IN:PS:LE16:BH02:current:ao",
+      "current_readback": "IN:PS:LE16:BH02:current:ai"
     },
     "BH03": {
-      "current_set": "IN:PS:LE16:BH03:current:ao"
+      "current_set": "IN:PS:LE16:BH03:current:ao",
+      "current_readback": "IN:PS:LE16:BH03:current:ai"
     },
     "BH04": {
-      "current_set": "IN:PS:LE16:BH04:current:ao"
+      "current_set": "IN:PS:LE16:BH04:current:ao",
+      "current_readback": "IN:PS:LE16:BH04:current:ai"
     },
     "BV01": {
-      "current_set": "IN:PS:LE16:BV01:current:ao"
+      "current_set": "IN:PS:LE16:BV01:current:ao",
+      "current_readback": "IN:PS:LE16:BV01:current:ai"
     },
     "BV02": {
-      "current_set": "IN:PS:LE16:BV02:current:ao"
+      "current_set": "IN:PS:LE16:BV02:current:ao",
+      "current_readback": "IN:PS:LE16:BV02:current:ai"
     },
     "BENY": {
-      "current_set": "IN:PS:LE16:BENY:current:ao"
+      "current_set": "IN:PS:LE16:BENY:current:ao",
+      "current_readback": "IN:PS:LE16:BENY:current:ai"
     },
     "PRF04": {
       "image": "HALF:IN:FLAG:PRF04:image1:ArrayData",

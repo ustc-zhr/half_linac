@@ -259,7 +259,7 @@ class MainWindow(QMainWindow):
         self._populate_element_combo(self.bpm_combo, bpms)
 
     def _corrector_choices(self, plane, fallback_tokens):
-        correctors = list_elements(self.context, kind="corr", logical_channel="setpoint")
+        correctors = list_elements(self.context, kind="corr", logical_channel="current_set")
         by_plane = [element for element in correctors if element.plane == plane]
         if by_plane:
             return by_plane

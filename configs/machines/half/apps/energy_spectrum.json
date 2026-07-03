@@ -4,15 +4,20 @@
   "vm_watch_element": "PRFESA",
   "flag_exposure_channel": "exposure_time",
   "flag_pixel_shape": {
-    "vm": [720,270],
-    "real": [1440,1080]
+    "vm": [
+      720,
+      270
+    ],
+    "real": [
+      1440,
+      1080
+    ]
   },
   "flag_pixel_width_mm": {
     "vm": 0.02,
     "real": 0.02
   },
   "bend_element": "BENY",
-  "bend_channel": "current_set",
   "model_backend": "simulation",
   "twiss_target_element": "PRFESA",
   "energy_set_pv": {

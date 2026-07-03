@@ -54,6 +54,7 @@ from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
     require_workflow_write_allowed,
+    resolve_bend_write_channel,
     resolve_channel,
     workflow_writes_allowed,
 )
@@ -611,11 +612,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             for element_id in self.esa_quad_ids
         }
         self.pushButton_sample_bg = self.pushButton_sapmles
-        self.bend_pv = resolve_channel(
+        self.bend_pv = resolve_bend_write_channel(
             self.app_context,
             self.energy_config["bend_element"],
-            self.energy_config["bend_channel"],
         )
+        self.bend_readback_pv = self._resolve_bend_readback_pv()
 
         self.current_theme = "dark"
         self._auto_tune_text = "Idle"
@@ -667,7 +668,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "flag_element",
             "flag_image_channel",
             "bend_element",
-            "bend_channel",
             "esa_quads",
             "flag_pixel_shape",
             "flag_pixel_width_mm",
@@ -680,6 +680,30 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if not isinstance(workflow["esa_quads"], list) or not workflow["esa_quads"]:
             raise MachineProfileError("workflows.energy_spectrum.esa_quads must be a non-empty list.")
         return workflow
+
+    def _resolve_bend_readback_pv(self):
+        if self.control_backend == "real":
+            try:
+                return resolve_channel(
+                    self.app_context,
+                    self.energy_config["bend_element"],
+                    "current_readback",
+                )
+            except MachineProfileError:
+                pass
+
+        legacy_channel = self.energy_config.get("bend_channel")
+        if legacy_channel:
+            try:
+                return resolve_channel(
+                    self.app_context,
+                    self.energy_config["bend_element"],
+                    str(legacy_channel),
+                )
+            except MachineProfileError:
+                pass
+
+        return self.bend_pv
 
     def _load_energy_model_config(self):
         if self.app_context.model_backend is None:
@@ -1794,7 +1818,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             # 1. 若提供了相关的能量物理量在ioc中 可以直接caget获取
             # 2. 根据磁铁(电流)强度给出energy0
             try:
-                current_ES_Bend = caget(self.bend_pv) # A
+                    current_ES_Bend = caget(self.bend_readback_pv) # A
             except Exception as exc:
                 current_ES_Bend = None
                 self._mark_pv_unavailable(exc)

@@ -23,7 +23,15 @@ from .commissioning import (
     real_commissioning_status_tone,
 )
 from .pixel_geometry import FlagPixelGeometry, resolve_flag_pixel_geometry
-from .resolver import get_bba_preset, get_emit_preset, get_workflow, list_elements, resolve_channel
+from .resolver import (
+    get_bba_preset,
+    get_emit_preset,
+    get_workflow,
+    list_elements,
+    resolve_channel,
+    resolve_bend_write_channel,
+    resolve_corrector_write_channel,
+)
 from .write_control import require_workflow_write_allowed, workflow_write_policy, workflow_writes_allowed
 
 __all__ = [
@@ -51,6 +59,8 @@ __all__ = [
     "resolve_virtual_machine_segment_choices",
     "resolve_virtual_machine_usedline_workflow",
     "resolve_channel",
+    "resolve_bend_write_channel",
+    "resolve_corrector_write_channel",
     "resolve_flag_pixel_geometry",
     "require_workflow_write_allowed",
     "workflow_write_policy",

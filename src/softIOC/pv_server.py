@@ -22,7 +22,9 @@ from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     list_elements,
     load_profile,
+    resolve_bend_write_channel,
     resolve_channel,
+    resolve_corrector_write_channel,
     resolve_machine_runtime,
 )
 from half_linac.src.shared.runtime_state import (
@@ -37,8 +39,8 @@ BEND_TYPES = {"BEND", "CSBEND", "CSRCSBEND", "SBEND", "SBEN"}
 COR_TYPES = {"HKICK", "VKICK"}
 LATTICE_FIELD_BY_CHANNEL = {
     ("quad", "k1"): "K1",
-    ("corr", "setpoint"): "KICK",
-    ("bend", "current_set"): "ANGLE",
+    ("corr", "kick"): "KICK",
+    ("bend", "angle"): "ANGLE",
 }
 
 
@@ -85,6 +87,21 @@ class pv_server:
         except MachineProfileError:
             return None
 
+    def _resolve_vm_writable_channel(
+        self,
+        element_id: str,
+        element_kind: str,
+        logical_channel: str,
+    ) -> str | None:
+        try:
+            if element_kind == "corr" and logical_channel == "kick":
+                return resolve_corrector_write_channel(self.machine_profile, element_id, "vm")
+            if element_kind == "bend" and logical_channel == "angle":
+                return resolve_bend_write_channel(self.machine_profile, element_id, "vm")
+            return resolve_channel(self.machine_profile, element_id, logical_channel, "vm")
+        except MachineProfileError:
+            return None
+
     def _flag_record_name(self, element_id: str, logical_channel: str) -> str:
         return self._internal_record_name("FLAG", element_id, logical_channel.upper())
 
@@ -100,9 +117,9 @@ class pv_server:
         self.substitutions_path.parent.mkdir(parents=True, exist_ok=True)
 
         quad_elements = list_elements(self.machine_profile, kind="quad", logical_channel="k1")
-        corr_elements = list_elements(self.machine_profile, kind="corr", logical_channel="setpoint")
+        corr_elements = list_elements(self.machine_profile, kind="corr")
         bpm_elements = list_elements(self.machine_profile, kind="bpm")
-        bend_elements = list_elements(self.machine_profile, kind="bend", logical_channel="current_set")
+        bend_elements = list_elements(self.machine_profile, kind="bend")
         flag_elements = list_elements(self.machine_profile, kind="flag")
 
         with self.substitutions_path.open("w", encoding="utf-8") as handle:
@@ -117,15 +134,15 @@ class pv_server:
 
             bend_rows: list[str] = []
             for element in bend_elements:
-                alias = self._resolve_vm_channel(element.id, "current_set")
+                alias = self._resolve_vm_writable_channel(element.id, element.kind, "angle")
                 if not alias:
                     continue
-                record = self._internal_record_name("BEND", element.id, "CURRENT_SET")
+                record = self._internal_record_name("BEND", element.id, "ANGLE")
                 bend_rows.append(f'  {{ "{element.id}", "{record}", "{alias}" }}')
             self._write_substitution_section(
                 handle,
                 "bend.template",
-                "BEND, RECORD, CURRENTALIAS",
+                "BEND, RECORD, ANGLEALIAS",
                 bend_rows,
             )
 
@@ -216,7 +233,7 @@ class pv_server:
 
             corr_rows: list[str] = []
             for element in corr_elements:
-                alias = self._resolve_vm_channel(element.id, "setpoint")
+                alias = self._resolve_vm_writable_channel(element.id, element.kind, "kick")
                 if not alias:
                     continue
                 set_record = self._internal_record_name("COR", element.id, "SET")
@@ -256,7 +273,11 @@ class pv_server:
                 continue
 
             for logical_channel, field_name in self._writable_channels_for_element(element.kind):
-                pv_name = self._resolve_vm_channel(element.id, logical_channel)
+                pv_name = self._resolve_vm_writable_channel(
+                    element.id,
+                    element.kind,
+                    logical_channel,
+                )
                 if not pv_name or field_name not in element_lattice:
                     continue
                 pvl.append(pv_name)

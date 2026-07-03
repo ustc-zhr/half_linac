@@ -52,6 +52,7 @@ from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     require_workflow_write_allowed,
     resolve_channel,
+    resolve_corrector_write_channel,
 )
 from half_linac.src.shared.machine_profile.runtime_selector import (
     default_control_backend_choices,
@@ -2216,7 +2217,7 @@ class myWindow(QWidget, Ui_Form):
             mode = self._profile_default_control_backend()
             self._require_family_control_backend(self.bba_workflow.standard, mode, "BBA-1")
             bpm_channel = self._bpm_logical_channel(params.plane)
-            params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", mode)
+            params.corrPV = resolve_corrector_write_channel(self.app_context, params.corr, mode)
             params.quadPV = resolve_channel(self.app_context, params.quad, "k1", mode)
             params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, mode)
             params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, mode)
@@ -2255,7 +2256,11 @@ class myWindow(QWidget, Ui_Form):
             self._require_family_control_backend(self.bba_workflow.bba2, params.control_backend, "BBA-2")
             bpm_channel = self._bpm_logical_channel(params.plane)
             params.quadPV = resolve_channel(self.app_context, params.quad, "k1", params.control_backend)
-            params.corrPV = resolve_channel(self.app_context, params.corr, "setpoint", params.control_backend)
+            params.corrPV = resolve_corrector_write_channel(
+                self.app_context,
+                params.corr,
+                params.control_backend,
+            )
             params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, params.control_backend)
             params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, params.control_backend)
 

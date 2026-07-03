@@ -11,7 +11,9 @@ from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     get_workflow,
+    resolve_bend_write_channel,
     resolve_channel,
+    resolve_corrector_write_channel,
     resolve_machine_runtime,
     resolve_virtual_machine_usedline_workflow,
 )
@@ -23,8 +25,8 @@ PREWATCH_FILENAME = "pre.bun"
 VM_PV_SYNC_CONNECTION_TIMEOUT_S = 0.5
 VM_WRITABLE_LATTICE_FIELD_BY_CHANNEL = {
     ("quad", "k1"): "K1",
-    ("corr", "setpoint"): "KICK",
-    ("bend", "current_set"): "ANGLE",
+    ("corr", "kick"): "KICK",
+    ("bend", "angle"): "ANGLE",
 }
 
 
@@ -318,7 +320,12 @@ def _collect_writable_vm_pvs(runtime, state: Mapping[str, Any]) -> tuple[list[st
             continue
 
         for logical_channel, field_name in _writable_channels_for_element_kind(element.kind):
-            pv_name = _resolve_vm_channel(runtime.profile, element.id, logical_channel)
+            pv_name = _resolve_vm_writable_channel(
+                runtime.profile,
+                element.id,
+                element.kind,
+                logical_channel,
+            )
             if not pv_name or field_name not in element_lattice:
                 continue
             pv_names.append(pv_name)
@@ -337,6 +344,22 @@ def _writable_channels_for_element_kind(kind: str) -> tuple[tuple[str, str], ...
 
 def _resolve_vm_channel(profile, element_id: str, logical_channel: str) -> str | None:
     try:
+        return resolve_channel(profile, element_id, logical_channel, "vm")
+    except MachineProfileError:
+        return None
+
+
+def _resolve_vm_writable_channel(
+    profile,
+    element_id: str,
+    element_kind: str,
+    logical_channel: str,
+) -> str | None:
+    try:
+        if element_kind == "corr" and logical_channel == "kick":
+            return resolve_corrector_write_channel(profile, element_id, "vm")
+        if element_kind == "bend" and logical_channel == "angle":
+            return resolve_bend_write_channel(profile, element_id, "vm")
         return resolve_channel(profile, element_id, logical_channel, "vm")
     except MachineProfileError:
         return None

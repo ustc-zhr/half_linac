@@ -29,6 +29,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     require_workflow_write_allowed,
     resolve_channel,
+    resolve_corrector_write_channel,
 )
 from half_linac.src.apps.solenoid_centering.profile_runtime import write_scan_result
 
@@ -332,8 +333,8 @@ class SolenoidCenteringScanner:
         self.stop_requested = stop_requested or (lambda: False)
         self.solenoid_pv = preset.solenoid_setpoint_pv
         self.solenoid_readback_pv = preset.solenoid_readback_pv
-        self.hcorr_pv = resolve_channel(app_context, preset.hcorr, "setpoint")
-        self.vcorr_pv = resolve_channel(app_context, preset.vcorr, "setpoint")
+        self.hcorr_pv = resolve_corrector_write_channel(app_context, preset.hcorr)
+        self.vcorr_pv = resolve_corrector_write_channel(app_context, preset.vcorr)
         self.bpm_x_pv = resolve_channel(app_context, preset.bpm, "x")
         self.bpm_y_pv = resolve_channel(app_context, preset.bpm, "y")
 
@@ -406,7 +407,7 @@ class SolenoidCenteringScanner:
         bpm_y = self.io.read(self.bpm_y_pv)
 
         range_checks: list[RangeCheck] = []
-        solenoid_element = self._find_setpoint_element(self.solenoid_pv)
+        solenoid_element = self._find_current_set_element(self.solenoid_pv)
         if solenoid_element is not None:
             range_checks.append(
                 self._build_range_check(
@@ -523,13 +524,13 @@ class SolenoidCenteringScanner:
         )
         return (float(center + low_delta), float(center + high_delta))
 
-    def _find_setpoint_element(self, pv_name: str) -> ElementConfig | None:
+    def _find_current_set_element(self, pv_name: str) -> ElementConfig | None:
         backend = self.app_context.control_backend.name
         for element in self.app_context.profile.elements:
-            setpoint_by_backend = element.channels.get("setpoint")
-            if setpoint_by_backend is None:
+            current_set_by_backend = element.channels.get("current_set") or element.channels.get("setpoint")
+            if current_set_by_backend is None:
                 continue
-            if setpoint_by_backend.get(backend) == pv_name:
+            if current_set_by_backend.get(backend) == pv_name:
                 return element
         return None
 

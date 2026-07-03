@@ -1,5 +1,5 @@
 record(ao, "$(RECORD)") {
-  alias("$(CURRENTALIAS)")
+  alias("$(ANGLEALIAS)")
   field(VAL, "0.0")
   field(DRVL, "-10.0")
   field(DRVH, "10.0")

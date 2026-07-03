@@ -174,280 +174,280 @@
       "y": "HALF:IN:BPM:BPM43:Y:ao"
     },
     "SM01-DX": {
-      "setpoint": "HALF:IN:COR:SM01-DX:ao"
+      "kick": "HALF:IN:COR:SM01-DX:ao"
     },
     "SM01-DY": {
-      "setpoint": "HALF:IN:COR:SM01-DY:ao"
+      "kick": "HALF:IN:COR:SM01-DY:ao"
     },
     "SL01-DX": {
-      "setpoint": "HALF:IN:COR:SL01-DX:ao"
+      "kick": "HALF:IN:COR:SL01-DX:ao"
     },
     "SL01-DY": {
-      "setpoint": "HALF:IN:COR:SL01-DY:ao"
+      "kick": "HALF:IN:COR:SL01-DY:ao"
     },
     "XC00": {
-      "setpoint": "HALF:IN:COR:XC00:ao"
+      "kick": "HALF:IN:COR:XC00:ao"
     },
     "XC01": {
-      "setpoint": "HALF:IN:COR:XC01:ao"
+      "kick": "HALF:IN:COR:XC01:ao"
     },
     "XC02": {
-      "setpoint": "HALF:IN:COR:XC02:ao"
+      "kick": "HALF:IN:COR:XC02:ao"
     },
     "XC03": {
-      "setpoint": "HALF:IN:COR:XC03:ao"
+      "kick": "HALF:IN:COR:XC03:ao"
     },
     "XC04": {
-      "setpoint": "HALF:IN:COR:XC04:ao"
+      "kick": "HALF:IN:COR:XC04:ao"
     },
     "XC05": {
-      "setpoint": "HALF:IN:COR:XC05:ao"
+      "kick": "HALF:IN:COR:XC05:ao"
     },
     "XC06": {
-      "setpoint": "HALF:IN:COR:XC06:ao"
+      "kick": "HALF:IN:COR:XC06:ao"
     },
     "XC07": {
-      "setpoint": "HALF:IN:COR:XC07:ao"
+      "kick": "HALF:IN:COR:XC07:ao"
     },
     "XC08": {
-      "setpoint": "HALF:IN:COR:XC08:ao"
+      "kick": "HALF:IN:COR:XC08:ao"
     },
     "XC09": {
-      "setpoint": "HALF:IN:COR:XC09:ao"
+      "kick": "HALF:IN:COR:XC09:ao"
     },
     "XC10": {
-      "setpoint": "HALF:IN:COR:XC10:ao"
+      "kick": "HALF:IN:COR:XC10:ao"
     },
     "XC11": {
-      "setpoint": "HALF:IN:COR:XC11:ao"
+      "kick": "HALF:IN:COR:XC11:ao"
     },
     "XC12": {
-      "setpoint": "HALF:IN:COR:XC12:ao"
+      "kick": "HALF:IN:COR:XC12:ao"
     },
     "XC13": {
-      "setpoint": "HALF:IN:COR:XC13:ao"
+      "kick": "HALF:IN:COR:XC13:ao"
     },
     "XC14": {
-      "setpoint": "HALF:IN:COR:XC14:ao"
+      "kick": "HALF:IN:COR:XC14:ao"
     },
     "XC15": {
-      "setpoint": "HALF:IN:COR:XC15:ao"
+      "kick": "HALF:IN:COR:XC15:ao"
     },
     "XC16": {
-      "setpoint": "HALF:IN:COR:XC16:ao"
+      "kick": "HALF:IN:COR:XC16:ao"
     },
     "XC17": {
-      "setpoint": "HALF:IN:COR:XC17:ao"
+      "kick": "HALF:IN:COR:XC17:ao"
     },
     "XC18": {
-      "setpoint": "HALF:IN:COR:XC18:ao"
+      "kick": "HALF:IN:COR:XC18:ao"
     },
     "XC19": {
-      "setpoint": "HALF:IN:COR:XC19:ao"
+      "kick": "HALF:IN:COR:XC19:ao"
     },
     "XC20": {
-      "setpoint": "HALF:IN:COR:XC20:ao"
+      "kick": "HALF:IN:COR:XC20:ao"
     },
     "XC21": {
-      "setpoint": "HALF:IN:COR:XC21:ao"
+      "kick": "HALF:IN:COR:XC21:ao"
     },
     "XC22": {
-      "setpoint": "HALF:IN:COR:XC22:ao"
+      "kick": "HALF:IN:COR:XC22:ao"
     },
     "XC23": {
-      "setpoint": "HALF:IN:COR:XC23:ao"
+      "kick": "HALF:IN:COR:XC23:ao"
     },
     "XC24": {
-      "setpoint": "HALF:IN:COR:XC24:ao"
+      "kick": "HALF:IN:COR:XC24:ao"
     },
     "XC25": {
-      "setpoint": "HALF:IN:COR:XC25:ao"
+      "kick": "HALF:IN:COR:XC25:ao"
     },
     "XC26": {
-      "setpoint": "HALF:IN:COR:XC26:ao"
+      "kick": "HALF:IN:COR:XC26:ao"
     },
     "XC27": {
-      "setpoint": "HALF:IN:COR:XC27:ao"
+      "kick": "HALF:IN:COR:XC27:ao"
     },
     "XC28": {
-      "setpoint": "HALF:IN:COR:XC28:ao"
+      "kick": "HALF:IN:COR:XC28:ao"
     },
     "XC29": {
-      "setpoint": "HALF:IN:COR:XC29:ao"
+      "kick": "HALF:IN:COR:XC29:ao"
     },
     "XC30": {
-      "setpoint": "HALF:IN:COR:XC30:ao"
+      "kick": "HALF:IN:COR:XC30:ao"
     },
     "XC31": {
-      "setpoint": "HALF:IN:COR:XC31:ao"
+      "kick": "HALF:IN:COR:XC31:ao"
     },
     "XC32": {
-      "setpoint": "HALF:IN:COR:XC32:ao"
+      "kick": "HALF:IN:COR:XC32:ao"
     },
     "XC33": {
-      "setpoint": "HALF:IN:COR:XC33:ao"
+      "kick": "HALF:IN:COR:XC33:ao"
     },
     "XC34": {
-      "setpoint": "HALF:IN:COR:XC34:ao"
+      "kick": "HALF:IN:COR:XC34:ao"
     },
     "XC35": {
-      "setpoint": "HALF:IN:COR:XC35:ao"
+      "kick": "HALF:IN:COR:XC35:ao"
     },
     "XC36": {
-      "setpoint": "HALF:IN:COR:XC36:ao"
+      "kick": "HALF:IN:COR:XC36:ao"
     },
     "XC37": {
-      "setpoint": "HALF:IN:COR:XC37:ao"
+      "kick": "HALF:IN:COR:XC37:ao"
     },
     "XC38": {
-      "setpoint": "HALF:IN:COR:XC38:ao"
+      "kick": "HALF:IN:COR:XC38:ao"
     },
     "XC39": {
-      "setpoint": "HALF:IN:COR:XC39:ao"
+      "kick": "HALF:IN:COR:XC39:ao"
     },
     "XC40": {
-      "setpoint": "HALF:IN:COR:XC40:ao"
+      "kick": "HALF:IN:COR:XC40:ao"
     },
     "XC41": {
-      "setpoint": "HALF:IN:COR:XC41:ao"
+      "kick": "HALF:IN:COR:XC41:ao"
     },
     "XC42": {
-      "setpoint": "HALF:IN:COR:XC42:ao"
+      "kick": "HALF:IN:COR:XC42:ao"
     },
     "XC43": {
-      "setpoint": "HALF:IN:COR:XC43:ao"
+      "kick": "HALF:IN:COR:XC43:ao"
     },
     "YC00": {
-      "setpoint": "HALF:IN:COR:YC00:ao"
+      "kick": "HALF:IN:COR:YC00:ao"
     },
     "YC01": {
-      "setpoint": "HALF:IN:COR:YC01:ao"
+      "kick": "HALF:IN:COR:YC01:ao"
     },
     "YC02": {
-      "setpoint": "HALF:IN:COR:YC02:ao"
+      "kick": "HALF:IN:COR:YC02:ao"
     },
     "YC03": {
-      "setpoint": "HALF:IN:COR:YC03:ao"
+      "kick": "HALF:IN:COR:YC03:ao"
     },
     "YC04": {
-      "setpoint": "HALF:IN:COR:YC04:ao"
+      "kick": "HALF:IN:COR:YC04:ao"
     },
     "YC05": {
-      "setpoint": "HALF:IN:COR:YC05:ao"
+      "kick": "HALF:IN:COR:YC05:ao"
     },
     "YC06": {
-      "setpoint": "HALF:IN:COR:YC06:ao"
+      "kick": "HALF:IN:COR:YC06:ao"
     },
     "YC07": {
-      "setpoint": "HALF:IN:COR:YC07:ao"
+      "kick": "HALF:IN:COR:YC07:ao"
     },
     "YC08": {
-      "setpoint": "HALF:IN:COR:YC08:ao"
+      "kick": "HALF:IN:COR:YC08:ao"
     },
     "YC09": {
-      "setpoint": "HALF:IN:COR:YC09:ao"
+      "kick": "HALF:IN:COR:YC09:ao"
     },
     "YC10": {
-      "setpoint": "HALF:IN:COR:YC10:ao"
+      "kick": "HALF:IN:COR:YC10:ao"
     },
     "YC11": {
-      "setpoint": "HALF:IN:COR:YC11:ao"
+      "kick": "HALF:IN:COR:YC11:ao"
     },
     "YC12": {
-      "setpoint": "HALF:IN:COR:YC12:ao"
+      "kick": "HALF:IN:COR:YC12:ao"
     },
     "YC13": {
-      "setpoint": "HALF:IN:COR:YC13:ao"
+      "kick": "HALF:IN:COR:YC13:ao"
     },
     "YC14": {
-      "setpoint": "HALF:IN:COR:YC14:ao"
+      "kick": "HALF:IN:COR:YC14:ao"
     },
     "YC15": {
-      "setpoint": "HALF:IN:COR:YC15:ao"
+      "kick": "HALF:IN:COR:YC15:ao"
     },
     "YC16": {
-      "setpoint": "HALF:IN:COR:YC16:ao"
+      "kick": "HALF:IN:COR:YC16:ao"
     },
     "YC17": {
-      "setpoint": "HALF:IN:COR:YC17:ao"
+      "kick": "HALF:IN:COR:YC17:ao"
     },
     "YC18": {
-      "setpoint": "HALF:IN:COR:YC18:ao"
+      "kick": "HALF:IN:COR:YC18:ao"
     },
     "YC19": {
-      "setpoint": "HALF:IN:COR:YC19:ao"
+      "kick": "HALF:IN:COR:YC19:ao"
     },
     "YC20": {
-      "setpoint": "HALF:IN:COR:YC20:ao"
+      "kick": "HALF:IN:COR:YC20:ao"
     },
     "YC21": {
-      "setpoint": "HALF:IN:COR:YC21:ao"
+      "kick": "HALF:IN:COR:YC21:ao"
     },
     "YC22": {
-      "setpoint": "HALF:IN:COR:YC22:ao"
+      "kick": "HALF:IN:COR:YC22:ao"
     },
     "YC23": {
-      "setpoint": "HALF:IN:COR:YC23:ao"
+      "kick": "HALF:IN:COR:YC23:ao"
     },
     "YC24": {
-      "setpoint": "HALF:IN:COR:YC24:ao"
+      "kick": "HALF:IN:COR:YC24:ao"
     },
     "YC25": {
-      "setpoint": "HALF:IN:COR:YC25:ao"
+      "kick": "HALF:IN:COR:YC25:ao"
     },
     "YC26": {
-      "setpoint": "HALF:IN:COR:YC26:ao"
+      "kick": "HALF:IN:COR:YC26:ao"
     },
     "YC27": {
-      "setpoint": "HALF:IN:COR:YC27:ao"
+      "kick": "HALF:IN:COR:YC27:ao"
     },
     "YC28": {
-      "setpoint": "HALF:IN:COR:YC28:ao"
+      "kick": "HALF:IN:COR:YC28:ao"
     },
     "YC29": {
-      "setpoint": "HALF:IN:COR:YC29:ao"
+      "kick": "HALF:IN:COR:YC29:ao"
     },
     "YC30": {
-      "setpoint": "HALF:IN:COR:YC30:ao"
+      "kick": "HALF:IN:COR:YC30:ao"
     },
     "YC31": {
-      "setpoint": "HALF:IN:COR:YC31:ao"
+      "kick": "HALF:IN:COR:YC31:ao"
     },
     "YC32": {
-      "setpoint": "HALF:IN:COR:YC32:ao"
+      "kick": "HALF:IN:COR:YC32:ao"
     },
     "YC33": {
-      "setpoint": "HALF:IN:COR:YC33:ao"
+      "kick": "HALF:IN:COR:YC33:ao"
     },
     "YC34": {
-      "setpoint": "HALF:IN:COR:YC34:ao"
+      "kick": "HALF:IN:COR:YC34:ao"
     },
     "YC35": {
-      "setpoint": "HALF:IN:COR:YC35:ao"
+      "kick": "HALF:IN:COR:YC35:ao"
     },
     "YC36": {
-      "setpoint": "HALF:IN:COR:YC36:ao"
+      "kick": "HALF:IN:COR:YC36:ao"
     },
     "YC37": {
-      "setpoint": "HALF:IN:COR:YC37:ao"
+      "kick": "HALF:IN:COR:YC37:ao"
     },
     "YC38": {
-      "setpoint": "HALF:IN:COR:YC38:ao"
+      "kick": "HALF:IN:COR:YC38:ao"
     },
     "YC39": {
-      "setpoint": "HALF:IN:COR:YC39:ao"
+      "kick": "HALF:IN:COR:YC39:ao"
     },
     "YC40": {
-      "setpoint": "HALF:IN:COR:YC40:ao"
+      "kick": "HALF:IN:COR:YC40:ao"
     },
     "YC41": {
-      "setpoint": "HALF:IN:COR:YC41:ao"
+      "kick": "HALF:IN:COR:YC41:ao"
     },
     "YC42": {
-      "setpoint": "HALF:IN:COR:YC42:ao"
+      "kick": "HALF:IN:COR:YC42:ao"
     },
     "YC43": {
-      "setpoint": "HALF:IN:COR:YC43:ao"
+      "kick": "HALF:IN:COR:YC43:ao"
     },
     "QL01": {
       "K1": "HALF:IN:AP:QUAD:QL01:K1:ao"
@@ -654,31 +654,31 @@
       "K1": "HALF:IN:AP:QUAD:QDU02:K1:ao"
     },
     "BL01A": {
-      "current_set": "HALF:IN:BEND:BL01A:current_set"
+      "angle": "HALF:IN:BEND:BL01A:angle"
     },
     "BL01B": {
-      "current_set": "HALF:IN:BEND:BL01B:current_set"
+      "angle": "HALF:IN:BEND:BL01B:angle"
     },
     "BH01": {
-      "current_set": "HALF:IN:BEND:BH01:current_set"
+      "angle": "HALF:IN:BEND:BH01:angle"
     },
     "BH02": {
-      "current_set": "HALF:IN:BEND:BH02:current_set"
+      "angle": "HALF:IN:BEND:BH02:angle"
     },
     "BH03": {
-      "current_set": "HALF:IN:BEND:BH03:current_set"
+      "angle": "HALF:IN:BEND:BH03:angle"
     },
     "BH04": {
-      "current_set": "HALF:IN:BEND:BH04:current_set"
+      "angle": "HALF:IN:BEND:BH04:angle"
     },
     "BV01": {
-      "current_set": "HALF:IN:BEND:BV01:current_set"
+      "angle": "HALF:IN:BEND:BV01:angle"
     },
     "BV02": {
-      "current_set": "HALF:IN:BEND:BV02:current_set"
+      "angle": "HALF:IN:BEND:BV02:angle"
     },
     "BENY": {
-      "current_set": "HALF:IN:ESA:PRF01:CurrentSet"
+      "angle": "HALF:IN:BEND:BENY:angle"
     },
     "PRF04": {
       "image": "HALF:IN:FLAG:PRF04:image1:ArrayData:vm",

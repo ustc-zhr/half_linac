@@ -5,15 +5,20 @@
   "twiss_target_element": "PRFESA",
   "flag_exposure_channel": "exposure_time",
   "flag_pixel_shape": {
-    "vm": [720, 270],
-    "real": [1440, 1080]
+    "vm": [
+      720,
+      270
+    ],
+    "real": [
+      1440,
+      1080
+    ]
   },
   "flag_pixel_width_mm": {
     "vm": 0.02,
     "real": 0.02
   },
   "bend_element": "BEND01",
-  "bend_channel": "current_set",
   "energy_set_pv": {
     "real": "TEMPLATE:REAL:ESA:ENERGY_SET"
   },
@@ -25,7 +30,11 @@
     "settle_time_s": 0.5,
     "restore_initial_on_failure": true
   },
-  "esa_quads": ["QE01", "QE02", "QE03"],
+  "esa_quads": [
+    "QE01",
+    "QE02",
+    "QE03"
+  ],
   "start_element_tag": "esa_start",
   "default_start_element": "Q01",
   "energy0_default_mev": 100,

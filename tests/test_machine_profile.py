@@ -36,6 +36,7 @@ from half_linac.src.shared.machine_profile import (
     load_solenoid_centering_workflow,
     real_commissioning_status,
     require_workflow_write_allowed,
+    resolve_bend_write_channel,
     resolve_channel,
     resolve_flag_pixel_geometry,
     resolve_machine_runtime,
@@ -372,8 +373,8 @@ class MachineProfileTests(unittest.TestCase):
             "HALF:IN:FLAG:PRF07:cam1:AcquireTime",
         )
         self.assertEqual(
-            resolve_channel(profile, "SM", "current_set", "vm"),
-            "HALF:IN:ESA:PRF01:CurrentSet",
+            resolve_bend_write_channel(profile, "BENY", "vm"),
+            "HALF:IN:BEND:BENY:angle",
         )
 
     def test_real_backend_uses_raw_machine_pv_naming(self):
@@ -1737,7 +1738,6 @@ class MachineProfileTests(unittest.TestCase):
             "flag_pixel_shape": {"real": [1440, 1080]},
             "flag_pixel_width_mm": {"real": 0.02},
             "bend_element": "SM",
-            "bend_channel": "current_set",
             "model_backend": "simulation",
             "bend_scan": {"min": 0, "max": 10, "coarse_steps": 2, "fine_steps": 2},
             "esa_quads": ["QE01", "QE02", "QE03"],
@@ -3087,7 +3087,6 @@ class MachineProfileTests(unittest.TestCase):
             "flag_pixel_shape": {"real": [1440, 1080]},
             "flag_pixel_width_mm": {"real": 0.02},
             "bend_element": "SM",
-            "bend_channel": "current_set",
             "model_backend": "simulation",
             "bend_scan": {"min": 0, "max": 10, "coarse_steps": 2, "fine_steps": 2},
             "esa_quads": ["QE01", "QE02", "QE03"],

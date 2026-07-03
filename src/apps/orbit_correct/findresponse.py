@@ -24,6 +24,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     require_workflow_write_allowed,
     resolve_channel,
+    resolve_corrector_write_channel,
 )
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     FINDRESPONSE_LOG_PATH,
@@ -213,11 +214,11 @@ class ResponseMatrixCalculator:
     def init_COR_pv(self) -> None:
         """Initialize corrector PV names."""
         self.pvCORx = [
-            resolve_channel(self.app_context, cor_id, "setpoint")
+            resolve_corrector_write_channel(self.app_context, cor_id)
             for cor_id in self.xcor_ids
         ]
         self.pvCORy = [
-            resolve_channel(self.app_context, cor_id, "setpoint")
+            resolve_corrector_write_channel(self.app_context, cor_id)
             for cor_id in self.ycor_ids
         ]
         logger.debug(f"Initialized {len(self.pvCORx)} COR X PVs")

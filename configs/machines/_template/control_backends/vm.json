@@ -10,10 +10,10 @@
       "y": "TEMPLATE:VM:BPM02:Y"
     },
     "XC01": {
-      "setpoint": "TEMPLATE:VM:XC01:SET"
+      "kick": "TEMPLATE:VM:XC01:SET"
     },
     "YC01": {
-      "setpoint": "TEMPLATE:VM:YC01:SET"
+      "kick": "TEMPLATE:VM:YC01:SET"
     },
     "Q01": {
       "K1": "TEMPLATE:VM:Q01:K1"
@@ -28,7 +28,7 @@
       "K1": "TEMPLATE:VM:QE03:K1"
     },
     "BEND01": {
-      "current_set": "TEMPLATE:VM:BEND01:CURRENT_SET"
+      "angle": "TEMPLATE:VM:BEND01:ANGLE"
     },
     "PRF01": {
       "image": "TEMPLATE:VM:PRF01:IMAGE",

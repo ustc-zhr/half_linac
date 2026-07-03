@@ -48,7 +48,9 @@
       ],
       "limits": {},
       "logical_channels": [
-        "setpoint"
+        "kick",
+        "current_set",
+        "current_readback"
       ]
     },
     {
@@ -62,7 +64,9 @@
       ],
       "limits": {},
       "logical_channels": [
-        "setpoint"
+        "kick",
+        "current_set",
+        "current_readback"
       ]
     },
     {
@@ -129,7 +133,9 @@
       ],
       "limits": {},
       "logical_channels": [
-        "current_set"
+        "angle",
+        "current_set",
+        "current_readback"
       ]
     },
     {
