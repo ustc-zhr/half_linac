@@ -47,6 +47,14 @@
             "conversion": {"type": "direct"}
           }
         },
+        "QT04": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
         "QL27": {
           "K1": {
             "logical_channel": "k1",

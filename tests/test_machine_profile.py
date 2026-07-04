@@ -314,6 +314,35 @@ class MachineProfileTests(unittest.TestCase):
             {"QM11": {"K1": -8.0}, "QM12": {"K1": 30.0}},
         )
 
+    def test_bba2_model_snapshot_fields_build_lattice_overrides(self):
+        half_context = load_app_context(
+            "bba",
+            machine_id="half",
+            control_backend="vm",
+        )
+        qt04_pv = resolve_channel(half_context, "QT04", "k1", "vm")
+        half_snapshot = build_model_snapshot(
+            half_context,
+            (("QT04", "K1"),),
+            pv_reader={qt04_pv: -3.5}.__getitem__,
+        )
+
+        self.assertEqual(half_snapshot.lattice_overrides, {"QT04": {"K1": -3.5}})
+
+        irfel_context = load_app_context(
+            "bba",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        qm04_pv = resolve_channel(irfel_context, "QM04", "k1", "vm")
+        irfel_snapshot = build_model_snapshot(
+            irfel_context,
+            (("QM04", "K1"),),
+            pv_reader={qm04_pv: -70.0}.__getitem__,
+        )
+
+        self.assertEqual(irfel_snapshot.lattice_overrides, {"QM04": {"K1": -70.0}})
+
     def test_model_snapshot_can_use_design_lattice_without_pv_read(self):
         context = load_app_context(
             "energy_spectrum",

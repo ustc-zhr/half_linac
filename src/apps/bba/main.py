@@ -1,6 +1,7 @@
 import json
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,7 @@ from gui import Ui_Form
 
 from half_linac.src.shared.machine_profile import (
     build_model_backend,
+    build_model_snapshot,
     describe_app_model_support,
     get_bba_preset,
     list_elements,
@@ -86,6 +88,24 @@ BBA2_TOOLTIP = (
     "BBA-2 fits BPM2 versus quad K1Leff and corrector kick, then reports "
     "the BPM1 reading at the quad center."
 )
+
+
+def _lattice_overrides_from_model_snapshot_metadata(metadata):
+    if not isinstance(metadata, Mapping):
+        return None
+    overrides = {}
+    fields = metadata.get("fields", [])
+    if not isinstance(fields, list):
+        return None
+    for field in fields:
+        if not isinstance(field, Mapping):
+            continue
+        element_id = str(field.get("element_id", "")).strip()
+        field_name = str(field.get("field_name", "")).strip()
+        if not element_id or not field_name or "value" not in field:
+            continue
+        overrides.setdefault(element_id, {})[field_name] = float(field["value"])
+    return overrides or None
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -507,6 +527,9 @@ class ScanParameters:
     bba2_recal_quad_points: list[tuple[float, float]] | None = None
     bba2_recal_bpm1_points: list[float] | None = None
     bba2_recal_corrector_points: list[tuple[float, float]] | None = None
+    model_snapshot_metadata: dict | None = None
+    model_lattice_overrides: dict | None = None
+    model_snapshot_error: str | None = None
     archive_dir: Path | None = None
 
 
@@ -2205,6 +2228,25 @@ class myWindow(QWidget, Ui_Form):
         if value < 0:
             raise ValueError(f"{field_name} must be non-negative.")
 
+    def _build_bba2_model_snapshot_metadata(self, params):
+        snapshot = build_model_snapshot(
+            self.app_context,
+            ((params.quad, "K1"),),
+        )
+        return snapshot.as_metadata()
+
+    def _prepare_bba2_model_snapshot(self, params):
+        try:
+            metadata = self._build_bba2_model_snapshot_metadata(params)
+        except MachineProfileError as exc:
+            params.model_snapshot_metadata = None
+            params.model_lattice_overrides = None
+            params.model_snapshot_error = str(exc)
+            return
+        params.model_snapshot_metadata = metadata
+        params.model_lattice_overrides = _lattice_overrides_from_model_snapshot_metadata(metadata)
+        params.model_snapshot_error = None
+
     def get_setting(self):
         try:
             params = ScanParameters()
@@ -2333,6 +2375,7 @@ class myWindow(QWidget, Ui_Form):
         self._clear_bba2_scan_points()
         params.recal = False
         self._apply_runtime_paths(params, "bba2")
+        self._prepare_bba2_model_snapshot(params)
         self.scan_mode = "scan"
         self.scan_family = "bba2"
         self._attach_scan(BBAScanThreadBBA2(params), self.display_bba2)
@@ -2389,6 +2432,7 @@ class myWindow(QWidget, Ui_Form):
         self.clearPlot_bba2()
         params.recal = True
         self._apply_runtime_paths(params, "bba2")
+        self._prepare_bba2_model_snapshot(params)
         if hasattr(self, "bba2_scan_points_table"):
             if all(len(rows) == 0 for rows in self.bba2_scan_points.values()):
                 self._load_latest_bba2_data_into_table()
@@ -3045,9 +3089,20 @@ class BBAScanThreadBBA2(BBABaseThread):
         self.params.quad_leff = float(analysis.get("quad_leff") or self.params.quad_leff)
         if initial.get("quad_k1") is not None:
             self.initial_quad_k1 = float(initial["quad_k1"])
+        model_snapshot = metadata.get("model_snapshot")
+        if isinstance(model_snapshot, Mapping):
+            self.params.model_snapshot_metadata = dict(model_snapshot)
+            self.params.model_lattice_overrides = _lattice_overrides_from_model_snapshot_metadata(
+                model_snapshot
+            )
+            self.params.model_snapshot_error = None
+        elif not self.params.model_snapshot_metadata:
+            model_snapshot_error = metadata.get("model_snapshot_error")
+            if isinstance(model_snapshot_error, str) and model_snapshot_error:
+                self.params.model_snapshot_error = model_snapshot_error
 
     def _metadata(self):
-        return {
+        metadata = {
             "family": "bba2",
             "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "machine": getattr(getattr(self.params.app_context, "machine", None), "id", None),
@@ -3100,6 +3155,11 @@ class BBAScanThreadBBA2(BBABaseThread):
                 "corrector_scan": "bba2_thetam2.txt",
             },
         }
+        if isinstance(self.params.model_snapshot_metadata, Mapping):
+            metadata["model_snapshot"] = dict(self.params.model_snapshot_metadata)
+        if self.params.model_snapshot_error:
+            metadata["model_snapshot_error"] = self.params.model_snapshot_error
+        return metadata
 
     def _perform_quad_scan(self, quad, bpm2, sign):
         k1_values = np.linspace(self.params.quad_from, self.params.quad_end, self.params.quad_steps)
@@ -3282,8 +3342,9 @@ class BBAScanThreadBBA2(BBABaseThread):
         else:
             raise RuntimeError("Plane should be X or Y.")
 
+        lattice_overrides = self.params.model_lattice_overrides
         overrides = None
-        if self.initial_quad_k1 is not None:
+        if lattice_overrides is None and self.initial_quad_k1 is not None:
             overrides = {self.params.quad: self.initial_quad_k1}
 
         try:
@@ -3293,6 +3354,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 row,
                 col,
                 element_overrides=overrides,
+                lattice_overrides=lattice_overrides,
             )
         except Exception as exc:
             self.model_r12_error = str(exc)
