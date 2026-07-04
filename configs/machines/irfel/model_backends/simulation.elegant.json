@@ -21,7 +21,7 @@
     "energy_log": "esa.log",
     "energy_dispersion_line_name": "ESAlocal",
     "energy_twiss_line_name": "ALL_ESA",
-    "snapshot": {
+    "snapshot_mapping": {
       "fields": {
         "QM19": {
           "K1": {

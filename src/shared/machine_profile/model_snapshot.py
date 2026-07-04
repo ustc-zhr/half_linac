@@ -405,14 +405,16 @@ def _snapshot_field_specs(app_context: AppContext) -> Mapping[str, Any]:
         raise MachineProfileError(
             f"AppContext for {app_context.app_name!r} does not define a model backend."
         )
-    snapshot = app_context.model_backend.config.get("snapshot")
-    if snapshot is None:
+    snapshot_mapping = app_context.model_backend.config.get("snapshot_mapping")
+    if snapshot_mapping is None:
+        snapshot_mapping = app_context.model_backend.config.get("snapshot")
+    if snapshot_mapping is None:
         return {}
-    if not isinstance(snapshot, Mapping):
-        raise MachineProfileError("model backend config.snapshot must be a mapping.")
-    fields = snapshot.get("fields", {})
+    if not isinstance(snapshot_mapping, Mapping):
+        raise MachineProfileError("model backend config.snapshot_mapping must be a mapping.")
+    fields = snapshot_mapping.get("fields", {})
     if not isinstance(fields, Mapping):
-        raise MachineProfileError("model backend config.snapshot.fields must be a mapping.")
+        raise MachineProfileError("model backend config.snapshot_mapping.fields must be a mapping.")
     return fields
 
 
@@ -427,7 +429,7 @@ def _find_snapshot_field_spec(
     if not isinstance(element_specs, Mapping):
         if required:
             raise MachineProfileError(
-                f"model backend snapshot is missing field mapping for {element_id}.{field_name}."
+                f"model backend snapshot_mapping is missing field mapping for {element_id}.{field_name}."
             )
         return {}
 
@@ -435,7 +437,7 @@ def _find_snapshot_field_spec(
     if not isinstance(field_spec, Mapping):
         if required:
             raise MachineProfileError(
-                f"model backend snapshot is missing field mapping for {element_id}.{field_name}."
+                f"model backend snapshot_mapping is missing field mapping for {element_id}.{field_name}."
             )
         return {}
     return field_spec

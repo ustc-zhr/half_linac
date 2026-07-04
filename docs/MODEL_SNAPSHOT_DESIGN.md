@@ -48,6 +48,17 @@ Snapshot values must be model-native. If a PV exposes current, the snapshot
 layer must convert current to the model field expected by elegant before the
 model backend sees it.
 
+The model backend configuration stores these rules under `snapshot_mapping`.
+This is a mapping definition, not a saved runtime snapshot. It declares how a
+requested model field such as `QE01.K1` is read from the selected control
+backend and converted to the lattice value used by elegant.
+
+Only fields requested by model-dependent workflows need to be listed. The
+current implementation intentionally maps a focused subset of elements used by
+`energy_spectrum`, `emit_measure`, and BBA model calculations. A complete
+machine-wide mapping is a later extension and should be generated or derived
+from machine profile metadata where possible, rather than duplicated by hand.
+
 Initial conversion types:
 
 - `direct`
@@ -90,13 +101,14 @@ This separation avoids hidden side effects:
 
 ## First Vertical Slice
 
-The first implementation should:
+The first implementation:
 
-1. Add field-level overrides to `ElegantModelBackend`.
-2. Add a shared `model_snapshot` module that reads configured fields and produces
+1. Added field-level overrides to `ElegantModelBackend`.
+2. Added a shared `model_snapshot` module that reads configured fields and produces
    both lattice overrides and metadata.
-3. Use snapshots in `energy_spectrum` for ESA quadrupole model fields.
-4. Keep `emit_measure`, BBA, and real-to-VM mirroring for later steps.
+3. Uses snapshots in `energy_spectrum`, `emit_measure`, and BBA-2 model R12
+   calculations.
+4. Keeps real-to-VM mirroring as a later debug-oriented feature.
 
 The second slice adds a stable saved snapshot JSON schema plus latest snapshot
 recording for `energy_spectrum` model calculations.
