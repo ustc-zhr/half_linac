@@ -47,6 +47,7 @@ class BeamModelBackend(Protocol):
         twiss0: Mapping[str, float],
         plane: str = "xplane",
         inverse: bool = False,
+        lattice_overrides: LatticeOverrides | None = None,
     ) -> Mapping[str, float]: ...
 
     def get_lattice_element(self, element_id: str) -> Mapping[str, str]: ...
@@ -95,6 +96,7 @@ class ElegantModelBackend:
         twiss0: Mapping[str, float],
         plane: str = "xplane",
         inverse: bool = False,
+        lattice_overrides: LatticeOverrides | None = None,
     ) -> Mapping[str, float]:
         id1, id2 = self._usedline_index_pair(quad1, quad2)
         if inverse:
@@ -103,14 +105,26 @@ class ElegantModelBackend:
                     "Backward Twiss transport requires From to be downstream of To. "
                     "Choose Forward or swap From/To."
                 )
-            mat = np.linalg.inv(self.get_map(quad2, quad1, seq="ent2exit"))
+            mat = np.linalg.inv(
+                self.get_map(
+                    quad2,
+                    quad1,
+                    lattice_overrides=lattice_overrides,
+                    seq="ent2exit",
+                )
+            )
         else:
             if id2 < id1:
                 raise MachineProfileError(
                     "Forward Twiss transport requires To to be downstream of From. "
                     "Choose Backward or swap From/To."
                 )
-            mat = self.get_map(quad1, quad2, seq="ent2exit")
+            mat = self.get_map(
+                quad1,
+                quad2,
+                lattice_overrides=lattice_overrides,
+                seq="ent2exit",
+            )
 
         if plane == "xplane":
             m11 = mat[0, 0]

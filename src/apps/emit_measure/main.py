@@ -2129,6 +2129,9 @@ class myWindow(QWidget,Ui_Form):
             record["scan_results_path"] = str(Path(self.loaded_scan_results_path))
         elif self.loaded_scan_metadata or self.pending_scan_metadata:
             record["scan_results_path"] = str(self._latest_scan_results_path())
+        model_snapshot = result.get("model_snapshot")
+        if isinstance(model_snapshot, Mapping):
+            record["model_snapshot"] = dict(model_snapshot)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
         return path
@@ -2785,6 +2788,16 @@ class myWindow(QWidget,Ui_Form):
         para["app_context"] = self.app_context
         para["from_element"] = para["quad1"]
         para["to_element"] = para["quad2"]
+        try:
+            model_snapshot = self._build_emit_model_snapshot_metadata()
+        except MachineProfileError as exc:
+            self.twiss_status_edit.setText("Model snapshot failed")
+            self._warn_twiss(str(exc))
+            return
+        para["model_snapshot_metadata"] = model_snapshot
+        para["model_lattice_overrides"] = self._lattice_overrides_from_model_snapshot_metadata(
+            model_snapshot
+        )
 
         self.latest_twiss_summary = {
             "status": "running",
@@ -3089,6 +3102,7 @@ class twissCalThread(QThread):
                 "from_element": self.input.get("from_element", quad1),
                 "to_element": self.input.get("to_element", quad2),
                 "energy_mev": self.input.get("EnergyMeV"),
+                "model_snapshot": self.input.get("model_snapshot_metadata"),
             }
 
             twiss0={}
@@ -3099,7 +3113,11 @@ class twissCalThread(QThread):
             plane = self.input["plane"]
             inverse = self.input["inverse_map"]
 
-            trans = transfer(self.input["EnergyMeV"], app_context=self.input["app_context"])
+            trans = transfer(
+                self.input["EnergyMeV"],
+                app_context=self.input["app_context"],
+                lattice_overrides=self.input.get("model_lattice_overrides"),
+            )
             if inverse:
                 matrix = np.linalg.inv(trans.get_map(quad2, quad1, seq="ent2exit"))
             else:
@@ -3632,6 +3650,7 @@ class transfer:
             twiss0,
             plane=plane,
             inverse=inverse,
+            lattice_overrides=self.lattice_overrides,
         )
 
     def get_map(self, elem1, elem2, k1=None, seq="exit2exit"):
