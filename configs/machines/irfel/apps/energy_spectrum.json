@@ -26,6 +26,10 @@
   "start_elements": ["QM12", "QM19"],
   "default_start_element": "QM12",
   "energy0_default_mev": 36,
+  "x_reference_mm": {
+    "vm": 0.0,
+    "real": 0.0
+  },
   "real_status": "commissioned",
   "write_control": {
     "vm": "allowed",

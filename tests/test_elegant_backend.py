@@ -217,6 +217,90 @@ class ElegantBackendTests(unittest.TestCase):
             self.assertNotIn("&error_element", emit_ele.read_text(encoding="utf-8"))
             self.assertNotIn("QT02", emit_lte.read_text(encoding="utf-8"))
 
+    def test_model_backend_applies_field_level_lattice_overrides(self):
+        class FakeSdds:
+            def __init__(self, _index):
+                self.columnData = [[[float(index)]] for index in range(48)]
+
+            def load(self, _path):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            elegant_dir = tmpdir_path / "elegant"
+            elegant_dir.mkdir()
+            source_lte = elegant_dir / "lattice_ini.lte"
+            emit_ini = elegant_dir / "emit_ini.ele"
+            emit_lte = elegant_dir / "emit.lte"
+            emit_ele = elegant_dir / "emit.ele"
+            emit_json = tmpdir_path / "emit.json"
+            emit_mat = elegant_dir / "emit.mat"
+
+            source_lte.write_text(
+                "\n".join(
+                    [
+                        "D0: DRIF,L=0.1",
+                        "QT02: QUAD,L=0.15,K1=2.5",
+                        "C1: HKICK,L=0,KICK=0.001",
+                        'PRF07: WATCH,FILENAME="PRF07.out",MODE="coord",DISABLE=0',
+                        "ALL_MAIN: LINE = (D0,QT02,C1,PRF07)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            emit_ini.write_text(
+                "\n".join(
+                    [
+                        "&run_setup",
+                        "    lattice = emit_ini.lte,",
+                        "    use_beamline = ALL_MAIN,",
+                        "&end",
+                        "&run_control",
+                        "    n_steps = 1,",
+                        "&end",
+                        "&matrix_output",
+                        "    SDDS_output = %s.mat,",
+                        "&end",
+                        "&track &end",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            backend = ElegantModelBackend(
+                ModelBackendConfig(
+                    name="simulation",
+                    engine="elegant",
+                    config={
+                        "working_dir": str(elegant_dir),
+                        "source_json": str(tmpdir_path / "runtime.json"),
+                        "source_lattice": str(source_lte),
+                        "emit_ini_ele": str(emit_ini),
+                        "emit_lte": str(emit_lte),
+                        "emit_ele": str(emit_ele),
+                        "emit_json": str(emit_json),
+                        "emit_mat": str(emit_mat),
+                        "emit_log": "emit.log",
+                        "line_name": "ALL_MAIN",
+                    },
+                )
+            )
+
+            with patch(
+                "half_linac.src.shared.machine_profile.model_backend.run_elegant_input",
+            ), patch("half_linac.src.shared.machine_profile.model_backend.sdds.SDDS", FakeSdds):
+                backend.get_map(
+                    "D0",
+                    "PRF07",
+                    lattice_overrides={
+                        "QT02": {"K1": 9.5},
+                        "C1": {"KICK": 0.004},
+                    },
+                )
+
+            emit_lte_text = emit_lte.read_text(encoding="utf-8")
+            self.assertIn('QT02: QUAD,L="0.15",K1="9.5"', emit_lte_text)
+            self.assertIn('C1: HKICK,L="0",KICK="0.004"', emit_lte_text)
+
     def test_lattice_usedline_helper_expands_irfel_main_and_esa_lines(self):
         runtime = resolve_machine_runtime("irfel")
         state = read_runtime_state(runtime.vm.runtime_json)
@@ -519,7 +603,7 @@ class ElegantBackendTests(unittest.TestCase):
         source = (REPO_ROOT / "src/softIOC/pv_server.py").read_text(encoding="utf-8")
         self.assertIn('_resolve_vm_writable_channel(element.id, element.kind, "angle")', source)
         self.assertIn("ANGLEALIAS", source)
-        self.assertNotIn('_resolve_vm_writable_channel(element.id, element.kind, "kick")', source)
+        self.assertNotIn('"VMIOC:BEND:{element.id}:KICK"', source)
 
     def test_half_vm_helper_scripts_use_runtime_resolver_for_paths(self):
         helper_paths = [

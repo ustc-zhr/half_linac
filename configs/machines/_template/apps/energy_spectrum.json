@@ -38,6 +38,10 @@
   "start_element_tag": "esa_start",
   "default_start_element": "Q01",
   "energy0_default_mev": 100,
+  "x_reference_mm": {
+    "vm": 0.0,
+    "real": 0.0
+  },
   "energy_from_bend_current": {
     "magnet_length_m": 2.7271,
     "deflect_angle_rad": 0.4363323129985824,

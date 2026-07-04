@@ -32,6 +32,7 @@ jitterfile_*.txt
 configs/machines/half/other/
 src/apps/orbit_correct/runtime/
 src/apps/bba/runtime/
+src/apps/energy_spectrum/runtime/
 src/apps/emit_measure/scanResults.txt
 src/apps/emit_measure/scanResults.meta.json
 src/apps/emit_measure/runtime/

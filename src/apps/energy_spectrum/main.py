@@ -46,16 +46,21 @@ from PyQt5.QtWidgets import (
 from gui import Ui_MainWindow
 from half_linac.src.apps.energy_spectrum.get_energy0 import get_energy0
 from half_linac.src.apps.energy_spectrum.esa_auto_tuner import ESA_AutoTuner
+from half_linac.src.apps.energy_spectrum.profile_runtime import (
+    resolve_energy_spectrum_runtime_paths,
+)
 from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.elegant_runtime import run_elegant_input
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
+    build_model_snapshot,
     get_workflow,
     list_elements,
     load_app_context,
     require_workflow_write_allowed,
     resolve_bend_write_channel,
     resolve_channel,
+    save_model_snapshot,
     workflow_writes_allowed,
 )
 # 会使用到VM计算η和twiss (不具有一般性)
@@ -64,9 +69,6 @@ from half_linac.src.shared.machine_profile import (
 HEADER_ACTION_HEIGHT = 32
 DEFAULT_DESIGN_ETA = 0.7484210850804714  # [m]
 
-
-class ESAQuadK1Error(RuntimeError):
-    """Raised when an ESA quadrupole K1 PV cannot provide a usable model value."""
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -590,6 +592,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
         self.energy_config = self._load_energy_spectrum_config()
+        self.x_reference_mm = self._load_x_reference_mm()
         self._pv_available = False
         self._pv_error = None
         self._model_error = None
@@ -607,10 +610,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.start_elements = self._build_start_elements()
         self.energy_set_pv = self._load_energy_set_pv()
         self.esa_quad_ids = tuple(self.energy_config["esa_quads"])
-        self.esa_quad_pvs = {
-            element_id: resolve_channel(self.app_context, element_id, "k1")
-            for element_id in self.esa_quad_ids
-        }
         self.pushButton_sample_bg = self.pushButton_sapmles
         self.bend_pv = resolve_bend_write_channel(
             self.app_context,
@@ -633,6 +632,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.sigy = None
         self.bg_image = None
         self.auto_tune_thread = None
+        self.latest_model_snapshot_metadata = None
+        self.latest_model_snapshot_path = None
 
         self._configure_window()
 
@@ -761,6 +762,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         text = str(raw_value).strip()
         return text or None
 
+    def _load_x_reference_mm(self):
+        raw_value = self.energy_config.get("x_reference_mm", 0.0)
+        if isinstance(raw_value, dict):
+            raw_value = self._resolve_mode_mapping(
+                raw_value,
+                self.control_backend,
+                "workflows.energy_spectrum.x_reference_mm",
+            )
+        try:
+            return float(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.x_reference_mm must be numeric."
+            ) from exc
+
     @staticmethod
     def _resolve_mode_mapping(mapping, mode, location):
         if not isinstance(mapping, dict):
@@ -808,22 +824,64 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             tooltip,
         )
 
-    def _get_esa_quad_k1_values(self):
-        values = {}
-        for element_id, pv_name in self.esa_quad_pvs.items():
-            raw_value = caget(pv_name)
-            if raw_value is None:
-                raise ESAQuadK1Error(f"{element_id} K1 PV {pv_name} returned no value.")
-            try:
-                value = float(raw_value)
-            except (TypeError, ValueError) as exc:
-                raise ESAQuadK1Error(
-                    f"{element_id} K1 PV {pv_name} returned non-numeric value {raw_value!r}."
-                ) from exc
-            if not math.isfinite(value):
-                raise ESAQuadK1Error(f"{element_id} K1 PV {pv_name} returned invalid value {raw_value!r}.")
-            values[element_id] = value
-        return values
+    def _esa_quad_model_fields(self):
+        return tuple((element_id, "K1") for element_id in self.esa_quad_ids)
+
+    def _build_esa_quad_model_snapshot(self):
+        snapshot = build_model_snapshot(self.app_context, self._esa_quad_model_fields())
+        self.latest_model_snapshot_metadata = snapshot.as_metadata()
+        self._save_latest_model_snapshot(snapshot)
+        return snapshot
+
+    def _save_latest_model_snapshot(self, snapshot):
+        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        try:
+            self.latest_model_snapshot_path = save_model_snapshot(
+                snapshot,
+                paths["model_snapshot_path"],
+                extra_metadata={
+                    "app": self.app_context.app_name,
+                    "calculation": "energy_spectrum_esa",
+                    "x_reference_mm": self.x_reference_mm,
+                },
+            )
+        except MachineProfileError as exc:
+            if isinstance(self.latest_model_snapshot_metadata, dict):
+                self.latest_model_snapshot_metadata["save_error"] = str(exc)
+            print(f"Warning: {exc}")
+
+    def _snapshot_status_label(self, snapshot):
+        labels = {
+            "live_from_vm": "VM snap",
+            "live_from_real": "Real snap",
+            "saved": "Saved snap",
+            "design": "Design",
+        }
+        return labels.get(snapshot.source, str(snapshot.source))
+
+    def _snapshot_status_tooltip(self, snapshot):
+        lines = [f"Model snapshot source: {snapshot.source}"]
+        if snapshot.origin_source:
+            lines.append(f"Origin source: {snapshot.origin_source}")
+        if self.latest_model_snapshot_path is not None:
+            lines.append(f"Saved snapshot: {self.latest_model_snapshot_path}")
+        for field in snapshot.fields:
+            pv_text = f" from {field.source_pv}" if field.source_pv else ""
+            lines.append(f"{field.element_id}.{field.field_name} = {field.value:g}{pv_text}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _apply_lattice_overrides(lattice, lattice_overrides):
+        for element_id, field_overrides in lattice_overrides.items():
+            if element_id not in lattice:
+                raise MachineProfileError(f"Model lattice does not define element {element_id!r}.")
+            element = lattice[element_id]
+            for field_name, value in field_overrides.items():
+                if field_name not in element:
+                    raise MachineProfileError(
+                        f"Model lattice element {element_id!r} does not define field {field_name!r}."
+                    )
+                element[field_name] = str(value)
 
     def _twiss_target_element(self):
         """Return the model element where ESA optics/readout values are reported."""
@@ -1840,9 +1898,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._refresh_status()
             return
 
-        # energy_center and energy_spread calculation and display 
-        energy_center = energy0 * (self.meanx - 0)*1e-3 / self.eta_flag + energy0 # MeV
-        energy_all = [energy0 * (xi - 0)*1e-3 / self.eta_flag + energy0 for xi in x]
+        # energy_center and energy_spread calculation and display
+        dx_center_m = (self.meanx - self.x_reference_mm) * 1e-3
+        energy_center = energy0 * dx_center_m / self.eta_flag + energy0 # MeV
+        energy_all = [
+            energy0 * (xi - self.x_reference_mm) * 1e-3 / self.eta_flag + energy0
+            for xi in x
+        ]
 
         if self.with_emit and (self.beta_flag <= 0 or self.emi_flag <= 0):
             message = "Include emit is enabled, but optics/emittance at the ESA flag are not available."
@@ -1907,7 +1969,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             # 根据ESA的弯铁SM(L, angle)和Q铁QE01 QE02 QE03(k,L) 漂移段(L)参数计算eta    变量仅为Q_k
             # 采用elegant计算
 
-            quad_k1_values = self._get_esa_quad_k1_values()
+            snapshot = self._build_esa_quad_model_snapshot()
 
             #
             lattice_file = self._energy_model_path("source_lattice")
@@ -1934,8 +1996,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             lattice  = lte["lattice"]
 
             contl['run_setup']['lattice'] = esa_lte_file.name
-            for element_id, k_value in quad_k1_values.items():
-                lattice[element_id]['K1'] = str(k_value)
+            self._apply_lattice_overrides(lattice, snapshot.lattice_overrides)
 
             lte["control"]  = contl
             lte["lattice"]  = lattice
@@ -1960,11 +2021,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
             self.eta_flag = Rj[0, -1] 
             print('dispersion of ESA updates: ',self.eta_flag, 'm')
-            self._update_model_status(f"eta {self.eta_flag:.4f} m, K1 from PV", "success")
+            self._update_model_status(
+                f"{self._snapshot_status_label(snapshot)} eta {self.eta_flag:.4f} m",
+                "success",
+                self._snapshot_status_tooltip(snapshot),
+            )
         
-        except ESAQuadK1Error as e:
+        except MachineProfileError as e:
             print(f"Error in cal_disp: {e}")
-            self._update_model_status("K1 PV invalid", "warning", str(e))
+            self._update_model_status("Snapshot invalid", "warning", str(e))
             self._refresh_status()
             return
         except Exception as e:
@@ -1991,10 +2056,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         emi_in = self.doubleSpinBox_emi_in.value()*1e-9 # m  ~43nm@QT02
         start_element = self.comboBox_start_element.currentText() 
         try:
-            quad_k1_values = self._get_esa_quad_k1_values()
-        except ESAQuadK1Error as e:
+            snapshot = self._build_esa_quad_model_snapshot()
+        except MachineProfileError as e:
             print(f"Error in cal_twiss_disp: {e}")
-            self._update_model_status("K1 PV invalid", "warning", str(e))
+            self._update_model_status("Snapshot invalid", "warning", str(e))
             self._refresh_status()
             return
 
@@ -2032,8 +2097,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             lattice  = lte["lattice"]
             usedline = lte["usedline"]
 
-            for element_id, k_value in quad_k1_values.items():
-                lattice[element_id]['K1'] = str(k_value)
+            self._apply_lattice_overrides(lattice, snapshot.lattice_overrides)
 
             contl['run_setup']['lattice'] = esa_lte_file.name
             contl['twiss_output']['beta_x'] = str(beta_in)
@@ -2091,7 +2155,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.lineEdit_beta_ESAflag.setText(str(round(self.beta_flag,5)))
         # self.lineEdit_emi_ESAflag.setText(str(self.emi_flag*1e9))
         self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag,5)))
-        self._update_model_status(f"@ {self._twiss_target_element()} eta {self.eta_flag:.4f} m, K1 from PV", "success")
+        self._update_model_status(
+            f"{self._snapshot_status_label(snapshot)} eta {self.eta_flag:.4f} m",
+            "success",
+            self._snapshot_status_tooltip(snapshot),
+        )
         self._refresh_status()
 
     def emit_withornot(self, state):

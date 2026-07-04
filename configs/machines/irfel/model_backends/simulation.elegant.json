@@ -20,6 +20,26 @@
     "energy_twi_file": "src/virtual_machine/irfel_elegant/elegant/esa.twi",
     "energy_log": "esa.log",
     "energy_dispersion_line_name": "ESAlocal",
-    "energy_twiss_line_name": "ALL_ESA"
+    "energy_twiss_line_name": "ALL_ESA",
+    "snapshot": {
+      "fields": {
+        "QM19": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM20": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        }
+      }
+    }
   }
 }

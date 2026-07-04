@@ -13,6 +13,9 @@ from half_linac.src.shared.elegant_runtime import run_elegant_input
 from .models import AppContext, MachineProfileError, ModelBackendConfig
 
 
+LatticeOverrides = Mapping[str, Mapping[str, float | int | str]]
+
+
 class BeamModelBackend(Protocol):
     def get_map(
         self,
@@ -20,6 +23,7 @@ class BeamModelBackend(Protocol):
         elem2: str,
         k1: float | None = None,
         element_overrides: Mapping[str, float] | None = None,
+        lattice_overrides: LatticeOverrides | None = None,
         seq: str = "exit2exit",
     ) -> np.ndarray: ...
 
@@ -32,6 +36,7 @@ class BeamModelBackend(Protocol):
         *,
         k1: float | None = None,
         element_overrides: Mapping[str, float] | None = None,
+        lattice_overrides: LatticeOverrides | None = None,
         seq: str = "exit2exit",
     ) -> float: ...
 
@@ -140,6 +145,7 @@ class ElegantModelBackend:
         elem2: str,
         k1: float | None = None,
         element_overrides: Mapping[str, float] | None = None,
+        lattice_overrides: LatticeOverrides | None = None,
         seq: str = "exit2exit",
     ) -> np.ndarray:
         parser = self._new_parser()
@@ -150,22 +156,6 @@ class ElegantModelBackend:
         control = lte["control"]
         lattice = lte["lattice"]
         usedline = lte["usedline"]
-
-        overrides = dict(element_overrides or {})
-        if k1 is not None:
-            overrides[elem1] = k1
-        for element_id, override in overrides.items():
-            try:
-                element = lattice[element_id]
-            except KeyError as exc:
-                raise MachineProfileError(
-                    f"Model backend override references unknown element {element_id!r}."
-                ) from exc
-            if "K1" not in element:
-                raise MachineProfileError(
-                    f"Element {element_id!r} does not support K1 override in the model backend."
-                )
-            element["K1"] = str(float(override))
 
         try:
             id1 = usedline.index(elem1)
@@ -210,6 +200,14 @@ class ElegantModelBackend:
             ):
                 lattice[elem]["DISABLE"] = "1"
 
+        normalized_overrides = _normalize_lattice_overrides(
+            lattice_overrides,
+            element_overrides=element_overrides,
+            k1_element=elem1 if k1 is not None else None,
+            k1=k1,
+        )
+        _apply_lattice_overrides(lattice, normalized_overrides)
+
         control["run_setup"]["lattice"] = self.emit_lte.name
         lte["control"] = control
         lte["lattice"] = lattice
@@ -239,6 +237,7 @@ class ElegantModelBackend:
         *,
         k1: float | None = None,
         element_overrides: Mapping[str, float] | None = None,
+        lattice_overrides: LatticeOverrides | None = None,
         seq: str = "exit2exit",
     ) -> float:
         matrix = self.get_map(
@@ -246,6 +245,7 @@ class ElegantModelBackend:
             elem2,
             k1=k1,
             element_overrides=element_overrides,
+            lattice_overrides=lattice_overrides,
             seq=seq,
         )
         return float(matrix[row, col])
@@ -300,3 +300,45 @@ def _require_config(config: Mapping[str, object], key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise MachineProfileError(f"Model backend config is missing {key!r}.")
     return value.strip()
+
+
+def _normalize_lattice_overrides(
+    lattice_overrides: LatticeOverrides | None,
+    *,
+    element_overrides: Mapping[str, float] | None,
+    k1_element: str | None,
+    k1: float | None,
+) -> dict[str, dict[str, float | int | str]]:
+    normalized: dict[str, dict[str, float | int | str]] = {
+        str(element_id): {str(field_name): value for field_name, value in fields.items()}
+        for element_id, fields in (lattice_overrides or {}).items()
+    }
+
+    for element_id, override in (element_overrides or {}).items():
+        normalized.setdefault(str(element_id), {})["K1"] = override
+
+    if k1_element is not None and k1 is not None:
+        normalized.setdefault(k1_element, {})["K1"] = k1
+
+    return normalized
+
+
+def _apply_lattice_overrides(
+    lattice: dict[str, dict[str, str]],
+    overrides: Mapping[str, Mapping[str, float | int | str]],
+) -> None:
+    for element_id, field_overrides in overrides.items():
+        try:
+            element = lattice[element_id]
+        except KeyError as exc:
+            raise MachineProfileError(
+                f"Model backend override references unknown element {element_id!r}."
+            ) from exc
+
+        for field_name, value in field_overrides.items():
+            if field_name not in element:
+                raise MachineProfileError(
+                    f"Element {element_id!r} does not support {field_name!r} override "
+                    "in the model backend."
+                )
+            element[field_name] = str(float(value))

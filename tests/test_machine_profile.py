@@ -21,10 +21,13 @@ from half_linac.src.shared.machine_profile import (
     MachineProfile,
     MachineProfileError,
     MachineValidationReport,
+    REAL_STATUS_COMMISSIONED,
     REAL_STATUS_NOT_SUPPORTED,
     REAL_STATUS_READ_ONLY,
     REAL_STATUS_WRITE_BLOCKED,
+    apply_snapshot_conversion,
     build_model_backend,
+    build_model_snapshot,
     describe_app_model_support,
     describe_app_support,
     get_bba_preset,
@@ -32,6 +35,7 @@ from half_linac.src.shared.machine_profile import (
     get_workflow,
     list_elements,
     load_app_context,
+    load_model_snapshot,
     load_profile,
     load_solenoid_centering_workflow,
     real_commissioning_status,
@@ -42,8 +46,12 @@ from half_linac.src.shared.machine_profile import (
     resolve_machine_runtime,
     resolve_virtual_machine_segment_choices,
     resolve_virtual_machine_usedline_workflow,
+    save_model_snapshot,
     validate_machine_profile,
     workflow_writes_allowed,
+)
+from half_linac.src.apps.energy_spectrum.profile_runtime import (
+    resolve_energy_spectrum_runtime_paths,
 )
 from half_linac.src.shared.machine_profile.loader import (
     load_bba_workflow,
@@ -109,6 +117,7 @@ class MachineProfileTests(unittest.TestCase):
             REPO_ROOT / "src/apps/emit_measure/test.py",
             REPO_ROOT / "src/apps/energy_spectrum/main.py",
             REPO_ROOT / "src/apps/energy_spectrum/get_energy0.py",
+            REPO_ROOT / "src/apps/energy_spectrum/profile_runtime.py",
             REPO_ROOT / "src/shared/elegant_backend/parser.py",
             REPO_ROOT / "src/shared/elegant_backend/publisher.py",
             REPO_ROOT / "src/shared/elegant_runtime.py",
@@ -212,6 +221,154 @@ class MachineProfileTests(unittest.TestCase):
         supported, reason = describe_app_model_support("half", "orbit_correct")
         self.assertTrue(supported)
         self.assertIsNone(reason)
+
+    def test_model_snapshot_reads_live_pv_and_builds_lattice_overrides(self):
+        context = load_app_context(
+            "energy_spectrum",
+            machine_id="half",
+            control_backend="vm",
+        )
+        qe01_pv = resolve_channel(context, "QE01", "k1", "vm")
+
+        snapshot = build_model_snapshot(
+            context,
+            (("QE01", "K1"),),
+            pv_reader=lambda pv_name: 1.75 if pv_name == qe01_pv else None,
+        )
+
+        self.assertEqual(snapshot.source, "live_from_vm")
+        self.assertEqual(snapshot.lattice_overrides, {"QE01": {"K1": 1.75}})
+        metadata = snapshot.as_metadata()
+        self.assertEqual(metadata["fields"][0]["source_pv"], qe01_pv)
+        self.assertEqual(metadata["fields"][0]["conversion"], {"type": "direct"})
+
+    def test_model_snapshot_conversion_helpers(self):
+        self.assertEqual(apply_snapshot_conversion(2.0, {"type": "direct"}), 2.0)
+        self.assertEqual(
+            apply_snapshot_conversion(
+                2.0,
+                {"type": "scale_offset", "scale": 3.0, "offset": -1.0},
+            ),
+            5.0,
+        )
+        self.assertEqual(
+            apply_snapshot_conversion(
+                2.0,
+                {"type": "polynomial", "coefficients": [1.0, 2.0, 3.0]},
+            ),
+            17.0,
+        )
+
+    def test_model_snapshot_requires_live_mapping_for_requested_field(self):
+        context = load_app_context(
+            "energy_spectrum",
+            machine_id="irfel",
+            control_backend="real",
+        )
+
+        with self.assertRaisesRegex(MachineProfileError, "QM01.K1"):
+            build_model_snapshot(
+                context,
+                (("QM01", "K1"),),
+                pv_reader=lambda _pv_name: 1.0,
+            )
+
+    def test_model_snapshot_can_use_design_lattice_without_pv_read(self):
+        context = load_app_context(
+            "energy_spectrum",
+            machine_id="half",
+            control_backend="vm",
+        )
+        snapshot = build_model_snapshot(
+            context,
+            (("QE01", "K1"),),
+            source="design",
+            pv_reader=lambda _pv_name: self.fail("design snapshot must not read PVs"),
+        )
+
+        self.assertEqual(snapshot.source, "design")
+        self.assertIn("QE01", snapshot.lattice_overrides)
+        self.assertIn("K1", snapshot.lattice_overrides["QE01"])
+        self.assertIsNone(snapshot.fields[0].source_pv)
+
+    def test_model_snapshot_can_round_trip_through_saved_file(self):
+        context = load_app_context(
+            "energy_spectrum",
+            machine_id="half",
+            control_backend="vm",
+        )
+        qe01_pv = resolve_channel(context, "QE01", "k1", "vm")
+        qe02_pv = resolve_channel(context, "QE02", "k1", "vm")
+        values = {qe01_pv: 1.75, qe02_pv: -2.5}
+        snapshot = build_model_snapshot(
+            context,
+            (("QE01", "K1"), ("QE02", "K1")),
+            pv_reader=values.__getitem__,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            snapshot_path = Path(temp_dir) / "snapshot.json"
+            saved_path = save_model_snapshot(
+                snapshot,
+                snapshot_path,
+                extra_metadata={"app": "energy_spectrum"},
+            )
+            saved = load_model_snapshot(
+                saved_path,
+                requested_fields=(("QE02", "K1"),),
+                app_context=context,
+            )
+            rebuilt = build_model_snapshot(
+                context,
+                (("QE02", "K1"),),
+                source="saved",
+                saved_snapshot_path=saved_path,
+                pv_reader=lambda _pv_name: self.fail("saved snapshot must not read PVs"),
+            )
+
+            raw = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(saved.source, "saved")
+        self.assertEqual(saved.origin_source, "live_from_vm")
+        self.assertEqual(saved.lattice_overrides, {"QE02": {"K1": -2.5}})
+        self.assertEqual(rebuilt.lattice_overrides, {"QE02": {"K1": -2.5}})
+        self.assertEqual(raw["schema_version"], "1")
+        self.assertEqual(raw["extra_metadata"]["app"], "energy_spectrum")
+
+    def test_saved_model_snapshot_rejects_machine_mismatch(self):
+        context = load_app_context(
+            "energy_spectrum",
+            machine_id="half",
+            control_backend="vm",
+        )
+        irfel_context = load_app_context(
+            "energy_spectrum",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        qe01_pv = resolve_channel(context, "QE01", "k1", "vm")
+        snapshot = build_model_snapshot(
+            context,
+            (("QE01", "K1"),),
+            pv_reader=lambda pv_name: 1.75 if pv_name == qe01_pv else None,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            snapshot_path = save_model_snapshot(snapshot, Path(temp_dir) / "snapshot.json")
+            with self.assertRaisesRegex(MachineProfileError, "machine mismatch"):
+                load_model_snapshot(snapshot_path, app_context=irfel_context)
+
+    def test_energy_spectrum_runtime_paths_include_latest_model_snapshot(self):
+        context = load_app_context(
+            "energy_spectrum",
+            machine_id="half",
+            control_backend="vm",
+        )
+        paths = resolve_energy_spectrum_runtime_paths(context)
+
+        self.assertTrue(str(paths["runtime_dir"]).endswith("src/apps/energy_spectrum/runtime/half/vm"))
+        self.assertEqual(paths["latest_dir"], paths["runtime_dir"] / "latest")
+        self.assertEqual(paths["model_snapshot_path"], paths["latest_dir"] / "latest_model_snapshot.json")
 
     def test_half_beam_monitor_workflow_keeps_backend_image_geometry(self):
         profile = load_profile("half")
@@ -347,7 +504,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsNotNone(context.emit_measure_workflow)
         self.assertIsNotNone(context.model_backend)
         assert context.emit_measure_workflow is not None
-        self.assertEqual(context.emit_measure_workflow.default_preset, "emit_ql27_prf06")
+        self.assertEqual(context.emit_measure_workflow.default_preset, "emit_qt02_prf07")
         self.assertEqual(context.emit_measure_workflow.twiss_quads, ())
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
@@ -492,8 +649,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(preset.family, "bba2")
         self.assertIsNone(preset.mode)
         self.assertEqual(preset.energy_mev, 2200)
-        self.assertEqual(preset.corr, "XC21")
-        self.assertEqual(preset.scan["quad_from"], -3)
+        self.assertEqual(preset.corr, "XC22")
+        self.assertEqual(preset.scan["quad_from"], -5)
         self.assertEqual(preset.analysis["energy_mev"], 2200)
         self.assertEqual(preset.analysis["bpm1_samples"], 1)
         self.assertEqual(preset.analysis.leff_by, 0.058287)
@@ -502,11 +659,11 @@ class MachineProfileTests(unittest.TestCase):
     def test_context_preset_helpers_support_default_emit_preset(self):
         emit_context = load_app_context("emit_measure")
         preset = get_emit_preset(emit_context)
-        self.assertEqual(preset.quad, "QL27")
-        self.assertEqual(preset.flag, "PRF06")
+        self.assertEqual(preset.quad, "QT02")
+        self.assertEqual(preset.flag, "PRF07")
         self.assertEqual(preset.energy_mev, 2200)
         self.assertEqual(preset.scan.k1_steps, 15)
-        self.assertEqual(preset.scan["samples"], 5)
+        self.assertEqual(preset.scan["samples"], 1)
         self.assertEqual(preset.analysis.energy_mev, 2200)
 
     def test_build_model_backend_returns_elegant_backend_for_measurement_apps(self):
@@ -763,29 +920,29 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(report.get_check("commissioning:energy_spectrum").status, "pass")
         self.assertEqual(
             real_commissioning_status(profile, "orbit_correct"),
-            REAL_STATUS_WRITE_BLOCKED,
+            REAL_STATUS_COMMISSIONED,
         )
         self.assertEqual(real_commissioning_status(profile, "orbit_display"), REAL_STATUS_READ_ONLY)
-        self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_WRITE_BLOCKED)
+        self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_COMMISSIONED)
         self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_NOT_SUPPORTED)
-        self.assertEqual(real_commissioning_status(profile, "emit_measure"), REAL_STATUS_WRITE_BLOCKED)
-        self.assertEqual(real_commissioning_status(profile, "energy_spectrum"), REAL_STATUS_WRITE_BLOCKED)
-        self.assertFalse(workflow_writes_allowed(orbit_context, "orbit"))
+        self.assertEqual(real_commissioning_status(profile, "emit_measure"), REAL_STATUS_COMMISSIONED)
+        self.assertEqual(real_commissioning_status(profile, "energy_spectrum"), REAL_STATUS_COMMISSIONED)
+        self.assertTrue(workflow_writes_allowed(orbit_context, "orbit"))
         self.assertTrue(workflow_writes_allowed(vm_orbit_context, "orbit"))
-        self.assertFalse(workflow_writes_allowed(real_beam_context, "beam_monitor"))
+        self.assertTrue(workflow_writes_allowed(real_beam_context, "beam_monitor"))
         self.assertTrue(workflow_writes_allowed(beam_context, "beam_monitor"))
-        self.assertFalse(workflow_writes_allowed(real_emit_context, "emit_measure"))
+        self.assertTrue(workflow_writes_allowed(real_emit_context, "emit_measure"))
         self.assertTrue(workflow_writes_allowed(emit_context, "emit_measure"))
-        self.assertFalse(workflow_writes_allowed(real_energy_context, "energy_spectrum"))
+        self.assertTrue(workflow_writes_allowed(real_energy_context, "energy_spectrum"))
         self.assertTrue(workflow_writes_allowed(energy_context, "energy_spectrum"))
         self.assertFalse(workflow_writes_allowed(real_bba_context, "bba"))
         self.assertTrue(workflow_writes_allowed(bba_context, "bba"))
         with self.assertRaisesRegex(MachineProfileError, "blocked"):
-            require_workflow_write_allowed(orbit_context, "orbit", "test write")
-        with self.assertRaisesRegex(MachineProfileError, "blocked"):
-            require_workflow_write_allowed(real_beam_context, "beam_monitor", "test write")
-        with self.assertRaisesRegex(MachineProfileError, "blocked"):
             require_workflow_write_allowed(real_bba_context, "bba", "test write")
+        require_workflow_write_allowed(orbit_context, "orbit", "test write")
+        require_workflow_write_allowed(real_beam_context, "beam_monitor", "test write")
+        require_workflow_write_allowed(real_emit_context, "emit_measure", "test write")
+        require_workflow_write_allowed(real_energy_context, "energy_spectrum", "test write")
         require_workflow_write_allowed(vm_orbit_context, "orbit", "test write")
         require_workflow_write_allowed(bba_context, "bba", "test write")
         self.assertEqual(beam_context.app_name, "beam_monitor")
@@ -919,7 +1076,7 @@ class MachineProfileTests(unittest.TestCase):
             tuple(choice.id for choice in vm_workflow.predefined_usedlines),
             ("ALL_MAIN", "ALL_ESA", "ALL_DUMP"),
         )
-        self.assertEqual(vm_workflow.segment_wait_s, 8.0)
+        self.assertEqual(vm_workflow.segment_wait_s, 3.0)
         self.assertEqual(vm_workflow.local_segments[1].parent_usedline, "ALL_ESA")
         self.assertEqual(vm_workflow.local_segments[1].end_ids, ("PRFESA",))
         self.assertEqual(vm_workflow.local_segments[2].parent_usedline, "ALL_DUMP")
@@ -1807,11 +1964,11 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIn('pattern {FLAG, ESARECORD, ESAALIAS}', substitutions)
         self.assertIn('{ "QL03", "VMIOC:QUAD:QL03:K1", "HALF:IN:AP:QUAD:QL03:K1:ao" }', substitutions)
         self.assertIn(
-            '{ "XC00", "VMIOC:COR:XC00:SET", "HALF:IN:PS:XC00:current:ao", "VMIOC:COR:XC00:READ" }',
+            '{ "XC00", "VMIOC:COR:XC00:SET", "HALF:IN:COR:XC00:ao", "VMIOC:COR:XC00:READ" }',
             substitutions,
         )
         self.assertIn(
-            '{ "HC01", "VMIOC:COR:HC01:SET", "HALF:IN:PS:HC01:current:ao", "VMIOC:COR:HC01:READ" }',
+            '{ "YC00", "VMIOC:COR:YC00:SET", "HALF:IN:COR:YC00:ao", "VMIOC:COR:YC00:READ" }',
             substitutions,
         )
         self.assertNotIn("CQ1", substitutions)

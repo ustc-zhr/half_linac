@@ -20,6 +20,34 @@
     "energy_twi_file": "src/virtual_machine/half_elegant/elegant/esa.twi",
     "energy_log": "esa.log",
     "energy_dispersion_line_name": "ESAlocal",
-    "energy_twiss_line_name": "ALL_ESA"
+    "energy_twiss_line_name": "ALL_ESA",
+    "snapshot": {
+      "fields": {
+        "QE01": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QE02": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QE03": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        }
+      }
+    }
   }
 }

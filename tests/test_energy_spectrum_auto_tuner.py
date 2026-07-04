@@ -32,6 +32,9 @@ class _FakeAutoTuner(ESA_AutoTuner):
     def _set_bend(self, current):
         self.current = float(current)
 
+    def _read_bend(self):
+        return self.current
+
     def _get_flag_image(self):
         return np.zeros((10, 10))
 
