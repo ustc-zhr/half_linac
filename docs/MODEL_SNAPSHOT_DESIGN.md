@@ -53,6 +53,11 @@ This is a mapping definition, not a saved runtime snapshot. It declares how a
 requested model field such as `QE01.K1` is read from the selected control
 backend and converted to the lattice value used by elegant.
 
+In each field mapping, the outer field name is the model-native lattice field
+such as `K1`, while `logical_channel` is the machine-profile control channel
+used to read the source value. `logical_channel` should match the spelling used
+by that machine profile, for example HALF uses `K1` and IRFEL uses `k1`.
+
 Only fields requested by model-dependent workflows need to be listed. The
 current implementation intentionally maps a focused subset of elements used by
 `energy_spectrum`, `emit_measure`, and BBA model calculations. A complete
