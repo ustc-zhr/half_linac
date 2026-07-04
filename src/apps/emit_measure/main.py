@@ -55,6 +55,7 @@ from half_linac.src.shared.beam_diagnostics import fit_beam_image
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     build_model_backend,
+    build_model_snapshot,
     describe_app_model_support,
     get_emit_preset,
     get_workflow,
@@ -1942,8 +1943,40 @@ class myWindow(QWidget,Ui_Form):
             return Path(self.loaded_scan_results_path).parent / TWISS_RESULTS_FILENAME
         return self._scan_latest_dir() / TWISS_RESULTS_FILENAME
 
+    def _emit_model_snapshot_fields(self):
+        fields = {(preset.quad, "K1") for preset in self.emit_workflow.presets}
+        fields.update((quad, "K1") for quad in self.emit_workflow.twiss_quads)
+        return tuple(sorted(fields))
+
+    def _build_emit_model_snapshot_metadata(self):
+        snapshot = build_model_snapshot(self.app_context, self._emit_model_snapshot_fields())
+        return snapshot.as_metadata()
+
+    @staticmethod
+    def _lattice_overrides_from_model_snapshot_metadata(metadata):
+        if not isinstance(metadata, Mapping):
+            return None
+        overrides = {}
+        fields = metadata.get("fields", [])
+        if not isinstance(fields, list):
+            return None
+        for field in fields:
+            if not isinstance(field, Mapping):
+                continue
+            element_id = str(field.get("element_id", "")).strip()
+            field_name = str(field.get("field_name", "")).strip()
+            if not element_id or not field_name or "value" not in field:
+                continue
+            overrides.setdefault(element_id, {})[field_name] = float(field["value"])
+        return overrides or None
+
+    def _prepare_emit_model_snapshot(self, paras):
+        metadata = self._build_emit_model_snapshot_metadata()
+        paras.model_snapshot_metadata = metadata
+        paras.model_lattice_overrides = self._lattice_overrides_from_model_snapshot_metadata(metadata)
+
     def _scan_metadata_from_paras(self, paras):
-        return {
+        metadata = {
             "schema_version": SCAN_DATA_SCHEMA_VERSION,
             "machine_id": self.machine_profile.machine.id,
             "machine_display_name": self.machine_profile.machine.display_name,
@@ -1961,6 +1994,10 @@ class myWindow(QWidget,Ui_Form):
             "settle_time": paras.settle_time,
             "sample_interval": paras.sample_interval,
         }
+        model_snapshot = getattr(paras, "model_snapshot_metadata", None)
+        if isinstance(model_snapshot, Mapping):
+            metadata["model_snapshot"] = dict(model_snapshot)
+        return metadata
 
     def _metadata_path_for_results(self, results_path):
         results_path = Path(results_path)
@@ -2587,6 +2624,11 @@ class myWindow(QWidget,Ui_Form):
             return
         if not self.refresh_current_beam_image_fit(self.paras):
             return
+        try:
+            self._prepare_emit_model_snapshot(self.paras)
+        except MachineProfileError as exc:
+            self._warn(str(exc))
+            return
         self.display({"clear": True, "preserve_beam_image": True})
         self.paras.recal = False
         self.paras.clear = False 
@@ -2638,6 +2680,23 @@ class myWindow(QWidget,Ui_Form):
         except RuntimeError as exc:
             self._warn(str(exc))
             return
+
+        model_snapshot = None
+        if isinstance(self.loaded_scan_metadata, Mapping):
+            candidate = self.loaded_scan_metadata.get("model_snapshot")
+            if isinstance(candidate, Mapping):
+                model_snapshot = candidate
+        if model_snapshot is None:
+            try:
+                self._prepare_emit_model_snapshot(self.paras)
+            except MachineProfileError as exc:
+                self._warn(str(exc))
+                return
+        else:
+            self.paras.model_snapshot_metadata = dict(model_snapshot)
+            self.paras.model_lattice_overrides = self._lattice_overrides_from_model_snapshot_metadata(
+                model_snapshot
+            )
 
         recal_points = self._enabled_scan_points()
         if self.scan_points_table is not None and self.scan_points_table.rowCount() > 0:
@@ -3084,6 +3143,8 @@ class scanThread(QThread):
         self.sample_interval = paras.sample_interval
         self.model_line = paras.model_line
         self.app_context = paras.app_context
+        self.model_snapshot_metadata = getattr(paras, "model_snapshot_metadata", None)
+        self.model_lattice_overrides = getattr(paras, "model_lattice_overrides", None)
         self.quad_length = None
 
         self.recal      = paras.recal 
@@ -3213,6 +3274,7 @@ class scanThread(QThread):
                 self.EnergyMeV,
                 app_context=self.app_context,
                 model_line=self.model_line,
+                lattice_overrides=self.model_lattice_overrides,
             )
             mat = trans.get_map(self.quad_name,self.flag_name)
             self.quad_length = trans.get_lattice_float(self.quad_name, "L")
@@ -3366,6 +3428,7 @@ class scanThread(QThread):
             self.EnergyMeV,
             app_context=self.app_context,
             model_line=self.model_line,
+            lattice_overrides=self.model_lattice_overrides,
         )
         for k1 in k1l:
             # get the transfer map 
@@ -3551,10 +3614,11 @@ class scanThread(QThread):
         self.is_running = False
 
 class transfer:
-    def __init__(self,EnergyMeV=None, app_context=None, model_line=None):
+    def __init__(self,EnergyMeV=None, app_context=None, model_line=None, lattice_overrides=None):
         self.energy = EnergyMeV
         self.app_context = app_context or load_app_context("emit_measure")
         self.model_line = model_line
+        self.lattice_overrides = lattice_overrides
         self.model_backend = build_model_backend(
             self.app_context,
             energy_mev=EnergyMeV,
@@ -3571,7 +3635,13 @@ class transfer:
         )
 
     def get_map(self, elem1, elem2, k1=None, seq="exit2exit"):
-        return self.model_backend.get_map(elem1, elem2, k1=k1, seq=seq)
+        return self.model_backend.get_map(
+            elem1,
+            elem2,
+            k1=k1,
+            lattice_overrides=self.lattice_overrides,
+            seq=seq,
+        )
 
     def get_lattice_float(self, element_id, field_name):
         element = self.model_backend.get_lattice_element(element_id)

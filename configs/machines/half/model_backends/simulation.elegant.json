@@ -46,6 +46,46 @@
             "model_unit": "1/m^2",
             "conversion": {"type": "direct"}
           }
+        },
+        "QL27": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT01": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT02": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL15": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL16": {
+          "K1": {
+            "logical_channel": "k1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
         }
       }
     }

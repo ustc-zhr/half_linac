@@ -273,6 +273,47 @@ class MachineProfileTests(unittest.TestCase):
                 pv_reader=lambda _pv_name: 1.0,
             )
 
+    def test_emit_measure_model_snapshot_fields_build_lattice_overrides(self):
+        half_context = load_app_context(
+            "emit_measure",
+            machine_id="half",
+            control_backend="vm",
+        )
+        qt02_pv = resolve_channel(half_context, "QT02", "k1", "vm")
+        ql27_pv = resolve_channel(half_context, "QL27", "k1", "vm")
+        half_values = {qt02_pv: 2.5, ql27_pv: 1.75}
+
+        half_snapshot = build_model_snapshot(
+            half_context,
+            (("QT02", "K1"), ("QL27", "K1")),
+            pv_reader=half_values.__getitem__,
+        )
+
+        self.assertEqual(
+            half_snapshot.lattice_overrides,
+            {"QT02": {"K1": 2.5}, "QL27": {"K1": 1.75}},
+        )
+
+        irfel_context = load_app_context(
+            "emit_measure",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        qm11_pv = resolve_channel(irfel_context, "QM11", "k1", "vm")
+        qm12_pv = resolve_channel(irfel_context, "QM12", "k1", "vm")
+        irfel_values = {qm11_pv: -8.0, qm12_pv: 30.0}
+
+        irfel_snapshot = build_model_snapshot(
+            irfel_context,
+            (("QM11", "K1"), ("QM12", "K1")),
+            pv_reader=irfel_values.__getitem__,
+        )
+
+        self.assertEqual(
+            irfel_snapshot.lattice_overrides,
+            {"QM11": {"K1": -8.0}, "QM12": {"K1": 30.0}},
+        )
+
     def test_model_snapshot_can_use_design_lattice_without_pv_read(self):
         context = load_app_context(
             "energy_spectrum",
