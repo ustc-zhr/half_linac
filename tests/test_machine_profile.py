@@ -179,7 +179,8 @@ class MachineProfileTests(unittest.TestCase):
         assert context.solenoid_centering_workflow is not None
         workflow = load_solenoid_centering_workflow(context.profile)
         self.assertEqual(workflow.default_preset, "ls_centering")
-        self.assertEqual(workflow.presets_by_id["ls_centering"].hcorr, "LS:HC")
+        self.assertEqual(workflow.presets_by_id["ls_centering"].solenoid, "SL01")
+        self.assertEqual(workflow.presets_by_id["ls_centering"].hcorr, "SL01-DX")
         self.assertFalse(workflow_writes_allowed(context, "solenoid_centering"))
 
     def test_load_irfel_solenoid_centering_app_context(self):
@@ -194,6 +195,7 @@ class MachineProfileTests(unittest.TestCase):
         assert context.solenoid_centering_workflow is not None
         workflow = context.solenoid_centering_workflow
         self.assertEqual(workflow.default_preset, "ms01_centering")
+        self.assertEqual(workflow.presets_by_id["ms01_centering"].solenoid, "MS01")
         self.assertEqual(workflow.presets_by_id["ms01_centering"].hcorr, "MSHC")
         self.assertEqual(workflow.presets_by_id["ls01_centering"].vcorr, "VC01")
         self.assertTrue(workflow_writes_allowed(context, "solenoid_centering"))
@@ -404,12 +406,12 @@ class MachineProfileTests(unittest.TestCase):
             "IN:PS:LE07:XC00:current:ao",
         )
         self.assertEqual(
-            resolve_channel(profile, "MS:HC", "setpoint", "real"),
+            resolve_channel(profile, "SM01-DX", "current_set", "real"),
             "IN:PS:LE07:SM01-DX:current:ao",
         )
         self.assertEqual(
-            resolve_channel(profile, "HC2", "setpoint", "real"),
-            "IRFEL:PS:HC02:current:ao",
+            resolve_channel(profile, "SL01-DY", "current_set", "real"),
+            "IN:PS:LE07:SL01-DY:current:ao",
         )
         self.assertEqual(
             resolve_channel(profile, "QT01", "k1", "real"),
@@ -423,16 +425,16 @@ class MachineProfileTests(unittest.TestCase):
     def test_vm_backend_uses_softioc_alias_naming_for_magnets(self):
         profile = load_profile("half")
         self.assertEqual(
-            resolve_channel(profile, "XC00", "setpoint", "vm"),
-            "HALF:IN:PS:XC00:current:ao",
+            resolve_channel(profile, "XC00", "kick", "vm"),
+            "HALF:IN:COR:XC00:ao",
         )
         self.assertEqual(
-            resolve_channel(profile, "XC21", "setpoint", "vm"),
-            "HALF:IN:PS:XC21:current:ao",
+            resolve_channel(profile, "XC21", "kick", "vm"),
+            "HALF:IN:COR:XC21:ao",
         )
         self.assertEqual(
-            resolve_channel(profile, "HC01", "setpoint", "vm"),
-            "HALF:IN:PS:HC01:current:ao",
+            resolve_channel(profile, "SM01-DX", "kick", "vm"),
+            "HALF:IN:COR:SM01-DX:ao",
         )
         self.assertEqual(
             resolve_channel(profile, "QL03", "k1", "vm"),
@@ -552,10 +554,10 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(image_flags, {"PRF04", "PRF06", "PRF07", "PRF08"})
         self.assertEqual(esa_flags, {"PRF07"})
         self.assertIn("XC00", x_corrs)
-        self.assertIn("MS:HC", x_corrs)
+        self.assertIn("SM01-DX", x_corrs)
         self.assertNotIn("YC00", x_corrs)
         self.assertIn("YC00", y_corrs)
-        self.assertIn("LS:VC", y_corrs)
+        self.assertIn("SL01-DY", y_corrs)
         self.assertNotIn("XC00", y_corrs)
 
     def test_half_elements_keep_simple_metadata_and_inferred_planes(self):

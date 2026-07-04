@@ -12,7 +12,6 @@
     "real": 0.02
   },
   "bend_element": "BM03",
-  "bend_channel": "current_readback",
   "model_backend": "simulation",
   "twiss_target_element": "PRFESA",
   "bend_scan": {

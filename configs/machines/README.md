@@ -54,6 +54,28 @@ For bends, keep the same distinction. A real-machine backend may expose bend pow
 in radians when it writes the elegant `ANGLE` field. Do not treat VM bend angle as a
 magnet current unless a separate current-to-angle calibration is defined.
 
+Common logical channel meanings:
+
+| Logical channel | Unit | Write policy | Typical backend | Meaning |
+| --- | --- | --- | --- | --- |
+| `x`, `y` | machine display unit, usually mm | read-only | `vm`, `real` | BPM transverse position |
+| `image`, `esa_image` | waveform pixels | read-only | `vm`, `real` | profile-monitor image data |
+| `sigx`, `sigy` | image-analysis size unit | read-only | `vm`, `real` | measured horizontal/vertical beam size |
+| `exposure_time` | seconds | writable when supported | `vm`, `real` | profile-monitor camera exposure |
+| `K1` | 1/m^2 | writable when mapped to a writable PV | `vm`, `real` | quadrupole normalized strength |
+| `K1_adj` | 1/m^2 | writable | `real` | adjustable quadrupole strength trim |
+| `K1_total` | 1/m^2 | read-only | `real` | computed total quadrupole strength |
+| `current_set` | A | writable | `real` | power-supply current setpoint |
+| `current_readback` | A | read-only | `real` | power-supply current readback |
+| `kick` | rad | writable | `vm` | corrector kick used by elegant `KICK` |
+| `angle` | rad | writable | `vm` | bend angle used by elegant `ANGLE` |
+| `setpoint` | backend-specific | legacy writable alias | legacy profiles | compatibility alias for `current_set` |
+| `readback` | backend-specific | legacy read-only alias | legacy profiles | compatibility alias for `current_readback` |
+
+When a physical quantity is not implemented by a backend, omit that backend mapping instead of
+reusing another logical channel with a different unit. For example, do not put a real-machine
+current PV under VM `kick`, and do not put a VM bend angle under real `current_set`.
+
 `real.json` is the source of truth for real-machine PV names. Keep it accurate because real
 machine operation has no softIOC fallback.
 
@@ -76,6 +98,8 @@ machine element inventory:
 
 Do not duplicate broad selectable element lists in app configs when they can be
 derived from element `kind`, `plane`, or minimal tags.
+Prefer element ids plus logical channels over direct PV strings. Keep direct PVs in
+app configs only for external controls that are not yet represented as machine elements.
 
 `model_backends/*.json` describes simulation or analysis model inputs used by
 model-driven apps. App workflow files may select one of these backends by name.

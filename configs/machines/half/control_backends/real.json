@@ -189,6 +189,14 @@
       "current_set": "IN:PS:LE07:SL01-DY:current:ao",
       "current_readback": "IN:PS:LE07:SL01-DY:current:ai"
     },
+    "SM01": {
+      "current_set": "IN:PS:LE07:SM01:current:ao",
+      "current_readback": "IN:PS:LE07:SM01:current:ai"
+    },
+    "SL01": {
+      "current_set": "IN:PS:LE07:SL01:current:ao",
+      "current_readback": "IN:PS:LE07:SL01:current:ai"
+    },
     "XC00": {
       "current_set": "IN:PS:LE07:XC00:current:ao",
       "current_readback": "IN:PS:LE07:XC00:current:ai"

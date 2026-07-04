@@ -4,8 +4,7 @@
     {
       "id": "ls_centering",
       "display_name": "LS Centering",
-      "solenoid_setpoint_pv": "IN:PS:LE07:SL01:current:ao",
-      "solenoid_readback_pv": "IN:PS:LE07:SL01:current:ai",
+      "solenoid": "SL01",
       "hcorr": "SL01-DX",
       "vcorr": "SL01-DY",
       "bpm": "BPM03",
@@ -27,8 +26,7 @@
     {
       "id": "ms_centering",
       "display_name": "MS Centering",
-      "solenoid_setpoint_pv": "IN:PS:LE07:SM01:current:ao",
-      "solenoid_readback_pv": "IN:PS:LE07:SM01:current:ai",
+      "solenoid": "SM01",
       "hcorr": "SM01-DX",
       "vcorr": "SM01-DY",
       "bpm": "BPM03",

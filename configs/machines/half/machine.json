@@ -3579,6 +3579,36 @@
         "sigx",
         "sigy"
       ]
+    },
+    {
+      "id": "SM01",
+      "kind": "solenoid",
+      "display_name": "SM01",
+      "order": 217,
+      "tags": [
+        "solenoid",
+        "focus"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "current_set",
+        "current_readback"
+      ]
+    },
+    {
+      "id": "SL01",
+      "kind": "solenoid",
+      "display_name": "SL01",
+      "order": 218,
+      "tags": [
+        "solenoid",
+        "focus"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "current_set",
+        "current_readback"
+      ]
     }
   ]
 }

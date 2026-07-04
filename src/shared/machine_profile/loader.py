@@ -268,6 +268,17 @@ def load_solenoid_centering_workflow(profile: MachineProfile) -> SolenoidCenteri
     for index, raw_preset in enumerate(presets_raw):
         location = f"workflows.solenoid_centering.presets[{index}]"
         preset = _parse_solenoid_centering_preset(raw_preset, location)
+        if preset.solenoid is not None:
+            element = profile.get_element(preset.solenoid)
+            if element.kind != "solenoid":
+                raise MachineProfileError(
+                    f"{location}.solenoid must reference a solenoid element."
+                )
+            if "current_set" not in element.channels and "setpoint" not in element.channels:
+                raise MachineProfileError(
+                    f"{location}.solenoid element {preset.solenoid!r} must define "
+                    "current_set or setpoint."
+                )
         presets.append(preset)
         presets_by_id[preset.id] = preset
 
@@ -1354,16 +1365,33 @@ def _parse_solenoid_centering_preset(
     location: str,
 ) -> SolenoidCenteringPreset:
     preset = _expect_mapping(raw_preset, location)
+    solenoid = (
+        _expect_non_empty_string(
+            preset.get("solenoid"),
+            f"{location}.solenoid",
+        )
+        if preset.get("solenoid") is not None
+        else None
+    )
+    solenoid_setpoint_pv = (
+        _expect_non_empty_string(
+            preset.get("solenoid_setpoint_pv"),
+            f"{location}.solenoid_setpoint_pv",
+        )
+        if preset.get("solenoid_setpoint_pv") is not None
+        else None
+    )
+    if solenoid is None and solenoid_setpoint_pv is None:
+        raise MachineProfileError(f"{location} must define solenoid or solenoid_setpoint_pv.")
+
     return SolenoidCenteringPreset(
         id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
         display_name=_expect_non_empty_string(
             preset.get("display_name"),
             f"{location}.display_name",
         ),
-        solenoid_setpoint_pv=_expect_non_empty_string(
-            preset.get("solenoid_setpoint_pv"),
-            f"{location}.solenoid_setpoint_pv",
-        ),
+        solenoid=solenoid,
+        solenoid_setpoint_pv=solenoid_setpoint_pv,
         solenoid_readback_pv=(
             _expect_non_empty_string(
                 preset.get("solenoid_readback_pv"),

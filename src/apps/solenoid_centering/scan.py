@@ -331,12 +331,30 @@ class SolenoidCenteringScanner:
         self.io = io or EpicsScalarIO()
         self.progress = progress or (lambda _message, _completed, _total: None)
         self.stop_requested = stop_requested or (lambda: False)
-        self.solenoid_pv = preset.solenoid_setpoint_pv
-        self.solenoid_readback_pv = preset.solenoid_readback_pv
+        self.solenoid_pv = self._resolve_solenoid_setpoint_pv()
+        self.solenoid_readback_pv = self._resolve_solenoid_readback_pv()
         self.hcorr_pv = resolve_corrector_write_channel(app_context, preset.hcorr)
         self.vcorr_pv = resolve_corrector_write_channel(app_context, preset.vcorr)
         self.bpm_x_pv = resolve_channel(app_context, preset.bpm, "x")
         self.bpm_y_pv = resolve_channel(app_context, preset.bpm, "y")
+
+    def _resolve_solenoid_setpoint_pv(self) -> str:
+        if self.preset.solenoid:
+            return resolve_channel(self.app_context, self.preset.solenoid, "current_set")
+        if self.preset.solenoid_setpoint_pv:
+            return self.preset.solenoid_setpoint_pv
+        raise MachineProfileError(
+            f"Solenoid centering preset {self.preset.id!r} does not define a solenoid element "
+            "or legacy solenoid_setpoint_pv."
+        )
+
+    def _resolve_solenoid_readback_pv(self) -> str | None:
+        if self.preset.solenoid:
+            try:
+                return resolve_channel(self.app_context, self.preset.solenoid, "current_readback")
+            except MachineProfileError:
+                return self.preset.solenoid_readback_pv
+        return self.preset.solenoid_readback_pv
 
     def run(self) -> CenteringResult:
         require_workflow_write_allowed(

@@ -296,8 +296,6 @@ class SolenoidCenteringScanRange:
 class SolenoidCenteringPreset:
     id: str
     display_name: str
-    solenoid_setpoint_pv: str
-    solenoid_readback_pv: str | None
     hcorr: str
     vcorr: str
     bpm: str
@@ -307,6 +305,9 @@ class SolenoidCenteringPreset:
     settle_time_s: float
     sample_interval_s: float
     max_rounds: int
+    solenoid: str | None = None
+    solenoid_setpoint_pv: str | None = None
+    solenoid_readback_pv: str | None = None
 
 
 @dataclass(frozen=True)
@@ -671,10 +672,22 @@ def _validate_solenoid_centering_workflow(
         preset = _expect_mapping(raw_preset, location)
         _expect_non_empty_string(preset.get("id"), f"{location}.id")
         _expect_non_empty_string(preset.get("display_name"), f"{location}.display_name")
-        _expect_non_empty_string(
-            preset.get("solenoid_setpoint_pv"),
-            f"{location}.solenoid_setpoint_pv",
-        )
+        if preset.get("solenoid") is not None:
+            _validate_element_ref(
+                preset.get("solenoid"),
+                elements_by_id,
+                f"{location}.solenoid",
+                expected_kind="solenoid",
+            )
+        elif preset.get("solenoid_setpoint_pv") is not None:
+            _expect_non_empty_string(
+                preset.get("solenoid_setpoint_pv"),
+                f"{location}.solenoid_setpoint_pv",
+            )
+        else:
+            raise MachineProfileError(
+                f"{location} must define solenoid or solenoid_setpoint_pv."
+            )
         if preset.get("solenoid_readback_pv") is not None:
             _expect_non_empty_string(
                 preset.get("solenoid_readback_pv"),

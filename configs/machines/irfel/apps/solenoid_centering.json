@@ -4,8 +4,7 @@
     {
       "id": "ms01_centering",
       "display_name": "MS01 Centering",
-      "solenoid_setpoint_pv": "IRFEL:PS:MS01:current:ao",
-      "solenoid_readback_pv": "IRFEL:PS:MS01:current:ai",
+      "solenoid": "MS01",
       "hcorr": "MSHC",
       "vcorr": "MSVC",
       "bpm": "BPM03",
@@ -27,8 +26,7 @@
     {
       "id": "ls01_centering",
       "display_name": "LS01 Centering",
-      "solenoid_setpoint_pv": "IRFEL:PS:LS01:current:ao",
-      "solenoid_readback_pv": "IRFEL:PS:LS01:current:ai",
+      "solenoid": "LS01",
       "hcorr": "HC01",
       "vcorr": "VC01",
       "bpm": "BPM03",

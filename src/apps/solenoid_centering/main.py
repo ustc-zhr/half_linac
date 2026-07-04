@@ -41,6 +41,7 @@ from half_linac.src.shared.machine_profile import (
     SolenoidCenteringScanRange,
     list_elements,
     load_app_context,
+    resolve_channel,
     workflow_writes_allowed,
 )
 from half_linac.src.apps.solenoid_centering.mplwidget import MplWidget
@@ -297,7 +298,7 @@ class MainWindow(QMainWindow):
         if self.preset_combo.count() <= 0:
             return
         preset = self._current_preset()
-        self.solenoid_pv_label.setText(preset.solenoid_setpoint_pv)
+        self.solenoid_pv_label.setText(self._solenoid_setpoint_label(preset))
         self._set_combo_value(self.hcorr_combo, preset.hcorr, "HCOR")
         self._set_combo_value(self.vcorr_combo, preset.vcorr, "VCOR")
         self._set_combo_value(self.bpm_combo, preset.bpm, "BPM")
@@ -311,6 +312,14 @@ class MainWindow(QMainWindow):
         self.settle.setValue(preset.settle_time_s)
         self.sample_interval.setValue(preset.sample_interval_s)
         self.max_rounds.setValue(preset.max_rounds)
+
+    def _solenoid_setpoint_label(self, preset: SolenoidCenteringPreset) -> str:
+        if preset.solenoid:
+            try:
+                return resolve_channel(self.app_context, preset.solenoid, "current_set")
+            except MachineProfileError:
+                return preset.solenoid
+        return preset.solenoid_setpoint_pv or ""
 
     @staticmethod
     def _set_combo_value(combo, value, label):

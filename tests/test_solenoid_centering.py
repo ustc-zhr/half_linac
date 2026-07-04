@@ -16,6 +16,7 @@ from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     SolenoidCenteringScanRange,
     load_app_context,
+    resolve_corrector_write_channel,
     resolve_channel,
 )
 
@@ -38,6 +39,19 @@ def _score(value: float) -> scan.ResponseScore:
         std_x=0.0,
         std_y=0.0,
     )
+
+
+def _solenoid_setpoint_pv(context, preset) -> str:
+    if preset.solenoid:
+        return resolve_channel(context, preset.solenoid, "current_set")
+    assert preset.solenoid_setpoint_pv is not None
+    return preset.solenoid_setpoint_pv
+
+
+def _solenoid_readback_pv(context, preset) -> str | None:
+    if preset.solenoid:
+        return resolve_channel(context, preset.solenoid, "current_readback")
+    return preset.solenoid_readback_pv
 
 
 class MockIO:
@@ -108,17 +122,19 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertEqual(len(axis_scans), 4)
 
     def test_scanner_restores_devices_when_stopped(self):
-        context = load_app_context("solenoid_centering")
+        context = load_app_context("solenoid_centering", control_backend="real")
         assert context.solenoid_centering_workflow is not None
         preset = context.solenoid_centering_workflow.presets_by_id["ls_centering"]
-        hcorr_pv = "HALF:IN:COR:LS:HC:ao"
-        vcorr_pv = "HALF:IN:COR:LS:VC:ao"
+        solenoid_pv = _solenoid_setpoint_pv(context, preset)
+        solenoid_readback_pv = _solenoid_readback_pv(context, preset)
+        hcorr_pv = resolve_corrector_write_channel(context, preset.hcorr)
+        vcorr_pv = resolve_corrector_write_channel(context, preset.vcorr)
         bpm_x_pv = resolve_channel(context, preset.bpm, "x")
         bpm_y_pv = resolve_channel(context, preset.bpm, "y")
         io = MockIO(
             {
-                preset.solenoid_setpoint_pv: 10.0,
-                preset.solenoid_readback_pv: 10.0,
+                solenoid_pv: 10.0,
+                solenoid_readback_pv: 10.0,
                 hcorr_pv: 0.1,
                 vcorr_pv: -0.2,
                 bpm_x_pv: 0.0,
@@ -136,10 +152,10 @@ class SolenoidCenteringTests(unittest.TestCase):
             with self.assertRaises(scan.StopRequested):
                 scanner.run()
 
-        self.assertEqual(io.values[preset.solenoid_setpoint_pv], 10.0)
+        self.assertEqual(io.values[solenoid_pv], 10.0)
         self.assertEqual(io.values[hcorr_pv], 0.1)
         self.assertEqual(io.values[vcorr_pv], -0.2)
-        self.assertIn((preset.solenoid_setpoint_pv, 10.0), io.writes)
+        self.assertIn((solenoid_pv, 10.0), io.writes)
         self.assertIn((hcorr_pv, 0.1), io.writes)
         self.assertIn((vcorr_pv, -0.2), io.writes)
 
@@ -151,14 +167,16 @@ class SolenoidCenteringTests(unittest.TestCase):
         )
         assert context.solenoid_centering_workflow is not None
         preset = context.solenoid_centering_workflow.presets_by_id["ms01_centering"]
+        solenoid_pv = _solenoid_setpoint_pv(context, preset)
+        solenoid_readback_pv = _solenoid_readback_pv(context, preset)
         hcorr_pv = resolve_channel(context, preset.hcorr, "setpoint")
         vcorr_pv = resolve_channel(context, preset.vcorr, "setpoint")
         bpm_x_pv = resolve_channel(context, preset.bpm, "x")
         bpm_y_pv = resolve_channel(context, preset.bpm, "y")
         io = MockIO(
             {
-                preset.solenoid_setpoint_pv: 0.02,
-                preset.solenoid_readback_pv: 0.02,
+                solenoid_pv: 0.02,
+                solenoid_readback_pv: 0.02,
                 hcorr_pv: 0.0,
                 vcorr_pv: 0.0,
                 bpm_x_pv: 0.0,
@@ -180,14 +198,16 @@ class SolenoidCenteringTests(unittest.TestCase):
         )
         assert context.solenoid_centering_workflow is not None
         preset = context.solenoid_centering_workflow.presets_by_id["ms01_centering"]
+        solenoid_pv = _solenoid_setpoint_pv(context, preset)
+        solenoid_readback_pv = _solenoid_readback_pv(context, preset)
         hcorr_pv = resolve_channel(context, preset.hcorr, "setpoint")
         vcorr_pv = resolve_channel(context, preset.vcorr, "setpoint")
         bpm_x_pv = resolve_channel(context, preset.bpm, "x")
         bpm_y_pv = resolve_channel(context, preset.bpm, "y")
         io = MockIO(
             {
-                preset.solenoid_setpoint_pv: 1.0,
-                preset.solenoid_readback_pv: 1.01,
+                solenoid_pv: 1.0,
+                solenoid_readback_pv: 1.01,
                 hcorr_pv: 0.0,
                 vcorr_pv: 0.0,
                 bpm_x_pv: 0.2,
@@ -215,14 +235,16 @@ class SolenoidCenteringTests(unittest.TestCase):
         )
         assert context.solenoid_centering_workflow is not None
         preset = context.solenoid_centering_workflow.presets_by_id["ms01_centering"]
+        solenoid_pv = _solenoid_setpoint_pv(context, preset)
+        solenoid_readback_pv = _solenoid_readback_pv(context, preset)
         hcorr_pv = resolve_channel(context, preset.hcorr, "setpoint")
         vcorr_pv = resolve_channel(context, preset.vcorr, "setpoint")
         bpm_x_pv = resolve_channel(context, preset.bpm, "x")
         bpm_y_pv = resolve_channel(context, preset.bpm, "y")
         io = MockIO(
             {
-                preset.solenoid_setpoint_pv: 1.0,
-                preset.solenoid_readback_pv: 1.0,
+                solenoid_pv: 1.0,
+                solenoid_readback_pv: 1.0,
                 hcorr_pv: 4.99,
                 vcorr_pv: 0.0,
                 bpm_x_pv: 0.0,
