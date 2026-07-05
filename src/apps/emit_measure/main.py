@@ -73,7 +73,6 @@ nest_dict    = lambda: defaultdict(nest_dict)
 
 ELECTRON_MASS_EV = 0.51099895000e6
 SCAN_RESULTS_FILENAME = "scanResults.txt"
-SCAN_RESULTS_META_FILENAME = "scanResults.meta.json"
 TWISS_RESULTS_FILENAME = "twissResults.jsonl"
 SCAN_ARCHIVE_ROOT = Path(__file__).resolve().parent / "runtime" / "scans"
 APP_DIR = Path(__file__).resolve().parent
@@ -2015,10 +2014,7 @@ class myWindow(QWidget,Ui_Form):
     def _metadata_path_for_results(self, results_path):
         results_path = Path(results_path)
         if results_path.name == SCAN_RESULTS_FILENAME:
-            metadata_path = results_path.parent / METADATA_FILENAME
-            if metadata_path.exists():
-                return metadata_path
-            return results_path.parent / SCAN_RESULTS_META_FILENAME
+            return results_path.parent / METADATA_FILENAME
         return results_path.with_suffix(".json")
 
     def _read_scan_metadata(self, results_path):
@@ -3208,7 +3204,6 @@ class scanThread(QThread):
         )
         self.scan_results_path = self.scan_latest_dir / SCAN_RESULTS_FILENAME
         self.scan_results_meta_path = self.scan_latest_dir / METADATA_FILENAME
-        self.legacy_scan_results_meta_path = self.scan_latest_dir / SCAN_RESULTS_META_FILENAME
         self.scan_metadata_paths = []
         self.is_running = True
 
@@ -3413,7 +3408,6 @@ class scanThread(QThread):
         np.savetxt(self.scan_results_path, data, fmt="%.6e")
         metadata_text = json.dumps(metadata, indent=2, sort_keys=True)
         self.scan_results_meta_path.write_text(metadata_text, encoding="utf-8")
-        self.legacy_scan_results_meta_path.write_text(metadata_text, encoding="utf-8")
 
         self.scan_archive_dir.mkdir(parents=True, exist_ok=True)
         archive_dir = self.scan_archive_dir / self._scan_archive_stem()
@@ -3424,7 +3418,6 @@ class scanThread(QThread):
         archive_meta_path.write_text(metadata_text, encoding="utf-8")
         self.scan_metadata_paths = [
             self.scan_results_meta_path,
-            self.legacy_scan_results_meta_path,
             archive_meta_path,
         ]
         print(f"Saved latest scan results: {self.scan_results_path}")
