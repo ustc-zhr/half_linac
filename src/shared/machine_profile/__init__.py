@@ -51,6 +51,7 @@ from .model_snapshot import (
     apply_snapshot_conversion,
     build_model_snapshot,
     load_model_snapshot,
+    model_snapshot_lattice_overrides,
     save_model_snapshot,
 )
 from .models import (
@@ -181,6 +182,7 @@ __all__ = [
     "load_model_snapshot",
     "load_profile",
     "load_solenoid_centering_workflow",
+    "model_snapshot_lattice_overrides",
     "normalize_mode",
     "normalize_plane",
     "real_commissioning_status",

@@ -61,6 +61,7 @@ from half_linac.src.shared.machine_profile import (
     get_workflow,
     load_app_context,
     load_profile,
+    model_snapshot_lattice_overrides,
     require_workflow_write_allowed,
     resolve_channel,
     resolve_flag_pixel_geometry,
@@ -1972,24 +1973,6 @@ class myWindow(QWidget,Ui_Form):
         snapshot = build_model_snapshot(self.app_context, fields)
         return snapshot.as_metadata()
 
-    @staticmethod
-    def _lattice_overrides_from_model_snapshot_metadata(metadata):
-        if not isinstance(metadata, Mapping):
-            return None
-        overrides = {}
-        fields = metadata.get("fields", [])
-        if not isinstance(fields, list):
-            return None
-        for field in fields:
-            if not isinstance(field, Mapping):
-                continue
-            element_id = str(field.get("element_id", "")).strip()
-            field_name = str(field.get("field_name", "")).strip()
-            if not element_id or not field_name or "value" not in field:
-                continue
-            overrides.setdefault(element_id, {})[field_name] = float(field["value"])
-        return overrides or None
-
     def _prepare_emit_model_snapshot(self, paras):
         metadata = self._build_emit_model_snapshot_metadata_for_path(
             paras.quad_name,
@@ -1997,7 +1980,7 @@ class myWindow(QWidget,Ui_Form):
             model_line=paras.model_line,
         )
         paras.model_snapshot_metadata = metadata
-        paras.model_lattice_overrides = self._lattice_overrides_from_model_snapshot_metadata(metadata)
+        paras.model_lattice_overrides = model_snapshot_lattice_overrides(metadata)
 
     def _scan_metadata_from_paras(self, paras):
         metadata = {
@@ -2721,9 +2704,7 @@ class myWindow(QWidget,Ui_Form):
                 return
         else:
             self.paras.model_snapshot_metadata = dict(model_snapshot)
-            self.paras.model_lattice_overrides = self._lattice_overrides_from_model_snapshot_metadata(
-                model_snapshot
-            )
+            self.paras.model_lattice_overrides = model_snapshot_lattice_overrides(model_snapshot)
 
         recal_points = self._enabled_scan_points()
         if self.scan_points_table is not None and self.scan_points_table.rowCount() > 0:
@@ -2822,9 +2803,7 @@ class myWindow(QWidget,Ui_Form):
             self._warn_twiss(str(exc))
             return
         para["model_snapshot_metadata"] = model_snapshot
-        para["model_lattice_overrides"] = self._lattice_overrides_from_model_snapshot_metadata(
-            model_snapshot
-        )
+        para["model_lattice_overrides"] = model_snapshot_lattice_overrides(model_snapshot)
 
         self.latest_twiss_summary = {
             "status": "running",

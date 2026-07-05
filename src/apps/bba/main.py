@@ -52,6 +52,7 @@ from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
     MachineProfileError,
+    model_snapshot_lattice_overrides,
     require_workflow_write_allowed,
     resolve_channel,
     resolve_corrector_write_channel,
@@ -89,23 +90,6 @@ BBA2_TOOLTIP = (
     "the BPM1 reading at the quad center."
 )
 
-
-def _lattice_overrides_from_model_snapshot_metadata(metadata):
-    if not isinstance(metadata, Mapping):
-        return None
-    overrides = {}
-    fields = metadata.get("fields", [])
-    if not isinstance(fields, list):
-        return None
-    for field in fields:
-        if not isinstance(field, Mapping):
-            continue
-        element_id = str(field.get("element_id", "")).strip()
-        field_name = str(field.get("field_name", "")).strip()
-        if not element_id or not field_name or "value" not in field:
-            continue
-        overrides.setdefault(element_id, {})[field_name] = float(field["value"])
-    return overrides or None
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -2244,7 +2228,7 @@ class myWindow(QWidget, Ui_Form):
             params.model_snapshot_error = str(exc)
             return
         params.model_snapshot_metadata = metadata
-        params.model_lattice_overrides = _lattice_overrides_from_model_snapshot_metadata(metadata)
+        params.model_lattice_overrides = model_snapshot_lattice_overrides(metadata)
         params.model_snapshot_error = None
 
     def get_setting(self):
@@ -3099,9 +3083,7 @@ class BBAScanThreadBBA2(BBABaseThread):
         model_snapshot = metadata.get("model_snapshot")
         if isinstance(model_snapshot, Mapping):
             self.params.model_snapshot_metadata = dict(model_snapshot)
-            self.params.model_lattice_overrides = _lattice_overrides_from_model_snapshot_metadata(
-                model_snapshot
-            )
+            self.params.model_lattice_overrides = model_snapshot_lattice_overrides(model_snapshot)
             self.params.model_snapshot_error = None
         elif not self.params.model_snapshot_metadata:
             model_snapshot_error = metadata.get("model_snapshot_error")

@@ -183,6 +183,38 @@ def load_model_snapshot(
     return _select_snapshot_fields(snapshot, requested_fields)
 
 
+def model_snapshot_lattice_overrides(
+    snapshot: ModelSnapshot | Mapping[str, Any] | None,
+) -> dict[str, dict[str, float]] | None:
+    if snapshot is None:
+        return None
+    if isinstance(snapshot, ModelSnapshot):
+        return snapshot.lattice_overrides or None
+    if not isinstance(snapshot, Mapping):
+        return None
+
+    fields = snapshot.get("fields", [])
+    if not isinstance(fields, list):
+        return None
+    overrides: dict[str, dict[str, float]] = {}
+    for field in fields:
+        if not isinstance(field, Mapping):
+            continue
+        element_id = str(field.get("element_id", "")).strip()
+        field_name = str(field.get("field_name", "")).strip()
+        if not element_id or not field_name or "value" not in field:
+            continue
+        try:
+            value = _finite_float(
+                field["value"],
+                f"model snapshot {element_id}.{field_name}.value",
+            )
+        except MachineProfileError:
+            continue
+        overrides.setdefault(element_id, {})[field_name] = value
+    return overrides or None
+
+
 def _resolve_snapshot_source(source: str | None, control_backend: str) -> str:
     if source is None or str(source).strip().lower() == "live":
         backend = normalize_mode(control_backend, "control_backend")
