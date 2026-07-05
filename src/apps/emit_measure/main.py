@@ -2697,14 +2697,28 @@ class myWindow(QWidget,Ui_Form):
             if isinstance(candidate, Mapping):
                 model_snapshot = candidate
         if model_snapshot is None:
+            self._warn(
+                "Scan metadata has no model_snapshot; recalculation will use the current model snapshot."
+            )
             try:
                 self._prepare_emit_model_snapshot(self.paras)
             except MachineProfileError as exc:
                 self._warn(str(exc))
                 return
         else:
+            archived_overrides = model_snapshot_lattice_overrides(model_snapshot)
             self.paras.model_snapshot_metadata = dict(model_snapshot)
-            self.paras.model_lattice_overrides = model_snapshot_lattice_overrides(model_snapshot)
+            self.paras.model_lattice_overrides = archived_overrides
+            if archived_overrides is None:
+                self._warn(
+                    "Scan metadata model_snapshot has no usable lattice overrides; "
+                    "recalculation will use the current model snapshot."
+                )
+                try:
+                    self._prepare_emit_model_snapshot(self.paras)
+                except MachineProfileError as exc:
+                    self._warn(str(exc))
+                    return
 
         recal_points = self._enabled_scan_points()
         if self.scan_points_table is not None and self.scan_points_table.rowCount() > 0:

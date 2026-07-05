@@ -534,6 +534,8 @@ class myWindow(QWidget, Ui_Form):
         self._plot_wrappers = {}
         self._result_fields = []
         self.bba2_scan_points = {key: [] for key in BBA2_SCAN_POINT_COLUMNS}
+        self.bba2_loaded_source_dir = None
+        self.bba2_loaded_metadata = None
         self._model_backend_available, self._model_backend_error = describe_app_model_support(
             self.machine_profile.machine.id,
             "bba",
@@ -1961,6 +1963,8 @@ class myWindow(QWidget, Ui_Form):
 
     def _clear_bba2_scan_points(self):
         self.bba2_scan_points = {key: [] for key in BBA2_SCAN_POINT_COLUMNS}
+        self.bba2_loaded_source_dir = None
+        self.bba2_loaded_metadata = None
         self._render_bba2_scan_points_table()
 
     def _on_bba2_scan_point_item_changed(self, item):
@@ -2059,6 +2063,8 @@ class myWindow(QWidget, Ui_Form):
             for corr, (theta, bpm2) in zip(corr_values, corrector_data[:, :2])
         ]
 
+        self.bba2_loaded_source_dir = source_dir
+        self.bba2_loaded_metadata = metadata
         self._render_bba2_scan_points_table()
         self._redraw_bba2_scan_points_from_table("quad")
         self._redraw_bba2_scan_points_from_table("corrector")
@@ -2416,10 +2422,12 @@ class myWindow(QWidget, Ui_Form):
         self.clearPlot_bba2()
         params.recal = True
         self._apply_runtime_paths(params, "bba2")
-        self._prepare_bba2_model_snapshot(params)
         if hasattr(self, "bba2_scan_points_table"):
             if all(len(rows) == 0 for rows in self.bba2_scan_points.values()):
                 self._load_latest_bba2_data_into_table()
+            source_dir = self.bba2_loaded_source_dir
+            if source_dir is not None:
+                params.bba2_metadata_path = Path(source_dir) / "metadata.json"
             quad_points = self._enabled_bba2_scan_points("quad")
             bpm1_points = self._enabled_bba2_scan_points("bpm1")
             corrector_points = self._enabled_bba2_scan_points("corrector")
@@ -2439,6 +2447,26 @@ class myWindow(QWidget, Ui_Form):
                 for _corr, theta, bpm2 in corrector_points
             ]
             params.samples = 1
+        metadata = self.bba2_loaded_metadata
+        if not isinstance(metadata, Mapping):
+            metadata = self._load_bba_metadata(params.bba2_metadata_path)
+        archived_snapshot = metadata.get("model_snapshot") if isinstance(metadata, Mapping) else None
+        if isinstance(archived_snapshot, Mapping):
+            archived_overrides = model_snapshot_lattice_overrides(archived_snapshot)
+            params.model_snapshot_metadata = dict(archived_snapshot)
+            params.model_lattice_overrides = archived_overrides
+            params.model_snapshot_error = None
+            if archived_overrides is None:
+                self._warn(
+                    "BBA-2 archive model_snapshot has no usable lattice overrides; "
+                    "recalculation will use the current model snapshot."
+                )
+                self._prepare_bba2_model_snapshot(params)
+        else:
+            self._warn(
+                "BBA-2 archive has no model_snapshot; recalculation will use the current model snapshot."
+            )
+            self._prepare_bba2_model_snapshot(params)
         self.scan_mode = "recalculate"
         self.scan_family = "bba2"
         self._attach_scan(BBAScanThreadBBA2(params), self.display_bba2)

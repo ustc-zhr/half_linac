@@ -92,6 +92,12 @@ The elegant backend accepts field-level lattice overrides:
 The backend writes these fields into its temporary lattice state before running
 elegant. It does not read PVs and does not mutate VM runtime state.
 
+Recalculation paths that use the model backend must prefer the snapshot stored
+with the original measurement metadata. If an older archive has no usable
+snapshot, the GUI may fall back to a current snapshot, but it should make that
+fallback explicit because the result is no longer a strict replay of the
+original model state.
+
 ## Elegant Runtime Files
 
 Elegant model calculations write temporary working files under the repository
@@ -132,6 +138,14 @@ They are runtime working files, not source files. They should stay ignored and
 untracked. The source contract is the design lattice, the initial elegant input
 files, the machine profile config, and the snapshot metadata recorded with each
 calculation.
+
+Application result metadata records snapshots close to the measured data:
+
+- `emit_measure` stores `model_snapshot` in `scanResults.meta.json`.
+- BBA-2 stores `model_snapshot` in each scan `metadata.json`.
+- `energy_spectrum` stores the latest energy result metadata in
+  `src/apps/energy_spectrum/runtime/<machine>/<backend>/latest/latest_energy_result.json`
+  and archives a new energy result JSON when the active model snapshot changes.
 
 VM runtime files and model backend runtime files are intentionally separate even
 when they use the same design lattice and elegant executable. This keeps the VM

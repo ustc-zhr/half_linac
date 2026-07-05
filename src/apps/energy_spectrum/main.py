@@ -6,6 +6,7 @@ import os
 import sdds
 import math
 import json
+from datetime import datetime
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -635,6 +636,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_thread = None
         self.latest_model_snapshot_metadata = None
         self.latest_model_snapshot_path = None
+        self._last_energy_result_archive_key = None
 
         self._configure_window()
 
@@ -829,6 +831,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _use_design_eta(self, status_text=None, tooltip=None):
         self.eta_flag = DEFAULT_DESIGN_ETA
+        self.latest_model_snapshot_metadata = None
+        self.latest_model_snapshot_path = None
         self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag, 5)))
         self._update_model_status(
             status_text or f"design eta {self.eta_flag:.4f} m",
@@ -1576,6 +1580,63 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._clear_readout_status()
         self._refresh_status()
 
+    def _write_energy_result_metadata(
+        self,
+        *,
+        energy0_mev,
+        energy_center_mev,
+        energy_spread,
+        fit_method,
+    ):
+        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        metadata = {
+            "schema_version": "energy_spectrum_result_v1",
+            "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "machine_id": self.machine_profile.machine.id,
+            "machine_display_name": self.machine_profile.machine.display_name,
+            "backend": self.control_backend,
+            "fit_method": fit_method,
+            "x_reference_mm": self.x_reference_mm,
+            "meanx_mm": float(self.meanx),
+            "sigx_mm": float(self.sigx),
+            "energy0_mev": float(energy0_mev),
+            "energy_center_mev": float(energy_center_mev),
+            "energy_spread_fraction": float(energy_spread),
+            "eta_m": float(self.eta_flag),
+            "beta_m": float(self.beta_flag),
+            "emittance_m": float(self.emi_flag),
+            "include_emit": bool(self.with_emit),
+        }
+        if isinstance(self.latest_model_snapshot_metadata, dict):
+            metadata["model_snapshot"] = dict(self.latest_model_snapshot_metadata)
+        else:
+            metadata["model_snapshot_warning"] = (
+                "No model_snapshot was available when this energy result was calculated."
+            )
+
+        try:
+            paths["latest_dir"].mkdir(parents=True, exist_ok=True)
+            paths["energy_result_path"].write_text(
+                json.dumps(metadata, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            snapshot_metadata = metadata.get("model_snapshot")
+            if isinstance(snapshot_metadata, dict):
+                archive_key = snapshot_metadata.get("created_at") or metadata["created_at"]
+            else:
+                archive_key = "no_model_snapshot"
+            if archive_key != self._last_energy_result_archive_key:
+                paths["result_archive_dir"].mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+                archive_path = paths["result_archive_dir"] / f"energy_result_{timestamp}.json"
+                archive_path.write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                self._last_energy_result_archive_key = archive_key
+        except OSError as exc:
+            print(f"Warning: failed to save energy spectrum result metadata: {exc}")
+
 
     def background_samples(self):
         """sample background image and subtract later"""
@@ -1953,6 +2014,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         energy_spread = math.sqrt(spread_term) * energy0 / energy_center
         
         self._set_energy_outputs(energy_center, energy_spread)
+        self._write_energy_result_metadata(
+            energy0_mev=energy0,
+            energy_center_mev=energy_center,
+            energy_spread=energy_spread,
+            fit_method=fit_method,
+        )
 
         # plot energy profile in another figure
         self.energy_plot.axes.clear()
@@ -2045,12 +2112,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         
         except MachineProfileError as e:
             print(f"Error in cal_disp: {e}")
+            self.latest_model_snapshot_metadata = None
+            self.latest_model_snapshot_path = None
             self._update_model_status("Snapshot invalid", "warning", str(e))
             self._refresh_status()
             return
         except Exception as e:
             print(f"Error in cal_disp: {e}")
             self.eta_flag = DEFAULT_DESIGN_ETA  # 理论设计值
+            self.latest_model_snapshot_metadata = None
+            self.latest_model_snapshot_path = None
             print('default dispersion: ',self.eta_flag, 'm')
             self._update_model_status(f"design eta {self.eta_flag:.4f} m", "warning")
             
@@ -2075,6 +2146,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             snapshot = self._build_esa_quad_model_snapshot()
         except MachineProfileError as e:
             print(f"Error in cal_twiss_disp: {e}")
+            self.latest_model_snapshot_metadata = None
+            self.latest_model_snapshot_path = None
             self._update_model_status("Snapshot invalid", "warning", str(e))
             self._refresh_status()
             return
@@ -2158,6 +2231,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             eta     = tmp.columnData[4][0][-1]
         except Exception as e:
             print(f"Error in cal_twiss_disp: {e}")
+            self.latest_model_snapshot_metadata = None
+            self.latest_model_snapshot_path = None
             self._update_model_status("Model update failed", "warning")
             self._refresh_status()
             return
