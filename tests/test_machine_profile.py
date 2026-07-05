@@ -114,7 +114,6 @@ class MachineProfileTests(unittest.TestCase):
             REPO_ROOT / "src/apps/beam_monitor/main.py",
             REPO_ROOT / "src/apps/bba/main.py",
             REPO_ROOT / "src/apps/emit_measure/main.py",
-            REPO_ROOT / "src/apps/emit_measure/test.py",
             REPO_ROOT / "src/apps/energy_spectrum/main.py",
             REPO_ROOT / "src/apps/energy_spectrum/get_energy0.py",
             REPO_ROOT / "src/apps/energy_spectrum/profile_runtime.py",
@@ -578,7 +577,9 @@ class MachineProfileTests(unittest.TestCase):
 
         self.assertTrue(str(paths["runtime_dir"]).endswith("src/apps/bba/runtime/irfel/vm"))
         self.assertEqual(paths["latest_dir"], paths["runtime_dir"] / "latest")
-        self.assertEqual(paths["archive_dir"], paths["runtime_dir"] / "scans")
+        self.assertEqual(paths["archive_dir"], paths["runtime_dir"] / "runs")
+        self.assertEqual(paths["runs_dir"], paths["runtime_dir"] / "runs")
+        self.assertEqual(paths["legacy_archive_dir"], paths["runtime_dir"] / "scans")
         self.assertEqual(paths["bba1_data_path"], paths["latest_dir"] / "m1S.txt")
         self.assertEqual(paths["bba1_quad_scan_path"], paths["latest_dir"] / "bba1_quad_scan.txt")
         self.assertEqual(paths["bba1_metadata_path"], paths["latest_dir"] / "metadata.json")
@@ -888,12 +889,15 @@ class MachineProfileTests(unittest.TestCase):
         source_json = Path(context.model_backend.config["source_json"])
         source_lattice = Path(context.model_backend.config["source_lattice"])
         working_dir = Path(context.model_backend.config["working_dir"])
+        asset_dir = Path(context.model_backend.config["asset_dir"])
         self.assertTrue(source_json.is_absolute())
         self.assertTrue(source_lattice.is_absolute())
         self.assertTrue(working_dir.is_absolute())
+        self.assertTrue(asset_dir.is_absolute())
         self.assertTrue(str(source_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
         self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
-        self.assertTrue(str(working_dir).endswith("src/virtual_machine/half_elegant/elegant"))
+        self.assertTrue(str(asset_dir).endswith("src/virtual_machine/half_elegant/elegant"))
+        self.assertTrue(str(working_dir).endswith("runtime/model_backend/half/simulation/emit"))
 
     def test_half_runtime_paths_are_resolved_from_machine_json(self):
         runtime = resolve_machine_runtime("half")
