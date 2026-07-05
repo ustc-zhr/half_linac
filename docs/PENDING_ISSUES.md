@@ -178,19 +178,41 @@
 
 ### 8. Model Snapshot And Real-to-VM Mirroring
 
-- Status: open
+- Status: partially implemented
 - Priority: high
 - Background:
   - Real machine and virtual accelerator are control objects: they accept control writes and produce diagnostic readbacks.
   - The elegant model backend is a calculation object: it should calculate optics from an explicit machine-state snapshot.
-  - Current model calculations mostly start from configured design lattice files and only apply the few parameter overrides passed by each app.
+  - Current model calculations start from configured design lattice files and apply explicit snapshot overrides for supported model fields.
 - Problem:
   - For real-machine use, model-dependent apps such as `energy_spectrum`, `emit_measure`, and BBA auxiliary model checks need model parameters aligned with current machine state.
   - Treating VM state as the implicit source of truth would couple the model backend to a specific control object and could disturb an active VM session.
   - Some real PVs expose current while elegant expects `K1`, kick, bend angle, or another model-native quantity.
+- Current implementation:
+  - `energy_spectrum`, `emit_measure`, and BBA-2 model R12 calculations can consume model snapshot lattice overrides.
+  - HALF and IRFEL model backend configs use `snapshot_mapping` to map logical control channels to model-native fields.
+  - `emit_measure` scopes snapshot reads to the active model path for scan/recalculate and Twiss calculations.
+  - Real-to-VM mirroring remains intentionally separate from model calculations.
 - Follow-up:
-  - Define a `model_snapshot` path as the primary accuracy mechanism: read selected real/VM/design values, convert them to model-native fields, record the source, and pass the snapshot into the model backend.
-  - Keep `real-to-VM mirroring` as a separate debug/commissioning feature that copies real-machine state into the VM control object when explicitly requested.
-  - Do not require real-to-VM mirroring before model calculations; the model backend should be able to consume a snapshot directly.
-  - Add metadata to model-driven results that records whether the calculation used `design`, `live_from_real`, `live_from_vm`, or a saved snapshot.
+  - Add explicit UI or CLI selection for saved snapshot JSON files.
+  - Keep `real-to-VM mirroring` as a separate debug/commissioning feature that copies real-machine state into the VM control object only when explicitly requested.
   - Require explicit unit/conversion definitions before using current-based magnet PVs as elegant `K1`, kick, or bend-angle values.
+  - Extend snapshot mapping coverage only when a model calculation actually needs the extra field, or generate broad coverage from machine profile metadata.
+
+### 9. Model Backend Runtime Workspace Separation
+
+- Status: open
+- Priority: medium
+- Background:
+  - VM runtime and model backend calculations both use elegant, but they play different roles.
+  - The VM is a control object with runtime state such as `halflinac.json`, `elegant/lattice.lte`, and `elegant/one.ele`.
+  - The model backend is a calculation object that writes temporary model files such as `emit.json`, `emit.lte`, `emit.ele`, `esa.json`, `esa.lte`, and `esa.ele`.
+  - The generated model working files can be rebuilt from `lattice_ini.lte`, `emit_ini.ele`, `esa_ini.ele`, configured line names, and explicit snapshot overrides.
+- Problem:
+  - Keeping model backend working files under `src/virtual_machine/<machine>_elegant/` works, but it visually couples model calculations to the VM control object.
+  - It also makes runtime diffs look like source changes when generated files are still tracked by git.
+- Follow-up:
+  - Keep generated elegant runtime files ignored and untracked.
+  - Move model backend working files to a dedicated runtime workspace, such as `src/shared/model_runtime/` or app-specific runtime directories.
+  - Keep VM runtime files and model backend runtime files separate even when both use the same design lattice and elegant executable.
+  - Update model backend config paths and validation once the dedicated workspace is introduced.

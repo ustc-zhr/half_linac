@@ -92,6 +92,39 @@ The elegant backend accepts field-level lattice overrides:
 The backend writes these fields into its temporary lattice state before running
 elegant. It does not read PVs and does not mutate VM runtime state.
 
+## Elegant Runtime Files
+
+The HALF elegant model backend currently writes calculation working files under
+`src/virtual_machine/half_elegant/`:
+
+- `emit.json`
+- `elegant/emit.lte`
+- `elegant/emit.ele`
+- `esa.json`
+- `elegant/esa.lte`
+- `elegant/esa.ele`
+
+These files are generated from the tracked source inputs:
+
+- `elegant/lattice_ini.lte`
+- `elegant/emit_ini.ele`
+- `elegant/esa_ini.ele`
+- the configured model line name
+- any explicit model snapshot lattice overrides
+
+They are runtime working files, not source files. They should stay ignored and
+untracked. The source contract is the design lattice, the initial elegant input
+files, the machine profile config, and the snapshot metadata recorded with each
+calculation.
+
+Keeping the model backend working files in the virtual-machine directory is a
+transitional layout. It is functional because the VM uses separate runtime files
+(`halflinac.json`, `elegant/lattice.lte`, `elegant/one.ele`), while model
+calculations use `emit.*` and `esa.*`. Long term, the cleaner layout is to give
+model calculations their own runtime workspace, for example under
+`src/shared/model_runtime/` or an app runtime directory, so model calculations
+are visibly separate from the VM control object.
+
 ## Real-To-VM Mirroring
 
 Real-to-VM mirroring is a separate debug and commissioning feature. It may copy
@@ -113,15 +146,15 @@ The first implementation:
    both lattice overrides and metadata.
 3. Uses snapshots in `energy_spectrum`, `emit_measure`, and BBA-2 model R12
    calculations.
-4. Keeps real-to-VM mirroring as a later debug-oriented feature.
-
-The second slice adds a stable saved snapshot JSON schema plus latest snapshot
-recording for `energy_spectrum` model calculations.
+4. Records latest snapshot metadata for model-driven calculations where runtime
+   result archives are already available.
+5. Keeps real-to-VM mirroring as a later debug-oriented feature.
 
 ## Later TODO
 
 - Add UI or CLI selection for saved snapshot files.
-- Extend snapshot use to `emit_measure` and BBA.
+- Move model backend working files out of the VM directory into a dedicated
+  model runtime workspace.
 - Add explicit real-to-VM mirroring/debug commands that copy selected real
   readbacks into the VM control object without becoming a hidden model
   dependency.
