@@ -74,7 +74,6 @@ nest_dict    = lambda: defaultdict(nest_dict)
 ELECTRON_MASS_EV = 0.51099895000e6
 SCAN_RESULTS_FILENAME = "scanResults.txt"
 TWISS_RESULTS_FILENAME = "twissResults.jsonl"
-SCAN_ARCHIVE_ROOT = Path(__file__).resolve().parent / "runtime" / "scans"
 APP_DIR = Path(__file__).resolve().parent
 SCAN_DATA_SCHEMA_VERSION = "emit_scan_v1"
 SCAN_POINT_COLUMNS = ("Use", "K1", "sigx (mm)", "sigy (mm)")
@@ -1948,9 +1947,6 @@ class myWindow(QWidget,Ui_Form):
     def _scan_archive_dir(self):
         return resolve_app_runtime_paths(APP_DIR, self.app_context)["runs_dir"]
 
-    def _legacy_scan_archive_dir(self):
-        return SCAN_ARCHIVE_ROOT / self.machine_profile.machine.id / self.machine_type
-
     def _scan_latest_dir(self):
         return resolve_app_runtime_paths(APP_DIR, self.app_context)["latest_dir"]
 
@@ -2083,9 +2079,6 @@ class myWindow(QWidget,Ui_Form):
         if paras is None:
             return
         archive_dir = self._scan_archive_dir()
-        legacy_archive_dir = self._legacy_scan_archive_dir()
-        if not archive_dir.exists() and legacy_archive_dir.exists():
-            archive_dir = legacy_archive_dir
         archive_dir.mkdir(parents=True, exist_ok=True)
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -3197,7 +3190,7 @@ class scanThread(QThread):
         self.recal_points = getattr(paras, "recal_points", None)
         self.scan_metadata = getattr(paras, "scan_metadata", None)
         self.scan_archive_dir = Path(
-            getattr(paras, "scan_archive_dir", SCAN_ARCHIVE_ROOT / "unknown" / "unknown")
+            getattr(paras, "scan_archive_dir", APP_DIR / "runtime" / "unknown" / "unknown" / "runs")
         )
         self.scan_latest_dir = Path(
             getattr(paras, "scan_latest_dir", self.scan_archive_dir / "latest")
