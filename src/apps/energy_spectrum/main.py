@@ -1616,10 +1616,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         try:
             paths["latest_dir"].mkdir(parents=True, exist_ok=True)
-            paths["energy_result_path"].write_text(
-                json.dumps(metadata, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
+            metadata_text = json.dumps(metadata, indent=2, sort_keys=True)
+            paths["latest_metadata_path"].write_text(metadata_text, encoding="utf-8")
+            paths["energy_result_path"].write_text(metadata_text, encoding="utf-8")
             snapshot_metadata = metadata.get("model_snapshot")
             if isinstance(snapshot_metadata, dict):
                 archive_key = snapshot_metadata.get("created_at") or metadata["created_at"]
@@ -1628,11 +1627,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             if archive_key != self._last_energy_result_archive_key:
                 paths["result_archive_dir"].mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-                archive_path = paths["result_archive_dir"] / f"energy_result_{timestamp}.json"
-                archive_path.write_text(
-                    json.dumps(metadata, indent=2, sort_keys=True),
-                    encoding="utf-8",
-                )
+                archive_dir = paths["result_archive_dir"] / f"energy_result_{timestamp}"
+                archive_dir.mkdir(parents=True, exist_ok=True)
+                archive_path = archive_dir / "metadata.json"
+                archive_path.write_text(metadata_text, encoding="utf-8")
                 self._last_energy_result_archive_key = archive_key
         except OSError as exc:
             print(f"Warning: failed to save energy spectrum result metadata: {exc}")

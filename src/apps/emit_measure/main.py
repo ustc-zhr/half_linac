@@ -53,6 +53,7 @@ from PyQt5.QtWidgets import (
 
 from half_linac.src.shared.beam_diagnostics import fit_beam_image
 from half_linac.src.shared.machine_profile import (
+    METADATA_FILENAME,
     MachineProfileError,
     build_model_backend,
     build_model_snapshot,
@@ -63,6 +64,7 @@ from half_linac.src.shared.machine_profile import (
     load_profile,
     model_snapshot_lattice_overrides,
     require_workflow_write_allowed,
+    resolve_app_runtime_paths,
     resolve_channel,
     resolve_flag_pixel_geometry,
 )
@@ -74,6 +76,7 @@ SCAN_RESULTS_FILENAME = "scanResults.txt"
 SCAN_RESULTS_META_FILENAME = "scanResults.meta.json"
 TWISS_RESULTS_FILENAME = "twissResults.jsonl"
 SCAN_ARCHIVE_ROOT = Path(__file__).resolve().parent / "runtime" / "scans"
+APP_DIR = Path(__file__).resolve().parent
 SCAN_DATA_SCHEMA_VERSION = "emit_scan_v1"
 SCAN_POINT_COLUMNS = ("Use", "K1", "sigx (mm)", "sigy (mm)")
 TWISS_TRANSPORT_TOOLTIP = (
@@ -1944,10 +1947,13 @@ class myWindow(QWidget,Ui_Form):
         self._redraw_scan_points_from_table()
 
     def _scan_archive_dir(self):
+        return resolve_app_runtime_paths(APP_DIR, self.app_context)["runs_dir"]
+
+    def _legacy_scan_archive_dir(self):
         return SCAN_ARCHIVE_ROOT / self.machine_profile.machine.id / self.machine_type
 
     def _scan_latest_dir(self):
-        return self._scan_archive_dir() / "latest"
+        return resolve_app_runtime_paths(APP_DIR, self.app_context)["latest_dir"]
 
     def _latest_scan_results_path(self):
         return self._scan_latest_dir() / SCAN_RESULTS_FILENAME
@@ -2009,6 +2015,9 @@ class myWindow(QWidget,Ui_Form):
     def _metadata_path_for_results(self, results_path):
         results_path = Path(results_path)
         if results_path.name == SCAN_RESULTS_FILENAME:
+            metadata_path = results_path.parent / METADATA_FILENAME
+            if metadata_path.exists():
+                return metadata_path
             return results_path.parent / SCAN_RESULTS_META_FILENAME
         return results_path.with_suffix(".json")
 
@@ -2078,6 +2087,9 @@ class myWindow(QWidget,Ui_Form):
         if paras is None:
             return
         archive_dir = self._scan_archive_dir()
+        legacy_archive_dir = self._legacy_scan_archive_dir()
+        if not archive_dir.exists() and legacy_archive_dir.exists():
+            archive_dir = legacy_archive_dir
         archive_dir.mkdir(parents=True, exist_ok=True)
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -3195,7 +3207,8 @@ class scanThread(QThread):
             getattr(paras, "scan_latest_dir", self.scan_archive_dir / "latest")
         )
         self.scan_results_path = self.scan_latest_dir / SCAN_RESULTS_FILENAME
-        self.scan_results_meta_path = self.scan_latest_dir / SCAN_RESULTS_META_FILENAME
+        self.scan_results_meta_path = self.scan_latest_dir / METADATA_FILENAME
+        self.legacy_scan_results_meta_path = self.scan_latest_dir / SCAN_RESULTS_META_FILENAME
         self.scan_metadata_paths = []
         self.is_running = True
 
@@ -3398,20 +3411,22 @@ class scanThread(QThread):
 
         self.scan_latest_dir.mkdir(parents=True, exist_ok=True)
         np.savetxt(self.scan_results_path, data, fmt="%.6e")
-        self.scan_results_meta_path.write_text(
-            json.dumps(metadata, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        metadata_text = json.dumps(metadata, indent=2, sort_keys=True)
+        self.scan_results_meta_path.write_text(metadata_text, encoding="utf-8")
+        self.legacy_scan_results_meta_path.write_text(metadata_text, encoding="utf-8")
 
         self.scan_archive_dir.mkdir(parents=True, exist_ok=True)
-        archive_path = self.scan_archive_dir / f"{self._scan_archive_stem()}.txt"
-        archive_meta_path = archive_path.with_suffix(".json")
+        archive_dir = self.scan_archive_dir / self._scan_archive_stem()
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = archive_dir / SCAN_RESULTS_FILENAME
+        archive_meta_path = archive_dir / METADATA_FILENAME
         np.savetxt(archive_path, data, fmt="%.6e")
-        archive_meta_path.write_text(
-            json.dumps(metadata, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        self.scan_metadata_paths = [self.scan_results_meta_path, archive_meta_path]
+        archive_meta_path.write_text(metadata_text, encoding="utf-8")
+        self.scan_metadata_paths = [
+            self.scan_results_meta_path,
+            self.legacy_scan_results_meta_path,
+            archive_meta_path,
+        ]
         print(f"Saved latest scan results: {self.scan_results_path}")
         print(f"Saved scan archive: {archive_path}")
 

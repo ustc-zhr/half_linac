@@ -508,6 +508,7 @@ class ScanParameters:
     bba2_bpm1_path: Path | None = None
     bba2_corrector_scan_path: Path | None = None
     bba2_metadata_path: Path | None = None
+    latest_metadata_path: Path | None = None
     bba2_recal_quad_points: list[tuple[float, float]] | None = None
     bba2_recal_bpm1_points: list[float] | None = None
     bba2_recal_corrector_points: list[tuple[float, float]] | None = None
@@ -2180,6 +2181,7 @@ class myWindow(QWidget, Ui_Form):
         params.bba2_bpm1_path = paths["bba2_bpm1_path"]
         params.bba2_corrector_scan_path = paths["bba2_corrector_scan_path"]
         params.bba2_metadata_path = paths["bba2_metadata_path"]
+        params.latest_metadata_path = paths["latest_metadata_path"]
         params.bba1_source_dir = paths["latest_dir"]
         if not params.recal:
             context = load_app_context(
@@ -3068,12 +3070,14 @@ class BBAScanThreadBBA2(BBABaseThread):
             if not self._sleep_or_stop(1):
                 return
             if not self.params.recal:
+                metadata = self._metadata()
                 self._save_json(
                     self.params.bba2_metadata_path,
-                    self._metadata(),
+                    metadata,
                     archive_dir=self.params.archive_dir,
                     archive_name="metadata.json",
                 )
+                self._save_json(self.params.latest_metadata_path, metadata)
         except Exception as exc:
             self._emit({"error": str(exc)})
 

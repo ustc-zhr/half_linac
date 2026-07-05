@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 
-from half_linac.src.shared.machine_profile import AppContext, MachineProfile
+from half_linac.src.shared.machine_profile import (
+    AppContext,
+    MachineProfile,
+    new_app_run_dir,
+    resolve_app_runtime_paths,
+)
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -19,15 +23,17 @@ BBA2_CORRECTOR_SCAN_FILE = "bba2_thetam2.txt"
 
 
 def resolve_bba_runtime_paths(target: MachineProfile | AppContext) -> dict[str, Path]:
-    profile = target.profile if isinstance(target, AppContext) else target
-    backend = target.control_backend.name if isinstance(target, AppContext) else profile.machine.default_mode
-    runtime_dir = BBA_RUNTIME_ROOT / profile.machine.id / backend
-    latest_dir = runtime_dir / "latest"
-    archive_dir = runtime_dir / "scans"
+    base_paths = resolve_app_runtime_paths(APP_DIR, target)
+    runtime_dir = base_paths["runtime_dir"]
+    latest_dir = base_paths["latest_dir"]
+    runs_dir = base_paths["runs_dir"]
     return {
         "runtime_dir": runtime_dir,
         "latest_dir": latest_dir,
-        "archive_dir": archive_dir,
+        "archive_dir": runs_dir,
+        "runs_dir": runs_dir,
+        "legacy_archive_dir": runtime_dir / "scans",
+        "latest_metadata_path": base_paths["latest_metadata_path"],
         "bba1_data_path": latest_dir / BBA1_DATA_FILE,
         "bba1_quad_scan_path": latest_dir / BBA1_QUAD_SCAN_FILE,
         "bba1_metadata_path": latest_dir / BBA_METADATA_FILE,
@@ -39,7 +45,4 @@ def resolve_bba_runtime_paths(target: MachineProfile | AppContext) -> dict[str, 
 
 
 def new_bba_scan_archive_dir(target: MachineProfile | AppContext, family: str) -> Path:
-    paths = resolve_bba_runtime_paths(target)
-    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-    family_slug = str(family).strip().lower().replace(" ", "_") or "bba"
-    return paths["archive_dir"] / f"scan_{timestamp}_{family_slug}"
+    return new_app_run_dir(APP_DIR, target, kind="scan", suffix=family)

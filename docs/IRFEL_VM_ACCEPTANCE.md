@@ -44,8 +44,8 @@ The runtime smoke verified:
 - `Reload Initial Lattice` rewrites the runtime JSON and, when the IOC is running, syncs VM writable PVs for quadrupoles, correctors, and bends.
 - `emit_measure` default IRFEL VM preset `emit_qm12_prf04` uses `QM12 -> PRF04`, model line `ALL_DUMP`, and scan range `25.0..35.0`.
 - `emit_measure` uses local PRF image fitting for beam sizes in IRFEL VM.
-- `emit_measure` stores timestamped scan archives under `src/apps/emit_measure/runtime/scans/irfel/vm`.
-- `src/apps/emit_measure/scanResults.txt` remains the latest-scan working copy for current recalculation workflow.
+- `emit_measure` stores timestamped scan archives under `src/apps/emit_measure/runtime/irfel/vm/runs`.
+- `src/apps/emit_measure/runtime/irfel/vm/latest/scanResults.txt` remains the latest-scan working copy for current recalculation workflow.
 - VM publishing currently provides BPM coordinates and flag images. Publishing `sigx/sigy` directly from VM runtime remains a separate TODO.
 
 ## Real-Mode Boundary

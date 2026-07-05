@@ -142,15 +142,15 @@
 
 ### 6. Emit Measure Latest Scan File Cleanup
 
-- Status: open
+- Status: partially addressed
 - Priority: low
 - Background:
-  - `src/apps/emit_measure/scanResults.txt` is currently the latest-scan working copy.
-  - `src/apps/emit_measure/runtime/scans/<machine>/<backend>/scan_*.txt` is the timestamped archive store.
-  - The current app writes both after a scan: the latest file supports immediate recalculation, while archive files preserve history.
+  - `src/apps/emit_measure/runtime/<machine>/<backend>/latest/scanResults.txt` is the latest-scan working copy.
+  - `src/apps/emit_measure/runtime/<machine>/<backend>/runs/<run_id>/scanResults.txt` is the timestamped archive store.
+  - The current app writes both after a scan: the latest file supports immediate recalculation, while archive directories preserve history.
 - Problem:
   - The two-file model is useful now but creates some conceptual overlap.
-  - Removing `scanResults.txt` too early would break current `Recalculate`, status display, and latest metadata paths.
+  - Removing the latest `scanResults.txt` too early would break current `Recalculate`, status display, and latest metadata paths.
 - Follow-up:
   - Keep `scanResults.txt` for the current IRFEL VM bring-up phase.
   - Later, make `Recalculate` use the GUI scan-point table as its primary source.

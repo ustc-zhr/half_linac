@@ -141,11 +141,24 @@ calculation.
 
 Application result metadata records snapshots close to the measured data:
 
-- `emit_measure` stores `model_snapshot` in `scanResults.meta.json`.
+- `emit_measure` stores `model_snapshot` in `metadata.json` beside each saved
+  `scanResults.txt`.
 - BBA-2 stores `model_snapshot` in each scan `metadata.json`.
 - `energy_spectrum` stores the latest energy result metadata in
-  `src/apps/energy_spectrum/runtime/<machine>/<backend>/latest/latest_energy_result.json`
-  and archives a new energy result JSON when the active model snapshot changes.
+  `src/apps/energy_spectrum/runtime/<machine>/<backend>/latest/metadata.json`
+  and archives a new result under `runs/energy_result_<timestamp>/metadata.json`
+  when the active model snapshot changes.
+
+The app runtime archive convention is:
+
+```text
+src/apps/<app>/runtime/<machine>/<backend>/latest/metadata.json
+src/apps/<app>/runtime/<machine>/<backend>/runs/<run_id>/metadata.json
+```
+
+App-specific data files may sit beside `metadata.json`, such as
+`scanResults.txt` for emit scans or BBA scan text files. Older metadata paths
+remain readable during the migration.
 
 VM runtime files and model backend runtime files are intentionally separate even
 when they use the same design lattice and elegant executable. This keeps the VM
