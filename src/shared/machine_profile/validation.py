@@ -613,7 +613,7 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
         "emit_ini_ele": backend.emit_ini_ele,
     }
     required_dirs = {
-        "working_dir": backend.working_dir,
+        "asset_dir": backend.asset_dir,
     }
     generated_targets = {
         "emit_lte": backend.emit_lte,
@@ -629,8 +629,9 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
         if not path.is_dir():
             missing.append(f"{label} directory not found: {path}")
     for label, path in generated_targets.items():
-        if not path.parent.is_dir():
-            missing.append(f"{label} parent directory not found: {path.parent}")
+        problem = _generated_target_parent_problem(label, path)
+        if problem:
+            missing.append(problem)
 
     if missing:
         return MachineValidationCheck(f"model:{app_name}", FAIL, "; ".join(missing))
@@ -698,10 +699,10 @@ def _validate_energy_spectrum_model_config(
     config = model_backend.config
     missing: list[str] = []
     required_files = {
-        "working_dir": _require_model_path(config, "working_dir"),
         "source_lattice": _require_model_path(config, "source_lattice"),
         "energy_ini_ele_file": _require_model_path(config, "energy_ini_ele_file"),
     }
+    asset_dir = Path(str(config.get("asset_dir") or required_files["source_lattice"].parent))
     generated_targets = {
         "energy_json_path": _require_model_path(config, "energy_json_path"),
         "energy_lte_file": _require_model_path(config, "energy_lte_file"),
@@ -710,16 +711,16 @@ def _validate_energy_spectrum_model_config(
         "energy_twi_file": _require_model_path(config, "energy_twi_file"),
     }
 
-    working_dir = required_files["working_dir"]
-    if not working_dir.is_dir():
-        missing.append(f"working_dir directory not found: {working_dir}")
+    if not asset_dir.is_dir():
+        missing.append(f"asset_dir directory not found: {asset_dir}")
     for label in ("source_lattice", "energy_ini_ele_file"):
         path = required_files[label]
         if not path.is_file():
             missing.append(f"{label} file not found: {path}")
     for label, path in generated_targets.items():
-        if not path.parent.is_dir():
-            missing.append(f"{label} parent directory not found: {path.parent}")
+        problem = _generated_target_parent_problem(label, path)
+        if problem:
+            missing.append(problem)
 
     if missing:
         return MachineValidationCheck("model:energy_spectrum", FAIL, "; ".join(missing))
@@ -736,6 +737,19 @@ def _require_model_path(config: Mapping[str, Any], key: str) -> Path:
     if not isinstance(raw_value, str) or not raw_value.strip():
         raise MachineProfileError(f"Model backend config is missing {key!r}.")
     return Path(raw_value)
+
+
+def _generated_target_parent_problem(label: str, path: Path) -> str | None:
+    parent = path.parent
+    if parent.is_dir():
+        return None
+
+    nearest = parent
+    while not nearest.exists() and nearest != nearest.parent:
+        nearest = nearest.parent
+    if nearest.is_dir():
+        return None
+    return f"{label} parent directory cannot be created from existing path: {parent}"
 
 
 def main(argv: Sequence[str] | None = None) -> int:

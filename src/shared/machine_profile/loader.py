@@ -68,7 +68,12 @@ PATHLIKE_MODEL_CONFIG_KEYS = (
     "_file",
     "_path",
 )
-PATHLIKE_MODEL_CONFIG_NAMES = {"working_dir"}
+PATHLIKE_MODEL_CONFIG_NAMES = {
+    "asset_dir",
+    "working_dir",
+    "emit_working_dir",
+    "energy_working_dir",
+}
 MACHINE_ID_ENV = "HALF_LINAC_MACHINE_ID"
 CONTROL_BACKEND_ENV = "HALF_LINAC_CONTROL_BACKEND"
 LEGACY_MACHINE_ID_ENV = "HALF_MACHINE_ID"

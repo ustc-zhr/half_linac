@@ -94,21 +94,37 @@ elegant. It does not read PVs and does not mutate VM runtime state.
 
 ## Elegant Runtime Files
 
-The HALF elegant model backend currently writes calculation working files under
-`src/virtual_machine/half_elegant/`:
+Elegant model calculations write temporary working files under the repository
+runtime directory:
 
-- `emit.json`
-- `elegant/emit.lte`
-- `elegant/emit.ele`
-- `esa.json`
-- `elegant/esa.lte`
-- `elegant/esa.ele`
+```text
+runtime/model_backend/<machine>/<backend>/
+  emit/
+    emit.json
+    emit.lte
+    emit.ele
+    emit.mat
+    emit.log
+  energy/
+    esa.json
+    esa.lte
+    esa.ele
+    esa.mat
+    esa.twi
+    esa.log
+```
+
+For example, HALF simulation outputs are written under:
+
+```text
+runtime/model_backend/half/simulation/
+```
 
 These files are generated from the tracked source inputs:
 
-- `elegant/lattice_ini.lte`
-- `elegant/emit_ini.ele`
-- `elegant/esa_ini.ele`
+- `src/virtual_machine/<machine>_elegant/elegant/lattice_ini.lte`
+- `src/virtual_machine/<machine>_elegant/elegant/emit_ini.ele`
+- `src/virtual_machine/<machine>_elegant/elegant/esa_ini.ele`
 - the configured model line name
 - any explicit model snapshot lattice overrides
 
@@ -117,13 +133,9 @@ untracked. The source contract is the design lattice, the initial elegant input
 files, the machine profile config, and the snapshot metadata recorded with each
 calculation.
 
-Keeping the model backend working files in the virtual-machine directory is a
-transitional layout. It is functional because the VM uses separate runtime files
-(`halflinac.json`, `elegant/lattice.lte`, `elegant/one.ele`), while model
-calculations use `emit.*` and `esa.*`. Long term, the cleaner layout is to give
-model calculations their own runtime workspace, for example under
-`src/shared/model_runtime/` or an app runtime directory, so model calculations
-are visibly separate from the VM control object.
+VM runtime files and model backend runtime files are intentionally separate even
+when they use the same design lattice and elegant executable. This keeps the VM
+as a control object and the model backend as a calculation object.
 
 ## Real-To-VM Mirroring
 
@@ -153,8 +165,6 @@ The first implementation:
 ## Later TODO
 
 - Add UI or CLI selection for saved snapshot files.
-- Move model backend working files out of the VM directory into a dedicated
-  model runtime workspace.
 - Add explicit real-to-VM mirroring/debug commands that copy selected real
   readbacks into the VM control object without becoming a hidden model
   dependency.

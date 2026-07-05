@@ -36,6 +36,7 @@ src/apps/energy_spectrum/runtime/
 src/apps/emit_measure/scanResults.txt
 src/apps/emit_measure/scanResults.meta.json
 src/apps/emit_measure/runtime/
+runtime/model_backend/
 
 # Runtime artifacts
 *.log

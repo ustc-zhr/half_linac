@@ -201,7 +201,7 @@
 
 ### 9. Model Backend Runtime Workspace Separation
 
-- Status: open
+- Status: partially implemented
 - Priority: medium
 - Background:
   - VM runtime and model backend calculations both use elegant, but they play different roles.
@@ -209,10 +209,12 @@
   - The model backend is a calculation object that writes temporary model files such as `emit.json`, `emit.lte`, `emit.ele`, `esa.json`, `esa.lte`, and `esa.ele`.
   - The generated model working files can be rebuilt from `lattice_ini.lte`, `emit_ini.ele`, `esa_ini.ele`, configured line names, and explicit snapshot overrides.
 - Problem:
-  - Keeping model backend working files under `src/virtual_machine/<machine>_elegant/` works, but it visually couples model calculations to the VM control object.
-  - It also makes runtime diffs look like source changes when generated files are still tracked by git.
+  - Keeping model backend working files under `src/virtual_machine/<machine>_elegant/` visually coupled model calculations to the VM control object.
+  - Runtime diffs could look like source changes when generated files were still tracked by git.
+- Current implementation:
+  - HALF and IRFEL model backend working files now use `runtime/model_backend/<machine>/simulation/{emit,energy}/`.
+  - VM source assets such as `lattice_ini.lte`, `emit_ini.ele`, and `esa_ini.ele` remain in the VM elegant asset directory.
+  - Generated model working files are ignored and untracked.
 - Follow-up:
-  - Keep generated elegant runtime files ignored and untracked.
-  - Move model backend working files to a dedicated runtime workspace, such as `src/shared/model_runtime/` or app-specific runtime directories.
   - Keep VM runtime files and model backend runtime files separate even when both use the same design lattice and elegant executable.
-  - Update model backend config paths and validation once the dedicated workspace is introduced.
+  - Consider moving the remaining app-local ESA elegant orchestration into the shared model backend once the runtime boundary is stable.

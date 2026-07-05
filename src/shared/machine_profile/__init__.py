@@ -34,7 +34,12 @@ from .loader import (
     VirtualMachineUsedlineWorkflow,
     load_solenoid_centering_workflow,
 )
-from .model_backend import BeamModelBackend, ElegantModelBackend, build_model_backend
+from .model_backend import (
+    BeamModelBackend,
+    ElegantModelBackend,
+    build_model_backend,
+    prepare_elegant_model_workdir,
+)
 from .model_snapshot import (
     MODEL_SNAPSHOT_SOURCE_DESIGN,
     MODEL_SNAPSHOT_SOURCE_LIVE_FROM_REAL,
@@ -187,6 +192,7 @@ __all__ = [
     "resolve_softioc_runtime",
     "resolve_vm_runtime",
     "request_runtime_restart",
+    "prepare_elegant_model_workdir",
     "resolve_channel",
     "resolve_bend_write_channel",
     "resolve_corrector_write_channel",

@@ -57,6 +57,7 @@ from half_linac.src.shared.machine_profile import (
     get_workflow,
     list_elements,
     load_app_context,
+    prepare_elegant_model_workdir,
     require_workflow_write_allowed,
     resolve_bend_write_channel,
     resolve_channel,
@@ -712,7 +713,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         config = dict(self.app_context.model_backend.config)
         required_keys = (
-            "working_dir",
             "source_lattice",
             "energy_ini_ele_file",
             "energy_json_path",
@@ -730,6 +730,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 raise MachineProfileError(
                     f"energy_spectrum model backend is missing required key {key!r}."
                 )
+        working_dir = config.get("energy_working_dir") or config.get("working_dir")
+        if not isinstance(working_dir, str) or not working_dir.strip():
+            raise MachineProfileError(
+                "energy_spectrum model backend is missing required key "
+                "'energy_working_dir' or fallback 'working_dir'."
+            )
         return config
 
     def _build_start_elements(self):
@@ -790,6 +796,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if self.energy_model_config is None:
             raise MachineProfileError(self._model_error or "energy_spectrum model backend is unavailable.")
         return Path(self.energy_model_config[key])
+
+    def _energy_model_working_dir(self):
+        if self.energy_model_config is None:
+            raise MachineProfileError(self._model_error or "energy_spectrum model backend is unavailable.")
+        working_dir = self.energy_model_config.get("energy_working_dir") or self.energy_model_config["working_dir"]
+        return Path(working_dir)
 
     def _model_available(self):
         return self.energy_model_config is not None
@@ -1975,12 +1987,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             lattice_file = self._energy_model_path("source_lattice")
             esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
             line_name = self.energy_model_config["energy_dispersion_line_name"]
-            working_dir = self._energy_model_path("working_dir")
+            working_dir = self._energy_model_working_dir()
 
             esajson_path = self._energy_model_path("energy_json_path")
             esa_lte_file = self._energy_model_path("energy_lte_file")
             esa_ele_file = self._energy_model_path("energy_ele_file")
             esa_mat_file = self._energy_model_path("energy_mat_file")
+            prepare_elegant_model_workdir(
+                working_dir,
+                output_paths=(esajson_path, esa_lte_file, esa_ele_file, esa_mat_file),
+            )
 
             lte1 = ElegantParser(
                 lattice_file,
@@ -2075,12 +2091,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         lattice_file = self._energy_model_path("source_lattice")
         esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
         line_name = self.energy_model_config["energy_twiss_line_name"]
-        working_dir = self._energy_model_path("working_dir")
+        working_dir = self._energy_model_working_dir()
 
         esajson_path = self._energy_model_path("energy_json_path")
         esa_lte_file = self._energy_model_path("energy_lte_file")
         esa_ele_file = self._energy_model_path("energy_ele_file")
         esa_twi_file = self._energy_model_path("energy_twi_file")
+        prepare_elegant_model_workdir(
+            working_dir,
+            output_paths=(esajson_path, esa_lte_file, esa_ele_file, esa_twi_file),
+        )
 
         try:
             lte1 = ElegantParser(

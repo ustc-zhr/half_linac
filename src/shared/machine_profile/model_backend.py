@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Iterable, Mapping, Protocol
 
 import numpy as np
 import sdds
@@ -14,6 +14,18 @@ from .models import AppContext, MachineProfileError, ModelBackendConfig
 
 
 LatticeOverrides = Mapping[str, Mapping[str, float | int | str]]
+
+
+def prepare_elegant_model_workdir(
+    working_dir: str | Path,
+    *,
+    output_paths: Iterable[str | Path] = (),
+) -> Path:
+    workdir = Path(working_dir)
+    workdir.mkdir(parents=True, exist_ok=True)
+    for output_path in output_paths:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    return workdir
 
 
 class BeamModelBackend(Protocol):
@@ -77,6 +89,9 @@ class ElegantModelBackend:
         self.energy_mev = energy_mev
         self.source_json = Path(_require_config(config, "source_json"))
         self.source_lattice = Path(_require_config(config, "source_lattice"))
+        self.asset_dir = Path(
+            str(config.get("asset_dir") or config.get("working_dir") or self.source_lattice.parent)
+        )
         self.emit_ini_ele = Path(_require_config(config, "emit_ini_ele"))
         self.emit_lte = Path(_require_config(config, "emit_lte"))
         self.emit_ele = Path(_require_config(config, "emit_ele"))
@@ -84,7 +99,7 @@ class ElegantModelBackend:
         self.emit_mat = Path(_require_config(config, "emit_mat"))
         self.emit_log = _require_config(config, "emit_log")
         self.line_name = line_name or _require_config(config, "line_name")
-        working_dir = config.get("working_dir")
+        working_dir = config.get("emit_working_dir") or config.get("working_dir")
         self.working_dir = Path(str(working_dir)) if working_dir is not None else self.emit_ele.parent
 
     def get_lattice_element(self, element_id: str) -> Mapping[str, str]:
@@ -190,6 +205,10 @@ class ElegantModelBackend:
         lattice_overrides: LatticeOverrides | None = None,
         seq: str = "exit2exit",
     ) -> np.ndarray:
+        prepare_elegant_model_workdir(
+            self.working_dir,
+            output_paths=(self.emit_json, self.emit_lte, self.emit_ele, self.emit_mat),
+        )
         parser = self._new_parser()
         parser.dump_runtime_state()
         with self.emit_json.open("r", encoding="utf-8") as handle:
