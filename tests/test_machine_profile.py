@@ -343,6 +343,28 @@ class MachineProfileTests(unittest.TestCase):
 
         self.assertEqual(irfel_snapshot.lattice_overrides, {"QM04": {"K1": -70.0}})
 
+    def test_emit_measure_model_snapshot_path_fields_are_path_scoped(self):
+        context = load_app_context(
+            "emit_measure",
+            machine_id="half",
+            control_backend="vm",
+        )
+        backend = build_model_backend(context)
+
+        qt02_path_quads = [
+            element["NAME"]
+            for element in backend.get_line_elements("QT02", "PRF07")
+            if element.get("TYPE") == "QUAD" and "K1" in element
+        ]
+        self.assertEqual(qt02_path_quads, ["QT02"])
+
+        ql27_path_quads = [
+            element["NAME"]
+            for element in backend.get_line_elements("QL27", "PRF07")
+            if element.get("TYPE") == "QUAD" and "K1" in element
+        ]
+        self.assertEqual(ql27_path_quads, ["QL27", "QT01", "QT02"])
+
     def test_model_snapshot_can_use_design_lattice_without_pv_read(self):
         context = load_app_context(
             "energy_spectrum",

@@ -1943,13 +1943,20 @@ class myWindow(QWidget,Ui_Form):
             return Path(self.loaded_scan_results_path).parent / TWISS_RESULTS_FILENAME
         return self._scan_latest_dir() / TWISS_RESULTS_FILENAME
 
-    def _emit_model_snapshot_fields(self):
-        fields = {(preset.quad, "K1") for preset in self.emit_workflow.presets}
-        fields.update((quad, "K1") for quad in self.emit_workflow.twiss_quads)
+    def _emit_model_snapshot_fields_for_path(self, elem1, elem2, *, model_line=None):
+        backend = build_model_backend(self.app_context, line_name=model_line)
+        fields = {
+            (str(element["NAME"]), "K1")
+            for element in backend.get_line_elements(elem1, elem2)
+            if str(element.get("TYPE", "")).upper() == "QUAD" and "K1" in element
+        }
         return tuple(sorted(fields))
 
-    def _build_emit_model_snapshot_metadata(self):
-        snapshot = build_model_snapshot(self.app_context, self._emit_model_snapshot_fields())
+    def _build_emit_model_snapshot_metadata_for_path(self, elem1, elem2, *, model_line=None):
+        fields = self._emit_model_snapshot_fields_for_path(elem1, elem2, model_line=model_line)
+        if not fields:
+            return None
+        snapshot = build_model_snapshot(self.app_context, fields)
         return snapshot.as_metadata()
 
     @staticmethod
@@ -1971,7 +1978,11 @@ class myWindow(QWidget,Ui_Form):
         return overrides or None
 
     def _prepare_emit_model_snapshot(self, paras):
-        metadata = self._build_emit_model_snapshot_metadata()
+        metadata = self._build_emit_model_snapshot_metadata_for_path(
+            paras.quad_name,
+            paras.flag_name,
+            model_line=paras.model_line,
+        )
         paras.model_snapshot_metadata = metadata
         paras.model_lattice_overrides = self._lattice_overrides_from_model_snapshot_metadata(metadata)
 
@@ -2789,7 +2800,10 @@ class myWindow(QWidget,Ui_Form):
         para["from_element"] = para["quad1"]
         para["to_element"] = para["quad2"]
         try:
-            model_snapshot = self._build_emit_model_snapshot_metadata()
+            model_snapshot = self._build_emit_model_snapshot_metadata_for_path(
+                para["quad1"],
+                para["quad2"],
+            )
         except MachineProfileError as exc:
             self.twiss_status_edit.setText("Model snapshot failed")
             self._warn_twiss(str(exc))

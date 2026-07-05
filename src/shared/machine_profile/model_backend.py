@@ -50,6 +50,14 @@ class BeamModelBackend(Protocol):
         lattice_overrides: LatticeOverrides | None = None,
     ) -> Mapping[str, float]: ...
 
+    def get_line_elements(
+        self,
+        elem1: str,
+        elem2: str,
+        *,
+        include_endpoints: bool = True,
+    ) -> tuple[Mapping[str, str], ...]: ...
+
     def get_lattice_element(self, element_id: str) -> Mapping[str, str]: ...
 
 
@@ -88,6 +96,26 @@ class ElegantModelBackend:
             raise MachineProfileError(
                 f"Model backend lattice does not define element {element_id!r}."
             ) from exc
+
+    def get_line_elements(
+        self,
+        elem1: str,
+        elem2: str,
+        *,
+        include_endpoints: bool = True,
+    ) -> tuple[Mapping[str, str], ...]:
+        parser = self._new_parser()
+        runtime_state = parser.build_runtime_state()
+        usedline = runtime_state["usedline"]
+        lattice = runtime_state["lattice"]
+        id1, id2 = self._usedline_index_pair_from_usedline(usedline, elem1, elem2)
+        if id2 < id1:
+            id1, id2 = id2, id1
+        if include_endpoints:
+            element_ids = usedline[id1 : id2 + 1]
+        else:
+            element_ids = usedline[id1 + 1 : id2]
+        return tuple(dict(lattice[element_id]) for element_id in element_ids)
 
     def get_twiss1(
         self,
@@ -276,7 +304,14 @@ class ElegantModelBackend:
     def _usedline_index_pair(self, elem1: str, elem2: str) -> tuple[int, int]:
         parser = self._new_parser()
         runtime_state = parser.build_runtime_state()
-        usedline = runtime_state["usedline"]
+        return self._usedline_index_pair_from_usedline(runtime_state["usedline"], elem1, elem2)
+
+    def _usedline_index_pair_from_usedline(
+        self,
+        usedline: list[str],
+        elem1: str,
+        elem2: str,
+    ) -> tuple[int, int]:
         try:
             return usedline.index(elem1), usedline.index(elem2)
         except ValueError as exc:
