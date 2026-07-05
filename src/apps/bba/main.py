@@ -2988,6 +2988,12 @@ class BBAScanThreadBBA2(BBABaseThread):
             sign = -1 if self.params.plane == "X" else 1
             kick_values = np.linspace(self.params.corr_from, self.params.corr_end, self.params.corr_steps)
             angle_values = self._calculate_kick_angles(kick_values)
+            baseline_bpm1_values = None
+
+            if not self.params.recal:
+                baseline_bpm1_values = self._measure_bpm1(bpm1)
+                if baseline_bpm1_values is None:
+                    return
 
             if self.params.recal:
                 if self.params.bba2_recal_quad_points is not None:
@@ -3010,7 +3016,10 @@ class BBAScanThreadBBA2(BBABaseThread):
 
             theta_scan = self._fit_quad_scan(k1_lq, quad_m2)
             self._emit(theta_scan)
-            if not self._sleep_or_stop(1):
+            # _perform_quad_scan restores the quad in its finally block; wait for the
+            # backend readbacks to reflect the restored lattice before the corrector scan.
+            post_quad_wait = self.params.sleeptime if not self.params.recal else 1
+            if not self._sleep_or_stop(post_quad_wait):
                 return
 
             if self.params.recal:
@@ -3020,9 +3029,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                     bpm1_path = self._require_path(self.params.bba2_bpm1_path, "BBA-2 BPM1 data")
                     bpm1_values = self._load_one_column(bpm1_path, "BBA-2 BPM1 data")
             else:
-                bpm1_values = self._measure_bpm1(bpm1)
-                if bpm1_values is None:
-                    return
+                bpm1_values = baseline_bpm1_values
             self.m1_ave = float(np.mean(bpm1_values))
             print("m1_ave=", self.m1_ave * 1e3, "mm")
 
