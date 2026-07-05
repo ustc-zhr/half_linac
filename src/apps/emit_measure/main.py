@@ -75,6 +75,11 @@ TWISS_RESULTS_FILENAME = "twissResults.jsonl"
 SCAN_ARCHIVE_ROOT = Path(__file__).resolve().parent / "runtime" / "scans"
 SCAN_DATA_SCHEMA_VERSION = "emit_scan_v1"
 SCAN_POINT_COLUMNS = ("Use", "K1", "sigx (mm)", "sigy (mm)")
+TWISS_TRANSPORT_TOOLTIP = (
+    "Twiss transport assumes geometric emittance is conserved along the selected "
+    "model path. Use it only for paths without acceleration or other processes "
+    "that change geometric emittance."
+)
 
 HEADER_ACTION_HEIGHT = 32
 
@@ -825,7 +830,8 @@ class myWindow(QWidget,Ui_Form):
         self.twiss_tab_layout = QGridLayout(self.twiss_tab)
         self.twiss_tab_layout.setContentsMargins(0, 0, 6, 6)
         self.twiss_tab_layout.setSpacing(10)
-        self.tabWidget.addTab(self.twiss_tab, "Twiss")
+        twiss_tab_index = self.tabWidget.addTab(self.twiss_tab, "Twiss")
+        self.tabWidget.setTabToolTip(twiss_tab_index, TWISS_TRANSPORT_TOOLTIP)
 
     def _build_summary_panel(self):
         panel = QFrame(self)
@@ -1207,7 +1213,9 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_3.setToolTip(
             "Clear plots, result fields, and the current scan point table. Saved archives are not deleted."
         )
-        self.pushButton_4.setToolTip("Calculate Twiss transport from the selected From element to the selected To element.")
+        self.label_8.setToolTip(TWISS_TRANSPORT_TOOLTIP)
+        self.twiss_tab.setToolTip(TWISS_TRANSPORT_TOOLTIP)
+        self.pushButton_4.setToolTip(self._twiss_transport_tooltip())
         self.pushButton_5.setToolTip("Request the running scan to stop and restore the quadrupole setting.")
         self.use_latest_fit_button.setToolTip(
             "Copy beta, alpha and gamma from the latest valid emittance fit for the selected Twiss plane."
@@ -1778,6 +1786,13 @@ class myWindow(QWidget,Ui_Form):
         return f"Model backend unavailable: {self._model_backend_error}"
 
     @staticmethod
+    def _twiss_transport_tooltip(prefix=None):
+        base = "Calculate Twiss transport from the selected From element to the selected To element."
+        if prefix:
+            base = f"{prefix} {base}"
+        return f"{base} {TWISS_TRANSPORT_TOOLTIP}"
+
+    @staticmethod
     def _refresh_widget_style(widget):
         style = widget.style()
         style.unpolish(widget)
@@ -1791,9 +1806,7 @@ class myWindow(QWidget,Ui_Form):
             self.pushButton_2.setEnabled(True)
             self.pushButton_2.setToolTip("Recalculate emittance from the active scan points.")
             self.pushButton_4.setEnabled(True)
-            self.pushButton_4.setToolTip(
-                "Calculate Twiss transport from the selected From element to the selected To element."
-            )
+            self.pushButton_4.setToolTip(self._twiss_transport_tooltip())
         else:
             message = self._model_backend_status_tooltip()
             self.pushButton.setEnabled(False)
@@ -1801,7 +1814,7 @@ class myWindow(QWidget,Ui_Form):
             self.pushButton_2.setEnabled(False)
             self.pushButton_2.setToolTip(message)
             self.pushButton_4.setEnabled(False)
-            self.pushButton_4.setToolTip(message)
+            self.pushButton_4.setToolTip(self._twiss_transport_tooltip(prefix=message))
 
         for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
             self._refresh_widget_style(button)
