@@ -7,7 +7,7 @@ from half_linac.src.shared.machine_profile import AppContext, MachineProfile, re
 
 APP_DIR = Path(__file__).resolve().parent
 ENERGY_SPECTRUM_RUNTIME_ROOT = APP_DIR / "runtime"
-MODEL_SNAPSHOT_FILE = "latest_model_snapshot.json"
+MODEL_SNAPSHOT_FILE = "model_snapshot.json"
 
 
 def resolve_energy_spectrum_runtime_paths(target: MachineProfile | AppContext) -> dict[str, Path]:

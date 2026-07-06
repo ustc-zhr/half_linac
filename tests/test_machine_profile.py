@@ -462,7 +462,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(paths["latest_metadata_path"], paths["latest_dir"] / "metadata.json")
         self.assertEqual(paths["runs_dir"], paths["runtime_dir"] / "runs")
         self.assertEqual(paths["result_archive_dir"], paths["runtime_dir"] / "runs")
-        self.assertEqual(paths["model_snapshot_path"], paths["latest_dir"] / "latest_model_snapshot.json")
+        self.assertEqual(paths["model_snapshot_path"], paths["latest_dir"] / "model_snapshot.json")
 
     def test_half_beam_monitor_workflow_keeps_backend_image_geometry(self):
         profile = load_profile("half")

@@ -636,7 +636,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_thread = None
         self.latest_model_snapshot_metadata = None
         self.latest_model_snapshot_path = None
-        self._last_energy_result_archive_key = None
+        self._archive_next_energy_result = False
 
         self._configure_window()
 
@@ -664,7 +664,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._use_design_eta(tooltip=self._model_tooltip)
             self._refresh_status()
         self.fit_method = self.comboBox_fitmethod.currentText()
-        self.ESA_running()
+        self.ESA_running(write_latest=False)
 
     def _load_energy_spectrum_config(self):
         workflow = dict(get_workflow(self.machine_profile, "energy_spectrum"))
@@ -1205,8 +1205,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.comboBox_colormap.currentTextChanged.connect(self._handle_colormap_change)
 
         self.checkBox_emit.clicked.connect(lambda: self.emit_withornot(self.checkBox_emit.isChecked()))
-        self.pushButton_cal_disp.clicked.connect(self.cal_disp)
-        self.pushButton_cal_twiss_disp.clicked.connect(self.cal_twiss_disp)
+        self.pushButton_cal_disp.clicked.connect(lambda: self.cal_disp(archive_result=True))
+        self.pushButton_cal_twiss_disp.clicked.connect(lambda: self.cal_twiss_disp(archive_result=True))
 
         self.pushButton_sample_bg.clicked.connect(self.background_samples)
         self.pushButton_save.clicked.connect(self.save_bgfile)
@@ -1388,7 +1388,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
         self._apply_theme()
         if self._pv_available:
-            self.ESA_running()
+            self.ESA_running(write_latest=False)
         else:
             self._draw_placeholder_views()
         self._refresh_background_preview()
@@ -1396,13 +1396,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _handle_colormap_change(self):
         if self._pv_available:
-            self.ESA_running()
+            self.ESA_running(write_latest=False)
         else:
             self._draw_placeholder_views()
         self._refresh_background_preview()
 
     def _handle_fit_method_change(self):
         self._update_fit_status(self.comboBox_fitmethod.currentText())
+        if self._pv_available:
+            self.ESA_running()
         self._refresh_status()
 
     @staticmethod
@@ -1587,6 +1589,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         energy_center_mev,
         energy_spread,
         fit_method,
+        archive_result=False,
     ):
         paths = resolve_energy_spectrum_runtime_paths(self.app_context)
         metadata = {
@@ -1618,19 +1621,17 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             paths["latest_dir"].mkdir(parents=True, exist_ok=True)
             metadata_text = json.dumps(metadata, indent=2, sort_keys=True)
             paths["latest_metadata_path"].write_text(metadata_text, encoding="utf-8")
-            snapshot_metadata = metadata.get("model_snapshot")
-            if isinstance(snapshot_metadata, dict):
-                archive_key = snapshot_metadata.get("created_at") or metadata["created_at"]
-            else:
-                archive_key = "no_model_snapshot"
-            if archive_key != self._last_energy_result_archive_key:
+            if archive_result:
                 paths["result_archive_dir"].mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
                 archive_dir = paths["result_archive_dir"] / f"energy_result_{timestamp}"
+                suffix = 2
+                while archive_dir.exists():
+                    archive_dir = paths["result_archive_dir"] / f"energy_result_{timestamp}_{suffix}"
+                    suffix += 1
                 archive_dir.mkdir(parents=True, exist_ok=True)
                 archive_path = archive_dir / "metadata.json"
                 archive_path.write_text(metadata_text, encoding="utf-8")
-                self._last_energy_result_archive_key = archive_key
         except OSError as exc:
             print(f"Warning: failed to save energy spectrum result metadata: {exc}")
 
@@ -1756,7 +1757,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def setup_timer(self):
         # refreah the figure at 1 Hz
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.ESA_running)
+        self.timer.timeout.connect(lambda: self.ESA_running(write_latest=False))
         self.is_timer_running = True  # 定时器状态
         self.timer.start(1000)# 每过1s timer.timeout触发一次
         self._refresh_status()
@@ -1793,7 +1794,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.lineEdit_expotime.setText("VM")
 
 
-    def ESA_running(self):
+    def ESA_running(self, write_latest=True, archive_result=False):
         palette = self._palette()
         self.fit_method = self.comboBox_fitmethod.currentText()
         self._update_fit_status(self.fit_method)
@@ -2011,12 +2012,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         energy_spread = math.sqrt(spread_term) * energy0 / energy_center
         
         self._set_energy_outputs(energy_center, energy_spread)
-        self._write_energy_result_metadata(
-            energy0_mev=energy0,
-            energy_center_mev=energy_center,
-            energy_spread=energy_spread,
-            fit_method=fit_method,
-        )
+        should_archive = archive_result or self._archive_next_energy_result
+        if write_latest or should_archive:
+            self._write_energy_result_metadata(
+                energy0_mev=energy0,
+                energy_center_mev=energy_center,
+                energy_spread=energy_spread,
+                fit_method=fit_method,
+                archive_result=should_archive,
+            )
+        self._archive_next_energy_result = False
 
         # plot energy profile in another figure
         self.energy_plot.axes.clear()
@@ -2033,7 +2038,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.energy_plot.canvas.draw()  # 强制刷新
         self._refresh_status()
 
-    def cal_disp(self):
+    def cal_disp(self, archive_result=False):
         if not self._model_available():
             message = f"Model backend unavailable: {self._model_unavailable_message()}"
             print(message)
@@ -2123,9 +2128,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._update_model_status(f"design eta {self.eta_flag:.4f} m", "warning")
             
         self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag,5)))
+        if archive_result:
+            self._archive_next_energy_result = True
         self._refresh_status()
 
-    def cal_twiss_disp(self):
+    def cal_twiss_disp(self, archive_result=False):
         """calculate the twiss @ ESA flag according the twiss @ in"""
         if not self._model_available():
             message = f"Model backend unavailable: {self._model_unavailable_message()}"
@@ -2252,6 +2259,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "success",
             self._snapshot_status_tooltip(snapshot),
         )
+        if archive_result:
+            self._archive_next_energy_result = True
         self._refresh_status()
 
     def emit_withornot(self, state):
