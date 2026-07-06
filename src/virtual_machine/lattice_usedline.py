@@ -28,6 +28,7 @@ VM_WRITABLE_LATTICE_FIELD_BY_CHANNEL = {
     ("corr", "kick"): "KICK",
     ("bend", "angle"): "ANGLE",
 }
+USEDLINE_CONTEXT_KEY = "usedline_context"
 
 
 class LatticeUsedlineError(RuntimeError):
@@ -77,6 +78,12 @@ def reload_initial_runtime_state() -> list[str]:
         elegant_dir=runtime.vm.bootstrap_lattice.parent,
     )
     state = parser.build_runtime_state()
+    _set_full_usedline_context(
+        runtime,
+        state,
+        runtime.vm.line_name,
+        source="reload_initial_lattice",
+    )
     _ensure_writable_lattice_defaults(runtime, state)
     write_runtime_state(runtime.vm.runtime_json, state)
     _sync_writable_vm_pvs(runtime, state)
@@ -85,6 +92,88 @@ def reload_initial_runtime_state() -> list[str]:
         f"and {runtime.vm.bootstrap_ele.name}: {len(state['usedline'])} element(s)."
     )
     return list(state["usedline"])
+
+
+def describe_runtime_usedline(runtime=None) -> str:
+    runtime = runtime or resolve_machine_runtime()
+    try:
+        state = read_runtime_state(runtime.vm.runtime_json)
+    except FileNotFoundError:
+        return "No runtime JSON"
+    return format_usedline_context(infer_usedline_context(runtime, state))
+
+
+def infer_usedline_context(runtime, state: Mapping[str, Any]) -> dict[str, Any]:
+    usedline = _current_usedline(state)
+    if not usedline:
+        return {"mode": "empty", "count": 0}
+
+    explicit = state.get(USEDLINE_CONTEXT_KEY)
+    if _context_mode(explicit) == "prewatch" and _context_matches_usedline(explicit, usedline):
+        return dict(explicit)
+
+    lattice = state.get("lattice", {})
+    if not isinstance(lattice, Mapping):
+        return _custom_usedline_context(usedline)
+
+    try:
+        workflow = resolve_virtual_machine_usedline_workflow(runtime.profile)
+        predefined = workflow.predefined_usedlines
+    except MachineProfileError:
+        predefined = ()
+
+    for choice in predefined:
+        try:
+            expanded = expand_lattice_line(lattice, choice.id)
+        except LatticeUsedlineError:
+            continue
+        if expanded == usedline:
+            return _full_usedline_context(
+                choice.id,
+                len(usedline),
+                label=choice.label,
+                source="runtime_json",
+            )
+
+    for choice in predefined:
+        try:
+            parent = expand_lattice_line(lattice, choice.id)
+        except LatticeUsedlineError:
+            continue
+        match = _find_contiguous_subsequence(parent, usedline)
+        if match is None:
+            continue
+        return _segment_usedline_context(
+            choice.id,
+            usedline[0],
+            usedline[-1],
+            len(usedline),
+            source="runtime_json",
+        )
+
+    return _custom_usedline_context(usedline)
+
+
+def format_usedline_context(context: Mapping[str, Any]) -> str:
+    mode = str(context.get("mode", "")).strip().lower()
+    count = int(context.get("count") or 0)
+    if mode == "full":
+        line = str(context.get("line") or context.get("line_name") or "UNKNOWN")
+        return f"{line} (full, {count} elements)"
+    if mode == "segment":
+        parent = str(context.get("parent_usedline") or "UNKNOWN")
+        start = str(context.get("start") or "?")
+        end = str(context.get("end") or "?")
+        return f"{parent} / {start} -> {end} ({count} elements)"
+    if mode == "prewatch":
+        parent = str(context.get("parent_usedline") or "UNKNOWN")
+        end = str(context.get("end") or "?")
+        return f"Preparing {parent} -> {end} ({count} elements)"
+    if mode == "custom":
+        first = str(context.get("first") or "?")
+        last = str(context.get("last") or "?")
+        return f"Custom: {first} -> {last} ({count} elements)"
+    return "No usedline"
 
 
 def apply_predefined_usedline(line_name: str) -> list[str]:
@@ -159,6 +248,16 @@ def simplify_usedline_segment(
             "DISABLE": "0",
         }
         runtime_state["usedline"] = preline
+        runtime_state[USEDLINE_CONTEXT_KEY] = {
+            "mode": "prewatch",
+            "parent_usedline": parent_usedline,
+            "start": start_element,
+            "end": end_element,
+            "first": preline[0] if preline else None,
+            "last": preline[-1] if preline else None,
+            "count": len(preline),
+            "source": "simplify_VM",
+        }
         _restore_baseline_control(runtime_state, baseline_control)
         return True
 
@@ -185,6 +284,13 @@ def simplify_usedline_segment(
         run_setup["p_central"] = str(p_central)
         run_setup["use_beamline"] = runtime.vm.line_name
         runtime_state["usedline"] = segment_usedline
+        runtime_state[USEDLINE_CONTEXT_KEY] = _segment_usedline_context(
+            parent_usedline,
+            start_element,
+            end_element,
+            len(segment_usedline),
+            source="simplify_VM",
+        )
         return True
 
     update_runtime_state(runtime.vm.runtime_json, apply_simplified_segment)
@@ -242,6 +348,12 @@ def _set_usedline_to_lattice_line(line_name: str, *, success_label: str) -> list
         runtime_state["lattice"].pop(PREWATCH_ID, None)
         result = expand_lattice_line(runtime_state["lattice"], line_name)
         runtime_state["usedline"] = result
+        _set_full_usedline_context(
+            runtime,
+            runtime_state,
+            line_name,
+            source="apply_predefined_usedline",
+        )
         _restore_baseline_control(runtime_state, baseline_control)
         runtime_state["control"].setdefault("run_setup", {})["use_beamline"] = runtime.vm.line_name
         return True
@@ -331,6 +443,115 @@ def _collect_writable_vm_pvs(runtime, state: Mapping[str, Any]) -> tuple[list[st
             pv_names.append(pv_name)
             pv_values.append(element_lattice[field_name])
     return pv_names, pv_values
+
+
+def _current_usedline(state: Mapping[str, Any]) -> list[str]:
+    raw_usedline = state.get("usedline", [])
+    if not isinstance(raw_usedline, Sequence) or isinstance(raw_usedline, (str, bytes)):
+        return []
+    return [str(item) for item in raw_usedline]
+
+
+def _set_full_usedline_context(runtime, state: dict[str, Any], line_name: str, *, source: str) -> None:
+    usedline = _current_usedline(state)
+    label = None
+    try:
+        workflow = resolve_virtual_machine_usedline_workflow(runtime.profile)
+        for choice in workflow.predefined_usedlines:
+            if choice.id == line_name:
+                label = choice.label
+                break
+    except MachineProfileError:
+        pass
+    state[USEDLINE_CONTEXT_KEY] = _full_usedline_context(
+        line_name,
+        len(usedline),
+        label=label,
+        source=source,
+    )
+
+
+def _full_usedline_context(
+    line_name: str,
+    count: int,
+    *,
+    label: str | None = None,
+    source: str,
+) -> dict[str, Any]:
+    return {
+        "mode": "full",
+        "line": line_name,
+        "label": label or line_name,
+        "count": count,
+        "source": source,
+    }
+
+
+def _segment_usedline_context(
+    parent_usedline: str,
+    start: str,
+    end: str,
+    count: int,
+    *,
+    source: str,
+) -> dict[str, Any]:
+    return {
+        "mode": "segment",
+        "parent_usedline": parent_usedline,
+        "start": start,
+        "end": end,
+        "count": count,
+        "source": source,
+    }
+
+
+def _custom_usedline_context(usedline: Sequence[str]) -> dict[str, Any]:
+    return {
+        "mode": "custom",
+        "first": usedline[0] if usedline else None,
+        "last": usedline[-1] if usedline else None,
+        "count": len(usedline),
+        "source": "runtime_json",
+    }
+
+
+def _context_matches_usedline(context: Any, usedline: Sequence[str]) -> bool:
+    if not isinstance(context, Mapping):
+        return False
+    count = context.get("count")
+    if count is not None:
+        try:
+            if int(count) != len(usedline):
+                return False
+        except (TypeError, ValueError):
+            return False
+    mode = _context_mode(context)
+    if mode == "full":
+        return bool(context.get("line"))
+    if mode == "segment":
+        return context.get("start") == usedline[0] and context.get("end") == usedline[-1]
+    if mode == "prewatch":
+        return context.get("last") == usedline[-1]
+    if mode == "custom":
+        return context.get("first") == usedline[0] and context.get("last") == usedline[-1]
+    return False
+
+
+def _context_mode(context: Any) -> str:
+    if not isinstance(context, Mapping):
+        return ""
+    return str(context.get("mode", "")).strip().lower()
+
+
+def _find_contiguous_subsequence(parent: Sequence[str], candidate: Sequence[str]) -> tuple[int, int] | None:
+    if not candidate or len(candidate) > len(parent):
+        return None
+    window = len(candidate)
+    for start in range(0, len(parent) - window + 1):
+        end = start + window
+        if list(parent[start:end]) == list(candidate):
+            return start, end - 1
+    return None
 
 
 def _writable_channels_for_element_kind(kind: str) -> tuple[tuple[str, str], ...]:
@@ -531,7 +752,10 @@ def _run_cli(label: str, action) -> int:
 __all__ = [
     "LatticeUsedlineError",
     "apply_predefined_usedline",
+    "describe_runtime_usedline",
     "expand_lattice_line",
+    "format_usedline_context",
+    "infer_usedline_context",
     "reload_initial_runtime_state",
     "restore_main_usedline",
     "select_esa_line_name",

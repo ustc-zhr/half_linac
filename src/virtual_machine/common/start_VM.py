@@ -24,6 +24,7 @@ from half_linac.src.shared.elegant_backend import (
 )
 from half_linac.src.shared.machine_profile import resolve_machine_runtime
 from half_linac.src.shared.runtime_state import ensure_runtime_state, read_runtime_state
+from half_linac.src.virtual_machine.lattice_usedline import describe_runtime_usedline
 
 
 JSON_POLL_INTERVAL_S = 2.0
@@ -116,6 +117,7 @@ def main():
         print("Initialized runtime lattice JSON.")
     else:
         print("Using existing runtime lattice JSON.")
+    print(f"Current VM usedline: {describe_runtime_usedline(runtime)}")
 
     parser = ElegantParser(
         lattice_file,

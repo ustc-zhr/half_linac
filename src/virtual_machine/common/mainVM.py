@@ -38,6 +38,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_machine_runtime,
     resolve_virtual_machine_usedline_workflow,
 )
+from half_linac.src.virtual_machine.lattice_usedline import describe_runtime_usedline
 
 
 PROCESS_START_TIMEOUT_S = 0.3
@@ -815,6 +816,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._append_log("VM control ready.")
         self._append_log("Start softIOC, then start the VM runtime.")
         self._append_log("Routing and error tools unlock after the VM is online.")
+        self._append_log(f"Current VM usedline: {self._current_usedline_summary()}.")
 
     def _prune_finished_processes(self):
         for key, proc in list(self.processes.items()):
@@ -944,7 +946,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if config_running:
             self._set_summary_value("config", "Applying", "warning")
         else:
-            self._set_summary_value("config", "Idle", "idle")
+            self._set_summary_value("config", self._current_usedline_summary(), "active")
 
         if not ioc_running and not vm_running:
             self._set_summary_value("connection", "Offline", "idle")
@@ -1100,6 +1102,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "warning": "warning",
         }.get(state, "subtle")
         self.status_panel.set_item(key, text, tone=tone)
+
+    def _current_usedline_summary(self):
+        try:
+            return describe_runtime_usedline(self.runtime)
+        except Exception as exc:
+            return f"Usedline unknown: {exc}"
 
     @staticmethod
     def _refresh_widget_style(widget):

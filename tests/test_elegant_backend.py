@@ -31,6 +31,8 @@ from half_linac.src.shared.runtime_state import read_runtime_state
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
 from half_linac.src.virtual_machine.lattice_usedline import (
     expand_lattice_line,
+    format_usedline_context,
+    infer_usedline_context,
     reload_initial_runtime_state,
     select_esa_line_name,
 )
@@ -314,6 +316,27 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertNotIn("PRF03", esa_usedline)
         self.assertIn("PRFESA", esa_usedline)
         self.assertTrue(all(state["lattice"][element]["TYPE"] != "LINE" for element in main_usedline))
+
+    def test_runtime_usedline_context_describes_full_and_segment_lines(self):
+        runtime = resolve_machine_runtime("irfel")
+        state = read_runtime_state(runtime.vm.runtime_json)
+
+        main_usedline = expand_lattice_line(state["lattice"], "ALL_MAIN")
+        state["usedline"] = main_usedline
+        full_context = infer_usedline_context(runtime, state)
+
+        start = main_usedline.index("QM13")
+        end = main_usedline.index("PRF03") + 1
+        state["usedline"] = main_usedline[start:end]
+        segment_context = infer_usedline_context(runtime, state)
+
+        self.assertEqual(full_context["mode"], "full")
+        self.assertEqual(full_context["line"], "ALL_MAIN")
+        self.assertEqual(format_usedline_context(full_context), f"ALL_MAIN (full, {len(main_usedline)} elements)")
+        self.assertEqual(segment_context["mode"], "segment")
+        self.assertEqual(segment_context["parent_usedline"], "ALL_MAIN")
+        self.assertEqual(segment_context["start"], "QM13")
+        self.assertEqual(segment_context["end"], "PRF03")
 
     def test_half_compat_parser_defaults_follow_machine_runtime_metadata(self):
         runtime = resolve_machine_runtime()
@@ -662,6 +685,8 @@ class ElegantBackendTests(unittest.TestCase):
         qm12_index = pv_names.index("IRFEL:VM:AP:QUAD:QM12:K1:ao")
 
         self.assertEqual(state["lattice"]["QM12"]["K1"], "50.43989105768644")
+        self.assertEqual(state["usedline_context"]["mode"], "full")
+        self.assertEqual(state["usedline_context"]["line"], "ALL_MAIN")
         self.assertEqual(pv_values[qm12_index], "50.43989105768644")
         self.assertFalse(caput_many_mock.call_args.kwargs["wait"])
         self.assertLessEqual(caput_many_mock.call_args.kwargs["connection_timeout"], 0.5)

@@ -7,7 +7,7 @@
         "pixel_width_mm": 0.02
       },
       "real": {
-        "shape": [360, 270],
+        "shape": [1440, 1080],
         "pixel_width_mm": 0.02
       }
     },

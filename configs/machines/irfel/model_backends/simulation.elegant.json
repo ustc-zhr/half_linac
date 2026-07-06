@@ -28,7 +28,7 @@
       "fields": {
         "QM19": {
           "K1": {
-            "logical_channel": "k1",
+            "logical_channel": "K1",
             "source_unit": "1/m^2",
             "model_unit": "1/m^2",
             "conversion": {"type": "direct"}
@@ -36,7 +36,7 @@
         },
         "QM20": {
           "K1": {
-            "logical_channel": "k1",
+            "logical_channel": "K1",
             "source_unit": "1/m^2",
             "model_unit": "1/m^2",
             "conversion": {"type": "direct"}
@@ -44,7 +44,7 @@
         },
         "QM04": {
           "K1": {
-            "logical_channel": "k1",
+            "logical_channel": "K1",
             "source_unit": "1/m^2",
             "model_unit": "1/m^2",
             "conversion": {"type": "direct"}
@@ -52,7 +52,7 @@
         },
         "QM11": {
           "K1": {
-            "logical_channel": "k1",
+            "logical_channel": "K1",
             "source_unit": "1/m^2",
             "model_unit": "1/m^2",
             "conversion": {"type": "direct"}
@@ -60,7 +60,7 @@
         },
         "QM12": {
           "K1": {
-            "logical_channel": "k1",
+            "logical_channel": "K1",
             "source_unit": "1/m^2",
             "model_unit": "1/m^2",
             "conversion": {"type": "direct"}

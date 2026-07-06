@@ -52,164 +52,184 @@
       "s": "IRFEL-BI:BPM10:BPM_S"
     },
     "HC01": {
-      "setpoint": "IRFEL:PS:HC01:current:ao",
-      "readback": "IRFEL:PS:HC01:current:ai"
+      "current_set": "IRFEL:PS:HC01:current:ao",
+      "current_readback": "IRFEL:PS:HC01:current:ai"
     },
     "HC02": {
-      "setpoint": "IRFEL:PS:HC02:current:ao",
-      "readback": "IRFEL:PS:HC02:current:ai"
+      "current_set": "IRFEL:PS:HC02:current:ao",
+      "current_readback": "IRFEL:PS:HC02:current:ai"
     },
     "HC03": {
-      "setpoint": "IRFEL:PS:HC03:current:ao",
-      "readback": "IRFEL:PS:HC03:current:ai"
+      "current_set": "IRFEL:PS:HC03:current:ao",
+      "current_readback": "IRFEL:PS:HC03:current:ai"
     },
     "HC04": {
-      "setpoint": "IRFEL:PS:HC04:current:ao",
-      "readback": "IRFEL:PS:HC04:current:ai"
+      "current_set": "IRFEL:PS:HC04:current:ao",
+      "current_readback": "IRFEL:PS:HC04:current:ai"
     },
     "HC05": {
-      "setpoint": "IRFEL:PS:HC05:current:ao",
-      "readback": "IRFEL:PS:HC05:current:ai"
+      "current_set": "IRFEL:PS:HC05:current:ao",
+      "current_readback": "IRFEL:PS:HC05:current:ai"
     },
     "HC06": {
-      "setpoint": "IRFEL:PS:HC06:current:ao",
-      "readback": "IRFEL:PS:HC06:current:ai"
+      "current_set": "IRFEL:PS:HC06:current:ao",
+      "current_readback": "IRFEL:PS:HC06:current:ai"
     },
     "HC07": {
-      "setpoint": "IRFEL:PS:HC07:current:ao",
-      "readback": "IRFEL:PS:HC07:current:ai"
+      "current_set": "IRFEL:PS:HC07:current:ao",
+      "current_readback": "IRFEL:PS:HC07:current:ai"
     },
     "HIC01": {
-      "setpoint": "IRFEL:PS:HIC01:current:ao",
-      "readback": "IRFEL:PS:HIC01:current:ai"
+      "current_set": "IRFEL:PS:HIC01:current:ao",
+      "current_readback": "IRFEL:PS:HIC01:current:ai"
     },
     "HIC02": {
-      "setpoint": "IRFEL:PS:HIC02:current:ao",
-      "readback": "IRFEL:PS:HIC02:current:ai"
+      "current_set": "IRFEL:PS:HIC02:current:ao",
+      "current_readback": "IRFEL:PS:HIC02:current:ai"
     },
     "MSHC": {
-      "setpoint": "IRFEL:PS:MS:HC:current:ao",
-      "readback": "IRFEL:PS:MS:HC:current:ai"
+      "current_set": "IRFEL:PS:MS:HC:current:ao",
+      "current_readback": "IRFEL:PS:MS:HC:current:ai"
     },
     "VC01": {
-      "setpoint": "IRFEL:PS:VC01:current:ao",
-      "readback": "IRFEL:PS:VC01:current:ai"
+      "current_set": "IRFEL:PS:VC01:current:ao",
+      "current_readback": "IRFEL:PS:VC01:current:ai"
     },
     "VC02": {
-      "setpoint": "IRFEL:PS:VC02:current:ao",
-      "readback": "IRFEL:PS:VC02:current:ai"
+      "current_set": "IRFEL:PS:VC02:current:ao",
+      "current_readback": "IRFEL:PS:VC02:current:ai"
     },
     "VC03": {
-      "setpoint": "IRFEL:PS:VC03:current:ao",
-      "readback": "IRFEL:PS:VC03:current:ai"
+      "current_set": "IRFEL:PS:VC03:current:ao",
+      "current_readback": "IRFEL:PS:VC03:current:ai"
     },
     "VC04": {
-      "setpoint": "IRFEL:PS:VC04:current:ao",
-      "readback": "IRFEL:PS:VC04:current:ai"
+      "current_set": "IRFEL:PS:VC04:current:ao",
+      "current_readback": "IRFEL:PS:VC04:current:ai"
     },
     "VC05": {
-      "setpoint": "IRFEL:PS:VC05:current:ao",
-      "readback": "IRFEL:PS:VC05:current:ai"
+      "current_set": "IRFEL:PS:VC05:current:ao",
+      "current_readback": "IRFEL:PS:VC05:current:ai"
     },
     "VC06": {
-      "setpoint": "IRFEL:PS:VC06:current:ao",
-      "readback": "IRFEL:PS:VC06:current:ai"
+      "current_set": "IRFEL:PS:VC06:current:ao",
+      "current_readback": "IRFEL:PS:VC06:current:ai"
     },
     "VC07": {
-      "setpoint": "IRFEL:PS:VC07:current:ao",
-      "readback": "IRFEL:PS:VC07:current:ai"
+      "current_set": "IRFEL:PS:VC07:current:ao",
+      "current_readback": "IRFEL:PS:VC07:current:ai"
     },
     "VIC01": {
-      "setpoint": "IRFEL:PS:VIC01:current:ao",
-      "readback": "IRFEL:PS:VIC01:current:ai"
+      "current_set": "IRFEL:PS:VIC01:current:ao",
+      "current_readback": "IRFEL:PS:VIC01:current:ai"
     },
     "VIC02": {
-      "setpoint": "IRFEL:PS:VIC02:current:ao",
-      "readback": "IRFEL:PS:VIC02:current:ai"
+      "current_set": "IRFEL:PS:VIC02:current:ao",
+      "current_readback": "IRFEL:PS:VIC02:current:ai"
     },
     "MSVC": {
-      "setpoint": "IRFEL:PS:MS:VC:current:ao",
-      "readback": "IRFEL:PS:MS:VC:current:ai"
+      "current_set": "IRFEL:PS:MS:VC:current:ao",
+      "current_readback": "IRFEL:PS:MS:VC:current:ai"
     },
     "QM01": {
-      "k1": "IRFEL:PS:QM01:current:ao",
-      "readback": "IRFEL:PS:QM01:current:ai"
+      "K1": "IRFEL:PS:QM01:K1:ao",
+      "current_set": "IRFEL:PS:QM01:current:ao",
+      "current_readback": "IRFEL:PS:QM01:current:ai"
     },
     "QM02": {
-      "k1": "IRFEL:PS:QM02:current:ao",
-      "readback": "IRFEL:PS:QM02:current:ai"
+      "K1": "IRFEL:PS:QM02:K1:ao",
+      "current_set": "IRFEL:PS:QM02:current:ao",
+      "current_readback": "IRFEL:PS:QM02:current:ai"
     },
     "QM03": {
-      "k1": "IRFEL:PS:QM03:current:ao",
-      "readback": "IRFEL:PS:QM03:current:ai"
+      "K1": "IRFEL:PS:QM03:K1:ao",
+      "current_set": "IRFEL:PS:QM03:current:ao",
+      "current_readback": "IRFEL:PS:QM03:current:ai"
     },
     "QM04": {
-      "k1": "IRFEL:PS:QM04:current:ao",
-      "readback": "IRFEL:PS:QM04:current:ai"
+      "K1": "IRFEL:PS:QM04:K1:ao",
+      "current_set": "IRFEL:PS:QM04:current:ao",
+      "current_readback": "IRFEL:PS:QM04:current:ai"
     },
     "QM05": {
-      "k1": "IRFEL:PS:QM05:current:ao",
-      "readback": "IRFEL:PS:QM05:current:ai"
+      "K1": "IRFEL:PS:QM05:K1:ao",
+      "current_set": "IRFEL:PS:QM05:current:ao",
+      "current_readback": "IRFEL:PS:QM05:current:ai"
     },
     "QM06": {
-      "k1": "IRFEL:PS:QM06:current:ao",
-      "readback": "IRFEL:PS:QM06:current:ai"
+      "K1": "IRFEL:PS:QM06:K1:ao",
+      "current_set": "IRFEL:PS:QM06:current:ao",
+      "current_readback": "IRFEL:PS:QM06:current:ai"
     },
     "QM07": {
-      "k1": "IRFEL:PS:QM07:current:ao",
-      "readback": "IRFEL:PS:QM07:current:ai"
+      "K1": "IRFEL:PS:QM07:K1:ao",
+      "current_set": "IRFEL:PS:QM07:current:ao",
+      "current_readback": "IRFEL:PS:QM07:current:ai"
     },
     "QM08": {
-      "k1": "IRFEL:PS:QM08:current:ao",
-      "readback": "IRFEL:PS:QM08:current:ai"
+      "K1": "IRFEL:PS:QM08:K1:ao",
+      "current_set": "IRFEL:PS:QM08:current:ao",
+      "current_readback": "IRFEL:PS:QM08:current:ai"
     },
     "QM09": {
-      "k1": "IRFEL:PS:QM09:current:ao",
-      "readback": "IRFEL:PS:QM09:current:ai"
+      "K1": "IRFEL:PS:QM09:K1:ao",
+      "current_set": "IRFEL:PS:QM09:current:ao",
+      "current_readback": "IRFEL:PS:QM09:current:ai"
     },
     "QM10": {
-      "k1": "IRFEL:PS:QM10:current:ao",
-      "readback": "IRFEL:PS:QM10:current:ai"
+      "K1": "IRFEL:PS:QM10:K1:ao",
+      "current_set": "IRFEL:PS:QM10:current:ao",
+      "current_readback": "IRFEL:PS:QM10:current:ai"
     },
     "QM11": {
-      "k1": "IRFEL:PS:QM11:current:ao",
-      "readback": "IRFEL:PS:QM11:current:ai"
+      "K1": "IRFEL:PS:QM11:K1:ao",
+      "current_set": "IRFEL:PS:QM11:current:ao",
+      "current_readback": "IRFEL:PS:QM11:current:ai"
     },
     "QM12": {
-      "k1": "IRFEL:PS:QM12:current:ao",
-      "readback": "IRFEL:PS:QM12:current:ai"
+      "K1": "IRFEL:PS:QM12:K1:ao",
+      "current_set": "IRFEL:PS:QM12:current:ao",
+      "current_readback": "IRFEL:PS:QM12:current:ai"
     },
     "QM13": {
-      "k1": "IRFEL:PS:QM13:current:ao",
-      "readback": "IRFEL:PS:QM13:current:ai"
+      "K1": "IRFEL:PS:QM13:K1:ao",
+      "current_set": "IRFEL:PS:QM13:current:ao",
+      "current_readback": "IRFEL:PS:QM13:current:ai"
     },
     "QM14": {
-      "k1": "IRFEL:PS:QM14:current:ao",
-      "readback": "IRFEL:PS:QM14:current:ai"
+      "K1": "IRFEL:PS:QM14:K1:ao",
+      "current_set": "IRFEL:PS:QM14:current:ao",
+      "current_readback": "IRFEL:PS:QM14:current:ai"
     },
     "QM15": {
-      "k1": "IRFEL:PS:QM15:current:ao",
-      "readback": "IRFEL:PS:QM15:current:ai"
+      "K1": "IRFEL:PS:QM15:K1:ao",
+      "current_set": "IRFEL:PS:QM15:current:ao",
+      "current_readback": "IRFEL:PS:QM15:current:ai"
     },
     "QM16": {
-      "k1": "IRFEL:PS:QM16:current:ao",
-      "readback": "IRFEL:PS:QM16:current:ai"
+      "K1": "IRFEL:PS:QM16:K1:ao",
+      "current_set": "IRFEL:PS:QM16:current:ao",
+      "current_readback": "IRFEL:PS:QM16:current:ai"
     },
     "QM17": {
-      "k1": "IRFEL:PS:QM17:current:ao",
-      "readback": "IRFEL:PS:QM17:current:ai"
+      "K1": "IRFEL:PS:QM17:K1:ao",
+      "current_set": "IRFEL:PS:QM17:current:ao",
+      "current_readback": "IRFEL:PS:QM17:current:ai"
     },
     "QM18": {
-      "k1": "IRFEL:PS:QM18:current:ao",
-      "readback": "IRFEL:PS:QM18:current:ai"
+      "K1": "IRFEL:PS:QM18:K1:ao",
+      "current_set": "IRFEL:PS:QM18:current:ao",
+      "current_readback": "IRFEL:PS:QM18:current:ai"
     },
     "QM19": {
-      "k1": "IRFEL:AP:QUAD:QM19:K1:ao",
-      "readback": "IRFEL:PS:QM19:current:ai"
+      "K1": "IRFEL:PS:QM19:K1:ao",
+      "current_set": "IRFEL:PS:QM19:current:ao",
+      "current_readback": "IRFEL:PS:QM19:current:ai"
     },
     "QM20": {
-      "k1": "IRFEL:AP:QUAD:QM20:K1:ao",
-      "readback": "IRFEL:PS:QM20:current:ai"
+      "K1": "IRFEL:PS:QM20:K1:ao",
+      "current_set": "IRFEL:PS:QM20:current:ao",
+      "current_readback": "IRFEL:PS:QM20:current:ai"
     },
     "BM01": {
       "current_set": "IRFEL:PS:BM01:current:ao",
@@ -224,20 +244,20 @@
       "current_readback": "IRFEL:PS:BM03:current:ai"
     },
     "MS01": {
-      "setpoint": "IRFEL:PS:MS01:current:ao",
-      "readback": "IRFEL:PS:MS01:current:ai"
+      "current_set": "IRFEL:PS:MS01:current:ao",
+      "current_readback": "IRFEL:PS:MS01:current:ai"
     },
     "LS01": {
-      "setpoint": "IRFEL:PS:LS01:current:ao",
-      "readback": "IRFEL:PS:LS01:current:ai"
+      "current_set": "IRFEL:PS:LS01:current:ao",
+      "current_readback": "IRFEL:PS:LS01:current:ai"
     },
     "SS01": {
-      "setpoint": "IRFEL:PS:SS01:current:ao",
-      "readback": "IRFEL:PS:SS01:current:ai"
+      "current_set": "IRFEL:PS:SS01:current:ao",
+      "current_readback": "IRFEL:PS:SS01:current:ai"
     },
     "SS02": {
-      "setpoint": "IRFEL:PS:SS02:current:ao",
-      "readback": "IRFEL:PS:SS02:current:ai"
+      "current_set": "IRFEL:PS:SS02:current:ao",
+      "current_readback": "IRFEL:PS:SS02:current:ai"
     },
     "MODULATOR_HV1": {
       "voltage_set": "IRFEL:modulator1:HV:set:ao",
@@ -247,23 +267,13 @@
       "voltage_set": "IRFEL:modulator2:HV:set:ao",
       "voltage_readback": "IRFEL:modulator2:HV:ai"
     },
-    "PRF01": {
-      "image": "IRFEL:VM:FLAG:PRF01:image1:ArrayData"
-    },
-    "PRF02": {
-      "image": "IRFEL:VM:FLAG:PRF02:image1:ArrayData"
-    },
     "PRF03": {
       "image": "IRFEL:BD:FLAG3:image1:ArrayData",
-      "exposure_time": "IRFEL:BD:FLAG3:cam1:AcquireTime",
-      "sigx": "IRFEL:VM:FLAG:PRF03:sigx",
-      "sigy": "IRFEL:VM:FLAG:PRF03:sigy"
+      "exposure_time": "IRFEL:BD:FLAG3:cam1:AcquireTime"
     },
     "PRF04": {
       "image": "IRFEL:BD:FLAG4:image1:ArrayData",
-      "exposure_time": "IRFEL:BD:FLAG4:cam1:AcquireTime",
-      "sigx": "IRFEL:VM:FLAG:PRF04:sigx",
-      "sigy": "IRFEL:VM:FLAG:PRF04:sigy"
+      "exposure_time": "IRFEL:BD:FLAG4:cam1:AcquireTime"
     },
     "PRFESA": {
       "image": "IRFEL:BD:FLAG5:image1:ArrayData",

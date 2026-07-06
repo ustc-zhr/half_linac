@@ -140,7 +140,16 @@
     "vm": 0.5,
     "real": 0.5
   },
-  "corrector_upperlimit_rad": 0.001,
+  "corrector_upperlimit_by_backend": {
+    "vm": {
+      "value": 0.001,
+      "unit": "rad"
+    },
+    "real": {
+      "value": 10,
+      "unit": "A"
+    }
+  },
   "runtime_defaults": {
     "method": "global",
     "sampling_interval_s": 8.0,
