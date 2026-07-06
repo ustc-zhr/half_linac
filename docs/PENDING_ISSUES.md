@@ -196,8 +196,14 @@
   - `energy_spectrum` timer refreshes, window initialization, theme changes, and colormap changes do not write result metadata; explicit model/result actions write `latest/metadata.json` and `runs/energy_result_<timestamp>/metadata.json` as appropriate.
   - Real-to-VM mirroring remains intentionally separate from model calculations.
 - Follow-up:
-  - Add explicit UI or CLI selection for saved snapshot JSON files.
-  - Keep `real-to-VM mirroring` as a separate debug/commissioning feature that copies real-machine state into the VM control object only when explicitly requested.
+  - TODO: Saved snapshot selection.
+    - Add explicit UI or CLI selection for saved snapshot JSON files.
+    - Validate machine/backend compatibility before applying a saved snapshot to model calculations.
+    - Make replay mode visible in result metadata so archived recalculations are distinguishable from live snapshots.
+  - TODO: Real-to-VM mirroring/debug.
+    - Add an explicit debug/commissioning command that copies selected real-machine readbacks into the VM control object only when requested.
+    - Keep mirroring separate from normal model calculations; model backends should continue to consume explicit snapshots rather than treating VM state as an implicit source of truth.
+    - Record mirrored source, target PVs, timestamp, and conversion assumptions for review.
   - Require explicit unit/conversion definitions before using current-based magnet PVs as elegant `K1`, kick, or bend-angle values.
   - Extend snapshot mapping coverage only when a model calculation actually needs the extra field, or generate broad coverage from machine profile metadata.
 
