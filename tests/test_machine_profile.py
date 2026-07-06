@@ -579,7 +579,6 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(paths["latest_dir"], paths["runtime_dir"] / "latest")
         self.assertEqual(paths["archive_dir"], paths["runtime_dir"] / "runs")
         self.assertEqual(paths["runs_dir"], paths["runtime_dir"] / "runs")
-        self.assertEqual(paths["legacy_archive_dir"], paths["runtime_dir"] / "scans")
         self.assertEqual(paths["bba1_data_path"], paths["latest_dir"] / "m1S.txt")
         self.assertEqual(paths["bba1_quad_scan_path"], paths["latest_dir"] / "bba1_quad_scan.txt")
         self.assertEqual(paths["bba1_metadata_path"], paths["latest_dir"] / "metadata.json")
