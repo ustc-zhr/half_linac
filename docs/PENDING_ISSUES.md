@@ -201,7 +201,7 @@
 
 ### 9. Model Backend Runtime Workspace Separation
 
-- Status: partially implemented
+- Status: completed
 - Priority: medium
 - Background:
   - VM runtime and model backend calculations both use elegant, but they play different roles.
@@ -215,6 +215,6 @@
   - HALF and IRFEL model backend working files now use `runtime/model_backend/<machine>/simulation/{emit,energy}/`.
   - VM source assets such as `lattice_ini.lte`, `emit_ini.ele`, and `esa_ini.ele` remain in the VM elegant asset directory.
   - Generated model working files are ignored and untracked.
+  - Template machine configs now describe model backend runtime output paths instead of app-local ESA output files.
 - Follow-up:
-  - Keep VM runtime files and model backend runtime files separate even when both use the same design lattice and elegant executable.
   - Consider moving the remaining app-local ESA elegant orchestration into the shared model backend once the runtime boundary is stable.
