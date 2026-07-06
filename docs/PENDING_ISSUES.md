@@ -192,6 +192,8 @@
   - `energy_spectrum`, `emit_measure`, and BBA-2 model R12 calculations can consume model snapshot lattice overrides.
   - HALF and IRFEL model backend configs use `snapshot_mapping` to map logical control channels to model-native fields.
   - `emit_measure` scopes snapshot reads to the active model path for scan/recalculate and Twiss calculations.
+  - `energy_spectrum` keeps its current optics snapshot cache at `latest/model_snapshot.json`; result metadata embeds the snapshot used for replay.
+  - `energy_spectrum` timer refreshes, window initialization, theme changes, and colormap changes do not write result metadata; explicit model/result actions write `latest/metadata.json` and `runs/energy_result_<timestamp>/metadata.json` as appropriate.
   - Real-to-VM mirroring remains intentionally separate from model calculations.
 - Follow-up:
   - Add explicit UI or CLI selection for saved snapshot JSON files.

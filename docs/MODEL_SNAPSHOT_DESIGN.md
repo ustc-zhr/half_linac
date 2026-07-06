@@ -144,10 +144,18 @@ Application result metadata records snapshots close to the measured data:
 - `emit_measure` stores `model_snapshot` in `metadata.json` beside each saved
   `scanResults.txt`.
 - BBA-2 stores `model_snapshot` in each scan `metadata.json`.
-- `energy_spectrum` stores the latest energy result metadata in
+- `energy_spectrum` stores the current model-state cache in
+  `src/apps/energy_spectrum/runtime/<machine>/<backend>/latest/model_snapshot.json`.
+  This file is not a result archive; it records the latest optics model input
+  snapshot used by `Update eta` or `Update optics`.
+- `energy_spectrum` writes result metadata to
   `src/apps/energy_spectrum/runtime/<machine>/<backend>/latest/metadata.json`
-  and archives a new result under `runs/energy_result_<timestamp>/metadata.json`
-  when the active model snapshot changes.
+  only for user-triggered result changes, not for timer refreshes, window
+  initialization, theme changes, or colormap changes.
+- `energy_spectrum` archives a result under
+  `runs/energy_result_<timestamp>/metadata.json` when the user explicitly runs
+  `Update eta` or `Update optics`. The archived `metadata.json` embeds the
+  `model_snapshot` used for that result and is the authoritative replay record.
 
 The app runtime archive convention is:
 
@@ -157,8 +165,9 @@ src/apps/<app>/runtime/<machine>/<backend>/runs/<run_id>/metadata.json
 ```
 
 App-specific data files may sit beside `metadata.json`, such as
-`scanResults.txt` for emit scans or BBA scan text files. Older metadata paths
-remain readable during the migration.
+`scanResults.txt` for emit scans or BBA scan text files. Removed legacy paths
+such as `scanResults.meta.json`, app-local `runtime/scans`, and
+`latest_energy_result.json` should not be used by new code.
 
 VM runtime files and model backend runtime files are intentionally separate even
 when they use the same design lattice and elegant executable. This keeps the VM
@@ -185,8 +194,8 @@ The first implementation:
    both lattice overrides and metadata.
 3. Uses snapshots in `energy_spectrum`, `emit_measure`, and BBA-2 model R12
    calculations.
-4. Records latest snapshot metadata for model-driven calculations where runtime
-   result archives are already available.
+4. Records model snapshots beside scan/result metadata and keeps the
+   `energy_spectrum` current model-state cache in `latest/model_snapshot.json`.
 5. Keeps real-to-VM mirroring as a later debug-oriented feature.
 
 ## Later TODO
