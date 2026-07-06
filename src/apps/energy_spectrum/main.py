@@ -1618,7 +1618,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             paths["latest_dir"].mkdir(parents=True, exist_ok=True)
             metadata_text = json.dumps(metadata, indent=2, sort_keys=True)
             paths["latest_metadata_path"].write_text(metadata_text, encoding="utf-8")
-            paths["energy_result_path"].write_text(metadata_text, encoding="utf-8")
             snapshot_metadata = metadata.get("model_snapshot")
             if isinstance(snapshot_metadata, dict):
                 archive_key = snapshot_metadata.get("created_at") or metadata["created_at"]
