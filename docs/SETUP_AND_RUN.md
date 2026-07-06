@@ -97,7 +97,13 @@ pip install pyepics
 conda install soliday::sdds
 ```
 
-注意：Energy Spectrum 代码中导入名是 `skimage`，实际安装包名是 `scikit-image`。
+注意：
+
+- Energy Spectrum 代码中导入名是 `skimage`，实际安装包名是 `scikit-image`。
+- `sdds` 建议使用 Robert Soliday 维护的 conda 包：
+  <https://anaconda.org/soliday/sdds>。Anaconda 页面给出的安装命令是
+  `conda install soliday::sdds`。在 Linux 上 conda 会选择该 channel 中
+  支持当前平台的版本。
 
 完成安装后，可以先做一次 Python 依赖自检：
 
@@ -121,6 +127,11 @@ PY
 
 ## 4. elegant 与 SDDS
 
+`elegant` 和 Python `sdds` 是两件不同的依赖：
+
+- `elegant` 是外部可执行程序，模型后端和 VM 会通过命令行调用它。
+- Python `sdds` 模块用于读取 elegant 输出的 `.mat`、`.twi` 等 SDDS 文件。
+
 virtual machine 目录下的脚本会调用本机 `elegant` 可执行文件，例如：
 
 - `src/virtual_machine/half_elegant/elegant/one`
@@ -131,7 +142,57 @@ virtual machine 目录下的脚本会调用本机 `elegant` 可执行文件，�
 elegant
 ```
 
-如果这条命令不可用，VM 相关流程只能做静态检查，不能做完整运行验证。
+### 安装 Python `sdds`
+
+推荐在当前 conda 环境里安装：
+
+```bash
+conda activate half_linac
+conda install soliday::sdds
+```
+
+验证：
+
+```bash
+python3 - <<'PY'
+import sdds
+print("Python sdds OK:", getattr(sdds, "__file__", "built-in"))
+PY
+```
+
+如果你已经用 `environment.yml` 创建环境，但发现 `import sdds` 失败，可以在
+激活环境后重新执行上面的 `conda install soliday::sdds`。
+
+### 安装 `elegant`
+
+`elegant` 需要按控制室机器的系统环境单独安装。官方软件入口是 APS
+Accelerator Operations and Physics Group 的 Software 页面：
+<https://www.aps.anl.gov/Accelerator-Operations-Physics/Software>。
+
+通常有三种可行方式：
+
+1. 使用控制室已有的 module 或本地软件栈。
+2. 从 APS Software 页面下载适合当前 Linux 发行版的 SDDS/elegant 相关包。
+3. 请控制系统/IT 维护人员把 `elegant` 安装到共享软件路径，并加入 `PATH`。
+
+验证：
+
+```bash
+which elegant
+elegant
+```
+
+如果 `which elegant` 没有输出，或执行时报 `command not found`，说明当前 shell
+还不能运行模型计算。此时 GUI 仍可做部分静态或只读操作，但 `Update eta`、
+`Update optics`、`emit_measure` Twiss/recalculate、VM/elegant 相关流程会失败。
+
+如果 `elegant` 已安装但不在默认 `PATH`，可以临时加入，例如：
+
+```bash
+export PATH=/path/to/elegant/bin:$PATH
+```
+
+最终建议把这行放到控制室机器的统一环境加载脚本中，而不是写死到仓库代码里。
 
 ## 5. 克隆仓库
 
