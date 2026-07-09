@@ -167,6 +167,9 @@ QFrame#summaryPanel {{
 }}
 
 QLabel#summaryTitle {{
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
     color: {title_fg};
     font-size: 24px;
     font-weight: 700;

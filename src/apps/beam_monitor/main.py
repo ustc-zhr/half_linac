@@ -150,6 +150,7 @@ QFrame#plotCard, QFrame#controlCard {{
 }}
 
 QLabel#summaryTitle {{
+    background-color: transparent;
     color: {summary_title_fg};
     font-size: 22px;
     font-weight: 700;
@@ -163,6 +164,7 @@ QLabel#panelTitle {{
 }}
 
 QLabel[role="field"] {{
+    background-color: transparent;
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;

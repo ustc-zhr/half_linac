@@ -211,6 +211,12 @@ QLineEdit {{
     selection-background-color: {metric_active_fg};
 }}
 
+QLineEdit#refreshIntervalEdit {{
+    min-height: {header_action_height}px;
+    max-height: {header_action_height}px;
+    padding: 0px 10px;
+}}
+
 QLabel {{
     color: {window_fg};
     font-size: 12px;
@@ -583,6 +589,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.addWidget(refresh_label)
 
         self.refresh_interval_edit = QLineEdit(panel)
+        self.refresh_interval_edit.setObjectName("refreshIntervalEdit")
         self.refresh_interval_edit.setText("1.0")
         self.refresh_interval_edit.setFixedWidth(72)
         self.refresh_interval_edit.setFixedHeight(HEADER_ACTION_HEIGHT)
@@ -677,7 +684,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.statusBar().showMessage(message, 5000)
 
     def _format_backend_name(self):
-        return self.control_backend
+        return self.control_backend.upper()
 
     def _apply_refresh_interval(self):
         if not hasattr(self, "refresh_interval_edit"):
