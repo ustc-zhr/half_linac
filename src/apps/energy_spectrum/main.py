@@ -65,6 +65,7 @@ from half_linac.src.shared.machine_profile import (
     save_model_snapshot,
     workflow_writes_allowed,
 )
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 # 会使用到VM计算η和twiss (不具有一般性)
 
 
@@ -590,6 +591,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        install_qt_window_raise_handler(self)
         self.app_context = load_app_context("energy_spectrum")
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name

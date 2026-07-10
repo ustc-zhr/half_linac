@@ -118,8 +118,10 @@ conda activate half_linac
 conda install soliday::sdds
 ```
 
-`environment.yml` already declares `soliday::sdds`. The explicit command above
-is useful when repairing an existing environment.
+`environment.yml` intentionally does not declare `soliday::sdds`, so the base
+control-room environment can be solved without the extra channel. The command
+above has been verified in the control room and should be run after creating the
+main `half_linac` environment.
 
 Verify:
 

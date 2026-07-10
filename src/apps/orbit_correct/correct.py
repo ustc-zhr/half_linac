@@ -89,8 +89,8 @@ class OrbitCorrector:
                 corrector_limit: Optional[float] = None,
                 global_max_iter: Optional[int] = None,
                 one_to_one_max_iter: Optional[int] = None,
-                one_to_one_gain: Optional[float] = None,
-                one_to_one_max_step_fraction: Optional[float] = None,
+                correction_gain: Optional[float] = None,
+                correction_max_step_fraction: Optional[float] = None,
                 response_kick: Optional[float] = None,
                 global_xcor_list: Optional[List[str]] = None,
                 global_ycor_list: Optional[List[str]] = None):
@@ -118,15 +118,15 @@ class OrbitCorrector:
             int(self.runtime_defaults["one_to_one_max_iter"]),
             "one_to_one_max_iter",
         )
-        self.one_to_one_gain = self._select_fraction(
-            one_to_one_gain,
-            float(self.runtime_defaults["one_to_one_gain"]),
-            "one_to_one_gain",
+        self.correction_gain = self._select_fraction(
+            correction_gain,
+            float(self.runtime_defaults["correction_gain"]),
+            "correction_gain",
         )
-        self.one_to_one_max_step_fraction = self._select_fraction(
-            one_to_one_max_step_fraction,
-            float(self.runtime_defaults["one_to_one_max_step_pct"]) / 100.0,
-            "one_to_one_max_step_fraction",
+        self.correction_max_step_fraction = self._select_fraction(
+            correction_max_step_fraction,
+            float(self.runtime_defaults["correction_max_step_pct"]) / 100.0,
+            "correction_max_step_fraction",
         )
         
         # all cor and bpm lists
@@ -371,10 +371,16 @@ class OrbitCorrector:
         
         return [r / self.samples_perstep for r in results]
 
+    def _max_correction_step(self) -> float:
+        return self.max_value * self.correction_max_step_fraction
+
+    def _bounded_correction_delta(self, delta) -> np.ndarray:
+        raw_delta = self.correction_gain * np.asarray(delta, dtype=float)
+        max_step = self._max_correction_step()
+        return np.clip(raw_delta, -max_step, max_step)
+
     def _bounded_correction_step(self, error: float, response: float) -> float:
-        raw_step = self.one_to_one_gain * error / response
-        max_step = max(self.max_value * self.one_to_one_max_step_fraction, self.d_value)
-        return float(np.clip(raw_step, -max_step, max_step))
+        return float(self._bounded_correction_delta(error / response))
 
     def _clip_corrector(self, value: float) -> float:
         return float(np.clip(value, -self.max_value, self.max_value))
@@ -671,8 +677,12 @@ class OrbitCorrector:
                 logger.info(f"correction is finished at iteration: {iteration}")
                 return True
             
-            delt_corrh = np.dot(self.pseudo_inverse_x, np.array(x_err))
-            delt_corrv = np.dot(self.pseudo_inverse_y, np.array(y_err))
+            delt_corrh = self._bounded_correction_delta(
+                np.dot(self.pseudo_inverse_x, np.array(x_err))
+            )
+            delt_corrv = self._bounded_correction_delta(
+                np.dot(self.pseudo_inverse_y, np.array(y_err))
+            )
 
 
             # 应用校正
@@ -766,8 +776,8 @@ if __name__ == '__main__':
             corrector_limit = _optional_float_arg(sys.argv, 9)
             global_max_iter = _optional_int_arg(sys.argv, 10)
             one_to_one_max_iter = _optional_int_arg(sys.argv, 11)
-            one_to_one_gain = _optional_float_arg(sys.argv, 12)
-            one_to_one_max_step_fraction = _optional_float_arg(sys.argv, 13)
+            correction_gain = _optional_float_arg(sys.argv, 12)
+            correction_max_step_fraction = _optional_float_arg(sys.argv, 13)
             response_kick = _optional_float_arg(sys.argv, 14)
             global_xcor_list = _optional_csv_arg(sys.argv, 15)
             global_ycor_list = _optional_csv_arg(sys.argv, 16)
@@ -778,8 +788,8 @@ if __name__ == '__main__':
                 corrector_limit=corrector_limit,
                 global_max_iter=global_max_iter,
                 one_to_one_max_iter=one_to_one_max_iter,
-                one_to_one_gain=one_to_one_gain,
-                one_to_one_max_step_fraction=one_to_one_max_step_fraction,
+                correction_gain=correction_gain,
+                correction_max_step_fraction=correction_max_step_fraction,
                 response_kick=response_kick,
                 global_xcor_list=global_xcor_list,
                 global_ycor_list=global_ycor_list,

@@ -33,10 +33,15 @@ dependencies:
   # Optimization helpers used by optional workflows.
   - bayesian-optimization
 
-  # SDDS Python bindings are intentionally not pinned here. The old
-  # environment used soliday::sdds, which is not available on standard
-  # channels in the control-room solver. Install the site-supported SDDS
-  # binding separately before running VM/model/energy-spectrum workflows
+  # SDDS Python bindings are intentionally not pinned here so the base
+  # control-room environment can be solved without the extra channel.
+  # After creating the environment, install the control-room verified
+  # binding with:
+  #
+  #   conda activate half_linac
+  #   conda install soliday::sdds
+  #
+  # This is required before running VM/model/energy-spectrum workflows
   # that import sdds.SDDS.
 
   - pip:

@@ -276,8 +276,8 @@
       "exposure_time": "IRFEL:BD:FLAG4:cam1:AcquireTime"
     },
     "PRFESA": {
-      "image": "IRFEL:BD:FLAG5:image1:ArrayData",
-      "exposure_time": "IRFEL:BD:FLAG5:cam1:AcquireTime"
+      "image": "IRFEL:BD:ESA:image1:ArrayData",
+      "exposure_time": "IRFEL:BD:ESA:cam1:AcquireTime"
     }
   }
 }

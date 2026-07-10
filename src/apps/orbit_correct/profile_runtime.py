@@ -30,8 +30,8 @@ DEFAULT_RUNTIME_DEFAULTS: dict[str, Any] = {
     "samples_per_step": 2,
     "global_max_iter": 20,
     "one_to_one_max_iter": 20,
-    "one_to_one_gain": 0.5,
-    "one_to_one_max_step_pct": 25.0,
+    "correction_gain": 0.5,
+    "correction_max_step_pct": 25.0,
     "local_response_kick_fraction": 0.02,
     "matrix_response_kick_fraction": 0.02,
     "matrix_samples_per_step": 2,
@@ -292,8 +292,8 @@ def _select_runtime_defaults(workflow: Mapping[str, Any]) -> dict[str, Any]:
     selected["samples_per_step"] = int(selected["samples_per_step"])
     selected["global_max_iter"] = int(selected["global_max_iter"])
     selected["one_to_one_max_iter"] = int(selected["one_to_one_max_iter"])
-    selected["one_to_one_gain"] = float(selected["one_to_one_gain"])
-    selected["one_to_one_max_step_pct"] = float(selected["one_to_one_max_step_pct"])
+    selected["correction_gain"] = float(selected["correction_gain"])
+    selected["correction_max_step_pct"] = float(selected["correction_max_step_pct"])
     selected["local_response_kick_fraction"] = float(selected["local_response_kick_fraction"])
     selected["matrix_response_kick_fraction"] = float(selected["matrix_response_kick_fraction"])
     selected["matrix_samples_per_step"] = int(selected["matrix_samples_per_step"])

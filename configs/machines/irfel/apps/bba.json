@@ -1,8 +1,8 @@
 {
   "presets": [
     {
-      "id": "irfel_bba_standard_qm01_hc01",
-      "family": "standard",
+      "id": "vm_irfel_bba1_qm01_hc01",
+      "family": "bba1",
       "plane": "X",
       "quad": "QM01",
       "corr": "HC01",
@@ -16,48 +16,68 @@
         "quad_end": 1.0,
         "quad_steps": 5,
         "samples": 1,
-        "sleeptime": 1.0,
+        "settle_time": 1.0,
         "sample_interval": 0.5
       }
     },
     {
-      "id": "irfel_bba_standard_qm04_hc02",
-      "family": "standard",
+      "id": "irfel_bba1_qm01_MSVC",
+      "family": "bba1",
       "plane": "X",
-      "quad": "QM04",
-      "corr": "HC02",
-      "bpm1": "BPM03",
-      "bpm2": "BPM07",
+      "quad": "QM01",
+      "corr": "MSVC",
+      "bpm1": "BPM02",
+      "bpm2": "BPM03",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
+        "corr_from": -2,
+        "corr_end": 2,
         "corr_steps": 5,
-        "quad_from": -80.0,
-        "quad_end": -60.0,
+        "quad_from": -1.0,
+        "quad_end": 1.0,
         "quad_steps": 5,
-        "samples": 1,
-        "sleeptime": 3.0,
-        "sample_interval": 0.5
+        "samples": 3,
+        "settle_time": 1.0,
+        "sample_interval": 0.2
       }
     },
     {
-      "id": "irfel_bba_standard_qm04_vc01",
-      "family": "standard",
-      "plane": "Y",
-      "quad": "QM04",
-      "corr": "VC01",
+      "id": "irfel_bba1_qm03_hc01",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QM03",
+      "corr": "HC01",
       "bpm1": "BPM03",
       "bpm2": "BPM07",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
+        "corr_from": -2,
+        "corr_end": 2,
         "corr_steps": 5,
         "quad_from": -80.0,
         "quad_end": -60.0,
         "quad_steps": 5,
-        "samples": 1,
-        "sleeptime": 3.0,
-        "sample_interval": 0.5
+        "samples": 3,
+        "settle_time": 1,
+        "sample_interval": 0.2
+      }
+    },
+    {
+      "id": "irfel_bba1_qm11_hc02",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QM11",
+      "corr": "HC02",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08",
+      "scan": {
+        "corr_from": -2,
+        "corr_end": 2,
+        "corr_steps": 5,
+        "quad_from": -80.0,
+        "quad_end": -60.0,
+        "quad_steps": 5,
+        "samples": 5,
+        "settle_time": 1,
+        "sample_interval": 0.2
       }
     },
     {
@@ -76,7 +96,7 @@
         "corr_end": 0.001,
         "corr_steps": 5,
         "samples": 1,
-        "sleeptime": 3.0,
+        "settle_time": 3.0,
         "sample_interval": 0.5
       },
       "analysis": {
@@ -90,17 +110,17 @@
       }
     }
   ],
-  "standard": {
-    "control_backends": ["vm"],
-    "default_preset": "irfel_bba_standard_qm01_hc01"
+  "bba1": {
+    "control_backends": ["vm", "real"],
+    "default_preset": "vm_irfel_bba1_qm01_hc01"
   },
   "bba2": {
-    "control_backends": ["vm"],
+    "control_backends": ["vm", "real"],
     "default_preset": "irfel_bba2_qm04_hc02"
   },
-  "real_status": "not_supported",
+  "real_status": "write_smoke_passed",
   "write_control": {
     "vm": "allowed",
-    "real": "blocked"
+    "real": "allowed"
   }
 }

@@ -38,20 +38,23 @@ bash scripts/runMe
 
 说明：`scripts/` 下的启动脚本和主要 Python 入口现在都会自行定位仓库，不需要你先在 `.zshrc` / `.bashrc` 里手工追加 `PYTHONPATH`。`source scripts/setup.sh` 只在你想反复手动执行多个 `python3 src/...` 入口时才有帮助。
 
-如果 `environment.yml` 不能直接复用，请至少保证以下依赖可用：
+如果 `environment.yml` 不能直接复用，控制室只连接目标机器的实机 IOC 时至少需要：
 
 - Python >=3.10，推荐 3.11；Python 3.9 或更低版本不能运行本仓库的部分应用
 - PyQt5
 - pyepics
 - numpy / scipy / matplotlib / scikit-image
 - pyqtgraph / pandas / h5py
+
+以下依赖只在本机运行 VM、model backend、energy spectrum 或仓库 softIOC 时需要：
+
 - sdds Python 模块
 - 系统可执行的 `elegant`
-- 已安装并可运行的 EPICS base / `softIoc`
+- 已安装并可运行的 EPICS Base / `softIoc`
 
 ### 2. 修改本机相关配置
 
-IOC 启动前，需要按本机环境检查或修改：
+如果只在控制室连接实机 IOC，不需要构建或启动本仓库的 `softIOC`，也不需要修改下面这些 IOC 构建配置。本机启动仓库 softIOC 前，需要按本机环境检查或修改：
 
 - `src/softIOC/halflinac/configure/RELEASE`
 

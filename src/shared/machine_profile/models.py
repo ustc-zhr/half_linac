@@ -207,7 +207,7 @@ class BBAScanConfig(_OptionalFieldMapping):
     quad_end: float | None = None
     quad_steps: int | None = None
     samples: int | None = None
-    sleeptime: float | None = None
+    settle_time: float | None = None
     sample_interval: float | None = None
 
 
@@ -244,7 +244,7 @@ class BBAPreset:
 class BBAWorkflowConfig:
     presets: tuple[BBAPreset, ...]
     presets_by_id: Mapping[str, BBAPreset]
-    standard: BBAFamilyConfig
+    bba1: BBAFamilyConfig
     bba2: BBAFamilyConfig
 
 
@@ -555,13 +555,13 @@ def _validate_bba_workflow(
             if quad_leff_value <= 0:
                 raise MachineProfileError(f"{location}.analysis.quad_leff must be positive.")
 
-    standard = _expect_optional_mapping(workflow.get("standard"), "workflows.bba.standard")
-    _validate_bba_family(standard, elements_by_id, "workflows.bba.standard")
+    bba1 = _expect_optional_mapping(workflow.get("bba1"), "workflows.bba.bba1")
+    _validate_bba_family(bba1, elements_by_id, "workflows.bba.bba1")
     _validate_family_default_preset(
-        standard,
-        "standard",
+        bba1,
+        "bba1",
         presets,
-        "workflows.bba.standard.default_preset",
+        "workflows.bba.bba1.default_preset",
     )
 
     bba2 = _expect_optional_mapping(workflow.get("bba2"), "workflows.bba.bba2")

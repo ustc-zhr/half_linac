@@ -26,12 +26,13 @@ from PyQt5.QtCore import QTimer
 from epics import caget_many
 
 class myWindow(QMainWindow, Ui_Form):
-    def __init__(self):
+    def __init__(self, refresh_interval_ms=1000):
         super().__init__()
         self.setupUi(self)
         self.app_context = load_app_context("orbit_display")
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
+        self.refresh_interval_ms = max(100, int(refresh_interval_ms))
         self.bpm_position_scale_to_mm = self._resolve_bpm_position_scale_to_mm()
         self.bpm_elements = list_elements(self.app_context, kind="bpm")
         self.bpm_ids = [element.id for element in self.bpm_elements]
@@ -43,8 +44,12 @@ class myWindow(QMainWindow, Ui_Form):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.bpmvalue_dis)
-        self.timer.start(1000)
+        self.timer.start(self.refresh_interval_ms)
         self.bpmvalue_dis()
+
+    def set_refresh_interval_ms(self, refresh_interval_ms):
+        self.refresh_interval_ms = max(100, int(refresh_interval_ms))
+        self.timer.start(self.refresh_interval_ms)
 
     def _resolve_bpm_position_scale_to_mm(self):
         workflow = get_workflow(self.machine_profile, "orbit")

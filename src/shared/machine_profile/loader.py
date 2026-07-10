@@ -207,10 +207,10 @@ def load_bba_workflow(profile: MachineProfile) -> BBAWorkflowConfig:
         presets.append(preset)
         presets_by_id[preset.id] = preset
 
-    standard = _parse_bba_family(
-        workflow.get("standard"),
-        "standard",
-        "workflows.bba.standard",
+    bba1 = _parse_bba_family(
+        workflow.get("bba1"),
+        "bba1",
+        "workflows.bba.bba1",
         presets,
     )
     bba2 = _parse_bba_family(
@@ -222,7 +222,7 @@ def load_bba_workflow(profile: MachineProfile) -> BBAWorkflowConfig:
     return BBAWorkflowConfig(
         presets=tuple(presets),
         presets_by_id=presets_by_id,
-        standard=standard,
+        bba1=bba1,
         bba2=bba2,
     )
 
@@ -1440,7 +1440,7 @@ def _parse_bba_scan_config(raw_scan: Mapping[str, Any]) -> BBAScanConfig:
         quad_end=_optional_float(raw_scan, "quad_end"),
         quad_steps=_optional_int(raw_scan, "quad_steps"),
         samples=_optional_int(raw_scan, "samples"),
-        sleeptime=_optional_float(raw_scan, "sleeptime"),
+        settle_time=_optional_float(raw_scan, "settle_time"),
         sample_interval=_optional_float(raw_scan, "sample_interval"),
     )
 

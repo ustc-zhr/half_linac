@@ -50,6 +50,11 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
 )
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
+from half_linac.src.shared.window_activation import (
+    activate_window_for_pid,
+    activate_windows_window_by_title,
+    request_qt_window_raise,
+)
 from gui import Ui_MainWindow
 
 ROOT = _REPO_BOOTSTRAP_ROOT
@@ -565,6 +570,7 @@ APP_DEFINITIONS = {
         "category": "core",
         "button_text": "Virtual Accelerator",
         "label": "Virtual Accelerator",
+        "window_title_patterns": ("VM Control", "Virtual Machine"),
         "description": "Manage the virtual machine and softIOC workflow.",
         "cmd": ["python3", "mainVM.py"],
         "cwd": ROOT / "src/virtual_machine/half_elegant",
@@ -574,6 +580,7 @@ APP_DEFINITIONS = {
         "category": "core",
         "button_text": "Optimization",
         "label": "Optimization",
+        "window_title_patterns": ("GOTAcc Studio", "Optimization"),
         "description": "Open the GOTAcc optimization workflow.",
         "cmd": ["python3", "mainOPT.py"],
         "cwd": ROOT / "src/optimization",
@@ -583,6 +590,7 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Orbit Display",
         "label": "Orbit Display",
+        "window_title_patterns": ("Orbit Display",),
         "description": "View BPM orbit readings for the selected machine/backend.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/orbit_display",
@@ -592,6 +600,7 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Beam Monitor",
         "label": "Beam Monitor",
+        "window_title_patterns": ("Beam Monitor",),
         "description": "View beam images and monitor profile diagnostics.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/beam_monitor",
@@ -601,6 +610,7 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Jitter Analysis",
         "label": "Jitter Analysis",
+        "window_title_patterns": ("Jitter Analysis",),
         "description": "Analyze shot-to-shot beam and signal jitter.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/jitter",
@@ -610,6 +620,7 @@ APP_DEFINITIONS = {
         "category": "diagnostic",
         "button_text": "Energy Spectrum",
         "label": "Energy Spectrum",
+        "window_title_patterns": ("Energy Spectrum",),
         "description": "Analyze the ESA energy spectrum workflow.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/energy_spectrum",
@@ -619,6 +630,7 @@ APP_DEFINITIONS = {
         "category": "control",
         "button_text": "BBA",
         "label": "BBA",
+        "window_title_patterns": ("BBA",),
         "description": "Run beam-based alignment scans and recalculation.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/bba",
@@ -628,6 +640,7 @@ APP_DEFINITIONS = {
         "category": "control",
         "button_text": "Orbit Correct",
         "label": "Orbit Correct",
+        "window_title_patterns": ("Orbit Correction", "Orbit Correct"),
         "description": "Measure response matrices and apply orbit correction.",
         "cmd": ["python3", "mainOrbCor.py"],
         "cwd": ROOT / "src/apps/orbit_correct",
@@ -637,6 +650,7 @@ APP_DEFINITIONS = {
         "category": "control",
         "button_text": "Solenoid Centering",
         "label": "Solenoid Centering",
+        "window_title_patterns": ("Solenoid Centering",),
         "description": "Find corrector settings that minimize BPM sensitivity to solenoid scans.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/solenoid_centering",
@@ -646,6 +660,7 @@ APP_DEFINITIONS = {
         "category": "control",
         "button_text": "Emittance",
         "label": "Emittance",
+        "window_title_patterns": ("Emittance Measurement", "Emittance & Twiss"),
         "description": "Run quadrupole-scan emittance measurement and Twiss analysis.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/emit_measure",
@@ -1073,15 +1088,43 @@ class myWindow(QMainWindow, Ui_MainWindow):
         prompt.setIcon(QMessageBox.Question)
         prompt.setWindowTitle(spec["label"])
         prompt.setText(f"{spec['label']} is already running.")
-        stop_button = prompt.addButton("Stop", QMessageBox.AcceptRole)
+        open_button = prompt.addButton("Open", QMessageBox.AcceptRole)
+        stop_button = prompt.addButton("Stop", QMessageBox.DestructiveRole)
         cancel_button = prompt.addButton("Cancel", QMessageBox.RejectRole)
-        prompt.setDefaultButton(cancel_button)
+        prompt.setDefaultButton(open_button)
+        prompt.setEscapeButton(cancel_button)
         prompt.exec_()
 
-        if prompt.clickedButton() is not stop_button:
-            self._notify(f"{spec['label']} is already running.")
+        clicked_button = prompt.clickedButton()
+        if clicked_button is open_button:
+            self._request_running_app_open(key)
+            return
+        if clicked_button is stop_button:
+            self._stop_running_app(key)
             return
 
+        self._notify(f"{spec['label']} is already running.")
+
+    def _request_running_app_open(self, key):
+        spec = APP_DEFINITIONS[key]
+        proc = self.process_manager.processes.get(key)
+        if proc is None:
+            self._notify(f"{spec['label']} is already running, but its process was not found.")
+            return
+
+        title_requested = activate_windows_window_by_title(
+            spec.get("window_title_patterns", (spec["label"],))
+        )
+        x11_requested = activate_window_for_pid(proc.pid)
+        qt_requested = request_qt_window_raise(proc.pid)
+        if title_requested or x11_requested or qt_requested:
+            self._notify(f"Open requested for {spec['label']}.")
+            return
+
+        self._notify(f"{spec['label']} is already running, but its window could not be opened automatically.")
+
+    def _stop_running_app(self, key):
+        spec = APP_DEFINITIONS[key]
         self._notify(f"Stopping {spec['label']}.")
         stopped = self.process_manager.stop_process(key)
         if stopped:

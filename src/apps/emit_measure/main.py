@@ -68,6 +68,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
     resolve_flag_pixel_geometry,
 )
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 
 nest_dict    = lambda: defaultdict(nest_dict)
 
@@ -702,6 +703,7 @@ class myWindow(QWidget,Ui_Form):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        install_qt_window_raise_handler(self)
         self.app_context = load_app_context("emit_measure")
         self.machine_profile = self.app_context.profile
         self.emit_workflow = self.app_context.emit_measure_workflow

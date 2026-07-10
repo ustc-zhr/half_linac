@@ -44,6 +44,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
     workflow_writes_allowed,
 )
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from half_linac.src.apps.solenoid_centering.mplwidget import MplWidget
 from half_linac.src.apps.solenoid_centering.scan import (
     CenteringResult,
@@ -106,6 +107,7 @@ class PreflightWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        install_qt_window_raise_handler(self)
         self.context = load_app_context("solenoid_centering")
         if self.context.solenoid_centering_workflow is None:
             raise MachineProfileError("Solenoid-centering workflow is not available.")

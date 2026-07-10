@@ -64,6 +64,7 @@ from half_linac.src.apps.bba.profile_runtime import (
     new_bba_scan_archive_dir,
     resolve_bba_runtime_paths,
 )
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 
 K1LQ_FACTOR = 0.15
 HEADER_ACTION_HEIGHT = 32
@@ -487,7 +488,7 @@ class ScanParameters:
     quad_end: float = 0.0
     quad_steps: int = 0
     samples: int = 0
-    sleeptime: float = 0.0
+    settle_time: float = 0.0
     sample_interval: float = 0.0
     recal: bool = False
     energy_mev: float = 0.0
@@ -522,6 +523,7 @@ class myWindow(QWidget, Ui_Form):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        install_qt_window_raise_handler(self)
         self.app_context = load_app_context("bba")
         self.machine_profile = self.app_context.profile
         self.bba_workflow = self.app_context.bba_workflow
@@ -1264,8 +1266,8 @@ class myWindow(QWidget, Ui_Form):
     def _scan_sample_interval_default(scan):
         if scan.sample_interval is not None:
             return scan.sample_interval
-        if scan.sleeptime is not None:
-            return scan.sleeptime
+        if scan.settle_time is not None:
+            return scan.settle_time
         return 0.5
 
     def _refresh_bba2_corrector_model_summary(self):
@@ -1441,7 +1443,7 @@ class myWindow(QWidget, Ui_Form):
                 "quad_end": self.lineEdit_4,
                 "quad_steps": self.lineEdit_5,
                 "quad_from": self.lineEdit_6,
-                "sleeptime": self.lineEdit_7,
+                "settle_time": self.lineEdit_7,
                 "samples": self.lineEdit_8,
             },
         )
@@ -1500,20 +1502,20 @@ class myWindow(QWidget, Ui_Form):
         return items
 
     def _standard_quad_items(self):
-        return self._family_element_ids(self.bba_workflow.standard.quads, kind="quad")
+        return self._family_element_ids(self.bba_workflow.bba1.quads, kind="quad")
 
     def _standard_corrector_items(self, plane):
         return self._family_element_ids(
-            self.bba_workflow.standard.correctors,
+            self.bba_workflow.bba1.correctors,
             kind="corr",
             plane=self._normalize_plane_value(plane).lower(),
         )
 
     def _standard_bpm1_items(self):
-        return self._family_element_ids(self.bba_workflow.standard.bpm1, kind="bpm")
+        return self._family_element_ids(self.bba_workflow.bba1.bpm1, kind="bpm")
 
     def _standard_bpm2_items(self):
-        return self._family_element_ids(self.bba_workflow.standard.bpm2, kind="bpm")
+        return self._family_element_ids(self.bba_workflow.bba1.bpm2, kind="bpm")
 
     def _bba2_quad_items(self):
         return self._family_element_ids(self.bba_workflow.bba2.quads, kind="quad")
@@ -1552,9 +1554,9 @@ class myWindow(QWidget, Ui_Form):
         self._refresh_corrector_combo(self.comboBox_9, items)
 
     def _configure_machine_profile(self):
-        standard = self.bba_workflow.standard
+        bba1 = self.bba_workflow.bba1
         bba2 = self.bba_workflow.bba2
-        self.standard_control_backend = self._selected_family_control_backend(standard)
+        self.standard_control_backend = self._selected_family_control_backend(bba1)
         bba2_control_backends = self._family_control_backends(bba2)
         bba2_control_backend = self._selected_family_control_backend(bba2)
 
@@ -1567,13 +1569,13 @@ class myWindow(QWidget, Ui_Form):
         self._set_combo_items(self.comboBox_6, self._bba2_bpm2_items())
         self._set_combo_items(self.comboBox_11, bba2_control_backends)
 
-        standard_default = self._find_bba_preset(standard.default_preset)
+        bba1_default = self._find_bba_preset(bba1.default_preset)
         self._set_bba_preset_combo_items(
             self.bba1_preset_combo,
-            self._bba_presets_for_family("standard"),
+            self._bba_presets_for_family("bba1"),
         )
-        self._set_bba_preset_combo_current(self.bba1_preset_combo, standard_default.id)
-        self._apply_bba1_preset(standard_default)
+        self._set_bba_preset_combo_current(self.bba1_preset_combo, bba1_default.id)
+        self._apply_bba1_preset(bba1_default)
 
         bba2_default = self._find_bba_preset(bba2.default_preset)
         self.bba2_quad_leff = bba2_default.analysis.quad_leff or K1LQ_FACTOR
@@ -1598,7 +1600,7 @@ class myWindow(QWidget, Ui_Form):
                 "corr_from": self.lineEdit_11,
                 "corr_end": self.lineEdit_13,
                 "quad_from": self.lineEdit_14,
-                "sleeptime": self.lineEdit_15,
+                "settle_time": self.lineEdit_15,
                 "quad_steps": self.lineEdit_16,
                 "quad_end": self.lineEdit_17,
                 "samples": self.lineEdit_9,
@@ -2249,7 +2251,7 @@ class myWindow(QWidget, Ui_Form):
             params.plane = self._normalize_plane_value(self.comboBox_5.currentText())
 
             mode = self._profile_default_control_backend()
-            self._require_family_control_backend(self.bba_workflow.standard, mode, "BBA-1")
+            self._require_family_control_backend(self.bba_workflow.bba1, mode, "BBA-1")
             bpm_channel = self._bpm_logical_channel(params.plane)
             params.corrPV = resolve_corrector_write_channel(self.app_context, params.corr, mode)
             params.quadPV = resolve_channel(self.app_context, params.quad, "k1", mode)
@@ -2265,13 +2267,13 @@ class myWindow(QWidget, Ui_Form):
             params.quad_end = float(self.lineEdit_4.text())
             params.quad_steps = int(self.lineEdit_5.text())
             params.samples = int(self.lineEdit_8.text())
-            params.sleeptime = float(self.lineEdit_7.text())
+            params.settle_time = float(self.lineEdit_7.text())
             params.sample_interval = float(self.bba1_sample_interval_edit.text())
 
             self._validate_positive_int(params.corr_steps, "Corrector steps")
             self._validate_positive_int(params.quad_steps, "Quad steps")
             self._validate_positive_int(params.samples, "Samples per step")
-            self._validate_non_negative_float(params.sleeptime, "Settle time")
+            self._validate_non_negative_float(params.settle_time, "Settle time")
             self._validate_non_negative_float(params.sample_interval, "Sample interval")
             return params
         except ValueError as exc:
@@ -2305,7 +2307,7 @@ class myWindow(QWidget, Ui_Form):
             params.corr_end = float(self.lineEdit_13.text())
             params.corr_steps = int(self.lineEdit_12.text())
             params.samples = int(self.lineEdit_9.text())
-            params.sleeptime = float(self.lineEdit_15.text())
+            params.settle_time = float(self.lineEdit_15.text())
             params.sample_interval = float(self.bba2_sample_interval_edit.text())
             params.energy_mev = float(self.lineEdit_20.text())
             params.bpm1_samples = int(self.lineEdit_22.text())
@@ -2320,7 +2322,7 @@ class myWindow(QWidget, Ui_Form):
             self._validate_positive_int(params.corr_steps, "Corrector steps")
             self._validate_positive_int(params.samples, "Samples per step")
             self._validate_positive_int(params.bpm1_samples, "BPM1 sample count")
-            self._validate_non_negative_float(params.sleeptime, "Settle time")
+            self._validate_non_negative_float(params.settle_time, "Settle time")
             self._validate_non_negative_float(params.sample_interval, "Sample interval")
             if params.energy_mev <= 0:
                 raise ValueError("Energy must be positive.")
@@ -2856,7 +2858,7 @@ class BBAScanThread(BBABaseThread):
                 "quad_end": self.params.quad_end,
                 "quad_steps": self.params.quad_steps,
                 "samples": self.params.samples,
-                "sleeptime": self.params.sleeptime,
+                "settle_time": self.params.settle_time,
                 "sample_interval": self.params.sample_interval,
             },
             "files": {
@@ -2895,7 +2897,7 @@ class BBAScanThread(BBABaseThread):
                     if not self.is_running:
                         return None
                     self._safe_put(quad, k1)
-                    if not self._sleep_or_stop(self.params.sleeptime):
+                    if not self._sleep_or_stop(self.params.settle_time):
                         return None
 
                     for sample_index in range(self.params.samples):
@@ -3032,7 +3034,7 @@ class BBAScanThreadBBA2(BBABaseThread):
             self._emit(theta_scan)
             # _perform_quad_scan restores the quad in its finally block; wait for the
             # backend readbacks to reflect the restored lattice before the corrector scan.
-            post_quad_wait = self.params.sleeptime if not self.params.recal else 1
+            post_quad_wait = self.params.settle_time if not self.params.recal else 1
             if not self._sleep_or_stop(post_quad_wait):
                 return
 
@@ -3097,7 +3099,7 @@ class BBAScanThreadBBA2(BBABaseThread):
         initial = metadata.get("initial") if isinstance(metadata.get("initial"), dict) else {}
 
         self.params.samples = int(scan.get("samples") or self.params.samples)
-        self.params.sleeptime = float(scan.get("sleeptime") or self.params.sleeptime)
+        self.params.settle_time = float(scan.get("settle_time") or self.params.settle_time)
         self.params.sample_interval = float(
             scan.get("sample_interval")
             if scan.get("sample_interval") is not None
@@ -3141,7 +3143,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 "corr_end": self.params.corr_end,
                 "corr_steps": self.params.corr_steps,
                 "samples": self.params.samples,
-                "sleeptime": self.params.sleeptime,
+                "settle_time": self.params.settle_time,
                 "sample_interval": self.params.sample_interval,
             },
             "analysis": {
@@ -3198,7 +3200,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 if not self.is_running:
                     return None
                 self._safe_put(quad, k1)
-                if not self._sleep_or_stop(self.params.sleeptime):
+                if not self._sleep_or_stop(self.params.settle_time):
                     return None
 
                 for sample_index in range(self.params.samples):
@@ -3276,7 +3278,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 if not self.is_running:
                     return None
                 self._safe_put(cor, kick)
-                if not self._sleep_or_stop(self.params.sleeptime):
+                if not self._sleep_or_stop(self.params.settle_time):
                     return None
                 for sample_index in range(self.params.samples):
                     if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):

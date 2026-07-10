@@ -1,8 +1,8 @@
 {
   "presets": [
     {
-      "id": "template_bba_standard",
-      "family": "standard",
+      "id": "template_bba1",
+      "family": "bba1",
       "plane": "x",
       "quad": "Q01",
       "corr": "XC01",
@@ -16,7 +16,7 @@
         "quad_end": 1.0,
         "quad_steps": 5,
         "samples": 3,
-        "sleeptime": 0.5,
+        "settle_time": 0.5,
         "sample_interval": 0.5
       }
     },

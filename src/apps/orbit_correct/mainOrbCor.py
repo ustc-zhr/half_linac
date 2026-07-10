@@ -44,6 +44,7 @@ from half_linac.src.shared.machine_profile import (
     require_workflow_write_allowed,
 )
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     APP_DIR,
     display_unit,
@@ -515,6 +516,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        install_qt_window_raise_handler(self)
         self.app_context = load_app_context("orbit_correct")
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
@@ -567,8 +569,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctorLimitLineEdit.setText(f"{corrector_limit:.6g}")
         self.globalMaxIterLineEdit.setText(str(int(self.runtime_defaults["global_max_iter"])))
         self.oneToOneMaxIterLineEdit.setText(str(int(self.runtime_defaults["one_to_one_max_iter"])))
-        self.oneToOneGainLineEdit.setText(f"{float(self.runtime_defaults['one_to_one_gain']):g}")
-        self.oneToOneMaxStepLineEdit.setText(f"{float(self.runtime_defaults['one_to_one_max_step_pct']):g}")
+        self.correctionGainLineEdit.setText(f"{float(self.runtime_defaults['correction_gain']):g}")
+        self.correctionMaxStepLineEdit.setText(f"{float(self.runtime_defaults['correction_max_step_pct']):g}")
         self.responseKickLineEdit.setText(
             f"{corrector_limit * float(self.runtime_defaults['local_response_kick_fraction']):.6g}"
         )
@@ -901,8 +903,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctorLimitLabel, self.correctorLimitLineEdit = self._make_parameter_field(card)
         self.globalMaxIterLabel, self.globalMaxIterLineEdit = self._make_parameter_field(card)
         self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit = self._make_parameter_field(card)
-        self.oneToOneGainLabel, self.oneToOneGainLineEdit = self._make_parameter_field(card)
-        self.oneToOneMaxStepLabel, self.oneToOneMaxStepLineEdit = self._make_parameter_field(card)
+        self.correctionGainLabel, self.correctionGainLineEdit = self._make_parameter_field(card)
+        self.correctionMaxStepLabel, self.correctionMaxStepLineEdit = self._make_parameter_field(card)
         self.responseKickLabel, self.responseKickLineEdit = self._make_parameter_field(card)
         self.activeMatrixLabel, self.activeMatrixValueLabel = self._make_parameter_display(card)
         self.matrixSetupLabel = QLabel(card)
@@ -919,6 +921,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 (self.correctorAccuracyUmLabel, self.correctorAccuracyUmLineEdit, True),
                 (self.sampPerStepLabel, self.sampPerStepLineEdit, True),
                 (self.correctorLimitLabel, self.correctorLimitLineEdit, False),
+                (self.correctionGainLabel, self.correctionGainLineEdit, False),
+                (self.correctionMaxStepLabel, self.correctionMaxStepLineEdit, False),
             ),
             card,
         )
@@ -941,8 +945,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "One-to-One Correction",
             (
                 (self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit, False),
-                (self.oneToOneGainLabel, self.oneToOneGainLineEdit, False),
-                (self.oneToOneMaxStepLabel, self.oneToOneMaxStepLineEdit, False),
                 (self.responseKickLabel, self.responseKickLineEdit, False),
             ),
             card,
@@ -1161,8 +1163,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctorLimitLabel.setProperty("role", "field")
         self.globalMaxIterLabel.setProperty("role", "field")
         self.oneToOneMaxIterLabel.setProperty("role", "field")
-        self.oneToOneGainLabel.setProperty("role", "field")
-        self.oneToOneMaxStepLabel.setProperty("role", "field")
+        self.correctionGainLabel.setProperty("role", "field")
+        self.correctionMaxStepLabel.setProperty("role", "field")
         self.responseKickLabel.setProperty("role", "field")
         self.matrixResponseKickLabel.setProperty("role", "field")
         self.matrixWaitSLabel.setProperty("role", "field")
@@ -1185,8 +1187,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctorLimitLabel.setText(f"Corrector Limit ({limit_unit})")
         self.globalMaxIterLabel.setText("Global Max Iter")
         self.oneToOneMaxIterLabel.setText("1-to-1 Max Iter / BPM")
-        self.oneToOneGainLabel.setText("1-to-1 Gain")
-        self.oneToOneMaxStepLabel.setText("1-to-1 Max Step (%)")
+        self.correctionGainLabel.setText("Correction Gain")
+        self.correctionMaxStepLabel.setText("Max Step (%)")
         self.responseKickLabel.setText(f"Local Response Kick ({limit_unit})")
         self.matrixResponseKickLabel.setText(f"Kick Step ({limit_unit})")
         self.matrixWaitSLabel.setText("Settle Time (s)")
@@ -1638,34 +1640,35 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self._set_response_progress(percent, text)
 
+    def _correction_step_parameter_values(self):
+        gain = self._parse_positive_float(self.correctionGainLineEdit, "Correction Gain")
+        if gain > 1.0:
+            raise ValueError("Correction Gain must be <= 1.0.")
+
+        max_step_pct = self._parse_positive_float(
+            self.correctionMaxStepLineEdit,
+            "Max Step",
+        )
+        if max_step_pct > 100.0:
+            raise ValueError("Max Step must be <= 100%.")
+        return gain, max_step_pct / 100.0
+
     def _one_to_one_parameter_values(self):
-        max_iter = self._parse_positive_int(
+        return self._parse_positive_int(
             self.oneToOneMaxIterLineEdit,
             "1-to-1 Max Iter / BPM",
         )
-        gain = self._parse_positive_float(self.oneToOneGainLineEdit, "1-to-1 Gain")
-        if gain > 1.0:
-            raise ValueError("1-to-1 Gain must be <= 1.0.")
-
-        max_step_pct = self._parse_positive_float(
-            self.oneToOneMaxStepLineEdit,
-            "1-to-1 Max Step",
-        )
-        if max_step_pct > 100.0:
-            raise ValueError("1-to-1 Max Step must be <= 100%.")
-        return max_iter, gain, max_step_pct / 100.0
 
     def _correction_parameter_args(self):
         method = self._selected_correction_method()
         corrector_limit = self._corrector_limit_value()
+        correction_gain, correction_max_step_fraction = self._correction_step_parameter_values()
         global_xcors = []
         global_ycors = []
 
         if method == "global":
             global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
             one_to_one_max_iter = int(self.runtime_defaults["one_to_one_max_iter"])
-            one_to_one_gain = float(self.runtime_defaults["one_to_one_gain"])
-            one_to_one_max_step_fraction = float(self.runtime_defaults["one_to_one_max_step_pct"]) / 100.0
             response_kick = min(
                 corrector_limit * float(self.runtime_defaults["local_response_kick_fraction"]),
                 corrector_limit,
@@ -1677,26 +1680,19 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 raise ValueError("Select at least one Y corrector for global correction.")
         elif method == "one-to-one":
             global_max_iter = int(self.runtime_defaults["global_max_iter"])
-            one_to_one_max_iter, one_to_one_gain, one_to_one_max_step_fraction = (
-                self._one_to_one_parameter_values()
-            )
+            one_to_one_max_iter = self._one_to_one_parameter_values()
             response_kick = self._local_response_kick_value(corrector_limit)
         else:
             global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
-            one_to_one_max_iter, one_to_one_gain, one_to_one_max_step_fraction = (
-                self._one_to_one_parameter_values()
-            )
+            one_to_one_max_iter = self._one_to_one_parameter_values()
             response_kick = self._local_response_kick_value(corrector_limit)
-
-        if one_to_one_gain > 1.0:
-            raise ValueError("1-to-1 Gain must be <= 1.0.")
 
         return [
             f"{corrector_limit:.12g}",
             str(global_max_iter),
             str(one_to_one_max_iter),
-            f"{one_to_one_gain:.12g}",
-            f"{one_to_one_max_step_fraction:.12g}",
+            f"{correction_gain:.12g}",
+            f"{correction_max_step_fraction:.12g}",
             f"{response_kick:.12g}",
             ",".join(global_xcors),
             ",".join(global_ycors),

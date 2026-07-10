@@ -56,8 +56,8 @@
     "samples_per_step": 1,
     "global_max_iter": 20,
     "one_to_one_max_iter": 20,
-    "one_to_one_gain": 1,
-    "one_to_one_max_step_pct": 100,
+    "correction_gain": 0.3,
+    "correction_max_step_pct": 5.0,
     "local_response_kick_fraction": 0.02,
     "matrix_response_kick_fraction": 0.02,
     "matrix_samples_per_step": 2

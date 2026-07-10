@@ -36,6 +36,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     resolve_channel,
 )
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from gui import Ui_MainWindow
 
 
@@ -410,6 +411,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        install_qt_window_raise_handler(self)
         self.app_context = load_app_context("orbit_display")
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
@@ -708,6 +710,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.refresh_interval_ms = new_interval_ms
         self._restore_refresh_interval_text()
+        self._sync_bpm_detail_refresh_interval()
         if self.is_x_running:
             self._start_refresh_timer()
         if self.is_y_running:
@@ -724,6 +727,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if interval_s.is_integer():
             return f"{int(interval_s)} s"
         return f"{interval_s:.1f} s"
+
+    def _sync_bpm_detail_refresh_interval(self):
+        if self._bpm_detail_window is not None:
+            self._bpm_detail_window.set_refresh_interval_ms(self.refresh_interval_ms)
 
     def _handle_hold_toggled(self, plane, checked):
         del checked
@@ -1098,11 +1105,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if self._bpm_detail_window is None:
             from submain import myWindow as BpmDetailWindow
 
-            self._bpm_detail_window = BpmDetailWindow()
+            self._bpm_detail_window = BpmDetailWindow(refresh_interval_ms=self.refresh_interval_ms)
             self._bpm_detail_window.setAttribute(Qt.WA_DeleteOnClose, True)
             self._bpm_detail_window.destroyed.connect(
                 lambda *_: setattr(self, "_bpm_detail_window", None)
             )
+        else:
+            self._sync_bpm_detail_refresh_interval()
         self._bpm_detail_window.show()
         self._bpm_detail_window.raise_()
         self._bpm_detail_window.activateWindow()

@@ -169,7 +169,7 @@ def get_workflow(profile: MachineProfile, workflow_name: str) -> Mapping[str, ob
 def get_bba_preset(ctx: AppContext, preset_id: str | None = None) -> BBAPreset:
     if ctx.bba_workflow is None:
         raise MachineProfileError("AppContext does not include a BBA workflow.")
-    selected_id = preset_id or ctx.selected_preset_id or ctx.bba_workflow.standard.default_preset
+    selected_id = preset_id or ctx.selected_preset_id or ctx.bba_workflow.bba1.default_preset
     try:
         return ctx.bba_workflow.presets_by_id[selected_id]
     except KeyError as exc:

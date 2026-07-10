@@ -2,7 +2,7 @@
   "presets": [
     {
       "id": "bba1_default",
-      "family": "standard",
+      "family": "bba1",
       "plane": "X",
       "quad": "QT04",
       "corr": "XC21",
@@ -16,7 +16,7 @@
         "quad_end": 5,
         "quad_steps": 5,
         "samples": 1,
-        "sleeptime": 8,
+        "settle_time": 8,
         "sample_interval": 0.5
       }
     },
@@ -36,7 +36,7 @@
         "corr_end": 0.001,
         "corr_steps": 5,
         "samples": 1,
-        "sleeptime": 8,
+        "settle_time": 8,
         "sample_interval": 0.5
       },
       "analysis": {

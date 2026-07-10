@@ -16,8 +16,8 @@ from __future__ import annotations
 from half_linac.src.shared.elegant_backend.publisher import build_vm_publish_plan
 from half_linac.src.shared.machine_profile import (
     REAL_STATUS_COMMISSIONED,
-    REAL_STATUS_NOT_SUPPORTED,
     REAL_STATUS_READ_ONLY,
+    REAL_STATUS_WRITE_SMOKE_PASSED,
     MachineProfileError,
     get_workflow,
     load_app_context,
@@ -80,6 +80,7 @@ real_contexts = {
     "beam_monitor": load_app_context("beam_monitor", control_backend="real"),
     "energy_spectrum": load_app_context("energy_spectrum", control_backend="real"),
     "emit_measure": load_app_context("emit_measure", control_backend="real"),
+    "bba": load_app_context("bba", control_backend="real"),
 }
 for workflow_name, context in real_contexts.items():
     require(
@@ -93,12 +94,12 @@ for workflow_name, context in real_contexts.items():
 
 bba_workflow = get_workflow(profile, "bba")
 require(
-    bba_workflow["standard"]["control_backends"] == ["vm"],
-    "IRFEL standard BBA must stay VM-only",
+    bba_workflow["bba1"]["control_backends"] == ["vm", "real"],
+    "IRFEL BBA-1 must support VM and real backends",
 )
 require(
-    bba_workflow["bba2"]["control_backends"] == ["vm"],
-    "IRFEL BBA2 must stay VM-only",
+    bba_workflow["bba2"]["control_backends"] == ["vm", "real"],
+    "IRFEL BBA2 must support VM and real backends",
 )
 
 expected_statuses = {
@@ -107,7 +108,7 @@ expected_statuses = {
     "beam_monitor": REAL_STATUS_COMMISSIONED,
     "energy_spectrum": REAL_STATUS_COMMISSIONED,
     "emit_measure": REAL_STATUS_COMMISSIONED,
-    "bba": REAL_STATUS_NOT_SUPPORTED,
+    "bba": REAL_STATUS_WRITE_SMOKE_PASSED,
 }
 for app_name, expected in expected_statuses.items():
     status = real_commissioning_status(profile, app_name)
@@ -116,5 +117,5 @@ for app_name, expected in expected_statuses.items():
 print("IRFEL VM acceptance passed.")
 print(f"  apps: {', '.join(contexts)}")
 print(f"  publish plan: {len(plan.bpm_specs)} BPM specs, {len(plan.watch_image_specs)} watch-image specs")
-print("  real write policy: allowed for orbit, beam_monitor, energy_spectrum, emit_measure")
+print("  real write policy: allowed for orbit, beam_monitor, energy_spectrum, emit_measure, bba")
 PY

@@ -38,6 +38,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_machine_runtime,
     resolve_virtual_machine_usedline_workflow,
 )
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from half_linac.src.virtual_machine.lattice_usedline import describe_runtime_usedline
 
 
@@ -524,6 +525,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        install_qt_window_raise_handler(self)
         self.runtime = resolve_machine_runtime()
         self.machine_profile = self.runtime.profile
         self.usedline_workflow = resolve_virtual_machine_usedline_workflow(self.machine_profile)
