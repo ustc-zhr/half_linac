@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from ...analysis.jitter import transform_jitter_values
-from .visibility import resolve_initial_visibility
+from .visibility import downsample_series_min_max, padded_finite_range, resolve_initial_visibility
 from .trend_plot import TrendAxisItem
 from .theme import style_plot_widget
 
@@ -24,6 +24,7 @@ if QtWidgets is not None:
 
     DEFAULT_VISIBLE_JITTER_SERIES = 1
     MAX_SYMBOL_POINTS_PER_SERIES = 5000
+    DEFAULT_JITTER_DISPLAY_POINTS = 6000
 
     class JitterPlot(QtWidgets.QWidget):
         def __init__(self, parent=None) -> None:
@@ -66,6 +67,19 @@ if QtWidgets is not None:
             self.axis_combo.addItem("Clock Time", "clock_time")
             self.axis_combo.setFixedHeight(28)
             controls.addWidget(self.axis_combo, 0)
+            self.downsample_check = QtWidgets.QCheckBox("Downsample")
+            self.downsample_check.setChecked(True)
+            self.downsample_check.setFixedHeight(28)
+            self.downsample_check.setToolTip("Reduce rendered jitter points with min/max sampling while preserving extrema.")
+            controls.addWidget(self.downsample_check, 0)
+            self.display_points_spin = QtWidgets.QSpinBox(self)
+            self.display_points_spin.setRange(500, 1_000_000)
+            self.display_points_spin.setSingleStep(500)
+            self.display_points_spin.setValue(DEFAULT_JITTER_DISPLAY_POINTS)
+            self.display_points_spin.setSuffix(" pts")
+            self.display_points_spin.setToolTip("Maximum rendered points per jitter series when downsampling is enabled.")
+            self.display_points_spin.setFixedHeight(28)
+            controls.addWidget(self.display_points_spin, 0)
             controls.addStretch(1)
             self.controls_layout = controls
             layout.addLayout(controls)
@@ -91,6 +105,9 @@ if QtWidgets is not None:
 
             self.display_mode_combo.currentIndexChanged.connect(self._render_series)
             self.axis_combo.currentIndexChanged.connect(self._render_series)
+            self.downsample_check.toggled.connect(self._handle_downsample_changed)
+            self.display_points_spin.valueChanged.connect(self._render_series)
+            self._update_downsample_control_state()
 
         def add_trailing_control_widget(self, widget) -> None:
             self.controls_layout.addWidget(widget, 0)
@@ -232,6 +249,29 @@ if QtWidgets is not None:
         def _axis_mode(self) -> str:
             return str(self.axis_combo.currentData() or "sample_index")
 
+        def _downsample_enabled(self) -> bool:
+            return bool(self.downsample_check.isChecked())
+
+        def _handle_downsample_changed(self, *_args) -> None:
+            self._update_downsample_control_state()
+            self._render_series()
+
+        def _update_downsample_control_state(self) -> None:
+            self.display_points_spin.setEnabled(self._downsample_enabled())
+
+        def _display_series_data(self, sample_indices, values) -> tuple[list[float], list[float], bool]:
+            length = min(len(sample_indices), len(values))
+            plot_sample_indices = list(sample_indices[:length])
+            plot_values = list(values[:length])
+            downsampled = False
+            if self._downsample_enabled():
+                plot_sample_indices, plot_values, downsampled = downsample_series_min_max(
+                    plot_sample_indices,
+                    plot_values,
+                    max_points=int(self.display_points_spin.value()),
+                )
+            return self._x_values_for_sample_indices(plot_sample_indices), plot_values, downsampled
+
         def _set_sample_timestamps(self, sample_timestamps: Sequence[datetime | None] | None) -> None:
             self._sample_elapsed_seconds = []
             self._time_origin = None
@@ -328,21 +368,43 @@ if QtWidgets is not None:
             else:
                 count_phrase = f"count={kept_count}"
                 filter_note = ""
+            downsample_enabled = self._downsample_enabled()
+            downsample_limit = int(self.display_points_spin.value())
             symbol_disabled_count = sum(
                 1
                 for row in visible_rows
-                if len(row.get("values", [])) > MAX_SYMBOL_POINTS_PER_SERIES
+                if (
+                    min(len(row.get("values", [])), downsample_limit)
+                    if downsample_enabled
+                    else len(row.get("values", []))
+                )
+                > MAX_SYMBOL_POINTS_PER_SERIES
             )
             symbol_note = (
                 f" Symbols disabled for {symbol_disabled_count} large series."
                 if symbol_disabled_count
                 else ""
             )
+            downsample_candidate_count = (
+                sum(1 for row in visible_rows if len(row.get("values", [])) > downsample_limit)
+                if downsample_enabled
+                else 0
+            )
+            if downsample_enabled and downsample_candidate_count:
+                downsample_note = (
+                    f" Min/max downsampling enabled: {downsample_candidate_count} large series "
+                    f"limited to {downsample_limit} rendered points."
+                )
+            elif downsample_enabled:
+                downsample_note = f" Min/max downsampling enabled: limit={downsample_limit} rendered points."
+            else:
+                downsample_note = " Downsampling disabled."
             self.info_label.setText(
                 f"Showing {len(visible_rows)}/{len(self._series_rows)} variables. "
                 f"Focus: {focused_label}, {count_phrase}{filter_note}, mean={float(focused_row['mean']):.6g}, "
                 f"std={float(focused_row['std']):.6g}, jitter rms={float(focused_row['rms']):.6g}, "
-                f"p2p={float(focused_row['p2p']):.6g}, plot={value_phrase}.{fallback_note}{symbol_note}"
+                f"p2p={float(focused_row['p2p']):.6g}, plot={value_phrase}.{fallback_note}"
+                f"{downsample_note}{symbol_note}"
             )
 
             if self.plot_widget is None:
@@ -371,6 +433,7 @@ if QtWidgets is not None:
                 self.plot_widget.setLabel("left", "Value - Mean" if requested_mode == "mean_centered" else "Value")
 
             self._mean_lines = []
+            visible_y_values = []
             for index, row in enumerate(visible_rows):
                 pv_id = str(row["pv_id"])
                 sample_indices = list(row.get("sample_indices", range(len(row["values"]))))
@@ -382,10 +445,12 @@ if QtWidgets is not None:
                     std=float(row["std"]),
                 )
                 values = transform.values
+                visible_y_values.extend(values)
+                plot_x_values, plot_y_values, _ = self._display_series_data(sample_indices, values)
                 color = pg.intColor(index, hues=max(len(visible_rows), 1))
                 focused = pv_id == str(self._focused_pv_id)
                 pen_width = 2.5 if focused else 1.5
-                use_symbols = len(values) <= MAX_SYMBOL_POINTS_PER_SERIES
+                use_symbols = len(plot_y_values) <= MAX_SYMBOL_POINTS_PER_SERIES
                 plot_kwargs = {
                     "pen": pg.mkPen(color=color, width=pen_width),
                     "name": str(row["label"]),
@@ -400,8 +465,8 @@ if QtWidgets is not None:
                         }
                     )
                 self.plot_widget.plot(
-                    self._x_values_for_sample_indices(sample_indices),
-                    values,
+                    plot_x_values,
+                    plot_y_values,
                     **plot_kwargs,
                 )
                 if focused:
@@ -415,6 +480,9 @@ if QtWidgets is not None:
                     self._mean_lines.append(mean_line)
 
             style_plot_widget(self.plot_widget)
+            y_range = padded_finite_range(visible_y_values)
+            if y_range is not None:
+                self.plot_widget.setYRange(y_range[0], y_range[1], padding=0.0)
 
 else:
 

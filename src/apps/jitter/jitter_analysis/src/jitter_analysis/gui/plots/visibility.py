@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 import math
 
 
@@ -107,3 +107,38 @@ def downsample_series_min_max(
         [y_values[index] for index in sampled_indices],
         True,
     )
+
+
+def padded_finite_range(
+    values: Iterable[float],
+    *,
+    padding_fraction: float = 0.05,
+    minimum_span: float = 1.0e-9,
+) -> tuple[float, float] | None:
+    """Return a padded finite min/max range for plotting."""
+
+    finite_values = []
+    for raw_value in values:
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            finite_values.append(value)
+
+    if not finite_values:
+        return None
+
+    lower = min(finite_values)
+    upper = max(finite_values)
+    span = upper - lower
+    safe_minimum_span = max(float(minimum_span), 0.0)
+    safe_padding_fraction = max(float(padding_fraction), 0.0)
+
+    if not math.isfinite(span) or span <= 0.0:
+        scale = max(abs(lower), 1.0)
+        half_span = max(scale * safe_padding_fraction, safe_minimum_span)
+        return lower - half_span, upper + half_span
+
+    padding = max(span * safe_padding_fraction, safe_minimum_span)
+    return lower - padding, upper + padding

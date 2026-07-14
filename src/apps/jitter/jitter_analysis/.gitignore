@@ -22,9 +22,8 @@ env/
 .idea/
 .codex
 
-# Runtime data. Keep the index/notes file, but do not commit large HDF5 runs.
+# Runtime data. Do not commit generated run outputs or local run notes.
 runs/*
-!runs/README.md
 saved_setups/
 
 # OS/editor noise

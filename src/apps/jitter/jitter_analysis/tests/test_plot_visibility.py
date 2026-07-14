@@ -9,6 +9,7 @@ if str(SRC) not in sys.path:
 
 from jitter_analysis.gui.plots.visibility import (
     downsample_series_min_max,
+    padded_finite_range,
     resolve_initial_visibility,
     slice_series_tail,
 )
@@ -135,3 +136,26 @@ def test_downsample_series_min_max_returns_original_when_small_enough():
     assert downsampled is False
     assert x_values == [0, 1, 2]
     assert y_values == [1.0, 2.0, 3.0]
+
+
+def test_padded_finite_range_adds_padding_to_data_range():
+    lower, upper = padded_finite_range([1.0, 3.0], padding_fraction=0.1)
+
+    assert round(lower, 6) == 0.8
+    assert round(upper, 6) == 3.2
+
+
+def test_padded_finite_range_handles_constant_series():
+    lower, upper = padded_finite_range([5.0, 5.0, 5.0], padding_fraction=0.1)
+
+    assert lower == 4.5
+    assert upper == 5.5
+
+
+def test_padded_finite_range_ignores_non_finite_values():
+    assert padded_finite_range([float("nan"), float("inf")]) is None
+
+    lower, upper = padded_finite_range([float("nan"), -1.0, 1.0, float("-inf")])
+
+    assert lower < -1.0
+    assert upper > 1.0
