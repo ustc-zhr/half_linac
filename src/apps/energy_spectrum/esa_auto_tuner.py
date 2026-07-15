@@ -258,11 +258,34 @@ if __name__=='__main__':
             "workflows.energy_spectrum.flag_pixel_shape must provide [nx, ny] for the selected backend."
         )
     flag_pv = resolve_channel(profile, flag_element, flag_channel, preferred_backend)
-    bend_pv = resolve_bend_write_channel(
-        profile,
-        str(workflow["bend_element"]),
-        preferred_backend,
-    )
+    enabled_backends = workflow.get("auto_tune_control_backends")
+    if enabled_backends is not None and preferred_backend not in enabled_backends:
+        raise RuntimeError(
+            f"ESA auto tune is not enabled for control backend {preferred_backend!r}."
+        )
+
+    actuator = workflow.get("auto_tune_actuator")
+    if isinstance(actuator, dict):
+        bend_pv = resolve_channel(
+            profile,
+            str(actuator["element"]),
+            str(actuator["channel"]),
+            preferred_backend,
+        )
+        actuator_unit = str(actuator.get("unit", "a.u."))
+        scan = workflow.get("auto_tune_scan")
+        if not isinstance(scan, dict):
+            raise RuntimeError(
+                "Coordinated ESA auto tune requires workflows.energy_spectrum.auto_tune_scan."
+            )
+    else:
+        bend_pv = resolve_bend_write_channel(
+            profile,
+            str(workflow["bend_element"]),
+            preferred_backend,
+        )
+        actuator_unit = "A"
+        scan = workflow.get("bend_scan", {})
     esa_tuner = ESA_AutoTuner(
         flag_pv_obj=flag_pv,
         flag_pixel=flag_pixel_machine,
@@ -271,7 +294,6 @@ if __name__=='__main__':
         bg_image=None
     )
 
-    scan = workflow.get("bend_scan", {})
     best_I = esa_tuner.run(
         B_min=float(scan.get("min", 0)),
         B_max=float(scan.get("max", 200)),
@@ -280,4 +302,4 @@ if __name__=='__main__':
     )
 
     if best_I is not None:
-        print(f"ESA auto-tuned to {best_I:.3f} A")
+        print(f"ESA auto-tuned to {best_I:.3f} {actuator_unit}")

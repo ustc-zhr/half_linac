@@ -1111,6 +1111,24 @@
       "logical_channels": [
         "phase_set"
       ]
+    },
+    {
+      "id": "ESA_ENERGY",
+      "kind": "energy",
+      "display_name": "ESA Energy (A3)",
+      "order": 66,
+      "tags": [
+        "esa",
+        "energy_spectrum",
+        "coordinated_control"
+      ],
+      "limits": {
+        "low": 0.0,
+        "high": 65.0
+      },
+      "logical_channels": [
+        "setpoint"
+      ]
     }
   ]
 }

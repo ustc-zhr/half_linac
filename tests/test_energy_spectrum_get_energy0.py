@@ -10,7 +10,10 @@ PARENT = REPO_ROOT.parent
 if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
-from half_linac.src.apps.energy_spectrum.get_energy0 import get_energy0
+from half_linac.src.apps.energy_spectrum.get_energy0 import (
+    get_energy0,
+    select_reference_energy_mev,
+)
 from half_linac.src.shared.machine_profile import get_workflow, load_profile
 
 
@@ -46,6 +49,31 @@ class Energy0ConversionTests(unittest.TestCase):
             self.assertIn("real", x_reference)
             self.assertIsInstance(float(x_reference["vm"]), float)
             self.assertIsInstance(float(x_reference["real"]), float)
+
+    def test_reference_energy_prefers_coordinated_energy_pv(self):
+        energy, source = select_reference_energy_mev(
+            36.0,
+            reference_energy_mev=35.8,
+            bend_current=0.062,
+            bend_conversion={
+                "magnet_length_m": 2.7271,
+                "deflect_angle_rad": 0.4363323129985824,
+                "field_t_per_a": 0.000599792458,
+            },
+        )
+
+        self.assertEqual(energy, 35.8)
+        self.assertEqual(source, "reference_pv")
+
+    def test_reference_energy_does_not_apply_implicit_bend_calibration(self):
+        energy, source = select_reference_energy_mev(
+            36.0,
+            bend_current=0.062,
+            bend_conversion=None,
+        )
+
+        self.assertEqual(energy, 36.0)
+        self.assertEqual(source, "workflow_default")
 
 
 if __name__ == "__main__":

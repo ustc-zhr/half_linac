@@ -54,6 +54,7 @@ from half_linac.src.apps.energy_spectrum.profile_runtime import (
     resolve_energy_spectrum_runtime_paths,
 )
 from half_linac.src.shared.machine_profile.loader import (
+    _validate_energy_spectrum_workflow,
     load_bba_workflow,
     load_emit_measure_workflow,
 )
@@ -176,6 +177,40 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(context.control_backend.name, "vm")
         self.assertIsNone(context.model_backend)
         self.assertIsNone(context.emit_measure_workflow)
+
+    def test_irfel_beam_monitor_flags_follow_selected_control_backend(self):
+        vm_context = load_app_context(
+            "beam_monitor",
+            machine_id="irfel",
+            control_backend="vm",
+        )
+        real_context = load_app_context(
+            "beam_monitor",
+            machine_id="irfel",
+            control_backend="real",
+        )
+
+        vm_flags = list_elements(
+            vm_context,
+            kind="flag",
+            logical_channel="image",
+            control_backend=vm_context.control_backend.name,
+        )
+        real_flags = list_elements(
+            real_context,
+            kind="flag",
+            logical_channel="image",
+            control_backend=real_context.control_backend.name,
+        )
+
+        self.assertEqual(
+            [element.id for element in vm_flags],
+            ["PRF01", "PRF02", "PRF03", "PRF04", "PRFESA"],
+        )
+        self.assertEqual(
+            [element.id for element in real_flags],
+            ["PRF03", "PRF04", "PRFESA"],
+        )
 
     def test_load_solenoid_centering_app_context(self):
         context = load_app_context("solenoid_centering")
@@ -1384,6 +1419,37 @@ class MachineProfileTests(unittest.TestCase):
             "HALF:IN:ESA:PRF01:EnergySet",
         )
         self.assertEqual(workflow["vm_watch_element"], "PRFESA")
+
+    def test_irfel_energy_spectrum_uses_coordinated_real_energy_control(self):
+        profile = load_profile("irfel")
+        workflow = get_workflow(profile, "energy_spectrum")
+
+        self.assertEqual(workflow["energy_element"], "ESA_ENERGY")
+        self.assertEqual(workflow["energy_set_channel"], "setpoint")
+        self.assertEqual(workflow["energy_reference_channel"], "setpoint")
+        energy_element = profile.get_element("ESA_ENERGY")
+        self.assertEqual(energy_element.kind, "energy")
+        self.assertEqual(energy_element.limits, {"low": 0.0, "high": 65.0})
+        self.assertEqual(
+            resolve_channel(profile, "ESA_ENERGY", "setpoint", "real"),
+            "IRFEL:AP:ENG:A3:ao",
+        )
+        self.assertEqual(workflow["auto_tune_control_backends"], ["real"])
+        self.assertEqual(workflow["auto_tune_actuator"]["element"], "ESA_ENERGY")
+        self.assertEqual(workflow["auto_tune_actuator"]["unit"], "MeV")
+        self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
+        self.assertEqual(workflow["auto_tune_scan"]["max"], 65)
+
+    def test_energy_spectrum_auto_tune_scan_cannot_exceed_actuator_limits(self):
+        profile = load_profile("irfel")
+        workflow = dict(get_workflow(profile, "energy_spectrum"))
+        workflow["auto_tune_scan"] = {
+            **workflow["auto_tune_scan"],
+            "max": 66,
+        }
+
+        with self.assertRaisesRegex(MachineProfileError, "ESA_ENERGY limits"):
+            _validate_energy_spectrum_workflow(profile, workflow)
 
     def test_virtual_machine_segment_choices_fall_back_to_quad_and_flag_inference(self):
         machine_json = {

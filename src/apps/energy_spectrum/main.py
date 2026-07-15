@@ -45,7 +45,7 @@ from PyQt5.QtWidgets import (
 )
 
 from gui import Ui_MainWindow
-from half_linac.src.apps.energy_spectrum.get_energy0 import get_energy0
+from half_linac.src.apps.energy_spectrum.get_energy0 import select_reference_energy_mev
 from half_linac.src.apps.energy_spectrum.esa_auto_tuner import ESA_AutoTuner
 from half_linac.src.apps.energy_spectrum.profile_runtime import (
     resolve_energy_spectrum_runtime_paths,
@@ -613,6 +613,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._model_tooltip = f"Model backend unavailable: {self._model_error}"
         self.start_elements = self._build_start_elements()
         self.energy_set_pv = self._load_energy_set_pv()
+        self.energy_reference_pv = self._load_energy_reference_pv()
+        self.energy_set_limits = self._load_energy_set_limits()
         self.esa_quad_ids = tuple(self.energy_config["esa_quads"])
         self.pushButton_sample_bg = self.pushButton_sapmles
         self.bend_pv = resolve_bend_write_channel(
@@ -620,6 +622,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.energy_config["bend_element"],
         )
         self.bend_readback_pv = self._resolve_bend_readback_pv()
+        self.auto_tune_pv, self.auto_tune_unit = self._load_auto_tune_actuator()
 
         self.current_theme = "dark"
         self._auto_tune_text = "Idle"
@@ -760,7 +763,44 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return [element.id for element in list_elements(self.app_context, kind="quad")]
 
     def _load_energy_set_pv(self):
-        raw_value = self.energy_config.get("energy_set_pv")
+        return self._load_energy_element_pv("energy_set_channel") or self._load_backend_pv(
+            "energy_set_pv"
+        )
+
+    def _load_energy_reference_pv(self):
+        return self._load_energy_element_pv(
+            "energy_reference_channel"
+        ) or self._load_backend_pv("energy_reference_pv")
+
+    def _load_energy_element_pv(self, channel_key):
+        element_id = str(self.energy_config.get("energy_element", "")).strip()
+        channel = str(self.energy_config.get(channel_key, "")).strip()
+        if not element_id or not channel:
+            return None
+        try:
+            return resolve_channel(self.app_context, element_id, channel)
+        except MachineProfileError:
+            if self.control_backend == "vm":
+                return None
+            raise
+
+    def _load_energy_set_limits(self):
+        element_id = str(self.energy_config.get("energy_element", "")).strip()
+        if not element_id:
+            return None
+        limits = self.machine_profile.get_element(element_id).limits
+        if "low" not in limits or "high" not in limits:
+            return None
+        low = float(limits["low"])
+        high = float(limits["high"])
+        if not np.isfinite(low) or not np.isfinite(high) or low >= high:
+            raise MachineProfileError(
+                f"Energy element {element_id} must define finite low/high limits."
+            )
+        return low, high
+
+    def _load_backend_pv(self, config_key):
+        raw_value = self.energy_config.get(config_key)
         if raw_value is None:
             return None
         if isinstance(raw_value, dict):
@@ -771,6 +811,69 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return text or None
         text = str(raw_value).strip()
         return text or None
+
+    def _read_reference_energy_mev(self):
+        default_energy = float(self.energy_config.get("energy0_default_mev", 2200))
+        if self.control_backend == "vm":
+            return default_energy, "workflow_default", None
+
+        reference_energy = None
+        if self.energy_reference_pv:
+            try:
+                reference_energy = caget(self.energy_reference_pv)
+            except Exception as exc:
+                print(
+                    f"Energy reference PV {self.energy_reference_pv} could not be read: {exc}"
+                )
+
+        bend_conversion = self.energy_config.get("energy_from_bend_current")
+        bend_current = None
+        if bend_conversion is not None:
+            try:
+                bend_current = caget(self.bend_readback_pv)
+            except Exception as exc:
+                print(f"Bend readback PV {self.bend_readback_pv} could not be read: {exc}")
+
+        energy, source = select_reference_energy_mev(
+            default_energy,
+            reference_energy_mev=reference_energy,
+            bend_current=bend_current,
+            bend_conversion=bend_conversion,
+        )
+        source_pv = None
+        if source == "reference_pv":
+            source_pv = self.energy_reference_pv
+        elif source == "bend_current_conversion":
+            source_pv = self.bend_readback_pv
+        elif self.energy_reference_pv or bend_conversion is not None:
+            print(f"Using configured default reference energy {default_energy:g} MeV.")
+        return energy, source, source_pv
+
+    def _auto_tune_configured_for_backend(self):
+        configured_backends = self.energy_config.get("auto_tune_control_backends")
+        if configured_backends is None:
+            return True
+        return self.control_backend in configured_backends
+
+    def _load_auto_tune_actuator(self):
+        actuator = self.energy_config.get("auto_tune_actuator")
+        if not isinstance(actuator, dict):
+            return self.bend_pv, "A"
+
+        element_id = str(actuator.get("element", "")).strip()
+        channel = str(actuator.get("channel", "")).strip()
+        unit = str(actuator.get("unit", "")).strip() or "a.u."
+        if not element_id or not channel:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_actuator requires element and channel."
+            )
+        try:
+            actuator_pv = resolve_channel(self.app_context, element_id, channel)
+        except MachineProfileError:
+            if not self._auto_tune_configured_for_backend():
+                return self.bend_pv, "A"
+            raise
+        return actuator_pv, unit
 
     def _load_x_reference_mm(self):
         raw_value = self.energy_config.get("x_reference_mm", 0.0)
@@ -1160,7 +1263,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             if index >= 0:
                 self.comboBox_start_element.setCurrentIndex(index)
 
+        if self.energy_set_limits is not None:
+            low, high = self.energy_set_limits
+            self.slider_energy.setRange(math.ceil(low), math.floor(high))
         default_energy = int(round(float(self.energy_config.get("energy0_default_mev", 2200))))
+        default_energy = min(
+            max(default_energy, self.slider_energy.minimum()),
+            self.slider_energy.maximum(),
+        )
         self.slider_energy.setValue(default_energy)
         self._update_energy_slider_label(default_energy)
         self._sync_energy_control_state()
@@ -1345,16 +1455,29 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         else:
             self.slider_energy.setToolTip("No energy_set_pv configured for the real backend.")
 
-        auto_tune_enabled = self.control_backend == "real" and not self._auto_tune_is_running() and writes_allowed
+        auto_tune_enabled = (
+            self.control_backend == "real"
+            and not self._auto_tune_is_running()
+            and writes_allowed
+            and self._auto_tune_configured_for_backend()
+        )
         self.pushButton_autoFind.setEnabled(auto_tune_enabled)
         if self._auto_tune_is_running():
             self.pushButton_autoFind.setText("Scanning...")
-            self.pushButton_autoFind.setToolTip("Bend scan is currently scanning the ESA bend current.")
+            self.pushButton_autoFind.setToolTip("Auto Find is scanning the configured ESA actuator.")
         else:
             self.pushButton_autoFind.setText("Auto Find")
-            if self.control_backend == "real" and writes_allowed:
+            if (
+                self.control_backend == "real"
+                and writes_allowed
+                and self._auto_tune_configured_for_backend()
+            ):
                 self.pushButton_autoFind.setToolTip(
-                    f"Scan {self.bend_pv} to locate the ESA beam on {self.flag_pv}."
+                    f"Scan {self.auto_tune_pv} to locate the ESA beam on {self.flag_pv}."
+                )
+            elif self.control_backend == "real" and not self._auto_tune_configured_for_backend():
+                self.pushButton_autoFind.setToolTip(
+                    "Direct bend scan is disabled for this backend; use the coordinated energy control."
                 )
             elif self.control_backend == "real":
                 self.pushButton_autoFind.setToolTip("Real-machine bend scan is blocked by machine profile.")
@@ -1588,6 +1711,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self,
         *,
         energy0_mev,
+        energy0_source,
+        energy0_source_pv,
         energy_center_mev,
         energy_spread,
         fit_method,
@@ -1605,6 +1730,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "meanx_mm": float(self.meanx),
             "sigx_mm": float(self.sigx),
             "energy0_mev": float(energy0_mev),
+            "energy0_source": str(energy0_source),
             "energy_center_mev": float(energy_center_mev),
             "energy_spread_fraction": float(energy_spread),
             "eta_m": float(self.eta_flag),
@@ -1612,6 +1738,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "emittance_m": float(self.emi_flag),
             "include_emit": bool(self.with_emit),
         }
+        if energy0_source_pv:
+            metadata["energy0_source_pv"] = str(energy0_source_pv)
         if isinstance(self.latest_model_snapshot_metadata, dict):
             metadata["model_snapshot"] = dict(self.latest_model_snapshot_metadata)
         else:
@@ -1943,24 +2071,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
 
         # -----------------
-        # energy0 calculation (coresponding to the x=0)
-        energy0 = float(self.energy_config.get("energy0_default_mev", 2200))
-        if self.control_backend != "vm":
-            # 1. 若提供了相关的能量物理量在ioc中 可以直接caget获取
-            # 2. 根据磁铁(电流)强度给出energy0
-            try:
-                    current_ES_Bend = caget(self.bend_readback_pv) # A
-            except Exception as exc:
-                current_ES_Bend = None
-                self._mark_pv_unavailable(exc)
-            if current_ES_Bend is not None:
-                try:
-                    energy0 = get_energy0(
-                        current_ES_Bend,
-                        self.energy_config.get("energy_from_bend_current"),
-                    ) # MeV
-                except Exception as exc:
-                    print(f"Energy0 fallback to default because conversion failed: {exc}")
+        # Reference energy corresponding to x_reference_mm.
+        energy0, energy0_source, energy0_source_pv = self._read_reference_energy_mev()
 
         # dispersion calculation and display 
         # self.cal_disp()
@@ -2018,6 +2130,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if write_latest or should_archive:
             self._write_energy_result_metadata(
                 energy0_mev=energy0,
+                energy0_source=energy0_source,
+                energy0_source_pv=energy0_source_pv,
                 energy_center_mev=energy_center,
                 energy_spread=energy_spread,
                 fit_method=fit_method,
@@ -2289,6 +2403,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if not self.energy_set_pv:
             print("No energy setpoint PV is configured for the real backend.")
             return
+        if self.energy_set_limits is not None:
+            low, high = self.energy_set_limits
+            if not low <= slider_value <= high:
+                self._warn(
+                    f"Target energy {slider_value:g} MeV is outside the configured "
+                    f"range [{low:g}, {high:g}] MeV."
+                )
+                return
         try:
             self._require_write_allowed("ESA target energy write")
         except MachineProfileError as exc:
@@ -2307,6 +2429,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def run_esa_auto_tune(self):
         if self.control_backend != "real":
             print("ESA auto tune is only enabled for the real backend.")
+            return
+        if not self._auto_tune_configured_for_backend():
+            self._warn(
+                "Direct bend scan is disabled for this backend because it would bypass "
+                "the coordinated energy control."
+            )
             return
         try:
             self._require_write_allowed("ESA auto tune")
@@ -2340,11 +2468,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 return
             self._mark_pv_available()
 
-            bend_scan = dict(self.energy_config.get("bend_scan", {}))
+            bend_scan = dict(
+                self.energy_config.get(
+                    "auto_tune_scan",
+                    self.energy_config.get("bend_scan", {}),
+                )
+            )
             self.auto_tune_thread = ESAAutoTuneThread(
                 flag_pv_obj=self.flag_pv_obj,
                 flag_pixel=self.flag_pixel,
-                bend_pv=self.bend_pv,
+                bend_pv=self.auto_tune_pv,
                 remove_bg=self.remove_bg,
                 bg_image=self.bg_image,
                 bend_scan=bend_scan,
@@ -2383,7 +2516,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         else:
             prefix = "Scan"
 
-        current_text = f"{float(current):.1f} A" if current is not None else "--"
+        current_text = (
+            f"{float(current):.1f} {self.auto_tune_unit}" if current is not None else "--"
+        )
         suffix = " beam" if has_beam else " ..."
         self._auto_tune_text = f"{prefix} {current_text}{suffix}"
         self._auto_tune_tone = "success" if has_beam else "warning"
@@ -2395,9 +2530,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if payload.get("ok"):
             best_current = payload.get("best_current")
             if best_current is not None:
-                self._auto_tune_text = f"{best_current:.1f} A"
+                self._auto_tune_text = f"{best_current:.1f} {self.auto_tune_unit}"
                 self._auto_tune_tone = "success"
-                print(f"[GUI] ESA auto-tuned to {best_current:.3f} A")
+                print(
+                    f"[GUI] ESA auto-tuned to {best_current:.3f} {self.auto_tune_unit}"
+                )
             else:
                 self._auto_tune_text = "Done"
                 self._auto_tune_tone = "success"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -1099,6 +1100,158 @@ def _validate_energy_spectrum_workflow(
                 raise MachineProfileError(
                     f"workflows.energy_spectrum.energy_from_bend_current.{key} must be numeric."
                 ) from exc
+
+    for pv_key in ("energy_set_pv", "energy_reference_pv"):
+        raw_pv = workflow.get(pv_key)
+        if raw_pv is None:
+            continue
+        if isinstance(raw_pv, Mapping):
+            unknown_backends = sorted(set(raw_pv) - set(profile.control_backends))
+            if unknown_backends:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.{pv_key} contains unknown backend(s): "
+                    + ", ".join(unknown_backends)
+                )
+            for backend_name, pv_name in raw_pv.items():
+                _expect_non_empty_string(
+                    pv_name,
+                    f"workflows.energy_spectrum.{pv_key}.{backend_name}",
+                )
+        else:
+            _expect_non_empty_string(raw_pv, f"workflows.energy_spectrum.{pv_key}")
+
+    energy_element_id = workflow.get("energy_element")
+    if energy_element_id is not None:
+        energy_element = profile.get_element(
+            _expect_non_empty_string(
+                energy_element_id,
+                "workflows.energy_spectrum.energy_element",
+            )
+        )
+        if energy_element.kind != "energy":
+            raise MachineProfileError(
+                "workflows.energy_spectrum.energy_element must reference an energy element."
+            )
+        for channel_key in ("energy_set_channel", "energy_reference_channel"):
+            channel_name = workflow.get(channel_key)
+            if channel_name is None:
+                continue
+            channel_name = _expect_non_empty_string(
+                channel_name,
+                f"workflows.energy_spectrum.{channel_key}",
+            )
+            if channel_name not in energy_element.channels:
+                raise MachineProfileError(
+                    f"Element {energy_element.id} is missing logical channel {channel_name!r} "
+                    f"required by workflows.energy_spectrum.{channel_key}."
+                )
+
+    actuator_element = None
+    auto_tune_actuator = workflow.get("auto_tune_actuator")
+    if auto_tune_actuator is not None:
+        actuator = _expect_mapping(
+            auto_tune_actuator,
+            "workflows.energy_spectrum.auto_tune_actuator",
+        )
+        actuator_element = profile.get_element(
+            _expect_non_empty_string(
+                actuator.get("element"),
+                "workflows.energy_spectrum.auto_tune_actuator.element",
+            )
+        )
+        actuator_channel = _expect_non_empty_string(
+            actuator.get("channel"),
+            "workflows.energy_spectrum.auto_tune_actuator.channel",
+        )
+        if actuator_channel not in actuator_element.channels:
+            raise MachineProfileError(
+                f"Element {actuator_element.id} is missing logical channel "
+                f"{actuator_channel!r} required by auto_tune_actuator."
+            )
+        _expect_non_empty_string(
+            actuator.get("unit"),
+            "workflows.energy_spectrum.auto_tune_actuator.unit",
+        )
+
+    auto_tune_scan = workflow.get("auto_tune_scan")
+    if auto_tune_scan is not None:
+        scan = _expect_mapping(
+            auto_tune_scan,
+            "workflows.energy_spectrum.auto_tune_scan",
+        )
+        numeric_values = {}
+        for key in ("min", "max", "settle_time_s"):
+            if key not in scan:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_scan.{key} is required."
+                )
+            try:
+                numeric_values[key] = float(scan[key])
+            except (TypeError, ValueError) as exc:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_scan.{key} must be numeric."
+                ) from exc
+            if not math.isfinite(numeric_values[key]):
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_scan.{key} must be finite."
+                )
+        if numeric_values["min"] >= numeric_values["max"]:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_scan.min must be less than max."
+            )
+        if numeric_values["settle_time_s"] < 0:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_scan.settle_time_s must not be negative."
+            )
+        for key in ("coarse_steps", "fine_steps"):
+            steps = _expect_int(
+                scan.get(key),
+                f"workflows.energy_spectrum.auto_tune_scan.{key}",
+            )
+            if steps < 2:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_scan.{key} must be at least 2."
+                )
+
+        if actuator_element is not None:
+            limits = actuator_element.limits
+            if "low" in limits and "high" in limits:
+                try:
+                    actuator_low = float(limits["low"])
+                    actuator_high = float(limits["high"])
+                except (TypeError, ValueError) as exc:
+                    raise MachineProfileError(
+                        f"Element {actuator_element.id} low/high limits must be numeric."
+                    ) from exc
+                if (
+                    not math.isfinite(actuator_low)
+                    or not math.isfinite(actuator_high)
+                    or actuator_low >= actuator_high
+                ):
+                    raise MachineProfileError(
+                        f"Element {actuator_element.id} must define finite low/high limits."
+                    )
+                if (
+                    numeric_values["min"] < actuator_low
+                    or numeric_values["max"] > actuator_high
+                ):
+                    raise MachineProfileError(
+                        "workflows.energy_spectrum.auto_tune_scan range must stay within "
+                        f"{actuator_element.id} limits [{actuator_low:g}, {actuator_high:g}]."
+                    )
+
+    auto_tune_backends = workflow.get("auto_tune_control_backends")
+    if auto_tune_backends is not None:
+        enabled_backends = _expect_optional_string_list(
+            auto_tune_backends,
+            "workflows.energy_spectrum.auto_tune_control_backends",
+        )
+        unknown_backends = sorted(set(enabled_backends) - set(profile.control_backends))
+        if unknown_backends:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_control_backends contains unknown "
+                "backend(s): " + ", ".join(unknown_backends)
+            )
 
 
 def _validate_dispersion_correction_workflow(

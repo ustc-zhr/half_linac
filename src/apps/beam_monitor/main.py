@@ -402,7 +402,12 @@ class myWindow(QWidget, Ui_Form):
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
         self.beam_monitor_config = get_workflow(self.machine_profile, "beam_monitor")
-        self.flag_elements = list_elements(self.app_context, kind="flag", logical_channel="image")
+        self.flag_elements = list_elements(
+            self.app_context,
+            kind="flag",
+            logical_channel="image",
+            control_backend=self.control_backend,
+        )
         self.flag_ids = [element.id for element in self.flag_elements]
 
         self.current_theme = "dark"

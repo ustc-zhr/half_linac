@@ -137,9 +137,19 @@ def list_elements(
     role: str | None = None,
     plane: str | None = None,
     logical_channel: str | None = None,
+    control_backend: str | None = None,
 ) -> list[ElementConfig]:
     profile = target.profile if isinstance(target, AppContext) else target
     normalized_plane = normalize_plane(plane, "plane") if plane is not None else None
+    normalized_backend = (
+        normalize_mode(control_backend, "control_backend")
+        if control_backend is not None
+        else None
+    )
+    if normalized_backend is not None and logical_channel is None:
+        raise MachineProfileError(
+            "list_elements control_backend filtering requires logical_channel."
+        )
     elements = list(profile.elements)
     if kind is not None:
         elements = [element for element in elements if element.kind == kind]
@@ -148,11 +158,16 @@ def list_elements(
     if normalized_plane is not None:
         elements = [element for element in elements if element.plane == normalized_plane]
     if logical_channel is not None:
-        elements = [
-            element
-            for element in elements
-            if _resolve_logical_channel_name(element, logical_channel) in element.channels
-        ]
+        filtered_elements = []
+        for element in elements:
+            resolved_channel = _resolve_logical_channel_name(element, logical_channel)
+            channel_modes = element.channels.get(resolved_channel)
+            if channel_modes is None:
+                continue
+            if normalized_backend is not None and normalized_backend not in channel_modes:
+                continue
+            filtered_elements.append(element)
+        elements = filtered_elements
     return elements
 
 

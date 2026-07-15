@@ -12,14 +12,23 @@
     "real": 0.02
   },
   "bend_element": "BM03",
+  "energy_element": "ESA_ENERGY",
+  "energy_set_channel": "setpoint",
+  "energy_reference_channel": "setpoint",
+  "auto_tune_actuator": {
+    "element": "ESA_ENERGY",
+    "channel": "setpoint",
+    "unit": "MeV"
+  },
+  "auto_tune_control_backends": ["real"],
   "model_backend": "simulation",
   "twiss_target_element": "PRFESA",
-  "bend_scan": {
+  "auto_tune_scan": {
     "min": 0,
-    "max": 200,
+    "max": 65,
     "coarse_steps": 40,
     "fine_steps": 15,
-    "settle_time_s": 0.5,
+    "settle_time_s": 1,
     "restore_initial_on_failure": true
   },
   "esa_quads": ["QM19", "QM20"],

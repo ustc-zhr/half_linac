@@ -222,12 +222,12 @@
       "current_readback": "IRFEL:PS:QM18:current:ai"
     },
     "QM19": {
-      "K1": "IRFEL:PS:QM19:K1:ao",
+      "K1": "IRFEL:AP:QUAD:EQ1:K1:ao",
       "current_set": "IRFEL:PS:QM19:current:ao",
       "current_readback": "IRFEL:PS:QM19:current:ai"
     },
     "QM20": {
-      "K1": "IRFEL:PS:QM20:K1:ao",
+      "K1": "IRFEL:AP:QUAD:EQ2:K1:ao",
       "current_set": "IRFEL:PS:QM20:current:ao",
       "current_readback": "IRFEL:PS:QM20:current:ai"
     },
@@ -269,6 +269,9 @@
     },
     "KLY1_CH3_PHASE": {
       "phase_set": "IRFEL:IN-MW:KLY1:SET_PHASE"
+    },
+    "ESA_ENERGY": {
+      "setpoint": "IRFEL:AP:ENG:A3:ao"
     },
     "PRF03": {
       "image": "IRFEL:BD:FLAG3:image1:ArrayData",

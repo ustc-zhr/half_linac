@@ -135,12 +135,16 @@ Defines the energy spectrum workflow:
 - VM WATCH source: `PRFESA`
 - bend element: `BM03`
 - bend channel used for readback
+- coordinated real energy element: `ESA_ENERGY.setpoint`
+  (`IRFEL:AP:ENG:A3:ao`)
 - ESA quadrupoles
 - start element choices
 - default energy
 - model backend: `simulation`
 
-IRFEL real mode is currently `write_blocked`; VM mode is allowed.
+IRFEL real mode uses the coordinated A3 energy control instead of applying the
+HALF bend-current calibration. Auto Find scans `ESA_ENERGY.setpoint` over the
+configured `0–65 MeV` range, so it preserves the coordinated BM03/QM19/QM20 control.
 
 ### `apps/dispersion_correction.json`
 

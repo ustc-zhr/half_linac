@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Mapping
 
 
@@ -44,3 +45,35 @@ def get_energy0(
     b0 = float(field_t_per_a) * float(current)
     energy0_mev = b0 * rho * SPEED_OF_LIGHT_M_S * 1.0e-6
     return float(energy0_mev)
+
+
+def select_reference_energy_mev(
+    default_energy_mev: float,
+    *,
+    reference_energy_mev: float | None = None,
+    bend_current: float | None = None,
+    bend_conversion: Mapping[str, Any] | None = None,
+) -> tuple[float, str]:
+    """Select a reference energy without applying an implicit bend calibration."""
+
+    default_energy = float(default_energy_mev)
+    if not math.isfinite(default_energy) or default_energy <= 0:
+        raise ValueError("default_energy_mev must be positive and finite.")
+
+    if reference_energy_mev is not None:
+        try:
+            reference_energy = float(reference_energy_mev)
+        except (TypeError, ValueError):
+            reference_energy = math.nan
+        if math.isfinite(reference_energy) and reference_energy > 0:
+            return reference_energy, "reference_pv"
+
+    if bend_current is not None and bend_conversion is not None:
+        try:
+            converted_energy = get_energy0(bend_current, bend_conversion)
+        except (TypeError, ValueError, ZeroDivisionError):
+            converted_energy = math.nan
+        if math.isfinite(converted_energy) and converted_energy > 0:
+            return converted_energy, "bend_current_conversion"
+
+    return default_energy, "workflow_default"
