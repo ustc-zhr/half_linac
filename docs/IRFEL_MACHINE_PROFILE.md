@@ -141,6 +141,27 @@ Defines the energy spectrum workflow:
 
 IRFEL real mode is currently `write_blocked`; VM mode is allowed.
 
+### `apps/dispersion_correction.json`
+
+Defines the IRFEL achromat correction workflow:
+
+- default target BPMs: `BPM09`, `BPM10`
+- default symmetric quadrupole knobs: `QM13/QM16` and `QM14/QM15`
+- energy perturbation and solver defaults
+- real-only backend support
+
+The Control Room disables this application in IRFEL VM mode. Real mode resolves
+the BPM and quadrupole PVs plus
+`KLY1_CH3_PHASE.phase_set -> IRFEL:IN-MW:KLY1:SET_PHASE`, but remains
+in application mode `read_only` because `write_control.real` is explicitly
+blocked. There is no independent RF phase readback, and the phase-to-`dp/p`
+calibration and positive real-machine timing values are configured but still
+require onsite confirmation. The GUI derives alternative BPM and quadrupole
+choices directly from machine-native element types and resolves their real PVs
+through this profile; the defaults above are not a selectable-device whitelist.
+Both the static/live preflights and the machine-profile write policy must pass
+before a write test.
+
 ### `apps/bba.json`
 
 Defines IRFEL BBA presets for VM bring-up:

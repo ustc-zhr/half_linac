@@ -1,0 +1,389 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from dataclasses import replace
+import math
+from typing import Any
+
+from half_linac.src.apps.dispersion_correction.models import RunConfig
+
+
+@dataclass(frozen=True)
+class PreflightResult:
+    level: str
+    blockers: tuple[str, ...]
+    warnings: tuple[str, ...]
+    checks: dict[str, bool]
+
+    @property
+    def ok(self) -> bool:
+        return not self.blockers
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "ok": self.ok,
+            "level": self.level,
+            "blockers": list(self.blockers),
+            "warnings": list(self.warnings),
+            "checks": dict(self.checks),
+        }
+
+
+@dataclass(frozen=True)
+class LivePreflightResult:
+    static: PreflightResult
+    blockers: tuple[str, ...]
+    warnings: tuple[str, ...]
+    checks: dict[str, bool]
+    readings: dict[str, Any]
+
+    @property
+    def ok(self) -> bool:
+        return self.static.ok and not self.blockers
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "ok": self.ok,
+            "static": self.static.as_dict(),
+            "blockers": list(self.blockers),
+            "warnings": list(self.warnings),
+            "checks": dict(self.checks),
+            "readings": dict(self.readings),
+        }
+
+
+def run_preflight(config: RunConfig) -> PreflightResult:
+    blockers: list[str] = []
+    warnings: list[str] = []
+    checks: dict[str, bool] = {}
+
+    pv_map = config.backend.options.get("pv_map", {})
+    pv_map_ok = isinstance(pv_map, dict)
+    checks["pv_map_is_mapping"] = pv_map_ok
+    if config.backend.type == "epics" and not pv_map_ok:
+        blockers.append("EPICS backend requires backend.options.pv_map")
+
+    bpms = pv_map.get("bpms", {}) if pv_map_ok else {}
+    bpms_ok = _configured_bpms(config, bpms)
+    checks["target_bpm_x_pvs_configured"] = bpms_ok
+    if config.backend.type == "epics" and not bpms_ok:
+        blockers.append("Every target BPM needs an x PV in pv_map.bpms")
+
+    quadrupoles = pv_map.get("quadrupoles", {}) if pv_map_ok else {}
+    quad_pvs_ok = _configured_quadrupoles(config, quadrupoles)
+    checks["quadrupole_pvs_configured"] = quad_pvs_ok
+    if config.backend.type == "epics" and not quad_pvs_ok:
+        blockers.append("Every knob device needs quadrupole PV mapping")
+
+    energy_map = pv_map.get("energy_knob", {}) if pv_map_ok else {}
+    energy_pv_ok = isinstance(energy_map, dict) and bool(
+        energy_map.get("readback") or energy_map.get("phase_readback") or energy_map.get("phase_set") or energy_map.get("set")
+    )
+    checks["energy_pv_configured"] = energy_pv_ok
+    if config.backend.type == "epics" and not energy_pv_ok:
+        blockers.append("Energy knob PV is not configured")
+    energy_independent_readback = isinstance(energy_map, dict) and bool(
+        energy_map.get("readback") or energy_map.get("phase_readback")
+    )
+    checks["energy_independent_readback"] = energy_independent_readback
+    if config.backend.type == "epics" and energy_pv_ok and not energy_independent_readback:
+        warnings.append("Energy verification uses the setpoint PV because no independent readback is configured")
+
+    is_phase = config.energy_knob.actuator == "phase" or "phase" in config.energy_knob.name.lower()
+    calibration_value = config.energy_knob.calibration.get("phase_per_delta")
+    try:
+        calibration_numeric = float(calibration_value)
+    except (TypeError, ValueError):
+        calibration_numeric = float("nan")
+    calibration_ok = (not is_phase) or (
+        math.isfinite(calibration_numeric) and calibration_numeric != 0
+    )
+    checks["energy_calibration_available"] = calibration_ok
+    if is_phase and not calibration_ok:
+        blockers.append("RF phase energy knob requires calibration.phase_per_delta before quantitative D_eff measurement")
+
+    safe_limits_ok = (
+        config.safety.max_reference_orbit_change_mm > 0
+    )
+    checks["safety_limits_positive"] = safe_limits_ok
+    if not safe_limits_ok:
+        blockers.append("BPM orbit threshold must be positive")
+
+    knob_limits_ok = all(
+        knob.scan_step > 0 and knob.limit > 0 and knob.scan_step <= knob.limit
+        for knob in config.knobs
+    )
+    checks["knob_limits_ordered"] = knob_limits_ok
+    if not knob_limits_ok:
+        blockers.append("Require 0 < scan_step <= limit for every knob")
+
+    response_dimensions_ok = len(config.target_bpms) >= len(config.knobs)
+    checks["response_dimensions_sufficient"] = response_dimensions_ok
+    if not response_dimensions_ok:
+        blockers.append(
+            "Response solve requires at least as many target BPMs as correction knobs"
+        )
+
+    timing_ok = (
+        config.backend.type != "epics"
+        or (
+            config.measurement.settle_time_s > 0
+            and config.measurement.sample_interval_s > 0
+        )
+    )
+    checks["real_machine_timing_positive"] = timing_ok
+    if not timing_ok:
+        blockers.append(
+            "EPICS operation requires positive measurement.settle_time_s and sample_interval_s"
+        )
+
+    if config.backend.type == "epics" and config.backend.mode == "write_enabled":
+        energy_write_ok = isinstance(energy_map, dict) and bool(energy_map.get("phase_set") or energy_map.get("set"))
+        quadrupole_write_ok = _configured_quadrupole_writes(config, quadrupoles)
+        checks["energy_write_pv_configured"] = energy_write_ok
+        checks["quadrupole_write_pvs_configured"] = quadrupole_write_ok
+        if not energy_write_ok:
+            blockers.append("write_enabled requires an energy phase_set or set PV")
+        if not quadrupole_write_ok:
+            blockers.append("write_enabled requires same-unit setpoint and readback PVs for every knob device")
+        quadrupole_independent_readbacks = _configured_independent_quadrupole_readbacks(config, quadrupoles)
+        checks["quadrupole_independent_readbacks"] = quadrupole_independent_readbacks
+        if not quadrupole_independent_readbacks:
+            warnings.append("Quadrupole verification uses setpoint PVs because independent readbacks are not configured")
+        write_ready = calibration_ok and safe_limits_ok and knob_limits_ok and not blockers
+        checks["write_ready"] = write_ready
+        if not write_ready:
+            blockers.append("write_enabled requires calibration, limits, PV mapping, and static checks to pass")
+    else:
+        checks["write_ready"] = False
+
+    level = _readiness_level(config, blockers, checks)
+    return PreflightResult(level=level, blockers=tuple(blockers), warnings=tuple(warnings), checks=checks)
+
+
+def run_live_preflight(config: RunConfig, machine=None) -> LivePreflightResult:
+    """Read every required live value without writing any setpoint."""
+
+    static = run_preflight(config)
+    if config.backend.type != "epics":
+        return LivePreflightResult(
+            static=static,
+            blockers=(),
+            warnings=(),
+            checks={"live_io_required": False},
+            readings={},
+        )
+
+    if machine is None:
+        from half_linac.src.apps.dispersion_correction.machine.epics import EpicsMachine
+
+        readonly_config = replace(
+            config,
+            backend=replace(config.backend, mode="read_only"),
+        )
+        machine = EpicsMachine(readonly_config)
+
+    blockers: list[str] = []
+    warnings: list[str] = []
+    checks: dict[str, bool] = {"live_io_required": True}
+    readings: dict[str, Any] = {}
+
+    try:
+        energy_value = float(machine.get_energy_delta())
+    except Exception as exc:
+        energy_value = float("nan")
+        blockers.append(f"Energy setpoint is not readable: {exc}")
+    energy_ok = math.isfinite(energy_value)
+    checks["energy_setpoint_readable"] = energy_ok
+    readings["energy_value"] = energy_value if energy_ok else None
+
+    try:
+        quadrupole_readbacks = machine.read_quadrupole_readbacks()
+        quadrupole_setpoints = machine.read_quadrupole_setpoints()
+    except Exception as exc:
+        quadrupole_readbacks = {}
+        quadrupole_setpoints = {}
+        blockers.append(f"Quadrupole values are not readable: {exc}")
+    quadrupoles_ok = bool(quadrupole_readbacks) and set(quadrupole_readbacks) == set(quadrupole_setpoints)
+    if quadrupoles_ok:
+        quadrupoles_ok = all(
+            math.isfinite(float(quadrupole_readbacks[name]))
+            and math.isfinite(float(quadrupole_setpoints[name]))
+            for name in quadrupole_readbacks
+        )
+    checks["quadrupole_values_readable"] = quadrupoles_ok
+    readings["quadrupole_readbacks"] = quadrupole_readbacks
+    readings["quadrupole_setpoints"] = quadrupole_setpoints
+    if not quadrupoles_ok and not any(item.startswith("Quadrupole") for item in blockers):
+        blockers.append("Quadrupole setpoints/readbacks are incomplete or non-finite")
+
+    quadrupole_matches = quadrupoles_ok
+    mismatches: dict[str, dict[str, float]] = {}
+    if quadrupoles_ok:
+        for name, readback in quadrupole_readbacks.items():
+            tolerance = float(machine.quadrupole_readback_tolerance(name))
+            difference = abs(float(quadrupole_setpoints[name]) - float(readback))
+            if difference > tolerance:
+                quadrupole_matches = False
+                mismatches[name] = {
+                    "difference": difference,
+                    "tolerance": tolerance,
+                }
+    checks["quadrupole_setpoint_readback_match"] = quadrupole_matches
+    readings["quadrupole_mismatches"] = mismatches
+    if quadrupoles_ok and not quadrupole_matches:
+        blockers.append("Quadrupole setpoint/readback mismatch exceeds configured tolerance")
+
+    try:
+        bpm = machine.read_bpm(config.target_bpms)
+        valid_count = int(bpm.valid.sum())
+    except Exception as exc:
+        bpm = None
+        valid_count = 0
+        blockers.append(f"Target BPMs are not readable: {exc}")
+    required_valid = len(config.target_bpms)
+    bpm_ok = valid_count >= required_valid
+    checks["all_target_bpms_valid"] = bpm_ok
+    readings["valid_bpm_count"] = valid_count
+    readings["required_valid_bpm_count"] = required_valid
+    if bpm is not None:
+        readings["bpms"] = {
+            name: {
+                "x_mm": float(bpm.x_mm[index]) if math.isfinite(float(bpm.x_mm[index])) else None,
+                "y_mm": float(bpm.y_mm[index]) if math.isfinite(float(bpm.y_mm[index])) else None,
+                "valid": bool(bpm.valid[index]),
+            }
+            for index, name in enumerate(bpm.names)
+        }
+    if not bpm_ok and not any(item.startswith("Target BPMs") for item in blockers):
+        blockers.append(
+            f"All target BPMs must be valid before writes ({valid_count}/{required_valid} valid)"
+        )
+
+    readings["planned_energy_delta"] = config.energy_knob.delta
+    readings["planned_knob_ranges"] = {
+        knob.name: {
+            "response_scan": knob.scan_step,
+            "cumulative_limit": knob.limit,
+            "max_solver_step": knob.limit * config.solver.max_step_fraction,
+        }
+        for knob in config.knobs
+    }
+    return LivePreflightResult(
+        static=static,
+        blockers=tuple(blockers),
+        warnings=tuple(warnings),
+        checks=checks,
+        readings=readings,
+    )
+
+
+def format_preflight(result: PreflightResult) -> str:
+    lines = [
+        "Dispersion Correction Preflight",
+        "",
+        f"Level: {result.level}",
+        f"OK: {result.ok}",
+        "",
+        "Checks:",
+    ]
+    for name, passed in result.checks.items():
+        lines.append(f"  {'PASS' if passed else 'FAIL'}  {name}")
+
+    lines.extend(["", "Blockers:"])
+    if result.blockers:
+        lines.extend(f"  - {item}" for item in result.blockers)
+    else:
+        lines.append("  - none")
+
+    lines.extend(["", "Warnings:"])
+    if result.warnings:
+        lines.extend(f"  - {item}" for item in result.warnings)
+    else:
+        lines.append("  - none")
+    return "\n".join(lines) + "\n"
+
+
+def _configured_bpms(config: RunConfig, bpms: Any) -> bool:
+    if config.backend.type == "offline" and not bpms:
+        return True
+    if not isinstance(bpms, dict):
+        return False
+    for name in config.target_bpms:
+        item = bpms.get(name)
+        if not isinstance(item, dict) or not item.get("x"):
+            return False
+    return True
+
+
+def _configured_quadrupoles(config: RunConfig, quadrupoles: Any) -> bool:
+    if config.backend.type == "offline" and not quadrupoles:
+        return True
+    if not isinstance(quadrupoles, dict):
+        return False
+    for knob in config.knobs:
+        for device in knob.devices:
+            item = quadrupoles.get(device)
+            if not isinstance(item, dict):
+                return False
+            control = str(item.get("control", "k1")).lower()
+            if control == "current" and not (item.get("current_readback") or item.get("current_set")):
+                return False
+            if control == "k1" and not (item.get("K1") or item.get("K1_readback")):
+                return False
+            if control not in {"current", "k1"}:
+                return False
+    return True
+
+
+def _configured_quadrupole_writes(config: RunConfig, quadrupoles: Any) -> bool:
+    if not isinstance(quadrupoles, dict):
+        return False
+    for knob in config.knobs:
+        for device in knob.devices:
+            item = quadrupoles.get(device)
+            if not isinstance(item, dict):
+                return False
+            control = str(item.get("control", "k1")).lower()
+            if control == "current" and not item.get("current_set"):
+                return False
+            if control == "current" and not (item.get("current_readback") or item.get("current_set")):
+                return False
+            if control == "k1" and not (item.get("K1_set") or item.get("K1")):
+                return False
+            if control == "k1" and not (item.get("K1_readback") or item.get("K1")):
+                return False
+            if control not in {"current", "k1"}:
+                return False
+    return True
+
+
+def _configured_independent_quadrupole_readbacks(config: RunConfig, quadrupoles: Any) -> bool:
+    if not isinstance(quadrupoles, dict):
+        return False
+    for knob in config.knobs:
+        for device in knob.devices:
+            item = quadrupoles.get(device)
+            if not isinstance(item, dict):
+                return False
+            control = str(item.get("control", "k1")).lower()
+            readback_key = "current_readback" if control == "current" else "K1_readback"
+            if not item.get(readback_key):
+                return False
+    return True
+
+
+def _readiness_level(
+    config: RunConfig,
+    blockers: list[str],
+    checks: dict[str, bool],
+) -> str:
+    if blockers:
+        return "blocked"
+    if config.backend.type == "offline":
+        return "offline-ready"
+    if config.backend.mode != "write_enabled":
+        return "read-only-ready"
+    if checks.get("energy_calibration_available"):
+        return "write-ready"
+    return "measurement-ready"

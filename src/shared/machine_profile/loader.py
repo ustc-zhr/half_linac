@@ -39,6 +39,7 @@ SUPPORTED_APP_NAMES = {
     "bba",
     "emit_measure",
     "solenoid_centering",
+    "dispersion_correction",
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum"}
 APP_WORKFLOW_FILES = {
@@ -49,6 +50,7 @@ APP_WORKFLOW_FILES = {
     "emit_measure": "emit_measure.json",
     "solenoid_centering": "solenoid_centering.json",
     "virtual_machine": "virtual_machine.json",
+    "dispersion_correction": "dispersion_correction.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
@@ -58,6 +60,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "bba": ("bba",),
     "emit_measure": ("emit_measure",),
     "solenoid_centering": ("solenoid_centering",),
+    "dispersion_correction": ("dispersion_correction",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",
@@ -721,6 +724,15 @@ def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
         load_solenoid_centering_workflow(profile)
         return
 
+    if app_name == "dispersion_correction":
+        workflow = profile.workflows.get("dispersion_correction")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError(
+                "dispersion_correction requires apps/dispersion_correction.json."
+            )
+        _validate_dispersion_correction_workflow(profile, workflow)
+        return
+
 
 def resolve_control_backend(control_backend: str | None, default_mode: str) -> str:
     raw_control_backend = control_backend
@@ -1087,6 +1099,117 @@ def _validate_energy_spectrum_workflow(
                 raise MachineProfileError(
                     f"workflows.energy_spectrum.energy_from_bend_current.{key} must be numeric."
                 ) from exc
+
+
+def _validate_dispersion_correction_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+) -> None:
+    required_keys = (
+        "control_backends",
+        "target_bpms",
+        "energy_knob",
+        "knobs",
+        "measurement",
+        "solver",
+        "safety",
+    )
+    missing = [key for key in required_keys if key not in workflow]
+    if missing:
+        raise MachineProfileError(
+            "workflows.dispersion_correction is missing required keys: "
+            + ", ".join(sorted(missing))
+        )
+
+    supported_backends = tuple(
+        normalize_mode(value, "workflows.dispersion_correction.control_backends[]")
+        for value in _expect_string_list(
+            workflow.get("control_backends"),
+            "workflows.dispersion_correction.control_backends",
+        )
+    )
+    if not supported_backends:
+        raise MachineProfileError(
+            "workflows.dispersion_correction.control_backends must not be empty."
+        )
+    unknown_backends = sorted(set(supported_backends) - set(profile.control_backends))
+    if unknown_backends:
+        raise MachineProfileError(
+            "workflows.dispersion_correction.control_backends contains unconfigured backend(s): "
+            + ", ".join(unknown_backends)
+        )
+
+    target_bpms = _expect_string_list(
+        workflow.get("target_bpms"),
+        "workflows.dispersion_correction.target_bpms",
+    )
+    if not target_bpms:
+        raise MachineProfileError(
+            "workflows.dispersion_correction.target_bpms must not be empty."
+        )
+    for bpm_id in target_bpms:
+        element = profile.get_element(bpm_id)
+        if element.kind != "bpm" or "x" not in element.channels:
+            raise MachineProfileError(
+                f"Dispersion BPM {bpm_id!r} must reference a bpm with logical channel 'x'."
+            )
+
+    knobs = _expect_list(
+        workflow.get("knobs"),
+        "workflows.dispersion_correction.knobs",
+    )
+    if not knobs:
+        raise MachineProfileError("workflows.dispersion_correction.knobs must not be empty.")
+    for index, raw_knob in enumerate(knobs):
+        location = f"workflows.dispersion_correction.knobs[{index}]"
+        knob = _expect_mapping(raw_knob, location)
+        _expect_non_empty_string(knob.get("name"), f"{location}.name")
+        devices = _expect_mapping(knob.get("devices"), f"{location}.devices")
+        if not devices:
+            raise MachineProfileError(f"{location}.devices must not be empty.")
+        for device_id in devices:
+            element = profile.get_element(str(device_id))
+            if element.kind != "quad":
+                raise MachineProfileError(
+                    f"{location}.devices.{device_id} must reference a quad element."
+                )
+
+    energy_knob = _expect_mapping(
+        workflow.get("energy_knob"),
+        "workflows.dispersion_correction.energy_knob",
+    )
+    energy_element = energy_knob.get("element")
+    if energy_element:
+        element = profile.get_element(
+            _expect_non_empty_string(
+                energy_element,
+                "workflows.dispersion_correction.energy_knob.element",
+            )
+        )
+        set_channel = _expect_non_empty_string(
+            energy_knob.get("set_channel", "phase_set"),
+            "workflows.dispersion_correction.energy_knob.set_channel",
+        )
+        channel_modes = element.channels.get(set_channel)
+        if channel_modes is None:
+            raise MachineProfileError(
+                f"Dispersion energy element {element.id!r} is missing logical channel "
+                f"{set_channel!r}."
+            )
+        missing_channel_backends = [
+            backend_name for backend_name in supported_backends if backend_name not in channel_modes
+        ]
+        if missing_channel_backends:
+            raise MachineProfileError(
+                f"Dispersion energy element {element.id!r} channel {set_channel!r} is missing "
+                "backend mapping(s): " + ", ".join(missing_channel_backends)
+            )
+
+    for key in ("measurement", "solver", "safety"):
+        _expect_mapping(
+            workflow.get(key),
+            f"workflows.dispersion_correction.{key}",
+        )
 
 
 def _validate_virtual_machine_workflow(

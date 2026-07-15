@@ -267,6 +267,9 @@
       "voltage_set": "IRFEL:modulator2:HV:set:ao",
       "voltage_readback": "IRFEL:modulator2:HV:ai"
     },
+    "KLY1_CH3_PHASE": {
+      "phase_set": "IRFEL:IN-MW:KLY1:SET_PHASE"
+    },
     "PRF03": {
       "image": "IRFEL:BD:FLAG3:image1:ArrayData",
       "exposure_time": "IRFEL:BD:FLAG3:cam1:AcquireTime"

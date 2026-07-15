@@ -29,6 +29,7 @@ REAL_COMMISSIONING_WORKFLOWS_BY_APP = {
     "bba": "bba",
     "emit_measure": "emit_measure",
     "solenoid_centering": "solenoid_centering",
+    "dispersion_correction": "dispersion_correction",
 }
 
 _REAL_STATUS_LABELS = {

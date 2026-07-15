@@ -13,7 +13,7 @@ HALF 直线加速器上层物理应用软件仓库，包含：
 
 ## 仓库地图
 
-- `src/apps/`: GUI 应用，包括 Control Room（目录当前仍为 `launcher`）、`orbit_correct`、`bba`、`beam_monitor`、`energy_spectrum` 等
+- `src/apps/`: GUI 应用，包括 Control Room（目录当前仍为 `launcher`）、`orbit_correct`、`dispersion_correction`、`bba`、`beam_monitor`、`energy_spectrum` 等
 - `src/shared/`: 跨多个 GUI / runtime 复用的共享辅助模块
 - `src/optimization/`: 在线优化 GUI 与 BO / RCDS / Rsimplex 算法
 - `src/softIOC/`: IOC 管理脚本、PV 同步逻辑、IOC 工程文件
@@ -117,6 +117,7 @@ bash scripts/start_vm.sh
 - [AGENTS.md](AGENTS.md): 仓库级 agent 规则与标准命令
 - [docs/SETUP_AND_RUN.md](docs/SETUP_AND_RUN.md): 安装、环境配置、运行方式
 - [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md): 历史开发记录
+- [docs/DISPERSION_CORRECTION.md](docs/DISPERSION_CORRECTION.md): 色散校正架构、运行边界与 commissioning 清单
 - [docs/CODEX_REVIEW_PRIORITY.md](docs/CODEX_REVIEW_PRIORITY.md): 重新审查和完善仓库时的优先级建议
 
 ## 推荐的 Codex 使用顺序

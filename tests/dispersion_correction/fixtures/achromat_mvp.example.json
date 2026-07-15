@@ -1,0 +1,59 @@
+{
+  "backend": {
+    "type": "offline",
+    "mode": "read_only",
+    "options": {
+      "gui_progress_delay_s": 0.15
+    }
+  },
+  "energy_knob": {
+    "name": "ENERGY_DELTA",
+    "delta": 0.0001
+  },
+  "target_bpms": [
+    "BPM01",
+    "BPM02",
+    "BPM03",
+    "BPM04"
+  ],
+  "knobs": [
+    {
+      "name": "Q1_sym",
+      "devices": {
+        "Q1L": 1.0,
+        "Q1R": 1.0
+      },
+      "scan_step": 0.002,
+      "limit": 0.03
+    },
+    {
+      "name": "Q2_sym",
+      "devices": {
+        "Q2L": 1.0,
+        "Q2R": 1.0
+      },
+      "scan_step": 0.002,
+      "limit": 0.03
+    }
+  ],
+  "measurement": {
+    "plane": "x",
+    "samples_per_step": 5,
+    "sample_interval_s": 0.0,
+    "final_samples": 10,
+    "settle_time_s": 0.0
+  },
+  "solver": {
+    "svd_cut": 0.001,
+    "regularization": 0.001,
+    "gain": 0.5,
+    "max_step_fraction": 0.25,
+    "max_iter": 5,
+    "response_update": "once",
+    "min_step_improvement": 0.05,
+    "success_min_improvement": 2.0
+  },
+  "safety": {
+    "max_reference_orbit_change_mm": 1.0
+  }
+}

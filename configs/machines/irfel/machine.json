@@ -1096,6 +1096,21 @@
         "image",
         "exposure_time"
       ]
+    },
+    {
+      "id": "KLY1_CH3_PHASE",
+      "kind": "rf",
+      "display_name": "KLY1 CH3 Phase",
+      "order": 65,
+      "tags": [
+        "rf",
+        "kly1",
+        "dispersion_correction"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "phase_set"
+      ]
     }
   ]
 }

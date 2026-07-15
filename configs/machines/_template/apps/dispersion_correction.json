@@ -1,0 +1,64 @@
+{
+  "control_backends": [
+    "real"
+  ],
+  "target_bpms": [
+    "BPM01",
+    "BPM02"
+  ],
+  "bpm_position_scale_to_mm": {
+    "real": 1.0
+  },
+  "energy_knob": {
+    "name": "ENERGY_PHASE",
+    "actuator": "phase",
+    "actuator_unit": "deg",
+    "delta": 0.0001,
+    "calibration": {}
+  },
+  "knobs": [
+    {
+      "name": "Q01_QE01_sym",
+      "devices": {
+        "Q01": 1.0,
+        "QE01": 1.0
+      },
+      "scan_step": 0.0005,
+      "limit": 0.01
+    },
+    {
+      "name": "QE02_QE03_sym",
+      "devices": {
+        "QE02": 1.0,
+        "QE03": 1.0
+      },
+      "scan_step": 0.0005,
+      "limit": 0.01
+    }
+  ],
+  "measurement": {
+    "plane": "x",
+    "samples_per_step": 5,
+    "sample_interval_s": 0.0,
+    "final_samples": 10,
+    "settle_time_s": 0.0
+  },
+  "solver": {
+    "svd_cut": 0.001,
+    "regularization": 0.001,
+    "gain": 0.5,
+    "max_step_fraction": 0.25,
+    "max_iter": 5,
+    "response_update": "once",
+    "min_step_improvement": 0.05,
+    "success_min_improvement": 2.0
+  },
+  "safety": {
+    "max_reference_orbit_change_mm": 1.0
+  },
+  "real_status": "not_supported",
+  "write_control": {
+    "vm": "blocked",
+    "real": "blocked"
+  }
+}

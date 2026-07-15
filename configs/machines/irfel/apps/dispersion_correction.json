@@ -1,0 +1,70 @@
+{
+  "control_backends": [
+    "real"
+  ],
+  "target_bpms": [
+    "BPM09",
+    "BPM10"
+  ],
+  "bpm_position_scale_to_mm": {
+    "real": 1.0
+  },
+  "energy_knob": {
+    "name": "KLY1_CH3_PHASE",
+    "actuator": "phase",
+    "actuator_unit": "deg",
+    "delta": 0.0001,
+    "calibration": {
+      "kind": "linear",
+      "phase_per_delta": 2500.0
+    },
+    "element": "KLY1_CH3_PHASE",
+    "set_channel": "phase_set"
+  },
+  "knobs": [
+    {
+      "name": "Q13_Q16_sym",
+      "devices": {
+        "QM13": 1.0,
+        "QM16": 1.0
+      },
+      "scan_step": 0.0005,
+      "limit": 0.012
+    },
+    {
+      "name": "Q14_Q15_sym",
+      "devices": {
+        "QM14": 1.0,
+        "QM15": 1.0
+      },
+      "scan_step": 0.0005,
+      "limit": 0.012
+    }
+  ],
+  "measurement": {
+    "plane": "x",
+    "samples_per_step": 5,
+    "sample_interval_s": 0.2,
+    "final_samples": 10,
+    "settle_time_s": 1.0
+  },
+  "solver": {
+    "svd_cut": 0.001,
+    "regularization": 0.001,
+    "gain": 0.5,
+    "max_step_fraction": 0.25,
+    "max_iter": 5,
+    "response_update": "once",
+    "min_step_improvement": 0.05,
+    "success_min_improvement": 2.0
+  },
+  "safety": {
+    "max_reference_orbit_change_mm": 0.5
+  },
+  "ca_timeout": 0.5,
+  "real_status": "write_blocked",
+  "write_control": {
+    "vm": "blocked",
+    "real": "blocked"
+  }
+}

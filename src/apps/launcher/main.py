@@ -14,6 +14,7 @@ from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 
 from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
     QFrame,
@@ -60,11 +61,28 @@ from gui import Ui_MainWindow
 ROOT = _REPO_BOOTSTRAP_ROOT
 HEADER_ACTION_HEIGHT = 32
 
+
+def build_launcher_icon() -> QIcon:
+    logo_path = ROOT / "HALF_logo.png"
+    icon = QIcon()
+    if not logo_path.is_file():
+        return icon
+
+    pixmap = QPixmap(str(logo_path))
+    if pixmap.isNull():
+        return icon
+
+    for size in (16, 24, 32, 48, 64, 128):
+        icon.addPixmap(
+            pixmap.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+    return icon
+
 DARK_THEME = {
     "window_bg": "#0f1519",
     "window_fg": "#e6edf2",
     "frame_bg": "#172027",
-    "frame_border": "#22303a",
+    "frame_border": "#1d2a32",
     "summary_panel_bg": "#1b262d",
     "summary_panel_border": "#2b3a45",
     "summary_card_bg": "#152028",
@@ -84,8 +102,8 @@ DARK_THEME = {
     "textedit_bg": "#10171c",
     "textedit_border": "#24343f",
     "textedit_fg": "#d7e2ea",
-    "group_bg": "#172027",
-    "group_border": "#24333d",
+    "group_bg": "transparent",
+    "group_border": "#20303a",
     "group_title_fg": "#e7edf1",
     "group_title_accent_fg": "#7dd7c5",
     "button_bg": "#22313a",
@@ -112,7 +130,7 @@ LIGHT_THEME = {
     "window_bg": "#f2ede5",
     "window_fg": "#2c3942",
     "frame_bg": "#faf7f1",
-    "frame_border": "#d7cec1",
+    "frame_border": "#d8d0c5",
     "summary_panel_bg": "#fcf9f3",
     "summary_panel_border": "#ddd4c8",
     "summary_card_bg": "#f1eadf",
@@ -132,8 +150,8 @@ LIGHT_THEME = {
     "textedit_bg": "#fffdf9",
     "textedit_border": "#ddd4c8",
     "textedit_fg": "#314049",
-    "group_bg": "#fffdf9",
-    "group_border": "#d7cec1",
+    "group_bg": "transparent",
+    "group_border": "#ded6cc",
     "group_title_fg": "#2d3940",
     "group_title_accent_fg": "#2d7f6d",
     "button_bg": "#f8f3eb",
@@ -169,12 +187,25 @@ QMainWindow, QWidget#centralwidget {{
 QFrame {{
     background-color: {frame_bg};
     border: 1px solid {frame_border};
-    border-radius: 14px;
+    border-radius: 10px;
+}}
+
+QFrame#frame {{
+    background-color: {frame_bg};
+    border: 1px solid {frame_border};
+    border-radius: 10px;
+}}
+
+QFrame#frame_2 {{
+    background: transparent;
+    border: none;
+    border-radius: 0px;
 }}
 
 QFrame#summaryPanel {{
     background-color: {summary_panel_bg};
     border: 1px solid {summary_panel_border};
+    border-radius: 10px;
 }}
 
 QFrame#summaryCard {{
@@ -184,6 +215,8 @@ QFrame#summaryCard {{
 }}
 
 QLabel#summaryTitle {{
+    background: transparent;
+    border: none;
     color: {title_fg};
     font-size: 23px;
     font-weight: 700;
@@ -234,7 +267,7 @@ QTextEdit#textEdit {{
 QGroupBox {{
     background-color: {group_bg};
     border: 1px solid {group_border};
-    border-radius: 14px;
+    border-radius: 10px;
     margin-top: 0px;
     padding-top: 30px;
     font-size: 14px;
@@ -665,6 +698,17 @@ APP_DEFINITIONS = {
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/emit_measure",
     },
+    "dispersion_correction": {
+        "button_name": "dispersion_correction_button",
+        "category": "control",
+        "button_text": "Dispersion Correction",
+        "label": "Dispersion Correction",
+        "window_title_patterns": ("Dispersion Correction",),
+        "description": "Measure and correct horizontal effective dispersion in an achromat section.",
+        "workflow_name": "dispersion_correction",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/dispersion_correction",
+    },
     "energy_feedback": {
         "button_name": "energy_feedback_button",
         "category": "control",
@@ -697,6 +741,7 @@ PROFILE_MANAGED_APP_KEYS = {
     "orbit_correct": "orbit_correct",
     "solenoid_centering": "solenoid_centering",
     "emitmeasure": "emit_measure",
+    "dispersion_correction": "dispersion_correction",
 }
 
 
@@ -738,6 +783,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} Control Room")
+        icon = build_launcher_icon()
+        if not icon.isNull():
+            self.setWindowIcon(icon)
         self.resize(1240, 800)
         self.setMinimumSize(940, 720)
         self._apply_theme()
@@ -867,6 +915,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.hv_feedback_button.setObjectName("hv_feedback_button")
         self.solenoid_centering_button = QPushButton(self.groupBox_5)
         self.solenoid_centering_button.setObjectName("solenoid_centering_button")
+        self.dispersion_correction_button = QPushButton(self.groupBox_5)
+        self.dispersion_correction_button.setObjectName("dispersion_correction_button")
 
         self.group_button_specs = [
             (self.gridLayout_3, self.groupBox_3, [self.vmbtn, self.online_opt], 1),
@@ -879,6 +929,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                     self.solenoid_centering_button,
                     self.BBA,
                     self.emitmeasure,
+                    self.dispersion_correction_button,
                     self.energy_feedback_button,
                     self.hv_feedback_button,
                 ],
@@ -942,6 +993,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
                         f"{tooltip}\n\n"
                         f"Model backend unavailable for machine '{self.machine_profile.machine.id}': {model_reason}"
                     )
+
+            workflow_name = spec.get("workflow_name")
+            if supported and workflow_name is not None:
+                workflow = self.machine_profile.workflows.get(workflow_name, {})
+                configured_backends = workflow.get("control_backends", ())
+                if configured_backends and self.control_backend not in configured_backends:
+                    supported = False
+                    reason = (
+                        f"{spec['label']} does not support backend {self.control_backend!r}; "
+                        f"configured backends: {', '.join(configured_backends)}."
+                    )
+                    tooltip = f"{tooltip}\n\nUnavailable: {reason}"
 
             if supported and profile_app_name is not None:
                 tooltip = self._append_real_commissioning_tooltip(tooltip, profile_app_name)
@@ -1353,6 +1416,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    icon = build_launcher_icon()
+    if not icon.isNull():
+        app.setWindowIcon(icon)
     window = myWindow()
     window.show()
     sys.exit(app.exec_())
