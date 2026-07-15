@@ -144,7 +144,12 @@ class ESA_AutoTuner:
         if region.area < 50 or region.area > 1e5:
             return False, 0.0, None
         # 不能太细长（长宽比 ≤ 6）
-        aspect = region.major_axis_length / max(region.minor_axis_length, 1)
+        major_axis_length = getattr(region, "axis_major_length", None)
+        minor_axis_length = getattr(region, "axis_minor_length", None)
+        if major_axis_length is None or minor_axis_length is None:
+            major_axis_length = region.major_axis_length
+            minor_axis_length = region.minor_axis_length
+        aspect = major_axis_length / max(minor_axis_length, 1)
         if aspect > 6:
             return False, 0.0, None
 

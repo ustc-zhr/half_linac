@@ -2720,6 +2720,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_thread.trigger.connect(self._handle_auto_tune_result)
             self.auto_tune_thread.finished.connect(self._on_auto_tune_finished)
             self.auto_tune_thread.start()
+            self._sync_energy_control_state()
+            QTimer.singleShot(0, self._sync_energy_control_state)
         except Exception as exc:
             print(f"ESA auto tune failed: {exc}")
             self._mark_pv_unavailable(exc)
