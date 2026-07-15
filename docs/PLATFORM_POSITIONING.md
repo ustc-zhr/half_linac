@@ -60,7 +60,8 @@ HALF 和 IRFEL 是目前的平台实例。它们具有不同的设备清单、PV
 
 当前边界包括：
 
-- 已由两台电子直线加速器验证
+- HALF 和 IRFEL 两套 machine profile 已通过配置、应用加载和 VM 相关校验
+- 实机 commissioning 证据目前来自 IRFEL；HALF 尚未完成真实机器验证
 - 控制系统以 EPICS Channel Access 为主
 - VM 和模型计算以 elegant 为主
 - 操作界面以 PyQt 桌面应用为主
