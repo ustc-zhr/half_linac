@@ -1,6 +1,6 @@
 # Setup And Run
 
-这份文档整理了当前 `half_linac` 仓库的环境准备、机器相关配置和常用运行方式。
+这份文档整理 Accelerator HLA Platform 的环境准备、机器相关配置和常用运行方式。`half_linac` 是当前保留的历史仓库和 Python 包名；HALF 与 IRFEL 是平台支持的机器实例。
 
 ## 1. Linux 环境
 

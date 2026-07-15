@@ -1,20 +1,41 @@
-# HALF Injector High-Level Applications
+# Accelerator HLA Platform
 
-HALF 直线加速器上层物理应用软件仓库，包含：
+面向多装置的电子加速器高层应用平台。平台通过 machine profile 将机器配置、控制后端和应用工作流解耦，使同一套高层应用能够服务于 HALF、IRFEL 以及后续接入的加速器装置。
+
+平台包含：
 
 - `EPICS softIOC`
 - 基于 `elegant` 的 virtual machine
 - PyQt 上层应用 GUI
 - 在线优化算法与辅助工具
 
+当前 `half_linac` 是仓库和 Python 包的历史名称，本阶段继续保留，以避免破坏已有导入、启动脚本、环境变量和控制室部署。HALF 不再代表平台的适用边界，而是 `configs/machines/half/` 中的一套机器配置；IRFEL 则由 `configs/machines/irfel/` 描述。
+
 当前仓库同时包含源码、生成文件、实验运行产物和少量历史备份文件。为了让 Codex 或人工审查更高效，项目入口已经收敛到本文档、`AGENTS.md` 和 `docs/`。
 
 运行时机器配置现在统一来自 `configs/machines/` 下的 machine profile。
 
+## 平台定位
+
+平台当前定位为：
+
+> 配置驱动、面向多装置、贯通实机与虚拟机、集成加速器模型并具有写入安全治理能力的电子加速器高层应用平台。
+
+这里的“通用”是加速器领域内的通用，而不是任意工业控制系统的通用。当前已经由 HALF 和 IRFEL 两台直线加速器验证，控制侧以 EPICS 为主，模型侧以 elegant 为主；对储存环、其他粒子类型、其他控制协议和模型引擎的支持仍属于后续扩展范围。
+
+平台按三层理解：
+
+- Platform Core：machine profile、逻辑通道解析、运行时选择、模型接口、进程管理和写入安全策略
+- Application Suite：轨道、束流图像、BBA、发射度、能谱、色散校正等高层应用
+- Machine Profiles：HALF、IRFEL 及后续机器的设备清单、PV 映射、工作流参数和运行资源
+
+更完整的产品边界、术语和演进原则见 [docs/PLATFORM_POSITIONING.md](docs/PLATFORM_POSITIONING.md)。
+
 ## 仓库地图
 
-- `src/apps/`: GUI 应用，包括 Control Room（目录当前仍为 `launcher`）、`orbit_correct`、`dispersion_correction`、`bba`、`beam_monitor`、`energy_spectrum` 等
-- `src/shared/`: 跨多个 GUI / runtime 复用的共享辅助模块
+- `configs/machines/`: HALF、IRFEL 等机器的 profile、控制后端、应用工作流和模型后端配置
+- `src/apps/`: 可由机器能力选择启用的 GUI 应用，包括 Control Room（目录当前仍为 `launcher`）、`orbit_correct`、`dispersion_correction`、`bba`、`beam_monitor`、`energy_spectrum` 等
+- `src/shared/`: 平台核心共享模块，包括 machine profile、模型运行、运行状态、进程与窗口管理
 - `src/optimization/`: 在线优化 GUI 与 BO / RCDS / Rsimplex 算法
 - `src/softIOC/`: IOC 管理脚本、PV 同步逻辑、IOC 工程文件
 - `src/virtual_machine/`: lattice 解析、VM 管理、`elegant` 运行目录
@@ -52,7 +73,9 @@ bash scripts/runMe
 - 系统可执行的 `elegant`
 - 已安装并可运行的 EPICS Base / `softIoc`
 
-### 2. 修改本机相关配置
+### 2. 选择机器并检查本地运行依赖
+
+Control Room 会从 `configs/machines/` 发现可用机器，并根据所选 machine profile 判断应用、控制后端和模型后端是否可用。新增机器请从 `configs/machines/_template/` 开始，具体步骤见 [docs/ADD_SECOND_MACHINE.md](docs/ADD_SECOND_MACHINE.md)。
 
 如果只在控制室连接实机 IOC，不需要构建或启动本仓库的 `softIOC`，也不需要修改下面这些 IOC 构建配置。本机启动仓库 softIOC 前，需要按本机环境检查或修改：
 
@@ -115,6 +138,9 @@ bash scripts/start_vm.sh
 ## 文档导航
 
 - [AGENTS.md](AGENTS.md): 仓库级 agent 规则与标准命令
+- [docs/PLATFORM_POSITIONING.md](docs/PLATFORM_POSITIONING.md): 平台定位、边界、架构分层与历史命名策略
+- [configs/machines/README.md](configs/machines/README.md): machine profile 结构和配置职责
+- [docs/ADD_SECOND_MACHINE.md](docs/ADD_SECOND_MACHINE.md): 新机器接入的最小路径
 - [docs/SETUP_AND_RUN.md](docs/SETUP_AND_RUN.md): 安装、环境配置、运行方式
 - [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md): 历史开发记录
 - [docs/DISPERSION_CORRECTION.md](docs/DISPERSION_CORRECTION.md): 色散校正架构、运行边界与 commissioning 清单

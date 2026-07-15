@@ -1,6 +1,10 @@
 # Machine Profiles
 
-This directory contains runtime machine profiles. Each machine has one directory:
+This directory contains the machine distributions used by Accelerator HLA Platform. HALF,
+IRFEL, and future accelerators are peer machine profiles; the historical repository name
+`half_linac` does not limit the platform to HALF.
+
+Each machine has one directory:
 
 ```text
 configs/machines/<machine_id>/
