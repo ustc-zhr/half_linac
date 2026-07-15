@@ -83,7 +83,7 @@ Minimal shape:
 
 Source file:
 
-- [configs/machines/irfel/irfel_pvlist.json](/home/zhanghaoran/gitproj/half_linac/configs/machines/irfel/irfel_pvlist.json:1)
+- [configs/machines/irfel/references/control_system/irfel_pvlist.json](../configs/machines/irfel/references/control_system/irfel_pvlist.json)
 
 This file is not already in our machine-profile schema, but it contains enough structured
 information to build the first machine-profile version for IRFEL.
@@ -411,7 +411,7 @@ And it gives you a clean base for later adding:
 Use this exact order:
 
 1. Copy `_template` into `configs/machines/irfel/`
-2. Keep the raw PV list under `configs/machines/irfel/other/`
+2. Keep the raw PV list under `configs/machines/irfel/references/control_system/`
 3. Fill `machine.json` with the real-only orbit subset first:
    - BPMs
    - horizontal correctors

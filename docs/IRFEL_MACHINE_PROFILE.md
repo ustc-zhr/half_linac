@@ -12,10 +12,11 @@ and how they work together.
 - `control_backends/vm.json`
 - `apps/*.json`
 - `model_backends/simulation.elegant.json`
-- `other/irfel_pvlist.json`
+- `references/control_system/irfel_pvlist.json`
+- `references/README.md`
 
 The profile loader uses the first four groups plus `model_backends/*.json`.
-Files under `other/` are reference or migration material, not the primary
+Files under `references/` are source or migration material, not the primary
 runtime profile entrypoint.
 
 ## Machine Definition

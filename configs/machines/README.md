@@ -21,7 +21,10 @@ configs/machines/<machine_id>/
     virtual_machine.json
   model_backends/
     simulation.elegant.json
-  other/
+  references/
+    README.md
+    control_system/
+    epics_examples/
 ```
 
 `_template/` is the recommended starting point for a new machine. It is intentionally
@@ -115,7 +118,17 @@ For elegant backends, keep source assets and generated working files separate:
 - Generated files such as `emit.json`, `emit.lte`, `esa.json`, and `esa.lte`
   are runtime artifacts and should not be tracked.
 
-`other/` is for source references and migration material, not runtime profile data.
+`references/` is for machine-specific source references and migration material, not runtime
+profile data. Use `references/control_system/` for raw PV lists or interface documents supplied
+by a control-system group, and `references/epics_examples/` for IOC templates or substitutions
+kept only as implementation examples. Add a small `references/README.md` that records provenance,
+date, intended use, publication status, and which profile files were derived from each source.
+
+Raw control-system files may expose a complete PV topology, writable controls, engineering
+limits, or document metadata. Keep them ignored or in an access-controlled store unless their
+owner has approved publication. Do not make applications read Word, Excel, substitutions, or
+other reference files at runtime. The maintained runtime sources of truth remain `machine.json`,
+`control_backends/*.json`, `apps/*.json`, and `model_backends/*.json`.
 
 ## Legacy `profile.json`
 

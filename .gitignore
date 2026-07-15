@@ -29,7 +29,10 @@ gui_old.ui
 bo_state.json
 bo_record.json
 jitterfile_*.txt
-configs/machines/half/other/
+
+# Local control-system source material; keep the tracked provenance README only.
+configs/machines/half/references/control_system/
+configs/machines/half/references/epics_examples/
 src/apps/orbit_correct/runtime/
 src/apps/bba/runtime/
 src/apps/energy_spectrum/runtime/
