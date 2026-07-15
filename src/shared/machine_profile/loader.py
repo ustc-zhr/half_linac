@@ -1146,6 +1146,18 @@ def _validate_energy_spectrum_workflow(
                     f"required by workflows.energy_spectrum.{channel_key}."
                 )
 
+    auto_tune_objective = workflow.get("auto_tune_objective")
+    if auto_tune_objective is not None:
+        objective = _expect_non_empty_string(
+            auto_tune_objective,
+            "workflows.energy_spectrum.auto_tune_objective",
+        )
+        if objective not in {"find_beam", "center_x_reference"}:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_objective must be "
+                "'find_beam' or 'center_x_reference'."
+            )
+
     actuator_element = None
     auto_tune_actuator = workflow.get("auto_tune_actuator")
     if auto_tune_actuator is not None:

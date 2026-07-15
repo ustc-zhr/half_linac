@@ -1435,6 +1435,7 @@ class MachineProfileTests(unittest.TestCase):
             "IRFEL:AP:ENG:A3:ao",
         )
         self.assertEqual(workflow["auto_tune_control_backends"], ["real"])
+        self.assertEqual(workflow["auto_tune_objective"], "center_x_reference")
         self.assertEqual(workflow["auto_tune_actuator"]["element"], "ESA_ENERGY")
         self.assertEqual(workflow["auto_tune_actuator"]["unit"], "MeV")
         self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
@@ -1450,6 +1451,14 @@ class MachineProfileTests(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(MachineProfileError, "ESA_ENERGY limits"):
+            _validate_energy_spectrum_workflow(profile, workflow)
+
+    def test_energy_spectrum_rejects_unknown_auto_tune_objective(self):
+        profile = load_profile("irfel")
+        workflow = dict(get_workflow(profile, "energy_spectrum"))
+        workflow["auto_tune_objective"] = "unknown"
+
+        with self.assertRaisesRegex(MachineProfileError, "auto_tune_objective"):
             _validate_energy_spectrum_workflow(profile, workflow)
 
     def test_virtual_machine_segment_choices_fall_back_to_quad_and_flag_inference(self):

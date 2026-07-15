@@ -147,7 +147,11 @@ HALF bend-current calibration. Auto Find scans `ESA_ENERGY.setpoint` over the
 configured `0–65 MeV` range, so it preserves the coordinated BM03/QM19/QM20 control.
 The Target control reads A3 on startup, follows later A3 changes while it is not
 being edited, and supports `0.01 MeV` input. Auto Find exposes its range, coarse/fine
-point counts, and settling time in the GUI; Stop restores the pre-scan A3 value.
+point counts, settling time, and optimization objective in the GUI; Stop restores
+the pre-scan A3 value. IRFEL defaults to `Closest to x reference`: brightness and
+shape first confirm a valid beam, then the selected energy minimizes the beam-center
+distance to the calibrated `x_reference_mm`. The legacy highest-brightness objective
+remains available for comparison.
 
 ### `apps/dispersion_correction.json`
 

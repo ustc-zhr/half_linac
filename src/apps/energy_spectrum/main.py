@@ -29,6 +29,7 @@ from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QApplication,
+    QComboBox,
     QFileDialog,
     QFrame,
     QDoubleSpinBox,
@@ -49,7 +50,10 @@ from PyQt5.QtWidgets import (
 
 from gui import Ui_MainWindow
 from half_linac.src.apps.energy_spectrum.get_energy0 import select_reference_energy_mev
-from half_linac.src.apps.energy_spectrum.esa_auto_tuner import ESA_AutoTuner
+from half_linac.src.apps.energy_spectrum.esa_auto_tuner import (
+    ESA_AutoTuner,
+    reference_x_pixel,
+)
 from half_linac.src.apps.energy_spectrum.profile_runtime import (
     resolve_energy_spectrum_runtime_paths,
 )
@@ -565,6 +569,13 @@ class ESAAutoTuneThread(QThread):
                 restore_initial_on_failure=bool(self.bend_scan.get("restore_initial_on_failure", True)),
                 cancel_requested=self.isInterruptionRequested,
                 restore_initial_on_cancel=True,
+                mode=str(self.bend_scan.get("objective", "find_beam")),
+                target_x_pixel=float(
+                    self.bend_scan.get(
+                        "target_x_pixel",
+                        (self.flag_pixel[0] - 1) / 2.0,
+                    )
+                ),
             )
             best_current = tuner.run(
                 B_min=float(self.bend_scan.get("min", 0)),
@@ -578,6 +589,7 @@ class ESAAutoTuneThread(QThread):
                     "best_current": best_current,
                     "status": tuner.get_last_status(),
                     "initial_value": tuner.initial_current,
+                    "best_center_offset_pixel": tuner.best_center_offset_px,
                 }
             )
         except Exception as exc:
@@ -1204,6 +1216,24 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_coarse_steps_spin.setValue(int(scan_config.get("coarse_steps", 40)))
         self.auto_tune_fine_steps_spin.setValue(int(scan_config.get("fine_steps", 81)))
 
+        self.auto_tune_objective_combo = QComboBox(self.groupBox_8)
+        self.auto_tune_objective_combo.setObjectName("autoTuneObjectiveComboBox")
+        self.auto_tune_objective_combo.addItem(
+            f"Closest to x reference ({self.x_reference_mm:g} mm)",
+            "center_x_reference",
+        )
+        self.auto_tune_objective_combo.addItem("Highest brightness", "find_beam")
+        configured_objective = str(
+            self.energy_config.get("auto_tune_objective", "find_beam")
+        ).strip()
+        objective_index = self.auto_tune_objective_combo.findData(configured_objective)
+        if objective_index < 0:
+            raise MachineProfileError(
+                f"Unsupported energy-spectrum auto_tune_objective: {configured_objective!r}."
+            )
+        self.auto_tune_objective_combo.setCurrentIndex(objective_index)
+        self.auto_tune_objective_combo.setProperty("dense", True)
+
         self.auto_tune_settle_spin = QDoubleSpinBox(self.groupBox_8)
         self.auto_tune_settle_spin.setObjectName("autoTuneSettleTimeSpinBox")
         self.auto_tune_settle_spin.setDecimals(2)
@@ -1224,6 +1254,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             ("Coarse pts", self.auto_tune_coarse_steps_spin, 1, 0),
             ("Fine pts", self.auto_tune_fine_steps_spin, 1, 2),
             ("Settle", self.auto_tune_settle_spin, 2, 0),
+            ("Objective", self.auto_tune_objective_combo, 2, 2),
         )
         for text, widget, row, column in scan_fields:
             label = QLabel(text, self.groupBox_8)
@@ -1250,6 +1281,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_coarse_steps_spin,
             self.auto_tune_fine_steps_spin,
             self.auto_tune_settle_spin,
+            self.auto_tune_objective_combo,
         )
 
     def _initial_target_energy_mev(self):
@@ -1309,12 +1341,20 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "auto_tune_scan",
             self.energy_config.get("bend_scan", {}),
         )
+        objective = str(self.auto_tune_objective_combo.currentData())
+        target_x_pixel = reference_x_pixel(
+            self.x_reference_mm,
+            self.flag_pixel[0],
+            self.flag_pixel_width_mm,
+        )
         return {
             "min": minimum,
             "max": maximum,
             "coarse_steps": self.auto_tune_coarse_steps_spin.value(),
             "fine_steps": self.auto_tune_fine_steps_spin.value(),
             "settle_time_s": self.auto_tune_settle_spin.value(),
+            "objective": objective,
+            "target_x_pixel": target_x_pixel,
             "restore_initial_on_failure": bool(
                 configured.get("restore_initial_on_failure", True)
             ),
@@ -1548,6 +1588,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_coarse_steps_spin: "Auto Find coarse scan points",
             self.auto_tune_fine_steps_spin: "Auto Find fine scan points",
             self.auto_tune_settle_spin: "Auto Find settle time",
+            self.auto_tune_objective_combo: "Auto Find optimization objective",
             self.pushButton_autoFind: "Auto Find start button",
             self.pushButton_stopAutoFind: "Auto Find stop button",
             self.background_plot: "Background preview plot",
@@ -1606,7 +1647,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 color: {palette["input_fg"]};
             }}
         """
-        for combo in (self.comboBox_colormap, self.comboBox_fitmethod, self.comboBox_start_element):
+        for combo in (
+            self.comboBox_colormap,
+            self.comboBox_fitmethod,
+            self.comboBox_start_element,
+            self.auto_tune_objective_combo,
+        ):
             if not isinstance(combo.view(), QListView):
                 combo.setView(QListView(combo))
             combo.setPalette(qt_palette)
@@ -2061,6 +2107,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 "workflows.energy_spectrum.flag_pixel_width_mm",
             )
         )
+        self.flag_pixel_width_mm = flag_pixel_width
 
         self.flag_expotime_pv = None
         if self.control_backend == "real":
@@ -2753,7 +2800,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         current_text = (
             f"{float(current):.2f} {self.auto_tune_unit}" if current is not None else "--"
         )
-        suffix = " beam" if has_beam else " ..."
+        center_offset_pixel = payload.get("center_offset_pixel")
+        if has_beam and center_offset_pixel is not None:
+            center_offset_mm = float(center_offset_pixel) * self.flag_pixel_width_mm
+            suffix = f" dx={center_offset_mm:+.2f} mm"
+        else:
+            suffix = " beam" if has_beam else " ..."
         self._auto_tune_text = f"{prefix} {current_text}{suffix}"
         self._auto_tune_tone = "success" if has_beam else "warning"
         self._refresh_status()
@@ -2770,6 +2822,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 print(
                     f"[GUI] ESA auto-tuned to {best_current:.3f} {self.auto_tune_unit}"
                 )
+                center_offset_pixel = payload.get("best_center_offset_pixel")
+                if center_offset_pixel is not None:
+                    center_offset_mm = (
+                        float(center_offset_pixel) * self.flag_pixel_width_mm
+                    )
+                    print(
+                        "[GUI] Final beam-center offset from x_reference_mm: "
+                        f"{center_offset_mm:+.3f} mm"
+                    )
             else:
                 self._auto_tune_text = "Done"
                 self._auto_tune_tone = "success"

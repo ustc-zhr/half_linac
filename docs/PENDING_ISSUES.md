@@ -58,6 +58,8 @@
     writing BM03 directly, so BM03/QM19/QM20 remain under the existing linked control.
   - Operator feedback added precise `0.01 MeV` Target input, live A3 Target synchronization,
     editable Auto Find parameters, and a cooperative Stop action that restores the pre-scan A3 value.
+  - IRFEL Auto Find defaults to minimizing the beam-center distance from calibrated
+    `x_reference_mm`; the previous maximum-brightness objective remains selectable for comparison.
 - Problem:
   - The independent energy readback corresponding to the A3 setpoint still needs confirmation.
   - The scan workflow cannot be meaningfully validated in VM and must be treated as a real-machine commissioning item.

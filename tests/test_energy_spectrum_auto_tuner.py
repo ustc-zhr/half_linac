@@ -11,7 +11,10 @@ PARENT = REPO_ROOT.parent
 if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
-from half_linac.src.apps.energy_spectrum.esa_auto_tuner import ESA_AutoTuner
+from half_linac.src.apps.energy_spectrum.esa_auto_tuner import (
+    ESA_AutoTuner,
+    reference_x_pixel,
+)
 
 
 class _DummyPV:
@@ -46,7 +49,43 @@ class _FakeAutoTuner(ESA_AutoTuner):
         return True, score, self.current
 
 
+class _CenterObjectiveAutoTuner(ESA_AutoTuner):
+    def __init__(self):
+        super().__init__(
+            flag_pv_obj=_DummyPV(),
+            flag_pixel=(100, 100),
+            bend_pv="FAKE:ENERGY",
+            mode="center_x_reference",
+            target_x_pixel=59.5,
+        )
+        self.current = 5.0
+        self.visited = []
+
+    def _set_bend(self, current, *, allow_cancel=True):
+        self.current = float(current)
+        self.visited.append(self.current)
+
+    def _read_bend(self):
+        return self.current
+
+    def _get_flag_image(self):
+        image = np.zeros((100, 100))
+        center_x = int(round(self.current * 10.0))
+        if 5 <= center_x <= 94:
+            # Brightness peaks away from the calibrated x target on purpose.
+            amplitude = 200.0 - 5.0 * abs(self.current - 3.0)
+            image[45:55, center_x - 5:center_x + 5] = amplitude
+        return image
+
+
 class ESAAutoTunerTests(unittest.TestCase):
+    def test_reference_x_mm_maps_to_calibrated_pixel_coordinate(self):
+        self.assertAlmostEqual(reference_x_pixel(0.0, 1440, 0.02), 719.5)
+        self.assertAlmostEqual(
+            reference_x_pixel(1.0, 1440, 0.02),
+            (1.0 + 14.4) / 28.8 * 1439,
+        )
+
     def test_detect_beam_returns_consistent_triplet_when_no_beam(self):
         tuner = ESA_AutoTuner(
             flag_pv_obj=_DummyPV(),
@@ -124,6 +163,19 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertEqual(tuner.get_last_status(), "FAILED")
         self.assertAlmostEqual(tuner.current, 2.5)
         self.assertEqual(updates[-1]["stage"], "restore")
+
+    def test_center_objective_uses_x_reference_instead_of_peak_brightness(self):
+        tuner = _CenterObjectiveAutoTuner()
+
+        interval = tuner.coarse_scan(0, 10, n_steps=11)
+
+        self.assertEqual(interval, (5.0, 7.0))
+        self.assertEqual(tuner.visited[:11], list(np.linspace(0, 10, 11)))
+
+        best = tuner.run(0, 10, coarse_steps=11, fine_steps=21)
+
+        self.assertAlmostEqual(best, 6.0)
+        self.assertAlmostEqual(tuner.best_center_offset_px, 0.0)
 
 
 if __name__ == "__main__":

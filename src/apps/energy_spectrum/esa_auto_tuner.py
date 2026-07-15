@@ -1,11 +1,27 @@
 import time
 import numpy as np
 from skimage import measure
-from epics import caget, caput
+from epics import PV, caget, caput
 
 
 class ESAAutoTuneCancelled(RuntimeError):
     """Raised internally when an operator requests a cooperative scan stop."""
+
+
+def reference_x_pixel(x_reference_mm, nx, pixel_width_mm):
+    """Map calibrated screen x to the pixel convention used by spectrum fitting."""
+    nx = int(nx)
+    pixel_width_mm = float(pixel_width_mm)
+    if nx <= 0 or pixel_width_mm <= 0:
+        raise ValueError("Screen width and pixel width must be positive.")
+    x_reference_mm = float(x_reference_mm)
+    half_width_mm = nx * pixel_width_mm / 2.0
+    if not -half_width_mm <= x_reference_mm <= half_width_mm:
+        raise ValueError(
+            f"x_reference_mm={x_reference_mm:g} lies outside the screen range "
+            f"[-{half_width_mm:g}, {half_width_mm:g}] mm."
+        )
+    return (x_reference_mm + half_width_mm) / (2.0 * half_width_mm) * (nx - 1)
 
 
 class ESA_AutoTuner:
@@ -28,7 +44,8 @@ class ESA_AutoTuner:
                  settle_time_s=0.5,
                  restore_initial_on_failure=True,
                  cancel_requested=None,
-                 restore_initial_on_cancel=True):
+                 restore_initial_on_cancel=True,
+                 target_x_pixel=None):
         """
         Parameters
         ----------
@@ -43,7 +60,14 @@ class ESA_AutoTuner:
         self.flag_pixel = flag_pixel
         self.bend_pv = bend_pv
 
-        self.mode = mode   
+        self.mode = str(mode).strip()
+        if self.mode not in {"find_beam", "center_lock", "center_x_reference"}:
+            raise ValueError(f"Unsupported ESA auto-tune mode: {self.mode!r}.")
+        if target_x_pixel is None:
+            target_x_pixel = (self.flag_pixel[0] - 1) / 2.0
+        self.target_x_pixel = float(target_x_pixel)
+        if not 0 <= self.target_x_pixel <= self.flag_pixel[0] - 1:
+            raise ValueError("target_x_pixel must lie inside the flag image.")
         self.progress_callback = progress_callback
         self.remove_bg = remove_bg
         self.bg_image = bg_image
@@ -53,11 +77,9 @@ class ESA_AutoTuner:
         self.restore_initial_on_cancel = bool(restore_initial_on_cancel)
 
         self.best_current = None
+        self.best_center_offset_px = None
         self.initial_current = None
         self.status = "IDLE"
-
-        # parameters for center lock
-        self.center_sigma = 0.10 # (10% FLAG width)
 
     # ==========================================================
     # Low-level helpers
@@ -107,17 +129,19 @@ class ESA_AutoTuner:
 
         return img
 
-    def _report_progress(self, stage, current, *, has_beam, score=None):
+    def _report_progress(self, stage, current, *, has_beam, score=None, cx=None):
         if self.progress_callback is None:
             return
-        self.progress_callback(
-            {
-                "stage": stage,
-                "current": float(current),
-                "has_beam": bool(has_beam),
-                "score": None if score is None else float(score),
-            }
-        )
+        payload = {
+            "stage": stage,
+            "current": float(current),
+            "has_beam": bool(has_beam),
+            "score": None if score is None else float(score),
+        }
+        if cx is not None:
+            payload["center_x_pixel"] = float(cx)
+            payload["center_offset_pixel"] = float(cx - self.target_x_pixel)
+        self.progress_callback(payload)
 
     def _detect_beam(self, img):
         """
@@ -162,11 +186,10 @@ class ESA_AutoTuner:
         # -----------------------------
         # scoring
         # -----------------------------
-        if self.mode == "center_lock":
-            x0 = self.flag_pixel[0] / 2
-            dx = abs(cx - x0) / x0
-            penalty = np.exp(-(dx / self.center_sigma) ** 2)
-            score = raw_score * penalty
+        if self.mode in {"center_lock", "center_x_reference"}:
+            # Beam brightness/shape determines whether this is a valid beam.
+            # Once valid, distance to the calibrated target is the primary objective.
+            score = -abs(cx - self.target_x_pixel)
         else:
             score = raw_score
 
@@ -178,24 +201,36 @@ class ESA_AutoTuner:
     def coarse_scan(self, B_min, B_max, n_steps=40):
         self.status = "COARSE_SCAN"
         hits = []
+        scan_values = np.linspace(B_min, B_max, n_steps)
 
-        for B in np.linspace(B_min, B_max, n_steps):
+        for B in scan_values:
             self._raise_if_cancelled()
             self._set_bend(B)
             img = self._get_flag_image()
             self._raise_if_cancelled()
-            has_beam, score, _ = self._detect_beam(img)
-            self._report_progress("coarse", B, has_beam=has_beam, score=score)
+            has_beam, score, cx = self._detect_beam(img)
+            self._report_progress(
+                "coarse", B, has_beam=has_beam, score=score, cx=cx
+            )
 
             if has_beam:
-                hits.append(B)
-                if len(hits) >= 3:
+                hits.append((float(B), float(score)))
+                if self.mode == "find_beam" and len(hits) >= 3:
                     break
 
         if not hits:
             return None
 
-        return min(hits), max(hits)
+        if self.mode in {"center_lock", "center_x_reference"}:
+            best_coarse = max(hits, key=lambda item: item[1])[0]
+            coarse_step = abs(float(scan_values[1]) - float(scan_values[0]))
+            return (
+                max(float(B_min), best_coarse - coarse_step),
+                min(float(B_max), best_coarse + coarse_step),
+            )
+
+        hit_values = [item[0] for item in hits]
+        return min(hit_values), max(hit_values)
 
     def fine_scan(self, B1, B2, n_steps=15):
         self.status = "FINE_SCAN"
@@ -207,22 +242,28 @@ class ESA_AutoTuner:
             self._set_bend(B)
 
             scores = []
+            centers = []
             for _ in range(3):  # median over 3 pulses
                 img = self._get_flag_image()
                 self._raise_if_cancelled()
-                has_beam, score, _ = self._detect_beam(img)
+                has_beam, score, cx = self._detect_beam(img)
                 if has_beam:
                     scores.append(score)
+                    centers.append(cx)
 
             if not scores:
                 self._report_progress("fine", B, has_beam=False, score=None)
                 continue
 
             score_med = np.median(scores)
-            self._report_progress("fine", B, has_beam=True, score=score_med)
+            center_med = np.median(centers)
+            self._report_progress(
+                "fine", B, has_beam=True, score=score_med, cx=center_med
+            )
             if score_med > best_score:
                 best_score = score_med
                 best_B = B
+                self.best_center_offset_px = float(center_med - self.target_x_pixel)
 
         return best_B
 
@@ -304,6 +345,22 @@ if __name__=='__main__':
             "workflows.energy_spectrum.flag_pixel_shape must provide [nx, ny] for the selected backend."
         )
     flag_pv = resolve_channel(profile, flag_element, flag_channel, preferred_backend)
+    pixel_width_config = workflow.get("flag_pixel_width_mm", {})
+    if isinstance(pixel_width_config, dict):
+        pixel_width_mm = float(pixel_width_config[preferred_backend])
+    else:
+        pixel_width_mm = float(pixel_width_config)
+    x_reference_config = workflow.get("x_reference_mm", 0.0)
+    if isinstance(x_reference_config, dict):
+        x_reference_mm = float(x_reference_config.get(preferred_backend, 0.0))
+    else:
+        x_reference_mm = float(x_reference_config)
+    objective = str(workflow.get("auto_tune_objective", "find_beam"))
+    target_x_pixel = reference_x_pixel(
+        x_reference_mm,
+        int(flag_pixel_machine[0]),
+        pixel_width_mm,
+    )
     enabled_backends = workflow.get("auto_tune_control_backends")
     if enabled_backends is not None and preferred_backend not in enabled_backends:
         raise RuntimeError(
@@ -333,9 +390,11 @@ if __name__=='__main__':
         actuator_unit = "A"
         scan = workflow.get("bend_scan", {})
     esa_tuner = ESA_AutoTuner(
-        flag_pv_obj=flag_pv,
+        flag_pv_obj=PV(flag_pv),
         flag_pixel=flag_pixel_machine,
         bend_pv=bend_pv,
+        mode=objective,
+        target_x_pixel=target_x_pixel,
         remove_bg=False,
         bg_image=None
     )

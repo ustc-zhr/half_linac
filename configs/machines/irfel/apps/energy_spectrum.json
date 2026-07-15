@@ -21,6 +21,7 @@
     "unit": "MeV"
   },
   "auto_tune_control_backends": ["real"],
+  "auto_tune_objective": "center_x_reference",
   "model_backend": "simulation",
   "twiss_target_element": "PRFESA",
   "auto_tune_scan": {
