@@ -1439,6 +1439,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["auto_tune_actuator"]["unit"], "MeV")
         self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
         self.assertEqual(workflow["auto_tune_scan"]["max"], 65)
+        self.assertEqual(workflow["auto_tune_scan"]["fine_steps"], 81)
 
     def test_energy_spectrum_auto_tune_scan_cannot_exceed_actuator_limits(self):
         profile = load_profile("irfel")

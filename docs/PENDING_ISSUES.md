@@ -56,6 +56,8 @@
     to `IRFEL:AP:ENG:A3:ao`; it is used as the target-energy setpoint and reference energy.
   - Real-mode Auto Find scans the coordinated energy element over `0–65 MeV`, rather than
     writing BM03 directly, so BM03/QM19/QM20 remain under the existing linked control.
+  - Operator feedback added precise `0.01 MeV` Target input, live A3 Target synchronization,
+    editable Auto Find parameters, and a cooperative Stop action that restores the pre-scan A3 value.
 - Problem:
   - The independent energy readback corresponding to the A3 setpoint still needs confirmation.
   - The scan workflow cannot be meaningfully validated in VM and must be treated as a real-machine commissioning item.

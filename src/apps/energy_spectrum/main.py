@@ -31,6 +31,7 @@ from PyQt5.QtWidgets import (
     QApplication,
     QFileDialog,
     QFrame,
+    QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -38,7 +39,9 @@ from PyQt5.QtWidgets import (
     QListView,
     QMainWindow,
     QMessageBox,
+    QPushButton,
     QSizePolicy,
+    QSpinBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -278,7 +281,7 @@ QPushButton[tight="true"] {{
     font-size: 11px;
 }}
 
-QLineEdit, QComboBox, QDoubleSpinBox {{
+QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox {{
     background-color: {input_bg};
     border: 1px solid {input_border};
     border-radius: 10px;
@@ -288,7 +291,7 @@ QLineEdit, QComboBox, QDoubleSpinBox {{
     selection-background-color: {metric_active_fg};
 }}
 
-QLineEdit[dense="true"], QComboBox[dense="true"], QDoubleSpinBox[dense="true"] {{
+QLineEdit[dense="true"], QComboBox[dense="true"], QDoubleSpinBox[dense="true"], QSpinBox[dense="true"] {{
     padding: 5px 8px;
     min-height: 14px;
     font-size: 11px;
@@ -560,18 +563,21 @@ class ESAAutoTuneThread(QThread):
                 bg_image=self.bg_image,
                 settle_time_s=float(self.bend_scan.get("settle_time_s", 0.5)),
                 restore_initial_on_failure=bool(self.bend_scan.get("restore_initial_on_failure", True)),
+                cancel_requested=self.isInterruptionRequested,
+                restore_initial_on_cancel=True,
             )
             best_current = tuner.run(
                 B_min=float(self.bend_scan.get("min", 0)),
                 B_max=float(self.bend_scan.get("max", 200)),
                 coarse_steps=int(self.bend_scan.get("coarse_steps", 40)),
-                fine_steps=int(self.bend_scan.get("fine_steps", 15)),
+                fine_steps=int(self.bend_scan.get("fine_steps", 81)),
             )
             self.trigger.emit(
                 {
                     "ok": best_current is not None,
                     "best_current": best_current,
                     "status": tuner.get_last_status(),
+                    "initial_value": tuner.initial_current,
                 }
             )
         except Exception as exc:
@@ -847,6 +853,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             source_pv = self.bend_readback_pv
         elif self.energy_reference_pv or bend_conversion is not None:
             print(f"Using configured default reference energy {default_energy:g} MeV.")
+        if (
+            source == "reference_pv"
+            and hasattr(self, "target_energy_spin")
+            and not self._auto_tune_is_running()
+            and not self.slider_energy.isSliderDown()
+            and not self.target_energy_spin.hasFocus()
+        ):
+            self._set_target_energy_control(energy)
         return energy, source, source_pv
 
     def _auto_tune_configured_for_backend(self):
@@ -1130,6 +1144,182 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.groupBox_8.setTitle("Energy Tuning")
         self.groupBox_7.setTitle("Background Reference")
 
+    def _configure_energy_tuning_controls(self):
+        self._energy_slider_scale = 100  # 0.01 MeV per slider count.
+
+        if self.energy_set_limits is not None:
+            energy_low, energy_high = self.energy_set_limits
+        else:
+            energy_low = self.slider_energy.minimum()
+            energy_high = self.slider_energy.maximum()
+
+        self.slider_energy.setRange(
+            math.ceil(energy_low * self._energy_slider_scale),
+            math.floor(energy_high * self._energy_slider_scale),
+        )
+        self.slider_energy.setSingleStep(1)
+        self.slider_energy.setPageStep(100)
+
+        self.target_energy_spin = QDoubleSpinBox(self.groupBox_8)
+        self.target_energy_spin.setObjectName("targetEnergySpinBox")
+        self.target_energy_spin.setDecimals(2)
+        self.target_energy_spin.setSingleStep(0.01)
+        self.target_energy_spin.setRange(energy_low, energy_high)
+        self.target_energy_spin.setSuffix(" MeV")
+        self.target_energy_spin.setKeyboardTracking(False)
+        self.target_energy_spin.setProperty("dense", True)
+
+        self.gridLayout_6.removeWidget(self.label_sliderenergy)
+        self.label_sliderenergy.hide()
+        self.gridLayout_6.addWidget(self.target_energy_spin, 0, 2)
+
+        scan_config = dict(
+            self.energy_config.get(
+                "auto_tune_scan",
+                self.energy_config.get("bend_scan", {}),
+            )
+        )
+        self.auto_tune_min_spin = QDoubleSpinBox(self.groupBox_8)
+        self.auto_tune_max_spin = QDoubleSpinBox(self.groupBox_8)
+        for spin in (self.auto_tune_min_spin, self.auto_tune_max_spin):
+            spin.setDecimals(2)
+            spin.setSingleStep(0.1)
+            spin.setRange(energy_low, energy_high)
+            spin.setSuffix(f" {self.auto_tune_unit}")
+            spin.setKeyboardTracking(False)
+            spin.setProperty("dense", True)
+        self.auto_tune_min_spin.setObjectName("autoTuneMinimumSpinBox")
+        self.auto_tune_max_spin.setObjectName("autoTuneMaximumSpinBox")
+        self.auto_tune_min_spin.setValue(float(scan_config.get("min", energy_low)))
+        self.auto_tune_max_spin.setValue(float(scan_config.get("max", energy_high)))
+
+        self.auto_tune_coarse_steps_spin = QSpinBox(self.groupBox_8)
+        self.auto_tune_fine_steps_spin = QSpinBox(self.groupBox_8)
+        for spin in (self.auto_tune_coarse_steps_spin, self.auto_tune_fine_steps_spin):
+            spin.setRange(2, 2000)
+            spin.setKeyboardTracking(False)
+            spin.setProperty("dense", True)
+        self.auto_tune_coarse_steps_spin.setObjectName("autoTuneCoarseStepsSpinBox")
+        self.auto_tune_fine_steps_spin.setObjectName("autoTuneFineStepsSpinBox")
+        self.auto_tune_coarse_steps_spin.setValue(int(scan_config.get("coarse_steps", 40)))
+        self.auto_tune_fine_steps_spin.setValue(int(scan_config.get("fine_steps", 81)))
+
+        self.auto_tune_settle_spin = QDoubleSpinBox(self.groupBox_8)
+        self.auto_tune_settle_spin.setObjectName("autoTuneSettleTimeSpinBox")
+        self.auto_tune_settle_spin.setDecimals(2)
+        self.auto_tune_settle_spin.setSingleStep(0.05)
+        self.auto_tune_settle_spin.setRange(0.0, 60.0)
+        self.auto_tune_settle_spin.setSuffix(" s")
+        self.auto_tune_settle_spin.setKeyboardTracking(False)
+        self.auto_tune_settle_spin.setProperty("dense", True)
+        self.auto_tune_settle_spin.setValue(float(scan_config.get("settle_time_s", 0.5)))
+
+        scan_layout = QGridLayout()
+        scan_layout.setContentsMargins(0, 0, 0, 0)
+        scan_layout.setHorizontalSpacing(7)
+        scan_layout.setVerticalSpacing(5)
+        scan_fields = (
+            ("Min", self.auto_tune_min_spin, 0, 0),
+            ("Max", self.auto_tune_max_spin, 0, 2),
+            ("Coarse pts", self.auto_tune_coarse_steps_spin, 1, 0),
+            ("Fine pts", self.auto_tune_fine_steps_spin, 1, 2),
+            ("Settle", self.auto_tune_settle_spin, 2, 0),
+        )
+        for text, widget, row, column in scan_fields:
+            label = QLabel(text, self.groupBox_8)
+            label.setProperty("role", "field")
+            scan_layout.addWidget(label, row, column)
+            scan_layout.addWidget(widget, row, column + 1)
+        scan_layout.setColumnStretch(1, 1)
+        scan_layout.setColumnStretch(3, 1)
+
+        self.pushButton_stopAutoFind = QPushButton("Stop", self.groupBox_8)
+        self.pushButton_stopAutoFind.setObjectName("pushButton_stopAutoFind")
+        button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(7)
+        self.verticalLayout_14.removeWidget(self.pushButton_autoFind)
+        button_layout.addWidget(self.pushButton_autoFind, 1)
+        button_layout.addWidget(self.pushButton_stopAutoFind, 1)
+        self.verticalLayout_14.addLayout(scan_layout)
+        self.verticalLayout_14.addLayout(button_layout)
+
+        self.auto_tune_parameter_widgets = (
+            self.auto_tune_min_spin,
+            self.auto_tune_max_spin,
+            self.auto_tune_coarse_steps_spin,
+            self.auto_tune_fine_steps_spin,
+            self.auto_tune_settle_spin,
+        )
+
+    def _initial_target_energy_mev(self):
+        fallback = float(self.energy_config.get("energy0_default_mev", 2200))
+        if self.control_backend != "real":
+            return fallback
+
+        source_pv = self.energy_set_pv or self.energy_reference_pv
+        if not source_pv:
+            return fallback
+        try:
+            value = caget(source_pv)
+            energy = float(value)
+        except Exception as exc:
+            print(f"Could not initialize Target from {source_pv}: {exc}")
+            return fallback
+        if not np.isfinite(energy):
+            print(f"Could not initialize Target from non-finite value on {source_pv}.")
+            return fallback
+        if self.energy_set_limits is not None:
+            low, high = self.energy_set_limits
+            if not low <= energy <= high:
+                print(
+                    f"Ignoring out-of-range Target value {energy:g} MeV from {source_pv}; "
+                    f"expected [{low:g}, {high:g}] MeV."
+                )
+                return fallback
+        print(f"Initialized Target to {energy:.2f} MeV from {source_pv}.")
+        return energy
+
+    def _set_target_energy_control(self, energy_mev):
+        energy = float(energy_mev)
+        energy = min(max(energy, self.target_energy_spin.minimum()), self.target_energy_spin.maximum())
+        slider_value = int(round(energy * self._energy_slider_scale))
+        slider_value = min(max(slider_value, self.slider_energy.minimum()), self.slider_energy.maximum())
+        slider_was_blocked = self.slider_energy.blockSignals(True)
+        spin_was_blocked = self.target_energy_spin.blockSignals(True)
+        try:
+            self.slider_energy.setValue(slider_value)
+            self.target_energy_spin.setValue(energy)
+        finally:
+            self.slider_energy.blockSignals(slider_was_blocked)
+            self.target_energy_spin.blockSignals(spin_was_blocked)
+
+    def _current_auto_tune_scan(self):
+        minimum = self.auto_tune_min_spin.value()
+        maximum = self.auto_tune_max_spin.value()
+        if minimum >= maximum:
+            raise ValueError("Auto Find minimum energy must be less than maximum energy.")
+        if self.energy_set_limits is not None:
+            low, high = self.energy_set_limits
+            if minimum < low or maximum > high:
+                raise ValueError(
+                    f"Auto Find range must stay within [{low:g}, {high:g}] MeV."
+                )
+        configured = self.energy_config.get(
+            "auto_tune_scan",
+            self.energy_config.get("bend_scan", {}),
+        )
+        return {
+            "min": minimum,
+            "max": maximum,
+            "coarse_steps": self.auto_tune_coarse_steps_spin.value(),
+            "fine_steps": self.auto_tune_fine_steps_spin.value(),
+            "settle_time_s": self.auto_tune_settle_spin.value(),
+            "restore_initial_on_failure": bool(
+                configured.get("restore_initial_on_failure", True)
+            ),
+        }
+
     def _configure_workspace_content(self):
         self.label.setText("Exposure (s)")
         self.label_2.setText("Colormap")
@@ -1148,6 +1338,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.pushButton_load.setText("Load BG")
         self.checkBox_emit.setText("Subtract emit")
         self.checkBox_bg.setText("Subtract background")
+        self._configure_energy_tuning_controls()
         self._name_operator_controls()
 
         for label in (
@@ -1263,25 +1454,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             if index >= 0:
                 self.comboBox_start_element.setCurrentIndex(index)
 
-        if self.energy_set_limits is not None:
-            low, high = self.energy_set_limits
-            self.slider_energy.setRange(math.ceil(low), math.floor(high))
-        default_energy = int(round(float(self.energy_config.get("energy0_default_mev", 2200))))
-        default_energy = min(
-            max(default_energy, self.slider_energy.minimum()),
-            self.slider_energy.maximum(),
-        )
-        self.slider_energy.setValue(default_energy)
-        self._update_energy_slider_label(default_energy)
+        self._set_target_energy_control(self._initial_target_energy_mev())
         self._sync_energy_control_state()
 
         self.pushButton_cal_disp.setProperty("compact", True)
         self.pushButton_cal_twiss_disp.setProperty("compact", True)
         self.pushButton_autoFind.setProperty("compact", True)
+        self.pushButton_stopAutoFind.setProperty("compact", True)
         for button in (
             self.pushButton_cal_disp,
             self.pushButton_cal_twiss_disp,
             self.pushButton_autoFind,
+            self.pushButton_stopAutoFind,
             self.pushButton_sample_bg,
             self.pushButton_save,
             self.pushButton_load,
@@ -1327,7 +1511,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         self.slider_energy.valueChanged.connect(self._update_energy_slider_label)
         self.slider_energy.sliderReleased.connect(self.set_bend_quad)
+        self.target_energy_spin.valueChanged.connect(self._update_energy_slider_from_spin)
+        self.target_energy_spin.editingFinished.connect(self.set_bend_quad)
         self.pushButton_autoFind.clicked.connect(self.run_esa_auto_tune)
+        self.pushButton_stopAutoFind.clicked.connect(self.stop_esa_auto_tune)
 
     def _name_operator_controls(self):
         self.pushButton_sample_bg.setObjectName("pushButton_sample_bg")
@@ -1354,8 +1541,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.pushButton_cal_disp: "Update dispersion button",
             self.pushButton_cal_twiss_disp: "Update optics button",
             self.slider_energy: "Target energy slider",
+            self.target_energy_spin: "Target energy precise input",
             self.label_sliderenergy: "Target energy value",
-            self.pushButton_autoFind: "Bend scan button",
+            self.auto_tune_min_spin: "Auto Find minimum energy",
+            self.auto_tune_max_spin: "Auto Find maximum energy",
+            self.auto_tune_coarse_steps_spin: "Auto Find coarse scan points",
+            self.auto_tune_fine_steps_spin: "Auto Find fine scan points",
+            self.auto_tune_settle_spin: "Auto Find settle time",
+            self.pushButton_autoFind: "Auto Find start button",
+            self.pushButton_stopAutoFind: "Auto Find stop button",
             self.background_plot: "Background preview plot",
             self.lineEdit_samples: "Background sample count input",
             self.pushButton_sample_bg: "Sample background button",
@@ -1444,6 +1638,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             and writes_allowed
         )
         self.slider_energy.setEnabled(slider_enabled)
+        self.target_energy_spin.setEnabled(slider_enabled)
         if self._auto_tune_is_running():
             self.slider_energy.setToolTip("Disabled while bend scan is running.")
         elif slider_enabled:
@@ -1454,6 +1649,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.slider_energy.setToolTip("VM backend does not support direct energy setpoint control.")
         else:
             self.slider_energy.setToolTip("No energy_set_pv configured for the real backend.")
+        self.target_energy_spin.setToolTip(self.slider_energy.toolTip())
 
         auto_tune_enabled = (
             self.control_backend == "real"
@@ -1462,6 +1658,19 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             and self._auto_tune_configured_for_backend()
         )
         self.pushButton_autoFind.setEnabled(auto_tune_enabled)
+        scan_running = self._auto_tune_is_running()
+        for widget in self.auto_tune_parameter_widgets:
+            widget.setEnabled(not scan_running)
+        stop_requested = (
+            scan_running
+            and self.auto_tune_thread is not None
+            and self.auto_tune_thread.isInterruptionRequested()
+        )
+        self.pushButton_stopAutoFind.setEnabled(scan_running and not stop_requested)
+        self.pushButton_stopAutoFind.setText("Stopping..." if stop_requested else "Stop")
+        self.pushButton_stopAutoFind.setToolTip(
+            "Stop scanning and restore the energy that was active before Auto Find."
+        )
         if self._auto_tune_is_running():
             self.pushButton_autoFind.setText("Scanning...")
             self.pushButton_autoFind.setToolTip("Auto Find is scanning the configured ESA actuator.")
@@ -2389,15 +2598,30 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.ESA_running()
 
     def _update_energy_slider_label(self, value):
-        self.label_sliderenergy.setText(str(int(value)))
+        energy = float(value) / self._energy_slider_scale
+        spin_was_blocked = self.target_energy_spin.blockSignals(True)
+        try:
+            self.target_energy_spin.setValue(energy)
+        finally:
+            self.target_energy_spin.blockSignals(spin_was_blocked)
+        self.label_sliderenergy.setText(f"{energy:.2f}")
+
+    def _update_energy_slider_from_spin(self, value):
+        slider_value = int(round(float(value) * self._energy_slider_scale))
+        slider_value = min(max(slider_value, self.slider_energy.minimum()), self.slider_energy.maximum())
+        slider_was_blocked = self.slider_energy.blockSignals(True)
+        try:
+            self.slider_energy.setValue(slider_value)
+        finally:
+            self.slider_energy.blockSignals(slider_was_blocked)
 
     def set_bend_quad(self):
         """
         update the energy0 value according to slider position
         这里energy0是由ESA的弯铁强度决定的
         """
-        slider_value = self.slider_energy.value()
-        self._update_energy_slider_label(slider_value)
+        target_energy = self.target_energy_spin.value()
+        self._set_target_energy_control(target_energy)
         if self.control_backend != "real":
             return
         if not self.energy_set_pv:
@@ -2405,9 +2629,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
         if self.energy_set_limits is not None:
             low, high = self.energy_set_limits
-            if not low <= slider_value <= high:
+            if not low <= target_energy <= high:
                 self._warn(
-                    f"Target energy {slider_value:g} MeV is outside the configured "
+                    f"Target energy {target_energy:g} MeV is outside the configured "
                     f"range [{low:g}, {high:g}] MeV."
                 )
                 return
@@ -2419,12 +2643,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
 
         try:
-            caput(self.energy_set_pv, float(slider_value))
-            print(f"ESA target energy set to {slider_value} MeV via {self.energy_set_pv}")
+            caput(self.energy_set_pv, float(target_energy))
+            print(f"ESA target energy set to {target_energy:.2f} MeV via {self.energy_set_pv}")
         except Exception as exc:
             self._mark_pv_unavailable(exc)
             self._refresh_status()
             print(f"Failed to write ESA target energy: {exc}")
+
+    def stop_esa_auto_tune(self):
+        if not self._auto_tune_is_running():
+            return
+        self.auto_tune_thread.requestInterruption()
+        self._auto_tune_text = "Stopping"
+        self._auto_tune_tone = "warning"
+        self._sync_energy_control_state()
+        self._refresh_status()
 
     def run_esa_auto_tune(self):
         if self.control_backend != "real":
@@ -2444,6 +2677,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
         if self._auto_tune_is_running():
             print("ESA auto tune is already running.")
+            return
+        try:
+            bend_scan = self._current_auto_tune_scan()
+        except ValueError as exc:
+            self._warn(str(exc))
             return
 
         # 暂停定时刷新，防止抢 PV
@@ -2468,12 +2706,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 return
             self._mark_pv_available()
 
-            bend_scan = dict(
-                self.energy_config.get(
-                    "auto_tune_scan",
-                    self.energy_config.get("bend_scan", {}),
-                )
-            )
             self.auto_tune_thread = ESAAutoTuneThread(
                 flag_pv_obj=self.flag_pv_obj,
                 flag_pixel=self.flag_pixel,
@@ -2517,7 +2749,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             prefix = "Scan"
 
         current_text = (
-            f"{float(current):.1f} {self.auto_tune_unit}" if current is not None else "--"
+            f"{float(current):.2f} {self.auto_tune_unit}" if current is not None else "--"
         )
         suffix = " beam" if has_beam else " ..."
         self._auto_tune_text = f"{prefix} {current_text}{suffix}"
@@ -2530,7 +2762,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if payload.get("ok"):
             best_current = payload.get("best_current")
             if best_current is not None:
-                self._auto_tune_text = f"{best_current:.1f} {self.auto_tune_unit}"
+                self._set_target_energy_control(best_current)
+                self._auto_tune_text = f"{best_current:.2f} {self.auto_tune_unit}"
                 self._auto_tune_tone = "success"
                 print(
                     f"[GUI] ESA auto-tuned to {best_current:.3f} {self.auto_tune_unit}"
@@ -2541,11 +2774,20 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         else:
             error_text = payload.get("error")
             status_text = payload.get("status", "FAILED")
-            self._auto_tune_text = "Failed"
-            self._auto_tune_tone = "warning"
-            if error_text:
+            if status_text == "CANCELLED":
+                initial_value = payload.get("initial_value")
+                if initial_value is not None:
+                    self._set_target_energy_control(initial_value)
+                self._auto_tune_text = "Stopped"
+                self._auto_tune_tone = "subtle"
+                print("[GUI] ESA auto tune stopped; initial energy restored.")
+            elif error_text:
+                self._auto_tune_text = "Failed"
+                self._auto_tune_tone = "warning"
                 print(f"ESA auto tune failed: {error_text}")
             else:
+                self._auto_tune_text = "Failed"
+                self._auto_tune_tone = "warning"
                 print(f"[GUI] ESA auto tune failed ({status_text}).")
         self._refresh_status()
 

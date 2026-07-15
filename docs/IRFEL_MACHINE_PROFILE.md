@@ -145,6 +145,9 @@ Defines the energy spectrum workflow:
 IRFEL real mode uses the coordinated A3 energy control instead of applying the
 HALF bend-current calibration. Auto Find scans `ESA_ENERGY.setpoint` over the
 configured `0–65 MeV` range, so it preserves the coordinated BM03/QM19/QM20 control.
+The Target control reads A3 on startup, follows later A3 changes while it is not
+being edited, and supports `0.01 MeV` input. Auto Find exposes its range, coarse/fine
+point counts, and settling time in the GUI; Stop restores the pre-scan A3 value.
 
 ### `apps/dispersion_correction.json`
 

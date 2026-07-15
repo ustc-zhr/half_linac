@@ -27,7 +27,7 @@
     "min": 0,
     "max": 65,
     "coarse_steps": 40,
-    "fine_steps": 15,
+    "fine_steps": 81,
     "settle_time_s": 1,
     "restore_initial_on_failure": true
   },

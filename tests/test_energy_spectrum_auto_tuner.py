@@ -20,16 +20,17 @@ class _DummyPV:
 
 
 class _FakeAutoTuner(ESA_AutoTuner):
-    def __init__(self, progress_callback=None):
+    def __init__(self, progress_callback=None, cancel_requested=None):
         super().__init__(
             flag_pv_obj=_DummyPV(),
             flag_pixel=(10, 10),
             bend_pv="FAKE:BEND",
             progress_callback=progress_callback,
+            cancel_requested=cancel_requested,
         )
         self.current = None
 
-    def _set_bend(self, current):
+    def _set_bend(self, current, *, allow_cancel=True):
         self.current = float(current)
 
     def _read_bend(self):
@@ -66,6 +67,7 @@ class ESAAutoTunerTests(unittest.TestCase):
 
     def test_run_returns_best_current_and_marks_done(self):
         tuner = _FakeAutoTuner()
+        tuner.current = 2.0
         best = tuner.run(0, 10, coarse_steps=11, fine_steps=9)
         self.assertAlmostEqual(best, 4.0)
         self.assertAlmostEqual(tuner.get_best_current(), 4.0)
@@ -74,12 +76,54 @@ class ESAAutoTunerTests(unittest.TestCase):
     def test_progress_callback_receives_scan_updates(self):
         updates = []
         tuner = _FakeAutoTuner(progress_callback=updates.append)
+        tuner.current = 2.0
         best = tuner.run(0, 10, coarse_steps=11, fine_steps=9)
 
         self.assertAlmostEqual(best, 4.0)
         self.assertGreaterEqual(len(updates), 2)
         self.assertEqual(updates[0]["stage"], "coarse")
         self.assertIn(updates[-1]["stage"], {"final", "fine"})
+
+    def test_operator_cancel_restores_initial_value(self):
+        updates = []
+        tuner = _FakeAutoTuner(
+            progress_callback=updates.append,
+            cancel_requested=lambda: True,
+        )
+        tuner.current = 4.25
+
+        best = tuner.run(0, 10, coarse_steps=11, fine_steps=9)
+
+        self.assertIsNone(best)
+        self.assertEqual(tuner.get_last_status(), "CANCELLED")
+        self.assertAlmostEqual(tuner.current, 4.25)
+        self.assertEqual(updates[-1]["stage"], "restore")
+
+    def test_scan_does_not_start_without_restorable_initial_value(self):
+        tuner = _FakeAutoTuner()
+
+        best = tuner.run(0, 10, coarse_steps=11, fine_steps=9)
+
+        self.assertIsNone(best)
+        self.assertEqual(tuner.get_last_status(), "FAILED")
+        self.assertIsNone(tuner.current)
+
+    def test_scan_error_restores_initial_value(self):
+        updates = []
+        tuner = _FakeAutoTuner(progress_callback=updates.append)
+        tuner.current = 2.5
+
+        def fail_image_read():
+            raise RuntimeError("camera unavailable")
+
+        tuner._get_flag_image = fail_image_read
+
+        with self.assertRaisesRegex(RuntimeError, "camera unavailable"):
+            tuner.run(0, 10, coarse_steps=11, fine_steps=9)
+
+        self.assertEqual(tuner.get_last_status(), "FAILED")
+        self.assertAlmostEqual(tuner.current, 2.5)
+        self.assertEqual(updates[-1]["stage"], "restore")
 
 
 if __name__ == "__main__":

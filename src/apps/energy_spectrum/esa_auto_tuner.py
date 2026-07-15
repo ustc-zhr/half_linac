@@ -4,6 +4,10 @@ from skimage import measure
 from epics import caget, caput
 
 
+class ESAAutoTuneCancelled(RuntimeError):
+    """Raised internally when an operator requests a cooperative scan stop."""
+
+
 class ESA_AutoTuner:
     """
     ESA automatic energy tuning module
@@ -22,7 +26,9 @@ class ESA_AutoTuner:
                  remove_bg=False,
                  bg_image=None,
                  settle_time_s=0.5,
-                 restore_initial_on_failure=True):
+                 restore_initial_on_failure=True,
+                 cancel_requested=None,
+                 restore_initial_on_cancel=True):
         """
         Parameters
         ----------
@@ -43,6 +49,8 @@ class ESA_AutoTuner:
         self.bg_image = bg_image
         self.settle_time_s = float(settle_time_s)
         self.restore_initial_on_failure = bool(restore_initial_on_failure)
+        self.cancel_requested = cancel_requested
+        self.restore_initial_on_cancel = bool(restore_initial_on_cancel)
 
         self.best_current = None
         self.initial_current = None
@@ -54,9 +62,25 @@ class ESA_AutoTuner:
     # ==========================================================
     # Low-level helpers
     # ==========================================================
-    def _set_bend(self, current):
+    def _raise_if_cancelled(self):
+        if self.cancel_requested is not None and self.cancel_requested():
+            raise ESAAutoTuneCancelled("ESA auto tune stopped by operator.")
+
+    def _wait_for_settle(self, *, allow_cancel=True):
+        deadline = time.monotonic() + max(self.settle_time_s, 0.0)
+        while True:
+            if allow_cancel:
+                self._raise_if_cancelled()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(remaining, 0.05))
+
+    def _set_bend(self, current, *, allow_cancel=True):
+        if allow_cancel:
+            self._raise_if_cancelled()
         caput(self.bend_pv, float(current))
-        time.sleep(max(self.settle_time_s, 0.0))
+        self._wait_for_settle(allow_cancel=allow_cancel)
 
     def _read_bend(self):
         value = caget(self.bend_pv)
@@ -67,7 +91,7 @@ class ESA_AutoTuner:
     def _restore_initial_bend(self):
         if self.initial_current is None:
             return
-        self._set_bend(self.initial_current)
+        self._set_bend(self.initial_current, allow_cancel=False)
         self._report_progress("restore", self.initial_current, has_beam=False, score=None)
 
     def _get_flag_image(self):
@@ -151,8 +175,10 @@ class ESA_AutoTuner:
         hits = []
 
         for B in np.linspace(B_min, B_max, n_steps):
+            self._raise_if_cancelled()
             self._set_bend(B)
             img = self._get_flag_image()
+            self._raise_if_cancelled()
             has_beam, score, _ = self._detect_beam(img)
             self._report_progress("coarse", B, has_beam=has_beam, score=score)
 
@@ -172,11 +198,13 @@ class ESA_AutoTuner:
         best_score = -np.inf
 
         for B in np.linspace(B1, B2, n_steps):
+            self._raise_if_cancelled()
             self._set_bend(B)
 
             scores = []
             for _ in range(3):  # median over 3 pulses
                 img = self._get_flag_image()
+                self._raise_if_cancelled()
                 has_beam, score, _ = self._detect_beam(img)
                 if has_beam:
                     scores.append(score)
@@ -200,34 +228,47 @@ class ESA_AutoTuner:
             B_min,
             B_max,
             coarse_steps=40,
-            fine_steps=15):
+            fine_steps=81):
         """
         One-button ESA auto tuning
         """
         self.status = "RUNNING"
         self.initial_current = self._read_bend()
+        if self.initial_current is None:
+            self.status = "FAILED"
+            return None
+        try:
+            interval = self.coarse_scan(B_min, B_max, coarse_steps)
+            if interval is None:
+                self.status = "FAILED"
+                if self.restore_initial_on_failure:
+                    self._restore_initial_bend()
+                return None
 
-        interval = self.coarse_scan(B_min, B_max, coarse_steps)
-        if interval is None:
+            B1, B2 = interval
+            best_B = self.fine_scan(B1, B2, fine_steps)
+
+            if best_B is None:
+                self.status = "FAILED"
+                if self.restore_initial_on_failure:
+                    self._restore_initial_bend()
+                return None
+
+            self._set_bend(best_B)
+            self._report_progress("final", best_B, has_beam=True, score=None)
+            self.best_current = best_B
+            self.status = "DONE"
+            return best_B
+        except ESAAutoTuneCancelled:
+            self.status = "CANCELLED"
+            if self.restore_initial_on_cancel:
+                self._restore_initial_bend()
+            return None
+        except Exception:
             self.status = "FAILED"
             if self.restore_initial_on_failure:
                 self._restore_initial_bend()
-            return None
-
-        B1, B2 = interval
-        best_B = self.fine_scan(B1, B2, fine_steps)
-
-        if best_B is None:
-            self.status = "FAILED"
-            if self.restore_initial_on_failure:
-                self._restore_initial_bend()
-            return None
-
-        self._set_bend(best_B)
-        self._report_progress("final", best_B, has_beam=True, score=None)
-        self.best_current = best_B
-        self.status = "DONE"
-        return best_B
+            raise
 
     def get_best_current(self):
         return self.best_current
@@ -298,7 +339,7 @@ if __name__=='__main__':
         B_min=float(scan.get("min", 0)),
         B_max=float(scan.get("max", 200)),
         coarse_steps=int(scan.get("coarse_steps", 40)),
-        fine_steps=int(scan.get("fine_steps", 15)),
+        fine_steps=int(scan.get("fine_steps", 81)),
     )
 
     if best_I is not None:
