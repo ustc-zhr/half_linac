@@ -32,14 +32,19 @@
     "settle_time_s": 1,
     "restore_initial_on_failure": true
   },
-  "auto_tune_hybrid": {
+  "auto_tune_center_lock": {
     "frame_samples": 3,
     "min_valid_frames": 2,
     "frame_interval_s": 0.2,
-    "brightness_fraction": 0.4,
-    "max_center_spread_mm": 1.0,
-    "target_tolerance_mm": 1.0,
-    "min_fit_correlation": 0.7
+    "brightness_fraction": 0.15,
+    "probe_step": 0.05,
+    "max_step": 0.5,
+    "max_total_offset": 1.5,
+    "max_iterations": 4,
+    "center_tolerance_mm": 0.2,
+    "max_center_spread_mm": 0.5,
+    "min_response_mm_per_unit": 1.0,
+    "min_gaussian_r_squared": 0.5
   },
   "esa_quads": ["QM19", "QM20"],
   "start_elements": ["QM12", "QM19"],

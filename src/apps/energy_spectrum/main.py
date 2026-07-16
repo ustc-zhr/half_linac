@@ -22,7 +22,6 @@ ensure_repo_import_path(__file__)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
-from scipy.optimize import curve_fit
 from epics import caget, caget_many, caput, caput_many, PV
 
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
@@ -56,6 +55,11 @@ from half_linac.src.apps.energy_spectrum.esa_auto_tuner import (
 )
 from half_linac.src.apps.energy_spectrum.profile_runtime import (
     resolve_energy_spectrum_runtime_paths,
+)
+from half_linac.src.apps.energy_spectrum.spectrum_profile import (
+    SpectrumProfileError,
+    fit_projection_profile,
+    project_image_profiles,
 )
 from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.elegant_runtime import run_elegant_input
@@ -591,6 +595,35 @@ class ESAAutoTuneThread(QThread):
                 min_fit_correlation=float(
                     self.bend_scan.get("min_fit_correlation", 0.7)
                 ),
+                pixel_width_mm=float(self.bend_scan["pixel_width_mm"]),
+                profile_fit_method=str(
+                    self.bend_scan.get("profile_fit_method", "Gauss fit")
+                ),
+                x_reference_mm=float(self.bend_scan.get("x_reference_mm", 0.0)),
+                center_probe_step=float(
+                    self.bend_scan.get("center_probe_step", 0.05)
+                ),
+                center_max_step=float(
+                    self.bend_scan.get("center_max_step", 0.5)
+                ),
+                center_max_total_offset=float(
+                    self.bend_scan.get("center_max_total_offset", 1.5)
+                ),
+                center_max_iterations=int(
+                    self.bend_scan.get("center_max_iterations", 4)
+                ),
+                center_tolerance_mm=float(
+                    self.bend_scan.get("center_tolerance_mm", 0.2)
+                ),
+                center_max_spread_mm=float(
+                    self.bend_scan.get("center_max_spread_mm", 0.5)
+                ),
+                center_min_response_mm_per_unit=float(
+                    self.bend_scan.get("center_min_response_mm_per_unit", 1.0)
+                ),
+                center_min_gaussian_r_squared=float(
+                    self.bend_scan.get("center_min_gaussian_r_squared", 0.5)
+                ),
             )
             best_current = tuner.run(
                 B_min=float(self.bend_scan.get("min", 0)),
@@ -607,6 +640,7 @@ class ESAAutoTuneThread(QThread):
                     "best_center_offset_pixel": tuner.best_center_offset_px,
                     "message": tuner.get_last_message(),
                     "hybrid_fit": tuner.hybrid_fit,
+                    "center_lock_result": tuner.center_lock_result,
                 }
             )
         except Exception as exc:
@@ -1241,8 +1275,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.auto_tune_objective_combo.addItem("Highest brightness", "find_beam")
         self.auto_tune_objective_combo.addItem(
-            "Brightness-gated x fit",
-            "brightness_gated_x_fit",
+            "Peak brightness + fitted center",
+            "brightness_then_profile_lock",
         )
         configured_objective = str(
             self.energy_config.get("auto_tune_objective", "find_beam")
@@ -1265,7 +1299,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_settle_spin.setProperty("dense", True)
         self.auto_tune_settle_spin.setValue(float(scan_config.get("settle_time_s", 0.5)))
 
-        hybrid_config = dict(self.energy_config.get("auto_tune_hybrid", {}))
+        center_lock_config = dict(self.energy_config.get("auto_tune_center_lock", {}))
         self.auto_tune_frame_interval_spin = QDoubleSpinBox(self.groupBox_8)
         self.auto_tune_frame_interval_spin.setObjectName("autoTuneFrameIntervalSpinBox")
         self.auto_tune_frame_interval_spin.setDecimals(2)
@@ -1275,7 +1309,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_frame_interval_spin.setKeyboardTracking(False)
         self.auto_tune_frame_interval_spin.setProperty("dense", True)
         self.auto_tune_frame_interval_spin.setValue(
-            float(hybrid_config.get("frame_interval_s", 0.2))
+            float(center_lock_config.get("frame_interval_s", 0.2))
         )
 
         self.auto_tune_brightness_gate_spin = QDoubleSpinBox(self.groupBox_8)
@@ -1287,7 +1321,33 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_brightness_gate_spin.setKeyboardTracking(False)
         self.auto_tune_brightness_gate_spin.setProperty("dense", True)
         self.auto_tune_brightness_gate_spin.setValue(
-            100.0 * float(hybrid_config.get("brightness_fraction", 0.4))
+            100.0 * float(center_lock_config.get("brightness_fraction", 0.15))
+        )
+
+        self.auto_tune_probe_step_spin = QDoubleSpinBox(self.groupBox_8)
+        self.auto_tune_probe_step_spin.setObjectName("autoTuneCenterProbeStepSpinBox")
+        self.auto_tune_probe_step_spin.setDecimals(2)
+        self.auto_tune_probe_step_spin.setSingleStep(0.01)
+        self.auto_tune_probe_step_spin.setRange(0.01, 2.0)
+        self.auto_tune_probe_step_spin.setSuffix(f" {self.auto_tune_unit}")
+        self.auto_tune_probe_step_spin.setKeyboardTracking(False)
+        self.auto_tune_probe_step_spin.setProperty("dense", True)
+        self.auto_tune_probe_step_spin.setValue(
+            float(center_lock_config.get("probe_step", 0.05))
+        )
+
+        self.auto_tune_center_tolerance_spin = QDoubleSpinBox(self.groupBox_8)
+        self.auto_tune_center_tolerance_spin.setObjectName(
+            "autoTuneCenterToleranceSpinBox"
+        )
+        self.auto_tune_center_tolerance_spin.setDecimals(2)
+        self.auto_tune_center_tolerance_spin.setSingleStep(0.05)
+        self.auto_tune_center_tolerance_spin.setRange(0.01, 5.0)
+        self.auto_tune_center_tolerance_spin.setSuffix(" mm")
+        self.auto_tune_center_tolerance_spin.setKeyboardTracking(False)
+        self.auto_tune_center_tolerance_spin.setProperty("dense", True)
+        self.auto_tune_center_tolerance_spin.setValue(
+            float(center_lock_config.get("center_tolerance_mm", 0.2))
         )
 
         scan_layout = QGridLayout()
@@ -1302,7 +1362,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             ("Settle", self.auto_tune_settle_spin, 2, 0),
             ("Objective", self.auto_tune_objective_combo, 2, 2),
             ("Frame gap", self.auto_tune_frame_interval_spin, 3, 0),
-            ("Bright gate", self.auto_tune_brightness_gate_spin, 3, 2),
+            ("Quality gate", self.auto_tune_brightness_gate_spin, 3, 2),
+            ("Probe step", self.auto_tune_probe_step_spin, 4, 0),
+            ("Center tol", self.auto_tune_center_tolerance_spin, 4, 2),
         )
         for text, widget, row, column in scan_fields:
             label = QLabel(text, self.groupBox_8)
@@ -1332,6 +1394,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_objective_combo,
             self.auto_tune_frame_interval_spin,
             self.auto_tune_brightness_gate_spin,
+            self.auto_tune_probe_step_spin,
+            self.auto_tune_center_tolerance_spin,
         )
 
     def _initial_target_energy_mev(self):
@@ -1392,7 +1456,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.energy_config.get("bend_scan", {}),
         )
         objective = str(self.auto_tune_objective_combo.currentData())
-        hybrid_config = dict(self.energy_config.get("auto_tune_hybrid", {}))
+        center_lock_config = dict(
+            self.energy_config.get("auto_tune_center_lock", {})
+        )
         target_x_pixel = reference_x_pixel(
             self.x_reference_mm,
             self.flag_pixel[0],
@@ -1406,18 +1472,32 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "settle_time_s": self.auto_tune_settle_spin.value(),
             "objective": objective,
             "target_x_pixel": target_x_pixel,
-            "frame_samples": int(hybrid_config.get("frame_samples", 3)),
-            "min_valid_frames": int(hybrid_config.get("min_valid_frames", 2)),
+            "frame_samples": int(center_lock_config.get("frame_samples", 3)),
+            "min_valid_frames": int(center_lock_config.get("min_valid_frames", 2)),
             "frame_interval_s": self.auto_tune_frame_interval_spin.value(),
             "brightness_fraction": self.auto_tune_brightness_gate_spin.value() / 100.0,
-            "max_center_spread_pixel": float(
-                hybrid_config.get("max_center_spread_mm", 1.0)
-            ) / self.flag_pixel_width_mm,
-            "target_tolerance_pixel": float(
-                hybrid_config.get("target_tolerance_mm", 1.0)
-            ) / self.flag_pixel_width_mm,
-            "min_fit_correlation": float(
-                hybrid_config.get("min_fit_correlation", 0.7)
+            "pixel_width_mm": self.flag_pixel_width_mm,
+            "profile_fit_method": self.comboBox_fitmethod.currentText(),
+            "x_reference_mm": self.x_reference_mm,
+            "center_probe_step": self.auto_tune_probe_step_spin.value(),
+            "center_max_step": float(
+                center_lock_config.get("max_step", 0.5)
+            ),
+            "center_max_total_offset": float(
+                center_lock_config.get("max_total_offset", 1.5)
+            ),
+            "center_max_iterations": int(
+                center_lock_config.get("max_iterations", 4)
+            ),
+            "center_tolerance_mm": self.auto_tune_center_tolerance_spin.value(),
+            "center_max_spread_mm": float(
+                center_lock_config.get("max_center_spread_mm", 0.5)
+            ),
+            "center_min_response_mm_per_unit": float(
+                center_lock_config.get("min_response_mm_per_unit", 1.0)
+            ),
+            "center_min_gaussian_r_squared": float(
+                center_lock_config.get("min_gaussian_r_squared", 0.5)
             ),
             "restore_initial_on_failure": bool(
                 configured.get("restore_initial_on_failure", True)
@@ -1657,7 +1737,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_settle_spin: "Auto Find settle time",
             self.auto_tune_objective_combo: "Auto Find optimization objective",
             self.auto_tune_frame_interval_spin: "Interval between fine-scan camera frames",
-            self.auto_tune_brightness_gate_spin: "Minimum brightness retained by the hybrid fit",
+            self.auto_tune_brightness_gate_spin: "Minimum brightness accepted by fitted-center lock",
+            self.auto_tune_probe_step_spin: "A3 probe step used to measure fitted-center response",
+            self.auto_tune_center_tolerance_spin: "Final fitted-center tolerance",
             self.pushButton_autoFind: "Auto Find start button",
             self.pushButton_stopAutoFind: "Auto Find stop button",
             self.background_plot: "Background preview plot",
@@ -1774,15 +1856,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.pushButton_autoFind.setEnabled(auto_tune_enabled)
         scan_running = self._auto_tune_is_running()
+        self.comboBox_fitmethod.setEnabled(not scan_running)
         for widget in self.auto_tune_parameter_widgets:
             widget.setEnabled(not scan_running)
-        hybrid_controls_enabled = (
+        center_lock_controls_enabled = (
             not scan_running
             and self.auto_tune_objective_combo.currentData()
-            == "brightness_gated_x_fit"
+            == "brightness_then_profile_lock"
         )
-        self.auto_tune_frame_interval_spin.setEnabled(hybrid_controls_enabled)
-        self.auto_tune_brightness_gate_spin.setEnabled(hybrid_controls_enabled)
+        for widget in (
+            self.auto_tune_frame_interval_spin,
+            self.auto_tune_brightness_gate_spin,
+            self.auto_tune_probe_step_spin,
+            self.auto_tune_center_tolerance_spin,
+        ):
+            widget.setEnabled(center_lock_controls_enabled)
         stop_requested = (
             scan_running
             and self.auto_tune_thread is not None
@@ -2306,17 +2394,22 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         #------------------------
 
         # sample out only the selected region data
-        x = np.linspace(self.extent[0],self.extent[1],self.flag_pixel[0])
-        y = np.linspace(self.extent[2],self.extent[3],self.flag_pixel[1])
-        idx = np.logical_and(x>self.xlim[0], x<self.xlim[1])
-        idy = np.logical_and(y>self.ylim[0], y<self.ylim[1])
-        x = x[idx] #numpy布尔索引
-        y = y[idy]
-        data = data[idy,:][:,idx]    
-        
+        try:
+            projection = project_image_profiles(data, self.flag_pixel_width_mm)
+        except SpectrumProfileError as exc:
+            self.sigx = None
+            self.sigy = None
+            print(f"Warning: ESA projection failed: {exc}")
+            self._set_energy_unavailable("Bad projection", str(exc))
+            self._refresh_status()
+            return
+        x = projection.x_mm
+        y = projection.y_mm
+        data = projection.image
+
         # projection density
-        denx0 = np.sum(data,axis=0) #-2e4
-        deny0 = np.sum(data,axis=1) #-6e4
+        denx0 = projection.density_x
+        deny0 = projection.density_y
         if np.max(denx0) == 0 or np.max(deny0) == 0:
             self.sigx = None
             self.sigy = None
@@ -2339,64 +2432,60 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         
         
-        # add gauss-fitting lines
-        #------------------------
-        def Gauss_func(x,a,x0,sigma):    
-                return a*np.exp(-(x-x0)**2/(2*sigma**2))
-        def gauss_fit(x,amp):
-            max_amp = np.max(amp)  # 最大值
-            max_index = np.argmax(amp)  # 最大值对应的索引
-            x0_initial = x[max_index]  # 对应的x坐标作为x0初始值
-            sigma_initial = max(np.std(x), np.ptp(x) / 10.0, 1e-6)
-            initial_guess = [max_amp, x0_initial, sigma_initial] # 对应高斯函数参数 [A, μ, σ] 的初始值
-            sigma_max = max(np.ptp(x), sigma_initial, 1e-6)
-            popt,pcov = curve_fit(
-                Gauss_func,
-                x,
-                amp,
-                p0=initial_guess,
-                bounds=([0.0, float(np.min(x)), 1e-6], [np.inf, float(np.max(x)), sigma_max]),
-            )
-            return popt
-        fit_norm_denx = norm_denx
-        if fit_method.lower() in ("gauss", "gauss fit"):
-            try:
-                popt = gauss_fit(x, norm_denx)
-                fit_norm_denx = Gauss_func(x,popt[0],popt[1],popt[2])
-                fit_denx = fit_norm_denx *self.height*0.3 +self.ylim[0]*0.98
-                self.ESAflag_image.axes.plot(x, fit_denx, "--", color=palette["plot_fit"], linewidth=1.4)
-                self.meanx = round(popt[1], 3)
-                self.sigx = abs(round(popt[2],3))
-                self.sigy = None
-                self._update_fit_status("Gauss OK", "success")
-            except (RuntimeError, ValueError, ZeroDivisionError, FloatingPointError) as exc:
-                print(f"Gauss fit failed, falling back to direct moments: {exc}")
-                self._update_fit_status("Direct fallback", "warning", f"Gauss fit failed: {exc}")
-                fit_method = "direct"
+        # Use one shared center definition for the GUI and Auto Find center lock.
+        try:
+            profile_fit = fit_projection_profile(x, denx0, fit_method)
+        except SpectrumProfileError as exc:
+            self.sigx = None
+            self.sigy = None
+            print(f"Spectrum profile fit failed: {exc}")
+            self._update_fit_status("Fit failed", "warning", str(exc))
+            self._set_energy_unavailable("Fit failed", str(exc))
+            self._refresh_status()
+            return
+        fit_method = profile_fit.method
+        fit_norm_denx = profile_fit.fitted_density
+        self.meanx = profile_fit.center_mm
+        self.sigx = profile_fit.sigma_mm
+        self.sigy = None
 
-        # 不拟合直接计算投影分布的方差
-        if fit_method == "direct":
+        if profile_fit.fallback_error is not None:
+            print(
+                "Gauss fit failed, falling back to direct moments: "
+                f"{profile_fit.fallback_error}"
+            )
+            self._update_fit_status(
+                "Direct fallback",
+                "warning",
+                f"Gauss fit failed: {profile_fit.fallback_error}",
+            )
+        if fit_method == "Gauss fit":
+            fit_denx = fit_norm_denx * self.height * 0.3 + self.ylim[0] * 0.98
+            self.ESAflag_image.axes.plot(
+                x,
+                fit_denx,
+                "--",
+                color=palette["plot_fit"],
+                linewidth=1.4,
+            )
+            if profile_fit.fallback_error is None:
+                self._update_fit_status("Gauss OK", "success")
+        else:
             if self._fit_text == self.comboBox_fitmethod.currentText():
                 self._update_fit_status("Direct", "success")
-            # 直接计算投影分布的方差
-            total_denx = np.sum(denx0)
-            probabilities = denx0 / total_denx
-            mean_direct = np.sum(x * probabilities)
-            variance_direct = np.sum(probabilities * (x - mean_direct)**2)
-            std_direct = np.sqrt(variance_direct)
-            # gauss_direct = Gauss_func(x, np.max(norm_denx), mean_direct, std_direct)
-            # fit_denx_direct = gauss_direct * self.height * 0.3 + self.ylim[0] * 0.98
-            # self.ESAflag_image.axes.plot(x, fit_denx_direct, '--g', label="direct")
-            self.meanx = mean_direct
-            self.sigx = std_direct
-
-            # 使用样条插值
+            # Keep the existing spline only as a display curve; it does not define center.
             try:
-                spline = UnivariateSpline(x, norm_denx, s=0.1)  # s是平滑参数
-                # x_dense = np.linspace(x[0], x[-1], 200)  # 更密集的点
+                spline = UnivariateSpline(x, norm_denx, s=0.1)
                 fit_norm_denx = spline(x)
                 fit_denx = fit_norm_denx * self.height * 0.3 + self.ylim[0] * 0.98
-                self.ESAflag_image.axes.plot(x, fit_denx, "--", color=palette["plot_fit"], linewidth=1.4, alpha=0.8)
+                self.ESAflag_image.axes.plot(
+                    x,
+                    fit_denx,
+                    "--",
+                    color=palette["plot_fit"],
+                    linewidth=1.4,
+                    alpha=0.8,
+                )
             except (ValueError, RuntimeError, FloatingPointError) as exc:
                 print(f"spline fit failed: {exc}")
         self.ESAflag_image.canvas.draw()
@@ -2870,6 +2959,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             prefix = "Final"
         elif stage == "verify":
             prefix = "Verify"
+        elif stage == "center_seed":
+            prefix = "Fit seed"
+        elif stage == "center_probe":
+            prefix = "Fit probe"
+        elif stage == "center_lock":
+            prefix = "Fit lock"
         elif stage == "restore":
             prefix = "Restore"
         else:
@@ -2916,6 +3011,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                         f"r={float(hybrid_fit['correlation']):+.3f}, "
                         f"slope={float(hybrid_fit['slope_pixel_per_unit']):+.3f} px/"
                         f"{self.auto_tune_unit}, points={int(hybrid_fit['points_used'])}."
+                    )
+                center_lock_result = payload.get("center_lock_result")
+                if center_lock_result:
+                    response = center_lock_result.get("response_mm_per_unit")
+                    response_text = (
+                        "--"
+                        if response is None
+                        else f"{float(response):+.3f} mm/{self.auto_tune_unit}"
+                    )
+                    print(
+                        "[GUI] Peak brightness + fitted center: "
+                        f"seed={float(center_lock_result['seed_energy']):.3f}, "
+                        f"dx={float(center_lock_result['final_offset_mm']):+.3f} mm, "
+                        f"response={response_text}, "
+                        f"fit={center_lock_result['fit_method']}."
                     )
             else:
                 self._auto_tune_text = "Done"

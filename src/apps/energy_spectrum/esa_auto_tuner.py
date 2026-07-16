@@ -3,6 +3,12 @@ import numpy as np
 from skimage import measure
 from epics import PV, caget, caput
 
+from half_linac.src.apps.energy_spectrum.spectrum_profile import (
+    SpectrumProfileError,
+    fit_projection_profile,
+    project_image_profiles,
+)
+
 
 class ESAAutoTuneCancelled(RuntimeError):
     """Raised internally when an operator requests a cooperative scan stop."""
@@ -52,7 +58,18 @@ class ESA_AutoTuner:
                  brightness_fraction=0.4,
                  max_center_spread_pixel=np.inf,
                  target_tolerance_pixel=np.inf,
-                 min_fit_correlation=0.7):
+                 min_fit_correlation=0.7,
+                 pixel_width_mm=None,
+                 profile_fit_method="Gauss fit",
+                 x_reference_mm=0.0,
+                 center_probe_step=0.05,
+                 center_max_step=0.5,
+                 center_max_total_offset=1.5,
+                 center_max_iterations=4,
+                 center_tolerance_mm=0.2,
+                 center_max_spread_mm=0.5,
+                 center_min_response_mm_per_unit=1.0,
+                 center_min_gaussian_r_squared=0.5):
         """
         Parameters
         ----------
@@ -73,6 +90,7 @@ class ESA_AutoTuner:
             "center_lock",
             "center_x_reference",
             "brightness_gated_x_fit",
+            "brightness_then_profile_lock",
         }:
             raise ValueError(f"Unsupported ESA auto-tune mode: {self.mode!r}.")
         if target_x_pixel is None:
@@ -94,6 +112,17 @@ class ESA_AutoTuner:
         self.max_center_spread_pixel = float(max_center_spread_pixel)
         self.target_tolerance_pixel = float(target_tolerance_pixel)
         self.min_fit_correlation = float(min_fit_correlation)
+        self.pixel_width_mm = None if pixel_width_mm is None else float(pixel_width_mm)
+        self.profile_fit_method = str(profile_fit_method).strip()
+        self.x_reference_mm = float(x_reference_mm)
+        self.center_probe_step = float(center_probe_step)
+        self.center_max_step = float(center_max_step)
+        self.center_max_total_offset = float(center_max_total_offset)
+        self.center_max_iterations = int(center_max_iterations)
+        self.center_tolerance_mm = float(center_tolerance_mm)
+        self.center_max_spread_mm = float(center_max_spread_mm)
+        self.center_min_response_mm_per_unit = float(center_min_response_mm_per_unit)
+        self.center_min_gaussian_r_squared = float(center_min_gaussian_r_squared)
         if self.frame_samples < 1:
             raise ValueError("frame_samples must be at least 1.")
         if not 1 <= self.min_valid_frames <= self.frame_samples:
@@ -111,6 +140,28 @@ class ESA_AutoTuner:
             or not 0 <= self.min_fit_correlation <= 1
         ):
             raise ValueError("min_fit_correlation must be in [0, 1].")
+        if self.mode == "brightness_then_profile_lock":
+            if self.pixel_width_mm is None or not np.isfinite(self.pixel_width_mm):
+                raise ValueError("pixel_width_mm is required for fitted-center lock.")
+            if self.pixel_width_mm <= 0:
+                raise ValueError("pixel_width_mm must be positive.")
+            for name, value in (
+                ("center_probe_step", self.center_probe_step),
+                ("center_max_step", self.center_max_step),
+                ("center_max_total_offset", self.center_max_total_offset),
+                ("center_tolerance_mm", self.center_tolerance_mm),
+                ("center_max_spread_mm", self.center_max_spread_mm),
+                ("center_min_response_mm_per_unit", self.center_min_response_mm_per_unit),
+            ):
+                if not np.isfinite(value) or value <= 0:
+                    raise ValueError(f"{name} must be positive and finite.")
+            if self.center_max_iterations < 1:
+                raise ValueError("center_max_iterations must be at least 1.")
+            if (
+                not np.isfinite(self.center_min_gaussian_r_squared)
+                or not 0 <= self.center_min_gaussian_r_squared <= 1
+            ):
+                raise ValueError("center_min_gaussian_r_squared must be in [0, 1].")
 
         self.best_current = None
         self.best_center_offset_px = None
@@ -119,6 +170,8 @@ class ESA_AutoTuner:
         self.fine_observations = []
         self.hybrid_fit = None
         self.hybrid_peak_brightness = None
+        self.best_brightness = None
+        self.center_lock_result = None
         self.last_message = None
         self.status = "IDLE"
 
@@ -310,7 +363,7 @@ class ESA_AutoTuner:
 
             if has_beam:
                 hits.append((float(B), float(score)))
-                if self.mode == "find_beam" and len(hits) >= 3:
+                if self.mode in {"find_beam", "brightness_then_profile_lock"} and len(hits) >= 3:
                     break
 
         if not hits:
@@ -370,15 +423,20 @@ class ESA_AutoTuner:
             self._raise_if_cancelled()
             self._set_bend(B)
 
-            scores = []
-            centers = []
-            for _ in range(3):  # median over 3 pulses
-                img = self._get_flag_image()
-                self._raise_if_cancelled()
-                has_beam, score, cx = self._detect_beam(img)
-                if has_beam:
-                    scores.append(score)
-                    centers.append(cx)
+            if self.mode == "brightness_then_profile_lock":
+                observations = self._sample_frames()
+                scores = [item[0] for item in observations]
+                centers = [item[1] for item in observations]
+            else:
+                scores = []
+                centers = []
+                for _ in range(3):  # median over 3 pulses
+                    img = self._get_flag_image()
+                    self._raise_if_cancelled()
+                    has_beam, score, cx = self._detect_beam(img)
+                    if has_beam:
+                        scores.append(score)
+                        centers.append(cx)
 
             if not scores:
                 self._report_progress("fine", B, has_beam=False, score=None)
@@ -392,6 +450,7 @@ class ESA_AutoTuner:
             if score_med > best_score:
                 best_score = score_med
                 best_B = B
+                self.best_brightness = float(score_med)
                 self.best_center_offset_px = float(center_med - self.target_x_pixel)
 
         return best_B
@@ -538,6 +597,230 @@ class ESA_AutoTuner:
             return False
         return True
 
+    def _center_mm_to_pixel(self, center_mm):
+        half_width_mm = self.flag_pixel[0] * self.pixel_width_mm / 2.0
+        return (
+            (float(center_mm) + half_width_mm)
+            / (2.0 * half_width_mm)
+            * (self.flag_pixel[0] - 1)
+        )
+
+    def _measure_profile_center(self, energy, stage):
+        centers_mm = []
+        brightness_values = []
+        fit_methods = []
+        fit_qualities = []
+
+        for sample_index in range(self.frame_samples):
+            self._raise_if_cancelled()
+            image = self._get_flag_image()
+            self._raise_if_cancelled()
+            has_beam, brightness, _region_center = self._detect_beam(image)
+            if has_beam:
+                try:
+                    projection = project_image_profiles(image, self.pixel_width_mm)
+                    profile_fit = fit_projection_profile(
+                        projection.x_mm,
+                        projection.density_x,
+                        self.profile_fit_method,
+                        allow_direct_fallback=False,
+                    )
+                except SpectrumProfileError:
+                    profile_fit = None
+                if profile_fit is not None:
+                    fit_quality_ok = (
+                        profile_fit.r_squared is None
+                        or profile_fit.r_squared >= self.center_min_gaussian_r_squared
+                    )
+                    brightness_ok = (
+                        self.best_brightness is None
+                        or brightness >= self.brightness_fraction * self.best_brightness
+                    )
+                    if fit_quality_ok and brightness_ok:
+                        centers_mm.append(float(profile_fit.center_mm))
+                        brightness_values.append(float(brightness))
+                        fit_methods.append(profile_fit.method)
+                        if profile_fit.r_squared is not None:
+                            fit_qualities.append(float(profile_fit.r_squared))
+            if sample_index + 1 < self.frame_samples:
+                self._wait(self.frame_interval_s)
+
+        if len(centers_mm) < self.min_valid_frames:
+            self._report_progress(stage, energy, has_beam=False, score=None)
+            return None
+        center_spread_mm = float(np.ptp(centers_mm))
+        if center_spread_mm > self.center_max_spread_mm:
+            self._report_progress(stage, energy, has_beam=False, score=None)
+            return None
+
+        center_mm = float(np.median(centers_mm))
+        brightness = float(np.median(brightness_values))
+        center_pixel = self._center_mm_to_pixel(center_mm)
+        self._report_progress(
+            stage,
+            energy,
+            has_beam=True,
+            score=brightness,
+            cx=center_pixel,
+        )
+        return {
+            "energy": float(energy),
+            "center_mm": center_mm,
+            "offset_mm": center_mm - self.x_reference_mm,
+            "brightness": brightness,
+            "center_spread_mm": center_spread_mm,
+            "fit_method": fit_methods[0],
+            "fit_r_squared": (
+                float(np.median(fit_qualities)) if fit_qualities else None
+            ),
+        }
+
+    @staticmethod
+    def _bracketed_center_candidate(measurements, target_mm):
+        candidates = []
+        for index, left in enumerate(measurements):
+            left_error = left["center_mm"] - target_mm
+            for right in measurements[index + 1:]:
+                right_error = right["center_mm"] - target_mm
+                if left_error == 0 or right_error == 0 or left_error * right_error > 0:
+                    continue
+                center_delta = right["center_mm"] - left["center_mm"]
+                if abs(center_delta) <= np.finfo(float).eps:
+                    continue
+                energy = left["energy"] + (
+                    (target_mm - left["center_mm"])
+                    * (right["energy"] - left["energy"])
+                    / center_delta
+                )
+                candidates.append(
+                    (abs(left_error) + abs(right_error), float(energy))
+                )
+        if not candidates:
+            return None
+        return min(candidates, key=lambda item: item[0])[1]
+
+    def _fit_center_response(self, measurements):
+        energies = np.asarray([item["energy"] for item in measurements], dtype=float)
+        centers = np.asarray([item["center_mm"] for item in measurements], dtype=float)
+        if len(measurements) < 2 or np.ptp(energies) <= np.finfo(float).eps:
+            return None
+        slope, intercept = np.polyfit(energies, centers, 1)
+        if (
+            not np.isfinite(slope)
+            or abs(slope) < self.center_min_response_mm_per_unit
+        ):
+            return None
+        return float(slope), float(intercept)
+
+    def _run_profile_center_lock(self, seed_energy, scan_min, scan_max):
+        self.status = "CENTER_LOCK"
+        local_min = max(float(scan_min), seed_energy - self.center_max_total_offset)
+        local_max = min(float(scan_max), seed_energy + self.center_max_total_offset)
+        measurements = []
+
+        self._set_bend(seed_energy)
+        seed = self._measure_profile_center(seed_energy, "center_seed")
+        if seed is None:
+            self.last_message = (
+                "Brightness peak was found, but its projected profile could not be fitted."
+            )
+            return None
+        measurements.append(seed)
+        converged = seed if abs(seed["offset_mm"]) <= self.center_tolerance_mm else None
+
+        if converged is None:
+            if seed_energy + self.center_probe_step <= local_max:
+                probe_energy = seed_energy + self.center_probe_step
+            elif seed_energy - self.center_probe_step >= local_min:
+                probe_energy = seed_energy - self.center_probe_step
+            else:
+                self.last_message = "No safe energy room is available for the center-response probe."
+                return None
+            self._set_bend(probe_energy)
+            probe = self._measure_profile_center(probe_energy, "center_probe")
+            if probe is None:
+                self.last_message = "The fitted beam profile was lost during the response probe."
+                return None
+            measurements.append(probe)
+            if abs(probe["offset_mm"]) <= self.center_tolerance_mm:
+                converged = probe
+
+        iterations = 0
+        while converged is None and iterations < self.center_max_iterations:
+            iterations += 1
+            response = self._fit_center_response(measurements)
+            if response is None:
+                self.last_message = (
+                    "The fitted profile center did not respond consistently to the A3 probe."
+                )
+                return None
+            slope, _intercept = response
+            candidate = self._bracketed_center_candidate(
+                measurements,
+                self.x_reference_mm,
+            )
+            anchor = min(measurements, key=lambda item: abs(item["offset_mm"]))
+            if candidate is None:
+                candidate = anchor["energy"] - anchor["offset_mm"] / slope
+            candidate = min(max(float(candidate), local_min), local_max)
+            candidate = min(
+                max(candidate, anchor["energy"] - self.center_max_step),
+                anchor["energy"] + self.center_max_step,
+            )
+            if any(
+                abs(candidate - item["energy"]) <= 1e-6
+                for item in measurements
+            ):
+                self.last_message = (
+                    "Fitted-center correction reached its safe local limit before convergence."
+                )
+                return None
+
+            self._set_bend(candidate)
+            measurement = self._measure_profile_center(candidate, "center_lock")
+            if measurement is None:
+                self.last_message = "The fitted beam profile was lost during center correction."
+                return None
+            measurements.append(measurement)
+            if abs(measurement["offset_mm"]) <= self.center_tolerance_mm:
+                converged = measurement
+
+        if converged is None:
+            best = min(measurements, key=lambda item: abs(item["offset_mm"]))
+            self.last_message = (
+                "Fitted-center lock did not converge within "
+                f"{self.center_max_iterations} iterations; best dx={best['offset_mm']:+.3f} mm."
+            )
+            return None
+
+        self._set_bend(converged["energy"])
+        verified = self._measure_profile_center(converged["energy"], "verify")
+        if verified is None:
+            self.last_message = "Final fitted-profile verification did not find a stable beam."
+            return None
+        if abs(verified["offset_mm"]) > self.center_tolerance_mm:
+            self.last_message = (
+                "Final fitted-profile center missed x_reference_mm by "
+                f"{verified['offset_mm']:+.3f} mm."
+            )
+            return None
+
+        response = self._fit_center_response(measurements)
+        self.best_center_offset_px = (
+            self._center_mm_to_pixel(verified["center_mm"]) - self.target_x_pixel
+        )
+        self.center_lock_result = {
+            "seed_energy": float(seed_energy),
+            "final_energy": float(verified["energy"]),
+            "final_offset_mm": float(verified["offset_mm"]),
+            "response_mm_per_unit": response[0] if response is not None else None,
+            "measurements": len(measurements),
+            "iterations": iterations,
+            "fit_method": verified["fit_method"],
+            "fit_r_squared": verified["fit_r_squared"],
+        }
+        return float(verified["energy"])
+
     # ==========================================================
     # Public API
     # ==========================================================
@@ -553,6 +836,8 @@ class ESA_AutoTuner:
         self.last_message = None
         self.hybrid_fit = None
         self.hybrid_peak_brightness = None
+        self.best_brightness = None
+        self.center_lock_result = None
         self.best_current = None
         self.best_center_offset_px = None
         self.initial_current = self._read_bend()
@@ -579,12 +864,23 @@ class ESA_AutoTuner:
                     self._restore_initial_bend()
                 return None
 
-            self._set_bend(best_B)
-            if self.mode == "brightness_gated_x_fit" and not self._verify_hybrid_solution(best_B):
-                self.status = "FAILED"
-                if self.restore_initial_on_failure:
-                    self._restore_initial_bend()
-                return None
+            if self.mode == "brightness_then_profile_lock":
+                best_B = self._run_profile_center_lock(best_B, B_min, B_max)
+                if best_B is None:
+                    self.status = "FAILED"
+                    if self.restore_initial_on_failure:
+                        self._restore_initial_bend()
+                    return None
+            else:
+                self._set_bend(best_B)
+                if (
+                    self.mode == "brightness_gated_x_fit"
+                    and not self._verify_hybrid_solution(best_B)
+                ):
+                    self.status = "FAILED"
+                    if self.restore_initial_on_failure:
+                        self._restore_initial_bend()
+                    return None
             self._report_progress("final", best_B, has_beam=True, score=None)
             self.best_current = best_B
             self.status = "DONE"
@@ -677,6 +973,10 @@ if __name__=='__main__':
         actuator_unit = "A"
         scan = workflow.get("bend_scan", {})
     hybrid = workflow.get("auto_tune_hybrid", {})
+    center_lock = workflow.get("auto_tune_center_lock", {})
+    sampling = (
+        center_lock if objective == "brightness_then_profile_lock" else hybrid
+    )
     esa_tuner = ESA_AutoTuner(
         flag_pv_obj=PV(flag_pv),
         flag_pixel=flag_pixel_machine,
@@ -685,10 +985,10 @@ if __name__=='__main__':
         target_x_pixel=target_x_pixel,
         settle_time_s=float(scan.get("settle_time_s", 0.5)),
         restore_initial_on_failure=bool(scan.get("restore_initial_on_failure", True)),
-        frame_samples=int(hybrid.get("frame_samples", 3)),
-        min_valid_frames=int(hybrid.get("min_valid_frames", 2)),
-        frame_interval_s=float(hybrid.get("frame_interval_s", 0.2)),
-        brightness_fraction=float(hybrid.get("brightness_fraction", 0.4)),
+        frame_samples=int(sampling.get("frame_samples", 3)),
+        min_valid_frames=int(sampling.get("min_valid_frames", 2)),
+        frame_interval_s=float(sampling.get("frame_interval_s", 0.2)),
+        brightness_fraction=float(sampling.get("brightness_fraction", 0.4)),
         max_center_spread_pixel=(
             float(hybrid.get("max_center_spread_mm", 1.0)) / pixel_width_mm
         ),
@@ -696,6 +996,20 @@ if __name__=='__main__':
             float(hybrid.get("target_tolerance_mm", 1.0)) / pixel_width_mm
         ),
         min_fit_correlation=float(hybrid.get("min_fit_correlation", 0.7)),
+        pixel_width_mm=pixel_width_mm,
+        x_reference_mm=x_reference_mm,
+        center_probe_step=float(center_lock.get("probe_step", 0.05)),
+        center_max_step=float(center_lock.get("max_step", 0.5)),
+        center_max_total_offset=float(center_lock.get("max_total_offset", 1.5)),
+        center_max_iterations=int(center_lock.get("max_iterations", 4)),
+        center_tolerance_mm=float(center_lock.get("center_tolerance_mm", 0.2)),
+        center_max_spread_mm=float(center_lock.get("max_center_spread_mm", 0.5)),
+        center_min_response_mm_per_unit=float(
+            center_lock.get("min_response_mm_per_unit", 1.0)
+        ),
+        center_min_gaussian_r_squared=float(
+            center_lock.get("min_gaussian_r_squared", 0.5)
+        ),
         remove_bg=False,
         bg_image=None,
     )

@@ -1156,10 +1156,12 @@ def _validate_energy_spectrum_workflow(
             "find_beam",
             "center_x_reference",
             "brightness_gated_x_fit",
+            "brightness_then_profile_lock",
         }:
             raise MachineProfileError(
                 "workflows.energy_spectrum.auto_tune_objective must be "
-                "'find_beam', 'center_x_reference', or 'brightness_gated_x_fit'."
+                "'find_beam', 'center_x_reference', 'brightness_gated_x_fit', or "
+                "'brightness_then_profile_lock'."
             )
 
     actuator_element = None
@@ -1318,6 +1320,92 @@ def _validate_energy_spectrum_workflow(
         if not 0 <= numeric_hybrid["min_fit_correlation"] <= 1:
             raise MachineProfileError(
                 "workflows.energy_spectrum.auto_tune_hybrid.min_fit_correlation must be in [0, 1]."
+            )
+
+    auto_tune_center_lock = workflow.get("auto_tune_center_lock")
+    if auto_tune_center_lock is not None:
+        center_lock = _expect_mapping(
+            auto_tune_center_lock,
+            "workflows.energy_spectrum.auto_tune_center_lock",
+        )
+        integer_values = {}
+        for key in ("frame_samples", "min_valid_frames", "max_iterations"):
+            integer_values[key] = _expect_int(
+                center_lock.get(key),
+                f"workflows.energy_spectrum.auto_tune_center_lock.{key}",
+            )
+        if integer_values["frame_samples"] < 1:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_center_lock.frame_samples "
+                "must be at least 1."
+            )
+        if not (
+            1
+            <= integer_values["min_valid_frames"]
+            <= integer_values["frame_samples"]
+        ):
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_center_lock.min_valid_frames "
+                "must be between 1 and frame_samples."
+            )
+        if integer_values["max_iterations"] < 1:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_center_lock.max_iterations "
+                "must be at least 1."
+            )
+
+        numeric_center_lock = {}
+        for key in (
+            "frame_interval_s",
+            "brightness_fraction",
+            "probe_step",
+            "max_step",
+            "max_total_offset",
+            "center_tolerance_mm",
+            "max_center_spread_mm",
+            "min_response_mm_per_unit",
+            "min_gaussian_r_squared",
+        ):
+            try:
+                numeric_center_lock[key] = float(center_lock[key])
+            except KeyError as exc:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_center_lock.{key} is required."
+                ) from exc
+            except (TypeError, ValueError) as exc:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_center_lock.{key} must be numeric."
+                ) from exc
+            if not math.isfinite(numeric_center_lock[key]):
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_center_lock.{key} must be finite."
+                )
+        if numeric_center_lock["frame_interval_s"] < 0:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_center_lock.frame_interval_s "
+                "must not be negative."
+            )
+        if not 0 < numeric_center_lock["brightness_fraction"] <= 1:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_center_lock.brightness_fraction "
+                "must be in (0, 1]."
+            )
+        for key in (
+            "probe_step",
+            "max_step",
+            "max_total_offset",
+            "center_tolerance_mm",
+            "max_center_spread_mm",
+            "min_response_mm_per_unit",
+        ):
+            if numeric_center_lock[key] <= 0:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_center_lock.{key} must be positive."
+                )
+        if not 0 <= numeric_center_lock["min_gaussian_r_squared"] <= 1:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_center_lock.min_gaussian_r_squared "
+                "must be in [0, 1]."
             )
 
     auto_tune_backends = workflow.get("auto_tune_control_backends")

@@ -15,6 +15,11 @@ from half_linac.src.apps.energy_spectrum.esa_auto_tuner import (
     ESA_AutoTuner,
     reference_x_pixel,
 )
+from half_linac.src.apps.energy_spectrum.spectrum_profile import (
+    fit_projection_profile,
+    gaussian,
+    project_image_profiles,
+)
 
 
 class _DummyPV:
@@ -112,7 +117,74 @@ class _HybridObjectiveAutoTuner(ESA_AutoTuner):
         return image
 
 
+class _ProfileLockAutoTuner(ESA_AutoTuner):
+    def __init__(self, *, moving_center=True, progress_callback=None):
+        super().__init__(
+            flag_pv_obj=_DummyPV(),
+            flag_pixel=(120, 100),
+            bend_pv="FAKE:ENERGY",
+            mode="brightness_then_profile_lock",
+            target_x_pixel=59.5,
+            pixel_width_mm=0.1,
+            profile_fit_method="Gauss fit",
+            x_reference_mm=0.0,
+            progress_callback=progress_callback,
+            frame_interval_s=0.0,
+            brightness_fraction=0.15,
+            center_probe_step=0.1,
+            center_max_step=0.5,
+            center_max_total_offset=1.5,
+            center_max_iterations=4,
+            center_tolerance_mm=0.08,
+            center_max_spread_mm=0.2,
+            center_min_response_mm_per_unit=0.2,
+            center_min_gaussian_r_squared=0.8,
+        )
+        self.current = 2.5
+        self.moving_center = moving_center
+
+    def _set_bend(self, current, *, allow_cancel=True):
+        self.current = float(current)
+
+    def _read_bend(self):
+        return self.current
+
+    def _get_flag_image(self):
+        image = np.zeros((100, 120))
+        if not 1.0 <= self.current <= 5.0:
+            return image
+        x_mm = np.linspace(-6.0, 6.0, 120)
+        y_mm = np.linspace(-5.0, 5.0, 100)
+        center_mm = self.current - 4.0 if self.moving_center else -1.0
+        amplitude = max(40.0, 300.0 - 50.0 * abs(self.current - 3.0))
+        xx, yy = np.meshgrid(x_mm, y_mm)
+        return amplitude * np.exp(
+            -((xx - center_mm) ** 2 + yy ** 2) / (2.0 * 0.6 ** 2)
+        )
+
+
 class ESAAutoTunerTests(unittest.TestCase):
+    def test_shared_projection_fit_matches_gaussian_and_direct_center_definitions(self):
+        x_mm = np.linspace(-5.0, 5.0, 201)
+        density = gaussian(x_mm, 3.0, 0.75, 0.6)
+
+        gauss_fit = fit_projection_profile(x_mm, density, "Gauss fit")
+        direct_fit = fit_projection_profile(x_mm, density, "direct")
+
+        self.assertAlmostEqual(gauss_fit.center_mm, 0.75, places=6)
+        self.assertAlmostEqual(direct_fit.center_mm, 0.75, places=6)
+        self.assertGreater(gauss_fit.r_squared, 0.999)
+
+    def test_shared_image_projection_uses_gui_coordinate_convention(self):
+        image = np.zeros((10, 12))
+        image[4:6, 7:9] = 1.0
+
+        projection = project_image_profiles(image, 0.1)
+
+        self.assertEqual(projection.image.shape, (8, 10))
+        self.assertEqual(projection.density_x.shape, (10,))
+        self.assertGreater(np.sum(projection.density_x), 0)
+
     def test_reference_x_mm_maps_to_calibrated_pixel_coordinate(self):
         self.assertAlmostEqual(reference_x_pixel(0.0, 1440, 0.02), 719.5)
         self.assertAlmostEqual(
@@ -248,6 +320,33 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertEqual(tuner.get_last_status(), "FAILED")
         self.assertAlmostEqual(tuner.current, initial)
         self.assertIn("correlation is too weak", tuner.get_last_message())
+
+    def test_profile_center_lock_moves_from_brightness_peak_to_fitted_center(self):
+        updates = []
+        tuner = _ProfileLockAutoTuner(progress_callback=updates.append)
+
+        best = tuner.run(0, 6, coarse_steps=7, fine_steps=21)
+
+        self.assertAlmostEqual(best, 4.0, delta=0.08)
+        self.assertEqual(tuner.get_last_status(), "DONE")
+        self.assertAlmostEqual(tuner.center_lock_result["seed_energy"], 3.0, delta=0.1)
+        self.assertAlmostEqual(tuner.center_lock_result["final_offset_mm"], 0.0, delta=0.08)
+        self.assertEqual(tuner.center_lock_result["fit_method"], "Gauss fit")
+        stages = {update["stage"] for update in updates}
+        self.assertIn("center_probe", stages)
+        self.assertIn("center_lock", stages)
+        self.assertIn("verify", stages)
+
+    def test_profile_center_lock_rejects_static_center_and_restores(self):
+        tuner = _ProfileLockAutoTuner(moving_center=False)
+        initial = tuner.current
+
+        best = tuner.run(0, 6, coarse_steps=7, fine_steps=21)
+
+        self.assertIsNone(best)
+        self.assertEqual(tuner.get_last_status(), "FAILED")
+        self.assertAlmostEqual(tuner.current, initial)
+        self.assertIn("did not respond consistently", tuner.get_last_message())
 
 
 if __name__ == "__main__":
