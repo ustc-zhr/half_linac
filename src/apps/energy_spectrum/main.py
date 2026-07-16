@@ -2901,6 +2901,23 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         current = payload.get("current")
         has_beam = bool(payload.get("has_beam"))
 
+        if stage == "fine_range":
+            range_min = float(payload["range_min"])
+            range_max = float(payload["range_max"])
+            points = int(payload["points"])
+            spacing = float(payload["spacing"])
+            print(
+                "[GUI] ESA Fine scan range: "
+                f"{range_min:.3f}–{range_max:.3f} {self.auto_tune_unit}, "
+                f"{points} points, spacing={spacing:.3f} {self.auto_tune_unit}."
+            )
+            self._auto_tune_text = (
+                f"Fine {range_min:.2f}–{range_max:.2f} {self.auto_tune_unit}"
+            )
+            self._auto_tune_tone = "neutral"
+            self._refresh_status()
+            return
+
         if stage == "coarse":
             prefix = "Coarse"
         elif stage == "fine":

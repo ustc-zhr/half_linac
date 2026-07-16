@@ -239,6 +239,14 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertEqual(updates[0]["stage"], "coarse")
         self.assertIn(updates[-1]["stage"], {"final", "fine"})
 
+        fine_range = next(
+            update for update in updates if update["stage"] == "fine_range"
+        )
+        self.assertEqual(fine_range["range_min"], 3.0)
+        self.assertEqual(fine_range["range_max"], 5.0)
+        self.assertEqual(fine_range["points"], 9)
+        self.assertEqual(fine_range["spacing"], 0.25)
+
     def test_operator_cancel_restores_initial_value(self):
         updates = []
         tuner = _FakeAutoTuner(

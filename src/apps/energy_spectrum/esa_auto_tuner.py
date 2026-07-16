@@ -221,6 +221,22 @@ class ESA_AutoTuner:
             payload["center_offset_pixel"] = float(cx - self.target_x_pixel)
         self.progress_callback(payload)
 
+    def _report_fine_range(self, start, stop, points):
+        if self.progress_callback is None:
+            return
+        spacing = 0.0 if points <= 1 else (float(stop) - float(start)) / (points - 1)
+        self.progress_callback(
+            {
+                "stage": "fine_range",
+                "current": float(start),
+                "has_beam": False,
+                "range_min": float(start),
+                "range_max": float(stop),
+                "points": int(points),
+                "spacing": float(spacing),
+            }
+        )
+
     def _detect_beam(self, img):
         """
         Robust single-shot beam detection
@@ -821,6 +837,7 @@ class ESA_AutoTuner:
                 return None
 
             B1, B2 = interval
+            self._report_fine_range(B1, B2, fine_steps)
             best_B = self.fine_scan(B1, B2, fine_steps)
 
             if best_B is None:
