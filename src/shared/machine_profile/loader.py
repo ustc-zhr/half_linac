@@ -1329,7 +1329,12 @@ def _validate_energy_spectrum_workflow(
             "workflows.energy_spectrum.auto_tune_center_lock",
         )
         integer_values = {}
-        for key in ("frame_samples", "min_valid_frames"):
+        for key in (
+            "frame_samples",
+            "min_valid_frames",
+            "verification_frame_samples",
+            "verification_min_valid_frames",
+        ):
             integer_values[key] = _expect_int(
                 center_lock.get(key),
                 f"workflows.energy_spectrum.auto_tune_center_lock.{key}",
@@ -1347,6 +1352,21 @@ def _validate_energy_spectrum_workflow(
             raise MachineProfileError(
                 "workflows.energy_spectrum.auto_tune_center_lock.min_valid_frames "
                 "must be between 1 and frame_samples."
+            )
+        if integer_values["verification_frame_samples"] < 1:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_center_lock."
+                "verification_frame_samples must be at least 1."
+            )
+        if not (
+            1
+            <= integer_values["verification_min_valid_frames"]
+            <= integer_values["verification_frame_samples"]
+        ):
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_center_lock."
+                "verification_min_valid_frames must be between 1 and "
+                "verification_frame_samples."
             )
         numeric_center_lock = {}
         for key in (

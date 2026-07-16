@@ -35,6 +35,8 @@
   "auto_tune_center_lock": {
     "frame_samples": 3,
     "min_valid_frames": 2,
+    "verification_frame_samples": 5,
+    "verification_min_valid_frames": 3,
     "frame_interval_s": 0.2,
     "center_step": 0.05,
     "max_total_offset": 1.0,

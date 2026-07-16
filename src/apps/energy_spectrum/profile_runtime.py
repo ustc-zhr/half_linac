@@ -8,6 +8,8 @@ from half_linac.src.shared.machine_profile import AppContext, MachineProfile, re
 APP_DIR = Path(__file__).resolve().parent
 ENERGY_SPECTRUM_RUNTIME_ROOT = APP_DIR / "runtime"
 MODEL_SNAPSHOT_FILE = "model_snapshot.json"
+BACKGROUND_IMAGE_FILE = "background.npy"
+BACKGROUND_METADATA_FILE = "background.json"
 
 
 def resolve_energy_spectrum_runtime_paths(target: MachineProfile | AppContext) -> dict[str, Path]:
@@ -22,4 +24,6 @@ def resolve_energy_spectrum_runtime_paths(target: MachineProfile | AppContext) -
         "runs_dir": runs_dir,
         "latest_metadata_path": base_paths["latest_metadata_path"],
         "model_snapshot_path": latest_dir / MODEL_SNAPSHOT_FILE,
+        "background_image_path": latest_dir / BACKGROUND_IMAGE_FILE,
+        "background_metadata_path": latest_dir / BACKGROUND_METADATA_FILE,
     }

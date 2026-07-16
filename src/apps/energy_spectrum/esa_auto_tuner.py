@@ -54,6 +54,8 @@ class ESA_AutoTuner:
                  target_x_pixel=None,
                  frame_samples=3,
                  min_valid_frames=2,
+                 verification_frame_samples=5,
+                 verification_min_valid_frames=3,
                  frame_interval_s=0.2,
                  brightness_fraction=0.4,
                  max_center_spread_pixel=np.inf,
@@ -102,6 +104,8 @@ class ESA_AutoTuner:
         self.restore_initial_on_cancel = bool(restore_initial_on_cancel)
         self.frame_samples = int(frame_samples)
         self.min_valid_frames = int(min_valid_frames)
+        self.verification_frame_samples = int(verification_frame_samples)
+        self.verification_min_valid_frames = int(verification_min_valid_frames)
         self.frame_interval_s = float(frame_interval_s)
         self.brightness_fraction = float(brightness_fraction)
         self.max_center_spread_pixel = float(max_center_spread_pixel)
@@ -117,6 +121,17 @@ class ESA_AutoTuner:
             raise ValueError("frame_samples must be at least 1.")
         if not 1 <= self.min_valid_frames <= self.frame_samples:
             raise ValueError("min_valid_frames must be between 1 and frame_samples.")
+        if self.verification_frame_samples < 1:
+            raise ValueError("verification_frame_samples must be at least 1.")
+        if not (
+            1
+            <= self.verification_min_valid_frames
+            <= self.verification_frame_samples
+        ):
+            raise ValueError(
+                "verification_min_valid_frames must be between 1 and "
+                "verification_frame_samples."
+            )
         if not np.isfinite(self.frame_interval_s) or self.frame_interval_s < 0:
             raise ValueError("frame_interval_s must not be negative.")
         if not np.isfinite(self.brightness_fraction) or not 0 < self.brightness_fraction <= 1:
@@ -207,7 +222,16 @@ class ESA_AutoTuner:
 
         return img
 
-    def _report_progress(self, stage, current, *, has_beam, score=None, cx=None):
+    def _report_progress(
+        self,
+        stage,
+        current,
+        *,
+        has_beam,
+        score=None,
+        cx=None,
+        **details,
+    ):
         if self.progress_callback is None:
             return
         payload = {
@@ -219,6 +243,7 @@ class ESA_AutoTuner:
         if cx is not None:
             payload["center_x_pixel"] = float(cx)
             payload["center_offset_pixel"] = float(cx - self.target_x_pixel)
+        payload.update(details)
         self.progress_callback(payload)
 
     def _report_fine_range(self, start, stop, points):
@@ -427,7 +452,7 @@ class ESA_AutoTuner:
             else:
                 scores = []
                 centers = []
-                for _ in range(3):  # median over 3 pulses
+                for _ in range(self.frame_samples):
                     img = self._get_flag_image()
                     self._raise_if_cancelled()
                     has_beam, score, cx = self._detect_beam(img)
@@ -435,8 +460,15 @@ class ESA_AutoTuner:
                         scores.append(score)
                         centers.append(cx)
 
-            if not scores:
-                self._report_progress("fine", B, has_beam=False, score=None)
+            if len(scores) < self.min_valid_frames:
+                self._report_progress(
+                    "fine",
+                    B,
+                    has_beam=False,
+                    score=None,
+                    valid_frames=len(scores),
+                    total_frames=self.frame_samples,
+                )
                 continue
 
             score_med = np.median(scores)
@@ -602,14 +634,29 @@ class ESA_AutoTuner:
             * (self.flag_pixel[0] - 1)
         )
 
-    def _measure_profile_center(self, energy, stage):
+    def _measure_profile_center(
+        self,
+        energy,
+        stage,
+        *,
+        frame_samples=None,
+        min_valid_frames=None,
+    ):
+        frame_samples = (
+            self.frame_samples if frame_samples is None else int(frame_samples)
+        )
+        min_valid_frames = (
+            self.min_valid_frames
+            if min_valid_frames is None
+            else int(min_valid_frames)
+        )
         centers_mm = []
         projection_strengths = []
         fit_methods = []
         fit_qualities = []
         fit_errors = []
 
-        for sample_index in range(self.frame_samples):
+        for sample_index in range(frame_samples):
             self._raise_if_cancelled()
             image = self._get_flag_image()
             self._raise_if_cancelled()
@@ -629,15 +676,23 @@ class ESA_AutoTuner:
                 fit_methods.append(profile_fit.method)
                 if profile_fit.r_squared is not None:
                     fit_qualities.append(float(profile_fit.r_squared))
-            if sample_index + 1 < self.frame_samples:
+            if sample_index + 1 < frame_samples:
                 self._wait(self.frame_interval_s)
 
-        if len(centers_mm) < self.min_valid_frames:
+        if len(centers_mm) < min_valid_frames:
             detail = fit_errors[-1] if fit_errors else "insufficient fitted frames"
             self.last_profile_diagnostic = (
-                f"{len(centers_mm)}/{self.frame_samples} fitted frames: {detail}"
+                f"{len(centers_mm)}/{frame_samples} fitted frames: {detail}"
             )
-            self._report_progress(stage, energy, has_beam=False, score=None)
+            self._report_progress(
+                stage,
+                energy,
+                has_beam=False,
+                score=None,
+                valid_frames=len(centers_mm),
+                total_frames=frame_samples,
+                diagnostic=self.last_profile_diagnostic,
+            )
             return None
         center_spread_mm = float(np.ptp(centers_mm))
 
@@ -651,6 +706,11 @@ class ESA_AutoTuner:
             has_beam=True,
             score=projection_strength,
             cx=center_pixel,
+            center_mm=center_mm,
+            center_offset_mm=center_mm - self.x_reference_mm,
+            valid_frames=len(centers_mm),
+            total_frames=frame_samples,
+            fit_method="/".join(dict.fromkeys(fit_methods)),
         )
         return {
             "energy": float(energy),
@@ -777,7 +837,12 @@ class ESA_AutoTuner:
             return None
 
         self._set_bend(converged["energy"])
-        verified = self._measure_profile_center(converged["energy"], "verify")
+        verified = self._measure_profile_center(
+            converged["energy"],
+            "verify",
+            frame_samples=self.verification_frame_samples,
+            min_valid_frames=self.verification_min_valid_frames,
+        )
         if verified is None:
             self.last_message = "Final fitted-profile verification did not find a stable beam."
             return None
@@ -970,6 +1035,12 @@ if __name__=='__main__':
         restore_initial_on_failure=bool(scan.get("restore_initial_on_failure", True)),
         frame_samples=int(sampling.get("frame_samples", 3)),
         min_valid_frames=int(sampling.get("min_valid_frames", 2)),
+        verification_frame_samples=int(
+            center_lock.get("verification_frame_samples", 5)
+        ),
+        verification_min_valid_frames=int(
+            center_lock.get("verification_min_valid_frames", 3)
+        ),
         frame_interval_s=float(sampling.get("frame_interval_s", 0.2)),
         brightness_fraction=float(sampling.get("brightness_fraction", 0.4)),
         max_center_spread_pixel=(

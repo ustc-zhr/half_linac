@@ -220,6 +220,22 @@ class ESAAutoTunerTests(unittest.TestCase):
         best = tuner.fine_scan(3.0, 5.0, n_steps=9)
         self.assertAlmostEqual(best, 4.0)
 
+    def test_fine_scan_rejects_points_with_only_one_valid_frame(self):
+        tuner = _FakeAutoTuner()
+        tuner.current = 4.0
+        calls = 0
+
+        def detect_one_frame(_image):
+            nonlocal calls
+            calls += 1
+            if calls % tuner.frame_samples == 1:
+                return True, 10.0, 4.0
+            return False, 0.0, None
+
+        tuner._detect_beam = detect_one_frame
+
+        self.assertIsNone(tuner.fine_scan(3.0, 5.0, n_steps=3))
+
     def test_run_returns_best_current_and_marks_done(self):
         tuner = _FakeAutoTuner()
         tuner.current = 2.0
@@ -338,6 +354,12 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertIn("center_step", stages)
         self.assertIn("center_lock", stages)
         self.assertIn("verify", stages)
+        verify = next(update for update in updates if update["stage"] == "verify")
+        self.assertEqual(verify["valid_frames"], 5)
+        self.assertEqual(verify["total_frames"], 5)
+        self.assertIn("center_mm", verify)
+        self.assertIn("center_offset_mm", verify)
+        self.assertEqual(verify["fit_method"], "Gauss fit")
 
     def test_profile_center_lock_rejects_static_center_and_restores(self):
         tuner = _ProfileLockAutoTuner(moving_center=False)

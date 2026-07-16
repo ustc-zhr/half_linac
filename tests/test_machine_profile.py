@@ -497,6 +497,13 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(paths["latest_metadata_path"], paths["latest_dir"] / "metadata.json")
         self.assertEqual(paths["runs_dir"], paths["runtime_dir"] / "runs")
         self.assertEqual(paths["result_archive_dir"], paths["runtime_dir"] / "runs")
+        self.assertEqual(
+            paths["background_image_path"], paths["latest_dir"] / "background.npy"
+        )
+        self.assertEqual(
+            paths["background_metadata_path"],
+            paths["latest_dir"] / "background.json",
+        )
         self.assertEqual(paths["model_snapshot_path"], paths["latest_dir"] / "model_snapshot.json")
 
     def test_half_beam_monitor_workflow_keeps_backend_image_geometry(self):
@@ -1443,6 +1450,12 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["auto_tune_scan"]["coarse_steps"], 16)
         self.assertEqual(workflow["auto_tune_scan"]["fine_steps"], 31)
         self.assertEqual(workflow["auto_tune_center_lock"]["frame_samples"], 3)
+        self.assertEqual(
+            workflow["auto_tune_center_lock"]["verification_frame_samples"], 5
+        )
+        self.assertEqual(
+            workflow["auto_tune_center_lock"]["verification_min_valid_frames"], 3
+        )
         self.assertEqual(workflow["auto_tune_center_lock"]["center_step"], 0.05)
         self.assertEqual(workflow["auto_tune_center_lock"]["max_total_offset"], 1.0)
         self.assertEqual(workflow["auto_tune_center_lock"]["center_tolerance_mm"], 0.2)

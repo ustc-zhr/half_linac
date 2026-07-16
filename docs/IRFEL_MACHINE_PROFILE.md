@@ -146,9 +146,11 @@ IRFEL real mode uses the coordinated A3 energy control instead of applying the
 HALF bend-current calibration. Auto Find scans `ESA_ENERGY.setpoint` over the
 configured `0–65 MeV` range, so it preserves the coordinated BM03/QM19/QM20 control.
 The Target control reads A3 on startup, follows later A3 changes while it is not
-being edited, and supports `0.01 MeV` input. Auto Find exposes its range, coarse/fine
-point counts, settling time, frame gap, center step, center tolerance, and optimization objective
-in the GUI; Stop restores the pre-scan A3 value. IRFEL defaults to `Highest
+being edited, and supports `0.01 MeV` input. The main Energy Tuning card keeps Target,
+Objective, a compact settings summary, Auto Find, Stop, and a Settings button. The
+settings dialog contains scan range, coarse/fine point counts, settling time, frame
+counts, frame gap, center step, center tolerance, and maximum center offset; Stop
+restores the pre-scan A3 value. IRFEL defaults to `Highest
 brightness`, which has been the more noise-tolerant commissioning choice. The
 selectable `Peak brightness + fitted center` method first reuses that brightness
 search, then calculates the same one-dimensional x-projection center used by the GUI's
@@ -156,8 +158,20 @@ current `direct` or `Gauss fit` method. It tries one fixed A3 center step in eac
 direction, continues in the direction that reduces the center error, and performs
 one interpolated measurement after crossing `x_reference_mm`. It does not apply an
 additional 2D beam or Gaussian-quality gate; too few valid profile fits or failed
-final verification restores the pre-scan value. The GUI exposes frame gap, center
-step, and center tolerance for this stage. `Closest to x reference` remains
+final verification restores the pre-scan value. Fine points require at least two of
+three valid beam frames. Center-search points use at least two of three fitted frames,
+while final verification uses at least three of five frames. The terminal log records
+the energy, fitted center, offset, valid-frame count, and fit method for every center
+measurement. Each Auto Find also writes an immediately flushed CSV event log under
+`runtime/irfel/real/runs/`; it includes the scan configuration, all Coarse/Fine and
+center events, Stop requests, restoration events, and the final status. These files
+are ignored by Git, and only the most recent 500 Auto Find CSV logs are retained.
+The Background card keeps only the subtraction toggle, current-background status,
+and a Background button. Sampling, preview, Load Latest, Load File, and Save As live
+in a separate dialog. A sampled background is saved automatically to
+`runtime/irfel/real/latest/background.npy` with `background.json` metadata and is
+loaded on the next startup without automatically enabling subtraction. Save As
+defaults to the backend-scoped `runs/` directory. `Closest to x reference` remains
 available for direct comparison with the older connected-region center logic.
 
 ### `apps/dispersion_correction.json`

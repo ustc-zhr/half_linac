@@ -29,6 +29,8 @@ from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFrame,
     QDoubleSpinBox,
@@ -48,6 +50,12 @@ from PyQt5.QtWidgets import (
 )
 
 from gui import Ui_MainWindow
+from half_linac.src.apps.energy_spectrum.auto_tune_run_log import ESAAutoTuneRunLog
+from half_linac.src.apps.energy_spectrum.background_store import (
+    BackgroundStoreError,
+    load_background,
+    save_background,
+)
 from half_linac.src.apps.energy_spectrum.get_energy0 import select_reference_energy_mev
 from half_linac.src.apps.energy_spectrum.esa_auto_tuner import (
     ESA_AutoTuner,
@@ -168,7 +176,7 @@ LIGHT_THEME = {
 def build_energy_spectrum_theme(palette):
     theme_values = dict(palette, header_action_height=HEADER_ACTION_HEIGHT)
     return """
-QMainWindow, QWidget#centralwidget {{
+QMainWindow, QWidget#centralwidget, QDialog#energySpectrumDialog {{
     background-color: {window_bg};
     color: {window_fg};
     font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif;
@@ -186,19 +194,48 @@ QFrame#plotCard, QGroupBox#workspaceCard {{
     border-radius: 14px;
 }}
 
+QWidget#ESAflag_image, QWidget#energy_plot, QWidget#background_plot {{
+    background-color: {plot_card_bg};
+    border: none;
+}}
+
 QGroupBox#workspaceCard {{
-    margin-top: 22px;
-    padding-top: 8px;
+    margin-top: 0;
+    padding-top: 0;
     font-weight: 700;
 }}
 
-QGroupBox#workspaceCard::title {{
-    subcontrol-origin: margin;
-    left: 14px;
-    top: 5px;
+QGroupBox#dialogCard {{
+    background-color: {panel_bg};
+    border: 1px solid {panel_border};
+    border-radius: 12px;
+    margin-top: 0;
     padding: 0;
+}}
+
+QDialog#energySpectrumDialog QToolBar {{
+    background-color: {plot_card_bg};
+    border: none;
+    spacing: 2px;
+}}
+
+QDialog#energySpectrumDialog QToolBar QToolButton {{
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 3px;
+}}
+
+QDialog#energySpectrumDialog QToolBar QToolButton:hover {{
+    background-color: {button_hover_bg};
+}}
+
+QLabel#cardTitle, QLabel#dialogCardTitle {{
     color: {summary_title_fg};
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 700;
+    background: transparent;
+    border: none;
 }}
 
 QLabel#summaryTitle {{
@@ -287,6 +324,13 @@ QPushButton[tight="true"] {{
     padding: 4px 10px;
     min-height: 22px;
     font-size: 11px;
+}}
+
+QDialog#energySpectrumDialog QPushButton[dialogAction="true"] {{
+    padding: 3px 10px;
+    min-height: 20px;
+    max-height: 22px;
+    border-radius: 8px;
 }}
 
 QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox {{
@@ -385,6 +429,72 @@ QToolButton#themeToggleButton:pressed {{
     background-color: {button_pressed_bg};
 }}
 """.format_map(theme_values)
+
+
+def build_background_file_dialog_theme(palette):
+    return """
+QFileDialog#backgroundFileDialog {{
+    background-color: {window_bg};
+    color: {window_fg};
+}}
+
+QFileDialog#backgroundFileDialog QAbstractItemView {{
+    background-color: {input_bg};
+    alternate-background-color: {panel_bg};
+    color: {input_fg};
+    border: 1px solid {input_border};
+    selection-background-color: {metric_active_fg};
+    selection-color: {window_bg};
+    outline: none;
+}}
+
+QFileDialog#backgroundFileDialog QAbstractItemView::item {{
+    padding: 3px 5px;
+}}
+
+QFileDialog#backgroundFileDialog QHeaderView::section {{
+    background-color: {panel_bg};
+    color: {window_fg};
+    border: none;
+    border-right: 1px solid {panel_border};
+    border-bottom: 1px solid {panel_border};
+    padding: 5px 7px;
+    font-weight: 700;
+}}
+
+QFileDialog#backgroundFileDialog QToolButton {{
+    background-color: {button_bg};
+    color: {button_fg};
+    border: 1px solid {button_border};
+    border-radius: 6px;
+    min-width: 26px;
+    min-height: 26px;
+    padding: 2px;
+}}
+
+QFileDialog#backgroundFileDialog QToolButton:hover {{
+    background-color: {button_hover_bg};
+}}
+
+QFileDialog#backgroundFileDialog QPushButton {{
+    padding: 4px 10px;
+    min-height: 24px;
+    max-height: 28px;
+    border-radius: 8px;
+}}
+
+QFileDialog#backgroundFileDialog QSplitter::handle {{
+    background-color: {panel_border};
+}}
+
+QFileDialog#backgroundFileDialog QScrollBar {{
+    background-color: {window_bg};
+}}
+
+QFileDialog#backgroundFileDialog QSizeGrip {{
+    background-color: {window_bg};
+}}
+""".format_map(palette)
 
 
 def build_status_strip_theme(palette):
@@ -582,6 +692,12 @@ class ESAAutoTuneThread(QThread):
                 ),
                 frame_samples=int(self.bend_scan.get("frame_samples", 3)),
                 min_valid_frames=int(self.bend_scan.get("min_valid_frames", 2)),
+                verification_frame_samples=int(
+                    self.bend_scan.get("verification_frame_samples", 5)
+                ),
+                verification_min_valid_frames=int(
+                    self.bend_scan.get("verification_min_valid_frames", 3)
+                ),
                 frame_interval_s=float(self.bend_scan.get("frame_interval_s", 0.2)),
                 max_center_spread_pixel=float(
                     self.bend_scan.get("max_center_spread_pixel", np.inf)
@@ -689,7 +805,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.sigx = None
         self.sigy = None
         self.bg_image = None
+        self.bg_metadata = {}
+        self.bg_image_path = None
+        self.remove_bg = False
         self.auto_tune_thread = None
+        self._auto_tune_run_log = None
+        self._auto_tune_log_path = None
         self.latest_model_snapshot_metadata = None
         self.latest_model_snapshot_path = None
         self._archive_next_energy_result = False
@@ -705,7 +826,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         # ESA 入口处束团参数
         self.with_emit = False # 默认不考虑发射度
-        self.remove_bg = False # 默认不去背景
+        self._load_latest_background(silent=True)
 
         self.beta_flag = 0
         self.emi_flag = 0
@@ -1094,7 +1215,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.verticalLayout_3.setSpacing(12)
         self.verticalLayout_7.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout_7.setSpacing(12)
+        self.verticalLayout_7.setAlignment(Qt.AlignTop)
         self.verticalLayout.setSpacing(12)
+        self.verticalLayout.setAlignment(Qt.AlignTop)
 
         self._build_summary_panel()
         self._configure_plot_card()
@@ -1157,6 +1280,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.verticalLayout_6.setContentsMargins(12, 12, 12, 12)
         self.verticalLayout_6.setSpacing(0)
         self.verticalLayout_5.setSpacing(10)
+        self.ESAflag_image.layout().setSpacing(0)
 
         self.flag_plot_title = QLabel("Flag Image", self.frame_3)
         self.flag_plot_title.setObjectName("panelTitle")
@@ -1170,24 +1294,38 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         self.verticalLayout_3.removeWidget(self.groupBox_4)
         self.verticalLayout_3.removeWidget(self.groupBox_5)
+        self.verticalLayout.insertWidget(0, self.groupBox_4)
+        self.verticalLayout.removeWidget(self.groupBox_8)
+        self.verticalLayout.insertWidget(1, self.groupBox_8)
         self.left_detail_stack = QVBoxLayout()
         self.left_detail_stack.setContentsMargins(0, 0, 0, 0)
         self.left_detail_stack.setSpacing(10)
-        self.left_detail_stack.addWidget(self.groupBox_4)
         self.left_detail_stack.addWidget(self.groupBox_5)
         self.verticalLayout_3.addLayout(self.left_detail_stack)
 
     def _configure_workspace_cards(self):
-        for group_box in (self.groupBox_4, self.groupBox_5, self.groupBox_6, self.groupBox_7, self.groupBox_8):
+        card_titles = (
+            (self.groupBox_4, "Acquisition"),
+            (self.groupBox_5, None),
+            (self.groupBox_6, "Optics Model"),
+            (self.groupBox_8, "Energy Tuning"),
+            (self.groupBox_7, "Background Reference"),
+        )
+        self.workspace_card_title_labels = []
+        for group_box, title in card_titles:
             group_box.setObjectName("workspaceCard")
             group_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+            group_box.setTitle("")
+
+            if title is None:
+                continue
+            title_label = QLabel(title, group_box)
+            title_label.setObjectName("cardTitle")
+            title_label.move(14, 8)
+            title_label.raise_()
+            self.workspace_card_title_labels.append(title_label)
 
         self.groupBox_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.groupBox_4.setTitle("Acquisition")
-        self.groupBox_5.setTitle("Readout")
-        self.groupBox_6.setTitle("Optics Model")
-        self.groupBox_8.setTitle("Energy Tuning")
-        self.groupBox_7.setTitle("Background Reference")
 
     def _configure_energy_tuning_controls(self):
         self._energy_slider_scale = 100  # 0.01 MeV per slider count.
@@ -1320,28 +1458,134 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             float(center_lock_config.get("center_tolerance_mm", 0.2))
         )
 
-        scan_layout = QGridLayout()
-        scan_layout.setContentsMargins(0, 0, 0, 0)
-        scan_layout.setHorizontalSpacing(7)
-        scan_layout.setVerticalSpacing(5)
-        scan_fields = (
-            ("Min", self.auto_tune_min_spin, 0, 0),
-            ("Max", self.auto_tune_max_spin, 0, 2),
-            ("Coarse pts", self.auto_tune_coarse_steps_spin, 1, 0),
-            ("Fine pts", self.auto_tune_fine_steps_spin, 1, 2),
-            ("Settle", self.auto_tune_settle_spin, 2, 0),
-            ("Objective", self.auto_tune_objective_combo, 2, 2),
-            ("Frame gap", self.auto_tune_frame_interval_spin, 3, 0),
-            ("Center step", self.auto_tune_probe_step_spin, 3, 2),
-            ("Center tol", self.auto_tune_center_tolerance_spin, 4, 0),
+        self.auto_tune_frame_samples_spin = QSpinBox(self.groupBox_8)
+        self.auto_tune_min_valid_frames_spin = QSpinBox(self.groupBox_8)
+        self.auto_tune_verification_frames_spin = QSpinBox(self.groupBox_8)
+        self.auto_tune_verification_min_valid_spin = QSpinBox(self.groupBox_8)
+        for spin in (
+            self.auto_tune_frame_samples_spin,
+            self.auto_tune_min_valid_frames_spin,
+            self.auto_tune_verification_frames_spin,
+            self.auto_tune_verification_min_valid_spin,
+        ):
+            spin.setRange(1, 100)
+            spin.setKeyboardTracking(False)
+            spin.setProperty("dense", True)
+        self.auto_tune_frame_samples_spin.setValue(
+            int(center_lock_config.get("frame_samples", 3))
         )
-        for text, widget, row, column in scan_fields:
-            label = QLabel(text, self.groupBox_8)
-            label.setProperty("role", "field")
-            scan_layout.addWidget(label, row, column)
-            scan_layout.addWidget(widget, row, column + 1)
-        scan_layout.setColumnStretch(1, 1)
-        scan_layout.setColumnStretch(3, 1)
+        self.auto_tune_min_valid_frames_spin.setValue(
+            int(center_lock_config.get("min_valid_frames", 2))
+        )
+        self.auto_tune_verification_frames_spin.setValue(
+            int(center_lock_config.get("verification_frame_samples", 5))
+        )
+        self.auto_tune_verification_min_valid_spin.setValue(
+            int(center_lock_config.get("verification_min_valid_frames", 3))
+        )
+
+        self.auto_tune_max_offset_spin = QDoubleSpinBox(self.groupBox_8)
+        self.auto_tune_max_offset_spin.setDecimals(2)
+        self.auto_tune_max_offset_spin.setSingleStep(0.1)
+        self.auto_tune_max_offset_spin.setRange(0.01, 10.0)
+        self.auto_tune_max_offset_spin.setSuffix(f" {self.auto_tune_unit}")
+        self.auto_tune_max_offset_spin.setKeyboardTracking(False)
+        self.auto_tune_max_offset_spin.setProperty("dense", True)
+        self.auto_tune_max_offset_spin.setValue(
+            float(center_lock_config.get("max_total_offset", 1.0))
+        )
+
+        self.auto_tune_settings_dialog = QDialog(self)
+        self.auto_tune_settings_dialog.setObjectName("energySpectrumDialog")
+        self.auto_tune_settings_dialog.setWindowTitle("Auto Find Settings")
+        self.auto_tune_settings_dialog.setModal(True)
+        self.auto_tune_settings_dialog.resize(560, 520)
+        settings_layout = QVBoxLayout(self.auto_tune_settings_dialog)
+        settings_layout.setContentsMargins(14, 14, 14, 14)
+        settings_layout.setSpacing(10)
+
+        def add_settings_group(title, fields):
+            group = QGroupBox("", self.auto_tune_settings_dialog)
+            group.setObjectName("dialogCard")
+            grid = QGridLayout(group)
+            grid.setContentsMargins(10, 9, 10, 10)
+            grid.setHorizontalSpacing(8)
+            grid.setVerticalSpacing(7)
+
+            title_label = QLabel(title, group)
+            title_label.setObjectName("dialogCardTitle")
+            grid.addWidget(title_label, 0, 0, 1, 2)
+            for row, (text, widget) in enumerate(fields):
+                label = QLabel(text, group)
+                label.setProperty("role", "field")
+                grid.addWidget(label, row + 1, 0)
+                grid.addWidget(widget, row + 1, 1)
+            grid.setColumnStretch(1, 1)
+            settings_layout.addWidget(group)
+
+        add_settings_group(
+            "Scan",
+            (
+                ("Minimum", self.auto_tune_min_spin),
+                ("Maximum", self.auto_tune_max_spin),
+                ("Coarse points", self.auto_tune_coarse_steps_spin),
+                ("Fine points", self.auto_tune_fine_steps_spin),
+                ("Settle time", self.auto_tune_settle_spin),
+            ),
+        )
+        add_settings_group(
+            "Sampling",
+            (
+                ("Fine/center frames", self.auto_tune_frame_samples_spin),
+                ("Minimum valid frames", self.auto_tune_min_valid_frames_spin),
+                ("Verification frames", self.auto_tune_verification_frames_spin),
+                ("Verification minimum", self.auto_tune_verification_min_valid_spin),
+                ("Frame gap", self.auto_tune_frame_interval_spin),
+            ),
+        )
+        add_settings_group(
+            "Center Lock",
+            (
+                ("Center step", self.auto_tune_probe_step_spin),
+                ("Center tolerance", self.auto_tune_center_tolerance_spin),
+                ("Maximum offset", self.auto_tune_max_offset_spin),
+            ),
+        )
+        self.auto_tune_settings_buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok
+            | QDialogButtonBox.Cancel
+            | QDialogButtonBox.RestoreDefaults,
+            parent=self.auto_tune_settings_dialog,
+        )
+        self.auto_tune_settings_buttons.accepted.connect(
+            self.auto_tune_settings_dialog.accept
+        )
+        self.auto_tune_settings_buttons.rejected.connect(
+            self.auto_tune_settings_dialog.reject
+        )
+        self.auto_tune_settings_buttons.button(
+            QDialogButtonBox.RestoreDefaults
+        ).clicked.connect(self._reset_auto_tune_settings)
+        self.auto_tune_settings_buttons.button(QDialogButtonBox.Ok).setText("Apply")
+        for button in self.auto_tune_settings_buttons.buttons():
+            button.setProperty("dialogAction", True)
+        settings_layout.addWidget(self.auto_tune_settings_buttons)
+
+        self.auto_tune_settings_button = QPushButton("Settings...", self.groupBox_8)
+        self.auto_tune_settings_button.setObjectName("pushButton_autoTuneSettings")
+        self.auto_tune_settings_summary = QLabel(self.groupBox_8)
+        self.auto_tune_settings_summary.setWordWrap(True)
+        self.auto_tune_settings_summary.setProperty("role", "field")
+
+        objective_layout = QGridLayout()
+        objective_layout.setContentsMargins(0, 0, 0, 0)
+        objective_layout.setHorizontalSpacing(7)
+        objective_label = QLabel("Objective", self.groupBox_8)
+        objective_label.setProperty("role", "field")
+        objective_layout.addWidget(objective_label, 0, 0)
+        objective_layout.addWidget(self.auto_tune_objective_combo, 0, 1)
+        objective_layout.addWidget(self.auto_tune_settings_button, 0, 2)
+        objective_layout.setColumnStretch(1, 1)
 
         self.pushButton_stopAutoFind = QPushButton("Stop", self.groupBox_8)
         self.pushButton_stopAutoFind.setObjectName("pushButton_stopAutoFind")
@@ -1351,7 +1595,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.verticalLayout_14.removeWidget(self.pushButton_autoFind)
         button_layout.addWidget(self.pushButton_autoFind, 1)
         button_layout.addWidget(self.pushButton_stopAutoFind, 1)
-        self.verticalLayout_14.addLayout(scan_layout)
+        self.verticalLayout_14.addLayout(objective_layout)
+        self.verticalLayout_14.addWidget(self.auto_tune_settings_summary)
         self.verticalLayout_14.addLayout(button_layout)
 
         self.auto_tune_parameter_widgets = (
@@ -1361,9 +1606,94 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_fine_steps_spin,
             self.auto_tune_settle_spin,
             self.auto_tune_objective_combo,
+            self.auto_tune_frame_samples_spin,
+            self.auto_tune_min_valid_frames_spin,
+            self.auto_tune_verification_frames_spin,
+            self.auto_tune_verification_min_valid_spin,
             self.auto_tune_frame_interval_spin,
             self.auto_tune_probe_step_spin,
             self.auto_tune_center_tolerance_spin,
+            self.auto_tune_max_offset_spin,
+        )
+        self._auto_tune_default_values = self._auto_tune_settings_values()
+        self._update_auto_tune_settings_summary()
+
+    def _auto_tune_settings_values(self):
+        return {
+            "minimum": self.auto_tune_min_spin.value(),
+            "maximum": self.auto_tune_max_spin.value(),
+            "coarse_steps": self.auto_tune_coarse_steps_spin.value(),
+            "fine_steps": self.auto_tune_fine_steps_spin.value(),
+            "settle_time_s": self.auto_tune_settle_spin.value(),
+            "frame_samples": self.auto_tune_frame_samples_spin.value(),
+            "min_valid_frames": self.auto_tune_min_valid_frames_spin.value(),
+            "verification_frame_samples": self.auto_tune_verification_frames_spin.value(),
+            "verification_min_valid_frames": self.auto_tune_verification_min_valid_spin.value(),
+            "frame_interval_s": self.auto_tune_frame_interval_spin.value(),
+            "center_step": self.auto_tune_probe_step_spin.value(),
+            "center_tolerance_mm": self.auto_tune_center_tolerance_spin.value(),
+            "max_total_offset": self.auto_tune_max_offset_spin.value(),
+        }
+
+    def _set_auto_tune_settings_values(self, values):
+        widget_values = (
+            (self.auto_tune_min_spin, "minimum"),
+            (self.auto_tune_max_spin, "maximum"),
+            (self.auto_tune_coarse_steps_spin, "coarse_steps"),
+            (self.auto_tune_fine_steps_spin, "fine_steps"),
+            (self.auto_tune_settle_spin, "settle_time_s"),
+            (self.auto_tune_frame_samples_spin, "frame_samples"),
+            (self.auto_tune_min_valid_frames_spin, "min_valid_frames"),
+            (self.auto_tune_verification_frames_spin, "verification_frame_samples"),
+            (self.auto_tune_verification_min_valid_spin, "verification_min_valid_frames"),
+            (self.auto_tune_frame_interval_spin, "frame_interval_s"),
+            (self.auto_tune_probe_step_spin, "center_step"),
+            (self.auto_tune_center_tolerance_spin, "center_tolerance_mm"),
+            (self.auto_tune_max_offset_spin, "max_total_offset"),
+        )
+        for widget, key in widget_values:
+            widget.setValue(values[key])
+
+    def _reset_auto_tune_settings(self):
+        self._set_auto_tune_settings_values(self._auto_tune_default_values)
+
+    def _validate_auto_tune_dialog_values(self):
+        values = self._auto_tune_settings_values()
+        if values["minimum"] >= values["maximum"]:
+            raise ValueError("Auto Find minimum energy must be less than maximum energy.")
+        if values["min_valid_frames"] > values["frame_samples"]:
+            raise ValueError("Minimum valid frames cannot exceed Fine/center frames.")
+        if (
+            values["verification_min_valid_frames"]
+            > values["verification_frame_samples"]
+        ):
+            raise ValueError(
+                "Verification minimum cannot exceed verification frames."
+            )
+
+    def _show_auto_tune_settings(self):
+        if self._auto_tune_is_running():
+            return
+        previous = self._auto_tune_settings_values()
+        if self.auto_tune_settings_dialog.exec_() != QDialog.Accepted:
+            self._set_auto_tune_settings_values(previous)
+            return
+        try:
+            self._validate_auto_tune_dialog_values()
+        except ValueError as exc:
+            self._warn(str(exc))
+            self._set_auto_tune_settings_values(previous)
+            return
+        self._update_auto_tune_settings_summary()
+
+    def _update_auto_tune_settings_summary(self):
+        self.auto_tune_settings_summary.setText(
+            f"Range {self.auto_tune_min_spin.value():g}–"
+            f"{self.auto_tune_max_spin.value():g} {self.auto_tune_unit} · "
+            f"{self.auto_tune_coarse_steps_spin.value()}/"
+            f"{self.auto_tune_fine_steps_spin.value()} pts · "
+            f"step {self.auto_tune_probe_step_spin.value():g} {self.auto_tune_unit} · "
+            f"tol {self.auto_tune_center_tolerance_spin.value():g} mm"
         )
 
     def _initial_target_energy_mev(self):
@@ -1424,9 +1754,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.energy_config.get("bend_scan", {}),
         )
         objective = str(self.auto_tune_objective_combo.currentData())
-        center_lock_config = dict(
-            self.energy_config.get("auto_tune_center_lock", {})
-        )
         target_x_pixel = reference_x_pixel(
             self.x_reference_mm,
             self.flag_pixel[0],
@@ -1440,16 +1767,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "settle_time_s": self.auto_tune_settle_spin.value(),
             "objective": objective,
             "target_x_pixel": target_x_pixel,
-            "frame_samples": int(center_lock_config.get("frame_samples", 3)),
-            "min_valid_frames": int(center_lock_config.get("min_valid_frames", 2)),
+            "frame_samples": self.auto_tune_frame_samples_spin.value(),
+            "min_valid_frames": self.auto_tune_min_valid_frames_spin.value(),
+            "verification_frame_samples": self.auto_tune_verification_frames_spin.value(),
+            "verification_min_valid_frames": self.auto_tune_verification_min_valid_spin.value(),
             "frame_interval_s": self.auto_tune_frame_interval_spin.value(),
             "pixel_width_mm": self.flag_pixel_width_mm,
             "profile_fit_method": self.comboBox_fitmethod.currentText(),
             "x_reference_mm": self.x_reference_mm,
             "center_step": self.auto_tune_probe_step_spin.value(),
-            "center_max_total_offset": float(
-                center_lock_config.get("max_total_offset", 1.0)
-            ),
+            "center_max_total_offset": self.auto_tune_max_offset_spin.value(),
             "center_tolerance_mm": self.auto_tune_center_tolerance_spin.value(),
             "restore_initial_on_failure": bool(
                 configured.get("restore_initial_on_failure", True)
@@ -1470,9 +1797,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.pushButton_cal_twiss_disp.setText("Update optics")
         self.pushButton_autoFind.setText("Auto Find")
         self.pushButton_sample_bg.setText("Sample BG")
-        self.pushButton_save.setText("Save BG")
-        self.pushButton_load.setText("Load BG")
-        self.checkBox_emit.setText("Subtract emit")
+        self.pushButton_save.setText("Save As")
+        self.pushButton_load.setText("Load File")
+        self.checkBox_emit.setText("Subtract emittance contribution")
+        self.checkBox_emit.setToolTip(
+            "Remove the beam-size contribution calculated from the current optics "
+            "and emittance when reporting energy spread."
+        )
         self.checkBox_bg.setText("Subtract background")
         self._configure_energy_tuning_controls()
         self._name_operator_controls()
@@ -1507,23 +1838,23 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         for label in (self.label_energy, self.label_energyspread):
             label.setStyleSheet("")
 
-        self.horizontalLayout_7.setContentsMargins(10, 12, 10, 8)
-        self.horizontalLayout_7.setSpacing(10)
-        self.horizontalLayout_6.setSpacing(8)
-        self.verticalLayout_13.setSpacing(6)
-
         self.lineEdit_expotime.setReadOnly(self.control_backend != "real" or not self._writes_allowed())
         self.lineEdit_alpha_ESAflag.setReadOnly(True)
         self.lineEdit_beta_ESAflag.setReadOnly(True)
         self.lineEdit_eta_ESAflag.setReadOnly(True)
 
-        self.verticalLayout_8.setContentsMargins(10, 12, 10, 8)
+        self.horizontalLayout_7.setContentsMargins(10, 8, 10, 8)
+        self.horizontalLayout_7.setSpacing(10)
+        self.horizontalLayout_6.setSpacing(8)
+        self.verticalLayout_13.setSpacing(6)
+
+        self.verticalLayout_8.setContentsMargins(10, 34, 10, 8)
         self.verticalLayout_8.setSpacing(6)
-        self.verticalLayout_9.setContentsMargins(10, 12, 10, 8)
+        self.verticalLayout_9.setContentsMargins(10, 34, 10, 8)
         self.verticalLayout_9.setSpacing(6)
-        self.verticalLayout_10.setContentsMargins(10, 12, 10, 8)
+        self.verticalLayout_10.setContentsMargins(10, 34, 10, 8)
         self.verticalLayout_10.setSpacing(6)
-        self.verticalLayout_14.setContentsMargins(10, 12, 10, 8)
+        self.verticalLayout_14.setContentsMargins(10, 34, 10, 8)
         self.verticalLayout_14.setSpacing(6)
         self.verticalLayout_11.setSpacing(6)
         self.verticalLayout_12.setContentsMargins(0, 0, 0, 0)
@@ -1547,6 +1878,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.gridLayout.addWidget(self.comboBox_colormap, 1, 1)
         self.gridLayout.addWidget(self.label_10, 1, 2)
         self.gridLayout.addWidget(self.comboBox_fitmethod, 1, 3)
+        self.gridLayout.removeWidget(self.checkBox_emit)
+        self.verticalLayout_13.removeWidget(self.checkBox_emit)
+        self.verticalLayout_9.insertWidget(1, self.checkBox_emit)
         self.gridLayout.setColumnStretch(0, 0)
         self.gridLayout.setColumnStretch(1, 1)
         self.gridLayout.setColumnStretch(2, 0)
@@ -1591,7 +1925,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 self.comboBox_start_element.setCurrentIndex(index)
 
         self._set_target_energy_control(self._initial_target_energy_mev())
-        self._sync_energy_control_state()
 
         self.pushButton_cal_disp.setProperty("compact", True)
         self.pushButton_cal_twiss_disp.setProperty("compact", True)
@@ -1602,6 +1935,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.pushButton_cal_twiss_disp,
             self.pushButton_autoFind,
             self.pushButton_stopAutoFind,
+            self.auto_tune_settings_button,
             self.pushButton_sample_bg,
             self.pushButton_save,
             self.pushButton_load,
@@ -1609,26 +1943,90 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             button.setProperty("tight", True)
             self._refresh_widget_style(button)
 
-        self.gridLayout_4.removeWidget(self.pushButton_sample_bg)
-        self.gridLayout_4.removeWidget(self.lineEdit_samples)
-        self.gridLayout_4.removeWidget(self.pushButton_save)
-        self.gridLayout_4.removeWidget(self.pushButton_load)
-        self.gridLayout_4.removeWidget(self.lineEdit)
-        self.gridLayout_4.removeWidget(self.lineEdit_3)
+        self.background_dialog = QDialog(self)
+        self.background_dialog.setObjectName("energySpectrumDialog")
+        self.background_dialog.setWindowTitle("Background Reference")
+        self.background_dialog.setModal(True)
+        self.background_dialog.resize(760, 620)
+        background_dialog_layout = QVBoxLayout(self.background_dialog)
+        background_dialog_layout.setContentsMargins(14, 14, 14, 14)
+        background_dialog_layout.setSpacing(10)
+
+        self.verticalLayout_12.removeWidget(self.background_plot)
+        self.background_plot.setParent(self.background_dialog)
+        self.background_plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.background_plot.setMinimumHeight(400)
+        background_dialog_layout.addWidget(self.background_plot, 1)
+
+        controls_group = QGroupBox("", self.background_dialog)
+        controls_group.setObjectName("dialogCard")
+        controls_layout = QGridLayout(controls_group)
+        controls_layout.setContentsMargins(10, 9, 10, 10)
+        controls_layout.setHorizontalSpacing(7)
+        controls_layout.setVerticalSpacing(7)
+        for widget in (
+            self.pushButton_sample_bg,
+            self.lineEdit_samples,
+            self.pushButton_save,
+            self.pushButton_load,
+            self.lineEdit,
+            self.lineEdit_3,
+        ):
+            self.gridLayout_4.removeWidget(widget)
+        controls_title = QLabel("Background Controls", controls_group)
+        controls_title.setObjectName("dialogCardTitle")
+        controls_layout.addWidget(controls_title, 0, 0, 1, 3)
+        sample_label = QLabel("Samples", controls_group)
+        sample_label.setProperty("role", "field")
+        controls_layout.addWidget(sample_label, 1, 0)
+        controls_layout.addWidget(self.lineEdit_samples, 1, 1)
+        controls_layout.addWidget(self.pushButton_sample_bg, 1, 2)
+        self.pushButton_load_latest_bg = QPushButton("Load Latest", controls_group)
+        background_action_layout = QHBoxLayout()
+        background_action_layout.setContentsMargins(0, 0, 0, 0)
+        background_action_layout.setSpacing(7)
+        background_action_layout.addWidget(self.pushButton_save, 1)
+        background_action_layout.addWidget(self.pushButton_load, 1)
+        background_action_layout.addWidget(self.pushButton_load_latest_bg, 1)
+        controls_layout.addLayout(background_action_layout, 2, 0, 1, 3)
+        controls_layout.setColumnStretch(1, 1)
+        background_dialog_layout.addWidget(controls_group)
+
+        self.background_path_label = QLabel("No background loaded", self.background_dialog)
+        self.background_path_label.setWordWrap(True)
+        self.background_path_label.setProperty("role", "field")
+        background_dialog_layout.addWidget(self.background_path_label)
+        background_close_buttons = QDialogButtonBox(
+            QDialogButtonBox.Close,
+            parent=self.background_dialog,
+        )
+        for button in background_close_buttons.buttons():
+            button.setProperty("dialogAction", True)
+        background_close_buttons.rejected.connect(self.background_dialog.reject)
+        background_dialog_layout.addWidget(background_close_buttons)
+
         self.lineEdit.hide()
         self.lineEdit_3.hide()
-        self.gridLayout_4.setHorizontalSpacing(7)
-        self.gridLayout_4.setVerticalSpacing(5)
-        self.gridLayout_4.addWidget(self.pushButton_sample_bg, 0, 0)
-        self.gridLayout_4.addWidget(self.lineEdit_samples, 0, 1)
-        self.gridLayout_4.addWidget(self.pushButton_save, 1, 0, 1, 2)
-        self.gridLayout_4.addWidget(self.pushButton_load, 2, 0, 1, 2)
-        self.gridLayout_4.setColumnStretch(1, 1)
-
-        self.background_plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.background_plot.setMinimumHeight(272)
-        self.verticalLayout_12.setStretch(0, 1)
-        self.verticalLayout_12.setStretch(1, 0)
+        while self.verticalLayout_12.count():
+            self.verticalLayout_12.takeAt(0)
+        self.background_status_label = QLabel("Background: None", self.groupBox_7)
+        self.background_status_label.setWordWrap(True)
+        self.background_status_label.setProperty("role", "field")
+        self.background_settings_button = QPushButton("Background...", self.groupBox_7)
+        self.background_settings_button.setObjectName("pushButton_backgroundSettings")
+        self.background_settings_button.setAccessibleName("Open background settings")
+        self.pushButton_load_latest_bg.setAccessibleName("Load latest background")
+        for button in (
+            self.background_settings_button,
+            self.pushButton_load_latest_bg,
+        ):
+            button.setProperty("tight", True)
+            self._refresh_widget_style(button)
+        self.verticalLayout_12.addWidget(self.checkBox_bg)
+        self.verticalLayout_12.addWidget(self.background_status_label)
+        self.verticalLayout_12.addWidget(self.background_settings_button)
+        self.groupBox_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self._sync_energy_control_state()
 
     def _connect_signals(self):
         self.lineEdit_expotime.returnPressed.connect(self.set_expotime)
@@ -1643,6 +2041,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.pushButton_sample_bg.clicked.connect(self.background_samples)
         self.pushButton_save.clicked.connect(self.save_bgfile)
         self.pushButton_load.clicked.connect(self.load_bgfile)
+        self.pushButton_load_latest_bg.clicked.connect(self._load_latest_background)
+        self.background_settings_button.clicked.connect(self._show_background_dialog)
         self.checkBox_bg.clicked.connect(lambda: self.bg_removeornot(self.checkBox_bg.isChecked()))
 
         self.slider_energy.valueChanged.connect(self._update_energy_slider_label)
@@ -1652,6 +2052,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_objective_combo.currentIndexChanged.connect(
             self._sync_energy_control_state
         )
+        self.auto_tune_objective_combo.currentIndexChanged.connect(
+            self._update_auto_tune_settings_summary
+        )
+        self.auto_tune_settings_button.clicked.connect(self._show_auto_tune_settings)
         self.pushButton_autoFind.clicked.connect(self.run_esa_auto_tune)
         self.pushButton_stopAutoFind.clicked.connect(self.stop_esa_auto_tune)
 
@@ -1688,9 +2092,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_fine_steps_spin: "Auto Find fine scan points",
             self.auto_tune_settle_spin: "Auto Find settle time",
             self.auto_tune_objective_combo: "Auto Find optimization objective",
+            self.auto_tune_frame_samples_spin: "Auto Find Fine and center frame count",
+            self.auto_tune_min_valid_frames_spin: "Auto Find minimum valid frame count",
+            self.auto_tune_verification_frames_spin: "Auto Find verification frame count",
+            self.auto_tune_verification_min_valid_spin: "Auto Find verification minimum valid frames",
             self.auto_tune_frame_interval_spin: "Interval between fine-scan camera frames",
             self.auto_tune_probe_step_spin: "Fixed A3 step used by fitted-center search",
             self.auto_tune_center_tolerance_spin: "Final fitted-center tolerance",
+            self.auto_tune_max_offset_spin: "Maximum fitted-center energy offset",
+            self.auto_tune_settings_button: "Open Auto Find settings",
             self.pushButton_autoFind: "Auto Find start button",
             self.pushButton_stopAutoFind: "Auto Find stop button",
             self.background_plot: "Background preview plot",
@@ -1807,6 +2217,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.pushButton_autoFind.setEnabled(auto_tune_enabled)
         scan_running = self._auto_tune_is_running()
+        self.auto_tune_settings_button.setEnabled(not scan_running)
+        self.background_settings_button.setEnabled(not scan_running)
+        self.checkBox_bg.setEnabled(not scan_running)
         self.comboBox_fitmethod.setEnabled(not scan_running)
         for widget in self.auto_tune_parameter_widgets:
             widget.setEnabled(not scan_running)
@@ -1819,6 +2232,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_frame_interval_spin,
             self.auto_tune_probe_step_spin,
             self.auto_tune_center_tolerance_spin,
+            self.auto_tune_verification_frames_spin,
+            self.auto_tune_verification_min_valid_spin,
+            self.auto_tune_max_offset_spin,
         ):
             widget.setEnabled(center_lock_controls_enabled)
         stop_requested = (
@@ -1857,7 +2273,22 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _apply_theme(self):
         palette = self._palette()
-        self.setStyleSheet(build_energy_spectrum_theme(palette))
+        theme = build_energy_spectrum_theme(palette)
+        self.setStyleSheet(theme)
+        for dialog_name in ("auto_tune_settings_dialog", "background_dialog"):
+            dialog = getattr(self, dialog_name, None)
+            if dialog is not None:
+                dialog.setStyleSheet(theme)
+                for button in dialog.findChildren(QPushButton):
+                    self._refresh_widget_style(button)
+        for title_label in getattr(self, "workspace_card_title_labels", ()):
+            title_label.setStyleSheet(
+                "color: {color}; font-size: 13px; font-weight: 700; "
+                "background: transparent; border: none;".format(
+                    color=palette["summary_title_fg"]
+                )
+            )
+            title_label.adjustSize()
         if hasattr(self, "status_panel"):
             self.status_panel.apply_theme(palette)
             self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
@@ -1911,6 +2342,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _style_axes(self, widget, xlabel, ylabel, title=None):
         palette = self._palette()
         widget.fig.patch.set_facecolor(palette["plot_card_bg"])
+        widget.fig.patch.set_edgecolor(palette["plot_card_bg"])
+        widget.fig.patch.set_linewidth(0.0)
         widget.axes.set_facecolor(palette["plot_bg"])
         widget.axes.tick_params(colors=palette["plot_text"], which="both", labelsize=9)
         widget.axes.xaxis.label.set_color(palette["plot_text"])
@@ -1951,8 +2384,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _draw_placeholder_views(self):
         note = "Waiting for image PV" if not self._pv_available else None
-        self._draw_placeholder_plot(self.ESAflag_image, "Flag Image", "x (mm)", "y (mm)", note=note)
-        self._draw_placeholder_plot(self.energy_plot, "Energy Spectrum", "E (MeV)", "Spectrum (arb. units)", note=note)
+        self._draw_placeholder_plot(self.ESAflag_image, None, "x (mm)", "y (mm)", note=note)
+        self._draw_placeholder_plot(
+            self.energy_plot,
+            None,
+            "E (MeV)",
+            "Spectrum (arb. units)",
+            note=note,
+        )
         self._refresh_background_preview()
 
     def _refresh_background_preview(self):
@@ -2131,9 +2570,121 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 archive_dir.mkdir(parents=True, exist_ok=True)
                 archive_path = archive_dir / "metadata.json"
                 archive_path.write_text(metadata_text, encoding="utf-8")
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             print(f"Warning: failed to save energy spectrum result metadata: {exc}")
 
+
+    def _background_metadata(self, *, source, sample_count=None):
+        exposure_s = None
+        try:
+            exposure_s = float(self.lineEdit_expotime.text())
+        except (TypeError, ValueError):
+            pass
+        metadata = dict(self.bg_metadata)
+        metadata.update(
+            {
+                "schema_version": "energy_spectrum_background_v1",
+                "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                "machine_id": self.machine_profile.machine.id,
+                "backend": self.control_backend,
+                "flag_pv": self.flag_pv,
+                "shape": [self.flag_pixel[1], self.flag_pixel[0]],
+                "pixel_width_mm": self.flag_pixel_width_mm,
+                "source": str(source),
+            }
+        )
+        if exposure_s is not None and np.isfinite(exposure_s):
+            metadata["exposure_s"] = exposure_s
+        if sample_count is not None:
+            metadata["sample_count"] = int(sample_count)
+        return metadata
+
+    def _set_background_image(self, image, metadata, image_path):
+        self.bg_image = image
+        self.bg_metadata = dict(metadata)
+        self.bg_image_path = Path(image_path)
+        saved_exposure = self.bg_metadata.get("exposure_s")
+        try:
+            saved_exposure = float(saved_exposure)
+        except (TypeError, ValueError):
+            saved_exposure = None
+        try:
+            current_exposure = float(self.lineEdit_expotime.text())
+        except (TypeError, ValueError):
+            current_exposure = None
+        if (
+            saved_exposure is not None
+            and current_exposure is not None
+            and not np.isclose(saved_exposure, current_exposure)
+        ):
+            print(
+                "[GUI] Background exposure warning: "
+                f"saved={saved_exposure:g} s, current={current_exposure:g} s."
+            )
+        self._refresh_background_preview()
+        self._update_background_status()
+
+    def _update_background_status(self):
+        if self.bg_image is None:
+            summary = "Background: None"
+            detail = "No background loaded"
+        else:
+            created_at = str(self.bg_metadata.get("created_at", "unknown time"))
+            filename = self.bg_image_path.name if self.bg_image_path else "in memory"
+            summary = f"Background: {filename} · {created_at}"
+            detail = str(self.bg_image_path or "Sampled background is not saved")
+        self.background_status_label.setText(summary)
+        self.background_path_label.setText(detail)
+
+    def _show_background_dialog(self):
+        if self._auto_tune_is_running():
+            return
+        self._refresh_background_preview()
+        self._update_background_status()
+        self.background_dialog.exec_()
+
+    def _save_latest_background(self, *, sample_count=None):
+        if self.bg_image is None:
+            raise BackgroundStoreError("No background image is available to save.")
+        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        metadata = self._background_metadata(
+            source="sampled_latest",
+            sample_count=sample_count,
+        )
+        image_path, _metadata_path = save_background(
+            self.bg_image,
+            paths["background_image_path"],
+            paths["background_metadata_path"],
+            metadata,
+        )
+        self.bg_metadata = metadata
+        self.bg_image_path = image_path
+        self._update_background_status()
+        return image_path
+
+    def _load_latest_background(self, _checked=False, *, silent=False):
+        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        image_path = paths["background_image_path"]
+        if not image_path.is_file():
+            if not silent:
+                self._warn(f"No latest background exists at {image_path}.")
+            self._update_background_status()
+            return False
+        try:
+            image, metadata = load_background(
+                image_path,
+                paths["background_metadata_path"],
+                expected_shape=(self.flag_pixel[1], self.flag_pixel[0]),
+            )
+        except BackgroundStoreError as exc:
+            if silent:
+                print(f"[GUI] Could not auto-load latest background: {exc}")
+            else:
+                self._warn(str(exc))
+            return False
+        self._set_background_image(image, metadata, image_path)
+        print(f"background image loaded from {image_path}")
+        return True
 
     def background_samples(self):
         """sample background image and subtract later"""
@@ -2155,29 +2706,124 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             bg_images.append(data)
         self._mark_pv_available()
         self.bg_image = np.mean(bg_images, axis=0)
-        print("background sampling done.")
+        self.bg_metadata = self._background_metadata(
+            source="sampled",
+            sample_count=n_samples,
+        )
+        try:
+            image_path = self._save_latest_background(sample_count=n_samples)
+        except (BackgroundStoreError, OSError, ValueError) as exc:
+            self.bg_image_path = None
+            print(f"background sampling done, but automatic save failed: {exc}")
+        else:
+            print(f"background sampling done and saved to {image_path}")
         self._refresh_background_preview()
+        self._update_background_status()
         self._refresh_status()
+
+    def _create_background_file_dialog(self, title, initial_path, *, save):
+        dialog = QFileDialog(self)
+        dialog.setObjectName("backgroundFileDialog")
+        dialog.setWindowTitle(title)
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        dialog.setNameFilters(("NumPy Files (*.npy)", "All Files (*)"))
+        dialog.selectNameFilter("NumPy Files (*.npy)")
+
+        initial_path = Path(initial_path)
+        initial_directory = initial_path.parent if initial_path.suffix else initial_path
+        dialog.setDirectory(str(initial_directory))
+        if save:
+            dialog.setAcceptMode(QFileDialog.AcceptSave)
+            dialog.setFileMode(QFileDialog.AnyFile)
+            dialog.setDefaultSuffix("npy")
+            dialog.selectFile(initial_path.name)
+        else:
+            dialog.setAcceptMode(QFileDialog.AcceptOpen)
+            dialog.setFileMode(QFileDialog.ExistingFile)
+            if initial_path.is_file():
+                dialog.selectFile(initial_path.name)
+
+        palette = self._palette()
+        qt_palette = QPalette(dialog.palette())
+        qt_palette.setColor(QPalette.Window, QColor(palette["window_bg"]))
+        qt_palette.setColor(QPalette.WindowText, QColor(palette["window_fg"]))
+        qt_palette.setColor(QPalette.Base, QColor(palette["input_bg"]))
+        qt_palette.setColor(QPalette.AlternateBase, QColor(palette["panel_bg"]))
+        qt_palette.setColor(QPalette.Text, QColor(palette["input_fg"]))
+        qt_palette.setColor(QPalette.Button, QColor(palette["button_bg"]))
+        qt_palette.setColor(QPalette.ButtonText, QColor(palette["button_fg"]))
+        qt_palette.setColor(QPalette.Highlight, QColor(palette["metric_active_fg"]))
+        qt_palette.setColor(QPalette.HighlightedText, QColor(palette["window_bg"]))
+        dialog.setPalette(qt_palette)
+        dialog.setStyleSheet(
+            build_energy_spectrum_theme(palette)
+            + build_background_file_dialog_theme(palette)
+        )
+        for child in dialog.findChildren(QWidget):
+            child.setPalette(qt_palette)
+        return dialog
+
+    def _choose_background_file(self, title, initial_path, *, save):
+        dialog = self._create_background_file_dialog(title, initial_path, save=save)
+        accepted = dialog.exec_() == QDialog.Accepted
+        selected_files = dialog.selectedFiles() if accepted else ()
+        dialog.deleteLater()
+        return selected_files[0] if selected_files else None
     
     def save_bgfile(self):
-        """save the background image to a file"""
-        options = QFileDialog.Options()
-        filePath, _ = QFileDialog.getSaveFileName(self,"Save Background Image","","NumPy Files (*.npy);;All Files (*)", options=options)
+        """Save the current background as an archived operator-selected file."""
         if self.bg_image is None:
             print("No background image to save!")
             return
+        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        paths["runs_dir"].mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        default_path = paths["runs_dir"] / f"background_{timestamp}.npy"
+        filePath = self._choose_background_file(
+            "Save Background Image",
+            default_path,
+            save=True,
+        )
         if filePath:
-            np.save(filePath, self.bg_image)
-            print(f"background image saved to {filePath}")
+            image_path = Path(filePath)
+            if image_path.suffix.lower() != ".npy":
+                image_path = image_path.with_suffix(".npy")
+            metadata_path = image_path.with_suffix(".json")
+            metadata = self._background_metadata(source="save_as")
+            try:
+                save_background(self.bg_image, image_path, metadata_path, metadata)
+            except (BackgroundStoreError, OSError, ValueError) as exc:
+                self._warn(f"Could not save background: {exc}")
+                return
+            self.bg_metadata = metadata
+            self.bg_image_path = image_path
+            self._update_background_status()
+            print(f"background image saved to {image_path}")
     
     def load_bgfile(self):
         """load the background image from a file"""
-        options = QFileDialog.Options()
-        filePath, _ = QFileDialog.getOpenFileName(self,"Load Background Image","","NumPy Files (*.npy);;All Files (*)", options=options)
+        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        default_path = paths["background_image_path"]
+        initial_path = default_path if default_path.is_file() else paths["latest_dir"]
+        filePath = self._choose_background_file(
+            "Load Background Image",
+            initial_path,
+            save=False,
+        )
         if filePath:
-            self.bg_image = np.load(filePath)
-            print(f"background image loaded from {filePath}")
-            self._refresh_background_preview()
+            image_path = Path(filePath)
+            metadata_path = image_path.with_suffix(".json")
+            try:
+                image, metadata = load_background(
+                    image_path,
+                    metadata_path,
+                    expected_shape=(self.flag_pixel[1], self.flag_pixel[0]),
+                )
+            except BackgroundStoreError as exc:
+                self._warn(str(exc))
+                return
+            self._set_background_image(image, metadata, image_path)
+            print(f"background image loaded from {image_path}")
 
     def bg_removeornot(self, state):
         """decide whether to remove background or not"""
@@ -2812,9 +3458,74 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._refresh_status()
             print(f"Failed to write ESA target energy: {exc}")
 
+    def _start_auto_tune_run_log(self, bend_scan):
+        self._close_auto_tune_run_log()
+        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        start_values = {
+            "machine_id": self.machine_profile.machine.id,
+            "backend": self.control_backend,
+            "objective": bend_scan.get("objective"),
+            "actuator_pv": self.auto_tune_pv,
+            "x_reference_mm": bend_scan.get("x_reference_mm"),
+            "scan_min_mev": bend_scan.get("min"),
+            "scan_max_mev": bend_scan.get("max"),
+            "coarse_points": bend_scan.get("coarse_steps"),
+            "fine_points": bend_scan.get("fine_steps"),
+            "frame_samples": bend_scan.get("frame_samples"),
+            "min_valid_frames": bend_scan.get("min_valid_frames"),
+            "verification_frame_samples": bend_scan.get(
+                "verification_frame_samples"
+            ),
+            "verification_min_valid_frames": bend_scan.get(
+                "verification_min_valid_frames"
+            ),
+            "frame_interval_s": bend_scan.get("frame_interval_s"),
+            "settle_time_s": bend_scan.get("settle_time_s"),
+            "center_step_mev": bend_scan.get("center_step"),
+            "center_tolerance_mm": bend_scan.get("center_tolerance_mm"),
+        }
+        try:
+            self._auto_tune_run_log = ESAAutoTuneRunLog.create(
+                paths["runs_dir"],
+                start_values,
+            )
+        except (OSError, ValueError) as exc:
+            self._auto_tune_run_log = None
+            self._auto_tune_log_path = None
+            print(f"[GUI] Could not create ESA Auto Find log: {exc}")
+            return
+        self._auto_tune_log_path = self._auto_tune_run_log.path
+        print(f"[GUI] ESA Auto Find log: {self._auto_tune_log_path}")
+
+    def _record_auto_tune_log(self, method_name, *args):
+        logger = self._auto_tune_run_log
+        if logger is None:
+            return
+        try:
+            getattr(logger, method_name)(*args)
+        except (OSError, ValueError) as exc:
+            print(f"[GUI] ESA Auto Find log write failed: {exc}")
+            self._auto_tune_run_log = None
+            try:
+                logger.close()
+            except (OSError, ValueError):
+                pass
+
+    def _close_auto_tune_run_log(self):
+        logger = self._auto_tune_run_log
+        if logger is None:
+            return
+        self._auto_tune_run_log = None
+        try:
+            logger.close()
+        except (OSError, ValueError) as exc:
+            print(f"[GUI] ESA Auto Find log close failed: {exc}")
+        print(f"[GUI] ESA Auto Find log saved: {logger.path}")
+
     def stop_esa_auto_tune(self):
         if not self._auto_tune_is_running():
             return
+        self._record_auto_tune_log("record_stop_requested")
         self.auto_tune_thread.requestInterruption()
         self._auto_tune_text = "Stopping"
         self._auto_tune_tone = "warning"
@@ -2867,6 +3578,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 self._refresh_status()
                 return
             self._mark_pv_available()
+            self._start_auto_tune_run_log(bend_scan)
 
             self.auto_tune_thread = ESAAutoTuneThread(
                 flag_pv_obj=self.flag_pv_obj,
@@ -2885,6 +3597,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._sync_energy_control_state()
             QTimer.singleShot(0, self._sync_energy_control_state)
         except Exception as exc:
+            self._record_auto_tune_log(
+                "record_result",
+                {"ok": False, "status": "FAILED", "error": str(exc)},
+            )
+            self._close_auto_tune_run_log()
             print(f"ESA auto tune failed: {exc}")
             self._mark_pv_unavailable(exc)
             self._auto_tune_text = "Failed"
@@ -2897,6 +3614,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 self.ESA_running()
 
     def _handle_auto_tune_progress(self, payload):
+        self._record_auto_tune_log("record_progress", payload)
         stage = str(payload.get("stage", "")).strip().lower()
         current = payload.get("current")
         has_beam = bool(payload.get("has_beam"))
@@ -2937,6 +3655,28 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         else:
             prefix = "Scan"
 
+        if stage in {"center_seed", "center_step", "center_lock", "verify"} and (
+            "total_frames" in payload
+        ):
+            valid_frames = int(payload.get("valid_frames", 0))
+            total_frames = int(payload["total_frames"])
+            if has_beam and payload.get("center_mm") is not None:
+                fit_method = str(payload.get("fit_method", "--"))
+                print(
+                    f"[GUI] ESA {prefix}: "
+                    f"E={float(current):.3f} {self.auto_tune_unit}, "
+                    f"center={float(payload['center_mm']):+.3f} mm, "
+                    f"dx={float(payload['center_offset_mm']):+.3f} mm, "
+                    f"frames={valid_frames}/{total_frames}, fit={fit_method}."
+                )
+            else:
+                diagnostic = str(payload.get("diagnostic", "profile fit failed"))
+                print(
+                    f"[GUI] ESA {prefix}: "
+                    f"E={float(current):.3f} {self.auto_tune_unit}, "
+                    f"frames={valid_frames}/{total_frames}, failed: {diagnostic}."
+                )
+
         current_text = (
             f"{float(current):.2f} {self.auto_tune_unit}" if current is not None else "--"
         )
@@ -2953,6 +3693,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.ESA_running()
 
     def _handle_auto_tune_result(self, payload):
+        self._record_auto_tune_log("record_result", payload)
         if payload.get("ok"):
             best_current = payload.get("best_current")
             if best_current is not None:
@@ -3017,6 +3758,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._refresh_status()
 
     def _on_auto_tune_finished(self):
+        self._close_auto_tune_run_log()
         self.auto_tune_thread = None
         self.timer.start()
         self.is_timer_running = True
