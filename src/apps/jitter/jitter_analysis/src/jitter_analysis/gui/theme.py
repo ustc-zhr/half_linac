@@ -428,6 +428,15 @@ QPushButton:disabled, QToolButton:disabled {{
     background: {spec.panel_bg};
     border-color: {spec.border_soft};
 }}
+QFileDialog QToolButton {{
+    min-width: 32px;
+    max-width: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    padding: 0px;
+    border-radius: 8px;
+    qproperty-iconSize: 18px 18px;
+}}
 QPushButton[role="subtle"], QToolButton[role="subtle"] {{
     background: {spec.subtle_bg};
     color: {spec.subtle_text};
