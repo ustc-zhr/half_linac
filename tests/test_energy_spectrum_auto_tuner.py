@@ -130,15 +130,9 @@ class _ProfileLockAutoTuner(ESA_AutoTuner):
             x_reference_mm=0.0,
             progress_callback=progress_callback,
             frame_interval_s=0.0,
-            brightness_fraction=0.15,
-            center_probe_step=0.1,
-            center_max_step=0.5,
+            center_step=0.1,
             center_max_total_offset=1.5,
-            center_max_iterations=4,
             center_tolerance_mm=0.08,
-            center_max_spread_mm=0.2,
-            center_min_response_mm_per_unit=0.2,
-            center_min_gaussian_r_squared=0.8,
         )
         self.current = 2.5
         self.moving_center = moving_center
@@ -333,7 +327,7 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertAlmostEqual(tuner.center_lock_result["final_offset_mm"], 0.0, delta=0.08)
         self.assertEqual(tuner.center_lock_result["fit_method"], "Gauss fit")
         stages = {update["stage"] for update in updates}
-        self.assertIn("center_probe", stages)
+        self.assertIn("center_step", stages)
         self.assertIn("center_lock", stages)
         self.assertIn("verify", stages)
 
@@ -346,7 +340,16 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertIsNone(best)
         self.assertEqual(tuner.get_last_status(), "FAILED")
         self.assertAlmostEqual(tuner.current, initial)
-        self.assertIn("did not respond consistently", tuner.get_last_message())
+        self.assertIn("did not reach x_reference_mm", tuner.get_last_message())
+
+    def test_profile_center_measurement_does_not_depend_on_2d_beam_detection(self):
+        tuner = _ProfileLockAutoTuner()
+        tuner._detect_beam = lambda _image: (False, None, 0.0)
+
+        measurement = tuner._measure_profile_center(tuner.current, "test")
+
+        self.assertIsNotNone(measurement)
+        self.assertAlmostEqual(measurement["center_mm"], -1.5, delta=0.08)
 
 
 if __name__ == "__main__":

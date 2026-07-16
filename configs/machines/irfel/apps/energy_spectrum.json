@@ -27,8 +27,8 @@
   "auto_tune_scan": {
     "min": 0,
     "max": 65,
-    "coarse_steps": 40,
-    "fine_steps": 81,
+    "coarse_steps": 16,
+    "fine_steps": 31,
     "settle_time_s": 1,
     "restore_initial_on_failure": true
   },
@@ -36,15 +36,9 @@
     "frame_samples": 3,
     "min_valid_frames": 2,
     "frame_interval_s": 0.2,
-    "brightness_fraction": 0.15,
-    "probe_step": 0.05,
-    "max_step": 0.5,
-    "max_total_offset": 1.5,
-    "max_iterations": 4,
-    "center_tolerance_mm": 0.2,
-    "max_center_spread_mm": 0.5,
-    "min_response_mm_per_unit": 1.0,
-    "min_gaussian_r_squared": 0.5
+    "center_step": 0.05,
+    "max_total_offset": 1.0,
+    "center_tolerance_mm": 0.2
   },
   "esa_quads": ["QM19", "QM20"],
   "start_elements": ["QM12", "QM19"],

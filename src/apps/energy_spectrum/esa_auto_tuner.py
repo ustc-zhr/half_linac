@@ -62,14 +62,9 @@ class ESA_AutoTuner:
                  pixel_width_mm=None,
                  profile_fit_method="Gauss fit",
                  x_reference_mm=0.0,
-                 center_probe_step=0.05,
-                 center_max_step=0.5,
-                 center_max_total_offset=1.5,
-                 center_max_iterations=4,
-                 center_tolerance_mm=0.2,
-                 center_max_spread_mm=0.5,
-                 center_min_response_mm_per_unit=1.0,
-                 center_min_gaussian_r_squared=0.5):
+                 center_step=0.05,
+                 center_max_total_offset=1.0,
+                 center_tolerance_mm=0.2):
         """
         Parameters
         ----------
@@ -115,14 +110,9 @@ class ESA_AutoTuner:
         self.pixel_width_mm = None if pixel_width_mm is None else float(pixel_width_mm)
         self.profile_fit_method = str(profile_fit_method).strip()
         self.x_reference_mm = float(x_reference_mm)
-        self.center_probe_step = float(center_probe_step)
-        self.center_max_step = float(center_max_step)
+        self.center_step = float(center_step)
         self.center_max_total_offset = float(center_max_total_offset)
-        self.center_max_iterations = int(center_max_iterations)
         self.center_tolerance_mm = float(center_tolerance_mm)
-        self.center_max_spread_mm = float(center_max_spread_mm)
-        self.center_min_response_mm_per_unit = float(center_min_response_mm_per_unit)
-        self.center_min_gaussian_r_squared = float(center_min_gaussian_r_squared)
         if self.frame_samples < 1:
             raise ValueError("frame_samples must be at least 1.")
         if not 1 <= self.min_valid_frames <= self.frame_samples:
@@ -146,22 +136,12 @@ class ESA_AutoTuner:
             if self.pixel_width_mm <= 0:
                 raise ValueError("pixel_width_mm must be positive.")
             for name, value in (
-                ("center_probe_step", self.center_probe_step),
-                ("center_max_step", self.center_max_step),
+                ("center_step", self.center_step),
                 ("center_max_total_offset", self.center_max_total_offset),
                 ("center_tolerance_mm", self.center_tolerance_mm),
-                ("center_max_spread_mm", self.center_max_spread_mm),
-                ("center_min_response_mm_per_unit", self.center_min_response_mm_per_unit),
             ):
                 if not np.isfinite(value) or value <= 0:
                     raise ValueError(f"{name} must be positive and finite.")
-            if self.center_max_iterations < 1:
-                raise ValueError("center_max_iterations must be at least 1.")
-            if (
-                not np.isfinite(self.center_min_gaussian_r_squared)
-                or not 0 <= self.center_min_gaussian_r_squared <= 1
-            ):
-                raise ValueError("center_min_gaussian_r_squared must be in [0, 1].")
 
         self.best_current = None
         self.best_center_offset_px = None
@@ -172,6 +152,7 @@ class ESA_AutoTuner:
         self.hybrid_peak_brightness = None
         self.best_brightness = None
         self.center_lock_result = None
+        self.last_profile_diagnostic = None
         self.last_message = None
         self.status = "IDLE"
 
@@ -607,67 +588,59 @@ class ESA_AutoTuner:
 
     def _measure_profile_center(self, energy, stage):
         centers_mm = []
-        brightness_values = []
+        projection_strengths = []
         fit_methods = []
         fit_qualities = []
+        fit_errors = []
 
         for sample_index in range(self.frame_samples):
             self._raise_if_cancelled()
             image = self._get_flag_image()
             self._raise_if_cancelled()
-            has_beam, brightness, _region_center = self._detect_beam(image)
-            if has_beam:
-                try:
-                    projection = project_image_profiles(image, self.pixel_width_mm)
-                    profile_fit = fit_projection_profile(
-                        projection.x_mm,
-                        projection.density_x,
-                        self.profile_fit_method,
-                        allow_direct_fallback=False,
-                    )
-                except SpectrumProfileError:
-                    profile_fit = None
-                if profile_fit is not None:
-                    fit_quality_ok = (
-                        profile_fit.r_squared is None
-                        or profile_fit.r_squared >= self.center_min_gaussian_r_squared
-                    )
-                    brightness_ok = (
-                        self.best_brightness is None
-                        or brightness >= self.brightness_fraction * self.best_brightness
-                    )
-                    if fit_quality_ok and brightness_ok:
-                        centers_mm.append(float(profile_fit.center_mm))
-                        brightness_values.append(float(brightness))
-                        fit_methods.append(profile_fit.method)
-                        if profile_fit.r_squared is not None:
-                            fit_qualities.append(float(profile_fit.r_squared))
+            try:
+                projection = project_image_profiles(image, self.pixel_width_mm)
+                profile_fit = fit_projection_profile(
+                    projection.x_mm,
+                    projection.density_x,
+                    self.profile_fit_method,
+                    allow_direct_fallback=True,
+                )
+            except SpectrumProfileError as exc:
+                fit_errors.append(str(exc))
+            else:
+                centers_mm.append(float(profile_fit.center_mm))
+                projection_strengths.append(float(np.sum(projection.density_x)))
+                fit_methods.append(profile_fit.method)
+                if profile_fit.r_squared is not None:
+                    fit_qualities.append(float(profile_fit.r_squared))
             if sample_index + 1 < self.frame_samples:
                 self._wait(self.frame_interval_s)
 
         if len(centers_mm) < self.min_valid_frames:
+            detail = fit_errors[-1] if fit_errors else "insufficient fitted frames"
+            self.last_profile_diagnostic = (
+                f"{len(centers_mm)}/{self.frame_samples} fitted frames: {detail}"
+            )
             self._report_progress(stage, energy, has_beam=False, score=None)
             return None
         center_spread_mm = float(np.ptp(centers_mm))
-        if center_spread_mm > self.center_max_spread_mm:
-            self._report_progress(stage, energy, has_beam=False, score=None)
-            return None
 
         center_mm = float(np.median(centers_mm))
-        brightness = float(np.median(brightness_values))
+        projection_strength = float(np.median(projection_strengths))
+        self.last_profile_diagnostic = None
         center_pixel = self._center_mm_to_pixel(center_mm)
         self._report_progress(
             stage,
             energy,
             has_beam=True,
-            score=brightness,
+            score=projection_strength,
             cx=center_pixel,
         )
         return {
             "energy": float(energy),
             "center_mm": center_mm,
             "offset_mm": center_mm - self.x_reference_mm,
-            "brightness": brightness,
+            "projection_strength": projection_strength,
             "center_spread_mm": center_spread_mm,
             "fit_method": fit_methods[0],
             "fit_r_squared": (
@@ -675,42 +648,20 @@ class ESA_AutoTuner:
             ),
         }
 
-    @staticmethod
-    def _bracketed_center_candidate(measurements, target_mm):
-        candidates = []
-        for index, left in enumerate(measurements):
-            left_error = left["center_mm"] - target_mm
-            for right in measurements[index + 1:]:
-                right_error = right["center_mm"] - target_mm
-                if left_error == 0 or right_error == 0 or left_error * right_error > 0:
-                    continue
-                center_delta = right["center_mm"] - left["center_mm"]
-                if abs(center_delta) <= np.finfo(float).eps:
-                    continue
-                energy = left["energy"] + (
-                    (target_mm - left["center_mm"])
-                    * (right["energy"] - left["energy"])
-                    / center_delta
-                )
-                candidates.append(
-                    (abs(left_error) + abs(right_error), float(energy))
-                )
-        if not candidates:
+    def _interpolate_center_target(self, left, right):
+        center_delta = right["center_mm"] - left["center_mm"]
+        if abs(center_delta) <= np.finfo(float).eps:
             return None
-        return min(candidates, key=lambda item: item[0])[1]
+        return float(
+            left["energy"]
+            + (self.x_reference_mm - left["center_mm"])
+            * (right["energy"] - left["energy"])
+            / center_delta
+        )
 
-    def _fit_center_response(self, measurements):
-        energies = np.asarray([item["energy"] for item in measurements], dtype=float)
-        centers = np.asarray([item["center_mm"] for item in measurements], dtype=float)
-        if len(measurements) < 2 or np.ptp(energies) <= np.finfo(float).eps:
-            return None
-        slope, intercept = np.polyfit(energies, centers, 1)
-        if (
-            not np.isfinite(slope)
-            or abs(slope) < self.center_min_response_mm_per_unit
-        ):
-            return None
-        return float(slope), float(intercept)
+    def _profile_measurement_at(self, energy, stage):
+        self._set_bend(energy)
+        return self._measure_profile_center(energy, stage)
 
     def _run_profile_center_lock(self, seed_energy, scan_min, scan_max):
         self.status = "CENTER_LOCK"
@@ -718,78 +669,94 @@ class ESA_AutoTuner:
         local_max = min(float(scan_max), seed_energy + self.center_max_total_offset)
         measurements = []
 
-        self._set_bend(seed_energy)
-        seed = self._measure_profile_center(seed_energy, "center_seed")
+        seed = self._profile_measurement_at(seed_energy, "center_seed")
         if seed is None:
             self.last_message = (
-                "Brightness peak was found, but its projected profile could not be fitted."
+                "Brightness peak was found, but its projected profile could not be fitted: "
+                f"{self.last_profile_diagnostic}."
             )
             return None
         measurements.append(seed)
         converged = seed if abs(seed["offset_mm"]) <= self.center_tolerance_mm else None
-
+        direction = 0
+        previous = seed
         if converged is None:
-            if seed_energy + self.center_probe_step <= local_max:
-                probe_energy = seed_energy + self.center_probe_step
-            elif seed_energy - self.center_probe_step >= local_min:
-                probe_energy = seed_energy - self.center_probe_step
-            else:
-                self.last_message = "No safe energy room is available for the center-response probe."
-                return None
-            self._set_bend(probe_energy)
-            probe = self._measure_profile_center(probe_energy, "center_probe")
-            if probe is None:
-                self.last_message = "The fitted beam profile was lost during the response probe."
-                return None
-            measurements.append(probe)
-            if abs(probe["offset_mm"]) <= self.center_tolerance_mm:
-                converged = probe
+            for candidate_direction in (1, -1):
+                candidate_energy = seed_energy + candidate_direction * self.center_step
+                if not local_min <= candidate_energy <= local_max:
+                    continue
+                candidate = self._profile_measurement_at(candidate_energy, "center_step")
+                if candidate is None:
+                    continue
+                measurements.append(candidate)
+                if abs(candidate["offset_mm"]) <= self.center_tolerance_mm:
+                    converged = candidate
+                    direction = candidate_direction
+                    previous = candidate
+                    break
+                if seed["offset_mm"] * candidate["offset_mm"] < 0:
+                    interpolated_energy = self._interpolate_center_target(seed, candidate)
+                    if interpolated_energy is not None:
+                        converged = self._profile_measurement_at(
+                            interpolated_energy,
+                            "center_lock",
+                        )
+                        if (
+                            converged is not None
+                            and abs(converged["offset_mm"]) > self.center_tolerance_mm
+                        ):
+                            converged = None
+                    direction = candidate_direction
+                    previous = candidate
+                    break
+                if abs(candidate["offset_mm"]) < abs(seed["offset_mm"]):
+                    direction = candidate_direction
+                    previous = candidate
+                    break
 
-        iterations = 0
-        while converged is None and iterations < self.center_max_iterations:
-            iterations += 1
-            response = self._fit_center_response(measurements)
-            if response is None:
-                self.last_message = (
-                    "The fitted profile center did not respond consistently to the A3 probe."
-                )
-                return None
-            slope, _intercept = response
-            candidate = self._bracketed_center_candidate(
-                measurements,
-                self.x_reference_mm,
-            )
-            anchor = min(measurements, key=lambda item: abs(item["offset_mm"]))
+        max_steps = max(
+            1,
+            int(np.ceil(self.center_max_total_offset / self.center_step)),
+        )
+        steps = 1 if direction else 0
+        while converged is None and direction and steps < max_steps:
+            steps += 1
+            candidate_energy = seed_energy + direction * steps * self.center_step
+            if not local_min <= candidate_energy <= local_max:
+                break
+            candidate = self._profile_measurement_at(candidate_energy, "center_lock")
             if candidate is None:
-                candidate = anchor["energy"] - anchor["offset_mm"] / slope
-            candidate = min(max(float(candidate), local_min), local_max)
-            candidate = min(
-                max(candidate, anchor["energy"] - self.center_max_step),
-                anchor["energy"] + self.center_max_step,
-            )
-            if any(
-                abs(candidate - item["energy"]) <= 1e-6
-                for item in measurements
-            ):
                 self.last_message = (
-                    "Fitted-center correction reached its safe local limit before convergence."
+                    "Projected profile fitting failed during center search: "
+                    f"{self.last_profile_diagnostic}."
                 )
                 return None
-
-            self._set_bend(candidate)
-            measurement = self._measure_profile_center(candidate, "center_lock")
-            if measurement is None:
-                self.last_message = "The fitted beam profile was lost during center correction."
-                return None
-            measurements.append(measurement)
-            if abs(measurement["offset_mm"]) <= self.center_tolerance_mm:
-                converged = measurement
+            measurements.append(candidate)
+            if abs(candidate["offset_mm"]) <= self.center_tolerance_mm:
+                converged = candidate
+                break
+            if previous["offset_mm"] * candidate["offset_mm"] < 0:
+                interpolated_energy = self._interpolate_center_target(previous, candidate)
+                if interpolated_energy is not None:
+                    interpolated = self._profile_measurement_at(
+                        interpolated_energy,
+                        "center_lock",
+                    )
+                    if (
+                        interpolated is not None
+                        and abs(interpolated["offset_mm"]) <= self.center_tolerance_mm
+                    ):
+                        converged = interpolated
+                break
+            if abs(candidate["offset_mm"]) >= abs(previous["offset_mm"]):
+                break
+            previous = candidate
 
         if converged is None:
             best = min(measurements, key=lambda item: abs(item["offset_mm"]))
             self.last_message = (
-                "Fitted-center lock did not converge within "
-                f"{self.center_max_iterations} iterations; best dx={best['offset_mm']:+.3f} mm."
+                "Simple fitted-center search did not reach x_reference_mm; "
+                f"best dx={best['offset_mm']:+.3f} mm."
             )
             return None
 
@@ -805,7 +772,6 @@ class ESA_AutoTuner:
             )
             return None
 
-        response = self._fit_center_response(measurements)
         self.best_center_offset_px = (
             self._center_mm_to_pixel(verified["center_mm"]) - self.target_x_pixel
         )
@@ -813,9 +779,9 @@ class ESA_AutoTuner:
             "seed_energy": float(seed_energy),
             "final_energy": float(verified["energy"]),
             "final_offset_mm": float(verified["offset_mm"]),
-            "response_mm_per_unit": response[0] if response is not None else None,
             "measurements": len(measurements),
-            "iterations": iterations,
+            "center_step": self.center_step,
+            "direction": direction,
             "fit_method": verified["fit_method"],
             "fit_r_squared": verified["fit_r_squared"],
         }
@@ -998,18 +964,9 @@ if __name__=='__main__':
         min_fit_correlation=float(hybrid.get("min_fit_correlation", 0.7)),
         pixel_width_mm=pixel_width_mm,
         x_reference_mm=x_reference_mm,
-        center_probe_step=float(center_lock.get("probe_step", 0.05)),
-        center_max_step=float(center_lock.get("max_step", 0.5)),
-        center_max_total_offset=float(center_lock.get("max_total_offset", 1.5)),
-        center_max_iterations=int(center_lock.get("max_iterations", 4)),
+        center_step=float(center_lock.get("center_step", 0.05)),
+        center_max_total_offset=float(center_lock.get("max_total_offset", 1.0)),
         center_tolerance_mm=float(center_lock.get("center_tolerance_mm", 0.2)),
-        center_max_spread_mm=float(center_lock.get("max_center_spread_mm", 0.5)),
-        center_min_response_mm_per_unit=float(
-            center_lock.get("min_response_mm_per_unit", 1.0)
-        ),
-        center_min_gaussian_r_squared=float(
-            center_lock.get("min_gaussian_r_squared", 0.5)
-        ),
         remove_bg=False,
         bg_image=None,
     )

@@ -583,9 +583,6 @@ class ESAAutoTuneThread(QThread):
                 frame_samples=int(self.bend_scan.get("frame_samples", 3)),
                 min_valid_frames=int(self.bend_scan.get("min_valid_frames", 2)),
                 frame_interval_s=float(self.bend_scan.get("frame_interval_s", 0.2)),
-                brightness_fraction=float(
-                    self.bend_scan.get("brightness_fraction", 0.4)
-                ),
                 max_center_spread_pixel=float(
                     self.bend_scan.get("max_center_spread_pixel", np.inf)
                 ),
@@ -600,29 +597,14 @@ class ESAAutoTuneThread(QThread):
                     self.bend_scan.get("profile_fit_method", "Gauss fit")
                 ),
                 x_reference_mm=float(self.bend_scan.get("x_reference_mm", 0.0)),
-                center_probe_step=float(
-                    self.bend_scan.get("center_probe_step", 0.05)
-                ),
-                center_max_step=float(
-                    self.bend_scan.get("center_max_step", 0.5)
+                center_step=float(
+                    self.bend_scan.get("center_step", 0.05)
                 ),
                 center_max_total_offset=float(
-                    self.bend_scan.get("center_max_total_offset", 1.5)
-                ),
-                center_max_iterations=int(
-                    self.bend_scan.get("center_max_iterations", 4)
+                    self.bend_scan.get("center_max_total_offset", 1.0)
                 ),
                 center_tolerance_mm=float(
                     self.bend_scan.get("center_tolerance_mm", 0.2)
-                ),
-                center_max_spread_mm=float(
-                    self.bend_scan.get("center_max_spread_mm", 0.5)
-                ),
-                center_min_response_mm_per_unit=float(
-                    self.bend_scan.get("center_min_response_mm_per_unit", 1.0)
-                ),
-                center_min_gaussian_r_squared=float(
-                    self.bend_scan.get("center_min_gaussian_r_squared", 0.5)
                 ),
             )
             best_current = tuner.run(
@@ -1312,20 +1294,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             float(center_lock_config.get("frame_interval_s", 0.2))
         )
 
-        self.auto_tune_brightness_gate_spin = QDoubleSpinBox(self.groupBox_8)
-        self.auto_tune_brightness_gate_spin.setObjectName("autoTuneBrightnessGateSpinBox")
-        self.auto_tune_brightness_gate_spin.setDecimals(0)
-        self.auto_tune_brightness_gate_spin.setSingleStep(5.0)
-        self.auto_tune_brightness_gate_spin.setRange(1.0, 100.0)
-        self.auto_tune_brightness_gate_spin.setSuffix(" %")
-        self.auto_tune_brightness_gate_spin.setKeyboardTracking(False)
-        self.auto_tune_brightness_gate_spin.setProperty("dense", True)
-        self.auto_tune_brightness_gate_spin.setValue(
-            100.0 * float(center_lock_config.get("brightness_fraction", 0.15))
-        )
-
         self.auto_tune_probe_step_spin = QDoubleSpinBox(self.groupBox_8)
-        self.auto_tune_probe_step_spin.setObjectName("autoTuneCenterProbeStepSpinBox")
+        self.auto_tune_probe_step_spin.setObjectName("autoTuneCenterStepSpinBox")
         self.auto_tune_probe_step_spin.setDecimals(2)
         self.auto_tune_probe_step_spin.setSingleStep(0.01)
         self.auto_tune_probe_step_spin.setRange(0.01, 2.0)
@@ -1333,7 +1303,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_probe_step_spin.setKeyboardTracking(False)
         self.auto_tune_probe_step_spin.setProperty("dense", True)
         self.auto_tune_probe_step_spin.setValue(
-            float(center_lock_config.get("probe_step", 0.05))
+            float(center_lock_config.get("center_step", 0.05))
         )
 
         self.auto_tune_center_tolerance_spin = QDoubleSpinBox(self.groupBox_8)
@@ -1362,9 +1332,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             ("Settle", self.auto_tune_settle_spin, 2, 0),
             ("Objective", self.auto_tune_objective_combo, 2, 2),
             ("Frame gap", self.auto_tune_frame_interval_spin, 3, 0),
-            ("Quality gate", self.auto_tune_brightness_gate_spin, 3, 2),
-            ("Probe step", self.auto_tune_probe_step_spin, 4, 0),
-            ("Center tol", self.auto_tune_center_tolerance_spin, 4, 2),
+            ("Center step", self.auto_tune_probe_step_spin, 3, 2),
+            ("Center tol", self.auto_tune_center_tolerance_spin, 4, 0),
         )
         for text, widget, row, column in scan_fields:
             label = QLabel(text, self.groupBox_8)
@@ -1393,7 +1362,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_settle_spin,
             self.auto_tune_objective_combo,
             self.auto_tune_frame_interval_spin,
-            self.auto_tune_brightness_gate_spin,
             self.auto_tune_probe_step_spin,
             self.auto_tune_center_tolerance_spin,
         )
@@ -1475,30 +1443,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "frame_samples": int(center_lock_config.get("frame_samples", 3)),
             "min_valid_frames": int(center_lock_config.get("min_valid_frames", 2)),
             "frame_interval_s": self.auto_tune_frame_interval_spin.value(),
-            "brightness_fraction": self.auto_tune_brightness_gate_spin.value() / 100.0,
             "pixel_width_mm": self.flag_pixel_width_mm,
             "profile_fit_method": self.comboBox_fitmethod.currentText(),
             "x_reference_mm": self.x_reference_mm,
-            "center_probe_step": self.auto_tune_probe_step_spin.value(),
-            "center_max_step": float(
-                center_lock_config.get("max_step", 0.5)
-            ),
+            "center_step": self.auto_tune_probe_step_spin.value(),
             "center_max_total_offset": float(
-                center_lock_config.get("max_total_offset", 1.5)
-            ),
-            "center_max_iterations": int(
-                center_lock_config.get("max_iterations", 4)
+                center_lock_config.get("max_total_offset", 1.0)
             ),
             "center_tolerance_mm": self.auto_tune_center_tolerance_spin.value(),
-            "center_max_spread_mm": float(
-                center_lock_config.get("max_center_spread_mm", 0.5)
-            ),
-            "center_min_response_mm_per_unit": float(
-                center_lock_config.get("min_response_mm_per_unit", 1.0)
-            ),
-            "center_min_gaussian_r_squared": float(
-                center_lock_config.get("min_gaussian_r_squared", 0.5)
-            ),
             "restore_initial_on_failure": bool(
                 configured.get("restore_initial_on_failure", True)
             ),
@@ -1737,8 +1689,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_settle_spin: "Auto Find settle time",
             self.auto_tune_objective_combo: "Auto Find optimization objective",
             self.auto_tune_frame_interval_spin: "Interval between fine-scan camera frames",
-            self.auto_tune_brightness_gate_spin: "Minimum brightness accepted by fitted-center lock",
-            self.auto_tune_probe_step_spin: "A3 probe step used to measure fitted-center response",
+            self.auto_tune_probe_step_spin: "Fixed A3 step used by fitted-center search",
             self.auto_tune_center_tolerance_spin: "Final fitted-center tolerance",
             self.pushButton_autoFind: "Auto Find start button",
             self.pushButton_stopAutoFind: "Auto Find stop button",
@@ -1866,7 +1817,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         for widget in (
             self.auto_tune_frame_interval_spin,
-            self.auto_tune_brightness_gate_spin,
             self.auto_tune_probe_step_spin,
             self.auto_tune_center_tolerance_spin,
         ):
@@ -2961,8 +2911,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             prefix = "Verify"
         elif stage == "center_seed":
             prefix = "Fit seed"
-        elif stage == "center_probe":
-            prefix = "Fit probe"
+        elif stage == "center_step":
+            prefix = "Fit step"
         elif stage == "center_lock":
             prefix = "Fit lock"
         elif stage == "restore":
@@ -3014,17 +2964,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                     )
                 center_lock_result = payload.get("center_lock_result")
                 if center_lock_result:
-                    response = center_lock_result.get("response_mm_per_unit")
-                    response_text = (
-                        "--"
-                        if response is None
-                        else f"{float(response):+.3f} mm/{self.auto_tune_unit}"
-                    )
                     print(
                         "[GUI] Peak brightness + fitted center: "
                         f"seed={float(center_lock_result['seed_energy']):.3f}, "
                         f"dx={float(center_lock_result['final_offset_mm']):+.3f} mm, "
-                        f"response={response_text}, "
+                        f"step={float(center_lock_result['center_step']):.3f} "
+                        f"{self.auto_tune_unit}, "
                         f"fit={center_lock_result['fit_method']}."
                     )
             else:

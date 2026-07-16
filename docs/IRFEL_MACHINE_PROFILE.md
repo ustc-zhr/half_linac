@@ -147,16 +147,17 @@ HALF bend-current calibration. Auto Find scans `ESA_ENERGY.setpoint` over the
 configured `0–65 MeV` range, so it preserves the coordinated BM03/QM19/QM20 control.
 The Target control reads A3 on startup, follows later A3 changes while it is not
 being edited, and supports `0.01 MeV` input. Auto Find exposes its range, coarse/fine
-point counts, settling time, frame gap, quality gate, probe step, center tolerance,
-and optimization objective
+point counts, settling time, frame gap, center step, center tolerance, and optimization objective
 in the GUI; Stop restores the pre-scan A3 value. IRFEL defaults to `Highest
 brightness`, which has been the more noise-tolerant commissioning choice. The
 selectable `Peak brightness + fitted center` method first reuses that brightness
 search, then calculates the same one-dimensional x-projection center used by the GUI's
-current `direct` or `Gauss fit` method. A small A3 probe measures the local center
-response, after which bounded iterations bring the fitted center to the calibrated
-`x_reference_mm`. Weak response, poor Gaussian quality, loss of brightness, or failed
-final verification restores the pre-scan value. `Closest to x reference` remains
+current `direct` or `Gauss fit` method. It tries one fixed A3 center step in each
+direction, continues in the direction that reduces the center error, and performs
+one interpolated measurement after crossing `x_reference_mm`. It does not apply an
+additional 2D beam or Gaussian-quality gate; too few valid profile fits or failed
+final verification restores the pre-scan value. The GUI exposes frame gap, center
+step, and center tolerance for this stage. `Closest to x reference` remains
 available for direct comparison with the older connected-region center logic.
 
 ### `apps/dispersion_correction.json`

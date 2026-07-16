@@ -1440,10 +1440,11 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["auto_tune_actuator"]["unit"], "MeV")
         self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
         self.assertEqual(workflow["auto_tune_scan"]["max"], 65)
-        self.assertEqual(workflow["auto_tune_scan"]["fine_steps"], 81)
+        self.assertEqual(workflow["auto_tune_scan"]["coarse_steps"], 16)
+        self.assertEqual(workflow["auto_tune_scan"]["fine_steps"], 31)
         self.assertEqual(workflow["auto_tune_center_lock"]["frame_samples"], 3)
-        self.assertEqual(workflow["auto_tune_center_lock"]["brightness_fraction"], 0.15)
-        self.assertEqual(workflow["auto_tune_center_lock"]["probe_step"], 0.05)
+        self.assertEqual(workflow["auto_tune_center_lock"]["center_step"], 0.05)
+        self.assertEqual(workflow["auto_tune_center_lock"]["max_total_offset"], 1.0)
         self.assertEqual(workflow["auto_tune_center_lock"]["center_tolerance_mm"], 0.2)
 
     def test_energy_spectrum_auto_tune_scan_cannot_exceed_actuator_limits(self):
