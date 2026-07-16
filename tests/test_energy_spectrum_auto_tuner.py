@@ -78,6 +78,40 @@ class _CenterObjectiveAutoTuner(ESA_AutoTuner):
         return image
 
 
+class _HybridObjectiveAutoTuner(ESA_AutoTuner):
+    def __init__(self, *, moving_center=True):
+        super().__init__(
+            flag_pv_obj=_DummyPV(),
+            flag_pixel=(120, 100),
+            bend_pv="FAKE:ENERGY",
+            mode="brightness_gated_x_fit",
+            target_x_pixel=59.5,
+            frame_interval_s=0.0,
+            brightness_fraction=0.4,
+            max_center_spread_pixel=5.0,
+            target_tolerance_pixel=2.0,
+            min_fit_correlation=0.7,
+        )
+        self.current = 4.25
+        self.moving_center = moving_center
+
+    def _set_bend(self, current, *, allow_cancel=True):
+        self.current = float(current)
+
+    def _read_bend(self):
+        return self.current
+
+    def _get_flag_image(self):
+        image = np.zeros((100, 120))
+        if not 1.0 <= self.current <= 9.0:
+            return image
+        center_x = 60 if not self.moving_center else int(round(20.0 + 8.0 * self.current))
+        # Peak brightness is at 3 MeV, while x_reference is reached at 5 MeV.
+        amplitude = max(20.0, 220.0 - 30.0 * abs(self.current - 3.0))
+        image[45:55, center_x - 5:center_x + 5] = amplitude
+        return image
+
+
 class ESAAutoTunerTests(unittest.TestCase):
     def test_reference_x_mm_maps_to_calibrated_pixel_coordinate(self):
         self.assertAlmostEqual(reference_x_pixel(0.0, 1440, 0.02), 719.5)
@@ -95,6 +129,22 @@ class ESAAutoTunerTests(unittest.TestCase):
         result = tuner._detect_beam(np.zeros((10, 10)))
         self.assertEqual(len(result), 3)
         self.assertEqual(result, (False, 0.0, None))
+
+    def test_hybrid_detection_uses_brightest_valid_spot_not_largest_noise_blob(self):
+        tuner = ESA_AutoTuner(
+            flag_pv_obj=_DummyPV(),
+            flag_pixel=(200, 200),
+            bend_pv="FAKE:BEND",
+            mode="brightness_gated_x_fit",
+        )
+        image = np.zeros((200, 200))
+        image[80:88, 46:54] = 500.0
+        image[70:82, 134:146] = 150.0
+
+        has_beam, _score, center_x = tuner._detect_beam(image)
+
+        self.assertTrue(has_beam)
+        self.assertAlmostEqual(center_x, 49.5)
 
     def test_coarse_and_fine_scan_use_triplet_detection_api(self):
         tuner = _FakeAutoTuner()
@@ -176,6 +226,28 @@ class ESAAutoTunerTests(unittest.TestCase):
 
         self.assertAlmostEqual(best, 6.0)
         self.assertAlmostEqual(tuner.best_center_offset_px, 0.0)
+
+    def test_brightness_gated_fit_uses_bright_beam_motion_to_reach_reference(self):
+        tuner = _HybridObjectiveAutoTuner()
+
+        best = tuner.run(0, 10, coarse_steps=11, fine_steps=29)
+
+        self.assertAlmostEqual(best, 5.0, delta=0.1)
+        self.assertEqual(tuner.get_last_status(), "DONE")
+        self.assertAlmostEqual(tuner.best_center_offset_px, 0.0, delta=1.0)
+        self.assertGreater(abs(tuner.hybrid_fit["correlation"]), 0.99)
+        self.assertGreaterEqual(tuner.hybrid_fit["points_used"], 3)
+
+    def test_brightness_gated_fit_rejects_static_bright_noise_and_restores(self):
+        tuner = _HybridObjectiveAutoTuner(moving_center=False)
+        initial = tuner.current
+
+        best = tuner.run(0, 10, coarse_steps=11, fine_steps=29)
+
+        self.assertIsNone(best)
+        self.assertEqual(tuner.get_last_status(), "FAILED")
+        self.assertAlmostEqual(tuner.current, initial)
+        self.assertIn("correlation is too weak", tuner.get_last_message())
 
 
 if __name__ == "__main__":

@@ -1435,12 +1435,14 @@ class MachineProfileTests(unittest.TestCase):
             "IRFEL:AP:ENG:A3:ao",
         )
         self.assertEqual(workflow["auto_tune_control_backends"], ["real"])
-        self.assertEqual(workflow["auto_tune_objective"], "center_x_reference")
+        self.assertEqual(workflow["auto_tune_objective"], "find_beam")
         self.assertEqual(workflow["auto_tune_actuator"]["element"], "ESA_ENERGY")
         self.assertEqual(workflow["auto_tune_actuator"]["unit"], "MeV")
         self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
         self.assertEqual(workflow["auto_tune_scan"]["max"], 65)
         self.assertEqual(workflow["auto_tune_scan"]["fine_steps"], 81)
+        self.assertEqual(workflow["auto_tune_hybrid"]["frame_samples"], 3)
+        self.assertEqual(workflow["auto_tune_hybrid"]["brightness_fraction"], 0.4)
 
     def test_energy_spectrum_auto_tune_scan_cannot_exceed_actuator_limits(self):
         profile = load_profile("irfel")

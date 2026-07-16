@@ -576,6 +576,21 @@ class ESAAutoTuneThread(QThread):
                         (self.flag_pixel[0] - 1) / 2.0,
                     )
                 ),
+                frame_samples=int(self.bend_scan.get("frame_samples", 3)),
+                min_valid_frames=int(self.bend_scan.get("min_valid_frames", 2)),
+                frame_interval_s=float(self.bend_scan.get("frame_interval_s", 0.2)),
+                brightness_fraction=float(
+                    self.bend_scan.get("brightness_fraction", 0.4)
+                ),
+                max_center_spread_pixel=float(
+                    self.bend_scan.get("max_center_spread_pixel", np.inf)
+                ),
+                target_tolerance_pixel=float(
+                    self.bend_scan.get("target_tolerance_pixel", np.inf)
+                ),
+                min_fit_correlation=float(
+                    self.bend_scan.get("min_fit_correlation", 0.7)
+                ),
             )
             best_current = tuner.run(
                 B_min=float(self.bend_scan.get("min", 0)),
@@ -590,6 +605,8 @@ class ESAAutoTuneThread(QThread):
                     "status": tuner.get_last_status(),
                     "initial_value": tuner.initial_current,
                     "best_center_offset_pixel": tuner.best_center_offset_px,
+                    "message": tuner.get_last_message(),
+                    "hybrid_fit": tuner.hybrid_fit,
                 }
             )
         except Exception as exc:
@@ -1223,6 +1240,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "center_x_reference",
         )
         self.auto_tune_objective_combo.addItem("Highest brightness", "find_beam")
+        self.auto_tune_objective_combo.addItem(
+            "Brightness-gated x fit",
+            "brightness_gated_x_fit",
+        )
         configured_objective = str(
             self.energy_config.get("auto_tune_objective", "find_beam")
         ).strip()
@@ -1244,6 +1265,31 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_settle_spin.setProperty("dense", True)
         self.auto_tune_settle_spin.setValue(float(scan_config.get("settle_time_s", 0.5)))
 
+        hybrid_config = dict(self.energy_config.get("auto_tune_hybrid", {}))
+        self.auto_tune_frame_interval_spin = QDoubleSpinBox(self.groupBox_8)
+        self.auto_tune_frame_interval_spin.setObjectName("autoTuneFrameIntervalSpinBox")
+        self.auto_tune_frame_interval_spin.setDecimals(2)
+        self.auto_tune_frame_interval_spin.setSingleStep(0.05)
+        self.auto_tune_frame_interval_spin.setRange(0.0, 10.0)
+        self.auto_tune_frame_interval_spin.setSuffix(" s")
+        self.auto_tune_frame_interval_spin.setKeyboardTracking(False)
+        self.auto_tune_frame_interval_spin.setProperty("dense", True)
+        self.auto_tune_frame_interval_spin.setValue(
+            float(hybrid_config.get("frame_interval_s", 0.2))
+        )
+
+        self.auto_tune_brightness_gate_spin = QDoubleSpinBox(self.groupBox_8)
+        self.auto_tune_brightness_gate_spin.setObjectName("autoTuneBrightnessGateSpinBox")
+        self.auto_tune_brightness_gate_spin.setDecimals(0)
+        self.auto_tune_brightness_gate_spin.setSingleStep(5.0)
+        self.auto_tune_brightness_gate_spin.setRange(1.0, 100.0)
+        self.auto_tune_brightness_gate_spin.setSuffix(" %")
+        self.auto_tune_brightness_gate_spin.setKeyboardTracking(False)
+        self.auto_tune_brightness_gate_spin.setProperty("dense", True)
+        self.auto_tune_brightness_gate_spin.setValue(
+            100.0 * float(hybrid_config.get("brightness_fraction", 0.4))
+        )
+
         scan_layout = QGridLayout()
         scan_layout.setContentsMargins(0, 0, 0, 0)
         scan_layout.setHorizontalSpacing(7)
@@ -1255,6 +1301,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             ("Fine pts", self.auto_tune_fine_steps_spin, 1, 2),
             ("Settle", self.auto_tune_settle_spin, 2, 0),
             ("Objective", self.auto_tune_objective_combo, 2, 2),
+            ("Frame gap", self.auto_tune_frame_interval_spin, 3, 0),
+            ("Bright gate", self.auto_tune_brightness_gate_spin, 3, 2),
         )
         for text, widget, row, column in scan_fields:
             label = QLabel(text, self.groupBox_8)
@@ -1282,6 +1330,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_fine_steps_spin,
             self.auto_tune_settle_spin,
             self.auto_tune_objective_combo,
+            self.auto_tune_frame_interval_spin,
+            self.auto_tune_brightness_gate_spin,
         )
 
     def _initial_target_energy_mev(self):
@@ -1342,6 +1392,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.energy_config.get("bend_scan", {}),
         )
         objective = str(self.auto_tune_objective_combo.currentData())
+        hybrid_config = dict(self.energy_config.get("auto_tune_hybrid", {}))
         target_x_pixel = reference_x_pixel(
             self.x_reference_mm,
             self.flag_pixel[0],
@@ -1355,6 +1406,19 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "settle_time_s": self.auto_tune_settle_spin.value(),
             "objective": objective,
             "target_x_pixel": target_x_pixel,
+            "frame_samples": int(hybrid_config.get("frame_samples", 3)),
+            "min_valid_frames": int(hybrid_config.get("min_valid_frames", 2)),
+            "frame_interval_s": self.auto_tune_frame_interval_spin.value(),
+            "brightness_fraction": self.auto_tune_brightness_gate_spin.value() / 100.0,
+            "max_center_spread_pixel": float(
+                hybrid_config.get("max_center_spread_mm", 1.0)
+            ) / self.flag_pixel_width_mm,
+            "target_tolerance_pixel": float(
+                hybrid_config.get("target_tolerance_mm", 1.0)
+            ) / self.flag_pixel_width_mm,
+            "min_fit_correlation": float(
+                hybrid_config.get("min_fit_correlation", 0.7)
+            ),
             "restore_initial_on_failure": bool(
                 configured.get("restore_initial_on_failure", True)
             ),
@@ -1553,6 +1617,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.slider_energy.sliderReleased.connect(self.set_bend_quad)
         self.target_energy_spin.valueChanged.connect(self._update_energy_slider_from_spin)
         self.target_energy_spin.editingFinished.connect(self.set_bend_quad)
+        self.auto_tune_objective_combo.currentIndexChanged.connect(
+            self._sync_energy_control_state
+        )
         self.pushButton_autoFind.clicked.connect(self.run_esa_auto_tune)
         self.pushButton_stopAutoFind.clicked.connect(self.stop_esa_auto_tune)
 
@@ -1589,6 +1656,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_fine_steps_spin: "Auto Find fine scan points",
             self.auto_tune_settle_spin: "Auto Find settle time",
             self.auto_tune_objective_combo: "Auto Find optimization objective",
+            self.auto_tune_frame_interval_spin: "Interval between fine-scan camera frames",
+            self.auto_tune_brightness_gate_spin: "Minimum brightness retained by the hybrid fit",
             self.pushButton_autoFind: "Auto Find start button",
             self.pushButton_stopAutoFind: "Auto Find stop button",
             self.background_plot: "Background preview plot",
@@ -1707,6 +1776,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         scan_running = self._auto_tune_is_running()
         for widget in self.auto_tune_parameter_widgets:
             widget.setEnabled(not scan_running)
+        hybrid_controls_enabled = (
+            not scan_running
+            and self.auto_tune_objective_combo.currentData()
+            == "brightness_gated_x_fit"
+        )
+        self.auto_tune_frame_interval_spin.setEnabled(hybrid_controls_enabled)
+        self.auto_tune_brightness_gate_spin.setEnabled(hybrid_controls_enabled)
         stop_requested = (
             scan_running
             and self.auto_tune_thread is not None
@@ -2792,6 +2868,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             prefix = "Fine"
         elif stage == "final":
             prefix = "Final"
+        elif stage == "verify":
+            prefix = "Verify"
         elif stage == "restore":
             prefix = "Restore"
         else:
@@ -2831,6 +2909,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                         "[GUI] Final beam-center offset from x_reference_mm: "
                         f"{center_offset_mm:+.3f} mm"
                     )
+                hybrid_fit = payload.get("hybrid_fit")
+                if hybrid_fit:
+                    print(
+                        "[GUI] Brightness-gated x fit: "
+                        f"r={float(hybrid_fit['correlation']):+.3f}, "
+                        f"slope={float(hybrid_fit['slope_pixel_per_unit']):+.3f} px/"
+                        f"{self.auto_tune_unit}, points={int(hybrid_fit['points_used'])}."
+                    )
             else:
                 self._auto_tune_text = "Done"
                 self._auto_tune_tone = "success"
@@ -2851,7 +2937,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             else:
                 self._auto_tune_text = "Failed"
                 self._auto_tune_tone = "warning"
-                print(f"[GUI] ESA auto tune failed ({status_text}).")
+                message = payload.get("message")
+                if message:
+                    print(f"[GUI] ESA auto tune failed ({status_text}): {message}")
+                else:
+                    print(f"[GUI] ESA auto tune failed ({status_text}).")
         self._refresh_status()
 
     def _on_auto_tune_finished(self):

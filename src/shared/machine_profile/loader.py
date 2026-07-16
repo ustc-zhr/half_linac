@@ -1152,10 +1152,14 @@ def _validate_energy_spectrum_workflow(
             auto_tune_objective,
             "workflows.energy_spectrum.auto_tune_objective",
         )
-        if objective not in {"find_beam", "center_x_reference"}:
+        if objective not in {
+            "find_beam",
+            "center_x_reference",
+            "brightness_gated_x_fit",
+        }:
             raise MachineProfileError(
                 "workflows.energy_spectrum.auto_tune_objective must be "
-                "'find_beam' or 'center_x_reference'."
+                "'find_beam', 'center_x_reference', or 'brightness_gated_x_fit'."
             )
 
     actuator_element = None
@@ -1251,6 +1255,70 @@ def _validate_energy_spectrum_workflow(
                         "workflows.energy_spectrum.auto_tune_scan range must stay within "
                         f"{actuator_element.id} limits [{actuator_low:g}, {actuator_high:g}]."
                     )
+
+    auto_tune_hybrid = workflow.get("auto_tune_hybrid")
+    if auto_tune_hybrid is not None:
+        hybrid = _expect_mapping(
+            auto_tune_hybrid,
+            "workflows.energy_spectrum.auto_tune_hybrid",
+        )
+        frame_samples = _expect_int(
+            hybrid.get("frame_samples"),
+            "workflows.energy_spectrum.auto_tune_hybrid.frame_samples",
+        )
+        min_valid_frames = _expect_int(
+            hybrid.get("min_valid_frames"),
+            "workflows.energy_spectrum.auto_tune_hybrid.min_valid_frames",
+        )
+        if frame_samples < 1:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_hybrid.frame_samples must be at least 1."
+            )
+        if not 1 <= min_valid_frames <= frame_samples:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_hybrid.min_valid_frames must be "
+                "between 1 and frame_samples."
+            )
+
+        numeric_hybrid = {}
+        for key in (
+            "frame_interval_s",
+            "brightness_fraction",
+            "max_center_spread_mm",
+            "target_tolerance_mm",
+            "min_fit_correlation",
+        ):
+            try:
+                numeric_hybrid[key] = float(hybrid[key])
+            except KeyError as exc:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_hybrid.{key} is required."
+                ) from exc
+            except (TypeError, ValueError) as exc:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_hybrid.{key} must be numeric."
+                ) from exc
+            if not math.isfinite(numeric_hybrid[key]):
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_hybrid.{key} must be finite."
+                )
+        if numeric_hybrid["frame_interval_s"] < 0:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_hybrid.frame_interval_s must not be negative."
+            )
+        if not 0 < numeric_hybrid["brightness_fraction"] <= 1:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_hybrid.brightness_fraction must be in (0, 1]."
+            )
+        for key in ("max_center_spread_mm", "target_tolerance_mm"):
+            if numeric_hybrid[key] <= 0:
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune_hybrid.{key} must be positive."
+                )
+        if not 0 <= numeric_hybrid["min_fit_correlation"] <= 1:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_hybrid.min_fit_correlation must be in [0, 1]."
+            )
 
     auto_tune_backends = workflow.get("auto_tune_control_backends")
     if auto_tune_backends is not None:
