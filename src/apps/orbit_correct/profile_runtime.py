@@ -48,6 +48,7 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
     backend = target.control_backend.name if isinstance(target, AppContext) else profile.machine.default_mode
     paths = resolve_orbit_runtime_paths(target)
     corrector_limit, corrector_limit_unit = _select_corrector_upperlimit(workflow, backend)
+    runtime_defaults = _select_runtime_defaults(workflow)
     return {
         "bpm_position_scale_to_m": _select_bpm_position_scale_to_m(
             workflow,
@@ -63,9 +64,14 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
             workflow,
             backend,
         ),
+        "correction_settle_s": _select_correction_settle_s(
+            workflow,
+            backend,
+            float(runtime_defaults["sampling_interval_s"]),
+        ),
         "corrector_upperlimit": corrector_limit,
         "corrector_upperlimit_unit": corrector_limit_unit,
-        "runtime_defaults": _select_runtime_defaults(workflow),
+        "runtime_defaults": runtime_defaults,
         **paths,
     }
 
@@ -252,6 +258,22 @@ def _select_response_sample_interval_s(
         backend,
         settle_time_s,
     )
+
+
+def _select_correction_settle_s(
+    workflow: Mapping[str, Any],
+    backend: str,
+    default: float,
+) -> float:
+    value = _select_backend_float(
+        workflow,
+        "correction_settle_s_by_backend",
+        backend,
+        default,
+    )
+    if value < 0:
+        raise ValueError("correction_settle_s_by_backend must be >= 0.")
+    return value
 
 
 def _select_bpm_position_scale_to_m(

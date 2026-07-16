@@ -1152,6 +1152,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit_unit"], "A")
         self.assertEqual(irfel_vm_orbit_runtime["bpm_position_scale_to_m"], 1.0)
         self.assertEqual(irfel_real_orbit_runtime["bpm_position_scale_to_m"], 1e-3)
+        self.assertEqual(irfel_vm_orbit_runtime["correction_settle_s"], 2.0)
+        self.assertEqual(irfel_real_orbit_runtime["correction_settle_s"], 1.0)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["method"], "global")
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["sampling_interval_s"], 2.0)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["accuracy_um"], 10.0)
@@ -1409,6 +1411,38 @@ class MachineProfileTests(unittest.TestCase):
         inverse_m = OrbitCorrector._truncated_pseudo_inverse(response_m, 0.01)
 
         np.testing.assert_allclose(inverse_m, inverse_mm * 1e3)
+
+    def test_orbit_correction_settle_is_separate_from_sample_interval(self):
+        from half_linac.src.apps.orbit_correct import correct as correct_module
+
+        with patch.dict(
+            os.environ,
+            {
+                "HALF_LINAC_MACHINE_ID": "irfel",
+                "HALF_LINAC_CONTROL_BACKEND": "real",
+            },
+        ):
+            corrector = correct_module.OrbitCorrector(
+                sample_interval=0.2,
+                samples_perstep=3,
+                target_BPMlist=["BPM07"],
+                target_BPMx_values=[0.0],
+                target_BPMy_values=[0.0],
+                correction_settle_s=1.0,
+            )
+            with (
+                patch.object(correct_module.time, "sleep") as sleep,
+                patch.object(
+                    correct_module,
+                    "caget_many",
+                    return_value=[-3.0, 8.0],
+                ),
+            ):
+                corrector._wait_for_correction_settle()
+                values = corrector._get_avg_readings2(["x", "y"])
+
+        self.assertEqual([item.args[0] for item in sleep.call_args_list], [1.0, 0.2, 0.2])
+        np.testing.assert_allclose(values, [-3e-3, 8e-3])
 
     def test_orbit_global_correction_can_limit_corrector_columns(self):
         from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime

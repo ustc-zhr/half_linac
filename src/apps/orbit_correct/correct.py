@@ -93,7 +93,8 @@ class OrbitCorrector:
                 correction_max_step_fraction: Optional[float] = None,
                 response_kick: Optional[float] = None,
                 global_xcor_list: Optional[List[str]] = None,
-                global_ycor_list: Optional[List[str]] = None):
+                global_ycor_list: Optional[List[str]] = None,
+                correction_settle_s: Optional[float] = None):
         self.app_context = load_app_context("orbit_correct")
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
@@ -101,6 +102,11 @@ class OrbitCorrector:
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
         self.runtime_defaults = self.orbit_runtime["runtime_defaults"]
         self.bpm_position_scale_to_m = self.orbit_runtime["bpm_position_scale_to_m"]
+        self.correction_settle_s = self._select_nonnegative_float(
+            correction_settle_s,
+            float(self.orbit_runtime["correction_settle_s"]),
+            "correction_settle_s",
+        )
 
         # constant definition
         self.response_matrix_path: Path | None = None
@@ -208,6 +214,17 @@ class OrbitCorrector:
         selected = default if value is None else float(value)
         if selected <= 0 or selected > 1:
             raise ValueError(f"{label} must be in the range (0, 1].")
+        return selected
+
+    @staticmethod
+    def _select_nonnegative_float(
+        value: Optional[float],
+        default: float,
+        label: str,
+    ) -> float:
+        selected = default if value is None else float(value)
+        if selected < 0:
+            raise ValueError(f"{label} must be >= 0.")
         return selected
 
     @staticmethod
@@ -367,8 +384,9 @@ class OrbitCorrector:
 
         results = [0.0] * len(pv_list)
         
-        for _ in range(self.samples_perstep):
-            time.sleep(self.sample_interval)
+        for sample_index in range(self.samples_perstep):
+            if sample_index:
+                time.sleep(self.sample_interval)
             for i, pv in enumerate(pv_list):
                 results[i] += self._read_pv(pv, "orbit correction sample")
         
@@ -376,6 +394,10 @@ class OrbitCorrector:
         for index in range(bpm_count):
             averaged[index] *= self.bpm_position_scale_to_m
         return averaged
+
+    def _wait_for_correction_settle(self) -> None:
+        if self.correction_settle_s > 0:
+            time.sleep(self.correction_settle_s)
 
     def _max_correction_step(self) -> float:
         return self.max_value * self.correction_max_step_fraction
@@ -421,18 +443,21 @@ class OrbitCorrector:
             # 微调并测量响应。X/Y corrector 分开 kick，避免交叉影响响应系数。
             try:
                 self._write_pv(self.pvCORx[j], hcorrVal + self.d_value, "X corrector response kick")
+                self._wait_for_correction_settle()
                 xbpm_val1 = self._get_avg_readings(
                     [self.pvBPMx[j]], bpm_count=1
                 )[0]
                 self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
 
                 self._write_pv(self.pvCORy[j], vcorrVal + self.d_value, "Y corrector response kick")
+                self._wait_for_correction_settle()
                 ybpm_val1 = self._get_avg_readings(
                     [self.pvBPMy[j]], bpm_count=1
                 )[0]
             finally:
                 self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
                 self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
+                self._wait_for_correction_settle()
             
             # cal response coefficient
             Rx = (xbpm_val1 - xbpm_val0) / self.d_value
@@ -508,7 +533,7 @@ class OrbitCorrector:
                 vcorrVal = next_vcorr
                 self._write_pv(self.pvCORx[j], hcorrVal, "X corrector correction")
                 self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector correction")
-                time.sleep(self.sample_interval)
+                self._wait_for_correction_settle()
 
             if not converged:
                 logger.warning(
@@ -623,8 +648,9 @@ class OrbitCorrector:
             
         results = np.zeros(len(pv_list), dtype=float)
         
-        for _ in range(self.samples_perstep):
-            time.sleep(self.sample_interval)
+        for sample_index in range(self.samples_perstep):
+            if sample_index:
+                time.sleep(self.sample_interval)
             results += (
                 self._read_many_pvs(pv_list, "orbit readings")
                 * self.bpm_position_scale_to_m
@@ -639,6 +665,12 @@ class OrbitCorrector:
         max_iter = self.global_max_iter if max_iter is None else max_iter
 
         logger.info("global correction uses SVD pseudo-inverse")
+        logger.info(
+            "correction timing uses settle=%.3f s, sample interval=%.3f s, samples/step=%d",
+            self.correction_settle_s,
+            self.sample_interval,
+            self.samples_perstep,
+        )
         self._compute_svd()
         pvname_corx = [self._cor_pv(cor) for cor in self.global_xcor_list]
         pvname_cory = [self._cor_pv(cor) for cor in self.global_ycor_list]
@@ -729,6 +761,7 @@ class OrbitCorrector:
             
             self._write_many_pvs(pvname_corx, new_hcor, "X corrector setpoints")
             self._write_many_pvs(pvname_cory, new_vcor, "Y corrector setpoints")
+            self._wait_for_correction_settle()
         
         logger.info(f"reach the max iteration: {max_iter}")
         return False
@@ -798,6 +831,7 @@ if __name__ == '__main__':
             response_kick = _optional_float_arg(sys.argv, 14)
             global_xcor_list = _optional_csv_arg(sys.argv, 15)
             global_ycor_list = _optional_csv_arg(sys.argv, 16)
+            correction_settle_s = _optional_float_arg(sys.argv, 17)
             
             corrector = OrbitCorrector(
                 samp_interval, cor_accuracy, samples_perstep,
@@ -810,6 +844,7 @@ if __name__ == '__main__':
                 response_kick=response_kick,
                 global_xcor_list=global_xcor_list,
                 global_ycor_list=global_ycor_list,
+                correction_settle_s=correction_settle_s,
             )
             corrector._require_targets()
             corrector.init_BPM_pv()

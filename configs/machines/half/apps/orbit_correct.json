@@ -140,6 +140,10 @@
     "vm": 0.5,
     "real": 0.5
   },
+  "correction_settle_s_by_backend": {
+    "vm": 8.0,
+    "real": 8.0
+  },
   "corrector_upperlimit_by_backend": {
     "vm": {
       "value": 0.001,

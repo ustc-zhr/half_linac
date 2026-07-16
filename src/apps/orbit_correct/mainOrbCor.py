@@ -563,6 +563,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         # initial parameters
         self._apply_default_method()
         self.samplingIntervalSLineEdit.setText(f"{float(self.runtime_defaults['sampling_interval_s']):g}")
+        self.correctionSettleSLineEdit.setText(
+            f"{float(self.orbit_runtime['correction_settle_s']):g}"
+        )
         self.correctorAccuracyUmLineEdit.setText(f"{float(self.runtime_defaults['accuracy_um']):g}")
         self.sampPerStepLineEdit.setText(str(int(self.runtime_defaults["samples_per_step"])))
         corrector_limit = float(self.orbit_runtime["corrector_upperlimit"])
@@ -901,6 +904,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _build_correction_parameters_card(self):
         card, layout = self._make_subcard(None, self.command_pane)
         self.correctorLimitLabel, self.correctorLimitLineEdit = self._make_parameter_field(card)
+        self.correctionSettleSLabel, self.correctionSettleSLineEdit = self._make_parameter_field(card)
         self.globalMaxIterLabel, self.globalMaxIterLineEdit = self._make_parameter_field(card)
         self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit = self._make_parameter_field(card)
         self.correctionGainLabel, self.correctionGainLineEdit = self._make_parameter_field(card)
@@ -918,6 +922,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             (
                 (self.label_6, self.comboBox, True),
                 (self.samplingIntervalSLabel, self.samplingIntervalSLineEdit, True),
+                (self.correctionSettleSLabel, self.correctionSettleSLineEdit, False),
                 (self.correctorAccuracyUmLabel, self.correctorAccuracyUmLineEdit, True),
                 (self.sampPerStepLabel, self.sampPerStepLineEdit, True),
                 (self.correctorLimitLabel, self.correctorLimitLineEdit, False),
@@ -1158,6 +1163,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _configure_form_content(self):
         self.label_6.setProperty("role", "field")
         self.samplingIntervalSLabel.setProperty("role", "field")
+        self.correctionSettleSLabel.setProperty("role", "field")
         self.correctorAccuracyUmLabel.setProperty("role", "field")
         self.sampPerStepLabel.setProperty("role", "field")
         self.correctorLimitLabel.setProperty("role", "field")
@@ -1182,6 +1188,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         limit_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         self.label_6.setText("Method")
         self.samplingIntervalSLabel.setText("Sampling Interval (s)")
+        self.correctionSettleSLabel.setText("Correction Settle (s)")
         self.correctorAccuracyUmLabel.setText("Accuracy (um)")
         self.sampPerStepLabel.setText("Samples / Step")
         self.correctorLimitLabel.setText(f"Corrector Limit ({limit_unit})")
@@ -1662,6 +1669,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _correction_parameter_args(self):
         method = self._selected_correction_method()
         corrector_limit = self._corrector_limit_value()
+        correction_settle_s = self._parse_nonnegative_float(
+            self.correctionSettleSLineEdit,
+            "Correction Settle",
+        )
         correction_gain, correction_max_step_fraction = self._correction_step_parameter_values()
         global_xcors = []
         global_ycors = []
@@ -1696,6 +1707,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             f"{response_kick:.12g}",
             ",".join(global_xcors),
             ",".join(global_ycors),
+            f"{correction_settle_s:.12g}",
         ]
         
     def measure_res(self): #measure response matrix
