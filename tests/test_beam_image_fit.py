@@ -57,6 +57,34 @@ class BeamImageFitTests(unittest.TestCase):
         self.assertEqual(result.status, "empty_window")
         self.assertEqual(result.cropped_image.size, 0)
 
+    def test_rms_moments_recovers_gaussian_sigmas(self):
+        x = np.linspace(-8.0, 8.0, 321)
+        y = np.linspace(-7.0, 7.0, 281)
+        xx, yy = np.meshgrid(x, y)
+        image = np.exp(-((xx - 0.6) ** 2) / (2 * 1.1**2)) * np.exp(
+            -((yy + 0.3) ** 2) / (2 * 1.6**2)
+        )
+
+        result = fit_beam_image(
+            image,
+            extent=(-8.0, 8.0, -7.0, 7.0),
+            method="RMS moments",
+        )
+
+        self.assertTrue(result.valid, result.message)
+        self.assertEqual(result.method, "RMS moments")
+        self.assertAlmostEqual(result.sigx_mm, 1.1, places=2)
+        self.assertAlmostEqual(result.sigy_mm, 1.6, places=2)
+        self.assertIsNone(result.x_projection.fitted_projection)
+
+    def test_fit_beam_image_rejects_unknown_profile_method(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported beam profile method"):
+            fit_beam_image(
+                np.ones((12, 16)),
+                extent=(-1.0, 1.0, -1.0, 1.0),
+                method="unknown",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

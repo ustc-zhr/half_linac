@@ -1,6 +1,7 @@
 import sys
 import time
 import math
+from datetime import datetime
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -19,7 +20,11 @@ from epics import PV, caget, caput, caput_many
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -27,6 +32,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QTextEdit,
     QToolButton,
     QVBoxLayout,
@@ -34,7 +40,15 @@ from PyQt5.QtWidgets import (
 )
 
 from gui import Ui_Form
-from half_linac.src.shared.beam_diagnostics import fit_beam_image
+from mplwidget import MplWidget
+from profile_runtime import resolve_beam_monitor_background_paths
+from half_linac.src.shared.beam_diagnostics import (
+    BackgroundStoreError,
+    fit_beam_image,
+    load_background,
+    save_background,
+    subtract_background,
+)
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     get_workflow,
@@ -202,7 +216,7 @@ QPushButton[compact="true"] {{
     font-size: 11px;
 }}
 
-QLineEdit, QComboBox {{
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
     background-color: {input_bg};
     border: 1px solid {input_border};
     border-radius: 10px;
@@ -222,6 +236,25 @@ QComboBox QAbstractItemView {{
     color: {input_fg};
     border: 1px solid {input_border};
     selection-background-color: {button_hover_bg};
+}}
+
+QCheckBox {{
+    background-color: transparent;
+    color: {window_fg};
+    spacing: 8px;
+}}
+
+QCheckBox::indicator {{
+    width: 16px;
+    height: 16px;
+    border: 1px solid {panel_border};
+    border-radius: 4px;
+    background-color: {input_bg};
+}}
+
+QCheckBox::indicator:checked {{
+    background-color: {metric_active_fg};
+    border: 2px solid {window_fg};
 }}
 
 QTextEdit {{
@@ -422,8 +455,13 @@ class myWindow(QWidget, Ui_Form):
         self._pixel_geometry_flag_id = None
         self._image_pv = None
         self._image_pv_name = None
-        self._view_offset_x = 0.0
-        self._view_offset_y = 0.0
+        self.background_image = None
+        self.background_metadata = {}
+        self.background_image_path = None
+        self.background_flag_id = None
+        self.subtract_background_enabled = False
+        self.background_dialog = None
+        self.background_preview = None
 
         self.h = None
         self.colorbar = None
@@ -609,6 +647,10 @@ class myWindow(QWidget, Ui_Form):
     def _populate_view_card(self):
         layout = self.view_card.layout()
 
+        self.pushButton_3.hide()
+        self.lineEdit_7.hide()
+        self.lineEdit_8.hide()
+
         grid = QGridLayout()
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
@@ -618,26 +660,54 @@ class myWindow(QWidget, Ui_Form):
         for label in (self.label_3, self.label_4):
             label.setProperty("role", "field")
 
-        move_x_label = QLabel("Delta X (mm)", self.view_card)
-        move_x_label.setProperty("role", "field")
-        move_y_label = QLabel("Delta Y (mm)", self.view_card)
-        move_y_label.setProperty("role", "field")
+        method_label = QLabel("Profile method", self.view_card)
+        method_label.setProperty("role", "field")
+        self.profile_method_combo = QComboBox(self.view_card)
+        self.profile_method_combo.setObjectName("profileMethodComboBox")
+        self.profile_method_combo.addItems(("Gaussian fit", "RMS moments"))
+        configured_method = str(
+            self.beam_monitor_config.get("profile_method", "Gaussian fit")
+        ).strip()
+        method_index = self.profile_method_combo.findText(configured_method)
+        if method_index < 0:
+            raise MachineProfileError(
+                f"Unsupported beam monitor profile_method: {configured_method!r}."
+            )
+        self.profile_method_combo.setCurrentIndex(method_index)
+        self.profile_method_combo.setToolTip(
+            "Gaussian fit reports the fitted core width. RMS moments reports the "
+            "intensity-weighted second moment and is more sensitive to background."
+        )
 
         grid.addWidget(self.label_3, 0, 0)
         grid.addWidget(self.lineEdit_4, 0, 1)
         grid.addWidget(self.label_4, 1, 0)
         grid.addWidget(self.lineEdit_3, 1, 1)
-        grid.addWidget(move_x_label, 2, 0)
-        grid.addWidget(self.lineEdit_7, 2, 1)
-        grid.addWidget(move_y_label, 3, 0)
-        grid.addWidget(self.lineEdit_8, 3, 1)
+        grid.addWidget(method_label, 2, 0)
+        grid.addWidget(self.profile_method_combo, 2, 1)
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
 
-        self.pushButton_3.setText("Apply Delta")
-        self.pushButton_3.setProperty("compact", True)
-        self.pushButton_3.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._refresh_widget_style(self.pushButton_3)
+        self.background_subtract_checkbox = QCheckBox(
+            "Subtract background",
+            self.view_card,
+        )
+        self.background_subtract_checkbox.setObjectName("subtractBackgroundCheckBox")
+        self.background_subtract_checkbox.setToolTip(
+            "Subtract the current flag's saved background before display and profile analysis."
+        )
+        layout.addWidget(self.background_subtract_checkbox)
+
+        self.background_status_label = QLabel("Background: None", self.view_card)
+        self.background_status_label.setProperty("role", "field")
+        self.background_status_label.setWordWrap(True)
+        layout.addWidget(self.background_status_label)
+
+        self.background_button = QPushButton("Background...", self.view_card)
+        self.background_button.setObjectName("backgroundButton")
+        self.background_button.setProperty("compact", True)
+        self.background_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._refresh_widget_style(self.background_button)
 
         self.reset_view_button = QPushButton("Reset View", self.view_card)
         self.reset_view_button.setProperty("compact", True)
@@ -647,7 +717,7 @@ class myWindow(QWidget, Ui_Form):
         action_row = QHBoxLayout()
         action_row.setContentsMargins(0, 0, 0, 0)
         action_row.setSpacing(10)
-        action_row.addWidget(self.pushButton_3)
+        action_row.addWidget(self.background_button)
         action_row.addWidget(self.reset_view_button)
         layout.addLayout(action_row)
 
@@ -693,14 +763,13 @@ class myWindow(QWidget, Ui_Form):
             self.flag_selec.setCurrentIndex(0)
         self.tmppv = self.flag_selec.currentText()
         self._configure_pixel_geometry(self.tmppv)
-        self.lineEdit_7.setText("0")
-        self.lineEdit_8.setText("0")
         self.lineEdit_4.setText("0")
         self.lineEdit_9.setText("1")
         self.lineEdit_5.setText("--")
         self.lineEdit_6.setText("--")
         self._update_exposure_edit_hint()
         self._read_exposure_time()
+        self._load_latest_background(silent=True)
 
     def _pick_default_flag_id(self):
         default_flag = str(self.beam_monitor_config.get("default_flag", "")).strip()
@@ -717,8 +786,14 @@ class myWindow(QWidget, Ui_Form):
     def _connect_signals(self):
         self.pushButton.clicked.connect(self.start1_btn)
         self.pushButton_2.clicked.connect(self.stop1_btn)
-        self.pushButton_3.clicked.connect(self.moveaxis)
         self.reset_view_button.clicked.connect(self.reset_view)
+        self.background_button.clicked.connect(self._show_background_dialog)
+        self.background_subtract_checkbox.toggled.connect(
+            self._set_background_subtraction
+        )
+        self.profile_method_combo.currentTextChanged.connect(
+            self._handle_profile_method_changed
+        )
         self.lineEdit.returnPressed.connect(self.setExpoTime)
         self.lineEdit_9.textChanged.connect(self.change_interval)
         self.flag_selec.currentTextChanged.connect(self._handle_flag_changed)
@@ -726,16 +801,416 @@ class myWindow(QWidget, Ui_Form):
     def _handle_flag_changed(self, flag_id):
         self.tmppv = flag_id
         self._configure_pixel_geometry(flag_id)
+        self._clear_background()
         self._update_exposure_edit_hint()
         self._read_exposure_time()
+        self._load_latest_background(silent=True)
+        if self.background_dialog is not None:
+            self.background_dialog.setWindowTitle(f"Background Reference — {flag_id}")
         self._draw_placeholder_plot("Beam Profile")
         self._refresh_status()
+
+    def _handle_profile_method_changed(self, _method):
+        self._set_profile_status(self.profile_method_combo.currentText(), "subtle")
+        if self._pv_available:
+            self.plot_beamprofile()
+
+    def _background_paths(self, flag_id=None):
+        return resolve_beam_monitor_background_paths(
+            self.app_context,
+            flag_id or self.tmppv,
+        )
+
+    def _current_exposure_value(self):
+        try:
+            value = float(self.lineEdit.text().strip())
+        except (TypeError, ValueError):
+            return None
+        return value if math.isfinite(value) else None
+
+    def _background_metadata(self, *, sample_count=None, sample_interval_s=None, source):
+        metadata = {
+            "machine_id": self.machine_profile.machine.id,
+            "control_backend": self.control_backend,
+            "flag_id": self.tmppv,
+            "image_pv": getattr(self, "pv", None),
+            "pixel_shape": [int(self.pixel[0]), int(self.pixel[1])],
+            "exposure_s": self._current_exposure_value(),
+            "source": source,
+            "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        }
+        if sample_count is not None:
+            metadata["sample_count"] = int(sample_count)
+        if sample_interval_s is not None:
+            metadata["sample_interval_s"] = float(sample_interval_s)
+        return metadata
+
+    def _validate_background_metadata(self, metadata):
+        expected = {
+            "machine_id": self.machine_profile.machine.id,
+            "control_backend": self.control_backend,
+            "flag_id": self.tmppv,
+        }
+        for key, expected_value in expected.items():
+            actual = metadata.get(key)
+            if actual is not None and str(actual) != str(expected_value):
+                raise BackgroundStoreError(
+                    f"Background {key} {actual!r} does not match current {expected_value!r}."
+                )
+
+    def _background_exposure_mismatch(self):
+        current = self._current_exposure_value()
+        saved = self.background_metadata.get("exposure_s")
+        try:
+            saved_value = float(saved)
+        except (TypeError, ValueError):
+            return False
+        return current is not None and not math.isclose(
+            current,
+            saved_value,
+            rel_tol=1e-6,
+            abs_tol=1e-9,
+        )
+
+    def _update_background_status(self):
+        if self.background_image is None:
+            text = "Background: None"
+        else:
+            sample_count = self.background_metadata.get("sample_count")
+            sample_text = f" • {sample_count} frames" if sample_count else ""
+            mismatch_text = " • exposure mismatch" if self._background_exposure_mismatch() else ""
+            text = f"Background: {self.background_flag_id}{sample_text}{mismatch_text}"
+        self.background_status_label.setText(text)
+        if hasattr(self, "background_dialog_status_label"):
+            self.background_dialog_status_label.setText(text)
+
+    def _set_background_image(self, image, metadata, image_path):
+        self._validate_background_metadata(metadata)
+        self.background_image = np.asarray(image, dtype=float)
+        self.background_metadata = dict(metadata)
+        self.background_image_path = Path(image_path) if image_path is not None else None
+        self.background_flag_id = self.tmppv
+        self._update_background_status()
+        self._refresh_background_preview()
+        if self._background_exposure_mismatch():
+            self._notify(
+                "Warning: loaded background exposure differs from the current camera exposure."
+            )
+
+    def _clear_background(self):
+        self.background_image = None
+        self.background_metadata = {}
+        self.background_image_path = None
+        self.background_flag_id = None
+        self.subtract_background_enabled = False
+        if hasattr(self, "background_subtract_checkbox"):
+            blocked = self.background_subtract_checkbox.blockSignals(True)
+            self.background_subtract_checkbox.setChecked(False)
+            self.background_subtract_checkbox.blockSignals(blocked)
+        if hasattr(self, "background_status_label"):
+            self._update_background_status()
+        self._refresh_background_preview()
+
+    def _load_latest_background(self, *, silent=False):
+        if not self.tmppv:
+            return False
+        paths = self._background_paths()
+        image_path = paths["background_image_path"]
+        if not image_path.is_file():
+            if not silent:
+                self._notify(f"No saved background is available for {self.tmppv}.")
+            return False
+        try:
+            image, metadata = load_background(
+                image_path,
+                paths["background_metadata_path"],
+                expected_shape=(self.pixel[1], self.pixel[0]),
+            )
+            self._set_background_image(image, metadata, image_path)
+        except (BackgroundStoreError, OSError, ValueError) as exc:
+            if not silent:
+                self._notify(f"Could not load background: {exc}")
+            else:
+                print(f"Could not auto-load background for {self.tmppv}: {exc}")
+            return False
+        print(f"Background loaded for {self.tmppv} from {image_path}")
+        return True
+
+    def _set_background_subtraction(self, checked):
+        if checked and self.background_image is None:
+            blocked = self.background_subtract_checkbox.blockSignals(True)
+            self.background_subtract_checkbox.setChecked(False)
+            self.background_subtract_checkbox.blockSignals(blocked)
+            self.subtract_background_enabled = False
+            self._notify("Load or sample a background before enabling subtraction.")
+            return
+        self.subtract_background_enabled = bool(checked)
+        if self._pv_available:
+            self.plot_beamprofile()
+
+    def _build_background_dialog(self):
+        dialog = QDialog(self)
+        dialog.setObjectName("backgroundDialog")
+        dialog.setWindowTitle("Beam Monitor Background")
+        dialog.resize(720, 620)
+
+        outer = QVBoxLayout(dialog)
+        outer.setContentsMargins(14, 14, 14, 14)
+        outer.setSpacing(10)
+
+        warning = QLabel(
+            "Sample only with beam absent and with the same camera exposure used for measurement.",
+            dialog,
+        )
+        warning.setWordWrap(True)
+        warning.setProperty("role", "field")
+        outer.addWidget(warning)
+
+        self.background_preview = MplWidget(dialog)
+        self.background_preview.setMinimumHeight(300)
+        outer.addWidget(self.background_preview, 1)
+
+        controls = QGridLayout()
+        controls.setHorizontalSpacing(10)
+        controls.setVerticalSpacing(8)
+        samples_label = QLabel("Samples", dialog)
+        samples_label.setProperty("role", "field")
+        interval_label = QLabel("Interval", dialog)
+        interval_label.setProperty("role", "field")
+        self.background_samples_spin = QSpinBox(dialog)
+        self.background_samples_spin.setRange(1, 100)
+        self.background_samples_spin.setValue(
+            int(self.beam_monitor_config.get("background_sample_count", 5))
+        )
+        self.background_interval_spin = QDoubleSpinBox(dialog)
+        self.background_interval_spin.setDecimals(2)
+        self.background_interval_spin.setSingleStep(0.05)
+        self.background_interval_spin.setRange(0.0, 60.0)
+        self.background_interval_spin.setSuffix(" s")
+        self.background_interval_spin.setValue(
+            float(self.beam_monitor_config.get("background_sample_interval_s", 1.0))
+        )
+        controls.addWidget(samples_label, 0, 0)
+        controls.addWidget(self.background_samples_spin, 0, 1)
+        controls.addWidget(interval_label, 0, 2)
+        controls.addWidget(self.background_interval_spin, 0, 3)
+        controls.setColumnStretch(1, 1)
+        controls.setColumnStretch(3, 1)
+        outer.addLayout(controls)
+
+        self.background_dialog_status_label = QLabel(dialog)
+        self.background_dialog_status_label.setProperty("role", "field")
+        self.background_dialog_status_label.setWordWrap(True)
+        outer.addWidget(self.background_dialog_status_label)
+
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+        sample_button = QPushButton("Sample Background", dialog)
+        load_latest_button = QPushButton("Load Latest", dialog)
+        load_file_button = QPushButton("Load File", dialog)
+        save_as_button = QPushButton("Save As", dialog)
+        close_button = QPushButton("Close", dialog)
+        for button in (
+            sample_button,
+            load_latest_button,
+            load_file_button,
+            save_as_button,
+            close_button,
+        ):
+            button.setProperty("compact", True)
+        sample_button.clicked.connect(self._sample_background)
+        load_latest_button.clicked.connect(
+            lambda: self._load_latest_background(silent=False)
+        )
+        load_file_button.clicked.connect(self._load_background_file)
+        save_as_button.clicked.connect(self._save_background_as)
+        close_button.clicked.connect(dialog.hide)
+        action_row.addWidget(sample_button)
+        action_row.addWidget(load_latest_button)
+        action_row.addWidget(load_file_button)
+        action_row.addWidget(save_as_button)
+        action_row.addStretch(1)
+        action_row.addWidget(close_button)
+        outer.addLayout(action_row)
+
+        self.background_dialog = dialog
+        self._update_background_status()
+        self._refresh_background_preview()
+
+    def _show_background_dialog(self):
+        if self.background_dialog is None:
+            self._build_background_dialog()
+        self.background_dialog.setWindowTitle(f"Background Reference — {self.tmppv}")
+        self._update_background_status()
+        self._refresh_background_preview()
+        self.background_dialog.show()
+        self.background_dialog.raise_()
+        self.background_dialog.activateWindow()
+
+    def _refresh_background_preview(self):
+        if self.background_preview is None:
+            return
+        palette = self._palette()
+        axes = self.background_preview.axes
+        axes.clear()
+        self.background_preview.fig.patch.set_facecolor(palette["plot_card_bg"])
+        axes.set_facecolor(palette["plot_bg"])
+        axes.tick_params(colors=palette["plot_text"], which="both", labelsize=8)
+        for spine in axes.spines.values():
+            spine.set_edgecolor(palette["plot_spine"])
+        if self.background_image is None:
+            axes.text(
+                0.5,
+                0.5,
+                "No background loaded",
+                ha="center",
+                va="center",
+                color=palette["muted_fg"],
+                transform=axes.transAxes,
+            )
+            axes.set_xticks([])
+            axes.set_yticks([])
+        else:
+            axes.imshow(
+                self.background_image,
+                cmap=self.comboBox_2.currentText(),
+                origin="lower",
+                aspect="auto",
+            )
+            axes.set_title(
+                f"{self.background_flag_id} background",
+                color=palette["plot_text"],
+                fontsize=10,
+                loc="left",
+            )
+            axes.set_xlabel("x pixel", color=palette["plot_text"])
+            axes.set_ylabel("y pixel", color=palette["plot_text"])
+        self.background_preview.canvas.draw_idle()
+
+    def _sample_background(self):
+        if not self.tmppv or not self._configure_active_channels():
+            return
+        sample_count = self.background_samples_spin.value()
+        interval_s = self.background_interval_spin.value()
+        expected_shape = (self.pixel[1], self.pixel[0])
+        timer_was_active = self.timer.isActive()
+        timer_interval = self.timer.interval()
+        self.timer.stop()
+        self._set_profile_status("Sampling background", "subtle")
+        self._refresh_status()
+        images = []
+        try:
+            for index in range(sample_count):
+                if index > 0 and interval_s > 0:
+                    time.sleep(interval_s)
+                raw = self._image_pv.get()
+                if raw is None:
+                    raise BackgroundStoreError(
+                        f"{self.pv} returned no image data during background sampling."
+                    )
+                image = np.asarray(raw, dtype=float).reshape(expected_shape)
+                if not np.all(np.isfinite(image)):
+                    raise BackgroundStoreError("Sampled background contains non-finite values.")
+                images.append(image)
+        except (BackgroundStoreError, TypeError, ValueError) as exc:
+            self._notify(f"Background sampling failed: {exc}")
+            self._set_profile_status("Background failed", "warning")
+            self._refresh_status()
+            return
+        finally:
+            if timer_was_active:
+                self.timer.start(max(timer_interval, 1))
+
+        background = np.mean(images, axis=0)
+        metadata = self._background_metadata(
+            sample_count=sample_count,
+            sample_interval_s=interval_s,
+            source="sampled",
+        )
+        paths = self._background_paths()
+        try:
+            image_path, _metadata_path = save_background(
+                background,
+                paths["background_image_path"],
+                paths["background_metadata_path"],
+                metadata,
+            )
+            self._set_background_image(background, metadata, image_path)
+        except (BackgroundStoreError, OSError, ValueError) as exc:
+            self._notify(f"Could not save sampled background: {exc}")
+            self._set_profile_status("Background save failed", "warning")
+            return
+        self._set_profile_status("Background sampled", "success")
+        self._refresh_status()
+        print(f"Background sampled for {self.tmppv} and saved to {image_path}")
+
+    def _choose_background_file(self, *, save):
+        paths = self._background_paths()
+        dialog = QFileDialog(self.background_dialog or self)
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        dialog.setNameFilter("NumPy files (*.npy)")
+        if save:
+            paths["runs_dir"].mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+            dialog.setWindowTitle("Save Beam Monitor Background")
+            dialog.setAcceptMode(QFileDialog.AcceptSave)
+            dialog.setDefaultSuffix("npy")
+            dialog.setDirectory(str(paths["runs_dir"]))
+            dialog.selectFile(f"{self.tmppv}_background_{timestamp}.npy")
+        else:
+            dialog.setWindowTitle("Load Beam Monitor Background")
+            dialog.setFileMode(QFileDialog.ExistingFile)
+            initial = paths["background_image_path"]
+            dialog.setDirectory(str(initial.parent if initial.parent.is_dir() else paths["latest_dir"]))
+        if dialog.exec_() != QDialog.Accepted:
+            return None
+        selected = dialog.selectedFiles()
+        return Path(selected[0]) if selected else None
+
+    def _load_background_file(self):
+        image_path = self._choose_background_file(save=False)
+        if image_path is None:
+            return
+        try:
+            image, metadata = load_background(
+                image_path,
+                image_path.with_suffix(".json"),
+                expected_shape=(self.pixel[1], self.pixel[0]),
+            )
+            self._set_background_image(image, metadata, image_path)
+        except (BackgroundStoreError, OSError, ValueError) as exc:
+            self._notify(f"Could not load background: {exc}")
+            return
+        print(f"Background loaded for {self.tmppv} from {image_path}")
+
+    def _save_background_as(self):
+        if self.background_image is None:
+            self._notify("No background is available to save.")
+            return
+        image_path = self._choose_background_file(save=True)
+        if image_path is None:
+            return
+        metadata = dict(self.background_metadata)
+        metadata.update(self._background_metadata(source="save_as"))
+        try:
+            save_background(
+                self.background_image,
+                image_path,
+                image_path.with_suffix(".json"),
+                metadata,
+            )
+        except (BackgroundStoreError, OSError, ValueError) as exc:
+            self._notify(f"Could not save background: {exc}")
+            return
+        print(f"Background saved to {image_path}")
 
     def _apply_theme(self):
         palette = self._palette()
         self.setStyleSheet(build_beam_monitor_theme(palette))
         if hasattr(self, "status_panel"):
             self.status_panel.apply_theme(palette)
+        if self.background_preview is not None:
+            self._refresh_background_preview()
         self._update_theme_toggle_button()
 
     def _palette(self):
@@ -947,8 +1422,6 @@ class myWindow(QWidget, Ui_Form):
         self.xlim = (-0.5 * self.width, 0.5 * self.width)
         self.ylim = (-0.5 * self.height, 0.5 * self.height)
         self.extent = self.xlim + self.ylim
-        self._view_offset_x = 0.0
-        self._view_offset_y = 0.0
 
     def _get_refresh_interval_ms(self):
         text = self.lineEdit_9.text().strip()
@@ -994,52 +1467,8 @@ class myWindow(QWidget, Ui_Form):
             self.lineEdit_3.setText(f"{vmax:.6g}")
         return vmin, vmax
 
-    def _parse_delta_input(self, line_edit, axis_name):
-        text = line_edit.text().strip()
-        if not text:
-            return 0.0, True
-        try:
-            value = float(text)
-        except ValueError:
-            self._warn_once(f"Warning: {axis_name} delta must be numeric.")
-            self._set_profile_status("Bad view delta", "warning")
-            line_edit.setText("0")
-            return 0.0, False
-        if not math.isfinite(value):
-            self._warn_once(f"Warning: {axis_name} delta must be finite.")
-            self._set_profile_status("Bad view delta", "warning")
-            line_edit.setText("0")
-            return 0.0, False
-        return value, True
-
-    def moveaxis(self):
-        offx, valid_x = self._parse_delta_input(self.lineEdit_7, "X")
-        offy, valid_y = self._parse_delta_input(self.lineEdit_8, "Y")
-        if not valid_x or not valid_y:
-            self._refresh_status()
-            return
-        self._view_offset_x += offx
-        self._view_offset_y += offy
-
-        tmp1 = tuple(np.array(self.xlim)[0:2] - offx)
-        tmp2 = tuple(np.array(self.ylim)[0:2] - offy)
-        self.xlim = tmp1
-        self.ylim = tmp2
-        self.extent = tmp1 + tmp2
-        self._set_profile_status(f"Offset x={self._view_offset_x:.3g}, y={self._view_offset_y:.3g}", "subtle")
-
-        axes = self._active_image_axes()
-        if axes is not None:
-            axes.set_xlim(tmp1)
-            axes.set_ylim(tmp2)
-            self.widget.canvas.draw()
-
-        self._refresh_status()
-
     def reset_view(self):
         self._reset_view_limits()
-        self.lineEdit_7.setText("0")
-        self.lineEdit_8.setText("0")
         self._set_profile_status("View reset", "subtle")
 
         axes = self._active_image_axes()
@@ -1197,6 +1626,20 @@ class myWindow(QWidget, Ui_Form):
             return
 
         data = np.reshape(data_ini, (self.pixel[1], self.pixel[0]))
+        if self.subtract_background_enabled:
+            try:
+                data = subtract_background(data, self.background_image)
+            except BackgroundStoreError as exc:
+                self.subtract_background_enabled = False
+                blocked = self.background_subtract_checkbox.blockSignals(True)
+                self.background_subtract_checkbox.setChecked(False)
+                self.background_subtract_checkbox.blockSignals(blocked)
+                self._show_profile_placeholder(
+                    f"{self.tmppv} / Background Error",
+                    warning=f"Warning: background subtraction failed: {exc}",
+                    status_text="Background error",
+                )
+                return
         self._profile_warning = None
         self._clear_profile_stats()
 
@@ -1227,7 +1670,15 @@ class myWindow(QWidget, Ui_Form):
         for tick in self.colorbar.ax.get_yticklabels():
             tick.set_color(self._palette()["plot_text"])
 
-        self.widget.axes.set_title(self.tmppv, color=self._palette()["plot_text"], fontsize=11, fontweight="bold", loc="left")
+        profile_method = self.profile_method_combo.currentText()
+        background_marker = " • BG" if self.subtract_background_enabled else ""
+        self.widget.axes.set_title(
+            f"{self.tmppv} • {profile_method}{background_marker}",
+            color=self._palette()["plot_text"],
+            fontsize=11,
+            fontweight="bold",
+            loc="left",
+        )
         self.widget.axes.set_xlabel("x (mm)")
         self.widget.axes.set_ylabel("y (mm)")
         self.widget.axes.set_xlim(self.xlim)
@@ -1241,6 +1692,7 @@ class myWindow(QWidget, Ui_Form):
             extent=self.extent,
             xlim=self.xlim,
             ylim=self.ylim,
+            method=profile_method,
         )
 
         if not fit_result.has_signal:
@@ -1258,20 +1710,36 @@ class myWindow(QWidget, Ui_Form):
             self.widget.axes.plot(deny, fit_result.y_axis, "--c")
 
         if fit_result.valid:
-            fit_denx = fit_result.x_projection.fitted_projection * height * 0.3 + self.ylim[0] * 0.98
-            self.widget.axes.plot(fit_result.x_axis, fit_denx, "--r")
+            if fit_result.x_projection.fitted_projection is not None:
+                fit_denx = (
+                    fit_result.x_projection.fitted_projection * height * 0.3
+                    + self.ylim[0] * 0.98
+                )
+                self.widget.axes.plot(fit_result.x_axis, fit_denx, "--r")
             self.sigx = round(fit_result.sigx_mm, 3)
             self.lineEdit_5.setText(str(self.sigx))
 
-            fit_deny = fit_result.y_projection.fitted_projection * width * 0.3 + self.xlim[0] * 0.98
-            self.widget.axes.plot(fit_deny, fit_result.y_axis, "--r", label="fitting curve")
+            if fit_result.y_projection.fitted_projection is not None:
+                fit_deny = (
+                    fit_result.y_projection.fitted_projection * width * 0.3
+                    + self.xlim[0] * 0.98
+                )
+                self.widget.axes.plot(
+                    fit_deny,
+                    fit_result.y_axis,
+                    "--r",
+                    label="Gaussian fit",
+                )
+                self.widget.axes.legend()
 
-            self.widget.axes.legend()
             self.sigy = round(fit_result.sigy_mm, 3)
             self.lineEdit_6.setText(str(self.sigy))
         elif fit_result.status == "fit_failed":
-            self._warn_once(f"Warning: beam profile Gaussian fitting skipped: {fit_result.message}")
-            self._set_profile_status("Fit failed", "warning")
+            self._warn_once(
+                f"Warning: beam profile {fit_result.method} analysis failed: "
+                f"{fit_result.message}"
+            )
+            self._set_profile_status(f"{fit_result.method} failed", "warning")
             self.lineEdit_5.setText("--")
             self.lineEdit_6.setText("--")
 

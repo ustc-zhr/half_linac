@@ -100,6 +100,7 @@ class OrbitCorrector:
         self.machine_mode = self.app_context.control_backend.name
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
         self.runtime_defaults = self.orbit_runtime["runtime_defaults"]
+        self.bpm_position_scale_to_m = self.orbit_runtime["bpm_position_scale_to_m"]
 
         # constant definition
         self.response_matrix_path: Path | None = None
@@ -357,10 +358,12 @@ class OrbitCorrector:
 
 
 
-    def _get_avg_readings(self, pv_list: List[PV]) -> List[float]:
+    def _get_avg_readings(self, pv_list: List[PV], *, bpm_count: int = 0) -> List[float]:
         """同时获取多个PV的多次采样平均值"""
         if not pv_list or self.samples_perstep is None or self.samples_perstep <= 0:
             return [0.0] * len(pv_list)
+        if bpm_count < 0 or bpm_count > len(pv_list):
+            raise ValueError("bpm_count must match the leading BPM PV values.")
 
         results = [0.0] * len(pv_list)
         
@@ -369,7 +372,10 @@ class OrbitCorrector:
             for i, pv in enumerate(pv_list):
                 results[i] += self._read_pv(pv, "orbit correction sample")
         
-        return [r / self.samples_perstep for r in results]
+        averaged = [r / self.samples_perstep for r in results]
+        for index in range(bpm_count):
+            averaged[index] *= self.bpm_position_scale_to_m
+        return averaged
 
     def _max_correction_step(self) -> float:
         return self.max_value * self.correction_max_step_fraction
@@ -399,7 +405,7 @@ class OrbitCorrector:
                 self.pvBPMy[j],
                 self.pvCORx[j],
                 self.pvCORy[j]
-            ])
+            ], bpm_count=2)
 
             initial_x_err = abs(self.target_BPMx_values[j] - xbpm_val0)
             initial_y_err = abs(self.target_BPMy_values[j] - ybpm_val0)
@@ -415,11 +421,15 @@ class OrbitCorrector:
             # 微调并测量响应。X/Y corrector 分开 kick，避免交叉影响响应系数。
             try:
                 self._write_pv(self.pvCORx[j], hcorrVal + self.d_value, "X corrector response kick")
-                xbpm_val1 = self._get_avg_readings([self.pvBPMx[j]])[0]
+                xbpm_val1 = self._get_avg_readings(
+                    [self.pvBPMx[j]], bpm_count=1
+                )[0]
                 self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
 
                 self._write_pv(self.pvCORy[j], vcorrVal + self.d_value, "Y corrector response kick")
-                ybpm_val1 = self._get_avg_readings([self.pvBPMy[j]])[0]
+                ybpm_val1 = self._get_avg_readings(
+                    [self.pvBPMy[j]], bpm_count=1
+                )[0]
             finally:
                 self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
                 self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
@@ -449,7 +459,7 @@ class OrbitCorrector:
                 xbpm_val1, ybpm_val1 = self._get_avg_readings([
                     self.pvBPMx[j],
                     self.pvBPMy[j]
-                ])
+                ], bpm_count=2)
 
                 x_delta = self.target_BPMx_values[j] - xbpm_val1
                 y_delta = self.target_BPMy_values[j] - ybpm_val1
@@ -526,7 +536,8 @@ class OrbitCorrector:
         return True
 
     def _final_orbit_failures(self) -> list[str]:
-        xy_vals = self._get_avg_readings(self.pvBPMx + self.pvBPMy)
+        bpm_pvs = self.pvBPMx + self.pvBPMy
+        xy_vals = self._get_avg_readings(bpm_pvs, bpm_count=len(bpm_pvs))
         length_half = len(xy_vals) // 2
         x_vals = xy_vals[:length_half]
         y_vals = xy_vals[length_half:]
@@ -597,8 +608,11 @@ class OrbitCorrector:
     def _truncated_pseudo_inverse(matrix: np.ndarray, min_singular_value: float) -> np.ndarray:
         U, singular_values, Vt = svd(matrix, full_matrices=False)
         s_inv = np.zeros_like(singular_values)
+        if singular_values.size == 0:
+            return Vt.T @ np.diag(s_inv) @ U.T
+        relative_cutoff = abs(float(min_singular_value)) * np.max(np.abs(singular_values))
         for i, value in enumerate(singular_values):
-            if abs(value) > min_singular_value:
+            if abs(value) > relative_cutoff:
                 s_inv[i] = 1 / value
         return Vt.T @ np.diag(s_inv) @ U.T
 
@@ -611,7 +625,10 @@ class OrbitCorrector:
         
         for _ in range(self.samples_perstep):
             time.sleep(self.sample_interval)
-            results += self._read_many_pvs(pv_list, "orbit readings")
+            results += (
+                self._read_many_pvs(pv_list, "orbit readings")
+                * self.bpm_position_scale_to_m
+            )
         
         return list(results / self.samples_perstep)
      

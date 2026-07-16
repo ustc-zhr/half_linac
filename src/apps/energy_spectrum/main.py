@@ -1580,7 +1580,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         objective_layout = QGridLayout()
         objective_layout.setContentsMargins(0, 0, 0, 0)
         objective_layout.setHorizontalSpacing(7)
-        objective_label = QLabel("Objective", self.groupBox_8)
+        objective_label = QLabel("Method", self.groupBox_8)
         objective_label.setProperty("role", "field")
         objective_layout.addWidget(objective_label, 0, 0)
         objective_layout.addWidget(self.auto_tune_objective_combo, 0, 1)
@@ -1792,7 +1792,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.label_6.setText("Spread (%)")
         self.label_9.setText("Input @")
         self.label_11.setText("Target")
-        self.label_14.setText("Target (MeV)")
+        self.label_14.setText("Energy setpoint")
         self.pushButton_cal_disp.setText("Update eta")
         self.pushButton_cal_twiss_disp.setText("Update optics")
         self.pushButton_autoFind.setText("Auto Find")
@@ -1923,6 +1923,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             index = self.comboBox_start_element.findText(default_start)
             if index >= 0:
                 self.comboBox_start_element.setCurrentIndex(index)
+        self._apply_optics_input_preset(self.comboBox_start_element.currentText())
 
         self._set_target_energy_control(self._initial_target_energy_mev())
 
@@ -1975,12 +1976,35 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.gridLayout_4.removeWidget(widget)
         controls_title = QLabel("Background Controls", controls_group)
         controls_title.setObjectName("dialogCardTitle")
-        controls_layout.addWidget(controls_title, 0, 0, 1, 3)
+        controls_layout.addWidget(controls_title, 0, 0, 1, 5)
         sample_label = QLabel("Samples", controls_group)
         sample_label.setProperty("role", "field")
+        interval_label = QLabel("Interval", controls_group)
+        interval_label.setProperty("role", "field")
+        self.background_sample_interval_spin = QDoubleSpinBox(controls_group)
+        self.background_sample_interval_spin.setObjectName(
+            "backgroundSampleIntervalSpinBox"
+        )
+        self.background_sample_interval_spin.setDecimals(2)
+        self.background_sample_interval_spin.setSingleStep(0.05)
+        self.background_sample_interval_spin.setRange(0.0, 60.0)
+        self.background_sample_interval_spin.setSuffix(" s")
+        self.background_sample_interval_spin.setKeyboardTracking(False)
+        self.background_sample_interval_spin.setProperty("dense", True)
+        self.background_sample_interval_spin.setValue(
+            float(self.energy_config.get("background_sample_interval_s", 1.0))
+        )
+        self.background_sample_interval_spin.setAccessibleName(
+            "Background sample interval"
+        )
+        self.background_sample_interval_spin.setToolTip(
+            "Delay between consecutive background frames."
+        )
         controls_layout.addWidget(sample_label, 1, 0)
         controls_layout.addWidget(self.lineEdit_samples, 1, 1)
-        controls_layout.addWidget(self.pushButton_sample_bg, 1, 2)
+        controls_layout.addWidget(interval_label, 1, 2)
+        controls_layout.addWidget(self.background_sample_interval_spin, 1, 3)
+        controls_layout.addWidget(self.pushButton_sample_bg, 1, 4)
         self.pushButton_load_latest_bg = QPushButton("Load Latest", controls_group)
         background_action_layout = QHBoxLayout()
         background_action_layout.setContentsMargins(0, 0, 0, 0)
@@ -1988,8 +2012,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         background_action_layout.addWidget(self.pushButton_save, 1)
         background_action_layout.addWidget(self.pushButton_load, 1)
         background_action_layout.addWidget(self.pushButton_load_latest_bg, 1)
-        controls_layout.addLayout(background_action_layout, 2, 0, 1, 3)
+        controls_layout.addLayout(background_action_layout, 2, 0, 1, 5)
         controls_layout.setColumnStretch(1, 1)
+        controls_layout.setColumnStretch(3, 1)
         background_dialog_layout.addWidget(controls_group)
 
         self.background_path_label = QLabel("No background loaded", self.background_dialog)
@@ -2028,11 +2053,43 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.groupBox_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self._sync_energy_control_state()
 
+    def _apply_optics_input_preset(self, element_id):
+        presets = self.energy_config.get("optics_input_presets", {})
+        if not isinstance(presets, dict):
+            return
+        preset = presets.get(str(element_id).strip())
+        if not isinstance(preset, dict):
+            return
+
+        fields = (
+            (self.doubleSpinBox_alpha_in, "alpha_x"),
+            (self.doubleSpinBox_beta_in, "beta_x_m"),
+            (self.doubleSpinBox_emi_in, "emittance_x_nm"),
+        )
+        try:
+            values = tuple(float(preset[key]) for _widget, key in fields)
+        except (KeyError, TypeError, ValueError) as exc:
+            print(f"Invalid optics input preset for {element_id}: {exc}")
+            return
+        if not all(np.isfinite(value) for value in values) or values[1] <= 0 or values[2] <= 0:
+            print(f"Invalid optics input preset for {element_id}: values must be finite and beta/emittance positive.")
+            return
+
+        for (widget, _key), value in zip(fields, values):
+            widget.setValue(value)
+        print(
+            f"Loaded optics preset at {element_id}: alpha_x={values[0]:g}, "
+            f"beta_x={values[1]:g} m, emittance_x={values[2]:g} nm."
+        )
+
     def _connect_signals(self):
         self.lineEdit_expotime.returnPressed.connect(self.set_expotime)
         self.lineEdit_refresh.returnPressed.connect(self.set_refresh)
         self.comboBox_fitmethod.currentTextChanged.connect(self._handle_fit_method_change)
         self.comboBox_colormap.currentTextChanged.connect(self._handle_colormap_change)
+        self.comboBox_start_element.currentTextChanged.connect(
+            self._apply_optics_input_preset
+        )
 
         self.checkBox_emit.clicked.connect(lambda: self.emit_withornot(self.checkBox_emit.isChecked()))
         self.pushButton_cal_disp.clicked.connect(lambda: self.cal_disp(archive_result=True))
@@ -2084,14 +2141,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.pushButton_cal_disp: "Update dispersion button",
             self.pushButton_cal_twiss_disp: "Update optics button",
             self.slider_energy: "Target energy slider",
-            self.target_energy_spin: "Target energy precise input",
+            self.target_energy_spin: "Energy setpoint precise input",
             self.label_sliderenergy: "Target energy value",
             self.auto_tune_min_spin: "Auto Find minimum energy",
             self.auto_tune_max_spin: "Auto Find maximum energy",
             self.auto_tune_coarse_steps_spin: "Auto Find coarse scan points",
             self.auto_tune_fine_steps_spin: "Auto Find fine scan points",
             self.auto_tune_settle_spin: "Auto Find settle time",
-            self.auto_tune_objective_combo: "Auto Find optimization objective",
+            self.auto_tune_objective_combo: "Auto Find search method",
             self.auto_tune_frame_samples_spin: "Auto Find Fine and center frame count",
             self.auto_tune_min_valid_frames_spin: "Auto Find minimum valid frame count",
             self.auto_tune_verification_frames_spin: "Auto Find verification frame count",
@@ -2692,9 +2749,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if n_samples is None:
             return
         print(f"sampling {n_samples} background images...")
+        sample_interval_s = self.background_sample_interval_spin.value()
         bg_images = []
         for i in range(n_samples):
-            time.sleep(1) # wait for PV update
+            if i > 0 and sample_interval_s > 0:
+                time.sleep(sample_interval_s)
             tmp = self.flag_pv_obj.get()
             if tmp is None:
                 self._mark_pv_unavailable(RuntimeError(f"{self.flag_pv} returned no background data"))

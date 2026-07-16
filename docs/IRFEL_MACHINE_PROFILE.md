@@ -103,16 +103,27 @@ correction writes corrector setpoints.
 
 Defines the beam monitor workflow:
 
-- default flag: `PRF03`
+- default flag: `PRFESA`
 - default image geometry per backend:
   - `vm`: `[360, 270]`, `0.02 mm/pixel`
-  - `real`: `[360, 270]`, `0.02 mm/pixel`
+  - `real`: `[1440, 1080]`, `0.02 mm/pixel`
 - optional `by_flag` image geometry overrides for PRFs that differ from the default
-- real commissioning status: `write_blocked`
-- VM writes are allowed, real writes are blocked
+- default profile method: `Gaussian fit`
+- default background sampling: `5` frames at `1.0 s` intervals
+- real commissioning status: `commissioned`
+- VM and real writes are allowed
 
-The app may write fitted `sigx/sigy` values or exposure time in workflows that
-allow it. For IRFEL real mode these writes remain blocked.
+The View Controls card offers `Gaussian fit` and `RMS moments`; display limits do
+not affect either calculation. Gaussian fit remains the default, while RMS moments
+reports the intensity-weighted second moment and is intentionally sensitive to the
+selected background and image window. The previous cumulative Delta X/Delta Y
+coordinate shift has been removed.
+
+Background references are stored independently for each machine, backend, and flag.
+Loading a background does not enable subtraction automatically. When enabled, the
+clipped background-subtracted image is used both for display and for profile analysis.
+The app may write the currently selected method's `sigx/sigy` values or exposure time
+in workflows that allow it; IRFEL real mode permits these writes.
 
 ### `apps/emit_measure.json`
 
@@ -145,14 +156,22 @@ Defines the energy spectrum workflow:
 IRFEL real mode uses the coordinated A3 energy control instead of applying the
 HALF bend-current calibration. Auto Find scans `ESA_ENERGY.setpoint` over the
 configured `0–65 MeV` range, so it preserves the coordinated BM03/QM19/QM20 control.
-The Target control reads A3 on startup, follows later A3 changes while it is not
-being edited, and supports `0.01 MeV` input. The main Energy Tuning card keeps Target,
-Objective, a compact settings summary, Auto Find, Stop, and a Settings button. The
-settings dialog contains scan range, coarse/fine point counts, settling time, frame
-counts, frame gap, center step, center tolerance, and maximum center offset; Stop
-restores the pre-scan A3 value. IRFEL defaults to `Highest
-brightness`, which has been the more noise-tolerant commissioning choice. The
-selectable `Peak brightness + fitted center` method first reuses that brightness
+The Energy setpoint control reads A3 on startup, follows later A3 changes while it is not
+being edited, and supports `0.01 MeV` input. The main Energy Tuning card keeps the
+Energy setpoint, Auto Find method, a compact settings summary, Auto Find, Stop, and
+a Settings button. Its settings dialog contains scan range, coarse/fine point counts,
+settling time, frame counts, frame gap, center step, center tolerance, and maximum
+center offset; Stop restores the pre-scan A3 value.
+
+The Optics Model starts at `QM12` with a model-derived input preset:
+`alpha_x=-2.26`, `beta_x=10 m`, and `emittance_x=102.81183 nm`. The Twiss values
+come from the 36 MeV Elegant design input, while the geometric emittance is
+calculated from the configured `36MeV_slitbeam_col.dat` particle distribution.
+Selecting `QM12` again reloads this preset; operators can still edit the fields
+afterward when measured values are available.
+
+IRFEL defaults to `Peak brightness + fitted center`.
+This method first reuses the noise-tolerant highest-brightness
 search, then calculates the same one-dimensional x-projection center used by the GUI's
 current `direct` or `Gauss fit` method. It tries one fixed A3 center step in each
 direction, continues in the direction that reduces the center error, and performs
@@ -171,7 +190,9 @@ and a Background button. Sampling, preview, Load Latest, Load File, and Save As 
 in a separate dialog. A sampled background is saved automatically to
 `runtime/irfel/real/latest/background.npy` with `background.json` metadata and is
 loaded on the next startup without automatically enabling subtraction. Save As
-defaults to the backend-scoped `runs/` directory. `Closest to x reference` remains
+defaults to the backend-scoped `runs/` directory. The sampling interval is
+configurable in the dialog (default `1.00 s`); the first frame is acquired
+immediately and the interval is applied between subsequent frames. `Closest to x reference` remains
 available for direct comparison with the older connected-region center logic.
 
 ### `apps/dispersion_correction.json`

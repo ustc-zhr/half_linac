@@ -658,6 +658,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.setStyleSheet(build_orbit_display_theme(palette))
         if hasattr(self, "status_panel"):
             self.status_panel.apply_theme(palette)
+        if self._bpm_detail_window is not None:
+            self._bpm_detail_window.apply_theme(palette)
         self._update_theme_toggle_button()
 
     def _update_theme_toggle_button(self):
@@ -1105,7 +1107,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if self._bpm_detail_window is None:
             from submain import myWindow as BpmDetailWindow
 
-            self._bpm_detail_window = BpmDetailWindow(refresh_interval_ms=self.refresh_interval_ms)
+            self._bpm_detail_window = BpmDetailWindow(
+                refresh_interval_ms=self.refresh_interval_ms,
+                palette=self._palette(),
+                parent=self,
+            )
             self._bpm_detail_window.setAttribute(Qt.WA_DeleteOnClose, True)
             self._bpm_detail_window.destroyed.connect(
                 lambda *_: setattr(self, "_bpm_detail_window", None)

@@ -43,6 +43,7 @@ class BeamImageFitResult:
     x_projection: GaussianProjectionFit
     y_projection: GaussianProjectionFit
     status: str
+    method: str = "Gaussian fit"
     message: str = ""
 
     @property
@@ -68,7 +69,16 @@ def fit_beam_image(
     extent: Sequence[float],
     xlim: Sequence[float] | None = None,
     ylim: Sequence[float] | None = None,
+    method: str = "Gaussian fit",
 ) -> BeamImageFitResult:
+    normalized_method = str(method).strip().lower()
+    if normalized_method in {"gaussian", "gaussian fit", "gauss", "gauss fit"}:
+        resolved_method = "Gaussian fit"
+    elif normalized_method in {"rms", "rms moments", "moments"}:
+        resolved_method = "RMS moments"
+    else:
+        raise ValueError(f"Unsupported beam profile method: {method!r}.")
+
     image_array = np.asarray(image, dtype=float)
     if image_array.ndim != 2:
         raise ValueError(f"beam image must be 2D, got shape {image_array.shape}")
@@ -98,6 +108,7 @@ def fit_beam_image(
             x_projection=empty_x,
             y_projection=empty_y,
             status="empty_window",
+            method=resolved_method,
             message="selected image window does not contain any pixels",
         )
 
@@ -114,11 +125,15 @@ def fit_beam_image(
             x_projection=GaussianProjectionFit(axis=x_axis, projection=x_projection),
             y_projection=GaussianProjectionFit(axis=y_axis, projection=y_projection),
             status="low_signal",
+            method=resolved_method,
             message="beam image projections do not contain positive signal",
         )
 
-    x_fit = _fit_projection(x_axis, x_projection)
-    y_fit = _fit_projection(y_axis, y_projection)
+    projection_handler = (
+        _fit_projection if resolved_method == "Gaussian fit" else _moment_projection
+    )
+    x_fit = projection_handler(x_axis, x_projection)
+    y_fit = projection_handler(y_axis, y_projection)
     errors = [fit.error for fit in (x_fit, y_fit) if fit.error]
     if errors:
         return BeamImageFitResult(
@@ -128,6 +143,7 @@ def fit_beam_image(
             x_projection=x_fit,
             y_projection=y_fit,
             status="fit_failed",
+            method=resolved_method,
             message="; ".join(errors),
         )
 
@@ -138,6 +154,37 @@ def fit_beam_image(
         x_projection=x_fit,
         y_projection=y_fit,
         status="valid",
+        method=resolved_method,
+    )
+
+
+def _moment_projection(axis: np.ndarray, projection: np.ndarray) -> GaussianProjectionFit:
+    if axis.size == 0 or projection.size == 0:
+        return GaussianProjectionFit(
+            axis=axis,
+            projection=projection,
+            error="projection is empty",
+        )
+
+    weights = np.clip(np.asarray(projection, dtype=float), 0.0, None)
+    total = float(np.sum(weights))
+    peak = float(np.max(weights)) if weights.size else 0.0
+    if not np.isfinite(total) or total <= 0.0 or not np.isfinite(peak) or peak <= 0.0:
+        return GaussianProjectionFit(
+            axis=axis,
+            projection=projection,
+            error="projection does not contain positive signal",
+        )
+
+    center = float(np.sum(axis * weights) / total)
+    variance = float(np.sum(weights * (axis - center) ** 2) / total)
+    normalized = weights / peak
+    return GaussianProjectionFit(
+        axis=axis,
+        projection=projection,
+        normalized_projection=normalized,
+        center=center,
+        sigma=float(np.sqrt(max(variance, 0.0))),
     )
 
 

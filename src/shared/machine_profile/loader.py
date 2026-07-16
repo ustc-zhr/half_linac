@@ -1539,6 +1539,29 @@ def _validate_beam_monitor_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
 ) -> None:
+    profile_method = workflow.get("profile_method", "Gaussian fit")
+    if profile_method not in {"Gaussian fit", "RMS moments"}:
+        raise MachineProfileError(
+            "workflows.beam_monitor.profile_method must be 'Gaussian fit' or "
+            "'RMS moments'."
+        )
+
+    sample_count = workflow.get("background_sample_count", 5)
+    if not isinstance(sample_count, int) or isinstance(sample_count, bool) or sample_count <= 0:
+        raise MachineProfileError(
+            "workflows.beam_monitor.background_sample_count must be a positive integer."
+        )
+    try:
+        sample_interval = float(workflow.get("background_sample_interval_s", 1.0))
+    except (TypeError, ValueError) as exc:
+        raise MachineProfileError(
+            "workflows.beam_monitor.background_sample_interval_s must be numeric."
+        ) from exc
+    if not math.isfinite(sample_interval) or sample_interval < 0:
+        raise MachineProfileError(
+            "workflows.beam_monitor.background_sample_interval_s must be finite and non-negative."
+        )
+
     has_structured_geometry = "flag_pixel_geometry" in workflow
     has_legacy_geometry = (
         "flag_pixel_shape" in workflow and "flag_pixel_width_mm" in workflow

@@ -54,6 +54,7 @@ from half_linac.src.apps.energy_spectrum.profile_runtime import (
     resolve_energy_spectrum_runtime_paths,
 )
 from half_linac.src.shared.machine_profile.loader import (
+    _validate_beam_monitor_workflow,
     _validate_energy_spectrum_workflow,
     load_bba_workflow,
     load_emit_measure_workflow,
@@ -510,9 +511,9 @@ class MachineProfileTests(unittest.TestCase):
         profile = load_profile("half")
         workflow = get_workflow(profile, "beam_monitor")
         self.assertEqual(workflow["default_flag"], "PRF06")
-        self.assertEqual(workflow["flag_pixel_shape"]["vm"], [360, 270])
-        self.assertEqual(workflow["flag_pixel_shape"]["real"], [1440, 1080])
-        self.assertEqual(workflow["flag_pixel_width_mm"]["vm"], 0.02)
+        self.assertEqual(workflow["profile_method"], "Gaussian fit")
+        self.assertEqual(workflow["background_sample_count"], 5)
+        self.assertEqual(workflow["background_sample_interval_s"], 1.0)
         self.assertEqual(
             resolve_flag_pixel_geometry(
                 workflow,
@@ -522,6 +523,14 @@ class MachineProfileTests(unittest.TestCase):
             ).shape,
             (360, 270),
         )
+
+    def test_beam_monitor_rejects_unknown_profile_method(self):
+        profile = load_profile("irfel")
+        workflow = dict(get_workflow(profile, "beam_monitor"))
+        workflow["profile_method"] = "unknown"
+
+        with self.assertRaisesRegex(MachineProfileError, "profile_method"):
+            _validate_beam_monitor_workflow(profile, workflow)
 
     def test_beam_monitor_pixel_geometry_supports_per_flag_override(self):
         workflow = {
@@ -1141,6 +1150,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(irfel_vm_orbit_runtime["corrector_upperlimit_unit"], "rad")
         self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit"], 5.0)
         self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit_unit"], "A")
+        self.assertEqual(irfel_vm_orbit_runtime["bpm_position_scale_to_m"], 1.0)
+        self.assertEqual(irfel_real_orbit_runtime["bpm_position_scale_to_m"], 1e-3)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["method"], "global")
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["sampling_interval_s"], 2.0)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["accuracy_um"], 10.0)
@@ -1264,6 +1275,26 @@ class MachineProfileTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "shape"):
                     orbit_runtime.resolve_active_response_matrix(context)
 
+    def test_orbit_real_response_matrix_rejects_legacy_raw_bpm_units(self):
+        from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
+
+        context = load_app_context(
+            "orbit_correct",
+            machine_id="irfel",
+            control_backend="real",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(orbit_runtime, "ORBIT_RUNTIME_ROOT", Path(temp_dir)):
+                record = orbit_runtime.write_response_matrix_snapshot(context, np.eye(10))
+                metadata_path = Path(record["metadata_path"])
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                metadata.pop("bpm_position_scale_to_m")
+                metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+                with self.assertRaisesRegex(ValueError, "legacy raw BPM units"):
+                    orbit_runtime.resolve_active_response_matrix(context)
+
     def test_orbit_response_matrix_quality_rejects_zero_response_columns(self):
         from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
 
@@ -1330,6 +1361,54 @@ class MachineProfileTests(unittest.TestCase):
             corrector.pseudo_inverse_x @ np.array([1.0, 2.0, 3.0]),
             np.array([1.0, 0.0, 0.0, 2.0, 3.0]),
         )
+
+    def test_orbit_real_bpm_readings_are_normalized_from_mm_to_m(self):
+        from half_linac.src.apps.orbit_correct import correct as correct_module
+        from half_linac.src.apps.orbit_correct import findresponse
+
+        with patch.dict(
+            os.environ,
+            {
+                "HALF_LINAC_MACHINE_ID": "irfel",
+                "HALF_LINAC_CONTROL_BACKEND": "real",
+            },
+        ):
+            corrector = correct_module.OrbitCorrector(
+                sample_interval=0.0,
+                samples_perstep=1,
+                target_BPMlist=["BPM07"],
+                target_BPMx_values=[-3e-3],
+                target_BPMy_values=[8e-3],
+            )
+            with patch.object(
+                correct_module,
+                "caget_many",
+                return_value=[-3.609395, 8.475415],
+            ):
+                x_value, y_value = corrector._get_avg_readings2(["x", "y"])
+            calculator = findresponse.ResponseMatrixCalculator()
+            with patch.object(
+                findresponse,
+                "caget_many",
+                return_value=[-3.609395, 8.475415],
+            ):
+                response_values = calculator._read_bpm_values(["x", "y"], "test")
+
+        self.assertAlmostEqual(x_value, -3.609395e-3)
+        self.assertAlmostEqual(y_value, 8.475415e-3)
+        self.assertAlmostEqual(corrector.target_BPMx_values[0] - x_value, 0.609395e-3)
+        self.assertAlmostEqual(corrector.target_BPMy_values[0] - y_value, -0.475415e-3)
+        np.testing.assert_allclose(response_values, [-3.609395e-3, 8.475415e-3])
+
+    def test_orbit_svd_cutoff_is_invariant_to_bpm_position_units(self):
+        from half_linac.src.apps.orbit_correct.correct import OrbitCorrector
+
+        response_mm = np.array([[2.0, 0.0], [0.0, 0.5]])
+        response_m = response_mm * 1e-3
+        inverse_mm = OrbitCorrector._truncated_pseudo_inverse(response_mm, 0.01)
+        inverse_m = OrbitCorrector._truncated_pseudo_inverse(response_m, 0.01)
+
+        np.testing.assert_allclose(inverse_m, inverse_mm * 1e3)
 
     def test_orbit_global_correction_can_limit_corrector_columns(self):
         from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime
@@ -1442,7 +1521,9 @@ class MachineProfileTests(unittest.TestCase):
             "IRFEL:AP:ENG:A3:ao",
         )
         self.assertEqual(workflow["auto_tune_control_backends"], ["real"])
-        self.assertEqual(workflow["auto_tune_objective"], "find_beam")
+        self.assertEqual(
+            workflow["auto_tune_objective"], "brightness_then_profile_lock"
+        )
         self.assertEqual(workflow["auto_tune_actuator"]["element"], "ESA_ENERGY")
         self.assertEqual(workflow["auto_tune_actuator"]["unit"], "MeV")
         self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
@@ -1459,6 +1540,15 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["auto_tune_center_lock"]["center_step"], 0.05)
         self.assertEqual(workflow["auto_tune_center_lock"]["max_total_offset"], 1.0)
         self.assertEqual(workflow["auto_tune_center_lock"]["center_tolerance_mm"], 0.2)
+        self.assertEqual(workflow["default_start_element"], "QM12")
+        self.assertEqual(
+            workflow["optics_input_presets"]["QM12"],
+            {
+                "alpha_x": -2.26,
+                "beta_x_m": 10.0,
+                "emittance_x_nm": 102.81183,
+            },
+        )
 
     def test_energy_spectrum_auto_tune_scan_cannot_exceed_actuator_limits(self):
         profile = load_profile("irfel")

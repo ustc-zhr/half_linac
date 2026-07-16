@@ -21,7 +21,7 @@
     "unit": "MeV"
   },
   "auto_tune_control_backends": ["real"],
-  "auto_tune_objective": "find_beam",
+  "auto_tune_objective": "brightness_then_profile_lock",
   "model_backend": "simulation",
   "twiss_target_element": "PRFESA",
   "auto_tune_scan": {
@@ -45,6 +45,13 @@
   "esa_quads": ["QM19", "QM20"],
   "start_elements": ["QM12", "QM19"],
   "default_start_element": "QM12",
+  "optics_input_presets": {
+    "QM12": {
+      "alpha_x": -2.26,
+      "beta_x_m": 10.0,
+      "emittance_x_nm": 102.81183
+    }
+  },
   "energy0_default_mev": 36,
   "x_reference_mm": {
     "vm": 0.0,

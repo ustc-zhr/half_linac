@@ -71,6 +71,7 @@ class ResponseMatrixCalculator:
         self.orbit_workflow = self.app_context.orbit_workflow
         self.machine_mode = self.app_context.control_backend.name
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
+        self.bpm_position_scale_to_m = self.orbit_runtime["bpm_position_scale_to_m"]
         if self.orbit_workflow is None:
             raise ValueError("Orbit workflow is not available in the current app context.")
         self.profile_max_value = self.orbit_runtime["corrector_upperlimit"]
@@ -196,7 +197,7 @@ class ResponseMatrixCalculator:
         array = np.asarray(values, dtype=float)
         if not np.all(np.isfinite(array)):
             raise ValueError(f"{label} BPM readings contain NaN or Inf.")
-        return array
+        return array * self.bpm_position_scale_to_m
 
     def init_BPM_pv(self) -> None:
         """Initialize BPM PV names."""

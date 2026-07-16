@@ -23,6 +23,7 @@ ORBIT_RUNTIME_ROOT = APP_DIR / "runtime"
 
 DEFAULT_RESPONSE_WAIT_S = 8.0
 DEFAULT_CORRECTOR_UPPERLIMIT_RAD = 0.001
+DEFAULT_BPM_POSITION_SCALE_TO_MM = 1000.0
 DEFAULT_RUNTIME_DEFAULTS: dict[str, Any] = {
     "method": "one-to-one",
     "sampling_interval_s": 6.0,
@@ -48,6 +49,10 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
     paths = resolve_orbit_runtime_paths(target)
     corrector_limit, corrector_limit_unit = _select_corrector_upperlimit(workflow, backend)
     return {
+        "bpm_position_scale_to_m": _select_bpm_position_scale_to_m(
+            workflow,
+            backend,
+        ),
         "response_wait_s": _select_backend_float(
             workflow,
             "response_wait_s_by_backend",
@@ -249,6 +254,21 @@ def _select_response_sample_interval_s(
     )
 
 
+def _select_bpm_position_scale_to_m(
+    workflow: Mapping[str, Any],
+    backend: str,
+) -> float:
+    scale_to_mm = _select_backend_float(
+        workflow,
+        "bpm_position_scale_to_mm",
+        backend,
+        DEFAULT_BPM_POSITION_SCALE_TO_MM,
+    )
+    if scale_to_mm <= 0:
+        raise ValueError("bpm_position_scale_to_mm must be greater than 0.")
+    return scale_to_mm * 1e-3
+
+
 def _select_corrector_upperlimit(
     workflow: Mapping[str, Any],
     backend: str,
@@ -324,6 +344,9 @@ def _build_response_matrix_metadata(
         "xcors": xcors,
         "ycors": ycors,
         "shape": list(shape),
+        "bpm_position_scale_to_m": load_orbit_runtime_settings(target)[
+            "bpm_position_scale_to_m"
+        ],
     }
 
 
@@ -374,6 +397,33 @@ def _validate_response_metadata(
             f"Response matrix {metadata_path} metadata shape is {metadata.get('shape')}, "
             f"expected {list(expected_shape)}."
         )
+
+    expected_bpm_scale = load_orbit_runtime_settings(target)[
+        "bpm_position_scale_to_m"
+    ]
+    matrix_bpm_scale = metadata.get("bpm_position_scale_to_m")
+    if matrix_bpm_scale is None:
+        # Legacy matrices contain raw PV units. They remain valid only when the
+        # backend already publishes BPM positions in metres (scale == 1).
+        if not np.isclose(expected_bpm_scale, 1.0):
+            raise ValueError(
+                f"Response matrix {metadata_path} uses legacy raw BPM units and is not "
+                f"safe for {_machine_id(target)}/{_backend_name(target)}. "
+                "Measure a new response matrix with BPM positions normalized to metres."
+            )
+    else:
+        try:
+            matrix_bpm_scale = float(matrix_bpm_scale)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Response matrix {metadata_path} has an invalid bpm_position_scale_to_m."
+            ) from exc
+        if not np.isclose(matrix_bpm_scale, expected_bpm_scale):
+            raise ValueError(
+                f"Response matrix {metadata_path} BPM scale {matrix_bpm_scale:g} does not "
+                f"match the current backend scale {expected_bpm_scale:g}. "
+                "Measure a new response matrix for the current backend."
+            )
 
     if require_matrix:
         matrix_file = metadata.get("matrix_file")
