@@ -958,12 +958,15 @@ if __name__=='__main__':
     from half_linac.src.shared.machine_profile import (
         get_workflow,
         load_profile,
+        resolve_default_energy_spectrum_station,
         resolve_channel,
         resolve_bend_write_channel,
     )
 
     profile = load_profile()
-    workflow = get_workflow(profile, "energy_spectrum")
+    workflow = resolve_default_energy_spectrum_station(
+        get_workflow(profile, "energy_spectrum")
+    )
     preferred_backend = "real" if "real" in profile.control_backends else profile.machine.default_mode
     flag_element = str(workflow["flag_element"])
     flag_channel = str(workflow["flag_image_channel"])

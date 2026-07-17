@@ -30,6 +30,7 @@ from .models import (
     normalize_plane,
 )
 from .pixel_geometry import resolve_flag_pixel_geometry
+from .energy_spectrum import resolve_energy_spectrum_stations
 
 
 SUPPORTED_APP_NAMES = {
@@ -970,6 +971,13 @@ def _validate_energy_spectrum_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
 ) -> None:
+    stations = workflow.get("stations")
+    if stations is not None:
+        _, resolved_stations = resolve_energy_spectrum_stations(workflow)
+        for effective_station in resolved_stations.values():
+            _validate_energy_spectrum_workflow(profile, effective_station)
+        return
+
     required_keys = (
         "flag_element",
         "flag_image_channel",
@@ -1119,6 +1127,74 @@ def _validate_energy_spectrum_workflow(
                 )
         else:
             _expect_non_empty_string(raw_pv, f"workflows.energy_spectrum.{pv_key}")
+
+    for backend_key in ("energy_control_backends", "auto_tune_control_backends"):
+        configured_backends = workflow.get(backend_key)
+        if configured_backends is None:
+            continue
+        backend_names = _expect_optional_string_list(
+            configured_backends,
+            f"workflows.energy_spectrum.{backend_key}",
+        )
+        unknown_backends = sorted(set(backend_names) - set(profile.control_backends))
+        if unknown_backends:
+            raise MachineProfileError(
+                f"workflows.energy_spectrum.{backend_key} contains unknown backend(s): "
+                + ", ".join(unknown_backends)
+            )
+
+    for line_key in ("energy_dispersion_line_name", "energy_twiss_line_name"):
+        line_name = workflow.get(line_key)
+        if line_name is not None:
+            _expect_non_empty_string(
+                line_name,
+                f"workflows.energy_spectrum.{line_key}",
+            )
+
+    model_snapshot_source = workflow.get("model_snapshot_source")
+    if model_snapshot_source is not None:
+        source_name = _expect_non_empty_string(
+            model_snapshot_source,
+            "workflows.energy_spectrum.model_snapshot_source",
+        ).lower()
+        if source_name not in {"design", "live", "real", "vm", "live_from_real", "live_from_vm"}:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.model_snapshot_source must select design or live data."
+            )
+
+    energy_range = workflow.get("energy_range_mev")
+    if energy_range is not None:
+        if not isinstance(energy_range, list) or len(energy_range) != 2:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.energy_range_mev must be [low, high]."
+            )
+        try:
+            energy_low, energy_high = (float(energy_range[0]), float(energy_range[1]))
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.energy_range_mev must be numeric."
+            ) from exc
+        if (
+            not math.isfinite(energy_low)
+            or not math.isfinite(energy_high)
+            or energy_low >= energy_high
+        ):
+            raise MachineProfileError(
+                "workflows.energy_spectrum.energy_range_mev requires finite low < high."
+            )
+
+    design_eta = workflow.get("design_eta_m")
+    if design_eta is not None:
+        try:
+            design_eta_value = float(design_eta)
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.design_eta_m must be numeric."
+            ) from exc
+        if not math.isfinite(design_eta_value):
+            raise MachineProfileError(
+                "workflows.energy_spectrum.design_eta_m must be finite."
+            )
 
     energy_element_id = workflow.get("energy_element")
     if energy_element_id is not None:

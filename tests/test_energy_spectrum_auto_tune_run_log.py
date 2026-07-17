@@ -24,6 +24,7 @@ class ESAAutoTuneRunLogTests(unittest.TestCase):
                 {
                     "machine_id": "irfel",
                     "backend": "real",
+                    "station_id": "eny",
                     "objective": "brightness_then_profile_lock",
                     "scan_min_mev": 0,
                     "scan_max_mev": 65,
@@ -70,6 +71,7 @@ class ESAAutoTuneRunLogTests(unittest.TestCase):
                 "result",
             ])
             self.assertEqual(rows[1]["stage"], "center_step")
+            self.assertEqual(rows[0]["station_id"], "eny")
             self.assertEqual(rows[1]["dx_mm"], "-0.036")
             self.assertEqual(rows[2]["restored_energy_mev"], "29.4")
             self.assertEqual(rows[3]["status"], "DONE")

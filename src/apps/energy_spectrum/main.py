@@ -69,6 +69,10 @@ from half_linac.src.apps.energy_spectrum.spectrum_profile import (
     fit_projection_profile,
     project_image_profiles,
 )
+from half_linac.src.apps.energy_spectrum.stations import (
+    LEGACY_STATION_ID,
+    resolve_energy_spectrum_stations,
+)
 from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.elegant_runtime import run_elegant_input
 from half_linac.src.shared.machine_profile import (
@@ -845,6 +849,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _load_energy_spectrum_config(self):
         workflow = dict(get_workflow(self.machine_profile, "energy_spectrum"))
+        default_station, stations = resolve_energy_spectrum_stations(workflow)
+        self.energy_workflow = workflow
+        self.energy_station_configs = stations
+        self.energy_station_id = default_station
+        workflow = dict(stations[default_station])
         required_keys = (
             "flag_element",
             "flag_image_channel",
@@ -861,6 +870,204 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if not isinstance(workflow["esa_quads"], list) or not workflow["esa_quads"]:
             raise MachineProfileError("workflows.energy_spectrum.esa_quads must be a non-empty list.")
         return workflow
+
+    def _runtime_paths(self):
+        station_id = None
+        if self.energy_station_id != LEGACY_STATION_ID:
+            station_id = self.energy_station_id
+        return resolve_energy_spectrum_runtime_paths(
+            self.app_context,
+            station_id=station_id,
+        )
+
+    def _energy_control_range(self):
+        if self.energy_set_limits is not None:
+            return self.energy_set_limits
+        configured = self.energy_config.get("energy_range_mev", (0.0, 2300.0))
+        if not isinstance(configured, (list, tuple)) or len(configured) != 2:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.energy_range_mev must be [low, high]."
+            )
+        low, high = (float(configured[0]), float(configured[1]))
+        if not np.isfinite(low) or not np.isfinite(high) or low >= high:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.energy_range_mev must contain finite low/high values."
+            )
+        return low, high
+
+    def _energy_control_configured_for_backend(self):
+        configured_backends = self.energy_config.get("energy_control_backends")
+        if configured_backends is None:
+            return self.control_backend == "real"
+        return self.control_backend in configured_backends
+
+    def _sync_exposure_control_state(self):
+        exposure_enabled = (
+            self.control_backend == "real"
+            and self.flag_expotime_pv is not None
+            and self._writes_allowed()
+        )
+        self.lineEdit_expotime.setReadOnly(not exposure_enabled)
+        if exposure_enabled:
+            self.lineEdit_expotime.setToolTip(
+                f"Write camera exposure to {self.flag_expotime_pv}."
+            )
+        elif self.control_backend == "real":
+            self.lineEdit_expotime.setToolTip(
+                "No exposure-time PV is configured for this station."
+            )
+        else:
+            self.lineEdit_expotime.setToolTip(
+                "VM images do not expose a camera exposure control."
+            )
+
+    def _station_display_name(self, station_id=None, station_config=None):
+        station_id = station_id or self.energy_station_id
+        station_config = station_config or self.energy_config
+        return str(
+            station_config.get("label")
+            or station_config.get("flag_element")
+            or station_id
+        )
+
+    def _handle_station_change(self, index):
+        station_id = self.station_combo.itemData(index)
+        if not station_id or station_id == self.energy_station_id:
+            return
+        previous_station_id = self.energy_station_id
+        if self._auto_tune_is_running():
+            previous = self.station_combo.findData(self.energy_station_id)
+            self.station_combo.blockSignals(True)
+            try:
+                self.station_combo.setCurrentIndex(previous)
+            finally:
+                self.station_combo.blockSignals(False)
+            self._warn("Stop Auto Find before changing the spectrum station.")
+            return
+
+        timer_was_active = self.timer.isActive()
+        if timer_was_active:
+            self.timer.stop()
+        try:
+            self._activate_energy_station(str(station_id))
+        except Exception as exc:
+            self.energy_station_id = previous_station_id
+            self.energy_config = dict(
+                self.energy_station_configs[previous_station_id]
+            )
+            previous = self.station_combo.findData(previous_station_id)
+            self.station_combo.blockSignals(True)
+            try:
+                self.station_combo.setCurrentIndex(previous)
+            finally:
+                self.station_combo.blockSignals(False)
+            self._warn(f"Could not switch spectrum station: {exc}")
+        finally:
+            if timer_was_active:
+                self.timer.start()
+
+    def _activate_energy_station(self, station_id):
+        try:
+            station_config = self.energy_station_configs[station_id]
+        except KeyError as exc:
+            raise MachineProfileError(
+                f"Unknown energy-spectrum station: {station_id!r}."
+            ) from exc
+
+        self.energy_station_id = station_id
+        self.energy_config = dict(station_config)
+        self.x_reference_mm = self._load_x_reference_mm()
+        self.start_elements = self._build_start_elements()
+        self.energy_set_pv = self._load_energy_set_pv()
+        self.energy_reference_pv = self._load_energy_reference_pv()
+        self.energy_set_limits = self._load_energy_set_limits()
+        self.esa_quad_ids = tuple(self.energy_config["esa_quads"])
+        self.bend_pv = resolve_bend_write_channel(
+            self.app_context,
+            self.energy_config["bend_element"],
+        )
+        self.bend_readback_pv = self._resolve_bend_readback_pv()
+        self.auto_tune_pv, self.auto_tune_unit = self._load_auto_tune_actuator()
+        self.init_ESAflag()
+        self._sync_exposure_control_state()
+        self._apply_station_controls()
+
+        self.flag_plot_title.setText(f"{self.energy_config['flag_element']} Image")
+        self.bg_image = None
+        self.bg_metadata = {}
+        self.bg_image_path = None
+        self.remove_bg = False
+        self.checkBox_bg.blockSignals(True)
+        try:
+            self.checkBox_bg.setChecked(False)
+        finally:
+            self.checkBox_bg.blockSignals(False)
+        self._update_background_status()
+        self._load_latest_background(silent=True)
+
+        self.latest_model_snapshot_metadata = None
+        self.latest_model_snapshot_path = None
+        self.beta_flag = 0
+        self.emi_flag = 0
+        self.eta_flag = 0
+        self._model_text = "Waiting"
+        self._model_tone = "subtle"
+        self._model_tooltip = None
+        self._set_energy_unavailable("Station changed")
+        if self._model_available():
+            self.cal_disp()
+        self._sync_energy_control_state()
+        self._refresh_status()
+        if self._pv_available:
+            self.ESA_running(write_latest=False)
+
+    def _apply_station_controls(self):
+        energy_low, energy_high = self._energy_control_range()
+        self.slider_energy.setRange(
+            math.ceil(energy_low * self._energy_slider_scale),
+            math.floor(energy_high * self._energy_slider_scale),
+        )
+        self.target_energy_spin.setRange(energy_low, energy_high)
+        for spin in (self.auto_tune_min_spin, self.auto_tune_max_spin):
+            spin.setRange(energy_low, energy_high)
+            spin.setSuffix(f" {self.auto_tune_unit}")
+
+        scan_config = dict(
+            self.energy_config.get(
+                "auto_tune_scan",
+                self.energy_config.get("bend_scan", {}),
+            )
+        )
+        self.auto_tune_min_spin.setValue(float(scan_config.get("min", energy_low)))
+        self.auto_tune_max_spin.setValue(float(scan_config.get("max", energy_high)))
+        self.auto_tune_coarse_steps_spin.setValue(int(scan_config.get("coarse_steps", 40)))
+        self.auto_tune_fine_steps_spin.setValue(int(scan_config.get("fine_steps", 81)))
+        self.auto_tune_settle_spin.setValue(float(scan_config.get("settle_time_s", 0.5)))
+
+        self.comboBox_start_element.blockSignals(True)
+        try:
+            self.comboBox_start_element.clear()
+            self.comboBox_start_element.addItems(self.start_elements)
+            default_start = str(self.energy_config.get("default_start_element", "")).strip()
+            start_index = self.comboBox_start_element.findText(default_start)
+            if start_index >= 0:
+                self.comboBox_start_element.setCurrentIndex(start_index)
+        finally:
+            self.comboBox_start_element.blockSignals(False)
+        self._apply_optics_input_preset(self.comboBox_start_element.currentText())
+
+        objective_index = self.auto_tune_objective_combo.findData("center_x_reference")
+        if objective_index >= 0:
+            self.auto_tune_objective_combo.setItemText(
+                objective_index,
+                f"Closest to x reference ({self.x_reference_mm:g} mm)",
+            )
+        self.background_sample_interval_spin.setValue(
+            float(self.energy_config.get("background_sample_interval_s", 1.0))
+        )
+        self._set_target_energy_control(self._initial_target_energy_mev())
+        self._auto_tune_default_values = self._auto_tune_settings_values()
+        self._update_auto_tune_settings_summary()
 
     def _resolve_bend_readback_pv(self):
         if self.control_backend == "real":
@@ -1115,7 +1322,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._refresh_widget_style(button)
 
     def _use_design_eta(self, status_text=None, tooltip=None):
-        self.eta_flag = DEFAULT_DESIGN_ETA
+        self.eta_flag = float(
+            self.energy_config.get("design_eta_m", DEFAULT_DESIGN_ETA)
+        )
         self.latest_model_snapshot_metadata = None
         self.latest_model_snapshot_path = None
         self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag, 5)))
@@ -1129,13 +1338,17 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return tuple((element_id, "K1") for element_id in self.esa_quad_ids)
 
     def _build_esa_quad_model_snapshot(self):
-        snapshot = build_model_snapshot(self.app_context, self._esa_quad_model_fields())
+        snapshot = build_model_snapshot(
+            self.app_context,
+            self._esa_quad_model_fields(),
+            source=self.energy_config.get("model_snapshot_source"),
+        )
         self.latest_model_snapshot_metadata = snapshot.as_metadata()
         self._save_latest_model_snapshot(snapshot)
         return snapshot
 
     def _save_latest_model_snapshot(self, snapshot):
-        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        paths = self._runtime_paths()
         try:
             self.latest_model_snapshot_path = save_model_snapshot(
                 snapshot,
@@ -1143,6 +1356,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 extra_metadata={
                     "app": self.app_context.app_name,
                     "calculation": "energy_spectrum_esa",
+                    "station_id": self.energy_station_id,
+                    "flag_element": self.energy_config["flag_element"],
                     "x_reference_mm": self.x_reference_mm,
                 },
             )
@@ -1252,6 +1467,26 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
             header_layout.addWidget(runtime_label)
 
+        self.station_label = QLabel("Spectrum Station", panel)
+        self.station_label.setProperty("role", "field")
+        header_layout.addWidget(self.station_label)
+        self.station_combo = QComboBox(panel)
+        self.station_combo.setObjectName("spectrumStationComboBox")
+        self.station_combo.setProperty("dense", True)
+        self.station_combo.setMinimumWidth(112)
+        for station_id, station in self.energy_station_configs.items():
+            self.station_combo.addItem(
+                self._station_display_name(station_id, station),
+                station_id,
+            )
+        station_index = self.station_combo.findData(self.energy_station_id)
+        if station_index >= 0:
+            self.station_combo.setCurrentIndex(station_index)
+        header_layout.addWidget(self.station_combo)
+        multiple_stations = len(self.energy_station_configs) > 1
+        self.station_label.setVisible(multiple_stations)
+        self.station_combo.setVisible(multiple_stations)
+
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
         self.theme_toggle_button.setFixedSize(HEADER_ACTION_HEIGHT, HEADER_ACTION_HEIGHT)
@@ -1263,6 +1498,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.status_panel = SpectrumStatusStrip(panel)
         self.status_panel.add_item("machine", "MACHINE", self.machine_profile.machine.id)
         self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
+        self.status_panel.add_item(
+            "station",
+            "STATION",
+            self._station_display_name(),
+        )
         self.status_panel.add_item("connection", "CONNECTION", "Waiting")
         self.status_panel.add_item("fit", "FIT", self.comboBox_fitmethod.currentText())
         self.status_panel.add_item("model", "MODEL", "Waiting")
@@ -1282,7 +1522,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.verticalLayout_5.setSpacing(10)
         self.ESAflag_image.layout().setSpacing(0)
 
-        self.flag_plot_title = QLabel("Flag Image", self.frame_3)
+        self.flag_plot_title = QLabel(
+            f"{self.energy_config['flag_element']} Image",
+            self.frame_3,
+        )
         self.flag_plot_title.setObjectName("panelTitle")
         self.spectrum_plot_title = QLabel("Energy Spectrum", self.frame_3)
         self.spectrum_plot_title.setObjectName("panelTitle")
@@ -1329,12 +1572,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _configure_energy_tuning_controls(self):
         self._energy_slider_scale = 100  # 0.01 MeV per slider count.
-
-        if self.energy_set_limits is not None:
-            energy_low, energy_high = self.energy_set_limits
-        else:
-            energy_low = self.slider_energy.minimum()
-            energy_high = self.slider_energy.maximum()
+        energy_low, energy_high = self._energy_control_range()
 
         self.slider_energy.setRange(
             math.ceil(energy_low * self._energy_slider_scale),
@@ -1838,7 +2076,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         for label in (self.label_energy, self.label_energyspread):
             label.setStyleSheet("")
 
-        self.lineEdit_expotime.setReadOnly(self.control_backend != "real" or not self._writes_allowed())
+        self._sync_exposure_control_state()
         self.lineEdit_alpha_ESAflag.setReadOnly(True)
         self.lineEdit_beta_ESAflag.setReadOnly(True)
         self.lineEdit_eta_ESAflag.setReadOnly(True)
@@ -2083,6 +2321,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
 
     def _connect_signals(self):
+        self.station_combo.currentIndexChanged.connect(self._handle_station_change)
         self.lineEdit_expotime.returnPressed.connect(self.set_expotime)
         self.lineEdit_refresh.returnPressed.connect(self.set_refresh)
         self.comboBox_fitmethod.currentTextChanged.connect(self._handle_fit_method_change)
@@ -2132,6 +2371,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.checkBox_emit: "Subtract emittance contribution toggle",
             self.checkBox_bg: "Subtract background image toggle",
             self.comboBox_start_element: "Optics input element selector",
+            self.station_combo: "Energy spectrum station selector",
             self.doubleSpinBox_alpha_in: "Input alpha x",
             self.doubleSpinBox_beta_in: "Input beta x",
             self.doubleSpinBox_emi_in: "Input emittance x",
@@ -2217,6 +2457,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             }}
         """
         for combo in (
+            self.station_combo,
             self.comboBox_colormap,
             self.comboBox_fitmethod,
             self.comboBox_start_element,
@@ -2246,9 +2487,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _sync_energy_control_state(self):
         writes_allowed = self._writes_allowed()
+        auto_tune_configured = self._auto_tune_configured_for_backend()
         slider_enabled = (
             self.control_backend == "real"
             and self.energy_set_pv is not None
+            and self._energy_control_configured_for_backend()
             and not self._auto_tune_is_running()
             and writes_allowed
         )
@@ -2260,6 +2503,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.slider_energy.setToolTip(f"Release to write target energy to {self.energy_set_pv}.")
         elif self.control_backend == "real" and not writes_allowed:
             self.slider_energy.setToolTip("Real-machine energy writes are blocked by machine profile.")
+        elif not self._energy_control_configured_for_backend():
+            self.slider_energy.setToolTip(
+                "Energy setpoint control is disabled for this station/backend."
+            )
         elif self.control_backend == "vm":
             self.slider_energy.setToolTip("VM backend does not support direct energy setpoint control.")
         else:
@@ -2270,18 +2517,22 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.control_backend == "real"
             and not self._auto_tune_is_running()
             and writes_allowed
-            and self._auto_tune_configured_for_backend()
+            and auto_tune_configured
         )
         self.pushButton_autoFind.setEnabled(auto_tune_enabled)
         scan_running = self._auto_tune_is_running()
-        self.auto_tune_settings_button.setEnabled(not scan_running)
+        self.auto_tune_settings_button.setEnabled(
+            not scan_running and auto_tune_configured
+        )
+        self.station_combo.setEnabled(not scan_running)
         self.background_settings_button.setEnabled(not scan_running)
         self.checkBox_bg.setEnabled(not scan_running)
         self.comboBox_fitmethod.setEnabled(not scan_running)
         for widget in self.auto_tune_parameter_widgets:
-            widget.setEnabled(not scan_running)
+            widget.setEnabled(not scan_running and auto_tune_configured)
         center_lock_controls_enabled = (
             not scan_running
+            and auto_tune_configured
             and self.auto_tune_objective_combo.currentData()
             == "brightness_then_profile_lock"
         )
@@ -2312,12 +2563,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             if (
                 self.control_backend == "real"
                 and writes_allowed
-                and self._auto_tune_configured_for_backend()
+                and auto_tune_configured
             ):
                 self.pushButton_autoFind.setToolTip(
                     f"Scan {self.auto_tune_pv} to locate the ESA beam on {self.flag_pv}."
                 )
-            elif self.control_backend == "real" and not self._auto_tune_configured_for_backend():
+            elif self.control_backend == "real" and not auto_tune_configured:
                 self.pushButton_autoFind.setToolTip(
                     "Direct bend scan is disabled for this backend; use the coordinated energy control."
                 )
@@ -2507,6 +2758,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         backend_tone = "warning" if self.control_backend == "vm" else "success"
         self.status_panel.set_item("machine", self.machine_profile.machine.id, machine_tone)
         self.status_panel.set_item("backend", self.control_backend.upper(), backend_tone)
+        self.status_panel.set_item(
+            "station",
+            self._station_display_name(),
+            "neutral",
+        )
         if self._pv_available:
             self.status_panel.set_item("connection", "Live PV", "success")
         else:
@@ -2583,13 +2839,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         fit_method,
         archive_result=False,
     ):
-        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        paths = self._runtime_paths()
         metadata = {
             "schema_version": "energy_spectrum_result_v1",
             "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "machine_id": self.machine_profile.machine.id,
             "machine_display_name": self.machine_profile.machine.display_name,
             "backend": self.control_backend,
+            "station_id": self.energy_station_id,
+            "flag_element": self.energy_config["flag_element"],
             "fit_method": fit_method,
             "x_reference_mm": self.x_reference_mm,
             "meanx_mm": float(self.meanx),
@@ -2644,6 +2902,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                 "machine_id": self.machine_profile.machine.id,
                 "backend": self.control_backend,
+                "station_id": self.energy_station_id,
+                "flag_element": self.energy_config["flag_element"],
                 "flag_pv": self.flag_pv,
                 "shape": [self.flag_pixel[1], self.flag_pixel[0]],
                 "pixel_width_mm": self.flag_pixel_width_mm,
@@ -2703,7 +2963,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _save_latest_background(self, *, sample_count=None):
         if self.bg_image is None:
             raise BackgroundStoreError("No background image is available to save.")
-        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        paths = self._runtime_paths()
         metadata = self._background_metadata(
             source="sampled_latest",
             sample_count=sample_count,
@@ -2720,7 +2980,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return image_path
 
     def _load_latest_background(self, _checked=False, *, silent=False):
-        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        paths = self._runtime_paths()
         image_path = paths["background_image_path"]
         if not image_path.is_file():
             if not silent:
@@ -2834,7 +3094,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if self.bg_image is None:
             print("No background image to save!")
             return
-        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        paths = self._runtime_paths()
         paths["runs_dir"].mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
         default_path = paths["runs_dir"] / f"background_{timestamp}.npy"
@@ -2861,7 +3121,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     
     def load_bgfile(self):
         """load the background image from a file"""
-        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        paths = self._runtime_paths()
         default_path = paths["background_image_path"]
         initial_path = default_path if default_path.is_file() else paths["latest_dir"]
         filePath = self._choose_background_file(
@@ -2930,7 +3190,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         self.flag_expotime_pv = None
         if self.control_backend == "real":
-            exposure_channel = str(self.energy_config.get("flag_exposure_channel", "")).strip()
+            raw_exposure_channel = self.energy_config.get("flag_exposure_channel")
+            exposure_channel = (
+                "" if raw_exposure_channel is None else str(raw_exposure_channel).strip()
+            )
             if exposure_channel:
                 self.flag_expotime_pv = resolve_channel(
                     self.app_context,
@@ -2944,8 +3207,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 expotime = None
                 self._mark_pv_unavailable(exc)
             self.lineEdit_expotime.setText(str(expotime) if expotime is not None else "--")
-        else:
+        elif self.control_backend != "real":
             self.lineEdit_expotime.setText("VM")
+        else:
+            self.lineEdit_expotime.setText("--")
 
         try:
             self.flag_pv_obj = PV(self.flag_pv)
@@ -3247,7 +3512,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             #
             lattice_file = self._energy_model_path("source_lattice")
             esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
-            line_name = self.energy_model_config["energy_dispersion_line_name"]
+            line_name = self.energy_config.get(
+                "energy_dispersion_line_name",
+                self.energy_model_config["energy_dispersion_line_name"],
+            )
             working_dir = self._energy_model_working_dir()
 
             esajson_path = self._energy_model_path("energy_json_path")
@@ -3297,7 +3565,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             Rj = np.array(list_R).reshape(6,6)
 
             self.eta_flag = Rj[0, -1] 
-            print('dispersion of ESA updates: ',self.eta_flag, 'm')
+            print(
+                f"dispersion at {self.energy_config['flag_element']} updates: ",
+                self.eta_flag,
+                "m",
+            )
             self._update_model_status(
                 f"{self._snapshot_status_label(snapshot)} eta {self.eta_flag:.4f} m",
                 "success",
@@ -3313,7 +3585,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
         except Exception as e:
             print(f"Error in cal_disp: {e}")
-            self.eta_flag = DEFAULT_DESIGN_ETA  # 理论设计值
+            self.eta_flag = float(
+                self.energy_config.get("design_eta_m", DEFAULT_DESIGN_ETA)
+            )
             self.latest_model_snapshot_metadata = None
             self.latest_model_snapshot_path = None
             print('default dispersion: ',self.eta_flag, 'm')
@@ -3359,7 +3633,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         #
         lattice_file = self._energy_model_path("source_lattice")
         esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
-        line_name = self.energy_model_config["energy_twiss_line_name"]
+        line_name = self.energy_config.get(
+            "energy_twiss_line_name",
+            self.energy_model_config["energy_twiss_line_name"],
+        )
         working_dir = self._energy_model_working_dir()
 
         esajson_path = self._energy_model_path("energy_json_path")
@@ -3491,6 +3768,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._set_target_energy_control(target_energy)
         if self.control_backend != "real":
             return
+        if not self._energy_control_configured_for_backend():
+            print("Energy setpoint control is disabled for this station/backend.")
+            return
         if not self.energy_set_pv:
             print("No energy setpoint PV is configured for the real backend.")
             return
@@ -3519,10 +3799,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _start_auto_tune_run_log(self, bend_scan):
         self._close_auto_tune_run_log()
-        paths = resolve_energy_spectrum_runtime_paths(self.app_context)
+        paths = self._runtime_paths()
         start_values = {
             "machine_id": self.machine_profile.machine.id,
             "backend": self.control_backend,
+            "station_id": self.energy_station_id,
             "objective": bend_scan.get("objective"),
             "actuator_pv": self.auto_tune_pv,
             "x_reference_mm": bend_scan.get("x_reference_mm"),

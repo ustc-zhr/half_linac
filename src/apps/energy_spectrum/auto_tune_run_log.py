@@ -18,6 +18,7 @@ class ESAAutoTuneRunLog:
         "status",
         "machine_id",
         "backend",
+        "station_id",
         "objective",
         "actuator_pv",
         "x_reference_mm",

@@ -57,6 +57,55 @@ class ElegantBackendTests(unittest.TestCase):
             "HALF compatibility wrapper should no longer inject AP fields.",
         )
 
+    def test_half_dogleg_uses_independent_symmetric_qt_quads(self):
+        main_state = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN").build_runtime_state()
+        esa_state = ElegantParser(self.lattice_file, self.ele_file, "ALL_ESA").build_runtime_state()
+
+        dogleg_quads = tuple(f"QT{index:02d}" for index in range(5, 13))
+        dogleg_quad_set = set(dogleg_quads)
+        self.assertEqual(
+            tuple(element for element in main_state["usedline"] if element in dogleg_quad_set),
+            dogleg_quads,
+        )
+        self.assertEqual(
+            tuple(element for element in esa_state["usedline"] if element in dogleg_quad_set),
+            ("QT05", "QT06"),
+        )
+        for upstream, downstream in (
+            ("QT05", "QT12"),
+            ("QT06", "QT11"),
+            ("QT07", "QT10"),
+            ("QT08", "QT09"),
+        ):
+            self.assertEqual(main_state["lattice"][upstream]["L"], "0.3")
+            self.assertEqual(
+                main_state["lattice"][upstream]["L"],
+                main_state["lattice"][downstream]["L"],
+            )
+            self.assertEqual(
+                main_state["lattice"][upstream]["K1"],
+                main_state["lattice"][downstream]["K1"],
+            )
+
+        for reference_id, active_ids in {
+            "QHL1": ("QT05", "QT12"),
+            "QHL2": ("QT06", "QT11"),
+            "QHL3": ("QT07", "QT10"),
+            "QHL4": ("QT08", "QT09"),
+        }.items():
+            self.assertIn(reference_id, main_state["lattice"])
+            self.assertNotIn(reference_id, main_state["usedline"])
+            self.assertNotIn(reference_id, esa_state["usedline"])
+            for active_id in active_ids:
+                self.assertEqual(
+                    main_state["lattice"][reference_id]["L"],
+                    main_state["lattice"][active_id]["L"],
+                )
+                self.assertEqual(
+                    main_state["lattice"][reference_id]["K1"],
+                    main_state["lattice"][active_id]["K1"],
+                )
+
     def test_json_to_lte_ele_matches_half_wrapper_output(self):
         shared_parser = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN")
         compat_parser = elegant_parser(str(self.lattice_file), str(self.ele_file), "ALL_MAIN")
@@ -433,17 +482,37 @@ class ElegantBackendTests(unittest.TestCase):
             (spec.target_element_id, spec.logical_channel): spec
             for spec in plan.watch_image_specs
         }
-        for flag_id in ("PRF04", "PRF06", "PRF07", "PRF08"):
+        self.assertNotIn(("PRF01", "image"), watch_specs)
+        for flag_id in (
+            "PRF02",
+            "PRF03",
+            "PRF04",
+            "PRF05",
+            "PRF06",
+            "PRF07",
+            "PRF08",
+            "PRF09",
+            "PRF10",
+            "PRF11",
+            "PRF12",
+            "PRF13",
+            "PRF14",
+            "ENY",
+        ):
             spec = watch_specs[(flag_id, "image")]
             self.assertEqual(spec.source_watch_id, flag_id)
             self.assertEqual(spec.pv_name, f"HALF:IN:FLAG:{flag_id}:image1:ArrayData:vm")
 
-        esa_spec = watch_specs[("PRF07", "esa_image")]
-        self.assertEqual(esa_spec.source_watch_id, "PRFESA")
-        self.assertEqual(esa_spec.target_element_id, "PRF07")
-        self.assertEqual(esa_spec.pv_name, "HALF:IN:FLAG:PRFESA:image1:ArrayData:vm")
-        self.assertEqual(esa_spec.pixel_shape, (720, 270))
-        self.assertEqual(esa_spec.pixel_width_mm, 0.02)
+        eny_specs = [
+            spec
+            for spec in plan.watch_image_specs
+            if spec.source_watch_id == "ENY" and spec.target_element_id == "ENY"
+        ]
+        self.assertEqual(len(eny_specs), 1)
+        self.assertEqual(eny_specs[0].logical_channel, "image")
+        self.assertEqual(eny_specs[0].pv_name, "HALF:IN:FLAG:ENY:image1:ArrayData:vm")
+        self.assertEqual(eny_specs[0].pixel_shape, (720, 270))
+        self.assertEqual(eny_specs[0].pixel_width_mm, 0.02)
 
     def test_shared_publisher_uses_plan_pvs_for_bpm_updates(self):
         publisher = VmPublisher()

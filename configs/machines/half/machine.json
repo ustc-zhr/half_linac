@@ -3515,10 +3515,45 @@
       ]
     },
     {
+      "id": "PRF01",
+      "kind": "flag",
+      "display_name": "PRF01",
+      "order": 213,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
+      "id": "PRF02",
+      "kind": "flag",
+      "display_name": "PRF02",
+      "order": 214,
+      "tags": [
+        "energy_spectrum"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
+      "id": "PRF03",
+      "kind": "flag",
+      "display_name": "PRF03",
+      "order": 215,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
       "id": "PRF04",
       "kind": "flag",
       "display_name": "PRF04",
-      "order": 213,
+      "order": 216,
       "tags": [
         "emit"
       ],
@@ -3531,10 +3566,21 @@
       ]
     },
     {
+      "id": "PRF05",
+      "kind": "flag",
+      "display_name": "PRF05",
+      "order": 217,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
       "id": "PRF06",
       "kind": "flag",
       "display_name": "PRF06",
-      "order": 214,
+      "order": 218,
       "tags": [
         "emit"
       ],
@@ -3550,25 +3596,7 @@
       "id": "PRF07",
       "kind": "flag",
       "display_name": "PRF07",
-      "order": 215,
-      "tags": [
-        "emit",
-        "energy_spectrum"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "image",
-        "esa_image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
-    },
-    {
-      "id": "PRF08",
-      "kind": "flag",
-      "display_name": "PRF08",
-      "order": 216,
+      "order": 219,
       "tags": [
         "emit"
       ],
@@ -3581,10 +3609,106 @@
       ]
     },
     {
+      "id": "PRF08",
+      "kind": "flag",
+      "display_name": "PRF08",
+      "order": 220,
+      "tags": [
+        "emit"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "image",
+        "exposure_time",
+        "sigx",
+        "sigy"
+      ]
+    },
+    {
+      "id": "PRF09",
+      "kind": "flag",
+      "display_name": "PRF09",
+      "order": 221,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
+      "id": "PRF10",
+      "kind": "flag",
+      "display_name": "PRF10",
+      "order": 222,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
+      "id": "PRF11",
+      "kind": "flag",
+      "display_name": "PRF11",
+      "order": 223,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
+      "id": "PRF12",
+      "kind": "flag",
+      "display_name": "PRF12",
+      "order": 224,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
+      "id": "PRF13",
+      "kind": "flag",
+      "display_name": "PRF13",
+      "order": 225,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
+      "id": "PRF14",
+      "kind": "flag",
+      "display_name": "PRF14",
+      "order": 226,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "image"
+      ]
+    },
+    {
+      "id": "ENY",
+      "kind": "flag",
+      "display_name": "ENY",
+      "order": 227,
+      "tags": [
+        "energy_spectrum"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "image",
+        "exposure_time"
+      ]
+    },
+    {
       "id": "SM01",
       "kind": "solenoid",
       "display_name": "SM01",
-      "order": 217,
+      "order": 228,
       "tags": [
         "solenoid",
         "focus"
@@ -3599,7 +3723,7 @@
       "id": "SL01",
       "kind": "solenoid",
       "display_name": "SL01",
-      "order": 218,
+      "order": 229,
       "tags": [
         "solenoid",
         "focus"
@@ -3608,6 +3732,39 @@
       "logical_channels": [
         "current_set",
         "current_readback"
+      ]
+    },
+    {
+      "id": "PREINJECTOR_ENERGY",
+      "kind": "energy",
+      "display_name": "Preinjector Coordinated Energy",
+      "order": 230,
+      "tags": [
+        "preinjector",
+        "energy_spectrum",
+        "coordinated_control"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
+      "id": "LINAC_ENERGY",
+      "kind": "energy",
+      "display_name": "Linac Coordinated Energy",
+      "order": 231,
+      "tags": [
+        "linac",
+        "energy_spectrum",
+        "coordinated_control"
+      ],
+      "limits": {
+        "low": 0.0,
+        "high": 2450.0
+      },
+      "logical_channels": [
+        "setpoint"
       ]
     }
   ]

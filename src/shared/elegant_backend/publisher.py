@@ -9,6 +9,9 @@ import epics.ca
 from epics import caput, caput_many
 
 from half_linac.src.shared.machine_profile.models import MachineProfile, MachineProfileError
+from half_linac.src.shared.machine_profile.energy_spectrum import (
+    resolve_default_energy_spectrum_station,
+)
 from half_linac.src.shared.machine_profile.pixel_geometry import resolve_flag_pixel_geometry
 from half_linac.src.shared.machine_profile.resolver import (
     get_workflow,
@@ -62,7 +65,9 @@ def build_vm_publish_plan(profile: MachineProfile) -> VmPublishPlan:
     if "beam_monitor" in profile.workflows:
         watch_specs.extend(_build_beam_monitor_watch_specs(profile))
     if "energy_spectrum" in profile.workflows:
-        watch_specs.append(_build_energy_spectrum_watch_spec(profile))
+        energy_spec = _build_energy_spectrum_watch_spec(profile)
+        if energy_spec not in watch_specs:
+            watch_specs.append(energy_spec)
 
     return VmPublishPlan(
         bpm_specs=tuple(bpm_specs),
@@ -224,7 +229,12 @@ def _build_beam_monitor_watch_specs(profile: MachineProfile) -> list[VmWatchImag
     workflow = get_workflow(profile, "beam_monitor")
 
     specs: list[VmWatchImagePublishSpec] = []
-    for element in list_elements(profile, kind="flag", logical_channel="image"):
+    for element in list_elements(
+        profile,
+        kind="flag",
+        logical_channel="image",
+        control_backend="vm",
+    ):
         pixel_geometry = resolve_flag_pixel_geometry(
             workflow,
             "workflows.beam_monitor",
@@ -261,7 +271,9 @@ def _resolve_watch_output_path(
 
 
 def _build_energy_spectrum_watch_spec(profile: MachineProfile) -> VmWatchImagePublishSpec:
-    workflow = get_workflow(profile, "energy_spectrum")
+    workflow = resolve_default_energy_spectrum_station(
+        get_workflow(profile, "energy_spectrum")
+    )
     flag_element = _require_non_empty_string(
         workflow.get("flag_element"),
         "workflows.energy_spectrum.flag_element",

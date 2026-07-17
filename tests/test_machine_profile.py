@@ -42,6 +42,7 @@ from half_linac.src.shared.machine_profile import (
     require_workflow_write_allowed,
     resolve_bend_write_channel,
     resolve_channel,
+    resolve_default_energy_spectrum_station,
     resolve_flag_pixel_geometry,
     resolve_machine_runtime,
     resolve_virtual_machine_segment_choices,
@@ -678,8 +679,12 @@ class MachineProfileTests(unittest.TestCase):
             "HALF:IN:FLAG:PRF07:image1:ArrayData:vm",
         )
         self.assertEqual(
-            resolve_channel(profile, "PRF07", "esa_image", "vm"),
-            "HALF:IN:FLAG:PRFESA:image1:ArrayData:vm",
+            resolve_channel(profile, "ENY", "image", "vm"),
+            "HALF:IN:FLAG:ENY:image1:ArrayData:vm",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "ENY", "image", "real"),
+            "HALF:IN:FLAG:ENY:image1:ArrayData",
         )
         self.assertEqual(
             resolve_channel(profile, "PRF07", "exposure_time", "real"),
@@ -835,7 +840,26 @@ class MachineProfileTests(unittest.TestCase):
         self.assertNotIn("VIC02", corr_ids)
         self.assertIn("QL03", quad_ids)
         self.assertNotIn("CQ3", quad_ids)
-        self.assertEqual({element.id for element in flag_elements}, {"PRF04", "PRF06", "PRF07", "PRF08"})
+        self.assertEqual(
+            {element.id for element in flag_elements},
+            {
+                "PRF01",
+                "PRF02",
+                "PRF03",
+                "PRF04",
+                "PRF05",
+                "PRF06",
+                "PRF07",
+                "PRF08",
+                "PRF09",
+                "PRF10",
+                "PRF11",
+                "PRF12",
+                "PRF13",
+                "PRF14",
+                "ENY",
+            },
+        )
 
     def test_list_elements_supports_role_and_plane_filters(self):
         profile = load_profile("half")
@@ -853,9 +877,53 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIn("QE03", quad_ids)
         self.assertIn("BPM01", bpm_ids)
         self.assertIn("BPM29", bpm_ids)
-        self.assertEqual(flag_ids, {"PRF04", "PRF06", "PRF07", "PRF08"})
-        self.assertEqual(image_flags, {"PRF04", "PRF06", "PRF07", "PRF08"})
-        self.assertEqual(esa_flags, {"PRF07"})
+        expected_image_flags = {
+            "PRF01",
+            "PRF02",
+            "PRF03",
+            "PRF04",
+            "PRF05",
+            "PRF06",
+            "PRF07",
+            "PRF08",
+            "PRF09",
+            "PRF10",
+            "PRF11",
+            "PRF12",
+            "PRF13",
+            "PRF14",
+            "ENY",
+        }
+        self.assertEqual(flag_ids, expected_image_flags)
+        self.assertEqual(image_flags, expected_image_flags)
+        self.assertEqual(esa_flags, set())
+
+        real_image_flags = {
+            element.id
+            for element in list_elements(
+                profile,
+                kind="flag",
+                logical_channel="image",
+                control_backend="real",
+            )
+        }
+        vm_image_flags = {
+            element.id
+            for element in list_elements(
+                profile,
+                kind="flag",
+                logical_channel="image",
+                control_backend="vm",
+            )
+        }
+        self.assertEqual(real_image_flags, expected_image_flags)
+        self.assertEqual(vm_image_flags, expected_image_flags - {"PRF01"})
+        for index in range(1, 15):
+            flag_id = f"PRF{index:02d}"
+            self.assertEqual(
+                resolve_channel(profile, flag_id, "image", "real"),
+                f"HALF:IN:FLAG:{flag_id}:image1:ArrayData",
+            )
         self.assertIn("XC00", x_corrs)
         self.assertIn("SM01-DX", x_corrs)
         self.assertNotIn("YC00", x_corrs)
@@ -1579,14 +1647,24 @@ class MachineProfileTests(unittest.TestCase):
             "IRFEL:VM:FLAG:PRFESA:image1:ArrayData",
         )
 
-    def test_half_energy_spectrum_workflow_keeps_real_energy_setpoint_pv(self):
+    def test_half_energy_spectrum_uses_coordinated_linac_energy_control(self):
         profile = load_profile("half")
-        workflow = get_workflow(profile, "energy_spectrum")
-        self.assertEqual(
-            workflow["energy_set_pv"]["real"],
-            "HALF:IN:ESA:PRF01:EnergySet",
+        workflow = resolve_default_energy_spectrum_station(
+            get_workflow(profile, "energy_spectrum")
         )
-        self.assertEqual(workflow["vm_watch_element"], "PRFESA")
+        self.assertEqual(
+            resolve_channel(profile, "LINAC_ENERGY", "setpoint", "real"),
+            "IN:LA:ENG",
+        )
+        self.assertEqual(workflow["energy_element"], "LINAC_ENERGY")
+        self.assertEqual(workflow["energy_set_channel"], "setpoint")
+        self.assertEqual(workflow["energy_reference_channel"], "setpoint")
+        self.assertEqual(workflow["energy_control_backends"], ["real"])
+        self.assertEqual(workflow["auto_tune_control_backends"], ["real"])
+        self.assertEqual(workflow["auto_tune_actuator"]["element"], "LINAC_ENERGY")
+        self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
+        self.assertEqual(workflow["auto_tune_scan"]["max"], 2450)
+        self.assertEqual(workflow["vm_watch_element"], "ENY")
 
     def test_irfel_energy_spectrum_uses_coordinated_real_energy_control(self):
         profile = load_profile("irfel")
@@ -2343,7 +2421,12 @@ class MachineProfileTests(unittest.TestCase):
         self.assertNotIn("HIC01", substitutions)
         self.assertNotIn("VIC01", substitutions)
         self.assertIn(
-            '{ "PRF07", "VMIOC:FLAG:PRF07:ESA_IMAGE", "HALF:IN:FLAG:PRFESA:image1:ArrayData:vm" }',
+            '{ "ENY", "VMIOC:FLAG:ENY:IMAGE", "HALF:IN:FLAG:ENY:image1:ArrayData:vm" }',
+            substitutions,
+        )
+        self.assertNotIn("VMIOC:FLAG:PRF07:ESA_IMAGE", substitutions)
+        self.assertIn(
+            '{ "PRF02", "VMIOC:FLAG:PRF02:IMAGE", "HALF:IN:FLAG:PRF02:image1:ArrayData:vm" }',
             substitutions,
         )
         self.assertNotIn(

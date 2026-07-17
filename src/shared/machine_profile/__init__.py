@@ -34,6 +34,11 @@ from .loader import (
     VirtualMachineUsedlineWorkflow,
     load_solenoid_centering_workflow,
 )
+from .energy_spectrum import (
+    LEGACY_ENERGY_SPECTRUM_STATION_ID,
+    resolve_default_energy_spectrum_station,
+    resolve_energy_spectrum_stations,
+)
 from .model_backend import (
     BeamModelBackend,
     ElegantModelBackend,
@@ -141,6 +146,7 @@ __all__ = [
     "MachineChoice",
     "MACHINE_ID_ENV",
     "LATEST_DIRNAME",
+    "LEGACY_ENERGY_SPECTRUM_STATION_ID",
     "LEGACY_CONTROL_BACKEND_ENV",
     "LEGACY_MACHINE_ID_ENV",
     "MachineProfile",
@@ -213,6 +219,8 @@ __all__ = [
     "resolve_bend_write_channel",
     "resolve_corrector_write_channel",
     "resolve_flag_pixel_geometry",
+    "resolve_default_energy_spectrum_station",
+    "resolve_energy_spectrum_stations",
     "resolve_app_runtime_paths",
     "save_model_snapshot",
     "sanitize_runtime_token",

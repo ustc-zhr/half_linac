@@ -59,10 +59,14 @@ for app_name, context in contexts.items():
 plan = build_vm_publish_plan(profile)
 require(len(plan.bpm_specs) == 10, f"expected 10 BPM publish specs, got {len(plan.bpm_specs)}")
 require(
-    len(plan.watch_image_specs) == 6,
-    f"expected 6 watch-image publish specs, got {len(plan.watch_image_specs)}",
+    len(plan.watch_image_specs) == 5,
+    f"expected 5 unique watch-image publish specs, got {len(plan.watch_image_specs)}",
 )
 watch_targets = {(spec.target_element_id, spec.logical_channel) for spec in plan.watch_image_specs}
+require(
+    len(watch_targets) == len(plan.watch_image_specs),
+    "VM publish plan contains duplicate watch-image targets",
+)
 require(("PRF03", "image") in watch_targets, "beam monitor PRF03 image is missing from VM publish plan")
 require(("PRFESA", "image") in watch_targets, "energy spectrum PRFESA image is missing from VM publish plan")
 

@@ -14,7 +14,11 @@ from half_linac.src.apps.energy_spectrum.get_energy0 import (
     get_energy0,
     select_reference_energy_mev,
 )
-from half_linac.src.shared.machine_profile import get_workflow, load_profile
+from half_linac.src.shared.machine_profile import (
+    get_workflow,
+    load_profile,
+    resolve_default_energy_spectrum_station,
+)
 
 
 class Energy0ConversionTests(unittest.TestCase):
@@ -33,7 +37,9 @@ class Energy0ConversionTests(unittest.TestCase):
 
     def test_half_energy_spectrum_workflow_exposes_bend_energy_conversion(self):
         profile = load_profile("half")
-        workflow = get_workflow(profile, "energy_spectrum")
+        workflow = resolve_default_energy_spectrum_station(
+            get_workflow(profile, "energy_spectrum")
+        )
         conversion = workflow["energy_from_bend_current"]
         self.assertAlmostEqual(conversion["magnet_length_m"], 2.7271)
         self.assertAlmostEqual(conversion["deflect_angle_rad"], 0.4363323129985824)

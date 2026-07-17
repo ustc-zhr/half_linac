@@ -1003,11 +1003,23 @@
       "current_set": "IN:PS:LE16:BENY:current:ao",
       "current_readback": "IN:PS:LE16:BENY:current:ai"
     },
+    "PRF01": {
+      "image": "HALF:IN:FLAG:PRF01:image1:ArrayData"
+    },
+    "PRF02": {
+      "image": "HALF:IN:FLAG:PRF02:image1:ArrayData"
+    },
+    "PRF03": {
+      "image": "HALF:IN:FLAG:PRF03:image1:ArrayData"
+    },
     "PRF04": {
       "image": "HALF:IN:FLAG:PRF04:image1:ArrayData",
       "exposure_time": "HALF:IN:FLAG:PRF04:cam1:AcquireTime",
       "sigx": "IN:BD:PRF04:H:SIZE",
       "sigy": "IN:BD:PRF04:V:SIZE"
+    },
+    "PRF05": {
+      "image": "HALF:IN:FLAG:PRF05:image1:ArrayData"
     },
     "PRF06": {
       "image": "HALF:IN:FLAG:PRF06:image1:ArrayData",
@@ -1017,7 +1029,6 @@
     },
     "PRF07": {
       "image": "HALF:IN:FLAG:PRF07:image1:ArrayData",
-      "esa_image": "HALF:IN:FLAG:PRF07:image1:ArrayData",
       "exposure_time": "HALF:IN:FLAG:PRF07:cam1:AcquireTime",
       "sigx": "IN:BD:PRF07:H:SIZE",
       "sigy": "IN:BD:PRF07:V:SIZE"
@@ -1027,6 +1038,34 @@
       "exposure_time": "HALF:IN:FLAG:PRF08:cam1:AcquireTime",
       "sigx": "IN:BD:PRF08:H:SIZE",
       "sigy": "IN:BD:PRF08:V:SIZE"
+    },
+    "PRF09": {
+      "image": "HALF:IN:FLAG:PRF09:image1:ArrayData"
+    },
+    "PRF10": {
+      "image": "HALF:IN:FLAG:PRF10:image1:ArrayData"
+    },
+    "PRF11": {
+      "image": "HALF:IN:FLAG:PRF11:image1:ArrayData"
+    },
+    "PRF12": {
+      "image": "HALF:IN:FLAG:PRF12:image1:ArrayData"
+    },
+    "PRF13": {
+      "image": "HALF:IN:FLAG:PRF13:image1:ArrayData"
+    },
+    "PRF14": {
+      "image": "HALF:IN:FLAG:PRF14:image1:ArrayData"
+    },
+    "ENY": {
+      "image": "HALF:IN:FLAG:ENY:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:ENY:cam1:AcquireTime"
+    },
+    "PREINJECTOR_ENERGY": {
+      "setpoint": "IN:PREINJECTOR:ENG"
+    },
+    "LINAC_ENERGY": {
+      "setpoint": "IN:LA:ENG"
     }
   }
 }

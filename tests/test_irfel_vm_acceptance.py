@@ -13,15 +13,13 @@ if str(PARENT) not in sys.path:
 
 from half_linac.src.shared.elegant_backend.publisher import build_vm_publish_plan
 from half_linac.src.shared.machine_profile import (
-    REAL_STATUS_NOT_SUPPORTED,
+    REAL_STATUS_COMMISSIONED,
     REAL_STATUS_READ_ONLY,
-    REAL_STATUS_WRITE_BLOCKED,
-    MachineProfileError,
+    REAL_STATUS_WRITE_SMOKE_PASSED,
     get_workflow,
     load_app_context,
     load_profile,
     real_commissioning_status,
-    require_workflow_write_allowed,
     validate_machine_profile,
     workflow_writes_allowed,
 )
@@ -55,11 +53,12 @@ class IRFELVmAcceptanceTests(unittest.TestCase):
 
         plan = build_vm_publish_plan(profile)
         self.assertEqual(len(plan.bpm_specs), 10)
-        self.assertEqual(len(plan.watch_image_specs), 6)
+        self.assertEqual(len(plan.watch_image_specs), 5)
         watch_targets = {
             (spec.target_element_id, spec.logical_channel)
             for spec in plan.watch_image_specs
         }
+        self.assertEqual(len(watch_targets), len(plan.watch_image_specs))
         self.assertIn(("PRF03", "image"), watch_targets)
         self.assertIn(("PRFESA", "image"), watch_targets)
 
@@ -68,7 +67,7 @@ class IRFELVmAcceptanceTests(unittest.TestCase):
         self.assertTrue(workflow_writes_allowed(contexts["energy_spectrum"], "energy_spectrum"))
         self.assertTrue(workflow_writes_allowed(contexts["emit_measure"], "emit_measure"))
 
-    def test_irfel_real_boundaries_remain_explicit_and_blocked(self):
+    def test_irfel_real_commissioning_boundaries_remain_explicit(self):
         profile = load_profile("irfel")
         real_contexts = {
             "orbit": load_app_context(
@@ -94,19 +93,17 @@ class IRFELVmAcceptanceTests(unittest.TestCase):
         }
 
         for workflow_name, context in real_contexts.items():
-            self.assertFalse(workflow_writes_allowed(context, workflow_name))
-            with self.assertRaises(MachineProfileError):
-                require_workflow_write_allowed(context, workflow_name, "test write")
+            self.assertTrue(workflow_writes_allowed(context, workflow_name))
 
         bba_workflow = get_workflow(profile, "bba")
-        self.assertEqual(bba_workflow["standard"]["control_backends"], ["vm"])
-        self.assertEqual(bba_workflow["bba2"]["control_backends"], ["vm"])
+        self.assertEqual(bba_workflow["bba1"]["control_backends"], ["vm", "real"])
+        self.assertEqual(bba_workflow["bba2"]["control_backends"], ["vm", "real"])
         self.assertEqual(real_commissioning_status(profile, "orbit_display"), REAL_STATUS_READ_ONLY)
-        self.assertEqual(real_commissioning_status(profile, "orbit_correct"), REAL_STATUS_WRITE_BLOCKED)
-        self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_WRITE_BLOCKED)
-        self.assertEqual(real_commissioning_status(profile, "energy_spectrum"), REAL_STATUS_WRITE_BLOCKED)
-        self.assertEqual(real_commissioning_status(profile, "emit_measure"), REAL_STATUS_WRITE_BLOCKED)
-        self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_NOT_SUPPORTED)
+        self.assertEqual(real_commissioning_status(profile, "orbit_correct"), REAL_STATUS_COMMISSIONED)
+        self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_COMMISSIONED)
+        self.assertEqual(real_commissioning_status(profile, "energy_spectrum"), REAL_STATUS_COMMISSIONED)
+        self.assertEqual(real_commissioning_status(profile, "emit_measure"), REAL_STATUS_COMMISSIONED)
+        self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_WRITE_SMOKE_PASSED)
 
 
 if __name__ == "__main__":
