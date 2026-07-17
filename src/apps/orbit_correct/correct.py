@@ -46,6 +46,12 @@ logger = logging.getLogger(__name__)
 
 MIN_RESPONSE = 1e-12
 CORRECTOR_EPS = 1e-12
+LOCAL_RESPONSE_MEASURE_LIVE = "measure_live"
+LOCAL_RESPONSE_ACTIVE_MATRIX = "active_matrix"
+LOCAL_RESPONSE_SOURCES = {
+    LOCAL_RESPONSE_MEASURE_LIVE,
+    LOCAL_RESPONSE_ACTIVE_MATRIX,
+}
 
 
 def _parse_target_arg(arg: str, scale: float = 1.0) -> List[float]:
@@ -94,7 +100,8 @@ class OrbitCorrector:
                 response_kick: Optional[float] = None,
                 global_xcor_list: Optional[List[str]] = None,
                 global_ycor_list: Optional[List[str]] = None,
-                correction_settle_s: Optional[float] = None):
+                correction_settle_s: Optional[float] = None,
+                local_response_source: Optional[str] = None):
         self.app_context = load_app_context("orbit_correct")
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
@@ -106,6 +113,10 @@ class OrbitCorrector:
             correction_settle_s,
             float(self.orbit_runtime["correction_settle_s"]),
             "correction_settle_s",
+        )
+        self.local_response_source = self._select_local_response_source(
+            local_response_source,
+            str(self.runtime_defaults["local_response_source"]),
         )
 
         # constant definition
@@ -225,6 +236,17 @@ class OrbitCorrector:
         selected = default if value is None else float(value)
         if selected < 0:
             raise ValueError(f"{label} must be >= 0.")
+        return selected
+
+    @staticmethod
+    def _select_local_response_source(value: Optional[str], default: str) -> str:
+        selected = default if value is None else str(value)
+        selected = selected.strip().lower()
+        if selected not in LOCAL_RESPONSE_SOURCES:
+            raise ValueError(
+                "local_response_source must be one of: "
+                + ", ".join(sorted(LOCAL_RESPONSE_SOURCES))
+            )
         return selected
 
     @staticmethod
@@ -417,6 +439,15 @@ class OrbitCorrector:
         """one-to-one method"""
         self._require_write_allowed("One-to-one orbit correction")
         self._require_targets()
+        local_response_matrix = None
+        if self.local_response_source == LOCAL_RESPONSE_ACTIVE_MATRIX:
+            local_response_matrix = self._load_valid_response_matrix()
+            logger.info(
+                "one-to-one correction uses local responses from active matrix: %s",
+                self.response_matrix_path,
+            )
+        else:
+            logger.info("one-to-one correction measures local responses live")
         failures: list[str] = []
         for j in range(len(self.bpm_list_target)):
             logger.info(f"开始校正: {self.bpm_list_target[j]}")
@@ -440,33 +471,41 @@ class OrbitCorrector:
                 )
                 continue
             
-            # 微调并测量响应。X/Y corrector 分开 kick，避免交叉影响响应系数。
-            try:
-                self._write_pv(self.pvCORx[j], hcorrVal + self.d_value, "X corrector response kick")
-                self._wait_for_correction_settle()
-                xbpm_val1 = self._get_avg_readings(
-                    [self.pvBPMx[j]], bpm_count=1
-                )[0]
-                self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
+            if local_response_matrix is not None:
+                Rx, Ry = self._local_response_coefficients(
+                    local_response_matrix,
+                    self.target_indices[j],
+                )
+            else:
+                # 微调并测量响应。X/Y corrector 分开 kick，避免交叉影响响应系数。
+                try:
+                    self._write_pv(self.pvCORx[j], hcorrVal + self.d_value, "X corrector response kick")
+                    self._wait_for_correction_settle()
+                    xbpm_val1 = self._get_avg_readings(
+                        [self.pvBPMx[j]], bpm_count=1
+                    )[0]
+                    self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
 
-                self._write_pv(self.pvCORy[j], vcorrVal + self.d_value, "Y corrector response kick")
-                self._wait_for_correction_settle()
-                ybpm_val1 = self._get_avg_readings(
-                    [self.pvBPMy[j]], bpm_count=1
-                )[0]
-            finally:
-                self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
-                self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
-                self._wait_for_correction_settle()
-            
-            # cal response coefficient
-            Rx = (xbpm_val1 - xbpm_val0) / self.d_value
-            Ry = (ybpm_val1 - ybpm_val0) / self.d_value
-            logger.info(f"response coefficient: Rx={Rx:.3f}, Ry={Ry:.3f}")
+                    self._write_pv(self.pvCORy[j], vcorrVal + self.d_value, "Y corrector response kick")
+                    self._wait_for_correction_settle()
+                    ybpm_val1 = self._get_avg_readings(
+                        [self.pvBPMy[j]], bpm_count=1
+                    )[0]
+                finally:
+                    self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
+                    self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
+                    self._wait_for_correction_settle()
+
+                Rx = (xbpm_val1 - xbpm_val0) / self.d_value
+                Ry = (ybpm_val1 - ybpm_val0) / self.d_value
+            logger.info(
+                "response coefficient (%s): Rx=%.6g, Ry=%.6g",
+                self.local_response_source,
+                Rx,
+                Ry,
+            )
 
             if abs(Rx) < MIN_RESPONSE or abs(Ry) < MIN_RESPONSE:
-                self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
-                self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
                 logger.warning(
                     "%s response is too small for stable one-to-one correction: Rx=%s, Ry=%s",
                     self.bpm_list_target[j],
@@ -589,6 +628,16 @@ class OrbitCorrector:
     def _expected_response_shape(self) -> tuple[int, int]:
         return (2 * self.N_BPM, 2 * self.N_COR)
 
+    def _local_response_coefficients(
+        self,
+        matrix: np.ndarray,
+        target_index: int,
+    ) -> tuple[float, float]:
+        return (
+            float(matrix[target_index, target_index]),
+            float(matrix[self.N_BPM + target_index, self.N_COR + target_index]),
+        )
+
     def _load_valid_response_matrix(self) -> np.ndarray:
         expected_shape = self._expected_response_shape()
         matrix_path = resolve_active_response_matrix(self.app_context)
@@ -599,7 +648,8 @@ class OrbitCorrector:
                 "Response matrix shape mismatch for "
                 f"{self.machine_profile.machine.id}/{self.machine_mode}: "
                 f"{matrix_path} has shape {matrix.shape}, expected {expected_shape}. "
-                "Run Measure Response Matrix for the current machine/backend before using global correction."
+                "Run Measure Response Matrix for the current machine/backend before using "
+                "matrix-based correction."
             )
         return matrix
 
@@ -832,6 +882,7 @@ if __name__ == '__main__':
             global_xcor_list = _optional_csv_arg(sys.argv, 15)
             global_ycor_list = _optional_csv_arg(sys.argv, 16)
             correction_settle_s = _optional_float_arg(sys.argv, 17)
+            local_response_source = sys.argv[18] if len(sys.argv) > 18 else None
             
             corrector = OrbitCorrector(
                 samp_interval, cor_accuracy, samples_perstep,
@@ -845,6 +896,7 @@ if __name__ == '__main__':
                 global_xcor_list=global_xcor_list,
                 global_ycor_list=global_ycor_list,
                 correction_settle_s=correction_settle_s,
+                local_response_source=local_response_source,
             )
             corrector._require_targets()
             corrector.init_BPM_pv()

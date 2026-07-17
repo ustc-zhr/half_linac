@@ -15,6 +15,7 @@ ensure_repo_import_path(__file__)
 import numpy as np
 from epics import caget_many
 from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QDoubleValidator, QIntValidator
 from PyQt5.QtWidgets import (
     QApplication,
     QFrame,
@@ -42,7 +43,7 @@ from gui import Ui_MainWindow
 
 HEADER_ACTION_HEIGHT = 32
 TRACE_COLOR_GOLDEN_RATIO = 0.618033988749895
-MAX_HOLD_TRACES = 3600
+MAX_HOLD_TRACES = 150
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -154,6 +155,8 @@ QLabel#summaryTitle {{
 }}
 
 QLabel#panelTitle {{
+    background-color: transparent;
+    border: none;
     color: {summary_title_fg};
     font-size: 15px;
     font-weight: 700;
@@ -184,6 +187,12 @@ QPushButton:pressed {{
     background-color: {button_pressed_bg};
 }}
 
+QPushButton:checked {{
+    background-color: {metric_active_fg};
+    border-color: {metric_active_fg};
+    color: {window_bg};
+}}
+
 QPushButton:disabled {{
     color: {button_disabled_fg};
     border-color: {button_disabled_border};
@@ -199,6 +208,7 @@ QPushButton#headerButton {{
 QPushButton[compact="true"] {{
     padding: 5px 10px;
     min-height: 28px;
+    max-height: 28px;
     font-size: 11px;
 }}
 
@@ -216,6 +226,12 @@ QLineEdit#refreshIntervalEdit {{
     min-height: {header_action_height}px;
     max-height: {header_action_height}px;
     padding: 0px 10px;
+}}
+
+QLineEdit[compact="true"] {{
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0px 8px;
 }}
 
 QLabel {{
@@ -428,6 +444,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._pv_error = None
         self._x_trace_count = 0
         self._y_trace_count = 0
+        self._bpm_range_start = 1
+        self._bpm_range_end = len(self.bpm_ids)
+        self._bpm_range_is_custom = False
+        self._axis_ranges = {"x": (None, None), "y": (None, None)}
         self._bpm_detail_window = None
         self.refresh_interval_ms = 1000
 
@@ -440,16 +460,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self._refresh_running_orbits)
 
-        self.start_1.clicked.connect(self.start1_btn)
-        self.stop_1.clicked.connect(self.stop1_btn)
-        self.start_2.clicked.connect(self.start2_btn)
-        self.stop_2.clicked.connect(self.stop2_btn)
+        self.x_live_button.clicked.connect(lambda: self._toggle_plane_live("x"))
+        self.y_live_button.clicked.connect(lambda: self._toggle_plane_live("y"))
         self.hold_1.toggled.connect(lambda checked: self._handle_hold_toggled("x", checked))
         self.hold_2.toggled.connect(lambda checked: self._handle_hold_toggled("y", checked))
-        self.bPMSLineEdit.textChanged.connect(self._refresh_status)
-        self.bPMELineEdit.textChanged.connect(self._refresh_status)
-        self.bPMSLineEdit_2.textChanged.connect(self._refresh_status)
-        self.bPMYLineEdit.textChanged.connect(self._refresh_status)
 
         self._prepare_empty_plot(self.graphWidget_1.canvas.axes, self.graphWidget_1.canvas.figure, "Horizontal Orbit")
         self._prepare_empty_plot(self.graphWidget_2.canvas.axes, self.graphWidget_2.canvas.figure, "Vertical Orbit")
@@ -465,69 +479,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _configure_controls(self):
         self.horizontalLayout.setContentsMargins(10, 10, 10, 10)
         self.horizontalLayout.setSpacing(12)
-        self.horizontalLayout_2.setSpacing(12)
-        self.verticalLayout_3.setSpacing(12)
-
-        self.frame_2.setObjectName("controlPanel")
-        self.frame_3.setObjectName("controlPanel")
-        self.frame_2.setMinimumWidth(210)
-        self.frame_3.setMinimumWidth(210)
-        self.frame_2.setMaximumWidth(220)
-        self.frame_3.setMaximumWidth(220)
-        self.frame_2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self.frame_3.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-
-        self.verticalLayout.setContentsMargins(12, 12, 12, 12)
-        self.verticalLayout_2.setContentsMargins(12, 12, 12, 12)
-        self.verticalLayout_7.setSpacing(14)
-        self.verticalLayout_9.setSpacing(14)
-
-        self._insert_panel_title(self.verticalLayout, "Horizontal Controls")
-        self._insert_panel_title(self.verticalLayout_2, "Vertical Controls")
-
-        self.start_1.setText("Run X Orbit")
-        self.stop_1.setText("Stop X Orbit")
-        self.hold_1.setText("Hold Trace")
-        self.start_2.setText("Run Y Orbit")
-        self.stop_2.setText("Stop Y Orbit")
-        self.hold_2.setText("Hold Trace")
-        for button in (self.start_1, self.stop_1, self.start_2, self.stop_2):
-            button.setProperty("compact", True)
-            button.style().unpolish(button)
-            button.style().polish(button)
-            button.update()
-        self.stop_1.setEnabled(False)
-        self.stop_2.setEnabled(False)
-
-        self.label_5.setText("Min (mm)")
-        self.label_6.setText("Max (mm)")
-        self.label_7.setText("Min (mm)")
-        self.label_8.setText("Max (mm)")
-        self.bPMSLabel.setText("BPM Start")
-        self.bPMELabel.setText("BPM End")
-        self.bPMSLabel_2.setText("BPM Start")
-        self.bPMYLabel.setText("BPM End")
-
-        self.QL_cxmin.setPlaceholderText("Auto")
-        self.QL_cxmax.setPlaceholderText("Auto")
-        self.QL_cymin.setPlaceholderText("Auto")
-        self.QL_cymax.setPlaceholderText("Auto")
-        self.bPMSLineEdit.setPlaceholderText("1")
-        self.bPMELineEdit.setPlaceholderText(str(len(self.bpm_ids)))
-        self.bPMSLineEdit_2.setPlaceholderText("1")
-        self.bPMYLineEdit.setPlaceholderText(str(len(self.bpm_ids)))
-
-        for label in (
-            self.label_5,
-            self.label_6,
-            self.label_7,
-            self.label_8,
-            self.bPMSLabel,
-            self.bPMELabel,
-            self.bPMSLabel_2,
-            self.bPMYLabel,
-        ):
-            label.setProperty("role", "field")
 
     def _build_plot_panel(self):
         self.verticalLayout_3.removeWidget(self.frame_2)
@@ -545,19 +496,17 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.page_layout.addWidget(self._build_summary_panel())
 
-        content_grid = QGridLayout()
-        content_grid.setContentsMargins(0, 0, 0, 0)
-        content_grid.setHorizontalSpacing(12)
-        content_grid.setVerticalSpacing(12)
-        content_grid.addWidget(self.frame_2, 0, 0)
-        content_grid.addWidget(self._build_plot_card("Horizontal Orbit", self.graphWidget_1), 0, 1)
-        content_grid.addWidget(self.frame_3, 1, 0)
-        content_grid.addWidget(self._build_plot_card("Vertical Orbit", self.graphWidget_2), 1, 1)
-        content_grid.setColumnStretch(0, 0)
-        content_grid.setColumnStretch(1, 1)
-        content_grid.setRowStretch(0, 1)
-        content_grid.setRowStretch(1, 1)
-        self.page_layout.addLayout(content_grid, 1)
+        self.frame_2.hide()
+        self.frame_3.hide()
+
+        self.page_layout.addWidget(
+            self._build_plot_card("Horizontal Orbit", self.graphWidget_1, "x"),
+            1,
+        )
+        self.page_layout.addWidget(
+            self._build_plot_card("Vertical Orbit", self.graphWidget_2, "y"),
+            1,
+        )
 
     def _build_summary_panel(self):
         panel = QFrame(self.centralwidget)
@@ -577,14 +526,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        for text in (
-            f"Machine: {self.machine_profile.machine.display_name}",
-            f"Backend: {self._format_backend_name()}",
-        ):
-            runtime_label = QLabel(text, panel)
-            runtime_label.setProperty("role", "field")
-            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-            header_layout.addWidget(runtime_label)
+        self.live_button = QPushButton("Pause Live", panel)
+        self.live_button.setObjectName("headerButton")
+        self.live_button.setFixedHeight(HEADER_ACTION_HEIGHT)
+        self.live_button.setToolTip("Pause or resume both orbit plots.")
+        self.live_button.clicked.connect(self._toggle_all_live)
+        header_layout.addWidget(self.live_button)
 
         refresh_label = QLabel("Refresh (s)", panel)
         refresh_label.setProperty("role", "field")
@@ -600,11 +547,47 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.refresh_interval_edit.editingFinished.connect(self._apply_refresh_interval)
         header_layout.addWidget(self.refresh_interval_edit)
 
+        bpm_range_label = QLabel("BPM Range", panel)
+        bpm_range_label.setProperty("role", "field")
+        header_layout.addWidget(bpm_range_label)
+
+        bpm_validator = QIntValidator(1, max(1, len(self.bpm_ids)), panel)
+        self.bpm_start_edit = QLineEdit(panel)
+        self.bpm_start_edit.setProperty("compact", True)
+        self.bpm_start_edit.setFixedWidth(54)
+        self.bpm_start_edit.setPlaceholderText("1")
+        self.bpm_start_edit.setValidator(bpm_validator)
+        self.bpm_start_edit.setToolTip("First BPM index. Empty uses the first BPM.")
+        header_layout.addWidget(self.bpm_start_edit)
+
+        bpm_range_separator = QLabel("to", panel)
+        bpm_range_separator.setProperty("role", "field")
+        header_layout.addWidget(bpm_range_separator)
+
+        self.bpm_end_edit = QLineEdit(panel)
+        self.bpm_end_edit.setProperty("compact", True)
+        self.bpm_end_edit.setFixedWidth(54)
+        self.bpm_end_edit.setPlaceholderText(str(len(self.bpm_ids)))
+        self.bpm_end_edit.setValidator(bpm_validator)
+        self.bpm_end_edit.setToolTip("Last BPM index. Empty uses the last BPM.")
+        header_layout.addWidget(self.bpm_end_edit)
+        for field in (self.bpm_start_edit, self.bpm_end_edit):
+            field.returnPressed.connect(self._apply_shared_bpm_range)
+            field.editingFinished.connect(self._apply_shared_bpm_range)
+
         self.detail_button = QPushButton("BPM Detail", panel)
         self.detail_button.setObjectName("headerButton")
         self.detail_button.setFixedHeight(HEADER_ACTION_HEIGHT)
         self.detail_button.clicked.connect(self.start_bpmvalue_btn)
         header_layout.addWidget(self.detail_button)
+
+        for widget in (
+            self.live_button,
+            self.refresh_interval_edit,
+            self.detail_button,
+        ):
+            widget.setFixedHeight(HEADER_ACTION_HEIGHT + 2)
+            header_layout.setAlignment(widget, Qt.AlignVCenter)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -619,7 +602,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.add_item("backend", "Backend", self._format_backend_name())
         self.status_panel.add_item("x", "X Orbit", "Idle")
         self.status_panel.add_item("y", "Y Orbit", "Idle")
-        self.status_panel.add_item("hold", "Hold", "Off")
+        self.status_panel.add_item("hold", "History", "Off")
         self.status_panel.add_item("refresh", "Refresh", "1.0 s")
         self.status_panel.add_item("view", "BPM View", f"1-{len(self.bpm_ids)} default")
         self.status_panel.finish()
@@ -631,7 +614,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         outer_layout.addWidget(self.status_panel)
         return panel
 
-    def _build_plot_card(self, title_text, plot_widget):
+    def _build_plot_card(self, title_text, plot_widget, plane):
         card = QFrame(self.centralwidget)
         card.setObjectName("plotCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -640,18 +623,92 @@ class myWindow(QMainWindow, Ui_MainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(8)
+
         title = QLabel(title_text, card)
         title.setObjectName("panelTitle")
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+        header_layout.addStretch(1)
+
+        live_button = QPushButton(card)
+        live_button.setProperty("compact", True)
+        live_button.setFixedWidth(78)
+        live_button.setToolTip(f"Pause or resume the {plane.upper()} orbit plot only.")
+        header_layout.addWidget(live_button)
+
+        range_label = QLabel("Y Range (mm)", card)
+        range_label.setProperty("role", "field")
+        header_layout.addWidget(range_label)
+
+        range_validator = QDoubleValidator(card)
+        range_validator.setNotation(QDoubleValidator.ScientificNotation)
+        minimum_edit = QLineEdit(card)
+        minimum_edit.setProperty("compact", True)
+        minimum_edit.setFixedWidth(80)
+        minimum_edit.setPlaceholderText("Min")
+        minimum_edit.setValidator(range_validator)
+        minimum_edit.setToolTip(
+            f"Optional minimum {plane.upper()} orbit Y-axis value in mm."
+        )
+        header_layout.addWidget(minimum_edit)
+
+        range_separator = QLabel("to", card)
+        range_separator.setProperty("role", "field")
+        header_layout.addWidget(range_separator)
+
+        maximum_edit = QLineEdit(card)
+        maximum_edit.setProperty("compact", True)
+        maximum_edit.setFixedWidth(80)
+        maximum_edit.setPlaceholderText("Max")
+        maximum_edit.setValidator(range_validator)
+        maximum_edit.setToolTip(
+            f"Optional maximum {plane.upper()} orbit Y-axis value in mm."
+        )
+        header_layout.addWidget(maximum_edit)
+        for field in (minimum_edit, maximum_edit):
+            field.returnPressed.connect(lambda plane=plane: self._apply_axis_range(plane))
+            field.editingFinished.connect(
+                lambda plane=plane: self._apply_axis_range(plane)
+            )
+
+        auto_button = QPushButton("Auto", card)
+        auto_button.setProperty("compact", True)
+        auto_button.setToolTip(f"Restore automatic {plane.upper()}-plot Y-axis limits.")
+        auto_button.clicked.connect(lambda: self._set_axis_auto(plane))
+        header_layout.addWidget(auto_button)
+
+        overlay_button = QPushButton("Trace History", card)
+        overlay_button.setProperty("compact", True)
+        overlay_button.setCheckable(True)
+        overlay_button.setToolTip(
+            f"Overlay up to the latest {MAX_HOLD_TRACES} {plane.upper()} orbit traces."
+        )
+        header_layout.addWidget(overlay_button)
+
+        clear_button = QPushButton("Clear", card)
+        clear_button.setProperty("compact", True)
+        clear_button.setToolTip(f"Clear accumulated {plane.upper()} orbit traces.")
+        clear_button.clicked.connect(lambda: self._clear_trace_history(plane))
+        header_layout.addWidget(clear_button)
+
+        if plane == "x":
+            self.x_live_button = live_button
+            self.QL_cxmin = minimum_edit
+            self.QL_cxmax = maximum_edit
+            self.hold_1 = overlay_button
+        else:
+            self.y_live_button = live_button
+            self.QL_cymin = minimum_edit
+            self.QL_cymax = maximum_edit
+            self.hold_2 = overlay_button
+
+        layout.addLayout(header_layout)
 
         plot_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(plot_widget)
         return card
-
-    def _insert_panel_title(self, layout, text):
-        title = QLabel(text, self.centralwidget)
-        title.setObjectName("panelTitle")
-        layout.insertWidget(0, title)
 
     def _apply_theme(self):
         palette = self._palette()
@@ -738,7 +795,71 @@ class myWindow(QMainWindow, Ui_MainWindow):
         del checked
         self._reset_trace_sequence(plane)
         self._clear_orbit_plot(plane)
+        if (plane == "x" and self.is_x_running) or (
+            plane == "y" and self.is_y_running
+        ):
+            self._plot_plane(plane, read_pv=False)
         self._refresh_status()
+
+    def _set_axis_auto(self, plane):
+        if plane == "x":
+            fields = (self.QL_cxmin, self.QL_cxmax)
+        else:
+            fields = (self.QL_cymin, self.QL_cymax)
+        for field in fields:
+            field.clear()
+        self._axis_ranges[plane] = (None, None)
+        self._plot_plane(plane, read_pv=False)
+        self._notify(f"{plane.upper()} orbit Y-axis range set to Auto.")
+
+    def _apply_axis_range(self, plane):
+        if plane == "x":
+            minimum_edit, maximum_edit = self.QL_cxmin, self.QL_cxmax
+        else:
+            minimum_edit, maximum_edit = self.QL_cymin, self.QL_cymax
+        minimum_text = minimum_edit.text().strip()
+        maximum_text = maximum_edit.text().strip()
+        minimum = float(minimum_text) if minimum_text else None
+        maximum = float(maximum_text) if maximum_text else None
+        if minimum is not None and maximum is not None and minimum >= maximum:
+            self._notify(
+                f"{plane.upper()} plot minimum must be smaller than maximum."
+            )
+            self._restore_axis_range_fields(plane)
+            return
+        self._axis_ranges[plane] = (minimum, maximum)
+        self._plot_plane(plane, read_pv=False)
+
+    def _restore_axis_range_fields(self, plane):
+        if plane == "x":
+            fields = (self.QL_cxmin, self.QL_cxmax)
+        else:
+            fields = (self.QL_cymin, self.QL_cymax)
+        values = self._axis_ranges[plane]
+        for field in fields:
+            field.blockSignals(True)
+        try:
+            for field, value in zip(fields, values):
+                field.setText("" if value is None else f"{value:g}")
+        finally:
+            for field in fields:
+                field.blockSignals(False)
+
+    def _clear_trace_history(self, plane):
+        self._reset_trace_sequence(plane)
+        self._clear_orbit_plot(plane)
+        if (plane == "x" and self.is_x_running) or (
+            plane == "y" and self.is_y_running
+        ):
+            self._plot_plane(plane, read_pv=False)
+        self._notify(f"{plane.upper()} orbit trace history cleared.")
+        self._refresh_status()
+
+    def _plot_plane(self, plane, *, read_pv):
+        if plane == "x":
+            self.plotorbit_x(read_pv=read_pv)
+        else:
+            self.plotorbit_y(read_pv=read_pv)
 
     def _reset_trace_sequence(self, plane):
         if plane == "x":
@@ -796,9 +917,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         hold_states = []
         if self.hold_1.isChecked():
-            hold_states.append(f"X {self._x_trace_count}")
+            hold_states.append(f"X {min(self._x_trace_count, MAX_HOLD_TRACES)}")
         if self.hold_2.isChecked():
-            hold_states.append(f"Y {self._y_trace_count}")
+            hold_states.append(f"Y {min(self._y_trace_count, MAX_HOLD_TRACES)}")
         hold_text = " + ".join(hold_states) if hold_states else "Off"
         hold_tone = "warning" if hold_states else "subtle"
         self.status_panel.set_item("hold", hold_text, hold_tone)
@@ -808,6 +929,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.status_panel.set_item("view", "Offline shell", "warning")
         else:
             self.status_panel.set_item("view", self._format_bpm_view(), "warning" if self._has_custom_view() else "subtle")
+        self._update_live_controls()
 
     def _start_refresh_timer(self):
         if self.is_x_running or self.is_y_running:
@@ -816,10 +938,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _start_default_refresh(self):
         self.is_x_running = True
         self.is_y_running = True
-        self.start_1.setEnabled(False)
-        self.stop_1.setEnabled(True)
-        self.start_2.setEnabled(False)
-        self.stop_2.setEnabled(True)
+        self._update_live_controls()
         self._start_refresh_timer()
         self._refresh_running_orbits()
         self._notify("Orbit refresh started.")
@@ -836,29 +955,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.plotorbit_y(read_pv=False)
 
     def _has_custom_view(self):
-        return any(
-            field.text().strip()
-            for field in (
-                self.bPMSLineEdit,
-                self.bPMELineEdit,
-                self.bPMSLineEdit_2,
-                self.bPMYLineEdit,
-            )
-        )
+        return self._bpm_range_is_custom
 
     def _format_bpm_view(self):
-        ranges = []
-        x_start = self.bPMSLineEdit.text().strip() or "1"
-        x_end = self.bPMELineEdit.text().strip() or str(len(self.bpm_ids))
-        y_start = self.bPMSLineEdit_2.text().strip() or "1"
-        y_end = self.bPMYLineEdit.text().strip() or str(len(self.bpm_ids))
-
-        if self.bPMSLineEdit.text().strip() or self.bPMELineEdit.text().strip():
-            ranges.append(f"X {x_start}-{x_end}")
-        if self.bPMSLineEdit_2.text().strip() or self.bPMYLineEdit.text().strip():
-            ranges.append(f"Y {y_start}-{y_end}")
-
-        return " / ".join(ranges) if ranges else f"1-{len(self.bpm_ids)} default"
+        suffix = " custom" if self._has_custom_view() else " default"
+        return f"{self._bpm_range_start}-{self._bpm_range_end}{suffix}"
 
     def init_pv(self):
         try:
@@ -875,6 +976,73 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 self._pv_error = error_text
                 self._notify("PV connection unavailable. Orbit Display is in offline shell mode.")
 
+    def _update_live_controls(self):
+        if not hasattr(self, "live_button"):
+            return
+        if self.is_x_running or self.is_y_running:
+            self.live_button.setText("Pause Live")
+        else:
+            self.live_button.setText("Resume Live")
+        self.x_live_button.setText("Pause X" if self.is_x_running else "Resume X")
+        self.y_live_button.setText("Pause Y" if self.is_y_running else "Resume Y")
+
+    def _toggle_all_live(self):
+        if self.is_x_running or self.is_y_running:
+            self.is_x_running = False
+            self.is_y_running = False
+            self.refresh_timer.stop()
+            self._notify("Orbit refresh paused for both planes.")
+        else:
+            self._apply_refresh_interval()
+            self.is_x_running = True
+            self.is_y_running = True
+            self._start_refresh_timer()
+            self._refresh_running_orbits()
+            self._notify("Orbit refresh resumed for both planes.")
+        self._update_live_controls()
+        self._refresh_status()
+
+    def _toggle_plane_live(self, plane):
+        if plane == "x":
+            if self.is_x_running:
+                self.stop1_btn()
+            else:
+                self.start1_btn()
+        elif self.is_y_running:
+            self.stop2_btn()
+        else:
+            self.start2_btn()
+
+    def _apply_shared_bpm_range(self):
+        start_text = self.bpm_start_edit.text().strip()
+        end_text = self.bpm_end_edit.text().strip()
+        start = int(start_text) if start_text else 1
+        end = int(end_text) if end_text else len(self.bpm_ids)
+        if start >= end:
+            self._notify("BPM range start must be smaller than end.")
+            self._restore_bpm_range_fields()
+            return
+        self._bpm_range_start = start
+        self._bpm_range_end = end
+        self._bpm_range_is_custom = bool(start_text or end_text)
+        self._refresh_status()
+        if self.is_x_running or self.is_y_running:
+            self._refresh_running_orbits()
+
+    def _restore_bpm_range_fields(self):
+        for field in (self.bpm_start_edit, self.bpm_end_edit):
+            field.blockSignals(True)
+        try:
+            if self._bpm_range_is_custom:
+                self.bpm_start_edit.setText(str(self._bpm_range_start))
+                self.bpm_end_edit.setText(str(self._bpm_range_end))
+            else:
+                self.bpm_start_edit.clear()
+                self.bpm_end_edit.clear()
+        finally:
+            for field in (self.bpm_start_edit, self.bpm_end_edit):
+                field.blockSignals(False)
+
     def start1_btn(self):
         if self.hold_1.isChecked():
             self._reset_trace_sequence("x")
@@ -882,16 +1050,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._apply_refresh_interval()
         self.is_x_running = True
         self._start_refresh_timer()
-        self.start_1.setEnabled(False)
-        self.stop_1.setEnabled(True)
+        self._update_live_controls()
         self._notify("Horizontal orbit refresh started.")
         self._refresh_status()
 
     def stop1_btn(self):
         self.is_x_running = False
         self._stop_refresh_timer_if_idle()
-        self.start_1.setEnabled(True)
-        self.stop_1.setEnabled(False)
+        self._update_live_controls()
         self._notify("Horizontal orbit refresh stopped.")
         self._refresh_status()
 
@@ -902,16 +1068,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._apply_refresh_interval()
         self.is_y_running = True
         self._start_refresh_timer()
-        self.start_2.setEnabled(False)
-        self.stop_2.setEnabled(True)
+        self._update_live_controls()
         self._notify("Vertical orbit refresh started.")
         self._refresh_status()
 
     def stop2_btn(self):
         self.is_y_running = False
         self._stop_refresh_timer_if_idle()
-        self.start_2.setEnabled(True)
-        self.stop_2.setEnabled(False)
+        self._update_live_controls()
         self._notify("Vertical orbit refresh stopped.")
         self._refresh_status()
 
@@ -956,57 +1120,20 @@ class myWindow(QMainWindow, Ui_MainWindow):
         fig.tight_layout()
         fig.canvas.draw()
 
-    def _read_float_field(self, field, label):
-        text = field.text().strip()
-        if not text:
-            return None
-        try:
-            return float(text)
-        except ValueError:
-            self._notify(f"{label} must be numeric.")
-            return None
-
-    def _read_bpm_limit_field(self, field, label):
-        text = field.text().strip()
-        if not text:
-            return None
-        try:
-            value = int(text)
-        except ValueError:
-            self._notify(f"{label} must be an integer BPM index.")
-            return None
-        if value < 1 or value > len(self.bpm_ids):
-            self._notify(f"{label} must be between 1 and {len(self.bpm_ids)}.")
-            return None
-        return value
-
     def _apply_plot_limits(self, ax, *, plane):
-        if plane == "x":
-            y_min = self._read_float_field(self.QL_cxmin, "X plot min")
-            y_max = self._read_float_field(self.QL_cxmax, "X plot max")
-            bpm_start = self._read_bpm_limit_field(self.bPMSLineEdit, "X BPM start")
-            bpm_end = self._read_bpm_limit_field(self.bPMELineEdit, "X BPM end")
-        else:
-            y_min = self._read_float_field(self.QL_cymin, "Y plot min")
-            y_max = self._read_float_field(self.QL_cymax, "Y plot max")
-            bpm_start = self._read_bpm_limit_field(self.bPMSLineEdit_2, "Y BPM start")
-            bpm_end = self._read_bpm_limit_field(self.bPMYLineEdit, "Y BPM end")
+        y_min, y_max = self._axis_ranges[plane]
+        bpm_start = self._bpm_range_start
+        bpm_end = self._bpm_range_end
 
-        if y_min is not None and y_max is not None and y_min >= y_max:
-            self._notify(f"{plane.upper()} plot min must be smaller than plot max.")
-        else:
-            if y_min is not None:
-                ax.set_ylim(bottom=y_min)
-            if y_max is not None:
-                ax.set_ylim(top=y_max)
+        ax.set_autoscaley_on(True)
+        ax.relim()
+        ax.autoscale_view(scalex=False, scaley=True)
+        if y_min is not None:
+            ax.set_ylim(bottom=y_min)
+        if y_max is not None:
+            ax.set_ylim(top=y_max)
 
-        if bpm_start is not None and bpm_end is not None and bpm_start >= bpm_end:
-            self._notify(f"{plane.upper()} BPM start must be smaller than BPM end.")
-        else:
-            if bpm_start is not None:
-                ax.set_xlim(left=bpm_start)
-            if bpm_end is not None:
-                ax.set_xlim(right=bpm_end)
+        ax.set_xlim(left=bpm_start, right=bpm_end)
 
     @staticmethod
     def _trim_hold_traces(ax):
@@ -1037,8 +1164,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._refresh_status()
             return
 
-        self._apply_plot_limits(ax, plane="x")
-
         x = np.linspace(1, len(pvl_val), len(pvl_val))
         trace_color = self._next_trace_color("x") if hold_trace else palette["orbit_x"]
         ax.plot(
@@ -1051,6 +1176,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             markersize=4,
             linewidth=1.5,
         )
+        self._apply_plot_limits(ax, plane="x")
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Cx (mm)", fontweight="bold")
         if hold_trace:
@@ -1082,8 +1208,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._refresh_status()
             return
 
-        self._apply_plot_limits(ax, plane="y")
-
         x = np.linspace(1, len(pvl_val), len(pvl_val))
         trace_color = self._next_trace_color("y") if hold_trace else palette["orbit_y"]
         ax.plot(
@@ -1096,6 +1220,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             markersize=4,
             linewidth=1.5,
         )
+        self._apply_plot_limits(ax, plane="y")
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Cy (mm)", fontweight="bold")
         if hold_trace:

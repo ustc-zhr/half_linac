@@ -554,6 +554,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.load_response_matrix_button.clicked.connect(self.load_response_matrix)
 
         self.comboBox.currentIndexChanged.connect(self._on_correction_method_changed)
+        self.localResponseSourceComboBox.currentIndexChanged.connect(
+            self._on_local_response_source_changed
+        )
         self.tabWidget.currentChanged.connect(self._refresh_status)
         for cb in self.all_checkboxes:
             cb.stateChanged.connect(self._refresh_status)
@@ -562,6 +565,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         # initial parameters
         self._apply_default_method()
+        self._apply_default_local_response_source()
         self.samplingIntervalSLineEdit.setText(f"{float(self.runtime_defaults['sampling_interval_s']):g}")
         self.correctionSettleSLineEdit.setText(
             f"{float(self.orbit_runtime['correction_settle_s']):g}"
@@ -910,6 +914,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctionGainLabel, self.correctionGainLineEdit = self._make_parameter_field(card)
         self.correctionMaxStepLabel, self.correctionMaxStepLineEdit = self._make_parameter_field(card)
         self.responseKickLabel, self.responseKickLineEdit = self._make_parameter_field(card)
+        self.localResponseSourceLabel = QLabel(card)
+        self.localResponseSourceComboBox = QComboBox(card)
+        self.localResponseSourceComboBox.addItem("Measure Live", "measure_live")
+        self.localResponseSourceComboBox.addItem("Active Matrix", "active_matrix")
         self.activeMatrixLabel, self.activeMatrixValueLabel = self._make_parameter_display(card)
         self.matrixSetupLabel = QLabel(card)
         self.openResponseMatrixTabButton = QPushButton(card)
@@ -950,6 +958,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "One-to-One Correction",
             (
                 (self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit, False),
+                (self.localResponseSourceLabel, self.localResponseSourceComboBox, False),
                 (self.responseKickLabel, self.responseKickLineEdit, False),
             ),
             card,
@@ -1172,6 +1181,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctionGainLabel.setProperty("role", "field")
         self.correctionMaxStepLabel.setProperty("role", "field")
         self.responseKickLabel.setProperty("role", "field")
+        self.localResponseSourceLabel.setProperty("role", "field")
         self.matrixResponseKickLabel.setProperty("role", "field")
         self.matrixWaitSLabel.setProperty("role", "field")
         self.matrixSampleIntervalSLabel.setProperty("role", "field")
@@ -1188,7 +1198,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         limit_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         self.label_6.setText("Method")
         self.samplingIntervalSLabel.setText("Sampling Interval (s)")
-        self.correctionSettleSLabel.setText("Correction Settle (s)")
+        self.correctionSettleSLabel.setText("Settle Time (s)")
         self.correctorAccuracyUmLabel.setText("Accuracy (um)")
         self.sampPerStepLabel.setText("Samples / Step")
         self.correctorLimitLabel.setText(f"Corrector Limit ({limit_unit})")
@@ -1197,6 +1207,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctionGainLabel.setText("Correction Gain")
         self.correctionMaxStepLabel.setText("Max Step (%)")
         self.responseKickLabel.setText(f"Local Response Kick ({limit_unit})")
+        self.localResponseSourceLabel.setText("Local Response Source")
+        self.localResponseSourceComboBox.setToolTip(
+            "Measure Live applies a local test kick; Active Matrix uses the paired "
+            "same-plane response coefficients from the active response matrix."
+        )
         self.matrixResponseKickLabel.setText(f"Kick Step ({limit_unit})")
         self.matrixWaitSLabel.setText("Settle Time (s)")
         self.matrixSampleIntervalSLabel.setText("Sample Interval (s)")
@@ -1340,6 +1355,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _selected_correction_method(self):
         return self.comboBox.currentText().strip().lower()
 
+    def _selected_local_response_source(self):
+        value = self.localResponseSourceComboBox.currentData()
+        return str(value or "measure_live").strip().lower()
+
     def _apply_default_method(self):
         method = str(self.runtime_defaults.get("method", "")).strip()
         if not method:
@@ -1348,8 +1367,20 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if index >= 0:
             self.comboBox.setCurrentIndex(index)
 
+    def _apply_default_local_response_source(self):
+        source = str(
+            self.runtime_defaults.get("local_response_source", "measure_live")
+        ).strip().lower()
+        index = self.localResponseSourceComboBox.findData(source)
+        if index >= 0:
+            self.localResponseSourceComboBox.setCurrentIndex(index)
+
     def _on_correction_method_changed(self, *_):
         self._update_method_parameter_state()
+        self._refresh_status()
+
+    def _on_local_response_source_changed(self, *_):
+        self._update_local_response_source_state()
         self._refresh_status()
 
     def _update_method_parameter_state(self):
@@ -1364,7 +1395,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.globalCorrectionGroup.setEnabled(show_global)
         self.oneToOneCorrectionGroup.setVisible(show_one_to_one)
         self.oneToOneCorrectionGroup.setEnabled(show_one_to_one)
+        self._update_local_response_source_state()
         self._update_global_corrector_edit_state(method == "global")
+
+    def _update_local_response_source_state(self):
+        if not hasattr(self, "responseKickLineEdit"):
+            return
+        measure_live = self._selected_local_response_source() == "measure_live"
+        self.responseKickLabel.setEnabled(measure_live)
+        self.responseKickLineEdit.setEnabled(measure_live)
 
     def _update_global_corrector_edit_state(self, enabled):
         if hasattr(self, "editCorrectorsButton"):
@@ -1668,10 +1707,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _correction_parameter_args(self):
         method = self._selected_correction_method()
+        local_response_source = self._selected_local_response_source()
         corrector_limit = self._corrector_limit_value()
         correction_settle_s = self._parse_nonnegative_float(
             self.correctionSettleSLineEdit,
-            "Correction Settle",
+            "Settle Time",
         )
         correction_gain, correction_max_step_fraction = self._correction_step_parameter_values()
         global_xcors = []
@@ -1692,7 +1732,24 @@ class myWindow(QMainWindow, Ui_MainWindow):
         elif method == "one-to-one":
             global_max_iter = int(self.runtime_defaults["global_max_iter"])
             one_to_one_max_iter = self._one_to_one_parameter_values()
-            response_kick = self._local_response_kick_value(corrector_limit)
+            if local_response_source == "active_matrix":
+                try:
+                    active_matrix = get_active_response_matrix_record(self.app_context)
+                except Exception as exc:
+                    raise ValueError(f"Active response matrix is invalid: {exc}") from exc
+                if active_matrix is None:
+                    raise ValueError(
+                        "Active Matrix local response requires an active response matrix "
+                        "for the current machine/backend."
+                    )
+                response_kick = min(
+                    corrector_limit * float(
+                        self.runtime_defaults["local_response_kick_fraction"]
+                    ),
+                    corrector_limit,
+                )
+            else:
+                response_kick = self._local_response_kick_value(corrector_limit)
         else:
             global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
             one_to_one_max_iter = self._one_to_one_parameter_values()
@@ -1708,6 +1765,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             ",".join(global_xcors),
             ",".join(global_ycors),
             f"{correction_settle_s:.12g}",
+            local_response_source,
         ]
         
     def measure_res(self): #measure response matrix

@@ -1155,6 +1155,10 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(irfel_vm_orbit_runtime["correction_settle_s"], 2.0)
         self.assertEqual(irfel_real_orbit_runtime["correction_settle_s"], 1.0)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["method"], "global")
+        self.assertEqual(
+            irfel_vm_orbit_runtime["runtime_defaults"]["local_response_source"],
+            "measure_live",
+        )
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["sampling_interval_s"], 2.0)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["accuracy_um"], 10.0)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["samples_per_step"], 1)
@@ -1443,6 +1447,50 @@ class MachineProfileTests(unittest.TestCase):
 
         self.assertEqual([item.args[0] for item in sleep.call_args_list], [1.0, 0.2, 0.2])
         np.testing.assert_allclose(values, [-3e-3, 8e-3])
+
+    def test_orbit_one_to_one_can_use_active_matrix_local_response(self):
+        from half_linac.src.apps.orbit_correct import correct as correct_module
+
+        with patch.dict(
+            os.environ,
+            {
+                "HALF_LINAC_MACHINE_ID": "irfel",
+                "HALF_LINAC_CONTROL_BACKEND": "vm",
+            },
+        ):
+            corrector = correct_module.OrbitCorrector(
+                sample_interval=0.0,
+                cor_accuracy=1e-5,
+                samples_perstep=1,
+                target_BPMlist=["BPM07"],
+                target_BPMx_values=[0.0],
+                target_BPMy_values=[0.0],
+                local_response_source="active_matrix",
+            )
+            corrector.pvBPMx = ["bpm-x"]
+            corrector.pvBPMy = ["bpm-y"]
+            corrector.pvCORx = ["cor-x"]
+            corrector.pvCORy = ["cor-y"]
+            matrix = np.eye(10)
+
+            with (
+                patch.object(corrector, "_load_valid_response_matrix", return_value=matrix),
+                patch.object(
+                    corrector,
+                    "_get_avg_readings",
+                    side_effect=[
+                        [1e-3, 1e-3, 0.0, 0.0],
+                        [0.0, 0.0],
+                        [0.0, 0.0],
+                    ],
+                ),
+                patch.object(corrector, "_write_pv") as write_pv,
+            ):
+                succeeded = corrector.correct_one_to_one()
+
+        self.assertTrue(succeeded)
+        write_pv.assert_not_called()
+        self.assertEqual(corrector._local_response_coefficients(matrix, 1), (1.0, 1.0))
 
     def test_orbit_global_correction_can_limit_corrector_columns(self):
         from half_linac.src.apps.orbit_correct import profile_runtime as orbit_runtime

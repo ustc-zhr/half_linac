@@ -24,8 +24,10 @@ ORBIT_RUNTIME_ROOT = APP_DIR / "runtime"
 DEFAULT_RESPONSE_WAIT_S = 8.0
 DEFAULT_CORRECTOR_UPPERLIMIT_RAD = 0.001
 DEFAULT_BPM_POSITION_SCALE_TO_MM = 1000.0
+LOCAL_RESPONSE_SOURCES = {"measure_live", "active_matrix"}
 DEFAULT_RUNTIME_DEFAULTS: dict[str, Any] = {
     "method": "one-to-one",
+    "local_response_source": "measure_live",
     "sampling_interval_s": 6.0,
     "accuracy_um": 10.0,
     "samples_per_step": 2,
@@ -329,6 +331,12 @@ def _select_runtime_defaults(workflow: Mapping[str, Any]) -> dict[str, Any]:
         if key in raw_defaults:
             selected[key] = raw_defaults[key]
     selected["method"] = str(selected["method"]).strip() or DEFAULT_RUNTIME_DEFAULTS["method"]
+    selected["local_response_source"] = str(selected["local_response_source"]).strip().lower()
+    if selected["local_response_source"] not in LOCAL_RESPONSE_SOURCES:
+        raise ValueError(
+            "local_response_source must be one of: "
+            + ", ".join(sorted(LOCAL_RESPONSE_SOURCES))
+        )
     selected["sampling_interval_s"] = float(selected["sampling_interval_s"])
     selected["accuracy_um"] = float(selected["accuracy_um"])
     selected["samples_per_step"] = int(selected["samples_per_step"])

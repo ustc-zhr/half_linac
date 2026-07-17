@@ -173,6 +173,8 @@ QLabel#summaryTitle {{
 }}
 
 QLabel#panelTitle {{
+    background-color: transparent;
+    border: none;
     color: {summary_title_fg};
     font-size: 15px;
     font-weight: 700;
@@ -579,8 +581,8 @@ class myWindow(QWidget, Ui_Form):
         self.control_grid.setVerticalSpacing(10)
 
         self.acquisition_card = self._build_control_card("Acquisition")
-        self.view_card = self._build_control_card("View Controls")
-        self.profile_card = self._build_control_card("Profile Stats")
+        self.view_card = self._build_control_card("Display Controls")
+        self.profile_card = self._build_control_card("Profile Analysis")
 
         self._populate_acquisition_card()
         self._populate_view_card()
@@ -612,8 +614,7 @@ class myWindow(QWidget, Ui_Form):
         self.label_10.setText("Flag")
         self.label.setText("Exposure (s)")
         self.label_9.setText("Refresh (s)")
-        self.label_2.setText("Colormap")
-        for label in (self.label_10, self.label, self.label_9, self.label_2):
+        for label in (self.label_10, self.label, self.label_9):
             label.setProperty("role", "field")
 
         grid.addWidget(self.label_10, 0, 0)
@@ -622,8 +623,6 @@ class myWindow(QWidget, Ui_Form):
         grid.addWidget(self.lineEdit, 1, 1)
         grid.addWidget(self.label_9, 2, 0)
         grid.addWidget(self.lineEdit_9, 2, 1)
-        grid.addWidget(self.label_2, 3, 0)
-        grid.addWidget(self.comboBox_2, 3, 1)
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
 
@@ -657,12 +656,38 @@ class myWindow(QWidget, Ui_Form):
 
         self.label_3.setText("vmin")
         self.label_4.setText("vmax")
-        for label in (self.label_3, self.label_4):
+        self.label_2.setText("Colormap")
+        for label in (self.label_2, self.label_3, self.label_4):
             label.setProperty("role", "field")
 
-        method_label = QLabel("Profile method", self.view_card)
+        grid.addWidget(self.label_2, 0, 0)
+        grid.addWidget(self.comboBox_2, 0, 1)
+        grid.addWidget(self.label_3, 1, 0)
+        grid.addWidget(self.lineEdit_4, 1, 1)
+        grid.addWidget(self.label_4, 2, 0)
+        grid.addWidget(self.lineEdit_3, 2, 1)
+        grid.setColumnStretch(1, 1)
+        layout.addLayout(grid)
+
+        self.reset_view_button = QPushButton("Fit to Image", self.view_card)
+        self.reset_view_button.setProperty("compact", True)
+        self.reset_view_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.reset_view_button.setToolTip(
+            "Restore the full physical image extent for the selected flag."
+        )
+        self._refresh_widget_style(self.reset_view_button)
+        layout.addWidget(self.reset_view_button)
+
+    def _populate_profile_card(self):
+        layout = self.profile_card.layout()
+
+        self.label_5.hide()
+        self.label_8.hide()
+        self.textEdit.hide()
+
+        method_label = QLabel("Profile method", self.profile_card)
         method_label.setProperty("role", "field")
-        self.profile_method_combo = QComboBox(self.view_card)
+        self.profile_method_combo = QComboBox(self.profile_card)
         self.profile_method_combo.setObjectName("profileMethodComboBox")
         self.profile_method_combo.addItems(("Gaussian fit", "RMS moments"))
         configured_method = str(
@@ -679,54 +704,37 @@ class myWindow(QWidget, Ui_Form):
             "intensity-weighted second moment and is more sensitive to background."
         )
 
-        grid.addWidget(self.label_3, 0, 0)
-        grid.addWidget(self.lineEdit_4, 0, 1)
-        grid.addWidget(self.label_4, 1, 0)
-        grid.addWidget(self.lineEdit_3, 1, 1)
-        grid.addWidget(method_label, 2, 0)
-        grid.addWidget(self.profile_method_combo, 2, 1)
-        grid.setColumnStretch(1, 1)
-        layout.addLayout(grid)
-
         self.background_subtract_checkbox = QCheckBox(
             "Subtract background",
-            self.view_card,
+            self.profile_card,
         )
         self.background_subtract_checkbox.setObjectName("subtractBackgroundCheckBox")
         self.background_subtract_checkbox.setToolTip(
             "Subtract the current flag's saved background before display and profile analysis."
         )
-        layout.addWidget(self.background_subtract_checkbox)
 
-        self.background_status_label = QLabel("Background: None", self.view_card)
+        self.background_status_label = QLabel("Background: None", self.profile_card)
         self.background_status_label.setProperty("role", "field")
         self.background_status_label.setWordWrap(True)
-        layout.addWidget(self.background_status_label)
 
-        self.background_button = QPushButton("Background...", self.view_card)
+        self.background_button = QPushButton("Background...", self.profile_card)
         self.background_button.setObjectName("backgroundButton")
         self.background_button.setProperty("compact", True)
         self.background_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._refresh_widget_style(self.background_button)
 
-        self.reset_view_button = QPushButton("Reset View", self.view_card)
-        self.reset_view_button.setProperty("compact", True)
-        self.reset_view_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._refresh_widget_style(self.reset_view_button)
+        analysis_grid = QGridLayout()
+        analysis_grid.setHorizontalSpacing(12)
+        analysis_grid.setVerticalSpacing(8)
+        analysis_grid.addWidget(method_label, 0, 0)
+        analysis_grid.addWidget(self.profile_method_combo, 0, 1)
+        analysis_grid.addWidget(self.background_subtract_checkbox, 0, 2)
+        analysis_grid.addWidget(self.background_status_label, 0, 3)
+        analysis_grid.addWidget(self.background_button, 0, 4)
+        analysis_grid.setColumnStretch(1, 1)
+        analysis_grid.setColumnStretch(3, 1)
+        layout.addLayout(analysis_grid)
 
-        action_row = QHBoxLayout()
-        action_row.setContentsMargins(0, 0, 0, 0)
-        action_row.setSpacing(10)
-        action_row.addWidget(self.background_button)
-        action_row.addWidget(self.reset_view_button)
-        layout.addLayout(action_row)
-
-    def _populate_profile_card(self):
-        layout = self.profile_card.layout()
-
-        self.label_5.hide()
-        self.label_8.hide()
-        self.textEdit.hide()
         self.label_6.setText("Sigma X (mm)")
         self.label_7.setText("Sigma Y (mm)")
         for label in (self.label_6, self.label_7):

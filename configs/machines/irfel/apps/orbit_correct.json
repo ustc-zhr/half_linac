@@ -55,6 +55,7 @@
   },
   "runtime_defaults": {
     "method": "global",
+    "local_response_source": "measure_live",
     "sampling_interval_s": 2.0,
     "accuracy_um": 10.0,
     "samples_per_step": 1,
