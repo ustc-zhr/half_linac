@@ -51,6 +51,7 @@ from half_linac.src.shared.beam_diagnostics import (
 )
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
+    RuntimeContextWidget,
     get_workflow,
     list_elements,
     load_app_context,
@@ -522,14 +523,14 @@ class myWindow(QWidget, Ui_Form):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        for text in (
-            f"Machine: {self.machine_profile.machine.display_name}",
-            f"Backend: {self.control_backend.upper()}",
-        ):
-            runtime_label = QLabel(text, panel)
-            runtime_label.setProperty("role", "field")
-            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-            header_layout.addWidget(runtime_label)
+        header_layout.addWidget(
+            RuntimeContextWidget(
+                machine_id=self.machine_profile.machine.id,
+                machine_display_name=self.machine_profile.machine.display_name,
+                control_backend=self.control_backend,
+                parent=panel,
+            )
+        )
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -540,8 +541,6 @@ class myWindow(QWidget, Ui_Form):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = BeamStatusStrip(panel)
-        self.status_panel.add_item("machine", "MACHINE", self.machine_profile.machine.id)
-        self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
         self.status_panel.add_item("flag", "FLAG", self.tmppv or "--")
         self.status_panel.add_item("acq", "ACQ", "Running")
         self.status_panel.add_item("profile", "PROFILE", "Waiting")
@@ -1244,12 +1243,6 @@ class myWindow(QWidget, Ui_Form):
         self._refresh_status()
 
     def _refresh_status(self):
-        self.status_panel.set_item("machine", self.machine_profile.machine.id, "subtle")
-        self.status_panel.set_item(
-            "backend",
-            self._current_mode().upper(),
-            "warning" if self._current_mode() == "real" else "success",
-        )
         self.status_panel.set_item(
             "flag",
             self.flag_selec.currentText() or "--",

@@ -40,6 +40,7 @@ from OrbCorgui import Ui_MainWindow
 
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
+    RuntimeContextWidget,
     load_app_context,
     require_workflow_write_allowed,
 )
@@ -736,14 +737,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        for text in (
-            f"Machine: {self.machine_profile.machine.display_name}",
-            f"Backend: {self._format_header_backend_name()}",
-        ):
-            runtime_label = QLabel(text, panel)
-            runtime_label.setProperty("role", "field")
-            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-            header_layout.addWidget(runtime_label)
+        header_layout.addWidget(
+            RuntimeContextWidget(
+                machine_id=self.machine_profile.machine.id,
+                machine_display_name=self.machine_profile.machine.display_name,
+                control_backend=self.app_context.control_backend.name,
+                parent=panel,
+            )
+        )
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -756,17 +757,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.add_item("tab", "Tab", "Run Correct")
         self.status_panel.add_item("method", "Method", self.comboBox.currentText())
         self.status_panel.add_item("targets", "Targets", "0/0")
-        self.status_panel.add_item("backend", "Backend", self.app_context.control_backend.name)
         self.status_panel.add_item("process", "Process", "Idle")
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
 
         self.verticalLayout_2.insertWidget(0, panel)
-
-    def _format_header_backend_name(self):
-        backend_name = self.app_context.control_backend.name
-        return "VM" if backend_name == "vm" else backend_name
 
     def _wrap_main_sections(self):
         self.horizontalLayout_9.removeItem(self.verticalLayout_4)
@@ -1449,9 +1445,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.set_item("tab", self.tabWidget.tabText(self.tabWidget.currentIndex()), "subtle")
         self.status_panel.set_item("method", self.comboBox.currentText(), "subtle")
         self.status_panel.set_item("targets", f"{selected}/{total}", "success" if selected else "warning")
-        backend_name = self.app_context.control_backend.name
-        backend_tone = "warning" if backend_name == "real" else "success"
-        self.status_panel.set_item("backend", backend_name, backend_tone)
         self.status_panel.set_item("process", process_text, process_tone)
         self._refresh_response_progress(response_running)
         if hasattr(self, "stop_response_button"):

@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (
 )
 
 from half_linac.src.shared.machine_profile import (
+    RuntimeContextWidget,
     get_workflow,
     list_elements,
     load_app_context,
@@ -526,6 +527,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
+        header_layout.addWidget(
+            RuntimeContextWidget(
+                machine_id=self.machine_profile.machine.id,
+                machine_display_name=self.machine_profile.machine.display_name,
+                control_backend=self.control_backend,
+                parent=panel,
+            )
+        )
+
         self.live_button = QPushButton("Pause Live", panel)
         self.live_button.setObjectName("headerButton")
         self.live_button.setFixedHeight(HEADER_ACTION_HEIGHT)
@@ -598,8 +608,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = OrbitStatusStrip(panel)
-        self.status_panel.add_item("machine", "Machine", self.machine_profile.machine.id)
-        self.status_panel.add_item("backend", "Backend", self._format_backend_name())
         self.status_panel.add_item("x", "X Orbit", "Idle")
         self.status_panel.add_item("y", "Y Orbit", "Idle")
         self.status_panel.add_item("hold", "History", "Off")
@@ -743,9 +751,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _notify(self, message):
         self.statusBar().showMessage(message, 5000)
-
-    def _format_backend_name(self):
-        return self.control_backend.upper()
 
     def _apply_refresh_interval(self):
         if not hasattr(self, "refresh_interval_edit"):
@@ -906,12 +911,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         )
 
     def _refresh_status(self):
-        self.status_panel.set_item("machine", self.machine_profile.machine.id, "subtle")
-        self.status_panel.set_item(
-            "backend",
-            self._format_backend_name(),
-            "warning" if self.control_backend == "real" else "success",
-        )
         self.status_panel.set_item("x", "Running" if self.is_x_running else "Idle", "success" if self.is_x_running else "subtle")
         self.status_panel.set_item("y", "Running" if self.is_y_running else "Idle", "success" if self.is_y_running else "subtle")
 

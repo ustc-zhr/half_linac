@@ -45,6 +45,7 @@ from PyQt5.QtWidgets import (
 from gui import Ui_Form
 
 from half_linac.src.shared.machine_profile import (
+    RuntimeContextWidget,
     build_model_backend,
     build_model_snapshot,
     describe_app_model_support,
@@ -56,9 +57,6 @@ from half_linac.src.shared.machine_profile import (
     require_workflow_write_allowed,
     resolve_channel,
     resolve_corrector_write_channel,
-)
-from half_linac.src.shared.machine_profile.runtime_selector import (
-    default_control_backend_choices,
 )
 from half_linac.src.apps.bba.profile_runtime import (
     new_bba_scan_archive_dir,
@@ -612,7 +610,6 @@ class myWindow(QWidget, Ui_Form):
         self.comboBox_5.currentIndexChanged.connect(self._refresh_standard_correctors)
         self.comboBox_10.currentIndexChanged.connect(self._refresh_status)
         self.comboBox_10.currentIndexChanged.connect(self._refresh_bba2_correctors)
-        self.comboBox_11.currentIndexChanged.connect(self._refresh_status)
 
     def _build_shell(self):
         self.gridLayout.setContentsMargins(10, 10, 10, 10)
@@ -659,22 +656,14 @@ class myWindow(QWidget, Ui_Form):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        runtime_state = QHBoxLayout()
-        runtime_state.setContentsMargins(0, 0, 0, 0)
-        runtime_state.setSpacing(6)
-        runtime_state.addWidget(
-            self._make_runtime_state_label(
-                f"Machine: {self.machine_profile.machine.display_name}",
-                panel,
+        header_layout.addWidget(
+            RuntimeContextWidget(
+                machine_id=self.machine_profile.machine.id,
+                machine_display_name=self.machine_profile.machine.display_name,
+                control_backend=self.app_context.control_backend.name,
+                parent=panel,
             )
         )
-        runtime_state.addWidget(
-            self._make_runtime_state_label(
-                f"Backend: {self._format_header_backend_name()}",
-                panel,
-            )
-        )
-        header_layout.addLayout(runtime_state)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -687,17 +676,12 @@ class myWindow(QWidget, Ui_Form):
         self.status_panel.add_item("tab", "Tab", self.tabWidget.tabText(self.tabWidget.currentIndex()))
         self.status_panel.add_item("plane", "Plane", self.comboBox_5.currentText())
         self.status_panel.add_item("scan", "Scan", "Idle")
-        self.status_panel.add_item("backend", "Backend", self._profile_default_control_backend())
         self.status_panel.add_item("model", "Model", self._model_backend_status_text())
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
 
         self.gridLayout.addWidget(panel, 0, 0, 1, 1)
-
-    def _format_header_backend_name(self):
-        backend_name = self.app_context.control_backend.name
-        return "VM" if backend_name == "vm" else backend_name
 
     def _style_plot_cards(self):
         self._wrap_plot_card(self.gridLayout_2, self.widget, "BBA-1 Quad Sweep", 0, 0, self.tab)
@@ -783,12 +767,6 @@ class myWindow(QWidget, Ui_Form):
     def _make_field_label(self, text, parent):
         label = QLabel(text, parent)
         label.setProperty("role", "field")
-        return label
-
-    def _make_runtime_state_label(self, text, parent):
-        label = QLabel(text, parent)
-        label.setProperty("role", "field")
-        label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         return label
 
     def _rebuild_bba1_setup_panel(self):
@@ -1387,16 +1365,6 @@ class myWindow(QWidget, Ui_Form):
             except ValueError:
                 continue
 
-    def _set_combo_current_control_backend(self, combo, backend):
-        target = self._normalize_control_backend_value(backend)
-        for index in range(combo.count()):
-            try:
-                if self._normalize_control_backend_value(combo.itemText(index)) == target:
-                    combo.setCurrentIndex(index)
-                    return
-            except ValueError:
-                continue
-
     def _find_bba_preset(self, preset_id):
         return get_bba_preset(self.app_context, preset_id)
 
@@ -1467,22 +1435,25 @@ class myWindow(QWidget, Ui_Form):
         self._apply_bba1_preset(preset)
 
     def _family_control_backends(self, family):
-        return family.control_backends or default_control_backend_choices(self.app_context.machine.id)
-
-    def _selected_family_control_backend(self, family):
-        control_backends = self._family_control_backends(family)
-        current = self.app_context.control_backend.name
-        if current in control_backends:
-            return current
-        if control_backends:
-            return control_backends[0]
-        return current
+        return family.control_backends
 
     def _require_family_control_backend(self, family, backend, label):
         allowed = self._family_control_backends(family)
         if allowed and backend not in allowed:
             allowed_text = ", ".join(allowed)
             raise ValueError(f"{label} does not allow {backend!r} backend. Allowed backend(s): {allowed_text}.")
+
+    def _configure_family_backend_availability(self):
+        backend = self.app_context.control_backend.name
+        for family, label, start_button in (
+            (self.bba_workflow.bba1, "BBA-1", self.pushButton),
+            (self.bba_workflow.bba2, "BBA-2", self.pushButton_5),
+        ):
+            try:
+                self._require_family_control_backend(family, backend, label)
+            except ValueError as exc:
+                start_button.setEnabled(False)
+                start_button.setToolTip(str(exc))
 
     def _profile_element_ids(self, *, kind, role=None, plane=None):
         return [element.id for element in list_elements(self.app_context, kind=kind, role=role, plane=plane)]
@@ -1556,9 +1527,6 @@ class myWindow(QWidget, Ui_Form):
     def _configure_machine_profile(self):
         bba1 = self.bba_workflow.bba1
         bba2 = self.bba_workflow.bba2
-        self.standard_control_backend = self._selected_family_control_backend(bba1)
-        bba2_control_backends = self._family_control_backends(bba2)
-        bba2_control_backend = self._selected_family_control_backend(bba2)
 
         self._set_combo_items(self.comboBox_2, self._standard_quad_items())
         self._set_combo_items(self.comboBox_3, self._standard_bpm1_items())
@@ -1567,8 +1535,6 @@ class myWindow(QWidget, Ui_Form):
         self._set_combo_items(self.comboBox_7, self._bba2_quad_items())
         self._set_combo_items(self.comboBox_8, self._bba2_bpm1_items())
         self._set_combo_items(self.comboBox_6, self._bba2_bpm2_items())
-        self._set_combo_items(self.comboBox_11, bba2_control_backends)
-
         bba1_default = self._find_bba_preset(bba1.default_preset)
         self._set_bba_preset_combo_items(
             self.bba1_preset_combo,
@@ -1589,10 +1555,6 @@ class myWindow(QWidget, Ui_Form):
         )
         self._set_combo_current_text(self.comboBox_8, bba2_default.bpm1)
         self._set_combo_current_text(self.comboBox_6, bba2_default.bpm2)
-        self._set_combo_current_control_backend(
-            self.comboBox_11,
-            bba2_control_backend,
-        )
         self._apply_typed_defaults(
             bba2_default.scan,
             {
@@ -1610,6 +1572,7 @@ class myWindow(QWidget, Ui_Form):
             self.bba2_sample_interval_edit,
             self._scan_sample_interval_default(bba2_default.scan),
         )
+        self._configure_family_backend_availability()
         self._apply_typed_defaults(
             bba2_default.analysis,
             {
@@ -1626,7 +1589,7 @@ class myWindow(QWidget, Ui_Form):
         self._load_latest_bba2_data_into_table()
 
     def _profile_default_control_backend(self):
-        return getattr(self, "standard_control_backend", self.app_context.control_backend.name)
+        return self.app_context.control_backend.name
 
     @staticmethod
     def _bpm_logical_channel(plane):
@@ -1634,16 +1597,6 @@ class myWindow(QWidget, Ui_Form):
 
     def _current_plane_text(self):
         return self.comboBox_5.currentText() if self.tabWidget.currentIndex() == 0 else self.comboBox_10.currentText()
-
-    def _current_control_backend_text(self):
-        return self._profile_default_control_backend() if self.tabWidget.currentIndex() == 0 else self.comboBox_11.currentText()
-
-    def _current_control_backend_display_text(self):
-        backend_text = self._current_control_backend_text()
-        try:
-            return self._normalize_control_backend_value(backend_text)
-        except ValueError:
-            return str(backend_text).strip()
 
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
@@ -1658,15 +1611,6 @@ class myWindow(QWidget, Ui_Form):
         else:
             self.status_panel.set_item("scan", "Idle", "subtle")
 
-        backend_text = self._current_control_backend_display_text()
-        try:
-            normalized_backend = self._normalize_control_backend_value(backend_text)
-        except ValueError:
-            normalized_backend = None
-        backend_tone = (
-            "warning" if normalized_backend == "real" else "success" if normalized_backend == "vm" else "subtle"
-        )
-        self.status_panel.set_item("backend", backend_text, backend_tone)
         self.status_panel.set_item(
             "model",
             self._model_backend_status_text(),
@@ -1707,7 +1651,7 @@ class myWindow(QWidget, Ui_Form):
         return self._bba_runtime_paths(self._profile_default_control_backend())["latest_dir"]
 
     def _latest_bba2_data_dir(self):
-        return self._bba_runtime_paths(self.comboBox_11.currentText())["latest_dir"]
+        return self._bba_runtime_paths(self._profile_default_control_backend())["latest_dir"]
 
     def _bba1_scan_points_counts(self):
         table = getattr(self, "bba1_scan_points_table", None)
@@ -2089,7 +2033,7 @@ class myWindow(QWidget, Ui_Form):
         if self._scan_is_running():
             self._warn("Stop the current BBA scan before loading archived data.")
             return
-        archive_dir = self._bba_runtime_paths(self.comboBox_11.currentText())["archive_dir"]
+        archive_dir = self._bba_runtime_paths(self._profile_default_control_backend())["archive_dir"]
         archive_dir.mkdir(parents=True, exist_ok=True)
         path = QFileDialog.getExistingDirectory(
             self,
@@ -2288,7 +2232,7 @@ class myWindow(QWidget, Ui_Form):
             params.bpm1 = self.comboBox_8.currentText()
             params.bpm2 = self.comboBox_6.currentText()
             params.plane = self._normalize_plane_value(self.comboBox_10.currentText())
-            params.control_backend = self._normalize_control_backend_value(self.comboBox_11.currentText())
+            params.control_backend = self._profile_default_control_backend()
             self._require_family_control_backend(self.bba_workflow.bba2, params.control_backend, "BBA-2")
             bpm_channel = self._bpm_logical_channel(params.plane)
             params.quadPV = resolve_channel(self.app_context, params.quad, "k1", params.control_backend)

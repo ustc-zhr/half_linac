@@ -106,6 +106,7 @@ from .runtime_resolver import (
 )
 from .runtime_selector import (
     MachineChoice,
+    RuntimeContextWidget,
     RuntimeSelectorWidget,
     default_control_backend_choices,
     list_machine_choices,
@@ -177,6 +178,7 @@ __all__ = [
     "ResolvedSoftIocRuntimeConfig",
     "ResolvedVmRuntimeConfig",
     "RUNS_DIRNAME",
+    "RuntimeContextWidget",
     "RuntimeSelectorWidget",
     "VirtualMachineLocalSegment",
     "VirtualMachinePredefinedUsedline",

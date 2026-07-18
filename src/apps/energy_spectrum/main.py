@@ -77,6 +77,7 @@ from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.elegant_runtime import run_elegant_input
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
+    RuntimeContextWidget,
     build_model_snapshot,
     get_workflow,
     list_elements,
@@ -1458,14 +1459,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        for text in (
-            f"Machine: {self.machine_profile.machine.display_name}",
-            f"Backend: {self.control_backend.upper()}",
-        ):
-            runtime_label = QLabel(text, panel)
-            runtime_label.setProperty("role", "field")
-            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-            header_layout.addWidget(runtime_label)
+        header_layout.addWidget(
+            RuntimeContextWidget(
+                machine_id=self.machine_profile.machine.id,
+                machine_display_name=self.machine_profile.machine.display_name,
+                control_backend=self.control_backend,
+                parent=panel,
+            )
+        )
 
         self.station_label = QLabel("Spectrum Station", panel)
         self.station_label.setProperty("role", "field")
@@ -1496,8 +1497,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = SpectrumStatusStrip(panel)
-        self.status_panel.add_item("machine", "MACHINE", self.machine_profile.machine.id)
-        self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
         self.status_panel.add_item(
             "station",
             "STATION",
@@ -2754,10 +2753,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if not hasattr(self, "status_panel"):
             return
 
-        machine_tone = "subtle"
-        backend_tone = "warning" if self.control_backend == "vm" else "success"
-        self.status_panel.set_item("machine", self.machine_profile.machine.id, machine_tone)
-        self.status_panel.set_item("backend", self.control_backend.upper(), backend_tone)
         self.status_panel.set_item(
             "station",
             self._station_display_name(),

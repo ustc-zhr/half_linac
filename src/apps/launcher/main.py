@@ -866,8 +866,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = LauncherStatusStrip(panel)
-        self.status_panel.add_item("machine", "MACHINE", self.machine_profile.machine.id)
-        self.status_panel.add_item("backend", "BACKEND", self.control_backend.upper())
         self.status_panel.add_item("real_access", "REAL ACCESS", "--")
         self.status_panel.add_item("running", "RUNNING", "0 apps")
         self.status_panel.finish()
@@ -1311,9 +1309,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "active" if active_count else "idle",
         )
 
-        backend_tone = "warning" if self.control_backend == "real" else "active"
-        self._set_summary_value("machine", self.machine_profile.machine.id, "active")
-        self._set_summary_value("backend", self.control_backend.upper(), backend_tone)
         real_status_text, real_status_state = self._real_commissioning_summary()
         self._set_summary_value("real_access", real_status_text, real_status_state)
 

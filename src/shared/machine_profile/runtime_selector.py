@@ -270,9 +270,58 @@ class RuntimeSelectorWidget(QWidget):
         widget.setFixedHeight(self._control_height)
 
 
+class RuntimeContextWidget(QWidget):
+    """Compact, read-only display of the active machine and control backend."""
+
+    def __init__(
+        self,
+        *,
+        machine_id: str,
+        machine_display_name: str,
+        control_backend: str,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        self.machine_label = QLabel(f"Machine: {machine_display_name}", self)
+        self.machine_label.setProperty("role", "field")
+        self.machine_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.machine_label.setToolTip(f"Machine profile: {machine_id}")
+        layout.addWidget(self.machine_label)
+
+        normalized_backend = str(control_backend).strip().lower()
+        backend_display = _display_control_backend(normalized_backend)
+        self.backend_label = QLabel(f"Backend: {backend_display}", self)
+        self.backend_label.setObjectName("runtimeBackendLabel")
+        if normalized_backend == "real":
+            self.backend_label.setStyleSheet(
+                "QLabel#runtimeBackendLabel {"
+                " color: #ffe0a3; background: #5c3a0d; border: 1px solid #d79a32;"
+                " border-radius: 6px; padding: 3px 8px; font-weight: 700; }"
+            )
+        else:
+            self.backend_label.setStyleSheet(
+                "QLabel#runtimeBackendLabel {"
+                " color: #b9f3e9; background: #17433f; border: 1px solid #368b80;"
+                " border-radius: 6px; padding: 3px 8px; font-weight: 700; }"
+            )
+        self.backend_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.backend_label.setToolTip(
+            "REAL MACHINE: commands may access live PVs."
+            if normalized_backend == "real"
+            else "Virtual Machine backend"
+        )
+        layout.addWidget(self.backend_label)
+
+
 def _display_control_backend(control_backend: str) -> str:
     if control_backend == "vm":
         return "Virtual Machine"
     if control_backend == "real":
-        return "Real Machine"
+        return "REAL MACHINE"
     return control_backend

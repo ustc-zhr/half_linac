@@ -55,6 +55,7 @@ from half_linac.src.shared.beam_diagnostics import fit_beam_image
 from half_linac.src.shared.machine_profile import (
     METADATA_FILENAME,
     MachineProfileError,
+    RuntimeContextWidget,
     build_model_backend,
     build_model_snapshot,
     describe_app_model_support,
@@ -855,14 +856,14 @@ class myWindow(QWidget,Ui_Form):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
-        for text in (
-            f"Machine: {self.machine_profile.machine.display_name}",
-            f"Backend: {self.machine_type.upper()}",
-        ):
-            runtime_label = QLabel(text, panel)
-            runtime_label.setProperty("role", "field")
-            runtime_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-            header_layout.addWidget(runtime_label)
+        header_layout.addWidget(
+            RuntimeContextWidget(
+                machine_id=self.machine_profile.machine.id,
+                machine_display_name=self.machine_profile.machine.display_name,
+                control_backend=self.machine_type,
+                parent=panel,
+            )
+        )
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -873,7 +874,6 @@ class myWindow(QWidget,Ui_Form):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = EmitStatusStrip(panel)
-        self.status_panel.add_item("mode", "MODE", self.machine_type.upper())
         self.status_panel.add_item("model", "MODEL", self._model_backend_status_text())
         self.status_panel.add_item("scan", "SCAN", "Idle")
         self.status_panel.add_item("twiss", "TWISS", "Idle")
@@ -1657,8 +1657,6 @@ class myWindow(QWidget,Ui_Form):
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
-        mode_tone = "warning" if self.machine_type == "real" else "success"
-        self.status_panel.set_item("mode", self.machine_type.upper(), mode_tone)
         self.status_panel.set_item(
             "model",
             self._model_backend_status_text(),
