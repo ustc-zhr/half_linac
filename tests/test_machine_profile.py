@@ -22,9 +22,9 @@ from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     MachineValidationReport,
     REAL_STATUS_COMMISSIONED,
-    REAL_STATUS_NOT_SUPPORTED,
     REAL_STATUS_READ_ONLY,
     REAL_STATUS_WRITE_BLOCKED,
+    REAL_STATUS_WRITE_SMOKE_PASSED,
     apply_snapshot_conversion,
     build_model_backend,
     build_model_snapshot,
@@ -611,10 +611,10 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsNotNone(context.bba_workflow)
         self.assertIsNotNone(context.model_backend)
         assert context.bba_workflow is not None
-        self.assertEqual(context.bba_workflow.standard.default_preset, "bba1_default")
+        self.assertEqual(context.bba_workflow.bba1.default_preset, "bba1_default")
         self.assertEqual(context.bba_workflow.bba2.default_preset, "bba2_default")
-        self.assertEqual(context.bba_workflow.standard.quads, ())
-        self.assertEqual(context.bba_workflow.standard.correctors, ())
+        self.assertEqual(context.bba_workflow.bba1.quads, ())
+        self.assertEqual(context.bba_workflow.bba1.correctors, ())
         self.assertEqual(context.bba_workflow.bba2.quads, ())
         self.assertEqual(context.bba_workflow.bba2.correctors, ())
         self.assertEqual(context.bba_workflow.bba2.control_backends, ())
@@ -784,7 +784,7 @@ class MachineProfileTests(unittest.TestCase):
         bba_preset_ids = {preset.id for preset in bba_context.bba_workflow.presets}
         emit_preset_ids = {preset.id for preset in emit_context.emit_measure_workflow.presets}
 
-        self.assertIn(bba_context.bba_workflow.standard.default_preset, bba_preset_ids)
+        self.assertIn(bba_context.bba_workflow.bba1.default_preset, bba_preset_ids)
         self.assertIn(bba_context.bba_workflow.bba2.default_preset, bba_preset_ids)
         self.assertIn(emit_context.emit_measure_workflow.default_preset, emit_preset_ids)
 
@@ -794,7 +794,7 @@ class MachineProfileTests(unittest.TestCase):
         bba_preset = get_bba_preset(bba_context)
         emit_preset = get_emit_preset(emit_context)
 
-        self.assertEqual(bba_preset.id, bba_context.bba_workflow.standard.default_preset)
+        self.assertEqual(bba_preset.id, bba_context.bba_workflow.bba1.default_preset)
         self.assertEqual(bba_preset.plane, "x")
         self.assertEqual(emit_preset.id, emit_context.emit_measure_workflow.default_preset)
         self.assertGreater(emit_preset.energy_mev, 0)
@@ -1146,7 +1146,7 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(real_commissioning_status(profile, "orbit_display"), REAL_STATUS_READ_ONLY)
         self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_COMMISSIONED)
-        self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_NOT_SUPPORTED)
+        self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_WRITE_SMOKE_PASSED)
         self.assertEqual(real_commissioning_status(profile, "emit_measure"), REAL_STATUS_COMMISSIONED)
         self.assertEqual(real_commissioning_status(profile, "energy_spectrum"), REAL_STATUS_COMMISSIONED)
         self.assertTrue(workflow_writes_allowed(orbit_context, "orbit"))
@@ -1157,10 +1157,9 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(workflow_writes_allowed(emit_context, "emit_measure"))
         self.assertTrue(workflow_writes_allowed(real_energy_context, "energy_spectrum"))
         self.assertTrue(workflow_writes_allowed(energy_context, "energy_spectrum"))
-        self.assertFalse(workflow_writes_allowed(real_bba_context, "bba"))
+        self.assertTrue(workflow_writes_allowed(real_bba_context, "bba"))
         self.assertTrue(workflow_writes_allowed(bba_context, "bba"))
-        with self.assertRaisesRegex(MachineProfileError, "blocked"):
-            require_workflow_write_allowed(real_bba_context, "bba", "test write")
+        require_workflow_write_allowed(real_bba_context, "bba", "test write")
         require_workflow_write_allowed(orbit_context, "orbit", "test write")
         require_workflow_write_allowed(real_beam_context, "beam_monitor", "test write")
         require_workflow_write_allowed(real_emit_context, "emit_measure", "test write")
@@ -1215,13 +1214,13 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["response_wait_s_by_backend"]["real"], 1.0)
         self.assertEqual(workflow["corrector_upperlimit_by_backend"]["vm"]["value"], 0.001)
         self.assertEqual(workflow["corrector_upperlimit_by_backend"]["vm"]["unit"], "rad")
-        self.assertEqual(workflow["corrector_upperlimit_by_backend"]["real"]["value"], 5.0)
+        self.assertEqual(workflow["corrector_upperlimit_by_backend"]["real"]["value"], 10.0)
         self.assertEqual(workflow["corrector_upperlimit_by_backend"]["real"]["unit"], "A")
         irfel_vm_orbit_runtime = orbit_runtime.load_orbit_runtime_settings(vm_orbit_context)
         irfel_real_orbit_runtime = orbit_runtime.load_orbit_runtime_settings(orbit_context)
         self.assertEqual(irfel_vm_orbit_runtime["corrector_upperlimit"], 0.001)
         self.assertEqual(irfel_vm_orbit_runtime["corrector_upperlimit_unit"], "rad")
-        self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit"], 5.0)
+        self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit"], 10.0)
         self.assertEqual(irfel_real_orbit_runtime["corrector_upperlimit_unit"], "A")
         self.assertEqual(irfel_vm_orbit_runtime["bpm_position_scale_to_m"], 1.0)
         self.assertEqual(irfel_real_orbit_runtime["bpm_position_scale_to_m"], 1e-3)
@@ -1238,9 +1237,9 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["accuracy_um"], 10.0)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["samples_per_step"], 1)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["global_max_iter"], 20)
-        self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["one_to_one_gain"], 1.0)
+        self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["correction_gain"], 0.3)
         self.assertEqual(irfel_real_orbit_runtime["runtime_defaults"], irfel_vm_orbit_runtime["runtime_defaults"])
-        self.assertEqual(beam_workflow["default_flag"], "PRF03")
+        self.assertEqual(beam_workflow["default_flag"], "PRFESA")
         self.assertEqual(
             beam_workflow["flag_pixel_geometry"]["default"]["vm"]["shape"],
             [360, 270],
@@ -1292,14 +1291,14 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(bba_context.control_backend.name, "vm")
         self.assertIsNotNone(bba_context.bba_workflow)
         assert bba_context.bba_workflow is not None
-        self.assertEqual(bba_context.bba_workflow.standard.control_backends, ("vm",))
-        self.assertEqual(bba_context.bba_workflow.bba2.control_backends, ("vm",))
-        self.assertEqual(bba_context.bba_workflow.standard.quads, ())
-        self.assertEqual(bba_context.bba_workflow.standard.correctors, ())
-        self.assertEqual(bba_context.bba_workflow.standard.bpm1, ())
-        self.assertEqual(bba_context.bba_workflow.standard.bpm2, ())
-        self.assertEqual(bba_workflow["standard"]["control_backends"], ["vm"])
-        self.assertEqual(bba_workflow["write_control"]["real"], "blocked")
+        self.assertEqual(bba_context.bba_workflow.bba1.control_backends, ("vm", "real"))
+        self.assertEqual(bba_context.bba_workflow.bba2.control_backends, ("vm", "real"))
+        self.assertEqual(bba_context.bba_workflow.bba1.quads, ())
+        self.assertEqual(bba_context.bba_workflow.bba1.correctors, ())
+        self.assertEqual(bba_context.bba_workflow.bba1.bpm1, ())
+        self.assertEqual(bba_context.bba_workflow.bba1.bpm2, ())
+        self.assertEqual(bba_workflow["bba1"]["control_backends"], ["vm", "real"])
+        self.assertEqual(bba_workflow["write_control"]["real"], "allowed")
         self.assertIn("BPM02", vm_start_ids)
         self.assertEqual(vm_end_ids, ("PRF03",))
         self.assertEqual(vm_default_start, "QM13")
@@ -1629,7 +1628,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(len(list_elements(profile, "flag")), 5)
         self.assertEqual(
             resolve_channel(profile, "QM01", "k1", "real"),
-            "IRFEL:PS:QM01:current:ao",
+            "IRFEL:PS:QM01:K1:ao",
         )
         self.assertEqual(
             resolve_channel(profile, "QM20", "readback", "real"),
@@ -2540,7 +2539,7 @@ class MachineProfileTests(unittest.TestCase):
                     "presets": [
                         {
                             "id": "legacy_bba",
-                            "family": "standard",
+                            "family": "bba1",
                             "plane": "x",
                             "quad": "Q01",
                             "corr": "XC01",
@@ -2558,7 +2557,7 @@ class MachineProfileTests(unittest.TestCase):
                             },
                         }
                     ],
-                    "standard": {
+                    "bba1": {
                         "correctors": ["XC01"],
                         "quads": ["Q01"],
                         "bpm1": ["BPM01"],
@@ -2772,7 +2771,7 @@ class MachineProfileTests(unittest.TestCase):
                     "presets": [
                         {
                             "id": "simple_bba1",
-                            "family": "standard",
+                            "family": "bba1",
                             "plane": "x",
                             "quad": "Q01",
                             "corr": "XC01",
@@ -2816,7 +2815,7 @@ class MachineProfileTests(unittest.TestCase):
                 bba_workflow = load_bba_workflow(profile)
                 emit_workflow = load_emit_measure_workflow(profile)
 
-        self.assertEqual(bba_workflow.standard.default_preset, "simple_bba1")
+        self.assertEqual(bba_workflow.bba1.default_preset, "simple_bba1")
         self.assertEqual(bba_workflow.bba2.default_preset, "simple_bba2")
         self.assertEqual(emit_workflow.default_preset, "simple_emit")
 
@@ -2936,7 +2935,7 @@ class MachineProfileTests(unittest.TestCase):
             "presets": [
                 {
                     "id": "dirsimple_bba1",
-                    "family": "standard",
+                    "family": "bba1",
                     "plane": "x",
                     "quad": "Q01",
                     "corr": "XC01",
@@ -3140,7 +3139,7 @@ class MachineProfileTests(unittest.TestCase):
                 },
                 "bba": {
                     "presets": [],
-                    "standard": {
+                    "bba1": {
                         "correctors": ["XC01"],
                         "quads": ["Q1"],
                         "bpm1": ["BPM01"],
@@ -3245,7 +3244,7 @@ class MachineProfileTests(unittest.TestCase):
                             "bpm2": "BPM01",
                         }
                     ],
-                    "standard": {
+                    "bba1": {
                         "correctors": ["XC01"],
                         "quads": ["Q1"],
                         "bpm1": ["BPM01"],
@@ -3361,7 +3360,7 @@ class MachineProfileTests(unittest.TestCase):
                             "mode": "offline",
                         }
                     ],
-                    "standard": {
+                    "bba1": {
                         "correctors": ["XC01"],
                         "quads": ["Q1"],
                         "bpm1": ["BPM01"],
@@ -3473,7 +3472,7 @@ class MachineProfileTests(unittest.TestCase):
                             "bpm2": "BPM01",
                         }
                     ],
-                    "standard": {
+                    "bba1": {
                         "correctors": ["XC01"],
                         "quads": ["Q1"],
                         "bpm1": ["BPM01"],
