@@ -75,6 +75,7 @@ from half_linac.src.apps.energy_spectrum.stations import (
 )
 from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.elegant_runtime import run_elegant_input
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     RuntimeContextWidget,
@@ -796,7 +797,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.bend_readback_pv = self._resolve_bend_readback_pv()
         self.auto_tune_pv, self.auto_tune_unit = self._load_auto_tune_actuator()
 
-        self.current_theme = "dark"
+        self.current_theme = resolve_initial_theme()
         self._auto_tune_text = "Idle"
         self._auto_tune_tone = "subtle"
         self._fit_text = "Waiting"
@@ -1454,7 +1455,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
 
-        title = QLabel(f"{self.machine_profile.machine.display_name} Energy Spectrum", panel)
+        title = QLabel("Energy Spectrum", panel)
         title.setObjectName("summaryTitle")
         header_layout.addWidget(title)
         header_layout.addStretch(1)

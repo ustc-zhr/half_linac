@@ -61,6 +61,7 @@ from half_linac.src.apps.dispersion_correction.profile_runtime import (
 )
 from half_linac.src.apps.dispersion_correction.reports import result_to_markdown
 from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import AppContext, workflow_writes_allowed
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 
@@ -143,7 +144,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self._window_title())
         self.setMinimumSize(1120, 760)
         self.resize(1440, 920)
-        self.theme_name = "night_shift"
+        self.theme_name = (
+            "control_room" if resolve_initial_theme() == "light" else "night_shift"
+        )
         self.worker: WorkflowWorker | None = None
         self.preflight_worker: LivePreflightWorker | None = None
         self.last_live_preflight = None

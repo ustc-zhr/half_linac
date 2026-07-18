@@ -50,6 +50,7 @@ from half_linac.src.shared.machine_profile import (
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
 )
+from half_linac.src.shared.app_theme import environment_with_initial_theme
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
 from half_linac.src.shared.window_activation import (
     activate_window_for_pid,
@@ -1138,6 +1139,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             label=spec["label"],
             cmd=spec["cmd"],
             cwd=str(spec["cwd"]),
+            env=environment_with_initial_theme(self.current_theme),
         )
         if proc is not None:
             self._notify(f"{spec['label']} started.")

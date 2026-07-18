@@ -38,6 +38,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     resolve_channel,
 )
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from gui import Ui_MainWindow
 
@@ -438,7 +439,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.bpm_x_pvs = [resolve_channel(self.app_context, bpm_id, "x") for bpm_id in self.bpm_ids]
         self.bpm_y_pvs = [resolve_channel(self.app_context, bpm_id, "y") for bpm_id in self.bpm_ids]
 
-        self.current_theme = "dark"
+        self.current_theme = resolve_initial_theme()
         self.is_x_running = False
         self.is_y_running = False
         self._pv_available = False
@@ -522,7 +523,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
 
-        title = QLabel(f"{self.machine_profile.machine.display_name} Orbit Display", panel)
+        title = QLabel("Orbit Display", panel)
         title.setObjectName("summaryTitle")
         header_layout.addWidget(title)
         header_layout.addStretch(1)

@@ -44,6 +44,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     require_workflow_write_allowed,
 )
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from half_linac.src.apps.orbit_correct.profile_runtime import (
@@ -524,7 +525,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
         self.runtime_defaults = self.orbit_runtime["runtime_defaults"]
         self.response_progress_path = Path(self.orbit_runtime["response_progress_path"])
-        self.current_theme = "dark"
+        self.current_theme = resolve_initial_theme()
         self.last_notice = "Idle"
         self.process_manager = ManagedProcessGroup(notify=self._notify)
         self.process_manager.install_signal_handlers()

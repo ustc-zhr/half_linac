@@ -33,6 +33,7 @@ from PyQt5.QtWidgets import (
 
 from half_linac.src.virtual_machine.half_elegant.VMgui import Ui_MainWindow
 
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     resolve_machine_runtime,
@@ -533,7 +534,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.comboBox_segment = QComboBox(self.groupBox_2)
         self.processes = {}
         self.process_start_times = {}
-        self.current_theme = "dark"
+        self.current_theme = resolve_initial_theme()
         self._is_shutting_down = False
         self._install_signal_handlers()
 

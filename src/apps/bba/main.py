@@ -58,6 +58,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_channel,
     resolve_corrector_write_channel,
 )
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.apps.bba.profile_runtime import (
     new_bba_scan_archive_dir,
     resolve_bba_runtime_paths,
@@ -527,7 +528,7 @@ class myWindow(QWidget, Ui_Form):
         self.bba_workflow = self.app_context.bba_workflow
         if self.bba_workflow is None:
             raise ValueError("BBA workflow is not available in the current app context.")
-        self.current_theme = "dark"
+        self.current_theme = resolve_initial_theme()
         self.scan = None
         self.clear = None
         self.scan_mode = None

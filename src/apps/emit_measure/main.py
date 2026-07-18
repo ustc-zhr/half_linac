@@ -51,6 +51,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.beam_diagnostics import fit_beam_image
 from half_linac.src.shared.machine_profile import (
     METADATA_FILENAME,
@@ -712,7 +713,7 @@ class myWindow(QWidget,Ui_Form):
             raise ValueError("Emit measure workflow is not available in the current app context.")
         self.beam_monitor_config = _load_beam_image_geometry_config(self.machine_profile.machine.id)
 
-        self.current_theme = "dark"
+        self.current_theme = resolve_initial_theme()
         self.machine_type = self.app_context.control_backend.name
         self.scan_mode = None
 

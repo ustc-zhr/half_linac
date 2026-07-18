@@ -49,6 +49,7 @@ from half_linac.src.shared.beam_diagnostics import (
     save_background,
     subtract_background,
 )
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     RuntimeContextWidget,
@@ -446,7 +447,7 @@ class myWindow(QWidget, Ui_Form):
         )
         self.flag_ids = [element.id for element in self.flag_elements]
 
-        self.current_theme = "dark"
+        self.current_theme = resolve_initial_theme()
         self.is_timer_running = True
         self._pv_available = False
         self._pv_error = None
@@ -518,7 +519,7 @@ class myWindow(QWidget, Ui_Form):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
 
-        title = QLabel(f"{self.machine_profile.machine.display_name} Beam Monitor", panel)
+        title = QLabel("Beam Monitor", panel)
         title.setObjectName("summaryTitle")
         header_layout.addWidget(title)
         header_layout.addStretch(1)

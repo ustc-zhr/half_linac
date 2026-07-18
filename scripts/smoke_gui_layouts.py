@@ -111,6 +111,7 @@ def _run_child(app_name: str) -> None:
 
     from PyQt5.QtWidgets import QApplication
 
+    from half_linac.src.shared.app_theme import resolve_initial_theme
     from half_linac.src.shared.machine_profile import (
         RuntimeContextWidget,
         RuntimeSelectorWidget,
@@ -143,6 +144,16 @@ def _run_child(app_name: str) -> None:
             raise AssertionError(f"Unexpected {app_name} backend label: {context.backend_label.text()!r}.")
         if context.sizeHint().width() <= 0 or context.sizeHint().height() <= 0:
             raise AssertionError(f"{app_name} runtime context has an invalid size hint.")
+
+        expected_theme = resolve_initial_theme()
+        if window.current_theme != expected_theme:
+            raise AssertionError(
+                f"{app_name} started with theme {window.current_theme!r}; "
+                f"expected {expected_theme!r}."
+            )
+        window._toggle_theme()
+        if window.current_theme == expected_theme:
+            raise AssertionError(f"{app_name} could not switch its inherited theme independently.")
 
     if app_name == "bba":
         if window.comboBox_11.isVisible():

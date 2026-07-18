@@ -37,7 +37,7 @@ class ManagedProcessGroup:
         proc = self.processes.get(key)
         return proc is not None and proc.poll() is None
 
-    def start_process(self, key, label, cmd, cwd, expect_running=True):
+    def start_process(self, key, label, cmd, cwd, expect_running=True, env=None):
         self.prune_finished_processes()
         if self.is_running(key):
             self.notify(f"{label} is already running.")
@@ -46,6 +46,7 @@ class ManagedProcessGroup:
         proc = Popen(
             cmd,
             cwd=cwd,
+            env=env,
             shell=False,
             start_new_session=True,
         )
