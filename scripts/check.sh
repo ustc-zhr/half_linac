@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 python3 -m compileall "$HALF_LINAC_ROOT/src"
+python3 -m py_compile "$HALF_LINAC_ROOT/scripts/smoke_gui_layouts.py"
 bash -n "$HALF_LINAC_ROOT/scripts/common.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/setup.sh"
 bash -n "$HALF_LINAC_ROOT/scripts/runMe"

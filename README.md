@@ -99,6 +99,16 @@ bash scripts/check.sh
 
 这一步不会启动 GUI、IOC 或 `elegant` 长进程，只做快速静态验证。
 
+涉及 GUI 布局或共享运行上下文时，在已激活 `environment.yml` 环境后补充运行：
+
+```bash
+python3 scripts/smoke_gui_layouts.py
+```
+
+该命令使用 HALF/VM 配置和 Qt offscreen 平台逐个构造主要 operator GUI，不启动 IOC、
+`elegant` 或实机控制流程。若当前 Python 缺少匹配的 Qt offscreen 插件，脚本会在创建
+窗口前报告应切换 Conda 环境。
+
 ### 4. 常用启动方式
 
 ```bash
