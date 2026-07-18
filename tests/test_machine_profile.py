@@ -767,10 +767,15 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["xcors"][18], "XC21")
         self.assertEqual(workflow["ycors"][26], "YC29")
         self.assertEqual(workflow["response_wait_s_by_backend"]["vm"], 8)
-        self.assertEqual(workflow["corrector_upperlimit_rad"], 0.001)
+        self.assertEqual(workflow["corrector_upperlimit_by_backend"]["vm"]["value"], 0.001)
         runtime = load_orbit_runtime_settings(load_app_context("orbit_correct", machine_id="half", control_backend="vm"))
         self.assertEqual(runtime["corrector_upperlimit"], 0.001)
         self.assertEqual(runtime["corrector_upperlimit_unit"], "rad")
+        self.assertEqual(runtime["svd_relative_cutoff"], 0.001)
+        real_runtime = load_orbit_runtime_settings(
+            load_app_context("orbit_correct", machine_id="half", control_backend="real")
+        )
+        self.assertEqual(real_runtime["svd_relative_cutoff"], 0.01)
 
     def test_bba_and_emit_defaults_exist(self):
         bba_context = load_app_context("bba")
@@ -1222,6 +1227,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(irfel_real_orbit_runtime["bpm_position_scale_to_m"], 1e-3)
         self.assertEqual(irfel_vm_orbit_runtime["correction_settle_s"], 2.0)
         self.assertEqual(irfel_real_orbit_runtime["correction_settle_s"], 1.0)
+        self.assertEqual(irfel_vm_orbit_runtime["svd_relative_cutoff"], 0.01)
+        self.assertEqual(irfel_real_orbit_runtime["svd_relative_cutoff"], 0.01)
         self.assertEqual(irfel_vm_orbit_runtime["runtime_defaults"]["method"], "global")
         self.assertEqual(
             irfel_vm_orbit_runtime["runtime_defaults"]["local_response_source"],
@@ -1483,6 +1490,16 @@ class MachineProfileTests(unittest.TestCase):
         inverse_m = OrbitCorrector._truncated_pseudo_inverse(response_m, 0.01)
 
         np.testing.assert_allclose(inverse_m, inverse_mm * 1e3)
+
+    def test_orbit_svd_cutoff_controls_retained_weak_modes(self):
+        from half_linac.src.apps.orbit_correct.correct import OrbitCorrector
+
+        response = np.diag([1.0, 0.005])
+        conservative = OrbitCorrector._truncated_pseudo_inverse(response, 0.01)
+        permissive = OrbitCorrector._truncated_pseudo_inverse(response, 0.001)
+
+        np.testing.assert_allclose(conservative, np.diag([1.0, 0.0]))
+        np.testing.assert_allclose(permissive, np.diag([1.0, 200.0]))
 
     def test_orbit_correction_settle_is_separate_from_sample_interval(self):
         from half_linac.src.apps.orbit_correct import correct as correct_module

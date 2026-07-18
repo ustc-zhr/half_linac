@@ -575,6 +575,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         corrector_limit = float(self.orbit_runtime["corrector_upperlimit"])
         self.correctorLimitLineEdit.setText(f"{corrector_limit:.6g}")
         self.globalMaxIterLineEdit.setText(str(int(self.runtime_defaults["global_max_iter"])))
+        self.svdCutoffPctLineEdit.setText(
+            f"{float(self.orbit_runtime['svd_relative_cutoff']) * 100.0:g}"
+        )
         self.oneToOneMaxIterLineEdit.setText(str(int(self.runtime_defaults["one_to_one_max_iter"])))
         self.correctionGainLineEdit.setText(f"{float(self.runtime_defaults['correction_gain']):g}")
         self.correctionMaxStepLineEdit.setText(f"{float(self.runtime_defaults['correction_max_step_pct']):g}")
@@ -910,6 +913,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctorLimitLabel, self.correctorLimitLineEdit = self._make_parameter_field(card)
         self.correctionSettleSLabel, self.correctionSettleSLineEdit = self._make_parameter_field(card)
         self.globalMaxIterLabel, self.globalMaxIterLineEdit = self._make_parameter_field(card)
+        self.svdCutoffPctLabel, self.svdCutoffPctLineEdit = self._make_parameter_field(card)
         self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit = self._make_parameter_field(card)
         self.correctionGainLabel, self.correctionGainLineEdit = self._make_parameter_field(card)
         self.correctionMaxStepLabel, self.correctionMaxStepLineEdit = self._make_parameter_field(card)
@@ -945,6 +949,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "Global Correction",
             (
                 (self.globalMaxIterLabel, self.globalMaxIterLineEdit, False),
+                (self.svdCutoffPctLabel, self.svdCutoffPctLineEdit, False),
                 (self.activeMatrixLabel, self.activeMatrixValueLabel, False),
                 (self.matrixSetupLabel, self.openResponseMatrixTabButton, False),
                 (self.globalCorrectorsLabel, self.globalCorrectorsValueLabel, False),
@@ -1177,6 +1182,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.sampPerStepLabel.setProperty("role", "field")
         self.correctorLimitLabel.setProperty("role", "field")
         self.globalMaxIterLabel.setProperty("role", "field")
+        self.svdCutoffPctLabel.setProperty("role", "field")
         self.oneToOneMaxIterLabel.setProperty("role", "field")
         self.correctionGainLabel.setProperty("role", "field")
         self.correctionMaxStepLabel.setProperty("role", "field")
@@ -1203,6 +1209,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.sampPerStepLabel.setText("Samples / Step")
         self.correctorLimitLabel.setText(f"Corrector Limit ({limit_unit})")
         self.globalMaxIterLabel.setText("Global Max Iter")
+        self.svdCutoffPctLabel.setText("SVD Cutoff (%)")
+        self.svdCutoffPctLineEdit.setToolTip(
+            "Discard response-matrix modes below this percentage of the largest "
+            "singular value. Lower values retain more weak modes."
+        )
         self.oneToOneMaxIterLabel.setText("1-to-1 Max Iter / BPM")
         self.correctionGainLabel.setText("Correction Gain")
         self.correctionMaxStepLabel.setText("Max Step (%)")
@@ -1705,6 +1716,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "1-to-1 Max Iter / BPM",
         )
 
+    def _svd_relative_cutoff_value(self):
+        cutoff_pct = self._parse_positive_float(
+            self.svdCutoffPctLineEdit,
+            "SVD Cutoff",
+        )
+        if cutoff_pct > 100.0:
+            raise ValueError("SVD Cutoff must be <= 100%.")
+        return cutoff_pct / 100.0
+
     def _correction_parameter_args(self):
         method = self._selected_correction_method()
         local_response_source = self._selected_local_response_source()
@@ -1714,11 +1734,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "Settle Time",
         )
         correction_gain, correction_max_step_fraction = self._correction_step_parameter_values()
+        svd_relative_cutoff = float(self.orbit_runtime["svd_relative_cutoff"])
         global_xcors = []
         global_ycors = []
 
         if method == "global":
             global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
+            svd_relative_cutoff = self._svd_relative_cutoff_value()
             one_to_one_max_iter = int(self.runtime_defaults["one_to_one_max_iter"])
             response_kick = min(
                 corrector_limit * float(self.runtime_defaults["local_response_kick_fraction"]),
@@ -1752,6 +1774,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 response_kick = self._local_response_kick_value(corrector_limit)
         else:
             global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
+            svd_relative_cutoff = self._svd_relative_cutoff_value()
             one_to_one_max_iter = self._one_to_one_parameter_values()
             response_kick = self._local_response_kick_value(corrector_limit)
 
@@ -1766,6 +1789,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             ",".join(global_ycors),
             f"{correction_settle_s:.12g}",
             local_response_source,
+            f"{svd_relative_cutoff:.12g}",
         ]
         
     def measure_res(self): #measure response matrix

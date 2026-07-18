@@ -170,16 +170,17 @@
 - Background:
   - `orbit_correct` global correction uses the active response matrix and SVD pseudo-inverse.
   - The global path now supports selected BPM rows with all correctors participating.
-  - Current exposed global controls are `Global Max Iter`, `Corrector Limit`, and the active response matrix selection.
-  - The SVD singular-value cutoff is still a fixed code value.
+  - Current exposed global controls include `Global Max Iter`, `Corrector Limit`,
+    `SVD Cutoff (%)`, and the active response matrix selection.
+  - The SVD cutoff is a backend-configurable relative threshold; the GUI passes the
+    operator-selected value to each global correction run.
 - Problem:
   - If global correction overshoots, oscillates, or becomes sensitive to poorly conditioned response matrices, operators do not yet have dedicated global damping controls.
   - The existing `1-to-1 Gain` and `1-to-1 Max Step (%)` controls are intentionally scoped to one-to-one correction and should not be reused implicitly for global correction.
 - Follow-up:
   - Add independent `Global Gain` for scaling the pseudo-inverse correction vector.
   - Add independent `Global Max Step (%)` to limit each corrector's per-iteration delta.
-  - Consider exposing `SVD Min Singular Value` or a small preset selector for singular-value truncation.
-  - Keep defaults equivalent to current behavior until VM tests show a need to tune them.
+  - Use VM commissioning data to refine the per-backend SVD cutoff defaults.
   - Validate with IRFEL VM global correction before considering any real-mode use.
 
 ### 8. Model Snapshot And Real-to-VM Mirroring

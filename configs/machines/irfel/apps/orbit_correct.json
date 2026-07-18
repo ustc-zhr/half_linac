@@ -43,6 +43,10 @@
     "vm": 2.0,
     "real": 1.0
   },
+  "svd_relative_cutoff_by_backend": {
+    "vm": 0.01,
+    "real": 0.01
+  },
   "corrector_upperlimit_by_backend": {
     "vm": {
       "value": 0.001,

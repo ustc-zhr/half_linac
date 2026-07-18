@@ -11,6 +11,10 @@
     "vm": 8.0,
     "real": 8.0
   },
+  "svd_relative_cutoff_by_backend": {
+    "vm": 0.01,
+    "real": 0.01
+  },
   "bpm_position_scale_to_mm": {
     "vm": 1000.0,
     "real": 1.0

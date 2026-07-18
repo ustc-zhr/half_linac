@@ -101,7 +101,8 @@ class OrbitCorrector:
                 global_xcor_list: Optional[List[str]] = None,
                 global_ycor_list: Optional[List[str]] = None,
                 correction_settle_s: Optional[float] = None,
-                local_response_source: Optional[str] = None):
+                local_response_source: Optional[str] = None,
+                svd_relative_cutoff: Optional[float] = None):
         self.app_context = load_app_context("orbit_correct")
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
@@ -113,6 +114,11 @@ class OrbitCorrector:
             correction_settle_s,
             float(self.orbit_runtime["correction_settle_s"]),
             "correction_settle_s",
+        )
+        self.svd_relative_cutoff = self._select_fraction(
+            svd_relative_cutoff,
+            float(self.orbit_runtime["svd_relative_cutoff"]),
+            "svd_relative_cutoff",
         )
         self.local_response_source = self._select_local_response_source(
             local_response_source,
@@ -653,9 +659,18 @@ class OrbitCorrector:
             )
         return matrix
 
-    def _compute_svd(self, min_singular_value=0.01):
+    def _compute_svd(self, min_singular_value: float | None = None):
         """计算响应矩阵的SVD分解"""
         self._require_targets()
+        relative_cutoff = (
+            self.svd_relative_cutoff
+            if min_singular_value is None
+            else self._select_fraction(
+                min_singular_value,
+                self.svd_relative_cutoff,
+                "svd_relative_cutoff",
+            )
+        )
         RM = self._load_valid_response_matrix()
         selected = np.array(self.target_indices, dtype=int)
         selected_xcors = np.array(self.global_xcor_indices, dtype=int)
@@ -676,18 +691,43 @@ class OrbitCorrector:
             ", ".join(self.global_ycor_list),
         )
 
-        self.pseudo_inverse_x = self._truncated_pseudo_inverse(ORM_x, min_singular_value)
-        self.pseudo_inverse_y = self._truncated_pseudo_inverse(ORM_y, min_singular_value)
+        self.pseudo_inverse_x = self._truncated_pseudo_inverse(
+            ORM_x,
+            relative_cutoff,
+            diagnostics_label="X",
+        )
+        self.pseudo_inverse_y = self._truncated_pseudo_inverse(
+            ORM_y,
+            relative_cutoff,
+            diagnostics_label="Y",
+        )
 
     @staticmethod
-    def _truncated_pseudo_inverse(matrix: np.ndarray, min_singular_value: float) -> np.ndarray:
+    def _truncated_pseudo_inverse(
+        matrix: np.ndarray,
+        min_singular_value: float,
+        *,
+        diagnostics_label: str | None = None,
+    ) -> np.ndarray:
         U, singular_values, Vt = svd(matrix, full_matrices=False)
         s_inv = np.zeros_like(singular_values)
         if singular_values.size == 0:
             return Vt.T @ np.diag(s_inv) @ U.T
         relative_cutoff = abs(float(min_singular_value)) * np.max(np.abs(singular_values))
+        retained = np.abs(singular_values) > relative_cutoff
+        if diagnostics_label is not None:
+            logger.info(
+                "SVD %s: relative cutoff=%.6g (%.4g%%), absolute cutoff=%.6g, "
+                "retained modes=%s/%s",
+                diagnostics_label,
+                min_singular_value,
+                min_singular_value * 100.0,
+                relative_cutoff,
+                int(np.count_nonzero(retained)),
+                singular_values.size,
+            )
         for i, value in enumerate(singular_values):
-            if abs(value) > relative_cutoff:
+            if retained[i]:
                 s_inv[i] = 1 / value
         return Vt.T @ np.diag(s_inv) @ U.T
 
@@ -716,10 +756,13 @@ class OrbitCorrector:
 
         logger.info("global correction uses SVD pseudo-inverse")
         logger.info(
-            "correction timing uses settle=%.3f s, sample interval=%.3f s, samples/step=%d",
+            "correction timing uses settle=%.3f s, sample interval=%.3f s, "
+            "samples/step=%d, SVD cutoff=%.6g (%.4g%%)",
             self.correction_settle_s,
             self.sample_interval,
             self.samples_perstep,
+            self.svd_relative_cutoff,
+            self.svd_relative_cutoff * 100.0,
         )
         self._compute_svd()
         pvname_corx = [self._cor_pv(cor) for cor in self.global_xcor_list]
@@ -883,6 +926,7 @@ if __name__ == '__main__':
             global_ycor_list = _optional_csv_arg(sys.argv, 16)
             correction_settle_s = _optional_float_arg(sys.argv, 17)
             local_response_source = sys.argv[18] if len(sys.argv) > 18 else None
+            svd_relative_cutoff = _optional_float_arg(sys.argv, 19)
             
             corrector = OrbitCorrector(
                 samp_interval, cor_accuracy, samples_perstep,
@@ -897,6 +941,7 @@ if __name__ == '__main__':
                 global_ycor_list=global_ycor_list,
                 correction_settle_s=correction_settle_s,
                 local_response_source=local_response_source,
+                svd_relative_cutoff=svd_relative_cutoff,
             )
             corrector._require_targets()
             corrector.init_BPM_pv()
