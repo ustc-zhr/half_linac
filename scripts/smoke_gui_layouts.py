@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,9 @@ class GuiSmokeSpec:
     window_class: str
     status_keys: frozenset[str]
     uses_selector: bool = False
+    machine_id: str = "half"
+    control_backend: str = "vm"
+    expected_hv_feedback_enabled: bool | None = None
 
 
 GUI_SMOKE_SPECS = {
@@ -32,6 +36,16 @@ GUI_SMOKE_SPECS = {
         "myWindow",
         frozenset({"real_access", "running"}),
         uses_selector=True,
+        expected_hv_feedback_enabled=False,
+    ),
+    "launcher_irfel_real": GuiSmokeSpec(
+        APP_ROOT / "launcher" / "main.py",
+        "myWindow",
+        frozenset({"real_access", "running"}),
+        uses_selector=True,
+        machine_id="irfel",
+        control_backend="real",
+        expected_hv_feedback_enabled=True,
     ),
     "beam_monitor": GuiSmokeSpec(
         APP_ROOT / "beam_monitor" / "main.py",
@@ -62,6 +76,13 @@ GUI_SMOKE_SPECS = {
         APP_ROOT / "emit_measure" / "main.py",
         "myWindow",
         frozenset({"model", "scan", "twiss", "fit", "emit", "data"}),
+    ),
+    "hv_feedback": GuiSmokeSpec(
+        APP_ROOT / "hv_feedback" / "main.py",
+        "HVFeedbackWindow",
+        frozenset({"operation", "state", "write", "log"}),
+        machine_id="irfel",
+        control_backend="real",
     ),
 }
 
@@ -131,6 +152,14 @@ def _run_child(app_name: str) -> None:
             f"{app_name} status keys are {sorted(status_items)}, expected {sorted(spec.status_keys)}."
         )
 
+    if spec.expected_hv_feedback_enabled is not None:
+        actual = window.hv_feedback_button.isEnabled()
+        if actual is not spec.expected_hv_feedback_enabled:
+            raise AssertionError(
+                f"{app_name} HV feedback enabled={actual}; "
+                f"expected {spec.expected_hv_feedback_enabled}."
+            )
+
     if spec.uses_selector:
         selectors = window.findChildren(RuntimeSelectorWidget)
         if len(selectors) != 1:
@@ -140,7 +169,12 @@ def _run_child(app_name: str) -> None:
         if len(contexts) != 1:
             raise AssertionError(f"{app_name} has {len(contexts)} runtime contexts; expected 1.")
         context = contexts[0]
-        if context.backend_label.text() != "Backend: Virtual Machine":
+        expected_backend_label = (
+            "Backend: Real Machine"
+            if spec.control_backend == "real"
+            else "Backend: Virtual Machine"
+        )
+        if context.backend_label.text() != expected_backend_label:
             raise AssertionError(f"Unexpected {app_name} backend label: {context.backend_label.text()!r}.")
         if context.sizeHint().width() <= 0 or context.sizeHint().height() <= 0:
             raise AssertionError(f"{app_name} runtime context has an invalid size hint.")
@@ -160,6 +194,100 @@ def _run_child(app_name: str) -> None:
             raise AssertionError("BBA legacy backend combo must remain hidden.")
         if window._profile_default_control_backend() != "vm":
             raise AssertionError("BBA did not retain the global VM backend.")
+
+    if app_name == "hv_feedback":
+        required_buttons = (
+            "start_monitor_button",
+            "start_feedback_button",
+            "measure_reference_button",
+            "stop_button",
+        )
+        missing_buttons = [name for name in required_buttons if not hasattr(window, name)]
+        if missing_buttons:
+            raise AssertionError(
+                "HV feedback is missing required actions: " + ", ".join(missing_buttons)
+            )
+        for forbidden_name in ("mock_check", "mode_combo", "write_check", "config_edit"):
+            if hasattr(window, forbidden_name):
+                raise AssertionError(f"HV feedback retained forbidden control {forbidden_name!r}.")
+        visible_parameter_count = sum(
+            spin.isVisible()
+            for fields in window._parameter_spins.values()
+            for spin in fields.values()
+        )
+        if visible_parameter_count != 4:
+            raise AssertionError(
+                "HV feedback should expose four primary control parameters; "
+                f"found {visible_parameter_count}."
+            )
+        for dialog_name in (
+            "advanced_settings_dialog",
+            "reference_measurement_dialog",
+            "reference_dialog",
+            "safety_dialog",
+        ):
+            dialog = getattr(window, dialog_name, None)
+            if dialog is None or dialog.isVisible():
+                raise AssertionError(
+                    f"HV feedback parameter dialog {dialog_name!r} is missing or opened at startup."
+                )
+        if window.session_thread is not None or window.reference_thread is not None:
+            raise AssertionError("HV feedback started EPICS work while constructing the window.")
+        if window.plot_scale_combo.currentText() != "Relative":
+            raise AssertionError("HV feedback trends should default to the relative scale.")
+        if window.plot_window_combo.currentText() != "Recent 15 min":
+            raise AssertionError("HV feedback trends should default to the recent 15 minute view.")
+        if window.plot_time_axis_combo.currentText() != "Elapsed":
+            raise AssertionError("HV feedback trends should default to elapsed time.")
+        expected_metrics = {
+            "hv_setpoint",
+            "hv_readback",
+            "hv_mismatch",
+            "acc1_level",
+            "amp_ratio_error",
+            "phase_error",
+        }
+        if set(window._value_labels) != expected_metrics:
+            raise AssertionError("HV feedback Latest Sample metrics are incomplete.")
+
+        reference = window.config["reference"]
+        timestamp = time.time()
+        sample = {
+            "event": "SAMPLE",
+            "timestamp": timestamp,
+            "hv_setpoint": reference["hv0"],
+            "hv_readback": reference["hv0"],
+            "acc1_amp": reference["acc1_amp_ref"],
+            "buncher_amp": reference["acc1_amp_ref"] * reference["amp_ratio_ref"],
+            "acc1_phase": reference["acc1_phase_ref"],
+            "buncher_phase": reference["buncher_phase_ref"],
+        }
+        window._operation = "monitor"
+        window._append_sample(sample)
+        window._append_hv_command(
+            {"event": "CAPUT_HV", "timestamp": timestamp, "hv_next": reference["hv0"]}
+        )
+        window._draw_plots()
+        if window._value_labels["amp_ratio_error"].text() != "+0.000%":
+            raise AssertionError("HV feedback did not derive the live amplitude-ratio error.")
+        if "Computed target" not in window.hv_axis.get_legend_handles_labels()[1]:
+            raise AssertionError("HV feedback trend omitted the computed HV target.")
+        window.plot_scale_combo.setCurrentText("Raw")
+        if window.amp_axis.get_ylabel() != "Amplitude (a.u.)":
+            raise AssertionError("HV feedback raw trend scale did not apply.")
+        window.plot_time_axis_combo.setCurrentText("Clock")
+        if window.hv_axis.get_xlabel() != "Clock time":
+            raise AssertionError("HV feedback clock-time axis did not apply.")
+        window.plot_scale_combo.setCurrentText("Relative")
+        window.plot_time_axis_combo.setCurrentText("Elapsed")
+
+        invalid_sample = dict(sample, timestamp=timestamp + 1.0, acc1_phase=None)
+        window._append_sample(invalid_sample)
+        if window._value_labels["phase_error"].text() != "INVALID":
+            raise AssertionError("HV feedback retained a stale phase value after an invalid sample.")
+        window._reset_monitor_display()
+        if window._signal_history["time"] or window._hv_command_history["time"]:
+            raise AssertionError("HV feedback did not clear trend history for a new session.")
 
     window.close()
     qt_app.processEvents()
@@ -190,11 +318,21 @@ def _run_parent(selected_apps: list[str]) -> None:
 
     failures: list[str] = []
     for app_name in selected_apps:
+        spec = GUI_SMOKE_SPECS[app_name]
+        app_env = env.copy()
+        app_env.update(
+            {
+                "HALF_LINAC_MACHINE_ID": spec.machine_id,
+                "HALF_LINAC_CONTROL_BACKEND": spec.control_backend,
+                "HALF_MACHINE_ID": spec.machine_id,
+                "HALF_CONTROL_BACKEND": spec.control_backend,
+            }
+        )
         try:
             result = subprocess.run(
                 [sys.executable, str(Path(__file__).resolve()), "--app", app_name],
                 cwd=REPO_ROOT,
-                env=env,
+                env=app_env,
                 capture_output=True,
                 text=True,
                 timeout=45,

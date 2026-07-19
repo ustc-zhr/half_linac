@@ -85,6 +85,7 @@ real_contexts = {
     "energy_spectrum": load_app_context("energy_spectrum", control_backend="real"),
     "emit_measure": load_app_context("emit_measure", control_backend="real"),
     "bba": load_app_context("bba", control_backend="real"),
+    "hv_feedback": load_app_context("hv_feedback", control_backend="real"),
 }
 for workflow_name, context in real_contexts.items():
     require(
@@ -106,6 +107,17 @@ require(
     "IRFEL BBA2 must support VM and real backends",
 )
 
+hv_vm = load_app_context("hv_feedback", control_backend="vm")
+hv_workflow = get_workflow(profile, "hv_feedback")
+require(
+    hv_workflow["control_backends"] == ["real"],
+    "IRFEL HV feedback must advertise only the real backend",
+)
+require(
+    not workflow_writes_allowed(hv_vm, "hv_feedback"),
+    "IRFEL VM HV feedback writes must remain blocked",
+)
+
 expected_statuses = {
     "orbit_display": REAL_STATUS_READ_ONLY,
     "orbit_correct": REAL_STATUS_COMMISSIONED,
@@ -113,6 +125,7 @@ expected_statuses = {
     "energy_spectrum": REAL_STATUS_COMMISSIONED,
     "emit_measure": REAL_STATUS_COMMISSIONED,
     "bba": REAL_STATUS_WRITE_SMOKE_PASSED,
+    "hv_feedback": REAL_STATUS_COMMISSIONED,
 }
 for app_name, expected in expected_statuses.items():
     status = real_commissioning_status(profile, app_name)
@@ -121,5 +134,5 @@ for app_name, expected in expected_statuses.items():
 print("IRFEL VM acceptance passed.")
 print(f"  apps: {', '.join(contexts)}")
 print(f"  publish plan: {len(plan.bpm_specs)} BPM specs, {len(plan.watch_image_specs)} watch-image specs")
-print("  real write policy: allowed for orbit, beam_monitor, energy_spectrum, emit_measure, bba")
+print("  real write policy: allowed for orbit, beam_monitor, energy_spectrum, emit_measure, bba, hv_feedback")
 PY

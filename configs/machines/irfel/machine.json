@@ -1109,7 +1109,50 @@
       ],
       "limits": {},
       "logical_channels": [
-        "phase_set"
+        "phase_set",
+        "phase_readback"
+      ]
+    },
+    {
+      "id": "KLY1_CH3_AMPLITUDE",
+      "kind": "rf",
+      "display_name": "KLY1 CH3 Amplitude",
+      "order": 65,
+      "tags": [
+        "rf",
+        "kly1"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "amplitude_readback"
+      ]
+    },
+    {
+      "id": "KLY1_CH4_AMPLITUDE",
+      "kind": "rf",
+      "display_name": "KLY1 CH4 Amplitude",
+      "order": 65,
+      "tags": [
+        "rf",
+        "kly1"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "amplitude_readback"
+      ]
+    },
+    {
+      "id": "KLY1_CH4_PHASE",
+      "kind": "rf",
+      "display_name": "KLY1 CH4 Phase",
+      "order": 65,
+      "tags": [
+        "rf",
+        "kly1"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "phase_readback"
       ]
     },
     {

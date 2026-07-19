@@ -40,6 +40,7 @@ src/apps/dispersion_correction/runtime/
 src/apps/emit_measure/scanResults.txt
 src/apps/emit_measure/scanResults.meta.json
 src/apps/emit_measure/runtime/
+src/apps/hv_feedback/runtime/
 runtime/model_backend/
 
 # Runtime artifacts

@@ -726,9 +726,9 @@ APP_DEFINITIONS = {
         "category": "control",
         "button_text": "HV Feedback",
         "label": "HV Feedback",
-        "description": "Reserved launcher entry for high-voltage feedback control.",
-        "reserved": True,
-        "reserved_reason": "High-voltage feedback GUI is not connected yet.",
+        "window_title_patterns": ("HV Feedback",),
+        "description": "Monitor and stabilize KLY1 amplitude with modulator high-voltage feedback.",
+        "workflow_name": "hv_feedback",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/hv_feedback",
     },
@@ -743,6 +743,7 @@ PROFILE_MANAGED_APP_KEYS = {
     "solenoid_centering": "solenoid_centering",
     "emitmeasure": "emit_measure",
     "dispersion_correction": "dispersion_correction",
+    "hv_feedback": "hv_feedback",
 }
 
 

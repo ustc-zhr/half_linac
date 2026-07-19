@@ -30,6 +30,7 @@ REAL_COMMISSIONING_WORKFLOWS_BY_APP = {
     "emit_measure": "emit_measure",
     "solenoid_centering": "solenoid_centering",
     "dispersion_correction": "dispersion_correction",
+    "hv_feedback": "hv_feedback",
 }
 
 _REAL_STATUS_LABELS = {

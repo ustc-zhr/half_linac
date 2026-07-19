@@ -42,6 +42,7 @@ SUPPORTED_APP_NAMES = {
     "emit_measure",
     "solenoid_centering",
     "dispersion_correction",
+    "hv_feedback",
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum"}
 APP_WORKFLOW_FILES = {
@@ -53,6 +54,7 @@ APP_WORKFLOW_FILES = {
     "solenoid_centering": "solenoid_centering.json",
     "virtual_machine": "virtual_machine.json",
     "dispersion_correction": "dispersion_correction.json",
+    "hv_feedback": "hv_feedback.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
@@ -63,6 +65,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "emit_measure": ("emit_measure",),
     "solenoid_centering": ("solenoid_centering",),
     "dispersion_correction": ("dispersion_correction",),
+    "hv_feedback": ("hv_feedback",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",
@@ -733,6 +736,15 @@ def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
                 "dispersion_correction requires apps/dispersion_correction.json."
             )
         _validate_dispersion_correction_workflow(profile, workflow)
+        return
+
+    if app_name == "hv_feedback":
+        workflow = profile.workflows.get("hv_feedback")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError(
+                "hv_feedback requires apps/hv_feedback.json."
+            )
+        _validate_hv_feedback_workflow(profile, workflow)
         return
 
 
@@ -1602,6 +1614,234 @@ def _validate_dispersion_correction_workflow(
             workflow.get(key),
             f"workflows.dispersion_correction.{key}",
         )
+
+
+def _validate_hv_feedback_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+) -> None:
+    required_sections = (
+        "control_backends",
+        "signals",
+        "control",
+        "reference",
+        "safety",
+        "logging",
+        "real_status",
+        "write_control",
+    )
+    missing_sections = [key for key in required_sections if key not in workflow]
+    if missing_sections:
+        raise MachineProfileError(
+            "workflows.hv_feedback is missing required keys: "
+            + ", ".join(sorted(missing_sections))
+        )
+
+    configured_backends = tuple(
+        normalize_mode(value, "workflows.hv_feedback.control_backends[]")
+        for value in _expect_string_list(
+            workflow.get("control_backends"),
+            "workflows.hv_feedback.control_backends",
+        )
+    )
+    if configured_backends != ("real",):
+        raise MachineProfileError(
+            "workflows.hv_feedback.control_backends must contain only 'real'."
+        )
+    if "real" not in profile.control_backends:
+        raise MachineProfileError(
+            "workflows.hv_feedback requires a configured real control backend."
+        )
+
+    signals = _expect_mapping(
+        workflow.get("signals"),
+        "workflows.hv_feedback.signals",
+    )
+    required_signals = (
+        "hv_setpoint",
+        "hv_readback",
+        "acc1_amp",
+        "acc1_phase",
+        "buncher_amp",
+        "buncher_phase",
+    )
+    missing_signals = [key for key in required_signals if key not in signals]
+    if missing_signals:
+        raise MachineProfileError(
+            "workflows.hv_feedback.signals is missing: "
+            + ", ".join(missing_signals)
+        )
+    for signal_name in required_signals:
+        location = f"workflows.hv_feedback.signals.{signal_name}"
+        signal = _expect_mapping(signals.get(signal_name), location)
+        element_id = _expect_non_empty_string(signal.get("element"), f"{location}.element")
+        channel = _expect_non_empty_string(signal.get("channel"), f"{location}.channel")
+        element = profile.get_element(element_id)
+        channel_modes = element.channels.get(channel)
+        if channel_modes is None:
+            raise MachineProfileError(
+                f"{location} references missing channel {element_id}.{channel}."
+            )
+        if "real" not in channel_modes:
+            raise MachineProfileError(
+                f"{location} channel {element_id}.{channel} has no real mapping."
+            )
+
+    control = _expect_mapping(
+        workflow.get("control"),
+        "workflows.hv_feedback.control",
+    )
+    control_values = _finite_workflow_numbers(
+        control,
+        "workflows.hv_feedback.control",
+        (
+            "sample_period_s",
+            "update_period_s",
+            "average_window_s",
+            "reference_samples",
+            "reference_sample_interval_s",
+            "gain_kv_per_relerr",
+            "max_step_kv",
+            "total_limit_kv",
+        ),
+    )
+    for key, value in control_values.items():
+        if value <= 0:
+            raise MachineProfileError(
+                f"workflows.hv_feedback.control.{key} must be positive."
+            )
+    reference_samples = control_values["reference_samples"]
+    if not reference_samples.is_integer() or not 3 <= reference_samples <= 100000:
+        raise MachineProfileError(
+            "workflows.hv_feedback.control.reference_samples must be an integer "
+            "between 3 and 100000."
+        )
+    if control_values["max_step_kv"] > control_values["total_limit_kv"]:
+        raise MachineProfileError(
+            "workflows.hv_feedback.control.max_step_kv must not exceed total_limit_kv."
+        )
+
+    reference = _expect_mapping(
+        workflow.get("reference"),
+        "workflows.hv_feedback.reference",
+    )
+    reference_values = _finite_workflow_numbers(
+        reference,
+        "workflows.hv_feedback.reference",
+        (
+            "acc1_amp_ref",
+            "acc1_phase_ref",
+            "buncher_phase_ref",
+            "amp_ratio_ref",
+            "hv0",
+        ),
+    )
+    if reference_values["acc1_amp_ref"] <= 0 or reference_values["amp_ratio_ref"] <= 0:
+        raise MachineProfileError(
+            "workflows.hv_feedback reference amplitudes and ratio must be positive."
+        )
+
+    safety = _expect_mapping(
+        workflow.get("safety"),
+        "workflows.hv_feedback.safety",
+    )
+    safety_values = _finite_workflow_numbers(
+        safety,
+        "workflows.hv_feedback.safety",
+        (
+            "hv_min_kv",
+            "hv_max_kv",
+            "hv_readback_tolerance_kv",
+            "acc1_phase_limit_deg",
+            "buncher_phase_limit_deg",
+            "amp_ratio_limit_rel",
+            "acc1_amp_min_rel",
+            "acc1_amp_max_rel",
+        ),
+    )
+    if safety_values["hv_min_kv"] >= safety_values["hv_max_kv"]:
+        raise MachineProfileError(
+            "workflows.hv_feedback.safety.hv_min_kv must be less than hv_max_kv."
+        )
+    for key in (
+        "hv_readback_tolerance_kv",
+        "acc1_phase_limit_deg",
+        "buncher_phase_limit_deg",
+        "amp_ratio_limit_rel",
+        "acc1_amp_min_rel",
+        "acc1_amp_max_rel",
+    ):
+        if safety_values[key] <= 0:
+            raise MachineProfileError(
+                f"workflows.hv_feedback.safety.{key} must be positive."
+            )
+    if not (
+        safety_values["acc1_amp_min_rel"]
+        <= 1.0
+        <= safety_values["acc1_amp_max_rel"]
+    ):
+        raise MachineProfileError(
+            "workflows.hv_feedback safety amplitude range must include 1.0."
+        )
+    hv0 = reference_values["hv0"]
+    total_limit = control_values["total_limit_kv"]
+    if not (
+        safety_values["hv_min_kv"] <= hv0 - total_limit
+        and hv0 + total_limit <= safety_values["hv_max_kv"]
+    ):
+        raise MachineProfileError(
+            "workflows.hv_feedback hv0 +/- total_limit_kv must fit inside safety HV bounds."
+        )
+    for key in ("require_valid_pv", "hold_on_fault"):
+        if safety.get(key) is not True:
+            raise MachineProfileError(
+                f"workflows.hv_feedback.safety.{key} must be true."
+            )
+
+    logging = _expect_mapping(
+        workflow.get("logging"),
+        "workflows.hv_feedback.logging",
+    )
+    _expect_non_empty_string(
+        logging.get("file_prefix"),
+        "workflows.hv_feedback.logging.file_prefix",
+    )
+    flush_rows = _expect_int(
+        logging.get("flush_every_n_rows"),
+        "workflows.hv_feedback.logging.flush_every_n_rows",
+    )
+    if flush_rows <= 0:
+        raise MachineProfileError(
+            "workflows.hv_feedback.logging.flush_every_n_rows must be positive."
+        )
+
+    write_control = _expect_mapping(
+        workflow.get("write_control"),
+        "workflows.hv_feedback.write_control",
+    )
+    if write_control.get("default") != "blocked" or write_control.get("real") != "allowed":
+        raise MachineProfileError(
+            "workflows.hv_feedback.write_control must block by default and allow real."
+        )
+
+
+def _finite_workflow_numbers(
+    values: Mapping[str, Any],
+    location: str,
+    keys: tuple[str, ...],
+) -> dict[str, float]:
+    parsed: dict[str, float] = {}
+    for key in keys:
+        try:
+            value = float(values[key])
+        except KeyError as exc:
+            raise MachineProfileError(f"{location}.{key} is required.") from exc
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(f"{location}.{key} must be numeric.") from exc
+        if not math.isfinite(value):
+            raise MachineProfileError(f"{location}.{key} must be finite.")
+        parsed[key] = value
+    return parsed
 
 
 def _validate_virtual_machine_workflow(

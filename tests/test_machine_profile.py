@@ -1644,7 +1644,7 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(
             resolve_channel(profile, "MODULATOR_HV1", "voltage_set", "real"),
-            "IRFEL:modulator1:HV:set:ao",
+            "IRFEL:modulator1:HV_set:ao",
         )
         self.assertEqual(
             resolve_channel(profile, "BPM01", "x", "vm"),

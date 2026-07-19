@@ -260,7 +260,7 @@
       "current_readback": "IRFEL:PS:SS02:current:ai"
     },
     "MODULATOR_HV1": {
-      "voltage_set": "IRFEL:modulator1:HV:set:ao",
+      "voltage_set": "IRFEL:modulator1:HV_set:ao",
       "voltage_readback": "IRFEL:modulator1:HV:ai"
     },
     "MODULATOR_HV2": {
@@ -268,7 +268,17 @@
       "voltage_readback": "IRFEL:modulator2:HV:ai"
     },
     "KLY1_CH3_PHASE": {
-      "phase_set": "IRFEL:IN-MW:KLY1:SET_PHASE"
+      "phase_set": "IRFEL:IN-MW:KLY1:SET_PHASE",
+      "phase_readback": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE"
+    },
+    "KLY1_CH3_AMPLITUDE": {
+      "amplitude_readback": "IRFEL:IN-MW:KLY1:GET_CH3_AMP"
+    },
+    "KLY1_CH4_AMPLITUDE": {
+      "amplitude_readback": "IRFEL:IN-MW:KLY1:GET_CH4_AMP"
+    },
+    "KLY1_CH4_PHASE": {
+      "phase_readback": "IRFEL:IN-MW:KLY1:GET_CH4_PHASE"
     },
     "ESA_ENERGY": {
       "setpoint": "IRFEL:AP:ENG:A3:ao"

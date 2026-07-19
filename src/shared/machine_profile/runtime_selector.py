@@ -4,7 +4,7 @@ import os
 import sys
 from dataclasses import dataclass
 
-from PyQt5.QtCore import QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, QTimer, pyqtSignal
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import (
     QComboBox,
@@ -294,34 +294,42 @@ class RuntimeContextWidget(QWidget):
         self.machine_label.setToolTip(f"Machine profile: {machine_id}")
         layout.addWidget(self.machine_label)
 
-        normalized_backend = str(control_backend).strip().lower()
-        backend_display = _display_control_backend(normalized_backend)
+        self._normalized_backend = str(control_backend).strip().lower()
+        backend_display = _display_control_backend(self._normalized_backend)
         self.backend_label = QLabel(f"Backend: {backend_display}", self)
         self.backend_label.setObjectName("runtimeBackendLabel")
-        if normalized_backend == "real":
-            self.backend_label.setStyleSheet(
-                "QLabel#runtimeBackendLabel {"
-                " color: #ffe0a3; background: #5c3a0d; border: 1px solid #d79a32;"
-                " border-radius: 6px; padding: 3px 8px; font-weight: 700; }"
-            )
-        else:
-            self.backend_label.setStyleSheet(
-                "QLabel#runtimeBackendLabel {"
-                " color: #b9f3e9; background: #17433f; border: 1px solid #368b80;"
-                " border-radius: 6px; padding: 3px 8px; font-weight: 700; }"
-            )
         self.backend_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.backend_label.setToolTip(
-            "REAL MACHINE: commands may access live PVs."
-            if normalized_backend == "real"
+            "Real Machine: commands may access live PVs."
+            if self._normalized_backend == "real"
             else "Virtual Machine backend"
         )
         layout.addWidget(self.backend_label)
+        self._apply_backend_style()
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        if event.type() in (QEvent.PaletteChange, QEvent.StyleChange):
+            QTimer.singleShot(0, self._apply_backend_style)
+
+    def _apply_backend_style(self) -> None:
+        dark = _is_dark_widget(self)
+        if self._normalized_backend == "real":
+            foreground = "#d1a052" if dark else "#966519"
+            border = "#a67a35" if dark else "#b4863c"
+        else:
+            foreground = "#58c7b7" if dark else "#26796f"
+            border = "#3b9185" if dark else "#4f978d"
+        self.backend_label.setStyleSheet(
+            "QLabel#runtimeBackendLabel {"
+            f" color: {foreground}; background: transparent; border: 1px solid {border};"
+            " border-radius: 6px; padding: 3px 8px; font-weight: 700; }"
+        )
 
 
 def _display_control_backend(control_backend: str) -> str:
     if control_backend == "vm":
         return "Virtual Machine"
     if control_backend == "real":
-        return "REAL MACHINE"
+        return "Real Machine"
     return control_backend
