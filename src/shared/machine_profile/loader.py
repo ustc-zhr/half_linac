@@ -1622,11 +1622,7 @@ def _validate_hv_feedback_workflow(
 ) -> None:
     required_sections = (
         "control_backends",
-        "signals",
-        "control",
-        "reference",
-        "safety",
-        "logging",
+        "feedback_units",
         "real_status",
         "write_control",
     )
@@ -1653,47 +1649,114 @@ def _validate_hv_feedback_workflow(
             "workflows.hv_feedback requires a configured real control backend."
         )
 
-    signals = _expect_mapping(
-        workflow.get("signals"),
-        "workflows.hv_feedback.signals",
+    units = _expect_list(
+        workflow.get("feedback_units"),
+        "workflows.hv_feedback.feedback_units",
     )
-    required_signals = (
-        "hv_setpoint",
-        "hv_readback",
-        "acc1_amp",
-        "acc1_phase",
-        "buncher_amp",
-        "buncher_phase",
-    )
-    missing_signals = [key for key in required_signals if key not in signals]
-    if missing_signals:
+    if not units:
         raise MachineProfileError(
-            "workflows.hv_feedback.signals is missing: "
-            + ", ".join(missing_signals)
+            "workflows.hv_feedback.feedback_units must not be empty."
         )
-    for signal_name in required_signals:
-        location = f"workflows.hv_feedback.signals.{signal_name}"
-        signal = _expect_mapping(signals.get(signal_name), location)
-        element_id = _expect_non_empty_string(signal.get("element"), f"{location}.element")
-        channel = _expect_non_empty_string(signal.get("channel"), f"{location}.channel")
-        element = profile.get_element(element_id)
-        channel_modes = element.channels.get(channel)
-        if channel_modes is None:
+    unit_ids: set[str] = set()
+    write_targets: dict[str, str] = {}
+    for index, raw_unit in enumerate(units):
+        location = f"workflows.hv_feedback.feedback_units[{index}]"
+        unit = _expect_mapping(raw_unit, location)
+        unit_id = _expect_non_empty_string(unit.get("id"), f"{location}.id")
+        if unit_id in unit_ids:
+            raise MachineProfileError(f"{location}.id duplicates {unit_id!r}.")
+        unit_ids.add(unit_id)
+        _validate_hv_feedback_unit(profile, unit, location)
+        hv = _expect_mapping(unit.get("hv"), f"{location}.hv")
+        setpoint = _expect_mapping(hv.get("setpoint"), f"{location}.hv.setpoint")
+        element_id = _expect_non_empty_string(
+            setpoint.get("element"), f"{location}.hv.setpoint.element"
+        )
+        channel = _expect_non_empty_string(
+            setpoint.get("channel"), f"{location}.hv.setpoint.channel"
+        )
+        target = str(profile.get_element(element_id).channels[channel]["real"])
+        duplicate = write_targets.get(target)
+        if duplicate is not None:
             raise MachineProfileError(
-                f"{location} references missing channel {element_id}.{channel}."
+                f"{location}.hv.setpoint resolves to {target!r}, already used by "
+                f"feedback unit {duplicate!r}."
             )
-        if "real" not in channel_modes:
-            raise MachineProfileError(
-                f"{location} channel {element_id}.{channel} has no real mapping."
-            )
+        write_targets[target] = unit_id
 
-    control = _expect_mapping(
-        workflow.get("control"),
-        "workflows.hv_feedback.control",
+    write_control = _expect_mapping(
+        workflow.get("write_control"),
+        "workflows.hv_feedback.write_control",
     )
+    if write_control.get("default") != "blocked" or write_control.get("real") != "allowed":
+        raise MachineProfileError(
+            "workflows.hv_feedback.write_control must block by default and allow real."
+        )
+
+
+def _validate_hv_feedback_unit(
+    profile: MachineProfile,
+    unit: Mapping[str, Any],
+    location: str,
+) -> None:
+    for key in (
+        "id",
+        "label",
+        "hv",
+        "rf_channels",
+        "default_feedback_channel",
+        "control",
+        "reference",
+        "safety",
+        "logging",
+    ):
+        if key not in unit:
+            raise MachineProfileError(f"{location}.{key} is required.")
+    _expect_non_empty_string(unit.get("label"), f"{location}.label")
+
+    hv = _expect_mapping(unit.get("hv"), f"{location}.hv")
+    for signal_name in ("setpoint", "readback"):
+        _validate_hv_feedback_signal(
+            profile,
+            hv.get(signal_name),
+            f"{location}.hv.{signal_name}",
+        )
+
+    raw_channels = _expect_list(unit.get("rf_channels"), f"{location}.rf_channels")
+    if not raw_channels:
+        raise MachineProfileError(f"{location}.rf_channels must not be empty.")
+    channel_ids: set[str] = set()
+    for index, raw_channel in enumerate(raw_channels):
+        channel_location = f"{location}.rf_channels[{index}]"
+        channel = _expect_mapping(raw_channel, channel_location)
+        channel_id = _expect_non_empty_string(
+            channel.get("id"), f"{channel_location}.id"
+        )
+        if channel_id in channel_ids:
+            raise MachineProfileError(
+                f"{channel_location}.id duplicates {channel_id!r}."
+            )
+        channel_ids.add(channel_id)
+        _expect_non_empty_string(channel.get("label"), f"{channel_location}.label")
+        for signal_name in ("amplitude", "phase"):
+            _validate_hv_feedback_signal(
+                profile,
+                channel.get(signal_name),
+                f"{channel_location}.{signal_name}",
+            )
+    default_channel = _expect_non_empty_string(
+        unit.get("default_feedback_channel"),
+        f"{location}.default_feedback_channel",
+    )
+    if default_channel not in channel_ids:
+        raise MachineProfileError(
+            f"{location}.default_feedback_channel must name one of its RF channels."
+        )
+
+    control = _expect_mapping(unit.get("control"), f"{location}.control")
     control_values = _finite_workflow_numbers(
         control,
-        "workflows.hv_feedback.control",
+        f"{location}.control",
         (
             "sample_period_s",
             "update_period_s",
@@ -1705,123 +1768,137 @@ def _validate_hv_feedback_workflow(
             "total_limit_kv",
         ),
     )
-    for key, value in control_values.items():
-        if value <= 0:
-            raise MachineProfileError(
-                f"workflows.hv_feedback.control.{key} must be positive."
-            )
-    reference_samples = control_values["reference_samples"]
-    if not reference_samples.is_integer() or not 3 <= reference_samples <= 100000:
+    if any(value <= 0 for value in control_values.values()):
+        raise MachineProfileError(f"{location}.control values must be positive.")
+    samples = control_values["reference_samples"]
+    if not samples.is_integer() or not 3 <= samples <= 100000:
         raise MachineProfileError(
-            "workflows.hv_feedback.control.reference_samples must be an integer "
-            "between 3 and 100000."
+            f"{location}.control.reference_samples must be an integer between 3 and 100000."
         )
     if control_values["max_step_kv"] > control_values["total_limit_kv"]:
         raise MachineProfileError(
-            "workflows.hv_feedback.control.max_step_kv must not exceed total_limit_kv."
+            f"{location}.control.max_step_kv must not exceed total_limit_kv."
         )
 
-    reference = _expect_mapping(
-        workflow.get("reference"),
-        "workflows.hv_feedback.reference",
+    reference = _expect_mapping(unit.get("reference"), f"{location}.reference")
+    hv_kv = _finite_workflow_numbers(
+        reference, f"{location}.reference", ("hv_kv",)
+    )["hv_kv"]
+    reference_channels = _expect_mapping(
+        reference.get("channels"), f"{location}.reference.channels"
     )
-    reference_values = _finite_workflow_numbers(
-        reference,
-        "workflows.hv_feedback.reference",
-        (
-            "acc1_amp_ref",
-            "acc1_phase_ref",
-            "buncher_phase_ref",
-            "amp_ratio_ref",
-            "hv0",
-        ),
-    )
-    if reference_values["acc1_amp_ref"] <= 0 or reference_values["amp_ratio_ref"] <= 0:
+    if set(reference_channels) != channel_ids:
         raise MachineProfileError(
-            "workflows.hv_feedback reference amplitudes and ratio must be positive."
+            f"{location}.reference.channels must exactly match rf_channels."
         )
+    for channel_id in channel_ids:
+        values = _expect_mapping(
+            reference_channels[channel_id],
+            f"{location}.reference.channels.{channel_id}",
+        )
+        reference_values = _finite_workflow_numbers(
+            values,
+            f"{location}.reference.channels.{channel_id}",
+            ("amplitude", "phase_deg"),
+        )
+        if reference_values["amplitude"] <= 0:
+            raise MachineProfileError(
+                f"{location}.reference.channels.{channel_id}.amplitude must be positive."
+            )
 
-    safety = _expect_mapping(
-        workflow.get("safety"),
-        "workflows.hv_feedback.safety",
-    )
+    safety = _expect_mapping(unit.get("safety"), f"{location}.safety")
     safety_values = _finite_workflow_numbers(
         safety,
-        "workflows.hv_feedback.safety",
+        f"{location}.safety",
         (
             "hv_min_kv",
             "hv_max_kv",
             "hv_readback_tolerance_kv",
-            "acc1_phase_limit_deg",
-            "buncher_phase_limit_deg",
-            "amp_ratio_limit_rel",
-            "acc1_amp_min_rel",
-            "acc1_amp_max_rel",
+            "amplitude_ratio_limit_rel",
+            "feedback_amplitude_min_rel",
+            "feedback_amplitude_max_rel",
         ),
     )
     if safety_values["hv_min_kv"] >= safety_values["hv_max_kv"]:
         raise MachineProfileError(
-            "workflows.hv_feedback.safety.hv_min_kv must be less than hv_max_kv."
+            f"{location}.safety.hv_min_kv must be less than hv_max_kv."
         )
-    for key in (
-        "hv_readback_tolerance_kv",
-        "acc1_phase_limit_deg",
-        "buncher_phase_limit_deg",
-        "amp_ratio_limit_rel",
-        "acc1_amp_min_rel",
-        "acc1_amp_max_rel",
+    if any(
+        safety_values[key] <= 0
+        for key in (
+            "hv_readback_tolerance_kv",
+            "amplitude_ratio_limit_rel",
+            "feedback_amplitude_min_rel",
+            "feedback_amplitude_max_rel",
+        )
     ):
-        if safety_values[key] <= 0:
-            raise MachineProfileError(
-                f"workflows.hv_feedback.safety.{key} must be positive."
-            )
+        raise MachineProfileError(f"{location}.safety tolerances must be positive.")
     if not (
-        safety_values["acc1_amp_min_rel"]
+        safety_values["feedback_amplitude_min_rel"]
         <= 1.0
-        <= safety_values["acc1_amp_max_rel"]
+        <= safety_values["feedback_amplitude_max_rel"]
     ):
         raise MachineProfileError(
-            "workflows.hv_feedback safety amplitude range must include 1.0."
+            f"{location}.safety feedback amplitude range must include 1.0."
         )
-    hv0 = reference_values["hv0"]
+    phase_limits = _expect_mapping(
+        safety.get("phase_limit_deg"), f"{location}.safety.phase_limit_deg"
+    )
+    if set(phase_limits) != channel_ids:
+        raise MachineProfileError(
+            f"{location}.safety.phase_limit_deg must exactly match rf_channels."
+        )
+    if any(
+        _finite_workflow_numbers(
+            phase_limits, f"{location}.safety.phase_limit_deg", (channel_id,)
+        )[channel_id]
+        <= 0
+        for channel_id in channel_ids
+    ):
+        raise MachineProfileError(f"{location}.safety phase limits must be positive.")
     total_limit = control_values["total_limit_kv"]
     if not (
-        safety_values["hv_min_kv"] <= hv0 - total_limit
-        and hv0 + total_limit <= safety_values["hv_max_kv"]
+        safety_values["hv_min_kv"] <= hv_kv - total_limit
+        and hv_kv + total_limit <= safety_values["hv_max_kv"]
     ):
         raise MachineProfileError(
-            "workflows.hv_feedback hv0 +/- total_limit_kv must fit inside safety HV bounds."
+            f"{location} reference HV +/- total_limit_kv must fit inside safety bounds."
         )
     for key in ("require_valid_pv", "hold_on_fault"):
         if safety.get(key) is not True:
-            raise MachineProfileError(
-                f"workflows.hv_feedback.safety.{key} must be true."
-            )
+            raise MachineProfileError(f"{location}.safety.{key} must be true.")
 
-    logging = _expect_mapping(
-        workflow.get("logging"),
-        "workflows.hv_feedback.logging",
-    )
+    logging = _expect_mapping(unit.get("logging"), f"{location}.logging")
     _expect_non_empty_string(
-        logging.get("file_prefix"),
-        "workflows.hv_feedback.logging.file_prefix",
+        logging.get("file_prefix"), f"{location}.logging.file_prefix"
     )
     flush_rows = _expect_int(
         logging.get("flush_every_n_rows"),
-        "workflows.hv_feedback.logging.flush_every_n_rows",
+        f"{location}.logging.flush_every_n_rows",
     )
     if flush_rows <= 0:
         raise MachineProfileError(
-            "workflows.hv_feedback.logging.flush_every_n_rows must be positive."
+            f"{location}.logging.flush_every_n_rows must be positive."
         )
 
-    write_control = _expect_mapping(
-        workflow.get("write_control"),
-        "workflows.hv_feedback.write_control",
-    )
-    if write_control.get("default") != "blocked" or write_control.get("real") != "allowed":
+
+def _validate_hv_feedback_signal(
+    profile: MachineProfile,
+    raw_signal: Any,
+    location: str,
+) -> None:
+    signal = _expect_mapping(raw_signal, location)
+    element_id = _expect_non_empty_string(signal.get("element"), f"{location}.element")
+    channel = _expect_non_empty_string(signal.get("channel"), f"{location}.channel")
+    element = profile.get_element(element_id)
+    channel_modes = element.channels.get(channel)
+    if channel_modes is None:
         raise MachineProfileError(
-            "workflows.hv_feedback.write_control must block by default and allow real."
+            f"{location} references missing channel {element_id}.{channel}."
+        )
+    if "real" not in channel_modes:
+        raise MachineProfileError(
+            f"{location} channel {element_id}.{channel} has no real mapping."
         )
 
 

@@ -15,7 +15,7 @@ class ControllerConfig:
 
 @dataclass
 class ControllerReference:
-    acc1_amp_ref: float
+    feedback_amplitude_ref: float
     hv0: float
 
 
@@ -30,13 +30,21 @@ class ControllerOutput:
 
 
 class IntegralHVController:
-    def __init__(self, cfg: ControllerConfig, ref: ControllerReference):
+    def __init__(
+        self,
+        cfg: ControllerConfig,
+        ref: ControllerReference,
+        feedback_signal_key: str = "feedback_amplitude",
+    ):
         self.cfg = cfg
         self.ref = ref
+        self.feedback_signal_key = feedback_signal_key
 
     def compute(self, agg: Dict[str, float], hv_setpoint_now: float) -> ControllerOutput:
-        acc1_amp = agg["acc1_amp"]
-        error_rel = (self.ref.acc1_amp_ref - acc1_amp) / self.ref.acc1_amp_ref
+        amplitude = agg[self.feedback_signal_key]
+        error_rel = (
+            self.ref.feedback_amplitude_ref - amplitude
+        ) / self.ref.feedback_amplitude_ref
         delta_hv_raw = self.cfg.gain_kv_per_relerr * error_rel
         delta_hv = clamp(delta_hv_raw, -self.cfg.max_step_kv, self.cfg.max_step_kv)
         hv_unclamped = hv_setpoint_now + delta_hv

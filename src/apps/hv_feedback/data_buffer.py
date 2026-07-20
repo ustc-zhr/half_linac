@@ -60,7 +60,7 @@ class DataBuffer:
             clean = [float(v) for v in vals if v is not None]
             if not clean:
                 continue
-            if key.endswith("phase"):
+            if key.endswith(".phase") or key == "phase":
                 cm = circular_mean_deg(clean)
                 if cm is not None:
                     agg[key] = cm
@@ -68,15 +68,4 @@ class DataBuffer:
                 med = median(clean)
                 if med is not None:
                     agg[key] = med
-
-        if "buncher_amp" in agg and "acc1_amp" in agg and agg["acc1_amp"] != 0:
-            ratios = []
-            for s in samples:
-                b = s.values.get("buncher_amp")
-                a = s.values.get("acc1_amp")
-                if b is not None and a not in (None, 0):
-                    ratios.append(float(b) / float(a))
-            r = median(ratios)
-            if r is not None:
-                agg["amp_ratio"] = r
         return agg

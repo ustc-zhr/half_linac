@@ -2,71 +2,96 @@
   "control_backends": [
     "real"
   ],
-  "signals": {
-    "hv_setpoint": {
-      "element": "MODULATOR_HV1",
-      "channel": "voltage_set",
-      "unit": "kV"
-    },
-    "hv_readback": {
-      "element": "MODULATOR_HV1",
-      "channel": "voltage_readback",
-      "unit": "kV"
-    },
-    "acc1_amp": {
-      "element": "KLY1_CH3_AMPLITUDE",
-      "channel": "amplitude_readback",
-      "unit": "a.u."
-    },
-    "acc1_phase": {
-      "element": "KLY1_CH3_PHASE",
-      "channel": "phase_readback",
-      "unit": "deg"
-    },
-    "buncher_amp": {
-      "element": "KLY1_CH4_AMPLITUDE",
-      "channel": "amplitude_readback",
-      "unit": "a.u."
-    },
-    "buncher_phase": {
-      "element": "KLY1_CH4_PHASE",
-      "channel": "phase_readback",
-      "unit": "deg"
+  "feedback_units": [
+    {
+      "id": "kly1",
+      "label": "Klystron 1(30MeV)",
+      "hv": {
+        "setpoint": {
+          "element": "MODULATOR_HV1",
+          "channel": "voltage_set",
+          "unit": "kV"
+        },
+        "readback": {
+          "element": "MODULATOR_HV1",
+          "channel": "voltage_readback",
+          "unit": "kV"
+        }
+      },
+      "rf_channels": [
+        {
+          "id": "acc1",
+          "label": "ACC1",
+          "amplitude": {
+            "element": "KLY1_CH3_AMPLITUDE",
+            "channel": "amplitude_readback",
+            "unit": "a.u."
+          },
+          "phase": {
+            "element": "KLY1_CH3_PHASE",
+            "channel": "phase_readback",
+            "unit": "deg"
+          }
+        },
+        {
+          "id": "buncher",
+          "label": "Buncher",
+          "amplitude": {
+            "element": "KLY1_CH4_AMPLITUDE",
+            "channel": "amplitude_readback",
+            "unit": "a.u."
+          },
+          "phase": {
+            "element": "KLY1_CH4_PHASE",
+            "channel": "phase_readback",
+            "unit": "deg"
+          }
+        }
+      ],
+      "default_feedback_channel": "acc1",
+      "control": {
+        "sample_period_s": 1.0,
+        "update_period_s": 10.0,
+        "average_window_s": 10.0,
+        "reference_samples": 30,
+        "reference_sample_interval_s": 1.0,
+        "gain_kv_per_relerr": 2.0,
+        "max_step_kv": 0.02,
+        "total_limit_kv": 0.2
+      },
+      "reference": {
+        "hv_kv": 38.993999,
+        "channels": {
+          "acc1": {
+            "amplitude": 24348.296,
+            "phase_deg": 99.7583
+          },
+          "buncher": {
+            "amplitude": 33906.414381168,
+            "phase_deg": -21.3092
+          }
+        }
+      },
+      "safety": {
+        "hv_min_kv": 38.5,
+        "hv_max_kv": 39.5,
+        "hv_readback_tolerance_kv": 0.02,
+        "phase_limit_deg": {
+          "acc1": 1.0,
+          "buncher": 1.0
+        },
+        "amplitude_ratio_limit_rel": 0.02,
+        "feedback_amplitude_min_rel": 0.95,
+        "feedback_amplitude_max_rel": 1.05,
+        "require_valid_pv": true,
+        "hold_on_fault": true
+      },
+      "logging": {
+        "file_prefix": "irfel_kly1_hv_feedback",
+        "flush_every_n_rows": 1
+      }
     }
-  },
-  "control": {
-    "sample_period_s": 1.0,
-    "update_period_s": 10.0,
-    "average_window_s": 10.0,
-    "reference_samples": 30,
-    "reference_sample_interval_s": 1.0,
-    "gain_kv_per_relerr": 2.0,
-    "max_step_kv": 0.02,
-    "total_limit_kv": 0.2
-  },
-  "reference": {
-    "acc1_amp_ref": 24348.296,
-    "acc1_phase_ref": 99.7583,
-    "buncher_phase_ref": -21.3092,
-    "amp_ratio_ref": 1.392558,
-    "hv0": 38.993999
-  },
-  "safety": {
-    "hv_min_kv": 38.5,
-    "hv_max_kv": 39.5,
-    "hv_readback_tolerance_kv": 0.02,
-    "acc1_phase_limit_deg": 1.0,
-    "buncher_phase_limit_deg": 1.0,
-    "amp_ratio_limit_rel": 0.02,
-    "acc1_amp_min_rel": 0.95,
-    "acc1_amp_max_rel": 1.05,
-    "require_valid_pv": true,
-    "hold_on_fault": true
-  },
-  "logging": {
-    "file_prefix": "irfel_kly1_hv_feedback",
-    "flush_every_n_rows": 1
-  },
+  ],
   "real_status": "commissioned",
   "write_control": {
     "default": "blocked",

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import importlib.util
 import os
 import subprocess
@@ -239,36 +240,34 @@ def _run_child(app_name: str) -> None:
             raise AssertionError("HV feedback trends should default to the recent 15 minute view.")
         if window.plot_time_axis_combo.currentText() != "Elapsed":
             raise AssertionError("HV feedback trends should default to elapsed time.")
-        expected_metrics = {
-            "hv_setpoint",
-            "hv_readback",
-            "hv_mismatch",
-            "acc1_level",
-            "amp_ratio_error",
-            "phase_error",
-        }
+        expected_metrics = {"hv_setpoint", "hv_readback", "hv_mismatch"}
         if set(window._value_labels) != expected_metrics:
             raise AssertionError("HV feedback Latest Sample metrics are incomplete.")
+        if window.feedback_unit_combo.count() != 1:
+            raise AssertionError("HV feedback did not expose the configured feedback unit.")
+        if window.feedback_channel_combo.count() != 2:
+            raise AssertionError("HV feedback did not expose the unit's RF channels.")
+        if set(window._rf_value_labels) != {"acc1", "buncher"}:
+            raise AssertionError("HV feedback RF channel metrics are incomplete.")
 
         reference = window.config["reference"]
         timestamp = time.time()
         sample = {
             "event": "SAMPLE",
             "timestamp": timestamp,
-            "hv_setpoint": reference["hv0"],
-            "hv_readback": reference["hv0"],
-            "acc1_amp": reference["acc1_amp_ref"],
-            "buncher_amp": reference["acc1_amp_ref"] * reference["amp_ratio_ref"],
-            "acc1_phase": reference["acc1_phase_ref"],
-            "buncher_phase": reference["buncher_phase_ref"],
+            "hv_setpoint": reference["hv_kv"],
+            "hv_readback": reference["hv_kv"],
         }
+        for channel_id, values in reference["channels"].items():
+            sample[f"rf.{channel_id}.amplitude"] = values["amplitude"]
+            sample[f"rf.{channel_id}.phase"] = values["phase_deg"]
         window._operation = "monitor"
         window._append_sample(sample)
         window._append_hv_command(
-            {"event": "CAPUT_HV", "timestamp": timestamp, "hv_next": reference["hv0"]}
+            {"event": "CAPUT_HV", "timestamp": timestamp, "hv_next": reference["hv_kv"]}
         )
         window._draw_plots()
-        if window._value_labels["amp_ratio_error"].text() != "+0.000%":
+        if "ratio +0.000%" not in window._rf_value_labels["buncher"]["amplitude"].text():
             raise AssertionError("HV feedback did not derive the live amplitude-ratio error.")
         if "Computed target" not in window.hv_axis.get_legend_handles_labels()[1]:
             raise AssertionError("HV feedback trend omitted the computed HV target.")
@@ -281,10 +280,51 @@ def _run_child(app_name: str) -> None:
         window.plot_scale_combo.setCurrentText("Relative")
         window.plot_time_axis_combo.setCurrentText("Elapsed")
 
-        invalid_sample = dict(sample, timestamp=timestamp + 1.0, acc1_phase=None)
+        invalid_sample = dict(sample, timestamp=timestamp + 1.0)
+        invalid_sample["rf.acc1.phase"] = None
         window._append_sample(invalid_sample)
-        if window._value_labels["phase_error"].text() != "INVALID":
+        if window._rf_value_labels["acc1"]["phase"].text() != "INVALID":
             raise AssertionError("HV feedback retained a stale phase value after an invalid sample.")
+        window.feedback_channel_combo.setCurrentIndex(1)
+        if window.feedback_channel_id != "buncher":
+            raise AssertionError("HV feedback did not switch the selected feedback channel.")
+        if window._signal_history["time"]:
+            raise AssertionError("HV feedback did not clear history after a channel switch.")
+        window._set_busy(True)
+        if window.feedback_unit_combo.isEnabled() or window.feedback_channel_combo.isEnabled():
+            raise AssertionError("HV feedback selectors remained enabled during an operation.")
+        window._set_busy(False)
+        single = copy.deepcopy(window.config)
+        single["feedback_unit_id"] = "single"
+        single["feedback_unit_label"] = "Single-channel unit"
+        single["rf_channels"] = single["rf_channels"][:1]
+        single["reference"]["channels"] = {
+            "acc1": single["reference"]["channels"]["acc1"]
+        }
+        single["safety"]["phase_limit_deg"] = {
+            "acc1": single["safety"]["phase_limit_deg"]["acc1"]
+        }
+        single["pvs"] = {
+            key: value
+            for key, value in single["pvs"].items()
+            if key in {
+                "hv_setpoint",
+                "hv_readback",
+                "rf.acc1.amplitude",
+                "rf.acc1.phase",
+            }
+        }
+        window.base_configs["single"] = copy.deepcopy(single)
+        window.unit_configs["single"] = copy.deepcopy(single)
+        window.selected_feedback_channels["single"] = "acc1"
+        window.feedback_unit_combo.addItem("Single-channel unit", "single")
+        window.feedback_unit_combo.setCurrentIndex(1)
+        if window.active_unit_id != "single":
+            raise AssertionError("HV feedback did not switch feedback units.")
+        if window.feedback_channel_combo.count() != 1:
+            raise AssertionError("HV feedback did not rebuild a one-channel unit layout.")
+        if set(window._rf_value_labels) != {"acc1"}:
+            raise AssertionError("HV feedback retained channels from the previous unit.")
         window._reset_monitor_display()
         if window._signal_history["time"] or window._hv_command_history["time"]:
             raise AssertionError("HV feedback did not clear trend history for a new session.")

@@ -54,22 +54,22 @@ from half_linac.src.apps.hv_feedback.data_buffer import DataBuffer, Sample
 from half_linac.src.apps.hv_feedback.epics_client import BaseClient
 from half_linac.src.apps.hv_feedback.logger import CSVLogger
 from half_linac.src.apps.hv_feedback.profile_runtime import (
+    amplitude_key,
+    get_unit_config,
     load_profile_config,
     load_runtime_snapshot,
     new_run_dir,
+    phase_key,
     require_confirmed_feedback_write,
     require_feedback_write_policy,
+    required_signal_keys,
     resolve_hv_feedback_runtime_paths,
     save_runtime_snapshot,
     validate_session_config,
     write_run_metadata,
 )
-from half_linac.src.apps.hv_feedback.reference import REFERENCE_KEYS, auto_reference
-from half_linac.src.apps.hv_feedback.runtime import (
-    REQUIRED_KEYS,
-    FeedbackEngine,
-    create_client,
-)
+from half_linac.src.apps.hv_feedback.reference import auto_reference
+from half_linac.src.apps.hv_feedback.runtime import FeedbackEngine, create_client
 from half_linac.src.apps.hv_feedback.utils import phase_diff_deg
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
@@ -120,24 +120,16 @@ REFERENCE_MEASUREMENT_KEYS = (
     "reference_sample_interval_s",
 )
 
-REFERENCE_FIELDS = (
-    ("acc1_amp_ref", "ACC1 amplitude", 0.000001, 1.0e9, 1.0, 6),
-    ("acc1_phase_ref", "ACC1 phase (deg)", -180.0, 180.0, 0.1, 4),
-    ("buncher_phase_ref", "Buncher phase (deg)", -180.0, 180.0, 0.1, 4),
-    ("amp_ratio_ref", "Amplitude ratio", 0.000001, 1.0e6, 0.001, 6),
-    ("hv0", "Reference HV (kV)", 0.0, 100.0, 0.001, 6),
-)
-
-SAFETY_FIELDS = (
+BASE_SAFETY_FIELDS = (
     ("hv_min_kv", "Minimum HV (kV)", 0.0, 100.0, 0.01, 4),
     ("hv_max_kv", "Maximum HV (kV)", 0.0, 100.0, 0.01, 4),
     ("hv_readback_tolerance_kv", "HV mismatch limit (kV)", 0.000001, 10.0, 0.001, 6),
-    ("acc1_phase_limit_deg", "ACC1 phase limit (deg)", 0.000001, 180.0, 0.1, 4),
-    ("buncher_phase_limit_deg", "Buncher phase limit (deg)", 0.000001, 180.0, 0.1, 4),
-    ("amp_ratio_limit_rel", "Ratio relative limit", 0.000001, 1.0, 0.001, 6),
-    ("acc1_amp_min_rel", "ACC1 minimum relative", 0.000001, 10.0, 0.01, 6),
-    ("acc1_amp_max_rel", "ACC1 maximum relative", 0.000001, 10.0, 0.01, 6),
+    ("amplitude_ratio_limit_rel", "Ratio relative limit", 0.000001, 1.0, 0.001, 6),
+    ("feedback_amplitude_min_rel", "Feedback minimum relative", 0.000001, 10.0, 0.01, 6),
+    ("feedback_amplitude_max_rel", "Feedback maximum relative", 0.000001, 10.0, 0.01, 6),
 )
+
+PLOT_COLORS = ("#45d0bc", "#e4b86f", "#79a9f5", "#d68ae8", "#ef8f6b")
 
 
 DARK_THEME = {
@@ -584,7 +576,7 @@ class StatusStrip(QFrame):
         label.update()
 
 
-class FeedbackWorker(QObject):
+class GeneralizedFeedbackWorker(QObject):
     rows_ready = pyqtSignal(list)
     status_ready = pyqtSignal(str, str)
     log_ready = pyqtSignal(str)
@@ -595,6 +587,7 @@ class FeedbackWorker(QObject):
         self,
         context: AppContext,
         config: dict[str, Any],
+        feedback_channel_id: str,
         operation: str,
         *,
         session_confirmed: bool,
@@ -602,6 +595,7 @@ class FeedbackWorker(QObject):
         super().__init__()
         self.context = context
         self.config = copy.deepcopy(config)
+        self.feedback_channel_id = feedback_channel_id
         self.operation = operation
         self.session_confirmed = session_confirmed
         self._stop_event = threading.Event()
@@ -614,49 +608,57 @@ class FeedbackWorker(QObject):
         detail = ""
         final_state = "STOPPED"
         try:
-            run_dir = new_run_dir(self.context, self.operation)
-            logging_cfg = self.config["logging"]
+            unit_id = str(self.config["feedback_unit_id"])
+            run_dir = new_run_dir(self.context, self.operation, unit_id)
+            logging_config = self.config["logging"]
             logger = CSVLogger(
                 run_dir,
-                str(logging_cfg["file_prefix"]),
-                int(logging_cfg["flush_every_n_rows"]),
+                str(logging_config["file_prefix"]),
+                self.config,
+                int(logging_config["flush_every_n_rows"]),
             )
             write_run_metadata(
                 self.context,
                 run_dir,
                 operation=self.operation,
                 config=self.config,
+                feedback_channel_id=self.feedback_channel_id,
                 state="CONNECTING",
                 log_path=logger.path,
             )
             self.log_ready.emit(str(logger.path))
             authorizer = None
             if self.operation == "feedback":
+                target_pv = str(self.config["pvs"]["hv_setpoint"]["name"])
                 authorizer = lambda: require_confirmed_feedback_write(
                     self.context,
                     session_confirmed=self.session_confirmed,
+                    feedback_unit_id=unit_id,
+                    target_pv=target_pv,
                 )
             engine = FeedbackEngine(
                 self.config,
                 mode=self.operation,
+                feedback_channel_id=self.feedback_channel_id,
                 write_authorizer=authorizer,
             )
-            active_state = "FEEDBACK ACTIVE" if self.operation == "feedback" else "MONITORING"
-            self.status_ready.emit(active_state, "danger" if self.operation == "feedback" else "success")
-
+            active_state = (
+                "FEEDBACK ACTIVE" if self.operation == "feedback" else "MONITORING"
+            )
+            tone = "danger" if self.operation == "feedback" else "success"
+            self.status_ready.emit(active_state, tone)
             while not self._stop_event.is_set():
                 rows = engine.step()
                 for row in rows:
                     logger.write(row)
                 self.rows_ready.emit(rows)
-                hold_rows = [row for row in rows if row.get("event") == "HOLD"]
-                if hold_rows:
+                holds = [row for row in rows if row.get("event") == "HOLD"]
+                if holds:
                     final_state = "HOLD"
-                    detail = str(hold_rows[-1].get("reason", "safety hold"))
+                    detail = str(holds[-1].get("reason", "safety hold"))
                     self.status_ready.emit("HOLD", "warning")
                 if self._stop_event.wait(engine.sample_period_s):
                     break
-
             stop_row = engine.stop_row()
             logger.write(stop_row)
             self.rows_ready.emit([stop_row])
@@ -674,6 +676,7 @@ class FeedbackWorker(QObject):
                         run_dir,
                         operation=self.operation,
                         config=self.config,
+                        feedback_channel_id=self.feedback_channel_id,
                         state=final_state,
                         log_path=logger.path if logger is not None else None,
                         detail=detail,
@@ -687,7 +690,7 @@ class FeedbackWorker(QObject):
         self._stop_event.set()
 
 
-class ReferenceWorker(QObject):
+class GeneralizedReferenceWorker(QObject):
     measured = pyqtSignal(dict)
     status_ready = pyqtSignal(str)
     failed = pyqtSignal(str)
@@ -706,21 +709,23 @@ class ReferenceWorker(QObject):
                 self.config["control"]["reference_sample_interval_s"]
             )
             client = create_client(self.config)
+            keys = required_signal_keys(self.config)
             buffer = DataBuffer(max_age_s=None)
             started = time.monotonic()
             for index in range(sample_count):
                 target_time = started + index * sample_interval
-                delay = max(0.0, target_time - time.monotonic())
-                if self._stop_event.wait(delay):
+                if self._stop_event.wait(max(0.0, target_time - time.monotonic())):
                     return
-                values = client.read_many(REQUIRED_KEYS)
+                values = client.read_many(keys)
                 errors = {
                     key: value.error
                     for key, value in values.items()
                     if not value.ok or value.value is None
                 }
                 if errors:
-                    raise RuntimeError(f"PV read invalid during reference measurement: {errors}")
+                    raise RuntimeError(
+                        f"PV read invalid during reference measurement: {errors}"
+                    )
                 buffer.append(
                     Sample(
                         timestamp=time.time(),
@@ -732,14 +737,22 @@ class ReferenceWorker(QObject):
                 self.status_ready.emit(
                     f"Measuring reference: {index + 1}/{sample_count} samples"
                 )
-
             if self._stop_event.is_set():
                 return
-            result = auto_reference(buffer, self.config["safety"])
+            result = auto_reference(buffer, self.config)
             if result.reference is None:
                 raise RuntimeError(result.reason or "Reference measurement failed.")
             self.measured.emit(
-                {key: float(getattr(result.reference, key)) for key in REFERENCE_KEYS}
+                {
+                    "hv_kv": result.reference.hv_kv,
+                    "channels": {
+                        channel_id: {
+                            "amplitude": result.reference.channel_amplitudes[channel_id],
+                            "phase_deg": result.reference.channel_phases[channel_id],
+                        }
+                        for channel_id in result.reference.channel_amplitudes
+                    },
+                }
             )
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
@@ -756,33 +769,35 @@ class HVFeedbackWindow(QMainWindow):
         install_qt_window_raise_handler(self)
         self.app_context = load_app_context("hv_feedback")
         self.machine_profile = self.app_context.profile
-        self.base_config = load_profile_config(self.app_context)
-        self.config = copy.deepcopy(self.base_config)
+        self.profile_config = load_profile_config(self.app_context)
+        self.base_configs = {
+            unit_id: get_unit_config(self.profile_config, unit_id)
+            for unit_id in self.profile_config["unit_order"]
+        }
+        self.unit_configs = copy.deepcopy(self.base_configs)
+        self.active_unit_id = str(self.profile_config["unit_order"][0])
+        self.base_config = copy.deepcopy(self.base_configs[self.active_unit_id])
+        self.config = copy.deepcopy(self.unit_configs[self.active_unit_id])
+        self.selected_feedback_channels = {
+            unit_id: str(config["default_feedback_channel"])
+            for unit_id, config in self.unit_configs.items()
+        }
+        self.feedback_channel_id = self.selected_feedback_channels[self.active_unit_id]
         self.current_theme = resolve_initial_theme()
 
         self.session_thread: QThread | None = None
-        self.session_worker: FeedbackWorker | None = None
+        self.session_worker: GeneralizedFeedbackWorker | None = None
         self.reference_thread: QThread | None = None
-        self.reference_worker: ReferenceWorker | None = None
+        self.reference_worker: GeneralizedReferenceWorker | None = None
         self._operation = "stopped"
-        self._signal_history: dict[str, list[float]] = {
-            "time": [],
-            "acc1_amp": [],
-            "buncher_amp": [],
-            "acc1_phase": [],
-            "buncher_phase": [],
-            "hv_setpoint": [],
-            "hv_readback": [],
-        }
-        self._hv_command_history: dict[str, list[float]] = {
-            "time": [],
-            "hv_next": [],
-        }
+        self._selector_guard = False
         self._history_t0: float | None = None
         self._last_sample_timestamp: float | None = None
         self._last_sample_valid: bool | None = None
         self._plot_redraw_pending = False
         self._last_plot_draw_monotonic = 0.0
+        self._signal_history: dict[str, list[float]] = {}
+        self._hv_command_history = {"time": [], "hv_next": []}
         self._parameter_spins: dict[str, dict[str, QDoubleSpinBox | QSpinBox]] = {
             "control": {},
             "reference": {},
@@ -792,9 +807,10 @@ class HVFeedbackWindow(QMainWindow):
         self._safety_summary_labels: dict[str, QLabel] = {}
         self._parameter_edit_buttons: list[QPushButton] = []
         self._value_labels: dict[str, QLabel] = {}
+        self._rf_value_labels: dict[str, dict[str, QLabel]] = {}
 
         self._build_ui()
-        self._apply_config_to_ui(self.config)
+        self._configure_active_unit(rebuild_dialogs=True)
         self._apply_theme()
         self._set_idle_state()
         self.sample_age_timer = QTimer(self)
@@ -807,7 +823,6 @@ class HVFeedbackWindow(QMainWindow):
         self.resize(1500, 940)
         self.setMinimumSize(1180, 760)
         central = QWidget(self)
-        central.setObjectName("centralWidget")
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
         root.setContentsMargins(12, 12, 12, 12)
@@ -837,7 +852,6 @@ class HVFeedbackWindow(QMainWindow):
         self.theme_toggle_button.clicked.connect(self._toggle_theme)
         title_row.addWidget(self.theme_toggle_button)
         header_layout.addLayout(title_row)
-
         self.status_panel = StatusStrip(header)
         self.status_panel.add_item("operation", "Operation", "None")
         self.status_panel.add_item("state", "State", "STOPPED")
@@ -862,13 +876,10 @@ class HVFeedbackWindow(QMainWindow):
         self.start_feedback_button = QPushButton("Start Feedback", actions)
         self.start_feedback_button.setObjectName("startFeedbackButton")
         self.measure_reference_button = QPushButton("Measure Reference", actions)
-        self.measure_reference_button.setObjectName("measureReferenceButton")
         self.stop_button = QPushButton("Stop", actions)
         self.stop_button.setObjectName("stopButton")
-        self.save_snapshot_button = QPushButton("Save Snapshot", actions)
-        self.save_snapshot_button.setObjectName("saveSnapshotButton")
         self.load_snapshot_button = QPushButton("Load Snapshot", actions)
-        self.load_snapshot_button.setObjectName("loadSnapshotButton")
+        self.save_snapshot_button = QPushButton("Save Snapshot", actions)
         for button in (
             self.start_monitor_button,
             self.start_feedback_button,
@@ -890,65 +901,57 @@ class HVFeedbackWindow(QMainWindow):
         splitter.setSizes([900, 550])
         root.addWidget(splitter, 1)
 
-        self._build_parameter_dialogs()
-
+        self._build_static_parameter_dialogs()
         self.start_monitor_button.clicked.connect(self.start_monitor)
         self.start_feedback_button.clicked.connect(self.start_feedback)
         self.measure_reference_button.clicked.connect(self.measure_reference)
         self.stop_button.clicked.connect(self.stop_operation)
-        self.save_snapshot_button.clicked.connect(self.save_snapshot)
         self.load_snapshot_button.clicked.connect(self.load_snapshot)
+        self.save_snapshot_button.clicked.connect(self.save_snapshot)
+        self.feedback_unit_combo.currentIndexChanged.connect(self._unit_changed)
+        self.feedback_channel_combo.currentIndexChanged.connect(
+            self._feedback_channel_changed
+        )
+        self.edit_reference_button.clicked.connect(self._edit_reference)
+        self.edit_safety_button.clicked.connect(self._edit_safety)
 
     def _build_monitor_panel(self, parent: QWidget) -> QWidget:
         panel = QWidget(parent)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 6, 0)
         layout.setSpacing(10)
-
         values_card = QFrame(panel)
         values_card.setObjectName("controlCard")
-        values_card_layout = QVBoxLayout(values_card)
-        values_card_layout.setContentsMargins(12, 11, 12, 12)
-        values_card_layout.setSpacing(9)
-        values_header = QHBoxLayout()
-        values_title = QLabel("Latest Sample", values_card)
-        values_title.setObjectName("panelTitle")
-        values_header.addWidget(values_title)
-        values_header.addStretch(1)
+        values_layout = QVBoxLayout(values_card)
+        values_layout.setContentsMargins(12, 11, 12, 12)
+        values_layout.setSpacing(9)
+        header = QHBoxLayout()
+        title = QLabel("Latest Sample", values_card)
+        title.setObjectName("panelTitle")
+        header.addWidget(title)
+        header.addStretch(1)
         self.sample_freshness_label = QLabel("Waiting for acquisition", values_card)
         self.sample_freshness_label.setProperty("role", "sampleFreshness")
         self.sample_freshness_label.setProperty("tone", "subtle")
-        values_header.addWidget(self.sample_freshness_label)
-        values_card_layout.addLayout(values_header)
-        values_layout = QGridLayout()
-        values_layout.setContentsMargins(0, 0, 0, 0)
-        values_layout.setHorizontalSpacing(8)
-        values_layout.setVerticalSpacing(8)
-        value_specs = (
-            ("hv_setpoint", "HV setpoint", "— kV"),
-            ("hv_readback", "HV readback", "— kV"),
-            ("hv_mismatch", "HV mismatch", "— kV"),
-            ("acc1_level", "ACC1 level", "— % of ref"),
-            ("amp_ratio_error", "Amplitude ratio error", "— %"),
-            ("phase_error", "ACC1 / Buncher phase error", "— / — deg"),
-        )
-        for index, (key, label_text, placeholder) in enumerate(value_specs):
-            row, col = divmod(index, 3)
-            card = QFrame(values_card)
-            card.setObjectName("metricCard")
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(10, 8, 10, 8)
-            card_layout.setSpacing(2)
-            name = QLabel(label_text, card)
-            name.setProperty("role", "metricName")
-            value = QLabel(placeholder, card)
-            value.setProperty("role", "metricValue")
-            value.setProperty("tone", "subtle")
-            card_layout.addWidget(name)
-            card_layout.addWidget(value)
-            values_layout.addWidget(card, row, col)
+        header.addWidget(self.sample_freshness_label)
+        values_layout.addLayout(header)
+        hv_layout = QGridLayout()
+        for column, (key, label, placeholder) in enumerate(
+            (
+                ("hv_setpoint", "HV setpoint", "— kV"),
+                ("hv_readback", "HV readback", "— kV"),
+                ("hv_mismatch", "HV mismatch", "— kV"),
+            )
+        ):
+            card, value = self._metric_card(values_card, label, placeholder)
+            hv_layout.addWidget(card, 0, column)
             self._value_labels[key] = value
-        values_card_layout.addLayout(values_layout)
+        values_layout.addLayout(hv_layout)
+        self.rf_metrics_widget = QWidget(values_card)
+        self.rf_metrics_layout = QVBoxLayout(self.rf_metrics_widget)
+        self.rf_metrics_layout.setContentsMargins(0, 0, 0, 0)
+        self.rf_metrics_layout.setSpacing(6)
+        values_layout.addWidget(self.rf_metrics_widget)
         layout.addWidget(values_card)
 
         plot_card = QFrame(panel)
@@ -957,93 +960,94 @@ class HVFeedbackWindow(QMainWindow):
         plot_layout.setContentsMargins(12, 11, 12, 12)
         plot_layout.setSpacing(6)
         plot_header = QHBoxLayout()
-        plot_header.setSpacing(6)
         plot_title = QLabel("Feedback Trends", plot_card)
         plot_title.setObjectName("panelTitle")
         plot_header.addWidget(plot_title)
         plot_header.addStretch(1)
-
-        scale_label = QLabel("Scale", plot_card)
-        scale_label.setProperty("role", "field")
-        plot_header.addWidget(scale_label)
-        self.plot_scale_combo = QComboBox(plot_card)
-        self.plot_scale_combo.addItems(("Relative", "Raw"))
-        self.plot_scale_combo.setToolTip(
-            "Relative shows deviations from the active feedback reference."
-        )
-        plot_header.addWidget(self.plot_scale_combo)
-
-        view_label = QLabel("View", plot_card)
-        view_label.setProperty("role", "field")
-        plot_header.addWidget(view_label)
-        self.plot_window_combo = QComboBox(plot_card)
-        for text, seconds in (
-            ("Recent 15 min", 15 * 60),
-            ("Recent 30 min", 30 * 60),
-            ("Recent 60 min", 60 * 60),
-            ("All", None),
+        for label_text, attr, items in (
+            ("Scale", "plot_scale_combo", (("Relative", None), ("Raw", None))),
+            (
+                "View",
+                "plot_window_combo",
+                (("Recent 15 min", 900), ("Recent 30 min", 1800), ("Recent 60 min", 3600), ("All", None)),
+            ),
+            ("Time", "plot_time_axis_combo", (("Elapsed", None), ("Clock", None))),
         ):
-            self.plot_window_combo.addItem(text, seconds)
-        self.plot_window_combo.setToolTip(
-            "Limit the visible trend by elapsed time; All shows the current in-memory run."
-        )
-        plot_header.addWidget(self.plot_window_combo)
-
-        time_label = QLabel("Time", plot_card)
-        time_label.setProperty("role", "field")
-        plot_header.addWidget(time_label)
-        self.plot_time_axis_combo = QComboBox(plot_card)
-        self.plot_time_axis_combo.addItems(("Elapsed", "Clock"))
-        self.plot_time_axis_combo.setToolTip(
-            "Elapsed uses minutes from session start; Clock uses local wall-clock time."
-        )
-        plot_header.addWidget(self.plot_time_axis_combo)
+            label = QLabel(label_text, plot_card)
+            label.setProperty("role", "field")
+            plot_header.addWidget(label)
+            combo = QComboBox(plot_card)
+            for text, data in items:
+                combo.addItem(text, data)
+            setattr(self, attr, combo)
+            combo.currentIndexChanged.connect(self._plot_control_changed)
+            plot_header.addWidget(combo)
         plot_layout.addLayout(plot_header)
-
-        self.figure = Figure(figsize=(8, 6), constrained_layout=True)
+        self.figure = Figure(figsize=(8.0, 6.0), tight_layout=True)
+        self.amp_axis = self.figure.add_subplot(311)
+        self.phase_axis = self.figure.add_subplot(312)
+        self.hv_axis = self.figure.add_subplot(313)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.amp_axis = self.figure.add_subplot(311)
-        self.phase_axis = self.figure.add_subplot(312, sharex=self.amp_axis)
-        self.hv_axis = self.figure.add_subplot(313, sharex=self.amp_axis)
+        plot_layout.addWidget(self.canvas, 1)
         self.plot_toolbar = CompactNavigationToolbar(self.canvas, plot_card)
         self.plot_toolbar.setObjectName("plotToolbar")
-        plot_layout.addWidget(self.plot_toolbar)
-        plot_layout.addWidget(self.canvas)
-        self.plot_scale_combo.currentTextChanged.connect(self._plot_control_changed)
-        self.plot_window_combo.currentIndexChanged.connect(self._plot_control_changed)
-        self.plot_time_axis_combo.currentTextChanged.connect(self._plot_control_changed)
         self.plot_toolbar.navigation_mode_changed.connect(self._plot_navigation_changed)
+        plot_layout.addWidget(self.plot_toolbar)
         layout.addWidget(plot_card, 1)
         return panel
+
+    @staticmethod
+    def _metric_card(parent: QWidget, label: str, placeholder: str) -> tuple[QFrame, QLabel]:
+        card = QFrame(parent)
+        card.setObjectName("metricCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(10, 7, 10, 7)
+        layout.setSpacing(2)
+        name = QLabel(label, card)
+        name.setProperty("role", "metricName")
+        value = QLabel(placeholder, card)
+        value.setProperty("role", "metricValue")
+        value.setProperty("tone", "subtle")
+        layout.addWidget(name)
+        layout.addWidget(value)
+        return card, value
 
     def _build_configuration_panel(self, parent: QWidget) -> QWidget:
         scroll = QScrollArea(parent)
         scroll.setObjectName("configurationScroll")
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         panel = QWidget(scroll)
         panel.setObjectName("configurationPanel")
-        panel.setMinimumWidth(430)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(6, 0, 0, 0)
         layout.setSpacing(10)
+
+        context_card = QFrame(panel)
+        context_card.setObjectName("controlCard")
+        context_layout = QVBoxLayout(context_card)
+        context_layout.setContentsMargins(12, 11, 12, 12)
+        context_title = QLabel("Feedback Context", context_card)
+        context_title.setObjectName("panelTitle")
+        context_layout.addWidget(context_title)
+        form = QFormLayout()
+        self.feedback_unit_combo = QComboBox(context_card)
+        for unit_id in self.profile_config["unit_order"]:
+            config = self.unit_configs[str(unit_id)]
+            self.feedback_unit_combo.addItem(str(config["feedback_unit_label"]), unit_id)
+        self.feedback_channel_combo = QComboBox(context_card)
+        form.addRow("Feedback Unit", self.feedback_unit_combo)
+        form.addRow("Feedback Channel", self.feedback_channel_combo)
+        context_layout.addLayout(form)
+        layout.addWidget(context_card)
 
         feedback_card = QFrame(panel)
         feedback_card.setObjectName("controlCard")
         feedback_layout = QVBoxLayout(feedback_card)
         feedback_layout.setContentsMargins(12, 11, 12, 12)
-        feedback_layout.setSpacing(8)
-        feedback_header = QHBoxLayout()
-        feedback_title = QLabel("Feedback Control", feedback_card)
+        feedback_title = QLabel("Feedback Settings", feedback_card)
         feedback_title.setObjectName("panelTitle")
-        feedback_header.addWidget(feedback_title)
-        feedback_header.addStretch(1)
-        self.advanced_settings_button = QPushButton("Advanced…", feedback_card)
-        self.advanced_settings_button.setProperty("compact", True)
-        feedback_header.addWidget(self.advanced_settings_button)
-        feedback_layout.addLayout(feedback_header)
+        feedback_layout.addWidget(feedback_title)
         feedback_layout.addLayout(
             self._build_parameter_form(
                 "control",
@@ -1051,100 +1055,37 @@ class HVFeedbackWindow(QMainWindow):
                 feedback_card,
             )
         )
+        self.advanced_settings_button = QPushButton("Advanced Settings…", feedback_card)
+        self.advanced_settings_button.setProperty("compact", True)
+        feedback_layout.addWidget(self.advanced_settings_button)
         self.timing_summary_label = QLabel("", feedback_card)
         self.timing_summary_label.setProperty("role", "field")
-        self.timing_summary_label.setWordWrap(True)
         feedback_layout.addWidget(self.timing_summary_label)
         layout.addWidget(feedback_card)
 
-        reference_card, self.edit_reference_button = self._build_summary_card(
+        reference_card, self.edit_reference_button = self._summary_card(
             "Reference Target",
-            (
-                ("acc1_amp_ref", "ACC1 amplitude"),
-                ("phases", "ACC1 / Buncher phase"),
-                ("amp_ratio_ref", "Amplitude ratio"),
-                ("hv0", "Reference HV"),
-            ),
+            (("feedback", "Feedback channel"), ("channels", "RF references"), ("hv", "Reference HV")),
             self._reference_summary_labels,
             panel,
         )
         layout.addWidget(reference_card)
-
-        safety_card, self.edit_safety_button = self._build_summary_card(
+        safety_card, self.edit_safety_button = self._summary_card(
             "Safety Limits",
-            (
-                ("hv_range", "HV range"),
-                ("hv_mismatch", "Readback mismatch"),
-                ("phase_limits", "Phase deviation"),
-                ("amplitude_limits", "Amplitude deviation"),
-            ),
+            (("hv", "HV range"), ("mismatch", "Readback mismatch"), ("phase", "Phase deviation"), ("amplitude", "Amplitude deviation")),
             self._safety_summary_labels,
             panel,
         )
         layout.addWidget(safety_card)
         self._parameter_edit_buttons.extend(
-            (
-                self.advanced_settings_button,
-                self.edit_reference_button,
-                self.edit_safety_button,
-            )
+            (self.advanced_settings_button, self.edit_reference_button, self.edit_safety_button)
         )
         layout.addStretch(1)
         scroll.setWidget(panel)
         return scroll
 
     @staticmethod
-    def _select_specs(
-        specs: tuple[tuple[str, str, float, float, float, int | None], ...],
-        keys: tuple[str, ...],
-    ) -> tuple[tuple[str, str, float, float, float, int | None], ...]:
-        by_key = {spec[0]: spec for spec in specs}
-        return tuple(by_key[key] for key in keys)
-
-    def _build_parameter_form(
-        self,
-        section: str,
-        specs: tuple[tuple[str, str, float, float, float, int | None], ...],
-        parent: QWidget,
-    ) -> QFormLayout:
-        form = QFormLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(6)
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        for spec in specs:
-            _key, label, *_ = spec
-            field_label = QLabel(label, parent)
-            field_label.setProperty("role", "field")
-            spin = self._create_parameter_spin(section, spec, parent)
-            form.addRow(field_label, spin)
-        return form
-
-    def _create_parameter_spin(
-        self,
-        section: str,
-        spec: tuple[str, str, float, float, float, int | None],
-        parent: QWidget,
-    ) -> QDoubleSpinBox | QSpinBox:
-        key, _label, minimum, maximum, step, decimals = spec
-        if decimals is None:
-            spin = QSpinBox(parent)
-            spin.setRange(int(minimum), int(maximum))
-            spin.setSingleStep(int(step))
-        else:
-            spin = CompactDoubleSpinBox(parent)
-            spin.setRange(minimum, maximum)
-            spin.setSingleStep(step)
-            spin.setDecimals(decimals)
-        spin.setKeyboardTracking(False)
-        spin.setProperty("numeric", True)
-        spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._parameter_spins[section][key] = spin
-        return spin
-
-    def _build_summary_card(
-        self,
+    def _summary_card(
         title: str,
         rows: tuple[tuple[str, str], ...],
         labels: dict[str, QLabel],
@@ -1152,100 +1093,93 @@ class HVFeedbackWindow(QMainWindow):
     ) -> tuple[QFrame, QPushButton]:
         card = QFrame(parent)
         card.setObjectName("controlCard")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(12, 11, 12, 12)
-        card_layout.setSpacing(8)
-
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 11, 12, 12)
+        layout.setSpacing(8)
         header = QHBoxLayout()
         title_label = QLabel(title, card)
         title_label.setObjectName("panelTitle")
         header.addWidget(title_label)
         header.addStretch(1)
-        edit_button = QPushButton("Edit…", card)
-        edit_button.setProperty("compact", True)
-        header.addWidget(edit_button)
-        card_layout.addLayout(header)
-
+        button = QPushButton("Edit…", card)
+        button.setProperty("compact", True)
+        header.addWidget(button)
+        layout.addLayout(header)
         grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(6)
         for row, (key, text) in enumerate(rows):
-            field_label = QLabel(text, card)
-            field_label.setProperty("role", "field")
-            value_label = QLabel("—", card)
-            value_label.setProperty("role", "summaryValue")
-            value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            grid.addWidget(field_label, row, 0)
-            grid.addWidget(value_label, row, 1)
-            labels[key] = value_label
+            field = QLabel(text, card)
+            field.setProperty("role", "field")
+            value = QLabel("—", card)
+            value.setProperty("role", "summaryValue")
+            value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            value.setWordWrap(True)
+            grid.addWidget(field, row, 0)
+            grid.addWidget(value, row, 1)
+            labels[key] = value
         grid.setColumnStretch(1, 1)
-        card_layout.addLayout(grid)
-        return card, edit_button
+        layout.addLayout(grid)
+        return card, button
 
-    def _build_parameter_dialogs(self) -> None:
-        self.advanced_settings_dialog = self._build_parameter_dialog(
+    @staticmethod
+    def _select_specs(specs, keys):
+        by_key = {spec[0]: spec for spec in specs}
+        return tuple(by_key[key] for key in keys)
+
+    def _build_parameter_form(self, section: str, specs, parent: QWidget) -> QFormLayout:
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(6)
+        for spec in specs:
+            field = QLabel(spec[1], parent)
+            field.setProperty("role", "field")
+            form.addRow(field, self._create_parameter_spin(section, spec, parent))
+        return form
+
+    def _create_parameter_spin(self, section: str, spec, parent: QWidget):
+        key, _label, minimum, maximum, step, decimals = spec
+        if decimals is None:
+            spin: QDoubleSpinBox | QSpinBox = QSpinBox(parent)
+            spin.setRange(int(minimum), int(maximum))
+            spin.setSingleStep(int(step))
+        else:
+            spin = CompactDoubleSpinBox(parent)
+            spin.setRange(float(minimum), float(maximum))
+            spin.setSingleStep(float(step))
+            spin.setDecimals(int(decimals))
+        spin.setKeyboardTracking(False)
+        spin.setProperty("numeric", True)
+        spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._parameter_spins[section][key] = spin
+        return spin
+
+    def _build_static_parameter_dialogs(self) -> None:
+        self.advanced_settings_dialog = self._parameter_dialog(
             "Advanced Settings",
             "control",
             self._select_specs(CONTROL_FIELDS, ADVANCED_CONTROL_KEYS),
-            accept_text="Apply",
+            "Apply",
         )
-        self.reference_measurement_dialog = self._build_parameter_dialog(
+        self.reference_measurement_dialog = self._parameter_dialog(
             "Measure Reference",
             "control",
             self._select_specs(CONTROL_FIELDS, REFERENCE_MEASUREMENT_KEYS),
-            accept_text="Start Measurement",
+            "Start Measurement",
         )
         self.reference_measurement_estimate_label = QLabel(
-            "",
-            self.reference_measurement_dialog,
+            "", self.reference_measurement_dialog
         )
         self.reference_measurement_estimate_label.setProperty("role", "field")
-        self.reference_measurement_estimate_label.setWordWrap(True)
-        measurement_layout = self.reference_measurement_dialog.layout()
-        if not isinstance(measurement_layout, QVBoxLayout):
-            raise RuntimeError("Reference measurement dialog requires a vertical layout.")
-        measurement_layout.insertWidget(
-            measurement_layout.count() - 1,
-            self.reference_measurement_estimate_label,
-        )
-        self.reference_dialog = self._build_parameter_dialog(
-            "Edit Reference",
-            "reference",
-            REFERENCE_FIELDS,
-            accept_text="Apply",
-        )
-        self.safety_dialog = self._build_parameter_dialog(
-            "Edit Safety Limits",
-            "safety",
-            SAFETY_FIELDS,
-            accept_text="Apply",
-        )
+        layout = self.reference_measurement_dialog.layout()
+        assert isinstance(layout, QVBoxLayout)
+        layout.insertWidget(layout.count() - 1, self.reference_measurement_estimate_label)
         self.advanced_settings_button.clicked.connect(
-            lambda _checked=False: self._open_parameter_dialog(
-                self.advanced_settings_dialog,
-                "control",
-                ADVANCED_CONTROL_KEYS,
+            lambda: self._open_parameter_dialog(
+                self.advanced_settings_dialog, "control", ADVANCED_CONTROL_KEYS
             )
         )
-        self.edit_reference_button.clicked.connect(
-            lambda _checked=False: self._open_parameter_dialog(
-                self.reference_dialog,
-                "reference",
-                tuple(spec[0] for spec in REFERENCE_FIELDS),
-            )
-        )
-        self.edit_safety_button.clicked.connect(
-            lambda _checked=False: self._open_parameter_dialog(
-                self.safety_dialog,
-                "safety",
-                tuple(spec[0] for spec in SAFETY_FIELDS),
-            )
-        )
-        for fields in self._parameter_spins.values():
-            for spin in fields.values():
-                spin.valueChanged.connect(self._refresh_parameter_summaries)
+        for spin in self._parameter_spins["control"].values():
+            spin.valueChanged.connect(self._refresh_parameter_summaries)
         self._parameter_spins["control"]["reference_samples"].valueChanged.connect(
             self._update_reference_measurement_estimate
         )
@@ -1254,30 +1188,51 @@ class HVFeedbackWindow(QMainWindow):
         )
         self._update_reference_measurement_estimate()
 
-    def _build_parameter_dialog(
-        self,
-        title: str,
-        section: str,
-        specs: tuple[tuple[str, str, float, float, float, int | None], ...],
-        *,
-        accept_text: str,
-    ) -> QDialog:
+    def _rebuild_dynamic_parameter_dialogs(self) -> None:
+        for name in ("reference_dialog", "safety_dialog"):
+            dialog = getattr(self, name, None)
+            if dialog is not None:
+                dialog.close()
+                dialog.deleteLater()
+        self._parameter_spins["reference"] = {}
+        self._parameter_spins["safety"] = {}
+        reference_specs = [
+            ("hv_kv", "Reference HV (kV)", 0.0, 100.0, 0.001, 6)
+        ]
+        safety_specs = list(BASE_SAFETY_FIELDS)
+        for channel in self.config["rf_channels"]:
+            channel_id = str(channel["id"])
+            label = str(channel["label"])
+            reference_specs.extend(
+                (
+                    (f"channels/{channel_id}/amplitude", f"{label} amplitude", 0.000001, 1.0e9, 1.0, 6),
+                    (f"channels/{channel_id}/phase_deg", f"{label} phase (deg)", -180.0, 180.0, 0.1, 4),
+                )
+            )
+            safety_specs.append(
+                (f"phase_limit_deg/{channel_id}", f"{label} phase limit (deg)", 0.000001, 180.0, 0.1, 4)
+            )
+        self.reference_dialog = self._parameter_dialog(
+            "Edit Reference", "reference", tuple(reference_specs), "Apply"
+        )
+        self.safety_dialog = self._parameter_dialog(
+            "Edit Safety Limits", "safety", tuple(safety_specs), "Apply"
+        )
+        for section in ("reference", "safety"):
+            for spin in self._parameter_spins[section].values():
+                spin.valueChanged.connect(self._refresh_parameter_summaries)
+
+    def _parameter_dialog(self, title: str, section: str, specs, accept_text: str) -> QDialog:
         dialog = QDialog(self)
-        dialog.setObjectName("parameterDialog")
         dialog.setWindowTitle(title)
         dialog.setModal(True)
         dialog.setMinimumWidth(480)
         layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
-
         card = QFrame(dialog)
         card.setObjectName("controlCard")
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(12, 11, 12, 12)
         card_layout.addLayout(self._build_parameter_form(section, specs, card))
         layout.addWidget(card)
-
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
         buttons.button(QDialogButtonBox.Ok).setText(accept_text)
         buttons.accepted.connect(dialog.accept)
@@ -1285,12 +1240,21 @@ class HVFeedbackWindow(QMainWindow):
         layout.addWidget(buttons)
         return dialog
 
-    def _open_parameter_dialog(
-        self,
-        dialog: QDialog,
-        section: str,
-        keys: tuple[str, ...],
-    ) -> bool:
+    def _edit_reference(self) -> None:
+        self._open_parameter_dialog(
+            self.reference_dialog,
+            "reference",
+            tuple(self._parameter_spins["reference"]),
+        )
+
+    def _edit_safety(self) -> None:
+        self._open_parameter_dialog(
+            self.safety_dialog,
+            "safety",
+            tuple(self._parameter_spins["safety"]),
+        )
+
+    def _open_parameter_dialog(self, dialog: QDialog, section: str, keys) -> bool:
         fields = self._parameter_spins[section]
         original = {key: fields[key].value() for key in keys}
         while True:
@@ -1302,10 +1266,132 @@ class HVFeedbackWindow(QMainWindow):
             config = self._validated_config_or_message()
             if config is not None:
                 self.config = copy.deepcopy(config)
+                self.unit_configs[self.active_unit_id] = copy.deepcopy(config)
                 self._refresh_parameter_summaries()
                 if section in {"reference", "safety"}:
                     self._reset_monitor_display()
                 return True
+
+    @staticmethod
+    def _nested_value(mapping: dict[str, Any], key: str) -> Any:
+        value: Any = mapping
+        for part in key.split("/"):
+            value = value[part]
+        return value
+
+    @staticmethod
+    def _set_nested_value(mapping: dict[str, Any], key: str, value: Any) -> None:
+        parts = key.split("/")
+        target = mapping
+        for part in parts[:-1]:
+            target = target[part]
+        target[parts[-1]] = value
+
+    def _apply_config_to_ui(self, config: dict[str, Any]) -> None:
+        for section, fields in self._parameter_spins.items():
+            for key, spin in fields.items():
+                value = self._nested_value(config[section], key)
+                spin.setValue(int(value) if isinstance(spin, QSpinBox) else float(value))
+        self._refresh_parameter_summaries()
+
+    def _config_from_ui(self) -> dict[str, Any]:
+        config = copy.deepcopy(self.config)
+        for section, fields in self._parameter_spins.items():
+            for key, spin in fields.items():
+                value = int(spin.value()) if isinstance(spin, QSpinBox) else float(spin.value())
+                self._set_nested_value(config[section], key, value)
+        validate_session_config(config)
+        return config
+
+    def _validated_config_or_message(self) -> dict[str, Any] | None:
+        try:
+            return self._config_from_ui()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Invalid HV Feedback Parameters", str(exc))
+            return None
+
+    def _configure_active_unit(self, *, rebuild_dialogs: bool) -> None:
+        self.config = copy.deepcopy(self.unit_configs[self.active_unit_id])
+        self.base_config = copy.deepcopy(self.base_configs[self.active_unit_id])
+        self.feedback_channel_id = self.selected_feedback_channels[self.active_unit_id]
+        self._selector_guard = True
+        self._populate_feedback_channel_combo()
+        self._selector_guard = False
+        if rebuild_dialogs:
+            self._rebuild_dynamic_parameter_dialogs()
+        self._apply_config_to_ui(self.config)
+        self._rebuild_rf_metrics()
+        self._reset_monitor_display()
+
+    def _populate_feedback_channel_combo(self) -> None:
+        self.feedback_channel_combo.clear()
+        selected_index = 0
+        for index, channel in enumerate(self.config["rf_channels"]):
+            channel_id = str(channel["id"])
+            self.feedback_channel_combo.addItem(str(channel["label"]), channel_id)
+            if channel_id == self.feedback_channel_id:
+                selected_index = index
+        self.feedback_channel_combo.setCurrentIndex(selected_index)
+
+    @pyqtSlot(int)
+    def _unit_changed(self, index: int) -> None:
+        if self._selector_guard or index < 0:
+            return
+        new_unit_id = str(self.feedback_unit_combo.itemData(index))
+        if new_unit_id == self.active_unit_id:
+            return
+        current = self._validated_config_or_message()
+        if current is None:
+            self._selector_guard = True
+            old_index = self.feedback_unit_combo.findData(self.active_unit_id)
+            self.feedback_unit_combo.setCurrentIndex(old_index)
+            self._selector_guard = False
+            return
+        self.unit_configs[self.active_unit_id] = copy.deepcopy(current)
+        self.active_unit_id = new_unit_id
+        self._configure_active_unit(rebuild_dialogs=True)
+
+    @pyqtSlot(int)
+    def _feedback_channel_changed(self, index: int) -> None:
+        if self._selector_guard or index < 0:
+            return
+        channel_id = str(self.feedback_channel_combo.itemData(index))
+        if channel_id == self.feedback_channel_id:
+            return
+        self.feedback_channel_id = channel_id
+        self.selected_feedback_channels[self.active_unit_id] = channel_id
+        self._refresh_parameter_summaries()
+        self._rebuild_rf_metrics()
+        self._reset_monitor_display()
+
+    def _rebuild_rf_metrics(self) -> None:
+        while self.rf_metrics_layout.count():
+            item = self.rf_metrics_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._rf_value_labels = {}
+        for channel in self.config["rf_channels"]:
+            channel_id = str(channel["id"])
+            label = str(channel["label"])
+            row = QFrame(self.rf_metrics_widget)
+            row.setObjectName("metricCard")
+            grid = QGridLayout(row)
+            grid.setContentsMargins(10, 6, 10, 6)
+            role = "Feedback Channel" if channel_id == self.feedback_channel_id else "Monitored"
+            name = QLabel(f"{label}  ·  {role}", row)
+            name.setProperty("role", "metricName")
+            amplitude = QLabel("—", row)
+            amplitude.setProperty("role", "metricValue")
+            amplitude.setProperty("tone", "subtle")
+            phase = QLabel("— deg", row)
+            phase.setProperty("role", "metricValue")
+            phase.setProperty("tone", "subtle")
+            grid.addWidget(name, 0, 0, 1, 2)
+            grid.addWidget(amplitude, 1, 0)
+            grid.addWidget(phase, 1, 1)
+            self.rf_metrics_layout.addWidget(row)
+            self._rf_value_labels[channel_id] = {"amplitude": amplitude, "phase": phase}
 
     @staticmethod
     def _format_value(value: float, decimals: int) -> str:
@@ -1318,84 +1404,59 @@ class HVFeedbackWindow(QMainWindow):
         samples = int(fields["reference_samples"].value())
         interval = float(fields["reference_sample_interval_s"].value())
         duration_s = max(0.0, (samples - 1) * interval)
-        if duration_s < 60.0:
-            duration = f"{self._format_value(duration_s, 1)} s"
-        else:
-            duration = f"{self._format_value(duration_s / 60.0, 1)} min"
+        duration = (
+            f"{self._format_value(duration_s, 1)} s"
+            if duration_s < 60.0
+            else f"{self._format_value(duration_s / 60.0, 1)} min"
+        )
         self.reference_measurement_estimate_label.setText(
             f"Estimated duration: ≈{duration}  ·  requires {samples} valid samples"
         )
 
     @pyqtSlot()
     def _refresh_parameter_summaries(self) -> None:
-        if not self._reference_summary_labels or not self._safety_summary_labels:
+        if not self._reference_summary_labels:
             return
-        control = {key: spin.value() for key, spin in self._parameter_spins["control"].items()}
-        reference = {
-            key: spin.value() for key, spin in self._parameter_spins["reference"].items()
-        }
-        safety = {key: spin.value() for key, spin in self._parameter_spins["safety"].items()}
-
-        fmt = self._format_value
-        self.timing_summary_label.setText(
-            "Sampling "
-            f"{fmt(control['sample_period_s'], 2)} s  ·  "
-            f"average {fmt(control['average_window_s'], 2)} s"
-        )
-        self._reference_summary_labels["acc1_amp_ref"].setText(
-            f"{fmt(reference['acc1_amp_ref'], 1)} a.u."
-        )
-        self._reference_summary_labels["phases"].setText(
-            f"{fmt(reference['acc1_phase_ref'], 3)}° / "
-            f"{fmt(reference['buncher_phase_ref'], 3)}°"
-        )
-        self._reference_summary_labels["amp_ratio_ref"].setText(
-            fmt(reference["amp_ratio_ref"], 4)
-        )
-        self._reference_summary_labels["hv0"].setText(
-            f"{fmt(reference['hv0'], 3)} kV"
-        )
-
-        self._safety_summary_labels["hv_range"].setText(
-            f"{fmt(safety['hv_min_kv'], 3)}–{fmt(safety['hv_max_kv'], 3)} kV"
-        )
-        self._safety_summary_labels["hv_mismatch"].setText(
-            f"≤ {fmt(safety['hv_readback_tolerance_kv'], 3)} kV"
-        )
-        self._safety_summary_labels["phase_limits"].setText(
-            f"±{fmt(safety['acc1_phase_limit_deg'], 2)}° / "
-            f"±{fmt(safety['buncher_phase_limit_deg'], 2)}°"
-        )
-        self._safety_summary_labels["amplitude_limits"].setText(
-            f"Ratio ±{fmt(safety['amp_ratio_limit_rel'] * 100.0, 1)}%  ·  "
-            f"ACC1 {fmt(safety['acc1_amp_min_rel'] * 100.0, 1)}–"
-            f"{fmt(safety['acc1_amp_max_rel'] * 100.0, 1)}%"
-        )
-
-    def _apply_config_to_ui(self, config: dict[str, Any]) -> None:
-        for section, fields in self._parameter_spins.items():
-            for key, spin in fields.items():
-                value = config[section][key]
-                spin.setValue(int(value) if isinstance(spin, QSpinBox) else float(value))
-        self._refresh_parameter_summaries()
-
-    def _config_from_ui(self) -> dict[str, Any]:
-        config = copy.deepcopy(self.config)
-        for section, fields in self._parameter_spins.items():
-            for key, spin in fields.items():
-                config[section][key] = (
-                    int(spin.value()) if isinstance(spin, QSpinBox) else float(spin.value())
-                )
-        config["reference"]["mode"] = "manual"
-        validate_session_config(config)
-        return config
-
-    def _validated_config_or_message(self) -> dict[str, Any] | None:
         try:
-            return self._config_from_ui()
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "Invalid HV Feedback Parameters", str(exc))
-            return None
+            config = self._config_from_ui()
+        except Exception:
+            config = self.config
+        control = config["control"]
+        reference = config["reference"]
+        safety = config["safety"]
+        labels = {str(channel["id"]): str(channel["label"]) for channel in config["rf_channels"]}
+        feedback_label = labels[self.feedback_channel_id]
+        self.timing_summary_label.setText(
+            f"Sampling {self._format_value(float(control['sample_period_s']), 2)} s  ·  "
+            f"average {self._format_value(float(control['average_window_s']), 2)} s"
+        )
+        self._reference_summary_labels["feedback"].setText(feedback_label)
+        self._reference_summary_labels["channels"].setText(
+            "  ·  ".join(
+                f"{labels[channel_id]} {float(values['amplitude']):.4g} / {float(values['phase_deg']):.3f}°"
+                for channel_id, values in reference["channels"].items()
+            )
+        )
+        self._reference_summary_labels["hv"].setText(
+            f"{float(reference['hv_kv']):.3f} kV"
+        )
+        self._safety_summary_labels["hv"].setText(
+            f"{float(safety['hv_min_kv']):.3f}–{float(safety['hv_max_kv']):.3f} kV"
+        )
+        self._safety_summary_labels["mismatch"].setText(
+            f"≤ {float(safety['hv_readback_tolerance_kv']):.3f} kV"
+        )
+        self._safety_summary_labels["phase"].setText(
+            "  ·  ".join(
+                f"{labels[channel_id]} ±{float(limit):.2f}°"
+                for channel_id, limit in safety["phase_limit_deg"].items()
+            )
+        )
+        self._safety_summary_labels["amplitude"].setText(
+            f"Feedback {float(safety['feedback_amplitude_min_rel']) * 100:.1f}–"
+            f"{float(safety['feedback_amplitude_max_rel']) * 100:.1f}%  ·  "
+            f"ratio ±{float(safety['amplitude_ratio_limit_rel']) * 100:.1f}%"
+        )
 
     def start_monitor(self) -> None:
         config = self._validated_config_or_message()
@@ -1416,7 +1477,6 @@ class HVFeedbackWindow(QMainWindow):
             return
         finally:
             QApplication.restoreOverrideCursor()
-
         if any(not value.ok or value.value is None for value in values.values()):
             detail = "; ".join(
                 f"{key}: {value.error or 'invalid value'}"
@@ -1425,23 +1485,27 @@ class HVFeedbackWindow(QMainWindow):
             )
             QMessageBox.critical(self, "HV Feedback Preflight Failed", detail)
             return
-
-        control = config["control"]
+        channel = next(
+            channel
+            for channel in config["rf_channels"]
+            if channel["id"] == self.feedback_channel_id
+        )
         reference = config["reference"]
         safety = config["safety"]
-        target_pv = config["pvs"]["hv_setpoint"]["name"]
+        control = config["control"]
         message = (
             "Start live high-voltage feedback?\n\n"
-            f"Target PV: {target_pv}\n"
+            f"Feedback Unit: {config['feedback_unit_label']}\n"
+            f"Feedback Channel: {channel['label']}\n"
+            f"Target PV: {config['pvs']['hv_setpoint']['name']}\n"
             f"Current setpoint: {values['hv_setpoint'].value:.6f} kV\n"
             f"Current readback: {values['hv_readback'].value:.6f} kV\n"
-            f"Reference HV: {reference['hv0']:.6f} kV\n"
+            f"Reference amplitude: {reference['channels'][self.feedback_channel_id]['amplitude']:.6f}\n"
+            f"Reference HV: {reference['hv_kv']:.6f} kV\n"
             f"Maximum step: {control['max_step_kv']:.6f} kV\n"
             f"Total offset limit: ±{control['total_limit_kv']:.6f} kV\n"
-            f"Absolute safety range: [{safety['hv_min_kv']:.6f}, "
-            f"{safety['hv_max_kv']:.6f}] kV\n"
-            f"ACC1 amplitude reference: {reference['acc1_amp_ref']:.6f}\n\n"
-            "Every write will be re-authorized against the active machine profile."
+            f"Absolute safety range: [{safety['hv_min_kv']:.6f}, {safety['hv_max_kv']:.6f}] kV\n\n"
+            "Every write will revalidate the selected unit target against the active profile."
         )
         answer = QMessageBox.warning(
             self,
@@ -1453,22 +1517,18 @@ class HVFeedbackWindow(QMainWindow):
         if answer == QMessageBox.Yes:
             self._start_session("feedback", config, session_confirmed=True)
 
-    def _start_session(
-        self,
-        operation: str,
-        config: dict[str, Any],
-        *,
-        session_confirmed: bool,
-    ) -> None:
+    def _start_session(self, operation: str, config: dict[str, Any], *, session_confirmed: bool) -> None:
         if self.session_thread is not None or self.reference_thread is not None:
             return
         self.config = copy.deepcopy(config)
+        self.unit_configs[self.active_unit_id] = copy.deepcopy(config)
         self._operation = operation
         self._reset_monitor_display()
         self.session_thread = QThread(self)
-        self.session_worker = FeedbackWorker(
+        self.session_worker = GeneralizedFeedbackWorker(
             self.app_context,
             config,
+            self.feedback_channel_id,
             operation,
             session_confirmed=session_confirmed,
         )
@@ -1483,7 +1543,10 @@ class HVFeedbackWindow(QMainWindow):
         self.session_thread.finished.connect(self._session_finished)
         self.session_thread.finished.connect(self.session_thread.deleteLater)
         self._set_busy(True)
-        self.status_panel.set_value("operation", operation.title())
+        self.status_panel.set_value(
+            "operation",
+            f"{operation.title()} · {config['feedback_unit_label']}",
+        )
         self.status_panel.set_value("state", "CONNECTING", "warning")
         self.status_panel.set_value(
             "write",
@@ -1507,7 +1570,7 @@ class HVFeedbackWindow(QMainWindow):
             return
         self.config = copy.deepcopy(config)
         self.reference_thread = QThread(self)
-        self.reference_worker = ReferenceWorker(config)
+        self.reference_worker = GeneralizedReferenceWorker(config)
         self.reference_worker.moveToThread(self.reference_thread)
         self.reference_thread.started.connect(self.reference_worker.run)
         self.reference_worker.measured.connect(self._reference_measured)
@@ -1518,7 +1581,7 @@ class HVFeedbackWindow(QMainWindow):
         self.reference_thread.finished.connect(self._reference_finished)
         self.reference_thread.finished.connect(self.reference_thread.deleteLater)
         self._set_busy(True)
-        self.status_panel.set_value("operation", "Reference")
+        self.status_panel.set_value("operation", f"Reference · {config['feedback_unit_label']}")
         self.status_panel.set_value("state", "MEASURING", "warning")
         self.status_panel.set_value("write", "READ ONLY", "success")
         self.reference_thread.start()
@@ -1538,10 +1601,9 @@ class HVFeedbackWindow(QMainWindow):
             if event == "SAMPLE":
                 self._append_sample(row)
             elif event == "HOLD":
-                reason = str(row.get("reason", "Safety hold"))
                 self.status_panel.set_value("state", "HOLD", "warning")
                 self.status_panel.set_value("write", "BLOCKED", "warning")
-                self._set_message(reason)
+                self._set_message(str(row.get("reason", "Safety hold")))
             elif event in {"MONITOR", "CAPUT_HV"} and row.get("hv_next") is not None:
                 self._append_hv_command(row)
                 if event == "CAPUT_HV":
@@ -1549,20 +1611,20 @@ class HVFeedbackWindow(QMainWindow):
                         f"Feedback wrote {float(row['hv_next']):.6f} kV to the HV setpoint."
                     )
 
+    def _new_signal_history(self) -> dict[str, list[float]]:
+        return {"time": [], **{key: [] for key in required_signal_keys(self.config)}}
+
     def _append_sample(self, row: dict[str, Any]) -> None:
         timestamp = float(row["timestamp"])
         if self._history_t0 is None:
             self._history_t0 = timestamp
         self._signal_history["time"].append(timestamp)
-        for key in self._signal_history:
-            if key == "time":
-                continue
+        for key in required_signal_keys(self.config):
             self._signal_history[key].append(self._numeric_or_nan(row.get(key)))
         self._last_sample_timestamp = timestamp
         self._last_sample_valid = all(
             math.isfinite(self._signal_history[key][-1])
-            for key in self._signal_history
-            if key != "time"
+            for key in required_signal_keys(self.config)
         )
         self._update_latest_sample_values(row)
         self._update_sample_freshness()
@@ -1578,210 +1640,133 @@ class HVFeedbackWindow(QMainWindow):
             return
         self._hv_command_history["time"].append(timestamp)
         self._hv_command_history["hv_next"].append(hv_next)
-        if len(self._hv_command_history["time"]) > MAX_PLOT_SAMPLES:
-            for values in self._hv_command_history.values():
-                del values[:-MAX_PLOT_SAMPLES]
-        self._schedule_plot_draw()
 
     @staticmethod
     def _numeric_or_nan(value: Any) -> float:
         try:
-            numeric = float(value)
+            number = float(value)
         except (TypeError, ValueError):
             return float("nan")
-        return numeric if math.isfinite(numeric) else float("nan")
+        return number if math.isfinite(number) else float("nan")
 
     def _update_latest_sample_values(self, row: dict[str, Any]) -> None:
         reference = self.config["reference"]
         safety = self.config["safety"]
         hv_setpoint = self._numeric_or_nan(row.get("hv_setpoint"))
         hv_readback = self._numeric_or_nan(row.get("hv_readback"))
-        acc1_amp = self._numeric_or_nan(row.get("acc1_amp"))
-        buncher_amp = self._numeric_or_nan(row.get("buncher_amp"))
-        acc1_phase = self._numeric_or_nan(row.get("acc1_phase"))
-        buncher_phase = self._numeric_or_nan(row.get("buncher_phase"))
-
-        hv_min = float(safety["hv_min_kv"])
-        hv_max = float(safety["hv_max_kv"])
-        hv_setpoint_tone = (
-            "danger"
-            if math.isfinite(hv_setpoint) and not hv_min <= hv_setpoint <= hv_max
-            else "subtle"
-        )
-        hv_readback_tone = (
-            "danger"
-            if math.isfinite(hv_readback) and not hv_min <= hv_readback <= hv_max
-            else "subtle"
-        )
-        self._set_metric(
-            "hv_setpoint",
-            f"{hv_setpoint:.6g} kV" if math.isfinite(hv_setpoint) else "INVALID",
-            hv_setpoint_tone,
-        )
-        self._set_metric(
-            "hv_readback",
-            f"{hv_readback:.6g} kV" if math.isfinite(hv_readback) else "INVALID",
-            hv_readback_tone,
-        )
-
+        for key, value in (("hv_setpoint", hv_setpoint), ("hv_readback", hv_readback)):
+            tone = "danger" if math.isfinite(value) and not float(safety["hv_min_kv"]) <= value <= float(safety["hv_max_kv"]) else "subtle"
+            self._set_metric(key, f"{value:.6g} kV" if math.isfinite(value) else "INVALID", tone)
         if math.isfinite(hv_setpoint) and math.isfinite(hv_readback):
             mismatch = hv_readback - hv_setpoint
-            mismatch_limit = float(safety["hv_readback_tolerance_kv"])
             self._set_metric(
                 "hv_mismatch",
                 f"{mismatch:+.6g} kV",
-                self._threshold_tone(abs(mismatch), mismatch_limit),
+                self._threshold_tone(abs(mismatch), float(safety["hv_readback_tolerance_kv"])),
             )
         else:
             self._set_metric("hv_mismatch", "INVALID", "danger")
 
-        acc1_ref = float(reference["acc1_amp_ref"])
-        if math.isfinite(acc1_amp) and acc1_ref > 0.0:
-            acc1_rel = acc1_amp / acc1_ref
-            acc1_tone = self._range_tone(
-                acc1_rel,
-                float(safety["acc1_amp_min_rel"]),
-                float(safety["acc1_amp_max_rel"]),
-            )
-            self._set_metric("acc1_level", f"{acc1_rel * 100.0:.3f}% of ref", acc1_tone)
-        else:
-            self._set_metric("acc1_level", "INVALID", "danger")
-
-        ratio_ref = float(reference["amp_ratio_ref"])
-        if (
-            math.isfinite(acc1_amp)
-            and math.isfinite(buncher_amp)
-            and acc1_amp != 0.0
-            and ratio_ref != 0.0
-        ):
-            ratio_error = (buncher_amp / acc1_amp / ratio_ref) - 1.0
-            self._set_metric(
-                "amp_ratio_error",
-                f"{ratio_error * 100.0:+.3f}%",
-                self._threshold_tone(
-                    abs(ratio_error), float(safety["amp_ratio_limit_rel"])
-                ),
-            )
-        else:
-            self._set_metric("amp_ratio_error", "INVALID", "danger")
-
-        if math.isfinite(acc1_phase) and math.isfinite(buncher_phase):
-            acc1_error = phase_diff_deg(acc1_phase, float(reference["acc1_phase_ref"]))
-            buncher_error = phase_diff_deg(
-                buncher_phase, float(reference["buncher_phase_ref"])
-            )
-            phase_tone = max(
-                (
-                    self._threshold_tone(
-                        abs(acc1_error), float(safety["acc1_phase_limit_deg"])
-                    ),
-                    self._threshold_tone(
-                        abs(buncher_error), float(safety["buncher_phase_limit_deg"])
-                    ),
-                ),
-                key=self._tone_rank,
-            )
-            self._set_metric(
-                "phase_error",
-                f"{acc1_error:+.3f}° / {buncher_error:+.3f}°",
-                phase_tone,
-            )
-        else:
-            self._set_metric("phase_error", "INVALID", "danger")
+        feedback_amp = self._numeric_or_nan(row.get(amplitude_key(self.feedback_channel_id)))
+        feedback_ref = float(reference["channels"][self.feedback_channel_id]["amplitude"])
+        for channel in self.config["rf_channels"]:
+            channel_id = str(channel["id"])
+            amplitude = self._numeric_or_nan(row.get(amplitude_key(channel_id)))
+            phase = self._numeric_or_nan(row.get(phase_key(channel_id)))
+            labels = self._rf_value_labels[channel_id]
+            if channel_id == self.feedback_channel_id and math.isfinite(amplitude):
+                relative = amplitude / feedback_ref
+                text = f"{amplitude:.6g}  ·  {relative * 100:.3f}% ref"
+                tone = self._range_tone(
+                    relative,
+                    float(safety["feedback_amplitude_min_rel"]),
+                    float(safety["feedback_amplitude_max_rel"]),
+                )
+            elif math.isfinite(amplitude) and math.isfinite(feedback_amp) and feedback_amp != 0:
+                channel_ref = float(reference["channels"][channel_id]["amplitude"])
+                ratio_ref = channel_ref / feedback_ref
+                ratio_error = (amplitude / feedback_amp) / ratio_ref - 1.0
+                text = f"{amplitude:.6g}  ·  ratio {ratio_error * 100:+.3f}%"
+                tone = self._threshold_tone(
+                    abs(ratio_error), float(safety["amplitude_ratio_limit_rel"])
+                )
+            else:
+                text, tone = "INVALID", "danger"
+            self._set_label_tone(labels["amplitude"], text, tone)
+            if math.isfinite(phase):
+                error = phase_diff_deg(
+                    phase, float(reference["channels"][channel_id]["phase_deg"])
+                )
+                phase_tone = self._threshold_tone(
+                    abs(error), float(safety["phase_limit_deg"][channel_id])
+                )
+                self._set_label_tone(labels["phase"], f"phase {error:+.3f}°", phase_tone)
+            else:
+                self._set_label_tone(labels["phase"], "INVALID", "danger")
 
     def _set_metric(self, key: str, text: str, tone: str) -> None:
-        label = self._value_labels[key]
+        self._set_label_tone(self._value_labels[key], text, tone)
+
+    @staticmethod
+    def _set_label_tone(label: QLabel, text: str, tone: str) -> None:
         label.setText(text)
         label.setProperty("tone", tone)
         label.style().unpolish(label)
         label.style().polish(label)
 
     @staticmethod
-    def _tone_rank(tone: str) -> int:
-        return {"subtle": 0, "warning": 1, "danger": 2}.get(tone, 0)
-
-    @staticmethod
     def _threshold_tone(value: float, limit: float) -> str:
-        if limit <= 0.0 or value > limit:
+        if limit <= 0 or value > limit:
             return "danger"
-        if value >= 0.8 * limit:
-            return "warning"
-        return "subtle"
+        return "warning" if value >= 0.8 * limit else "subtle"
 
     @staticmethod
     def _range_tone(value: float, minimum: float, maximum: float) -> str:
         if value < minimum or value > maximum:
             return "danger"
-        if value < 1.0:
-            warning_boundary = 1.0 + 0.8 * (minimum - 1.0)
-            return "warning" if value <= warning_boundary else "subtle"
-        warning_boundary = 1.0 + 0.8 * (maximum - 1.0)
-        return "warning" if value >= warning_boundary else "subtle"
+        distance = min(value - minimum, maximum - value)
+        span = min(1.0 - minimum, maximum - 1.0)
+        return "warning" if span > 0 and distance <= 0.2 * span else "subtle"
 
     def _reset_monitor_display(self) -> None:
-        for values in self._signal_history.values():
-            values.clear()
-        for values in self._hv_command_history.values():
-            values.clear()
+        self._signal_history = self._new_signal_history()
+        self._hv_command_history = {"time": [], "hv_next": []}
         self._history_t0 = None
         self._last_sample_timestamp = None
         self._last_sample_valid = None
-        placeholders = {
-            "hv_setpoint": "— kV",
-            "hv_readback": "— kV",
-            "hv_mismatch": "— kV",
-            "acc1_level": "— % of ref",
-            "amp_ratio_error": "— %",
-            "phase_error": "— / — deg",
-        }
-        for key, placeholder in placeholders.items():
-            self._set_metric(key, placeholder, "subtle")
+        for key in ("hv_setpoint", "hv_readback", "hv_mismatch"):
+            self._set_metric(key, "— kV", "subtle")
+        for labels in self._rf_value_labels.values():
+            self._set_label_tone(labels["amplitude"], "—", "subtle")
+            self._set_label_tone(labels["phase"], "— deg", "subtle")
         self._update_sample_freshness()
-        self._draw_plots()
+        if hasattr(self, "canvas"):
+            self._draw_plots()
 
     def _update_sample_freshness(self) -> None:
-        if not hasattr(self, "sample_freshness_label"):
-            return
         tone = "subtle"
         if self._last_sample_timestamp is None:
-            text = (
-                "Waiting for first sample"
-                if self._operation != "stopped"
-                else "Waiting for acquisition"
-            )
+            text = "Waiting for first sample" if self._operation != "stopped" else "Waiting for acquisition"
         elif self._last_sample_valid is False:
-            stamp = datetime.fromtimestamp(self._last_sample_timestamp).strftime("%H:%M:%S")
-            text = (
-                "Latest sample invalid"
-                if self._operation != "stopped"
-                else f"Last sample invalid · {stamp}"
-            )
-            tone = "danger"
+            text, tone = "Latest sample invalid", "danger"
         elif self._operation == "stopped":
-            stamp = datetime.fromtimestamp(self._last_sample_timestamp).strftime("%H:%M:%S")
-            text = f"Last sample · {stamp}"
+            text = f"Last sample · {datetime.fromtimestamp(self._last_sample_timestamp):%H:%M:%S}"
         else:
-            age_s = max(0.0, time.time() - self._last_sample_timestamp)
-            text = f"Updated {age_s:.1f} s ago"
-            stale_after_s = max(
-                2.0,
-                3.0 * float(self.config["control"]["sample_period_s"]),
-            )
-            if age_s > stale_after_s:
-                tone = "warning"
-                text = f"Sample stale · {age_s:.1f} s ago"
-        self.sample_freshness_label.setText(text)
-        self.sample_freshness_label.setProperty("tone", tone)
-        self.sample_freshness_label.style().unpolish(self.sample_freshness_label)
-        self.sample_freshness_label.style().polish(self.sample_freshness_label)
+            age = max(0.0, time.time() - self._last_sample_timestamp)
+            text = f"Updated {age:.1f} s ago"
+            if age > max(2.0, 3.0 * float(self.config["control"]["sample_period_s"])):
+                text, tone = f"Sample stale · {age:.1f} s ago", "warning"
+        self._set_label_tone(self.sample_freshness_label, text, tone)
 
     def _schedule_plot_draw(self) -> None:
         if self._plot_redraw_pending or bool(self.plot_toolbar.mode):
             return
-        elapsed_ms = (time.monotonic() - self._last_plot_draw_monotonic) * 1000.0
-        delay_ms = max(0, int(PLOT_REDRAW_INTERVAL_MS - elapsed_ms))
+        elapsed_ms = (time.monotonic() - self._last_plot_draw_monotonic) * 1000
         self._plot_redraw_pending = True
-        QTimer.singleShot(delay_ms, self._flush_scheduled_plot_draw)
+        QTimer.singleShot(
+            max(0, int(PLOT_REDRAW_INTERVAL_MS - elapsed_ms)),
+            self._flush_scheduled_plot_draw,
+        )
 
     @pyqtSlot()
     def _flush_scheduled_plot_draw(self) -> None:
@@ -1795,6 +1780,102 @@ class HVFeedbackWindow(QMainWindow):
         if not active:
             self._schedule_plot_draw()
 
+    def _draw_plots(self) -> None:
+        palette = DARK_THEME if self.current_theme == "dark" else LIGHT_THEME
+        times_all = self._signal_history.get("time", [])
+        window_seconds = self.plot_window_combo.currentData()
+        start = 0
+        if times_all and window_seconds is not None:
+            cutoff = times_all[-1] - float(window_seconds)
+            start = next((i for i, stamp in enumerate(times_all) if stamp >= cutoff), len(times_all))
+        times = times_all[start:]
+        signals = {key: values[start:] for key, values in self._signal_history.items() if key != "time"}
+        clock = self.plot_time_axis_combo.currentText() == "Clock"
+        t0 = self._history_t0 or 0.0
+        x = [datetime.fromtimestamp(value) for value in times] if clock else [(value - t0) / 60 for value in times]
+        for axis in (self.amp_axis, self.phase_axis, self.hv_axis):
+            axis.clear()
+            axis.set_facecolor(palette["plot_bg"])
+            axis.tick_params(colors=palette["plot_text"], labelsize=8)
+            for spine in axis.spines.values():
+                spine.set_color(palette["plot_spine"])
+            axis.grid(True, color=palette["plot_grid"], alpha=0.75, linestyle="--")
+        relative = self.plot_scale_combo.currentText() == "Relative"
+        reference = self.config["reference"]
+        channels = self.config["rf_channels"]
+        feedback_values = signals.get(amplitude_key(self.feedback_channel_id), [])
+        feedback_ref = float(reference["channels"][self.feedback_channel_id]["amplitude"])
+        for index, channel in enumerate(channels):
+            channel_id = str(channel["id"])
+            label = str(channel["label"])
+            amplitude_values = signals.get(amplitude_key(channel_id), [])
+            phase_values = signals.get(phase_key(channel_id), [])
+            if relative:
+                if channel_id == self.feedback_channel_id:
+                    amplitude_plot = [((value / feedback_ref) - 1) * 100 if math.isfinite(value) else float("nan") for value in amplitude_values]
+                    amplitude_label = f"{label} level"
+                else:
+                    ratio_ref = float(reference["channels"][channel_id]["amplitude"]) / feedback_ref
+                    amplitude_plot = [
+                        (((value / feedback) / ratio_ref) - 1) * 100
+                        if math.isfinite(value) and math.isfinite(feedback) and feedback != 0
+                        else float("nan")
+                        for value, feedback in zip(amplitude_values, feedback_values)
+                    ]
+                    amplitude_label = f"{label} ratio"
+                phase_plot = [phase_diff_deg(value, float(reference["channels"][channel_id]["phase_deg"])) if math.isfinite(value) else float("nan") for value in phase_values]
+            else:
+                amplitude_plot = amplitude_values
+                amplitude_label = label
+                phase_plot = phase_values
+            color = PLOT_COLORS[index % len(PLOT_COLORS)]
+            if x:
+                self.amp_axis.plot(x, amplitude_plot, label=amplitude_label, color=color)
+                self.phase_axis.plot(x, phase_plot, label=label, color=color)
+        hv0 = float(reference["hv_kv"])
+        hv_setpoint = signals.get("hv_setpoint", [])
+        hv_readback = signals.get("hv_readback", [])
+        if relative:
+            hv_setpoint = [(value - hv0) * 1000 if math.isfinite(value) else float("nan") for value in hv_setpoint]
+            hv_readback = [(value - hv0) * 1000 if math.isfinite(value) else float("nan") for value in hv_readback]
+        if x:
+            self.hv_axis.plot(x, hv_setpoint, label="Setpoint", color="#e37878")
+            self.hv_axis.plot(x, hv_readback, label="Readback", color="#7dd7c5")
+        command_times = self._hv_command_history["time"]
+        command_values = self._hv_command_history["hv_next"]
+        if command_times:
+            command_x = [datetime.fromtimestamp(value) for value in command_times] if clock else [(value - t0) / 60 for value in command_times]
+            if relative:
+                command_values = [(value - hv0) * 1000 for value in command_values]
+            self.hv_axis.plot(command_x, command_values, label="Written target" if self._operation == "feedback" else "Computed target", color="#f0b45a", marker="o", markersize=3, drawstyle="steps-post")
+        self.amp_axis.set_title("Amplitude Error from Reference" if relative else "Amplitude", color=palette["plot_text"], fontsize=10)
+        self.phase_axis.set_title("Phase Error from Reference" if relative else "Phase", color=palette["plot_text"], fontsize=10)
+        self.hv_axis.set_title("High Voltage Offset from Reference" if relative else "High Voltage", color=palette["plot_text"], fontsize=10)
+        self.amp_axis.set_ylabel("Error (%)" if relative else "Amplitude (a.u.)", color=palette["plot_text"])
+        self.phase_axis.set_ylabel("Error (deg)" if relative else "Phase (deg)", color=palette["plot_text"])
+        self.hv_axis.set_ylabel("HV - HV0 (V)" if relative else "HV (kV)", color=palette["plot_text"])
+        for axis in (self.amp_axis, self.phase_axis, self.hv_axis):
+            handles, labels = axis.get_legend_handles_labels()
+            if handles:
+                legend = axis.legend(handles, labels, loc="best", fontsize=8, frameon=False)
+                for label in legend.get_texts():
+                    label.set_color(palette["plot_text"])
+            if relative:
+                axis.axhline(0, color=palette["plot_spine"], linewidth=0.9, alpha=0.8)
+        self.amp_axis.tick_params(labelbottom=False)
+        self.phase_axis.tick_params(labelbottom=False)
+        if clock:
+            locator = mdates.AutoDateLocator()
+            self.hv_axis.xaxis.set_major_locator(locator)
+            self.hv_axis.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+            self.hv_axis.set_xlabel("Clock time", color=palette["plot_text"])
+        else:
+            self.hv_axis.xaxis.set_major_locator(mticker.AutoLocator())
+            self.hv_axis.xaxis.set_major_formatter(mticker.ScalarFormatter())
+            self.hv_axis.set_xlabel("Elapsed time (min)", color=palette["plot_text"])
+        self.canvas.draw_idle()
+        self._last_plot_draw_monotonic = time.monotonic()
+
     @pyqtSlot(str, str)
     def _set_session_state(self, state: str, tone: str) -> None:
         self.status_panel.set_value("state", state, tone)
@@ -1802,9 +1883,6 @@ class HVFeedbackWindow(QMainWindow):
     @pyqtSlot(str)
     def _set_log_path(self, path: str) -> None:
         self.status_panel.set_value("log", Path(path).name)
-        container, label = self.status_panel._items["log"]
-        container.setToolTip(path)
-        label.setToolTip(path)
 
     @pyqtSlot(str)
     def _session_failed(self, message: str) -> None:
@@ -1820,14 +1898,12 @@ class HVFeedbackWindow(QMainWindow):
         self._set_idle_state()
 
     @pyqtSlot(dict)
-    def _reference_measured(self, values: dict[str, float]) -> None:
-        for key, value in values.items():
-            self._parameter_spins["reference"][key].setValue(float(value))
-        self.config["reference"].update(values)
+    def _reference_measured(self, values: dict[str, Any]) -> None:
+        self.config["reference"] = copy.deepcopy(values)
+        self.unit_configs[self.active_unit_id] = copy.deepcopy(self.config)
+        self._apply_config_to_ui(self.config)
         self._reset_monitor_display()
-        self._set_message(
-            "Reference measurement completed. Save a runtime snapshot if these values should be reused."
-        )
+        self._set_message("Reference measurement completed. Save a runtime snapshot if these values should be reused.")
 
     @pyqtSlot(str)
     def _reference_failed(self, message: str) -> None:
@@ -1850,38 +1926,46 @@ class HVFeedbackWindow(QMainWindow):
             QMessageBox.critical(self, "Save Snapshot Failed", str(exc))
             return
         self.config = copy.deepcopy(config)
+        self.unit_configs[self.active_unit_id] = copy.deepcopy(config)
         self._set_message(f"Saved runtime snapshot: {path}")
 
     def load_snapshot(self) -> None:
-        snapshots_dir = resolve_hv_feedback_runtime_paths(self.app_context)["snapshots_dir"]
-        if not snapshots_dir.is_dir():
+        paths = resolve_hv_feedback_runtime_paths(self.app_context, self.active_unit_id)
+        snapshots_dir = paths["snapshots_dir"]
+        start_dir = snapshots_dir if snapshots_dir.is_dir() else paths["snapshots_root"]
+        if not start_dir.is_dir():
             QMessageBox.information(self, "Load Snapshot", "No runtime snapshots have been saved yet.")
             return
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load HV Feedback Snapshot",
-            str(snapshots_dir),
-            "JSON snapshots (*.json)",
-        )
+        path, _ = QFileDialog.getOpenFileName(self, "Load HV Feedback Snapshot", str(start_dir), "JSON snapshots (*.json)")
         if not path:
             return
         try:
-            config = load_runtime_snapshot(self.app_context, path, self.base_config)
+            config = load_runtime_snapshot(
+                self.app_context,
+                path,
+                self.base_configs[self.active_unit_id],
+            )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "Load Snapshot Failed", str(exc))
             return
         self.config = config
+        self.unit_configs[self.active_unit_id] = copy.deepcopy(config)
         self._apply_config_to_ui(config)
         self._reset_monitor_display()
         self._set_message(f"Loaded runtime snapshot: {path}")
 
     def _set_busy(self, busy: bool) -> None:
-        self.start_monitor_button.setEnabled(not busy)
-        self.start_feedback_button.setEnabled(not busy)
-        self.measure_reference_button.setEnabled(not busy)
+        for widget in (
+            self.start_monitor_button,
+            self.start_feedback_button,
+            self.measure_reference_button,
+            self.save_snapshot_button,
+            self.load_snapshot_button,
+            self.feedback_unit_combo,
+            self.feedback_channel_combo,
+        ):
+            widget.setEnabled(not busy)
         self.stop_button.setEnabled(busy)
-        self.save_snapshot_button.setEnabled(not busy)
-        self.load_snapshot_button.setEnabled(not busy)
         for button in self._parameter_edit_buttons:
             button.setEnabled(not busy)
         for fields in self._parameter_spins.values():
@@ -1918,233 +2002,8 @@ class HVFeedbackWindow(QMainWindow):
         self.plot_toolbar.refresh_icons()
         self.status_panel.apply_theme(palette)
         self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
-        self._style_plot(palette)
-
-    def _style_plot(self, palette: dict[str, str]) -> None:
         self.figure.patch.set_facecolor(palette["plot_card_bg"])
-        for axis in (self.amp_axis, self.phase_axis, self.hv_axis):
-            axis.set_facecolor(palette["plot_bg"])
-            axis.tick_params(colors=palette["plot_text"], labelsize=8)
-            axis.xaxis.label.set_color(palette["plot_text"])
-            axis.yaxis.label.set_color(palette["plot_text"])
-            axis.title.set_color(palette["plot_text"])
-            for spine in axis.spines.values():
-                spine.set_color(palette["plot_spine"])
-            axis.grid(True, color=palette["plot_grid"], alpha=0.75, linestyle="--")
         self._draw_plots()
-
-    def _draw_plots(self) -> None:
-        palette = DARK_THEME if self.current_theme == "dark" else LIGHT_THEME
-        all_times = self._signal_history["time"]
-        window_seconds = self.plot_window_combo.currentData()
-        start_index = 0
-        if all_times and window_seconds is not None:
-            cutoff = all_times[-1] - float(window_seconds)
-            start_index = next(
-                (index for index, timestamp in enumerate(all_times) if timestamp >= cutoff),
-                len(all_times),
-            )
-        times = all_times[start_index:]
-        visible_signals = {
-            key: values[start_index:]
-            for key, values in self._signal_history.items()
-            if key != "time"
-        }
-
-        command_start = 0
-        command_times = self._hv_command_history["time"]
-        if command_times and window_seconds is not None and all_times:
-            cutoff = all_times[-1] - float(window_seconds)
-            command_start = next(
-                (
-                    index
-                    for index, timestamp in enumerate(command_times)
-                    if timestamp >= cutoff
-                ),
-                len(command_times),
-            )
-        visible_command_times = command_times[command_start:]
-        visible_commands = self._hv_command_history["hv_next"][command_start:]
-
-        for axis in (self.amp_axis, self.phase_axis, self.hv_axis):
-            axis.clear()
-            axis.set_facecolor(palette["plot_bg"])
-            axis.tick_params(colors=palette["plot_text"], labelsize=8)
-            for spine in axis.spines.values():
-                spine.set_color(palette["plot_spine"])
-            axis.grid(True, color=palette["plot_grid"], alpha=0.75, linestyle="--")
-
-        relative = self.plot_scale_combo.currentText() == "Relative"
-        clock_axis = self.plot_time_axis_combo.currentText() == "Clock"
-        if clock_axis:
-            x = [datetime.fromtimestamp(timestamp) for timestamp in times]
-            command_x = [
-                datetime.fromtimestamp(timestamp) for timestamp in visible_command_times
-            ]
-        else:
-            t0 = self._history_t0 if self._history_t0 is not None else 0.0
-            x = [(timestamp - t0) / 60.0 for timestamp in times]
-            command_x = [
-                (timestamp - t0) / 60.0 for timestamp in visible_command_times
-            ]
-
-        if relative:
-            reference = self.config["reference"]
-            acc1_ref = float(reference["acc1_amp_ref"])
-            ratio_ref = float(reference["amp_ratio_ref"])
-            hv0 = float(reference["hv0"])
-            acc1_values = visible_signals.get("acc1_amp", [])
-            buncher_values = visible_signals.get("buncher_amp", [])
-            acc1_plot = [
-                ((value / acc1_ref) - 1.0) * 100.0
-                if math.isfinite(value) and acc1_ref != 0.0
-                else float("nan")
-                for value in acc1_values
-            ]
-            ratio_plot = [
-                (((buncher / acc1) / ratio_ref) - 1.0) * 100.0
-                if math.isfinite(acc1)
-                and math.isfinite(buncher)
-                and acc1 != 0.0
-                and ratio_ref != 0.0
-                else float("nan")
-                for acc1, buncher in zip(acc1_values, buncher_values)
-            ]
-            acc1_phase_plot = [
-                phase_diff_deg(value, float(reference["acc1_phase_ref"]))
-                if math.isfinite(value)
-                else float("nan")
-                for value in visible_signals.get("acc1_phase", [])
-            ]
-            buncher_phase_plot = [
-                phase_diff_deg(value, float(reference["buncher_phase_ref"]))
-                if math.isfinite(value)
-                else float("nan")
-                for value in visible_signals.get("buncher_phase", [])
-            ]
-            hv_setpoint_plot = [
-                (value - hv0) * 1000.0 if math.isfinite(value) else float("nan")
-                for value in visible_signals.get("hv_setpoint", [])
-            ]
-            hv_readback_plot = [
-                (value - hv0) * 1000.0 if math.isfinite(value) else float("nan")
-                for value in visible_signals.get("hv_readback", [])
-            ]
-            hv_command_plot = [(value - hv0) * 1000.0 for value in visible_commands]
-            self.amp_axis.set_title(
-                "Amplitude Error from Reference",
-                color=palette["plot_text"],
-                fontsize=10,
-            )
-            self.phase_axis.set_title(
-                "Phase Error from Reference",
-                color=palette["plot_text"],
-                fontsize=10,
-            )
-            self.hv_axis.set_title(
-                "High Voltage Offset from Reference",
-                color=palette["plot_text"],
-                fontsize=10,
-            )
-            self.amp_axis.set_ylabel("Error (%)", color=palette["plot_text"])
-            self.phase_axis.set_ylabel("Error (deg)", color=palette["plot_text"])
-            self.hv_axis.set_ylabel("HV - HV0 (V)", color=palette["plot_text"])
-            for axis in (self.amp_axis, self.phase_axis, self.hv_axis):
-                axis.axhline(
-                    0.0,
-                    color=palette["plot_spine"],
-                    linewidth=0.9,
-                    alpha=0.8,
-                )
-        else:
-            acc1_plot = visible_signals.get("acc1_amp", [])
-            ratio_plot = visible_signals.get("buncher_amp", [])
-            acc1_phase_plot = visible_signals.get("acc1_phase", [])
-            buncher_phase_plot = visible_signals.get("buncher_phase", [])
-            hv_setpoint_plot = visible_signals.get("hv_setpoint", [])
-            hv_readback_plot = visible_signals.get("hv_readback", [])
-            hv_command_plot = visible_commands
-            self.amp_axis.set_title("Amplitude", color=palette["plot_text"], fontsize=10)
-            self.phase_axis.set_title("Phase", color=palette["plot_text"], fontsize=10)
-            self.hv_axis.set_title("High Voltage", color=palette["plot_text"], fontsize=10)
-            self.amp_axis.set_ylabel("Amplitude (a.u.)", color=palette["plot_text"])
-            self.phase_axis.set_ylabel("Phase (deg)", color=palette["plot_text"])
-            self.hv_axis.set_ylabel("HV (kV)", color=palette["plot_text"])
-
-        if x:
-            self.amp_axis.plot(
-                x,
-                acc1_plot,
-                label="ACC1 level" if relative else "ACC1",
-                color="#45d0bc",
-            )
-            self.amp_axis.plot(
-                x,
-                ratio_plot,
-                label="Amp ratio" if relative else "Buncher",
-                color="#e4b86f",
-            )
-            self.phase_axis.plot(x, acc1_phase_plot, label="ACC1", color="#79a9f5")
-            self.phase_axis.plot(
-                x,
-                buncher_phase_plot,
-                label="Buncher",
-                color="#d68ae8",
-            )
-            self.hv_axis.plot(
-                x,
-                hv_setpoint_plot,
-                label="Setpoint",
-                color="#e37878",
-            )
-            self.hv_axis.plot(
-                x,
-                hv_readback_plot,
-                label="Readback",
-                color="#7dd7c5",
-            )
-        if command_x:
-            self.hv_axis.plot(
-                command_x,
-                hv_command_plot,
-                label=(
-                    "Written target"
-                    if self._operation == "feedback"
-                    else "Computed target"
-                ),
-                color="#f0b45a",
-                linewidth=1.2,
-                marker="o",
-                markersize=3,
-                drawstyle="steps-post",
-            )
-
-        for axis in (self.amp_axis, self.phase_axis, self.hv_axis):
-            handles, labels = axis.get_legend_handles_labels()
-            if handles:
-                legend = axis.legend(
-                    handles,
-                    labels,
-                    loc="best",
-                    fontsize=8,
-                    frameon=False,
-                )
-                if legend is not None:
-                    for label in legend.get_texts():
-                        label.set_color(palette["plot_text"])
-        self.amp_axis.tick_params(labelbottom=False)
-        self.phase_axis.tick_params(labelbottom=False)
-        if clock_axis:
-            locator = mdates.AutoDateLocator()
-            self.hv_axis.xaxis.set_major_locator(locator)
-            self.hv_axis.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-            self.hv_axis.set_xlabel("Clock time", color=palette["plot_text"])
-        else:
-            self.hv_axis.xaxis.set_major_locator(mticker.AutoLocator())
-            self.hv_axis.xaxis.set_major_formatter(mticker.ScalarFormatter())
-            self.hv_axis.set_xlabel("Elapsed time (min)", color=palette["plot_text"])
-        self.canvas.draw_idle()
-        self._last_plot_draw_monotonic = time.monotonic()
 
     def closeEvent(self, event) -> None:  # noqa: N802
         if self.session_worker is not None:
