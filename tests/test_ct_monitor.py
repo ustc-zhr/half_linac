@@ -45,7 +45,7 @@ from half_linac.src.virtual_machine.lattice_parser import lattice_parser
 
 
 class CTMonitorCalculationTests(unittest.TestCase):
-    def test_efficiency_uses_absolute_charge_without_clamping(self):
+    def test_efficiency_uses_absolute_measurements_without_clamping(self):
         self.assertEqual(calculate_efficiency(-2.0, 1.0, 0.01), 50.0)
         self.assertEqual(calculate_efficiency(1.0, -1.2, 0.01), 120.0)
 
@@ -122,35 +122,54 @@ class CTMonitorPairingTests(unittest.TestCase):
             "ICT01",
             "ICT02",
             now=100.1,
-            scale_to_nc=1e9,
+            scale_to_display_unit=1e9,
             tolerance_s=0.2,
             stale_timeout_s=None,
-            minimum_upstream_charge_nc=0.01,
+            minimum_upstream_value=0.01,
         )
         self.assertEqual(result.status, "valid")
-        self.assertAlmostEqual(result.sample.upstream_nc, 0.55)
+        self.assertAlmostEqual(result.sample.upstream_value, 0.55)
         self.assertAlmostEqual(result.sample.efficiency_percent, 80.0)
         repeated = pairer.try_pair(
             samples,
             "ICT01",
             "ICT02",
             now=100.2,
-            scale_to_nc=1e9,
+            scale_to_display_unit=1e9,
             tolerance_s=0.2,
             stale_timeout_s=None,
-            minimum_upstream_charge_nc=0.01,
+            minimum_upstream_value=0.01,
         )
         self.assertEqual(repeated.status, "waiting for paired update")
+
+    def test_pairs_irfel_current_values_without_unit_scaling(self):
+        result = ShotPairer().try_pair(
+            {
+                "ICT02": self._sample(0.080, 100.0),
+                "ICT03": self._sample(0.060, 100.05),
+            },
+            "ICT02",
+            "ICT03",
+            now=100.1,
+            scale_to_display_unit=1.0,
+            tolerance_s=0.2,
+            stale_timeout_s=3.0,
+            minimum_upstream_value=0.001,
+        )
+        self.assertEqual(result.status, "valid")
+        self.assertAlmostEqual(result.sample.upstream_value, 0.080)
+        self.assertAlmostEqual(result.sample.downstream_value, 0.060)
+        self.assertAlmostEqual(result.sample.efficiency_percent, 75.0)
 
     def test_rejects_timestamp_mismatch_stale_disconnect_and_alarm(self):
         defaults = dict(
             upstream_key="ICT01",
             downstream_key="ICT02",
             now=20.0,
-            scale_to_nc=1.0,
+            scale_to_display_unit=1.0,
             tolerance_s=0.2,
             stale_timeout_s=3.0,
-            minimum_upstream_charge_nc=0.01,
+            minimum_upstream_value=0.01,
         )
         pairer = ShotPairer()
         mismatch = pairer.try_pair(
@@ -193,10 +212,10 @@ class CTMonitorPairingTests(unittest.TestCase):
             "ICT01",
             "ICT02",
             now=100.3,
-            scale_to_nc=1e9,
+            scale_to_display_unit=1e9,
             tolerance_s=0.2,
             stale_timeout_s=None,
-            minimum_upstream_charge_nc=0.01,
+            minimum_upstream_value=0.01,
         )
         self.assertEqual(result.status, "valid")
         self.assertEqual(len(result.samples), 10)
@@ -207,10 +226,10 @@ class CTMonitorPairingTests(unittest.TestCase):
             "ICT01",
             "ICT02",
             now=100.4,
-            scale_to_nc=1e9,
+            scale_to_display_unit=1e9,
             tolerance_s=0.2,
             stale_timeout_s=None,
-            minimum_upstream_charge_nc=0.01,
+            minimum_upstream_value=0.01,
         )
         self.assertEqual(repeated.status, "waiting for paired update")
         self.assertEqual(repeated.samples, ())
@@ -230,10 +249,10 @@ class CTMonitorPairingTests(unittest.TestCase):
             "ICT01",
             "ICT02",
             now=2.1,
-            scale_to_nc=1.0,
+            scale_to_display_unit=1.0,
             tolerance_s=0.2,
             stale_timeout_s=None,
-            minimum_upstream_charge_nc=0.01,
+            minimum_upstream_value=0.01,
         )
         self.assertEqual(len(result.samples), 1)
         self.assertEqual(result.mismatched_samples, 1)
@@ -254,7 +273,9 @@ class CTMonitorProfileTests(unittest.TestCase):
         workflow = get_workflow(vm.profile, "ct_monitor")
         self.assertEqual(workflow["default_upstream"], "ICT01")
         self.assertEqual(workflow["default_downstream"], "ICT02")
-        self.assertEqual(workflow["charge_scale_to_nc"]["vm"], 1e9)
+        self.assertEqual(workflow["measurement_channel"], "charge")
+        self.assertEqual(workflow["measurement_unit"], "nC")
+        self.assertEqual(workflow["scale_to_display_unit"]["vm"], 1e9)
         self.assertEqual(workflow["event_queue_size"], 512)
         self.assertEqual(workflow["rolling_window_options"], [10, 20, 50, 100])
         self.assertEqual(workflow["rolling_window_input_range"], [5, 1000])
@@ -262,10 +283,44 @@ class CTMonitorProfileTests(unittest.TestCase):
         self.assertEqual(workflow["trend_window_input_range_s"], [10, 1800])
         self.assertEqual(workflow["max_plot_points"], 2000)
 
-    def test_irfel_ct_monitor_is_not_supported(self):
+    def test_irfel_real_exposes_three_current_icts_and_vm_is_unsupported(self):
         supported, reason = describe_app_support("irfel", "ct_monitor")
-        self.assertFalse(supported)
-        self.assertIn("ct_monitor.json", reason)
+        self.assertTrue(supported, reason)
+
+        real = load_app_context("ct_monitor", machine_id="irfel", control_backend="real")
+        current_icts = list_elements(
+            real,
+            kind="ct",
+            logical_channel="current",
+            control_backend="real",
+        )
+        self.assertEqual(
+            [element.id for element in current_icts],
+            ["ICT02", "ICT03", "ICT04"],
+        )
+        self.assertEqual(
+            resolve_channel(real, "ICT02", "current"),
+            "IRFEL:BD:CT:CT2:I",
+        )
+        self.assertEqual(
+            resolve_channel(real, "ICT03", "current"),
+            "IRFEL:BD:CT:CT3:I",
+        )
+        self.assertEqual(
+            resolve_channel(real, "ICT04", "current"),
+            "IRFEL:BD:CT:CT4:I",
+        )
+        workflow = get_workflow(real.profile, "ct_monitor")
+        self.assertEqual(workflow["control_backends"], ["real"])
+        self.assertEqual(workflow["default_upstream"], "ICT02")
+        self.assertEqual(workflow["default_downstream"], "ICT03")
+        self.assertEqual(workflow["measurement_channel"], "current")
+        self.assertEqual(workflow["measurement_label"], "current")
+        self.assertEqual(workflow["measurement_unit"], "A")
+        self.assertEqual(workflow["minimum_upstream_value"], 0.001)
+
+        with self.assertRaisesRegex(MachineProfileError, "does not support backend 'vm'"):
+            load_app_context("ct_monitor", machine_id="irfel", control_backend="vm")
 
     def test_vm_publish_plan_contains_four_charge_specs(self):
         plan = build_vm_publish_plan(load_profile("half"))

@@ -283,6 +283,15 @@
     "ESA_ENERGY": {
       "setpoint": "IRFEL:AP:ENG:A3:ao"
     },
+    "ICT02": {
+      "current": "IRFEL:BD:CT:CT2:I"
+    },
+    "ICT03": {
+      "current": "IRFEL:BD:CT:CT3:I"
+    },
+    "ICT04": {
+      "current": "IRFEL:BD:CT:CT4:I"
+    },
     "PRF03": {
       "image": "IRFEL:BD:FLAG3:image1:ArrayData",
       "exposure_time": "IRFEL:BD:FLAG3:cam1:AcquireTime"

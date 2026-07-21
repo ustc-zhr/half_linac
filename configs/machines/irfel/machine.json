@@ -1172,6 +1172,45 @@
       "logical_channels": [
         "setpoint"
       ]
+    },
+    {
+      "id": "ICT02",
+      "kind": "ct",
+      "display_name": "ICT2",
+      "order": 67,
+      "tags": [
+        "diagnostics"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "current"
+      ]
+    },
+    {
+      "id": "ICT03",
+      "kind": "ct",
+      "display_name": "ICT3",
+      "order": 68,
+      "tags": [
+        "diagnostics"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "current"
+      ]
+    },
+    {
+      "id": "ICT04",
+      "kind": "ct",
+      "display_name": "ICT4",
+      "order": 69,
+      "tags": [
+        "diagnostics"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "current"
+      ]
     }
   ]
 }

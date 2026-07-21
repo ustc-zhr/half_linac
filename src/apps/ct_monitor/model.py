@@ -21,8 +21,8 @@ class SignalSample:
 @dataclass(frozen=True)
 class TransmissionSample:
     timestamp: float
-    upstream_nc: float
-    downstream_nc: float
+    upstream_value: float
+    downstream_value: float
     efficiency_percent: float
 
 
@@ -116,16 +116,16 @@ class MonitorStore:
 
 
 def calculate_efficiency(
-    upstream_nc: float,
-    downstream_nc: float,
-    minimum_upstream_charge_nc: float,
+    upstream_value: float,
+    downstream_value: float,
+    minimum_upstream_value: float,
 ) -> float | None:
-    values = (upstream_nc, downstream_nc, minimum_upstream_charge_nc)
+    values = (upstream_value, downstream_value, minimum_upstream_value)
     if not all(math.isfinite(value) for value in values):
         return None
-    if abs(upstream_nc) < minimum_upstream_charge_nc:
+    if abs(upstream_value) < minimum_upstream_value:
         return None
-    return abs(downstream_nc) / abs(upstream_nc) * 100.0
+    return abs(downstream_value) / abs(upstream_value) * 100.0
 
 
 def rolling_statistics(
@@ -172,8 +172,8 @@ def downsample_transmission_samples(
     bucket_width = max(1, math.ceil(interior_count / bucket_count))
     selected = {0, len(samples) - 1}
     value_getters = (
-        lambda sample: sample.upstream_nc,
-        lambda sample: sample.downstream_nc,
+        lambda sample: sample.upstream_value,
+        lambda sample: sample.downstream_value,
         lambda sample: sample.efficiency_percent,
     )
     for start in range(1, len(samples) - 1, bucket_width):
@@ -230,10 +230,10 @@ class ShotPairer:
         downstream_key: str,
         *,
         now: float,
-        scale_to_nc: float,
+        scale_to_display_unit: float,
         tolerance_s: float,
         stale_timeout_s: float | None,
-        minimum_upstream_charge_nc: float,
+        minimum_upstream_value: float,
     ) -> PairingResult:
         upstream = samples.get(upstream_key)
         downstream = samples.get(downstream_key)
@@ -277,12 +277,12 @@ class ShotPairer:
 
         self._consumed_timestamps[upstream_key] = upstream.timestamp
         self._consumed_timestamps[downstream_key] = downstream.timestamp
-        upstream_nc = upstream.value * scale_to_nc
-        downstream_nc = downstream.value * scale_to_nc
+        upstream_value = upstream.value * scale_to_display_unit
+        downstream_value = downstream.value * scale_to_display_unit
         efficiency = calculate_efficiency(
-            upstream_nc,
-            downstream_nc,
-            minimum_upstream_charge_nc,
+            upstream_value,
+            downstream_value,
+            minimum_upstream_value,
         )
         if efficiency is None:
             return PairingResult("upstream below threshold")
@@ -290,8 +290,8 @@ class ShotPairer:
             "valid",
             TransmissionSample(
                 timestamp=max(upstream.timestamp, downstream.timestamp),
-                upstream_nc=upstream_nc,
-                downstream_nc=downstream_nc,
+                upstream_value=upstream_value,
+                downstream_value=downstream_value,
                 efficiency_percent=efficiency,
             ),
         )
@@ -304,10 +304,10 @@ class ShotPairer:
         downstream_key: str,
         *,
         now: float,
-        scale_to_nc: float,
+        scale_to_display_unit: float,
         tolerance_s: float,
         stale_timeout_s: float | None,
-        minimum_upstream_charge_nc: float,
+        minimum_upstream_value: float,
     ) -> PairingBatch:
         """Consume every currently pairable event, preserving shots between GUI refreshes."""
 
@@ -356,9 +356,9 @@ class ShotPairer:
                 up,
                 down,
                 now=now,
-                scale_to_nc=scale_to_nc,
+                scale_to_display_unit=scale_to_display_unit,
                 stale_timeout_s=stale_timeout_s,
-                minimum_upstream_charge_nc=minimum_upstream_charge_nc,
+                minimum_upstream_value=minimum_upstream_value,
             )
             if result.sample is not None:
                 paired.append(result.sample)
@@ -428,9 +428,9 @@ class ShotPairer:
         downstream: SignalSample,
         *,
         now: float,
-        scale_to_nc: float,
+        scale_to_display_unit: float,
         stale_timeout_s: float | None,
-        minimum_upstream_charge_nc: float,
+        minimum_upstream_value: float,
     ) -> PairingResult:
         if upstream.value is None or downstream.value is None:
             return PairingResult("invalid value")
@@ -445,12 +445,12 @@ class ShotPairer:
             or now - downstream.timestamp > stale_timeout_s
         ):
             return PairingResult("stale data")
-        upstream_nc = upstream.value * scale_to_nc
-        downstream_nc = downstream.value * scale_to_nc
+        upstream_value = upstream.value * scale_to_display_unit
+        downstream_value = downstream.value * scale_to_display_unit
         efficiency = calculate_efficiency(
-            upstream_nc,
-            downstream_nc,
-            minimum_upstream_charge_nc,
+            upstream_value,
+            downstream_value,
+            minimum_upstream_value,
         )
         if efficiency is None:
             return PairingResult("upstream below threshold")
@@ -458,8 +458,8 @@ class ShotPairer:
             "valid",
             TransmissionSample(
                 timestamp=max(upstream.timestamp, downstream.timestamp),
-                upstream_nc=upstream_nc,
-                downstream_nc=downstream_nc,
+                upstream_value=upstream_value,
+                downstream_value=downstream_value,
                 efficiency_percent=efficiency,
             ),
         )

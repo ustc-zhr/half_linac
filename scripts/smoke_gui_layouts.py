@@ -49,6 +49,15 @@ GUI_SMOKE_SPECS = {
         control_backend="real",
         expected_hv_feedback_enabled=True,
     ),
+    "launcher_irfel_vm": GuiSmokeSpec(
+        APP_ROOT / "launcher" / "main.py",
+        "myWindow",
+        frozenset({"real_access", "running"}),
+        uses_selector=True,
+        machine_id="irfel",
+        control_backend="vm",
+        expected_hv_feedback_enabled=False,
+    ),
     "beam_monitor": GuiSmokeSpec(
         APP_ROOT / "beam_monitor" / "main.py",
         "myWindow",
@@ -73,6 +82,13 @@ GUI_SMOKE_SPECS = {
         APP_ROOT / "ct_monitor" / "main.py",
         "CTMonitorWindow",
         frozenset({"connection", "pairing"}),
+        control_backend="real",
+    ),
+    "ct_monitor_irfel_real": GuiSmokeSpec(
+        APP_ROOT / "ct_monitor" / "main.py",
+        "CTMonitorWindow",
+        frozenset({"connection", "pairing"}),
+        machine_id="irfel",
         control_backend="real",
     ),
     "orbit_correct": GuiSmokeSpec(
@@ -155,7 +171,7 @@ def _run_child(app_name: str) -> None:
     qt_app = QApplication.instance() or QApplication([f"gui-smoke-{app_name}"])
     module = _load_entrypoint(app_name, spec)
     ct_pv_calls = []
-    if app_name in {"ct_monitor", "ct_monitor_real"}:
+    if app_name.startswith("ct_monitor"):
         class SmokePV:
             def __init__(self, pvname, **kwargs):
                 self.pvname = pvname
@@ -189,6 +205,11 @@ def _run_child(app_name: str) -> None:
                 f"expected {spec.expected_hv_feedback_enabled}."
             )
 
+    if app_name == "launcher_irfel_real" and not window.ct_monitor_button.isEnabled():
+        raise AssertionError("IRFEL real launcher did not enable CT Monitor.")
+    if app_name == "launcher_irfel_vm" and window.ct_monitor_button.isEnabled():
+        raise AssertionError("IRFEL VM launcher incorrectly enabled the real-only CT Monitor.")
+
     if spec.uses_selector:
         selectors = window.findChildren(RuntimeSelectorWidget)
         if len(selectors) != 1:
@@ -214,7 +235,7 @@ def _run_child(app_name: str) -> None:
                 f"{app_name} started with theme {window.current_theme!r}; "
                 f"expected {expected_theme!r}."
             )
-        if app_name in {"ct_monitor", "ct_monitor_real"}:
+        if app_name.startswith("ct_monitor"):
             expected_size = module.THEME_BUTTON_SIZE
             if window.theme_button.width() != expected_size or window.theme_button.height() != expected_size:
                 raise AssertionError("CT theme toggle does not match the compact BBA button size.")
@@ -228,7 +249,7 @@ def _run_child(app_name: str) -> None:
         if window._profile_default_control_backend() != "vm":
             raise AssertionError("BBA did not retain the global VM backend.")
 
-    if app_name in {"ct_monitor", "ct_monitor_real"}:
+    if app_name.startswith("ct_monitor"):
         import time
 
         if window.pause_button.parent() is not window.status_panel.parent():
@@ -239,26 +260,34 @@ def _run_child(app_name: str) -> None:
             raise AssertionError("CT theme button should remain in the title row.")
         if window.selection_policy_label.text():
             raise AssertionError("CT monitor shows redundant physical-order status text.")
-        expected_pv_count = 5 if spec.control_backend == "real" else 4
+        expected_pv_count = len(window.measurement_elements) + len(window.fct_elements)
         if len(ct_pv_calls) != expected_pv_count:
             raise AssertionError("CT monitor created an unexpected number of PV monitors.")
-        charge_pvs = [pv for pv in ct_pv_calls if "FCT" not in pv.pvname]
+        measurement_pvs = [pv for pv in ct_pv_calls if "FCT" not in pv.pvname]
         fct_pvs = [pv for pv in ct_pv_calls if "FCT" in pv.pvname]
-        if any(pv.init_kwargs.get("form") != "time" for pv in charge_pvs):
+        if any(pv.init_kwargs.get("form") != "time" for pv in measurement_pvs):
             raise AssertionError("CT monitor ICT callbacks must retain CA time metadata.")
         if any(pv.init_kwargs.get("form") != "ctrl" for pv in fct_pvs):
             raise AssertionError("CT monitor FCT callback must receive CTRL units metadata.")
         if any(pv.callback_kwargs.get("with_ctrlvars") is not False for pv in ct_pv_calls):
             raise AssertionError("CT monitor unexpectedly requested synchronous CTRL metadata.")
         timestamp = time.time()
-        upstream_value = 0.55 if spec.control_backend == "real" else 5.5e-10
-        downstream_value = 0.44 if spec.control_backend == "real" else 4.4e-10
+        upstream_id, downstream_id = window._selected_ids()
+        uses_coulomb_source = (
+            window.measurement_channel == "charge" and spec.control_backend == "vm"
+        )
+        upstream_value = 5.5e-10 if uses_coulomb_source else 0.55
+        downstream_value = 4.4e-10 if uses_coulomb_source else 0.44
         for index in range(8):
             sample_time = timestamp + index * 0.01
-            window.store.update("ICT01", value=upstream_value, timestamp=sample_time)
-            window.store.update("ICT02", value=downstream_value, timestamp=sample_time + 0.005)
-            if spec.control_backend == "real":
-                window.store.update("FCT1", value=12.0 + index, timestamp=sample_time)
+            window.store.update(upstream_id, value=upstream_value, timestamp=sample_time)
+            window.store.update(downstream_id, value=downstream_value, timestamp=sample_time + 0.005)
+            if window.fct_elements:
+                window.store.update(
+                    window.fct_elements[0].id,
+                    value=12.0 + index,
+                    timestamp=sample_time,
+                )
         window._refresh()
         if len(window.transmission_history) != 8:
             raise AssertionError(
@@ -266,8 +295,17 @@ def _run_child(app_name: str) -> None:
             )
         if window.efficiency_card.value_label.text() != "80.00%":
             raise AssertionError("CT monitor did not display the queued-pair efficiency.")
-        if spec.control_backend == "real" and len(window.fct_history) != 8:
+        if window.fct_elements and len(window.fct_history) != 8:
             raise AssertionError("CT monitor did not preserve every queued FCT sample.")
+        if not window.fct_elements and window.fct_history:
+            raise AssertionError("CT monitor created FCT history without an available FCT channel.")
+        if app_name == "ct_monitor_irfel_real":
+            if window.measurement_channel != "current" or window.measurement_unit != "A":
+                raise AssertionError("IRFEL CT monitor did not select current in amperes.")
+            if window.upstream_card.value_label.text() != "0.55 A":
+                raise AssertionError("IRFEL CT monitor did not display ICT current in amperes.")
+            if window.measurement_axis.get_ylabel() != "Current (A)":
+                raise AssertionError("IRFEL CT current trend has the wrong axis label.")
         if window.trend_window_combo.count() != 4 or window.rolling_window_combo.count() != 4:
             raise AssertionError("CT monitor is missing trend or rolling window choices.")
         if not window.trend_window_combo.isEditable() or not window.rolling_window_combo.isEditable():
@@ -297,11 +335,11 @@ def _run_child(app_name: str) -> None:
             raise AssertionError("CT rolling history was incorrectly trimmed by trend span.")
         if "n=9" not in window.statistics_card.detail_label.text():
             raise AssertionError("CT rolling statistics did not use retained valid samples.")
-        plotted_x = window.charge_axis.lines[0].get_xdata()
+        plotted_x = window.measurement_axis.lines[0].get_xdata()
         if any(value < -30.0 for value in plotted_x if math.isfinite(value)):
             raise AssertionError("CT trend plotted samples outside the selected time span.")
-        if window.charge_axis.get_ylim()[0] > 0.0:
-            raise AssertionError("CT charge axis does not include zero.")
+        if window.measurement_axis.get_ylim()[0] > 0.0:
+            raise AssertionError("CT measurement axis does not include zero.")
         if window.efficiency_axis.get_ylim()[1] < 110.0:
             raise AssertionError("CT efficiency axis default range is too narrow.")
         window.trend_gap_s = 3.0
@@ -316,8 +354,8 @@ def _run_child(app_name: str) -> None:
             raise AssertionError("CT trend did not break the line across a beam gap.")
         window._toggle_pause()
         paused_count = len(window.transmission_history)
-        window.store.update("ICT01", value=upstream_value, timestamp=timestamp + 1.0)
-        window.store.update("ICT02", value=downstream_value, timestamp=timestamp + 1.005)
+        window.store.update(upstream_id, value=upstream_value, timestamp=timestamp + 1.0)
+        window.store.update(downstream_id, value=downstream_value, timestamp=timestamp + 1.005)
         window._refresh()
         if len(window.transmission_history) != paused_count:
             raise AssertionError("CT monitor retained samples while paused.")

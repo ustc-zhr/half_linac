@@ -526,9 +526,17 @@ def _validate_app(profile: MachineProfile, app_name: str) -> list[MachineValidat
             )
         ]
 
+    workflow = profile.workflows.get(app_name)
+    configured_backends = (
+        tuple(workflow.get("control_backends", ()))
+        if isinstance(workflow, Mapping)
+        else ()
+    )
+    app_backends = configured_backends or tuple(profile.control_backends)
+
     contexts: list[AppContext] = []
     failures: list[str] = []
-    for backend_name in profile.control_backends:
+    for backend_name in app_backends:
         try:
             contexts.append(
                 load_app_context(
@@ -554,7 +562,7 @@ def _validate_app(profile: MachineProfile, app_name: str) -> list[MachineValidat
             f"app:{app_name}",
             PASS,
             f"loaded {len(contexts)} app context(s) across backend(s): "
-            + ", ".join(profile.control_backends),
+            + ", ".join(app_backends),
         )
     ]
 

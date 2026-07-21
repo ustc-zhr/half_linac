@@ -74,6 +74,7 @@ Common logical channel meanings:
 | `K1_total` | 1/m^2 | read-only | `real` | computed total quadrupole strength |
 | `current_set` | A | writable | `real` | power-supply current setpoint |
 | `current_readback` | A | read-only | `real` | power-supply current readback |
+| `current` | A | read-only | `real` | beam current measured by an ICT in macro-pulse/micro-pulse operation |
 | `kick` | rad | writable | `vm` | corrector kick used by elegant `KICK` |
 | `angle` | rad | writable | `vm` | bend angle used by elegant `ANGLE` |
 | `charge` | backend-specific; CT apps normalize to nC | read-only | `vm`, `real` | integrated beam charge measured by an ICT |

@@ -2037,18 +2037,54 @@ def _validate_ct_monitor_workflow(
         control_backend or profile.machine.default_mode,
         "ct_monitor control backend",
     )
-    charge_elements = [
+    configured_backends = tuple(
+        normalize_mode(value, "workflows.ct_monitor.control_backends[]")
+        for value in _expect_string_list(
+            workflow.get("control_backends"),
+            "workflows.ct_monitor.control_backends",
+        )
+    )
+    if not configured_backends:
+        raise MachineProfileError(
+            "workflows.ct_monitor.control_backends must not be empty."
+        )
+    unknown_backends = sorted(set(configured_backends) - set(profile.control_backends))
+    if unknown_backends:
+        raise MachineProfileError(
+            "workflows.ct_monitor.control_backends contains unconfigured backend(s): "
+            + ", ".join(unknown_backends)
+        )
+    if backend not in configured_backends:
+        raise MachineProfileError(
+            f"ct_monitor does not support backend {backend!r}; configured backends: "
+            + ", ".join(configured_backends)
+            + "."
+        )
+    measurement_channel = _expect_non_empty_string(
+        workflow.get("measurement_channel"),
+        "workflows.ct_monitor.measurement_channel",
+    )
+    _expect_non_empty_string(
+        workflow.get("measurement_label"),
+        "workflows.ct_monitor.measurement_label",
+    )
+    _expect_non_empty_string(
+        workflow.get("measurement_unit"),
+        "workflows.ct_monitor.measurement_unit",
+    )
+    measurement_elements = [
         element
         for element in profile.elements
         if element.kind == "ct"
-        and backend in element.channels.get("charge", {})
+        and backend in element.channels.get(measurement_channel, {})
     ]
-    if len(charge_elements) < 2:
+    if len(measurement_elements) < 2:
         raise MachineProfileError(
-            f"ct_monitor requires at least two charge CT elements for backend {backend!r}."
+            f"ct_monitor requires at least two CT elements with channel "
+            f"{measurement_channel!r} for backend {backend!r}."
         )
 
-    charge_ids = {element.id for element in charge_elements}
+    measurement_ids = {element.id for element in measurement_elements}
     upstream = _expect_non_empty_string(
         workflow.get("default_upstream"),
         "workflows.ct_monitor.default_upstream",
@@ -2062,37 +2098,43 @@ def _validate_ct_monitor_workflow(
             "workflows.ct_monitor default upstream and downstream must be different."
         )
     for key, element_id in (("default_upstream", upstream), ("default_downstream", downstream)):
-        if element_id not in charge_ids:
+        if element_id not in measurement_ids:
             raise MachineProfileError(
-                f"workflows.ct_monitor.{key} must reference a charge CT available for "
-                f"backend {backend!r}."
+                f"workflows.ct_monitor.{key} must reference a CT with channel "
+                f"{measurement_channel!r} available for backend {backend!r}."
             )
 
     scale_by_backend = _expect_mapping(
-        workflow.get("charge_scale_to_nc"),
-        "workflows.ct_monitor.charge_scale_to_nc",
+        workflow.get("scale_to_display_unit"),
+        "workflows.ct_monitor.scale_to_display_unit",
     )
-    for backend_name in profile.control_backends:
+    unknown_scale_backends = sorted(set(scale_by_backend) - set(configured_backends))
+    if unknown_scale_backends:
+        raise MachineProfileError(
+            "workflows.ct_monitor.scale_to_display_unit contains unsupported backend(s): "
+            + ", ".join(unknown_scale_backends)
+        )
+    for backend_name in configured_backends:
         try:
             scale = float(scale_by_backend[backend_name])
         except KeyError as exc:
             raise MachineProfileError(
-                "workflows.ct_monitor.charge_scale_to_nc is missing backend "
+                "workflows.ct_monitor.scale_to_display_unit is missing backend "
                 f"{backend_name!r}."
             ) from exc
         except (TypeError, ValueError) as exc:
             raise MachineProfileError(
-                f"workflows.ct_monitor.charge_scale_to_nc.{backend_name} must be numeric."
+                f"workflows.ct_monitor.scale_to_display_unit.{backend_name} must be numeric."
             ) from exc
         if not math.isfinite(scale) or scale <= 0:
             raise MachineProfileError(
-                f"workflows.ct_monitor.charge_scale_to_nc.{backend_name} must be finite and positive."
+                f"workflows.ct_monitor.scale_to_display_unit.{backend_name} must be finite and positive."
             )
 
     positive_numbers = (
         "refresh_interval_ms",
         "pair_tolerance_s",
-        "minimum_upstream_charge_nc",
+        "minimum_upstream_value",
         "trend_window_s",
     )
     for key in positive_numbers:
@@ -2241,7 +2283,13 @@ def _validate_ct_monitor_workflow(
         workflow.get("stale_timeout_s"),
         "workflows.ct_monitor.stale_timeout_s",
     )
-    for backend_name in profile.control_backends:
+    unknown_stale_backends = sorted(set(stale_by_backend) - set(configured_backends))
+    if unknown_stale_backends:
+        raise MachineProfileError(
+            "workflows.ct_monitor.stale_timeout_s contains unsupported backend(s): "
+            + ", ".join(unknown_stale_backends)
+        )
+    for backend_name in configured_backends:
         if backend_name not in stale_by_backend:
             raise MachineProfileError(
                 f"workflows.ct_monitor.stale_timeout_s is missing backend {backend_name!r}."
@@ -2264,7 +2312,13 @@ def _validate_ct_monitor_workflow(
         workflow.get("trend_gap_s"),
         "workflows.ct_monitor.trend_gap_s",
     )
-    for backend_name in profile.control_backends:
+    unknown_gap_backends = sorted(set(gap_by_backend) - set(configured_backends))
+    if unknown_gap_backends:
+        raise MachineProfileError(
+            "workflows.ct_monitor.trend_gap_s contains unsupported backend(s): "
+            + ", ".join(unknown_gap_backends)
+        )
+    for backend_name in configured_backends:
         if backend_name not in gap_by_backend:
             raise MachineProfileError(
                 f"workflows.ct_monitor.trend_gap_s is missing backend {backend_name!r}."

@@ -211,7 +211,10 @@ class CTMonitorWindow(QMainWindow):
         self.refresh_interval_ms = int(self.workflow["refresh_interval_ms"])
         self.event_queue_size = int(self.workflow["event_queue_size"])
         self.pair_tolerance_s = float(self.workflow["pair_tolerance_s"])
-        self.minimum_charge_nc = float(self.workflow["minimum_upstream_charge_nc"])
+        self.measurement_channel = str(self.workflow["measurement_channel"])
+        self.measurement_label = str(self.workflow["measurement_label"])
+        self.measurement_unit = str(self.workflow["measurement_unit"])
+        self.minimum_upstream_value = float(self.workflow["minimum_upstream_value"])
         self.rolling_window = int(self.workflow["rolling_window"])
         self.rolling_window_options = tuple(
             int(value) for value in self.workflow["rolling_window_options"]
@@ -234,14 +237,16 @@ class CTMonitorWindow(QMainWindow):
         self.efficiency_axis_default_max = float(
             self.workflow["efficiency_axis_default_max_percent"]
         )
-        self.charge_scale_to_nc = float(self.workflow["charge_scale_to_nc"][self.backend])
+        self.scale_to_display_unit = float(
+            self.workflow["scale_to_display_unit"][self.backend]
+        )
         raw_stale = self.workflow["stale_timeout_s"][self.backend]
         self.stale_timeout_s = None if raw_stale is None else float(raw_stale)
 
-        self.charge_elements = list_elements(
+        self.measurement_elements = list_elements(
             self.app_context,
             kind="ct",
-            logical_channel="charge",
+            logical_channel=self.measurement_channel,
             control_backend=self.backend,
         )
         self.fct_elements = list_elements(
@@ -262,8 +267,8 @@ class CTMonitorWindow(QMainWindow):
         self._plots_dirty = True
         self._last_plot_draw = 0.0
         self._last_valid_sample: TransmissionSample | None = None
-        self._charge_order = {
-            element.id: element.order for element in self.charge_elements
+        self._measurement_order = {
+            element.id: element.order for element in self.measurement_elements
         }
 
         self._build_ui()
@@ -345,7 +350,7 @@ class CTMonitorWindow(QMainWindow):
         controls_layout.addWidget(self.clear_button)
         root.addWidget(controls)
 
-        for element in self.charge_elements:
+        for element in self.measurement_elements:
             self.upstream_combo.addItem(element.display_name, element.id)
             self.downstream_combo.addItem(element.display_name, element.id)
         self._select_combo_data(self.upstream_combo, str(self.workflow["default_upstream"]))
@@ -406,7 +411,7 @@ class CTMonitorWindow(QMainWindow):
         view_layout.addWidget(
             self._field_label(
                 f"Tolerance {self.pair_tolerance_s:.1f} s · "
-                f"threshold {self.minimum_charge_nc:g} nC",
+                f"threshold {self.minimum_upstream_value:g} {self.measurement_unit}",
                 view_controls,
             )
         )
@@ -414,8 +419,8 @@ class CTMonitorWindow(QMainWindow):
 
         metrics = QGridLayout()
         metrics.setHorizontalSpacing(10)
-        self.upstream_card = MetricCard("Upstream charge", central)
-        self.downstream_card = MetricCard("Downstream charge", central)
+        self.upstream_card = MetricCard(f"Upstream {self.measurement_label}", central)
+        self.downstream_card = MetricCard(f"Downstream {self.measurement_label}", central)
         self.efficiency_card = MetricCard("Transmission efficiency", central)
         self.statistics_card = MetricCard(
             f"Rolling {self.rolling_window} {self.sample_noun}", central
@@ -452,7 +457,7 @@ class CTMonitorWindow(QMainWindow):
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         rows = 3 if self.fct_elements else 2
-        self.charge_axis = self.figure.add_subplot(rows, 1, 1)
+        self.measurement_axis = self.figure.add_subplot(rows, 1, 1)
         self.efficiency_axis = self.figure.add_subplot(rows, 1, 2)
         self.fct_axis = self.figure.add_subplot(rows, 1, 3) if self.fct_elements else None
         plot_layout.addWidget(self.canvas)
@@ -500,16 +505,21 @@ class CTMonitorWindow(QMainWindow):
         )
 
     def _connect_pvs(self) -> None:
-        elements = [*self.charge_elements, *self.fct_elements]
-        for element in elements:
-            channel = "charge" if "charge" in element.channels else "peak_current"
+        channel_elements = [
+            (element, self.measurement_channel)
+            for element in self.measurement_elements
+        ]
+        channel_elements.extend(
+            (element, "peak_current") for element in self.fct_elements
+        )
+        for element, channel in channel_elements:
             key = element.id
             pv_name = resolve_channel(self.app_context, key, channel)
             self.store.set_connected(key, False)
             try:
                 pv = PV(
                     pv_name,
-                    form="time" if channel == "charge" else "ctrl",
+                    form="time" if channel == self.measurement_channel else "ctrl",
                     connection_callback=self._connection_callback(key),
                     auto_monitor=True,
                 )
@@ -531,7 +541,12 @@ class CTMonitorWindow(QMainWindow):
 
     def _value_callback(self, key: str, channel: str):
         def callback(value=None, timestamp=None, status=None, severity=None, **kwargs):
-            units = str(kwargs.get("units") or ("A" if channel == "peak_current" else ""))
+            fallback_units = (
+                self.measurement_unit
+                if channel == self.measurement_channel
+                else "A"
+            )
+            units = str(kwargs.get("units") or fallback_units)
             self.store.update(
                 key,
                 value=value,
@@ -564,7 +579,7 @@ class CTMonitorWindow(QMainWindow):
 
     def _is_reverse_order(self) -> bool:
         upstream, downstream = self._selected_ids()
-        return self._charge_order[upstream] > self._charge_order[downstream]
+        return self._measurement_order[upstream] > self._measurement_order[downstream]
 
     def _update_selection_policy(self) -> None:
         if self._is_reverse_order():
@@ -634,10 +649,10 @@ class CTMonitorWindow(QMainWindow):
             upstream_id,
             downstream_id,
             now=now,
-            scale_to_nc=self.charge_scale_to_nc,
+            scale_to_display_unit=self.scale_to_display_unit,
             tolerance_s=self.pair_tolerance_s,
             stale_timeout_s=self.stale_timeout_s,
-            minimum_upstream_charge_nc=self.minimum_charge_nc,
+            minimum_upstream_value=self.minimum_upstream_value,
         )
 
         if not self._paused and result.samples:
@@ -654,7 +669,7 @@ class CTMonitorWindow(QMainWindow):
             len(result.samples),
             result.mismatched_samples,
         )
-        self._update_charge_cards(snapshot, upstream_id, downstream_id, now)
+        self._update_measurement_cards(snapshot, upstream_id, downstream_id, now)
         self._update_efficiency_cards(pairing_status, now)
         self._update_fct(snapshot, queued, now)
         self._update_status(snapshot, pairing_status)
@@ -702,7 +717,7 @@ class CTMonitorWindow(QMainWindow):
             return f"{duration_s:.1f} s"
         return f"{duration_s / 60.0:.1f} min"
 
-    def _charge_card_state(
+    def _measurement_card_state(
         self,
         sample: SignalSample | None,
         element_id: str,
@@ -726,12 +741,12 @@ class CTMonitorWindow(QMainWindow):
         ):
             return "N/A", f"{element_id} · stale · {age}", True
         return (
-            f"{sample.value * self.charge_scale_to_nc:.4g} nC",
+            f"{sample.value * self.scale_to_display_unit:.4g} {self.measurement_unit}",
             f"{element_id} · {age}",
             False,
         )
 
-    def _update_charge_cards(
+    def _update_measurement_cards(
         self,
         snapshot: dict[str, SignalSample],
         upstream_id: str,
@@ -739,10 +754,10 @@ class CTMonitorWindow(QMainWindow):
         now: float,
     ) -> None:
         self.upstream_card.set_value(
-            *self._charge_card_state(snapshot.get(upstream_id), upstream_id, now)
+            *self._measurement_card_state(snapshot.get(upstream_id), upstream_id, now)
         )
         self.downstream_card.set_value(
-            *self._charge_card_state(snapshot.get(downstream_id), downstream_id, now)
+            *self._measurement_card_state(snapshot.get(downstream_id), downstream_id, now)
         )
 
     def _update_efficiency_cards(self, pairing_status: str, now: float) -> None:
@@ -843,9 +858,9 @@ class CTMonitorWindow(QMainWindow):
     ) -> None:
         connected = sum(
             bool(snapshot.get(element.id) and snapshot[element.id].connected)
-            for element in [*self.charge_elements, *self.fct_elements]
+            for element in [*self.measurement_elements, *self.fct_elements]
         )
-        total = len(self.charge_elements) + len(self.fct_elements)
+        total = len(self.measurement_elements) + len(self.fct_elements)
         connection_tone = "success" if total and connected == total else "danger"
         if 0 < connected < total:
             connection_tone = "neutral"
@@ -901,8 +916,8 @@ class CTMonitorWindow(QMainWindow):
                 downstream.append(float("nan"))
                 efficiency.append(float("nan"))
             x.append(sample.timestamp - now)
-            upstream.append(sample.upstream_nc)
-            downstream.append(sample.downstream_nc)
+            upstream.append(sample.upstream_value)
+            downstream.append(sample.downstream_value)
             efficiency.append(sample.efficiency_percent)
             previous_timestamp = sample.timestamp
         return x, upstream, downstream, efficiency
@@ -945,7 +960,7 @@ class CTMonitorWindow(QMainWindow):
 
     def _draw_plots(self, now: float) -> None:
         palette = DARK if self.current_theme == "dark" else LIGHT
-        axes = [self.charge_axis, self.efficiency_axis]
+        axes = [self.measurement_axis, self.efficiency_axis]
         if self.fct_axis is not None:
             axes.append(self.fct_axis)
         for axis in axes:
@@ -970,9 +985,9 @@ class CTMonitorWindow(QMainWindow):
         )
         if x:
             up_id, down_id = self._selected_ids()
-            self.charge_axis.plot(x, upstream, color=palette["upstream"], label=up_id, linewidth=1.7)
-            self.charge_axis.plot(x, downstream, color=palette["downstream"], label=down_id, linewidth=1.7)
-            self.charge_axis.legend(loc="upper left", frameon=False, labelcolor=palette["text"])
+            self.measurement_axis.plot(x, upstream, color=palette["upstream"], label=up_id, linewidth=1.7)
+            self.measurement_axis.plot(x, downstream, color=palette["downstream"], label=down_id, linewidth=1.7)
+            self.measurement_axis.legend(loc="upper left", frameon=False, labelcolor=palette["text"])
             self.efficiency_axis.plot(x, efficiency, color=palette["efficiency"], linewidth=1.8)
         self.efficiency_axis.axhline(
             100.0,
@@ -980,7 +995,7 @@ class CTMonitorWindow(QMainWindow):
             linestyle="--",
             linewidth=1.0,
         )
-        self._set_zero_inclusive_ylim(self.charge_axis, [*upstream, *downstream])
+        self._set_zero_inclusive_ylim(self.measurement_axis, [*upstream, *downstream])
         finite_efficiency = [value for value in efficiency if math.isfinite(value)]
         efficiency_upper = self.efficiency_axis_default_max
         if finite_efficiency:
@@ -989,12 +1004,15 @@ class CTMonitorWindow(QMainWindow):
                 max(finite_efficiency) * 1.05,
             )
         self.efficiency_axis.set_ylim(0.0, efficiency_upper)
-        self.charge_axis.set_ylabel("Charge (nC)", color=palette["text"])
+        self.measurement_axis.set_ylabel(
+            f"{self.measurement_label.capitalize()} ({self.measurement_unit})",
+            color=palette["text"],
+        )
         plot_count = len(plot_samples)
         source_count = len(recent_samples)
         point_note = f" · {plot_count}/{source_count} plotted" if source_count > plot_count else ""
-        self.charge_axis.set_title(
-            f"ICT charge trend{point_note}",
+        self.measurement_axis.set_title(
+            f"ICT {self.measurement_label} trend{point_note}",
             color=palette["text"],
             loc="left",
             fontweight="bold",
@@ -1002,7 +1020,7 @@ class CTMonitorWindow(QMainWindow):
         self.efficiency_axis.set_ylabel("Efficiency (%)", color=palette["text"])
         self.efficiency_axis.set_title("Transmission efficiency", color=palette["text"], loc="left", fontweight="bold")
         self.efficiency_axis.set_xlabel("Time from now (s)", color=palette["text"])
-        self.charge_axis.set_xlim(-self.trend_window_s, 0.0)
+        self.measurement_axis.set_xlim(-self.trend_window_s, 0.0)
         self.efficiency_axis.set_xlim(-self.trend_window_s, 0.0)
 
         if self.fct_axis is not None:
