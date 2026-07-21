@@ -306,6 +306,30 @@ def _run_child(app_name: str) -> None:
                 raise AssertionError("IRFEL CT monitor did not display ICT current in amperes.")
             if window.measurement_axis.get_ylabel() != "Current (A)":
                 raise AssertionError("IRFEL CT current trend has the wrong axis label.")
+            metric_cards = (
+                window.upstream_card,
+                window.downstream_card,
+                window.efficiency_card,
+                window.statistics_card,
+            )
+            widths_before = [card.width() for card in metric_cards]
+            if max(widths_before) - min(widths_before) > 1:
+                raise AssertionError(
+                    f"IRFEL CT metric cards are not equal width: {widths_before}."
+                )
+            window.efficiency_card.set_value(
+                "N/A",
+                "timestamp mismatch while waiting for paired update",
+                True,
+            )
+            qt_app.processEvents()
+            widths_after = [card.width() for card in metric_cards]
+            if widths_after != widths_before:
+                raise AssertionError("CT metric card widths changed with detail text.")
+            if window.efficiency_card.detail_label.toolTip() != (
+                "timestamp mismatch while waiting for paired update"
+            ):
+                raise AssertionError("CT metric detail tooltip did not preserve full text.")
         if window.trend_window_combo.count() != 4 or window.rolling_window_combo.count() != 4:
             raise AssertionError("CT monitor is missing trend or rolling window choices.")
         if not window.trend_window_combo.isEditable() or not window.rolling_window_combo.isEditable():

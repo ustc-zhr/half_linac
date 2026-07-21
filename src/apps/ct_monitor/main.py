@@ -148,6 +148,9 @@ class MetricCard(QFrame):
     def __init__(self, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("metricCard")
+        # Grid columns should remain equal even when a changing detail string has
+        # a much wider size hint (for example, "waiting for paired update").
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(2)
@@ -157,6 +160,7 @@ class MetricCard(QFrame):
         self.value_label.setObjectName("metricValue")
         self.detail_label = QLabel("Waiting for data", self)
         self.detail_label.setProperty("role", "field")
+        self.detail_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         layout.addWidget(self.title_label)
         layout.addWidget(self.value_label)
         layout.addWidget(self.detail_label)
@@ -164,6 +168,7 @@ class MetricCard(QFrame):
     def set_value(self, value: str, detail: str = "", warning: bool = False) -> None:
         self.value_label.setText(value)
         self.detail_label.setText(detail)
+        self.detail_label.setToolTip(detail)
         self.value_label.setProperty("warning", warning)
         self.value_label.style().unpolish(self.value_label)
         self.value_label.style().polish(self.value_label)
