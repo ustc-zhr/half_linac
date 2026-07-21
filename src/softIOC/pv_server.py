@@ -118,6 +118,7 @@ class pv_server:
         bpm_elements = list_elements(self.machine_profile, kind="bpm")
         bend_elements = list_elements(self.machine_profile, kind="bend")
         flag_elements = list_elements(self.machine_profile, kind="flag")
+        ct_elements = list_elements(self.machine_profile, kind="ct")
 
         with self.substitutions_path.open("w", encoding="utf-8") as handle:
             quad_rows: list[str] = []
@@ -226,6 +227,22 @@ class pv_server:
                 "flag_expotime.template",
                 "FLAG, EXPOTIMERECORD, EXPOTIMEALIAS",
                 flag_exposure_rows,
+            )
+
+            ct_rows: list[str] = []
+            for element in ct_elements:
+                charge_alias = self._resolve_vm_channel(element.id, "charge")
+                if not charge_alias:
+                    continue
+                record = self._internal_record_name("CT", element.id, "CHARGE")
+                ct_rows.append(
+                    f'  {{ "{element.id}", "{record}", "{charge_alias}" }}'
+                )
+            self._write_substitution_section(
+                handle,
+                "ct.template",
+                "CT, RECORD, ALIAS",
+                ct_rows,
             )
 
             corr_rows: list[str] = []

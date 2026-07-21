@@ -76,6 +76,8 @@ Common logical channel meanings:
 | `current_readback` | A | read-only | `real` | power-supply current readback |
 | `kick` | rad | writable | `vm` | corrector kick used by elegant `KICK` |
 | `angle` | rad | writable | `vm` | bend angle used by elegant `ANGLE` |
+| `charge` | backend-specific; CT apps normalize to nC | read-only | `vm`, `real` | integrated beam charge measured by an ICT |
+| `peak_current` | A unless the PV supplies another EGU | read-only | `real` | peak beam current measured by an FCT |
 | `setpoint` | backend-specific | legacy writable alias | legacy profiles | compatibility alias for `current_set` |
 | `readback` | backend-specific | legacy read-only alias | legacy profiles | compatibility alias for `current_readback` |
 

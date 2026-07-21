@@ -21,9 +21,14 @@ from half_linac.src.shared.elegant_backend import (
     ElegantParser,
     VmPublisher,
     build_vm_publish_plan,
+    reconcile_watch_scalar_sources,
 )
 from half_linac.src.shared.machine_profile import resolve_machine_runtime
-from half_linac.src.shared.runtime_state import ensure_runtime_state, read_runtime_state
+from half_linac.src.shared.runtime_state import (
+    ensure_runtime_state,
+    read_runtime_state,
+    update_runtime_state,
+)
 from half_linac.src.virtual_machine.lattice_usedline import describe_runtime_usedline
 
 
@@ -93,6 +98,16 @@ def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
     else:
         print("flag publish skipped or incomplete.")
 
+    if publisher.publish_watch_scalars(
+        publish_plan,
+        lattice=parser.lattice,
+        usedline=read_runtime_state(jsonpath)["usedline"],
+        elegant_dir=elegant_dir,
+    ):
+        print("scalar diagnostic data updated.")
+    else:
+        print("scalar diagnostic publish skipped or incomplete.")
+
 
 def main():
     signal.signal(signal.SIGTERM, _handle_shutdown_signal)
@@ -132,6 +147,17 @@ def main():
     except Exception as exc:
         print(f"failed to build VM publish plan: {exc}")
         return 1
+    if publish_plan.watch_scalar_specs:
+        _, diagnostics_changed = update_runtime_state(
+            jsonpath,
+            lambda state: reconcile_watch_scalar_sources(
+                state,
+                parser.lattice,
+                publish_plan.watch_scalar_specs,
+            ),
+        )
+        if diagnostics_changed:
+            print("Synchronized scalar diagnostic WATCH elements into VM runtime state.")
     last_modified = jsonpath.stat().st_mtime
 
     try:

@@ -639,6 +639,16 @@ APP_DEFINITIONS = {
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/beam_monitor",
     },
+    "ct_monitor": {
+        "button_name": "ct_monitor_button",
+        "category": "diagnostic",
+        "button_text": "CT Monitor",
+        "label": "CT Monitor",
+        "window_title_patterns": ("CT Monitor", "CT Transmission Monitor"),
+        "description": "Monitor FCT/ICT signals and calculate ICT charge transmission.",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/ct_monitor",
+    },
     "jitter": {
         "button_name": "jitter_plot",
         "category": "diagnostic",
@@ -737,6 +747,7 @@ APP_DEFINITIONS = {
 PROFILE_MANAGED_APP_KEYS = {
     "orbitdisplay": "orbit_display",
     "beammonitor": "beam_monitor",
+    "ct_monitor": "ct_monitor",
     "energy_spectrum": "energy_spectrum",
     "bba": "bba",
     "orbit_correct": "orbit_correct",
@@ -917,10 +928,23 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.solenoid_centering_button.setObjectName("solenoid_centering_button")
         self.dispersion_correction_button = QPushButton(self.groupBox_5)
         self.dispersion_correction_button.setObjectName("dispersion_correction_button")
+        self.ct_monitor_button = QPushButton(self.groupBox_4)
+        self.ct_monitor_button.setObjectName("ct_monitor_button")
 
         self.group_button_specs = [
             (self.gridLayout_3, self.groupBox_3, [self.vmbtn, self.online_opt], 1),
-            (self.gridLayout_2, self.groupBox_4, [self.beammonitor, self.orbitdisplay, self.energy_spectrum, self.jitter_plot], 1),
+            (
+                self.gridLayout_2,
+                self.groupBox_4,
+                [
+                    self.beammonitor,
+                    self.orbitdisplay,
+                    self.ct_monitor_button,
+                    self.energy_spectrum,
+                    self.jitter_plot,
+                ],
+                1,
+            ),
             (
                 self.gridLayout_4,
                 self.groupBox_5,

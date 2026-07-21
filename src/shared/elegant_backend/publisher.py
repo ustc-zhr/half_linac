@@ -19,7 +19,11 @@ from half_linac.src.shared.machine_profile.resolver import (
     resolve_channel,
 )
 
-from .parser import _load_bpm_centroids_from_sdds, _load_watch_image_from_sdds
+from .parser import (
+    _load_bpm_centroids_from_sdds,
+    _load_watch_image_from_sdds,
+    _load_watch_scalar_from_sdds,
+)
 
 
 EPICS_CONNECTION_TIMEOUT_S = 0.5
@@ -44,10 +48,19 @@ class VmWatchImagePublishSpec:
 
 
 @dataclass(frozen=True)
+class VmWatchScalarPublishSpec:
+    source_watch_id: str
+    target_element_id: str
+    logical_channel: str
+    pv_name: str
+    sdds_column: str
+
+
+@dataclass(frozen=True)
 class VmPublishPlan:
     bpm_specs: tuple[VmBpmPublishSpec, ...] = ()
     watch_image_specs: tuple[VmWatchImagePublishSpec, ...] = ()
-    watch_scalar_specs: tuple[object, ...] = field(default_factory=tuple)
+    watch_scalar_specs: tuple[VmWatchScalarPublishSpec, ...] = field(default_factory=tuple)
 
 
 def build_vm_publish_plan(profile: MachineProfile) -> VmPublishPlan:
@@ -69,10 +82,76 @@ def build_vm_publish_plan(profile: MachineProfile) -> VmPublishPlan:
         if energy_spec not in watch_specs:
             watch_specs.append(energy_spec)
 
+    scalar_specs = [
+        VmWatchScalarPublishSpec(
+            source_watch_id=element.id,
+            target_element_id=element.id,
+            logical_channel="charge",
+            pv_name=resolve_channel(profile, element.id, "charge", "vm"),
+            sdds_column="Charge",
+        )
+        for element in list_elements(
+            profile,
+            kind="ct",
+            logical_channel="charge",
+            control_backend="vm",
+        )
+    ]
+
     return VmPublishPlan(
         bpm_specs=tuple(bpm_specs),
         watch_image_specs=tuple(watch_specs),
+        watch_scalar_specs=tuple(scalar_specs),
     )
+
+
+def reconcile_watch_scalar_sources(
+    runtime_state: dict[str, Any],
+    bootstrap_lattice: Mapping[str, Mapping[str, Any]],
+    specs: Sequence[VmWatchScalarPublishSpec],
+) -> bool:
+    """Refresh diagnostic WATCH definitions without replacing operator lattice settings."""
+
+    lattice = runtime_state.get("lattice")
+    if not isinstance(lattice, dict):
+        raise MachineProfileError("VM runtime state lattice must be a mapping.")
+    usedline = runtime_state.get("usedline")
+    if not isinstance(usedline, list):
+        raise MachineProfileError("VM runtime state usedline must be a list.")
+
+    changed = False
+    for spec in specs:
+        source_id = spec.source_watch_id
+        source_definition = bootstrap_lattice.get(source_id)
+        if source_definition is None:
+            raise MachineProfileError(
+                f"VM bootstrap lattice is missing scalar watch source {source_id}."
+            )
+
+        legacy_id = f"{source_id}S"
+        if source_id not in lattice and legacy_id in lattice:
+            lattice.pop(legacy_id)
+            usedline[:] = [source_id if item == legacy_id else item for item in usedline]
+            for element in lattice.values():
+                if not isinstance(element, dict) or element.get("TYPE") != "LINE":
+                    continue
+                tokens = [token.strip() for token in str(element.get("LINE", "")).split(",")]
+                replaced = [source_id if token == legacy_id else token for token in tokens]
+                if replaced != tokens:
+                    element["LINE"] = ",".join(replaced)
+            context = runtime_state.get("usedline_context")
+            if isinstance(context, dict):
+                for key, value in tuple(context.items()):
+                    if value == legacy_id:
+                        context[key] = source_id
+            changed = True
+
+        desired = dict(source_definition)
+        if lattice.get(source_id) != desired:
+            lattice[source_id] = desired
+            changed = True
+
+    return changed
 
 
 class VmPublisher:
@@ -169,6 +248,66 @@ class VmPublisher:
                 label=f"flag {spec.target_element_id}/{spec.logical_channel}",
                 pv_name=spec.pv_name,
                 value=image,
+            ):
+                all_ok = False
+
+        return all_ok
+
+    def publish_watch_scalars(
+        self,
+        plan: VmPublishPlan,
+        *,
+        lattice: Mapping[str, Mapping[str, Any]],
+        usedline: Sequence[str],
+        elegant_dir: str | Path,
+    ) -> bool:
+        elegant_dir = Path(elegant_dir)
+        usedline_set = set(usedline)
+        all_ok = True
+
+        for spec in plan.watch_scalar_specs:
+            element = lattice.get(spec.source_watch_id)
+            error: str | None = None
+            value = float("nan")
+
+            if element is None:
+                error = f"watch {spec.source_watch_id} not found in runtime lattice"
+            elif spec.source_watch_id not in usedline_set:
+                error = None
+            elif element.get("TYPE") != "WATCH":
+                error = f"{spec.source_watch_id} is not a WATCH element"
+            elif str(element.get("MODE", "")).lower() not in {"parameter", "parameters"}:
+                error = f"{spec.source_watch_id} is not in parameter mode"
+            elif str(element.get("DISABLE", "0")) != "0":
+                error = f"{spec.source_watch_id} is disabled"
+            else:
+                output_path = _resolve_watch_output_path(
+                    elegant_dir,
+                    spec.source_watch_id,
+                    element,
+                )
+                if not output_path.is_file():
+                    error = f"missing watch output {output_path.name}"
+                else:
+                    try:
+                        value = _load_watch_scalar_from_sdds(
+                            output_path,
+                            spec.sdds_column,
+                        )
+                    except Exception as exc:
+                        error = str(exc)
+
+            if error is not None:
+                print(
+                    "scalar publish invalidated for "
+                    f"{spec.target_element_id}/{spec.logical_channel}: {error}."
+                )
+                all_ok = False
+
+            if not self._publish_one_best_effort(
+                label=f"scalar {spec.target_element_id}/{spec.logical_channel}",
+                pv_name=spec.pv_name,
+                value=value,
             ):
                 all_ok = False
 
@@ -344,5 +483,7 @@ __all__ = [
     "VmPublisher",
     "VmPublishPlan",
     "VmWatchImagePublishSpec",
+    "VmWatchScalarPublishSpec",
     "build_vm_publish_plan",
+    "reconcile_watch_scalar_sources",
 ]

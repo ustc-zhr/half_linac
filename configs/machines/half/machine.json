@@ -3766,6 +3766,63 @@
       "logical_channels": [
         "setpoint"
       ]
+    },
+    {
+      "id": "FCT1",
+      "kind": "ct",
+      "display_name": "FCT1",
+      "order": 232,
+      "tags": [
+        "fast"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "peak_current"
+      ]
+    },
+    {
+      "id": "ICT01",
+      "kind": "ct",
+      "display_name": "ICT1",
+      "order": 233,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "charge"
+      ]
+    },
+    {
+      "id": "ICT02",
+      "kind": "ct",
+      "display_name": "ICT2",
+      "order": 234,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "charge"
+      ]
+    },
+    {
+      "id": "ICT03",
+      "kind": "ct",
+      "display_name": "ICT3",
+      "order": 235,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "charge"
+      ]
+    },
+    {
+      "id": "ICT04",
+      "kind": "ct",
+      "display_name": "ICT4",
+      "order": 236,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "charge"
+      ]
     }
   ]
 }

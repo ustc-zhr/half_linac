@@ -444,7 +444,8 @@ def _validate_vm_publish_plan(
 
     detail = (
         f"{len(plan.bpm_specs)} BPM publish spec(s), "
-        f"{len(plan.watch_image_specs)} watch-image publish spec(s)."
+        f"{len(plan.watch_image_specs)} watch-image publish spec(s), "
+        f"{len(plan.watch_scalar_specs)} watch-scalar publish spec(s)."
     )
     if runtime is None:
         return MachineValidationCheck("vm_publish_plan", PASS, detail), None
@@ -491,13 +492,26 @@ def _validate_vm_publish_sources(
         if element.get("TYPE") != "WATCH":
             problems.append(f"{spec.source_watch_id} is not a WATCH element")
 
+    for spec in plan.watch_scalar_specs:
+        element = parser.lattice.get(spec.source_watch_id)
+        if element is None:
+            problems.append(f"{spec.source_watch_id} not found in {runtime.vm.bootstrap_lattice.name}")
+            continue
+        if element.get("TYPE") != "WATCH":
+            problems.append(f"{spec.source_watch_id} is not a WATCH element")
+            continue
+        if str(element.get("MODE", "")).lower() not in {"parameter", "parameters"}:
+            problems.append(f"{spec.source_watch_id} is not in parameter mode")
+
     if problems:
         return MachineValidationCheck("vm_publish_sources", FAIL, "; ".join(problems))
 
     return MachineValidationCheck(
         "vm_publish_sources",
         PASS,
-        f"validated {len(plan.watch_image_specs)} VM watch source(s) against {runtime.vm.bootstrap_lattice.name}.",
+        f"validated {len(plan.watch_image_specs)} image and "
+        f"{len(plan.watch_scalar_specs)} scalar VM watch source(s) against "
+        f"{runtime.vm.bootstrap_lattice.name}.",
     )
 
 

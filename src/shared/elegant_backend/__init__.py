@@ -6,7 +6,9 @@ from .publisher import (
     VmPublisher,
     VmPublishPlan,
     VmWatchImagePublishSpec,
+    VmWatchScalarPublishSpec,
     build_vm_publish_plan,
+    reconcile_watch_scalar_sources,
 )
 
 __all__ = [
@@ -16,5 +18,7 @@ __all__ = [
     "VmPublisher",
     "VmPublishPlan",
     "VmWatchImagePublishSpec",
+    "VmWatchScalarPublishSpec",
     "build_vm_publish_plan",
+    "reconcile_watch_scalar_sources",
 ]

@@ -67,6 +67,9 @@ def iter_softioc_vm_aliases(profile: MachineProfile) -> tuple[SoftIocAlias, ...]
         add(element.id, element.kind, "sigy")
         add(element.id, element.kind, "exposure_time")
 
+    for element in list_elements(profile, kind="ct"):
+        add(element.id, element.kind, "charge")
+
     for element in list_elements(profile, kind="corr"):
         add(element.id, element.kind, "kick")
 

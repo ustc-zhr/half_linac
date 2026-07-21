@@ -1,0 +1,7 @@
+record(ao, "$(RECORD)") {
+  alias("$(ALIAS)")
+  field(DESC, "$(CT) charge")
+  field(EGU, "C")
+  field(PREC, "12")
+  field(PINI, "YES")
+}

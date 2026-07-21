@@ -734,6 +734,18 @@
     "ENY": {
       "image": "HALF:IN:FLAG:ENY:image1:ArrayData:vm",
       "exposure_time": "HALF:IN:FLAG:ENY:cam1:AcquireTime:vm"
+    },
+    "ICT01": {
+      "charge": "HALF:IN:BD:ICT1:C:vm"
+    },
+    "ICT02": {
+      "charge": "HALF:IN:BD:ICT2:C:vm"
+    },
+    "ICT03": {
+      "charge": "HALF:IN:BD:ICT3:C:vm"
+    },
+    "ICT04": {
+      "charge": "HALF:IN:BD:ICT4:C:vm"
     }
   }
 }

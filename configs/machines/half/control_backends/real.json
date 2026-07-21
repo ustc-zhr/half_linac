@@ -1066,6 +1066,21 @@
     },
     "LINAC_ENERGY": {
       "setpoint": "IN:LA:ENG"
+    },
+    "FCT1": {
+      "peak_current": "IN:BD:FCT1:I"
+    },
+    "ICT01": {
+      "charge": "IN:BD:ICT1:C"
+    },
+    "ICT02": {
+      "charge": "IN:BD:ICT2:C"
+    },
+    "ICT03": {
+      "charge": "IN:BD:ICT3:C"
+    },
+    "ICT04": {
+      "charge": "IN:BD:ICT4:C"
     }
   }
 }

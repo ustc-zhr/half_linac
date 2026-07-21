@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import importlib.util
+import math
 import os
 import subprocess
 import sys
@@ -62,6 +63,17 @@ GUI_SMOKE_SPECS = {
         APP_ROOT / "orbit_display" / "main.py",
         "myWindow",
         frozenset({"x", "y", "hold", "refresh", "view"}),
+    ),
+    "ct_monitor": GuiSmokeSpec(
+        APP_ROOT / "ct_monitor" / "main.py",
+        "CTMonitorWindow",
+        frozenset({"connection", "pairing"}),
+    ),
+    "ct_monitor_real": GuiSmokeSpec(
+        APP_ROOT / "ct_monitor" / "main.py",
+        "CTMonitorWindow",
+        frozenset({"connection", "pairing"}),
+        control_backend="real",
     ),
     "orbit_correct": GuiSmokeSpec(
         APP_ROOT / "orbit_correct" / "mainOrbCor.py",
@@ -142,6 +154,22 @@ def _run_child(app_name: str) -> None:
     spec = GUI_SMOKE_SPECS[app_name]
     qt_app = QApplication.instance() or QApplication([f"gui-smoke-{app_name}"])
     module = _load_entrypoint(app_name, spec)
+    ct_pv_calls = []
+    if app_name in {"ct_monitor", "ct_monitor_real"}:
+        class SmokePV:
+            def __init__(self, pvname, **kwargs):
+                self.pvname = pvname
+                self.init_kwargs = kwargs
+                self.callback_kwargs = None
+                ct_pv_calls.append(self)
+
+            def add_callback(self, _callback, **kwargs):
+                self.callback_kwargs = kwargs
+
+            def clear_callbacks(self):
+                return None
+
+        module.PV = SmokePV
     window_type = getattr(module, spec.window_class)
     window = window_type()
     window.show()
@@ -186,6 +214,10 @@ def _run_child(app_name: str) -> None:
                 f"{app_name} started with theme {window.current_theme!r}; "
                 f"expected {expected_theme!r}."
             )
+        if app_name in {"ct_monitor", "ct_monitor_real"}:
+            expected_size = module.THEME_BUTTON_SIZE
+            if window.theme_button.width() != expected_size or window.theme_button.height() != expected_size:
+                raise AssertionError("CT theme toggle does not match the compact BBA button size.")
         window._toggle_theme()
         if window.current_theme == expected_theme:
             raise AssertionError(f"{app_name} could not switch its inherited theme independently.")
@@ -195,6 +227,109 @@ def _run_child(app_name: str) -> None:
             raise AssertionError("BBA legacy backend combo must remain hidden.")
         if window._profile_default_control_backend() != "vm":
             raise AssertionError("BBA did not retain the global VM backend.")
+
+    if app_name in {"ct_monitor", "ct_monitor_real"}:
+        import time
+
+        if window.pause_button.parent() is not window.status_panel.parent():
+            raise AssertionError("CT Pause button was not moved into the device-control row.")
+        if window.clear_button.parent() is not window.status_panel.parent():
+            raise AssertionError("CT Clear button was not moved into the device-control row.")
+        if window.theme_button.parent() is window.pause_button.parent():
+            raise AssertionError("CT theme button should remain in the title row.")
+        if window.selection_policy_label.text():
+            raise AssertionError("CT monitor shows redundant physical-order status text.")
+        expected_pv_count = 5 if spec.control_backend == "real" else 4
+        if len(ct_pv_calls) != expected_pv_count:
+            raise AssertionError("CT monitor created an unexpected number of PV monitors.")
+        charge_pvs = [pv for pv in ct_pv_calls if "FCT" not in pv.pvname]
+        fct_pvs = [pv for pv in ct_pv_calls if "FCT" in pv.pvname]
+        if any(pv.init_kwargs.get("form") != "time" for pv in charge_pvs):
+            raise AssertionError("CT monitor ICT callbacks must retain CA time metadata.")
+        if any(pv.init_kwargs.get("form") != "ctrl" for pv in fct_pvs):
+            raise AssertionError("CT monitor FCT callback must receive CTRL units metadata.")
+        if any(pv.callback_kwargs.get("with_ctrlvars") is not False for pv in ct_pv_calls):
+            raise AssertionError("CT monitor unexpectedly requested synchronous CTRL metadata.")
+        timestamp = time.time()
+        upstream_value = 0.55 if spec.control_backend == "real" else 5.5e-10
+        downstream_value = 0.44 if spec.control_backend == "real" else 4.4e-10
+        for index in range(8):
+            sample_time = timestamp + index * 0.01
+            window.store.update("ICT01", value=upstream_value, timestamp=sample_time)
+            window.store.update("ICT02", value=downstream_value, timestamp=sample_time + 0.005)
+            if spec.control_backend == "real":
+                window.store.update("FCT1", value=12.0 + index, timestamp=sample_time)
+        window._refresh()
+        if len(window.transmission_history) != 8:
+            raise AssertionError(
+                "CT monitor did not preserve every queued sample between GUI refreshes."
+            )
+        if window.efficiency_card.value_label.text() != "80.00%":
+            raise AssertionError("CT monitor did not display the queued-pair efficiency.")
+        if spec.control_backend == "real" and len(window.fct_history) != 8:
+            raise AssertionError("CT monitor did not preserve every queued FCT sample.")
+        if window.trend_window_combo.count() != 4 or window.rolling_window_combo.count() != 4:
+            raise AssertionError("CT monitor is missing trend or rolling window choices.")
+        if not window.trend_window_combo.isEditable() or not window.rolling_window_combo.isEditable():
+            raise AssertionError("CT monitor trend and rolling controls must accept manual input.")
+        if not isinstance(window.trend_window_combo, module.CleanComboBox):
+            raise AssertionError("CT monitor did not apply the clean combo-box style.")
+        window.trend_window_combo.setEditText("90")
+        window._apply_trend_window_input()
+        window.rolling_window_combo.setEditText("75")
+        window._apply_rolling_window_input()
+        if window.trend_window_s != 90.0 or window.rolling_window != 75:
+            raise AssertionError("CT monitor did not apply valid custom window values.")
+        window.trend_window_combo.setEditText("9")
+        window._apply_trend_window_input()
+        window.rolling_window_combo.setEditText("1001")
+        window._apply_rolling_window_input()
+        if window.trend_window_s != 90.0 or window.rolling_window != 75:
+            raise AssertionError("CT monitor did not reject out-of-range window values.")
+        window.trend_window_combo.setEditText("30")
+        window._apply_trend_window_input()
+        window.rolling_window_combo.setEditText("100")
+        window._apply_rolling_window_input()
+        old_sample = module.TransmissionSample(timestamp - 200.0, 0.55, 0.44, 80.0)
+        window.transmission_history.insert(0, old_sample)
+        window._refresh()
+        if old_sample not in window.transmission_history:
+            raise AssertionError("CT rolling history was incorrectly trimmed by trend span.")
+        if "n=9" not in window.statistics_card.detail_label.text():
+            raise AssertionError("CT rolling statistics did not use retained valid samples.")
+        plotted_x = window.charge_axis.lines[0].get_xdata()
+        if any(value < -30.0 for value in plotted_x if math.isfinite(value)):
+            raise AssertionError("CT trend plotted samples outside the selected time span.")
+        if window.charge_axis.get_ylim()[0] > 0.0:
+            raise AssertionError("CT charge axis does not include zero.")
+        if window.efficiency_axis.get_ylim()[1] < 110.0:
+            raise AssertionError("CT efficiency axis default range is too narrow.")
+        window.trend_gap_s = 3.0
+        gap_x, gap_up, _gap_down, _gap_eff = window._transmission_plot_series(
+            [
+                module.TransmissionSample(timestamp - 10.0, 0.55, 0.44, 80.0),
+                module.TransmissionSample(timestamp - 1.0, 0.55, 0.44, 80.0),
+            ],
+            timestamp,
+        )
+        if not any(math.isnan(value) for value in gap_up) or len(gap_x) != 3:
+            raise AssertionError("CT trend did not break the line across a beam gap.")
+        window._toggle_pause()
+        paused_count = len(window.transmission_history)
+        window.store.update("ICT01", value=upstream_value, timestamp=timestamp + 1.0)
+        window.store.update("ICT02", value=downstream_value, timestamp=timestamp + 1.005)
+        window._refresh()
+        if len(window.transmission_history) != paused_count:
+            raise AssertionError("CT monitor retained samples while paused.")
+        pairing_text = window.status_panel._items["pairing"][1].text()
+        if "Paused" not in pairing_text:
+            raise AssertionError("CT monitor does not expose paused state in its compact badge.")
+        if "discarded" not in window.statusBar().currentMessage():
+            raise AssertionError("CT monitor does not explain its paused discard policy.")
+        window._toggle_pause()
+        window._swap_selection()
+        if "Reverse order" not in window.selection_policy_label.text():
+            raise AssertionError("CT monitor did not warn about a reverse-order CT pair.")
 
     if app_name == "hv_feedback":
         required_buttons = (

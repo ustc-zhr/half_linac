@@ -65,6 +65,33 @@ def _load_watch_image_from_sdds(
     return np.reshape(hist.transpose(), (np.size(hist),))
 
 
+def _load_watch_scalar_from_sdds(
+    watch_output_path: Path,
+    column_name: str,
+) -> float:
+    watch_file = _new_legacy_sdds_dataset()
+    watch_file.load(str(watch_output_path))
+    try:
+        column_index = watch_file.columnName.index(column_name)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"SDDS watch output does not contain column {column_name!r}."
+        ) from exc
+
+    pages = watch_file.columnData[column_index]
+    for page in reversed(pages):
+        values = np.asarray(page).reshape(-1)
+        if values.size == 0:
+            continue
+        value = float(values[-1])
+        if not np.isfinite(value):
+            raise RuntimeError(
+                f"SDDS watch column {column_name!r} returned a non-finite value."
+            )
+        return value
+    raise RuntimeError(f"SDDS watch column {column_name!r} has no rows.")
+
+
 class EleParser(lattice_parser):
     """
     Parser for Elegant ``*.ele`` files.

@@ -31,6 +31,7 @@ REAL_COMMISSIONING_WORKFLOWS_BY_APP = {
     "solenoid_centering": "solenoid_centering",
     "dispersion_correction": "dispersion_correction",
     "hv_feedback": "hv_feedback",
+    "ct_monitor": "ct_monitor",
 }
 
 _REAL_STATUS_LABELS = {

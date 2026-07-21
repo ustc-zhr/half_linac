@@ -39,3 +39,17 @@ class HalfVmPublisher:
             usedline=usedline,
             elegant_dir=elegant_dir,
         )
+
+    def publish_scalars(
+        self,
+        *,
+        lattice: Mapping[str, Mapping[str, Any]],
+        usedline: Sequence[str],
+        elegant_dir: str | Path,
+    ) -> bool:
+        return self._publisher.publish_watch_scalars(
+            self.plan,
+            lattice=lattice,
+            usedline=usedline,
+            elegant_dir=elegant_dir,
+        )

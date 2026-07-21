@@ -43,6 +43,7 @@ SUPPORTED_APP_NAMES = {
     "solenoid_centering",
     "dispersion_correction",
     "hv_feedback",
+    "ct_monitor",
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum"}
 APP_WORKFLOW_FILES = {
@@ -55,6 +56,7 @@ APP_WORKFLOW_FILES = {
     "virtual_machine": "virtual_machine.json",
     "dispersion_correction": "dispersion_correction.json",
     "hv_feedback": "hv_feedback.json",
+    "ct_monitor": "ct_monitor.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
@@ -66,6 +68,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "solenoid_centering": ("solenoid_centering",),
     "dispersion_correction": ("dispersion_correction",),
     "hv_feedback": ("hv_feedback",),
+    "ct_monitor": ("ct_monitor",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",
@@ -136,10 +139,10 @@ def load_app_context(
     profile_id = resolve_machine_id(machine_id)
     required_workflows = APP_WORKFLOW_NAMES_BY_APP[app_name]
     profile = _load_profile_for_machine_id(profile_id, workflow_names=required_workflows)
-    _validate_basic_app_support(profile, app_name)
     selected_control_backend = ControlBackendConfig(
         name=resolve_control_backend(control_backend, profile.machine.default_mode)
     )
+    _validate_basic_app_support(profile, app_name, selected_control_backend.name)
     requested_model_backend = model_backend
     if requested_model_backend is None and app_name == "energy_spectrum":
         workflow = profile.workflows.get("energy_spectrum")
@@ -688,7 +691,11 @@ def resolve_machine_id(machine_id: str | None) -> str:
     return profile_id
 
 
-def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
+def _validate_basic_app_support(
+    profile: MachineProfile,
+    app_name: str,
+    control_backend: str | None = None,
+) -> None:
     if app_name in {"orbit_correct", "orbit_display"}:
         bpm_count = sum(1 for element in profile.elements if element.kind == "bpm")
         if bpm_count <= 0:
@@ -745,6 +752,13 @@ def _validate_basic_app_support(profile: MachineProfile, app_name: str) -> None:
                 "hv_feedback requires apps/hv_feedback.json."
             )
         _validate_hv_feedback_workflow(profile, workflow)
+        return
+
+    if app_name == "ct_monitor":
+        workflow = profile.workflows.get("ct_monitor")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError("ct_monitor requires apps/ct_monitor.json.")
+        _validate_ct_monitor_workflow(profile, workflow, control_backend)
         return
 
 
@@ -2011,6 +2025,262 @@ def _validate_beam_monitor_workflow(
                 "workflows.beam_monitor",
                 backend_name,
                 flag_id,
+            )
+
+
+def _validate_ct_monitor_workflow(
+    profile: MachineProfile,
+    workflow: Mapping[str, Any],
+    control_backend: str | None,
+) -> None:
+    backend = normalize_mode(
+        control_backend or profile.machine.default_mode,
+        "ct_monitor control backend",
+    )
+    charge_elements = [
+        element
+        for element in profile.elements
+        if element.kind == "ct"
+        and backend in element.channels.get("charge", {})
+    ]
+    if len(charge_elements) < 2:
+        raise MachineProfileError(
+            f"ct_monitor requires at least two charge CT elements for backend {backend!r}."
+        )
+
+    charge_ids = {element.id for element in charge_elements}
+    upstream = _expect_non_empty_string(
+        workflow.get("default_upstream"),
+        "workflows.ct_monitor.default_upstream",
+    )
+    downstream = _expect_non_empty_string(
+        workflow.get("default_downstream"),
+        "workflows.ct_monitor.default_downstream",
+    )
+    if upstream == downstream:
+        raise MachineProfileError(
+            "workflows.ct_monitor default upstream and downstream must be different."
+        )
+    for key, element_id in (("default_upstream", upstream), ("default_downstream", downstream)):
+        if element_id not in charge_ids:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.{key} must reference a charge CT available for "
+                f"backend {backend!r}."
+            )
+
+    scale_by_backend = _expect_mapping(
+        workflow.get("charge_scale_to_nc"),
+        "workflows.ct_monitor.charge_scale_to_nc",
+    )
+    for backend_name in profile.control_backends:
+        try:
+            scale = float(scale_by_backend[backend_name])
+        except KeyError as exc:
+            raise MachineProfileError(
+                "workflows.ct_monitor.charge_scale_to_nc is missing backend "
+                f"{backend_name!r}."
+            ) from exc
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.charge_scale_to_nc.{backend_name} must be numeric."
+            ) from exc
+        if not math.isfinite(scale) or scale <= 0:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.charge_scale_to_nc.{backend_name} must be finite and positive."
+            )
+
+    positive_numbers = (
+        "refresh_interval_ms",
+        "pair_tolerance_s",
+        "minimum_upstream_charge_nc",
+        "trend_window_s",
+    )
+    for key in positive_numbers:
+        try:
+            value = float(workflow[key])
+        except KeyError as exc:
+            raise MachineProfileError(f"workflows.ct_monitor.{key} is required.") from exc
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.{key} must be numeric."
+            ) from exc
+        if not math.isfinite(value) or value <= 0:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.{key} must be finite and positive."
+            )
+
+    rolling_window = workflow.get("rolling_window")
+    if not isinstance(rolling_window, int) or isinstance(rolling_window, bool) or rolling_window <= 0:
+        raise MachineProfileError(
+            "workflows.ct_monitor.rolling_window must be a positive integer."
+        )
+    event_queue_size = workflow.get("event_queue_size")
+    if (
+        not isinstance(event_queue_size, int)
+        or isinstance(event_queue_size, bool)
+        or event_queue_size < 2
+    ):
+        raise MachineProfileError(
+            "workflows.ct_monitor.event_queue_size must be an integer of at least 2."
+        )
+
+    rolling_options = workflow.get("rolling_window_options")
+    if (
+        not isinstance(rolling_options, list)
+        or not rolling_options
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            for value in rolling_options
+        )
+        or rolling_window not in rolling_options
+    ):
+        raise MachineProfileError(
+            "workflows.ct_monitor.rolling_window_options must be a non-empty list of "
+            "positive integers containing rolling_window."
+        )
+
+    trend_options = workflow.get("trend_window_options_s")
+    if not isinstance(trend_options, list) or not trend_options:
+        raise MachineProfileError(
+            "workflows.ct_monitor.trend_window_options_s must be a non-empty list."
+        )
+    try:
+        normalized_trend_options = [float(value) for value in trend_options]
+    except (TypeError, ValueError) as exc:
+        raise MachineProfileError(
+            "workflows.ct_monitor.trend_window_options_s must contain numeric values."
+        ) from exc
+    if (
+        any(
+            not math.isfinite(value) or value <= 0 or not value.is_integer()
+            for value in normalized_trend_options
+        )
+        or not float(workflow["trend_window_s"]).is_integer()
+        or float(workflow["trend_window_s"]) not in normalized_trend_options
+    ):
+        raise MachineProfileError(
+            "workflows.ct_monitor.trend_window_options_s must contain positive integer "
+            "second values including trend_window_s."
+        )
+
+    input_ranges: dict[str, tuple[int, int]] = {}
+    for key in ("rolling_window_input_range", "trend_window_input_range_s"):
+        raw_range = workflow.get(key)
+        if (
+            not isinstance(raw_range, list)
+            or len(raw_range) != 2
+            or any(
+                not isinstance(value, int) or isinstance(value, bool) or value <= 0
+                for value in raw_range
+            )
+            or raw_range[0] > raw_range[1]
+        ):
+            raise MachineProfileError(
+                f"workflows.ct_monitor.{key} must be [minimum, maximum] positive integers."
+            )
+        input_ranges[key] = (raw_range[0], raw_range[1])
+
+    rolling_input_min, rolling_input_max = input_ranges["rolling_window_input_range"]
+    if (
+        not rolling_input_min <= rolling_window <= rolling_input_max
+        or any(
+            not rolling_input_min <= value <= rolling_input_max
+            for value in rolling_options
+        )
+    ):
+        raise MachineProfileError(
+            "workflows.ct_monitor rolling defaults and options must be inside "
+            "rolling_window_input_range."
+        )
+
+    trend_input_min, trend_input_max = input_ranges["trend_window_input_range_s"]
+    if (
+        not trend_input_min <= float(workflow["trend_window_s"]) <= trend_input_max
+        or any(
+            not trend_input_min <= value <= trend_input_max
+            for value in normalized_trend_options
+        )
+    ):
+        raise MachineProfileError(
+            "workflows.ct_monitor trend defaults and options must be inside "
+            "trend_window_input_range_s."
+        )
+
+    history_size = workflow.get("history_size")
+    max_plot_points = workflow.get("max_plot_points")
+    if (
+        not isinstance(history_size, int)
+        or isinstance(history_size, bool)
+        or history_size < rolling_input_max
+    ):
+        raise MachineProfileError(
+            "workflows.ct_monitor.history_size must cover rolling_window_input_range."
+        )
+    if (
+        not isinstance(max_plot_points, int)
+        or isinstance(max_plot_points, bool)
+        or max_plot_points < 12
+        or max_plot_points > history_size
+    ):
+        raise MachineProfileError(
+            "workflows.ct_monitor.max_plot_points must be between 12 and history_size."
+        )
+
+    try:
+        efficiency_axis_max = float(workflow["efficiency_axis_default_max_percent"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise MachineProfileError(
+            "workflows.ct_monitor.efficiency_axis_default_max_percent must be numeric."
+        ) from exc
+    if not math.isfinite(efficiency_axis_max) or efficiency_axis_max <= 100:
+        raise MachineProfileError(
+            "workflows.ct_monitor.efficiency_axis_default_max_percent must exceed 100."
+        )
+
+    stale_by_backend = _expect_mapping(
+        workflow.get("stale_timeout_s"),
+        "workflows.ct_monitor.stale_timeout_s",
+    )
+    for backend_name in profile.control_backends:
+        if backend_name not in stale_by_backend:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.stale_timeout_s is missing backend {backend_name!r}."
+            )
+        raw_timeout = stale_by_backend[backend_name]
+        if raw_timeout is None:
+            continue
+        try:
+            timeout = float(raw_timeout)
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.stale_timeout_s.{backend_name} must be numeric or null."
+            ) from exc
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.stale_timeout_s.{backend_name} must be finite and positive."
+            )
+
+    gap_by_backend = _expect_mapping(
+        workflow.get("trend_gap_s"),
+        "workflows.ct_monitor.trend_gap_s",
+    )
+    for backend_name in profile.control_backends:
+        if backend_name not in gap_by_backend:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.trend_gap_s is missing backend {backend_name!r}."
+            )
+        raw_gap = gap_by_backend[backend_name]
+        if raw_gap is None:
+            continue
+        try:
+            gap = float(raw_gap)
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.trend_gap_s.{backend_name} must be numeric or null."
+            ) from exc
+        if not math.isfinite(gap) or gap <= 0:
+            raise MachineProfileError(
+                f"workflows.ct_monitor.trend_gap_s.{backend_name} must be finite and positive."
             )
 
 
