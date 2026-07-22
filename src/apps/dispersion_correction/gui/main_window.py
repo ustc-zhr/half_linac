@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime
+import math
 from pathlib import Path
 import re
 
-from PyQt5.QtCore import QPointF, QThread, pyqtSignal
+from PyQt5.QtCore import QPointF, QRectF, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QPen, QPolygonF
 from PyQt5.QtWidgets import (
     QFileDialog,
@@ -164,17 +165,25 @@ class FullWidthTabWidget(QTabWidget):
 
 
 class DispersionCurveWidget(QWidget):
+    DEFAULT_TOOLTIP = (
+        "Solid: baseline; dashed: correction preview. Red: horizontal; blue: vertical. "
+        "Move over the lattice strip for element details."
+    )
+
     def __init__(self) -> None:
         super().__init__()
         self.result: ModelResponseResult | None = None
         self.theme_name = "night_shift"
-        self.setMinimumHeight(210)
-        self.setToolTip(
-            "Solid: baseline; dashed: correction preview. Red: horizontal; blue: vertical."
-        )
+        self._lattice_geometry: tuple[QRectF, float, float] | None = None
+        self.setMinimumHeight(300)
+        self.setMouseTracking(True)
+        self.setToolTip(self.DEFAULT_TOOLTIP)
 
     def set_result(self, result: ModelResponseResult | None) -> None:
         self.result = result
+        if result is None:
+            self._lattice_geometry = None
+            self.setToolTip(self.DEFAULT_TOOLTIP)
         self.update()
 
     def set_theme(self, name: str) -> None:
@@ -186,7 +195,7 @@ class DispersionCurveWidget(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         tokens = theme_tokens(self.theme_name)
         painter.fillRect(self.rect(), QColor(tokens["plot_bg"]))
-        plot = self.rect().adjusted(58, 24, -18, -38)
+        plot = self.rect().adjusted(58, 24, -18, -112)
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(12, 18, "Dispersion curve (mm)")
         if self.result is None or plot.width() <= 0 or plot.height() <= 0:
@@ -246,12 +255,214 @@ class DispersionCurveWidget(QWidget):
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(4, plot.top() + 5, f"{limit:.3g}")
         painter.drawText(4, plot.bottom(), f"{-limit:.3g}")
-        painter.drawText(plot.left(), self.height() - 12, f"{s_min:.3g} m")
-        painter.drawText(plot.right() - 45, self.height() - 12, f"{s_max:.3g} m")
         painter.setPen(horizontal)
         painter.drawText(plot.left() + 8, plot.top() + 16, "Dx")
         painter.setPen(vertical)
         painter.drawText(plot.left() + 38, plot.top() + 16, "Dy")
+        lattice_rect = QRectF(
+            float(plot.left()),
+            float(plot.bottom() + 20),
+            float(plot.width()),
+            58.0,
+        )
+        self._lattice_geometry = (lattice_rect, s_min, s_max)
+        self._draw_lattice(
+            painter,
+            lattice_rect,
+            s_min,
+            s_max,
+            float(plot.top()),
+            tokens,
+        )
+        painter.setPen(QColor(tokens["text_muted"]))
+        painter.drawText(plot.left(), self.height() - 10, f"{s_min:.3g} m")
+        painter.drawText(plot.right() - 45, self.height() - 10, f"{s_max:.3g} m")
+
+    def _draw_lattice(
+        self,
+        painter: QPainter,
+        rect: QRectF,
+        s_min: float,
+        s_max: float,
+        constraint_top: float,
+        tokens: dict[str, str],
+    ) -> None:
+        if self.result is None:
+            return
+        curve = self.result.baseline_curve
+        span = max(s_max - s_min, 1.0e-12)
+        center_y = rect.top() + 28.0
+
+        def x_at(s_value: float) -> float:
+            return rect.left() + (s_value - s_min) / span * rect.width()
+
+        painter.setPen(QPen(QColor(tokens["text_muted"]), 1))
+        painter.drawLine(
+            QPointF(rect.left(), center_y),
+            QPointF(rect.right(), center_y),
+        )
+        self._draw_lattice_legend(painter, rect, tokens)
+        constraint_elements = set(self.result.observable_elements)
+        for index in self._visible_element_indices():
+            name = curve.element_names[index]
+            element_type = curve.element_types[index].upper()
+            s_exit = float(curve.s_m[index])
+            length = max(0.0, float(curve.element_lengths_m[index]))
+            left = x_at(max(s_min, s_exit - length))
+            right = x_at(min(s_max, s_exit))
+            center_x = (left + right) / 2.0
+            width = right - left
+            if width < 3.0:
+                width = 3.0
+                left = center_x - width / 2.0
+
+            if "BEND" in element_type:
+                tilt = float(curve.element_tilts_rad[index])
+                vertical_bend = abs(math.sin(tilt)) > 0.7
+                color = QColor("#3aa6b9" if vertical_bend else "#db8b3d")
+                element_rect = QRectF(left, center_y - 10.0, width, 20.0)
+            elif "QUAD" in element_type:
+                k1 = float(curve.element_k1_m2[index])
+                color = QColor("#d25f8d" if k1 >= 0 else "#7d74d8")
+                top = center_y - 15.0 if k1 >= 0 else center_y
+                element_rect = QRectF(left, top, width, 15.0)
+            elif self._is_bpm(name, element_type):
+                color = QColor("#4dbb83")
+                painter.setPen(QPen(color, 2))
+                painter.drawLine(
+                    QPointF(center_x, center_y - 13.0),
+                    QPointF(center_x, center_y + 13.0),
+                )
+                triangle = QPolygonF(
+                    [
+                        QPointF(center_x - 4.0, center_y - 14.0),
+                        QPointF(center_x + 4.0, center_y - 14.0),
+                        QPointF(center_x, center_y - 20.0),
+                    ]
+                )
+                painter.setBrush(color)
+                painter.drawPolygon(triangle)
+                element_rect = None
+            elif self._is_rf(name, element_type):
+                color = QColor("#b27ad8")
+                element_rect = QRectF(left, center_y - 7.0, width, 14.0)
+            else:
+                color = QColor(tokens["text_muted"])
+                element_rect = QRectF(left, center_y - 3.0, width, 6.0)
+
+            if element_rect is not None:
+                painter.setPen(QPen(color.darker(125), 1))
+                painter.setBrush(color)
+                painter.drawRect(element_rect)
+
+            if name in constraint_elements:
+                marker_color = QColor(tokens["focus"])
+                marker_color.setAlpha(150)
+                painter.setPen(QPen(marker_color, 2, Qt.DotLine))
+                painter.drawLine(
+                    QPointF(center_x, constraint_top),
+                    QPointF(center_x, rect.bottom()),
+                )
+                painter.setPen(QColor(tokens["focus"]))
+                painter.drawText(
+                    QRectF(center_x - 35.0, rect.bottom() - 14.0, 70.0, 14.0),
+                    Qt.AlignCenter,
+                    name,
+                )
+            elif "BEND" in element_type:
+                painter.setPen(QColor(tokens["text_primary"]))
+                painter.drawText(
+                    QRectF(center_x - 35.0, rect.top(), 70.0, 14.0),
+                    Qt.AlignCenter,
+                    name,
+                )
+
+        painter.setPen(QColor(tokens["text_muted"]))
+        painter.drawText(QRectF(rect.left(), rect.bottom() - 14.0, 150.0, 14.0), "Lattice")
+
+    @staticmethod
+    def _draw_lattice_legend(
+        painter: QPainter,
+        rect: QRectF,
+        tokens: dict[str, str],
+    ) -> None:
+        entries = (
+            ("Bend-H", QColor("#db8b3d")),
+            ("Bend-V", QColor("#3aa6b9")),
+            ("Quad+", QColor("#d25f8d")),
+            ("Quad-", QColor("#7d74d8")),
+            ("BPM", QColor("#4dbb83")),
+            ("RF", QColor("#b27ad8")),
+        )
+        x = rect.left()
+        y = rect.top() - 14.0
+        for label, color in entries:
+            painter.fillRect(QRectF(x, y + 3.0, 9.0, 7.0), color)
+            painter.setPen(QColor(tokens["text_muted"]))
+            painter.drawText(QRectF(x + 12.0, y, 45.0, 14.0), label)
+            x += 56.0
+
+    def _visible_element_indices(self) -> list[int]:
+        if self.result is None:
+            return []
+        curve = self.result.baseline_curve
+        return [
+            index
+            for index, element_type in enumerate(curve.element_types)
+            if element_type.upper() not in {"DRIF", "CSRDRIFT", "MARK"}
+            and curve.element_names[index] != "_BEG_"
+        ]
+
+    @staticmethod
+    def _is_bpm(name: str, element_type: str) -> bool:
+        return name.upper().startswith("BPM") or element_type == "MONI"
+
+    @staticmethod
+    def _is_rf(name: str, element_type: str) -> bool:
+        return name.upper().startswith("PRF") or "RF" in element_type
+
+    def mouseMoveEvent(self, event) -> None:
+        if self.result is None or self._lattice_geometry is None:
+            self.setToolTip(self.DEFAULT_TOOLTIP)
+            return super().mouseMoveEvent(event)
+        rect, s_min, s_max = self._lattice_geometry
+        if not rect.adjusted(-4.0, -8.0, 4.0, 8.0).contains(event.localPos()):
+            self.setToolTip(self.DEFAULT_TOOLTIP)
+            return super().mouseMoveEvent(event)
+        curve = self.result.baseline_curve
+        span = max(s_max - s_min, 1.0e-12)
+        indices = self._visible_element_indices()
+        if not indices:
+            return super().mouseMoveEvent(event)
+        nearest = min(
+            indices,
+            key=lambda index: abs(
+                rect.left()
+                + (
+                    float(curve.s_m[index])
+                    - 0.5 * max(0.0, float(curve.element_lengths_m[index]))
+                    - s_min
+                )
+                / span
+                * rect.width()
+                - event.localPos().x()
+            ),
+        )
+        name = curve.element_names[nearest]
+        element_type = curve.element_types[nearest]
+        details = [
+            f"{name} [{element_type}]",
+            f"s={float(curve.s_m[nearest]):.6g} m",
+            f"L={float(curve.element_lengths_m[nearest]):.6g} m",
+        ]
+        k1 = float(curve.element_k1_m2[nearest])
+        angle = float(curve.element_angles_rad[nearest])
+        if math.isfinite(k1):
+            details.append(f"K1={k1:.6g} 1/m²")
+        if math.isfinite(angle):
+            details.append(f"angle={angle:.6g} rad")
+        self.setToolTip("\n".join(details))
+        super().mouseMoveEvent(event)
 
 
 class MainWindow(QMainWindow):

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 
@@ -153,5 +154,49 @@ def test_main_window_constructs_offscreen() -> None:
     assert not half_window.bpm_select_button.isVisibleTo(half_window)
     assert not half_window.knob_select_button.isVisibleTo(half_window)
     assert half_window.status_strip.items["SAFETY"].value_label.text() == "MODEL ONLY"
+    from half_linac.src.apps.dispersion_correction.models import (
+        ModelOpticsCurve,
+        ModelResponseResult,
+    )
+
+    curve = ModelOpticsCurve(
+        element_names=("_BEG_", "BL01A", "QL01", "BPM06"),
+        element_types=("MARK", "CSBEND", "QUAD", "MONI"),
+        element_occurrences=(1, 1, 1, 1),
+        element_lengths_m=np.asarray([0.0, 0.35, 0.15, 0.0]),
+        element_k1_m2=np.asarray([np.nan, np.nan, 6.0, np.nan]),
+        element_angles_rad=np.asarray([np.nan, -0.3, np.nan, np.nan]),
+        element_tilts_rad=np.zeros(4),
+        s_m=np.asarray([0.0, 1.0, 2.0, 3.0]),
+        dx_mm=np.asarray([0.0, 10.0, 3.0, 0.1]),
+        dxp_mrad=np.asarray([0.0, 2.0, 1.0, 0.01]),
+        dy_mm=np.zeros(4),
+        dyp_mrad=np.zeros(4),
+        beta_x_m=np.asarray([10.0, 12.0, 11.0, 10.0]),
+        beta_y_m=np.asarray([9.0, 10.0, 11.0, 12.0]),
+    )
+    model_result = ModelResponseResult(
+        section_id="bl01",
+        observable_names=("BPM06 Dx", "BPM06 Dx'"),
+        observable_elements=("BPM06", "BPM06"),
+        observable_components=("dx", "dxp"),
+        observable_units=("mm", "mrad"),
+        knob_names=("QL01_QL06_sym",),
+        baseline_values=np.asarray([0.1, 0.01]),
+        target_values=np.zeros(2),
+        response_matrix=np.asarray([[1.0], [0.1]]),
+        singular_values=np.asarray([1.0]),
+        condition_number=1.0,
+        retained_rank=1,
+        derived_knobs=(),
+        baseline_curve=curve,
+        preview_knob_deltas={"QL01_QL06_sym": -0.1},
+        preview_values=np.zeros(2),
+        preview_curve=curve,
+    )
+    half_window._show_model_response(model_result)
+    app.processEvents()
+    assert half_window.dispersion_curve.result is model_result
+    assert not half_window.dispersion_curve.grab().isNull()
     half_window.close()
     app.quit()

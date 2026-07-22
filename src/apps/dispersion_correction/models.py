@@ -277,6 +277,12 @@ class ModelResponseResult:
 @dataclass(frozen=True)
 class ModelOpticsCurve:
     element_names: tuple[str, ...]
+    element_types: tuple[str, ...]
+    element_occurrences: tuple[int, ...]
+    element_lengths_m: ArrayLike
+    element_k1_m2: ArrayLike
+    element_angles_rad: ArrayLike
+    element_tilts_rad: ArrayLike
     s_m: ArrayLike
     dx_mm: ArrayLike
     dxp_mrad: ArrayLike
@@ -289,6 +295,10 @@ class ModelOpticsCurve:
         arrays = {
             name: np.asarray(getattr(self, name), dtype=float)
             for name in (
+                "element_lengths_m",
+                "element_k1_m2",
+                "element_angles_rad",
+                "element_tilts_rad",
                 "s_m",
                 "dx_mm",
                 "dxp_mrad",
@@ -299,6 +309,8 @@ class ModelOpticsCurve:
             )
         }
         size = len(self.element_names)
+        if len(self.element_types) != size or len(self.element_occurrences) != size:
+            raise ValueError("Model element metadata must match element_names")
         if any(values.shape != (size,) for values in arrays.values()):
             raise ValueError("Model optics curve arrays must match element_names")
         for name, values in arrays.items():

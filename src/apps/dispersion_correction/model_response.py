@@ -217,6 +217,12 @@ def format_model_response(result: ModelResponseResult) -> str:
 def _curve_to_dict(curve: ModelOpticsCurve) -> dict[str, Any]:
     return {
         "element_names": list(curve.element_names),
+        "element_types": list(curve.element_types),
+        "element_occurrences": list(curve.element_occurrences),
+        "element_lengths_m": curve.element_lengths_m.tolist(),
+        "element_k1_m2": _finite_or_none(curve.element_k1_m2),
+        "element_angles_rad": _finite_or_none(curve.element_angles_rad),
+        "element_tilts_rad": curve.element_tilts_rad.tolist(),
         "s_m": curve.s_m.tolist(),
         "dx_mm": curve.dx_mm.tolist(),
         "dxp_mrad": curve.dxp_mrad.tolist(),
@@ -225,6 +231,10 @@ def _curve_to_dict(curve: ModelOpticsCurve) -> dict[str, Any]:
         "beta_x_m": curve.beta_x_m.tolist(),
         "beta_y_m": curve.beta_y_m.tolist(),
     }
+
+
+def _finite_or_none(values: np.ndarray) -> list[float | None]:
+    return [float(value) if np.isfinite(value) else None for value in values]
 
 
 def _base_k1_values(backend, config: RunConfig) -> dict[str, float]:
@@ -283,6 +293,20 @@ def _optics_curve(
         raise ValueError("Elegant model returned an empty optics profile")
     return ModelOpticsCurve(
         element_names=tuple(str(row["element_name"]) for row in rows),
+        element_types=tuple(str(row.get("element_type", "")) for row in rows),
+        element_occurrences=tuple(int(row.get("element_occurrence", 1)) for row in rows),
+        element_lengths_m=np.asarray(
+            [row.get("element_length_m", 0.0) for row in rows], dtype=float
+        ),
+        element_k1_m2=np.asarray(
+            [row.get("element_k1_m2", float("nan")) for row in rows], dtype=float
+        ),
+        element_angles_rad=np.asarray(
+            [row.get("element_angle_rad", float("nan")) for row in rows], dtype=float
+        ),
+        element_tilts_rad=np.asarray(
+            [row.get("element_tilt_rad", 0.0) for row in rows], dtype=float
+        ),
         s_m=np.asarray([row["s_m"] for row in rows], dtype=float),
         dx_mm=1000.0 * np.asarray([row["dx_m"] for row in rows], dtype=float),
         dxp_mrad=1000.0 * np.asarray([row["dxp_rad"] for row in rows], dtype=float),

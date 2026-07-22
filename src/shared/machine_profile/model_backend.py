@@ -339,6 +339,8 @@ class ElegantModelBackend:
         twiss_path = self.emit_ele.with_suffix(".twi")
         twiss = sdds.SDDS(0)
         twiss.load(str(twiss_path))
+        with self.emit_json.open("r", encoding="utf-8") as handle:
+            emitted_lattice = json.load(handle).get("lattice", {})
         columns = {
             name: twiss.columnData[index][0]
             for index, name in enumerate(twiss.columnName)
@@ -361,21 +363,29 @@ class ElegantModelBackend:
                 f"Elegant Twiss output {twiss_path} is missing columns: {', '.join(missing)}"
             )
         row_count = len(columns["s"])
-        return tuple(
-            {
-                "element_name": str(columns["ElementName"][index]),
-                "element_occurrence": int(columns["ElementOccurence"][index]),
-                "element_type": str(columns["ElementType"][index]),
-                "s_m": float(columns["s"][index]),
-                "dx_m": float(columns["etax"][index]),
-                "dxp_rad": float(columns["etaxp"][index]),
-                "dy_m": float(columns["etay"][index]),
-                "dyp_rad": float(columns["etayp"][index]),
-                "beta_x_m": float(columns["betax"][index]),
-                "beta_y_m": float(columns["betay"][index]),
-            }
-            for index in range(row_count)
-        )
+        rows = []
+        for index in range(row_count):
+            element_name = str(columns["ElementName"][index])
+            element = emitted_lattice.get(element_name, {})
+            rows.append(
+                {
+                    "element_name": element_name,
+                    "element_occurrence": int(columns["ElementOccurence"][index]),
+                    "element_type": str(columns["ElementType"][index]),
+                    "element_length_m": _optional_float(element.get("L"), default=0.0),
+                    "element_k1_m2": _optional_float(element.get("K1")),
+                    "element_angle_rad": _optional_float(element.get("ANGLE")),
+                    "element_tilt_rad": _optional_float(element.get("TILT"), default=0.0),
+                    "s_m": float(columns["s"][index]),
+                    "dx_m": float(columns["etax"][index]),
+                    "dxp_rad": float(columns["etaxp"][index]),
+                    "dy_m": float(columns["etay"][index]),
+                    "dyp_rad": float(columns["etayp"][index]),
+                    "beta_x_m": float(columns["betax"][index]),
+                    "beta_y_m": float(columns["betay"][index]),
+                }
+            )
+        return tuple(rows)
 
     def _new_parser(self) -> ElegantParser:
         return ElegantParser(
@@ -434,6 +444,13 @@ def _require_config(config: Mapping[str, object], key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise MachineProfileError(f"Model backend config is missing {key!r}.")
     return value.strip()
+
+
+def _optional_float(value: object, *, default: float = float("nan")) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _normalize_lattice_overrides(

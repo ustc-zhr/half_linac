@@ -106,9 +106,12 @@ python3 -m half_linac.src.apps.dispersion_correction.cli model-response --sectio
 The model report includes endpoint `D/D'` observables, the raw symmetric-pair
 response matrix, retained SVD rank, model-derived weighted quadrupole modes,
 and a bounded correction preview. The GUI also plots baseline and preview
-horizontal/vertical dispersion curves. One BL01 analysis uses eight isolated
-Elegant runs: baseline, positive/negative scans for three raw knobs, and the
-exact preview lattice.
+horizontal/vertical dispersion curves. A lattice strip on the same longitudinal
+axis shows horizontal/vertical bends, focusing/defocusing quadrupoles, BPMs,
+RF elements, and the configured dispersion constraint locations. Hovering over
+the strip reports element name, type, position, length, and applicable K1 or
+bend angle. One BL01 analysis uses eight isolated Elegant runs: baseline,
+positive/negative scans for three raw knobs, and the exact preview lattice.
 
 The preview reports suggested raw-knob deltas and recomputes the lattice rather
 than showing only a linear matrix prediction. It remains read-only: the
