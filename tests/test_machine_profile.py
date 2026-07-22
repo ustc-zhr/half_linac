@@ -278,6 +278,36 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(metadata["fields"][0]["source_pv"], qe01_pv)
         self.assertEqual(metadata["fields"][0]["conversion"], {"type": "direct"})
 
+    def test_half_bl01_model_snapshot_supports_vm_and_real_k1_channels(self):
+        fields = tuple((f"QL{index:02d}", "K1") for index in range(1, 13))
+        for backend, expected_source in (
+            ("vm", "live_from_vm"),
+            ("real", "live_from_real"),
+        ):
+            context = load_app_context(
+                "dispersion_correction",
+                machine_id="half",
+                control_backend=backend,
+            )
+            pv_values = {
+                resolve_channel(context, element_id, "k1", backend): float(index)
+                for index, (element_id, _field_name) in enumerate(fields, start=1)
+            }
+            snapshot = build_model_snapshot(
+                context,
+                fields,
+                pv_reader=pv_values.__getitem__,
+            )
+
+            self.assertEqual(snapshot.source, expected_source)
+            self.assertEqual(len(snapshot.fields), 12)
+            self.assertEqual(snapshot.lattice_overrides["QL12"]["K1"], 12.0)
+
+        self.assertEqual(
+            resolve_channel(context, "QL01", "k1", "real"),
+            "IN:MG:L001:QUAD:QL01:K1",
+        )
+
     def test_model_snapshot_conversion_helpers(self):
         self.assertEqual(apply_snapshot_conversion(2.0, {"type": "direct"}), 2.0)
         self.assertEqual(
@@ -727,7 +757,7 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(
             resolve_channel(profile, "QL03", "k1", "real"),
-            "IN:PS:LE07:QL03:current:ao",
+            "IN:MG:L001:QUAD:QL03:K1",
         )
 
     def test_vm_backend_uses_softioc_alias_naming_for_magnets(self):

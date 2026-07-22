@@ -228,6 +228,10 @@ class ModelResponseResult:
     preview_knob_deltas: dict[str, float]
     preview_values: ArrayLike
     preview_curve: "ModelOpticsCurve"
+    model_source: str = "design"
+    design_curve: "ModelOpticsCurve | None" = None
+    snapshot_metadata: dict[str, Any] | None = None
+    entrance_condition: str = ""
 
     def __post_init__(self) -> None:
         baseline = np.asarray(self.baseline_values, dtype=float)

@@ -552,62 +552,62 @@
     "QL01": {
       "current_set": "IN:PS:LE07:QL01:current:ao",
       "current_readback": "IN:PS:LE07:QL01:current:ai",
-      "K1": "IN:PS:LE07:QL01:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL01:K1"
     },
     "QL02": {
       "current_set": "IN:PS:LE07:QL02:current:ao",
       "current_readback": "IN:PS:LE07:QL02:current:ai",
-      "K1": "IN:PS:LE07:QL02:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL02:K1"
     },
     "QL03": {
       "current_set": "IN:PS:LE07:QL03:current:ao",
       "current_readback": "IN:PS:LE07:QL03:current:ai",
-      "K1": "IN:PS:LE07:QL03:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL03:K1"
     },
     "QL04": {
       "current_set": "IN:PS:LE07:QL04:current:ao",
       "current_readback": "IN:PS:LE07:QL04:current:ai",
-      "K1": "IN:PS:LE07:QL04:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL04:K1"
     },
     "QL05": {
       "current_set": "IN:PS:LE07:QL05:current:ao",
       "current_readback": "IN:PS:LE07:QL05:current:ai",
-      "K1": "IN:PS:LE07:QL05:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL05:K1"
     },
     "QL06": {
       "current_set": "IN:PS:LE07:QL06:current:ao",
       "current_readback": "IN:PS:LE07:QL06:current:ai",
-      "K1": "IN:PS:LE07:QL06:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL06:K1"
     },
     "QL07": {
       "current_set": "IN:PS:LE07:QL07:current:ao",
       "current_readback": "IN:PS:LE07:QL07:current:ai",
-      "K1": "IN:PS:LE07:QL07:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL07:K1"
     },
     "QL08": {
       "current_set": "IN:PS:LE07:QL08:current:ao",
       "current_readback": "IN:PS:LE07:QL08:current:ai",
-      "K1": "IN:PS:LE07:QL08:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL08:K1"
     },
     "QL09": {
       "current_set": "IN:PS:LE07:QL09:current:ao",
       "current_readback": "IN:PS:LE07:QL09:current:ai",
-      "K1": "IN:PS:LE07:QL09:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL09:K1"
     },
     "QL10": {
       "current_set": "IN:PS:LE07:QL10:current:ao",
       "current_readback": "IN:PS:LE07:QL10:current:ai",
-      "K1": "IN:PS:LE07:QL10:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL10:K1"
     },
     "QL11": {
       "current_set": "IN:PS:LE07:QL11:current:ao",
       "current_readback": "IN:PS:LE07:QL11:current:ai",
-      "K1": "IN:PS:LE07:QL11:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL11:K1"
     },
     "QL12": {
       "current_set": "IN:PS:LE07:QL12:current:ao",
       "current_readback": "IN:PS:LE07:QL12:current:ai",
-      "K1": "IN:PS:LE07:QL12:current:ao"
+      "K1": "IN:MG:L001:QUAD:QL12:K1"
     },
     "QL13": {
       "current_set": "IN:PS:LE07:QL13:current:ao",

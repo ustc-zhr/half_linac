@@ -26,6 +26,102 @@
     "energy_twiss_line_name": "ALL_ESA",
     "snapshot_mapping": {
       "fields": {
+        "QL01": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL02": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL03": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL04": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL05": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL06": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL07": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL08": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL09": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL10": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL11": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QL12": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
         "QE01": {
           "K1": {
             "logical_channel": "K1",

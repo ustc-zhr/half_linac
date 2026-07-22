@@ -145,6 +145,10 @@ def test_main_window_constructs_offscreen() -> None:
     half_window.show()
     app.processEvents()
     assert half_window.section_combo.currentData() == "bl01"
+    assert half_window.model_source_combo.itemText(0) == "Design lattice"
+    assert half_window.model_source_combo.itemText(1) == "Current VM snapshot"
+    assert half_window.model_source_combo.itemData(1) == "live"
+    assert half_window.model_boundary_label.text() == "Assume D=D'=0 at BPM02"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
     assert half_window.dispersion_curve.result is None
@@ -203,4 +207,16 @@ def test_main_window_constructs_offscreen() -> None:
     assert half_window.dispersion_curve._is_visible_optics_element("BPM06", "MONI")
     assert not half_window.dispersion_curve._is_visible_optics_element("PRF02", "WATCH")
     half_window.close()
+
+    half_real_context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="real",
+    )
+    _, half_real_config = load_profile_run_config(half_real_context)
+    half_real_window = MainWindow(half_real_config, half_real_context)
+    assert half_real_window.model_source_combo.itemText(1) == "Current REAL snapshot"
+    assert half_real_window.model_source_combo.itemData(1) == "live"
+    assert half_real_window.model_response_button.isEnabled()
+    half_real_window.close()
     app.quit()

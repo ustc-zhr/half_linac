@@ -140,16 +140,18 @@ class ModelResponseWorker(QThread):
     failed = pyqtSignal(str)
     completed = pyqtSignal(object)
 
-    def __init__(self, context: AppContext, config: RunConfig) -> None:
+    def __init__(self, context: AppContext, config: RunConfig, model_source: str) -> None:
         super().__init__()
         self.context = context
         self.config = config
+        self.model_source = model_source
 
     def run(self) -> None:
         try:
             result = calculate_model_response(
                 self.context,
                 self.config,
+                model_source=self.model_source,
                 progress_callback=self.progress.emit,
             )
         except Exception as exc:
@@ -166,7 +168,8 @@ class FullWidthTabWidget(QTabWidget):
 
 class DispersionCurveWidget(QWidget):
     DEFAULT_TOOLTIP = (
-        "Solid: baseline; dashed: correction preview. Red: horizontal; blue: vertical. "
+        "Dotted: design reference; solid: selected baseline; dashed: correction preview. "
+        "Red: horizontal; blue: vertical. "
         "Move over the lattice strip for element details."
     )
 
@@ -208,6 +211,11 @@ class DispersionCurveWidget(QWidget):
             self.result.preview_curve.dx_mm,
             self.result.preview_curve.dy_mm,
         )
+        if self.result.design_curve is not None:
+            curves = curves + (
+                self.result.design_curve.dx_mm,
+                self.result.design_curve.dy_mm,
+            )
         limit = max((abs(float(value)) for curve in curves for value in curve), default=1.0)
         limit = max(limit * 1.1, 1.0e-6)
         s_values = self.result.baseline_curve.s_m
@@ -238,6 +246,15 @@ class DispersionCurveWidget(QWidget):
 
         horizontal = QColor("#e66b5b")
         vertical = QColor("#4c9be8")
+        if self.result.design_curve is not None:
+            for color, curve in (
+                (horizontal, self.result.design_curve.dx_mm),
+                (vertical, self.result.design_curve.dy_mm),
+            ):
+                design_color = QColor(color)
+                design_color.setAlpha(120)
+                painter.setPen(QPen(design_color, 2, Qt.DotLine))
+                painter.drawPolyline(points(self.result.design_curve.s_m, curve))
         for color, curve in (
             (horizontal, self.result.baseline_curve.dx_mm),
             (vertical, self.result.baseline_curve.dy_mm),
@@ -259,6 +276,12 @@ class DispersionCurveWidget(QWidget):
         painter.drawText(plot.left() + 8, plot.top() + 16, "Dx")
         painter.setPen(vertical)
         painter.drawText(plot.left() + 38, plot.top() + 16, "Dy")
+        painter.setPen(QColor(tokens["text_muted"]))
+        painter.drawText(
+            plot.left() + 75,
+            plot.top() + 16,
+            "design ···  baseline —  preview --",
+        )
         lattice_rect = QRectF(
             float(plot.left()),
             float(plot.bottom() + 20),
@@ -849,10 +872,27 @@ class MainWindow(QMainWindow):
         response_layout = QVBoxLayout(self.response_page)
         response_layout.setContentsMargins(8, 8, 8, 8)
         response_actions = QHBoxLayout()
+        response_actions.addWidget(QLabel("Model source"))
+        self.model_source_combo = QComboBox()
+        self.model_source_combo.addItem("Design lattice", "design")
+        if self.app_context is not None:
+            backend_name = self.app_context.control_backend.name.lower()
+            self.model_source_combo.addItem(
+                f"Current {backend_name.upper()} snapshot",
+                "live",
+            )
+        self.model_source_combo.setToolTip(
+            "Current snapshot reads quadrupole K1 PVs without writing machine state."
+        )
+        self.model_source_combo.currentIndexChanged.connect(self._model_source_changed)
+        response_actions.addWidget(self.model_source_combo)
         self.model_response_button = QPushButton("Analyze Model + Preview")
         self.model_response_button.clicked.connect(self._start_model_response)
         self.model_response_button.setVisible(self._model_analysis_available())
         response_actions.addWidget(self.model_response_button)
+        self.model_boundary_label = QLabel()
+        self.model_boundary_label.setObjectName("modelBoundaryLabel")
+        response_actions.addWidget(self.model_boundary_label)
         response_actions.addStretch(1)
         self.response_button = QPushButton("Measure Response")
         self.response_button.clicked.connect(lambda: self._start_task("response"))
@@ -939,6 +979,12 @@ class MainWindow(QMainWindow):
             self.gain_spin.setValue(self.config.solver.gain)
             self.max_step_pct_spin.setValue(100.0 * self.config.solver.max_step_fraction)
             self.response_update_combo.setCurrentText(self.config.solver.response_update)
+            entrance = self.config.section.model_entrance or "section entrance"
+            self.model_boundary_label.setText(f"Assume D=D'=0 at {entrance}")
+            self.model_boundary_label.setToolTip(
+                "The isolated Elegant section starts with zero horizontal and vertical "
+                "dispersion and slope."
+            )
             self._update_knob_summary()
         finally:
             self._loading_widgets = False
@@ -985,6 +1031,13 @@ class MainWindow(QMainWindow):
         self.response_table.setRowCount(0)
         self._configure_profile_mode()
         self._load_config_to_widgets()
+
+    def _model_source_changed(self, _index: int | None = None) -> None:
+        if not hasattr(self, "dispersion_curve"):
+            return
+        self.dispersion_curve.set_result(None)
+        self.response_info.clear()
+        self.response_table.setRowCount(0)
 
     def _select_knobs(self) -> None:
         if self.app_context is None:
@@ -1367,7 +1420,12 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Configuration", str(exc))
             return
-        self.model_worker = ModelResponseWorker(self.app_context, self.config)
+        model_source = str(self.model_source_combo.currentData() or "design")
+        self.model_worker = ModelResponseWorker(
+            self.app_context,
+            self.config,
+            model_source,
+        )
         self.model_worker.progress.connect(self._update_progress)
         self.model_worker.failed.connect(self._task_failed)
         self.model_worker.completed.connect(self._model_response_completed)
@@ -1382,7 +1440,9 @@ class MainWindow(QMainWindow):
             return
         self._show_model_response(result)
         self._refresh_status(f"Model rank {result.retained_rank}")
-        self._append_log("Model response completed without machine writes")
+        self._append_log(
+            f"Model response completed from {result.model_source} without machine writes"
+        )
 
     def _show_measurement(self, measurement: DispersionMeasurement) -> None:
         self.measure_table.setRowCount(len(measurement.bpm_names))
@@ -1467,6 +1527,7 @@ class MainWindow(QMainWindow):
         self.model_response_button.setEnabled(
             not running and self._model_analysis_available()
         )
+        self.model_source_combo.setEnabled(not running)
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
         self.run_button.setEnabled(not running and operation_allowed)

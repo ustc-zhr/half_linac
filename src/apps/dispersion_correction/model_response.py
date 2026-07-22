@@ -16,7 +16,12 @@ from half_linac.src.apps.dispersion_correction.solver import (
     condition_number,
     solve_bounded_correction,
 )
-from half_linac.src.shared.machine_profile import AppContext, build_model_backend
+from half_linac.src.shared.machine_profile import (
+    MODEL_SNAPSHOT_SOURCE_DESIGN,
+    AppContext,
+    build_model_backend,
+    build_model_snapshot,
+)
 
 
 ProgressCallback = Callable[[str, int, int], None]
@@ -26,9 +31,11 @@ def calculate_model_response(
     context: AppContext,
     config: RunConfig,
     *,
+    model_source: str = MODEL_SNAPSHOT_SOURCE_DESIGN,
+    pv_reader: Callable[[str], Any] | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> ModelResponseResult:
-    """Calculate a design response and correction preview without touching VM state."""
+    """Calculate an isolated response from design or a read-only machine snapshot."""
 
     entrance = config.section.model_entrance
     exit_element = config.section.model_exit
@@ -41,10 +48,34 @@ def calculate_model_response(
         raise ValueError("The selected machine profile has no model backend")
 
     backend = build_model_backend(context)
-    base_k1 = _base_k1_values(backend, config)
+    snapshot = None
+    base_overrides: dict[str, dict[str, float]] = {}
+    source_name = str(model_source).strip().lower().replace("-", "_")
+    design_curve = None
+    if source_name not in {"design", "lattice"}:
+        _progress(progress_callback, "Reading current quadrupole snapshot", 0, 1)
+        snapshot = build_model_snapshot(
+            context,
+            _section_quadrupole_fields(backend, entrance, exit_element),
+            source=model_source,
+            pv_reader=pv_reader,
+        )
+        source_name = snapshot.source
+        base_overrides = snapshot.lattice_overrides
+        _progress(progress_callback, "Calculating design reference", 0, 1)
+        design_curve = _optics_curve(backend, entrance, exit_element)
+    else:
+        source_name = MODEL_SNAPSHOT_SOURCE_DESIGN
+
+    base_k1 = _base_k1_values(backend, config, base_overrides)
     total = 2 + 2 * len(config.knobs)
     _progress(progress_callback, "Calculating baseline optics", 0, total)
-    baseline_curve = _optics_curve(backend, entrance, exit_element)
+    baseline_curve = _optics_curve(
+        backend,
+        entrance,
+        exit_element,
+        lattice_overrides=base_overrides or None,
+    )
     baseline = _observable_vector(baseline_curve, observables)
     matrix = np.zeros((len(observables), len(config.knobs)), dtype=float)
 
@@ -55,7 +86,10 @@ def calculate_model_response(
             backend,
             entrance,
             exit_element,
-            lattice_overrides=_knob_overrides(base_k1, knob, knob.scan_step),
+            lattice_overrides=_merge_lattice_overrides(
+                base_overrides,
+                _knob_overrides(base_k1, knob, knob.scan_step),
+            ),
         )
         plus = _observable_vector(plus_curve, observables)
         completed += 1
@@ -64,7 +98,10 @@ def calculate_model_response(
             backend,
             entrance,
             exit_element,
-            lattice_overrides=_knob_overrides(base_k1, knob, -knob.scan_step),
+            lattice_overrides=_merge_lattice_overrides(
+                base_overrides,
+                _knob_overrides(base_k1, knob, -knob.scan_step),
+            ),
         )
         minus = _observable_vector(minus_curve, observables)
         completed += 1
@@ -98,7 +135,10 @@ def calculate_model_response(
         backend,
         entrance,
         exit_element,
-        lattice_overrides=_combined_knob_overrides(base_k1, config.knobs, deltas),
+        lattice_overrides=_merge_lattice_overrides(
+            base_overrides,
+            _combined_knob_overrides(base_k1, config.knobs, deltas),
+        ),
     )
     preview = _observable_vector(preview_curve, observables)
     derived_knobs = _derived_knobs(config, vh, retained)
@@ -121,12 +161,19 @@ def calculate_model_response(
         preview_knob_deltas=preview_deltas,
         preview_values=preview,
         preview_curve=preview_curve,
+        model_source=source_name,
+        design_curve=design_curve,
+        snapshot_metadata=snapshot.as_metadata() if snapshot is not None else None,
+        entrance_condition=f"D=D'=0 assumed at {entrance}",
     )
 
 
 def model_response_to_dict(result: ModelResponseResult) -> dict[str, Any]:
     return {
         "section_id": result.section_id,
+        "model_source": result.model_source,
+        "entrance_condition": result.entrance_condition,
+        "model_snapshot": result.snapshot_metadata,
         "observables": [
             {
                 "name": result.observable_names[index],
@@ -158,12 +205,17 @@ def model_response_to_dict(result: ModelResponseResult) -> dict[str, Any]:
         ],
         "baseline_curve": _curve_to_dict(result.baseline_curve),
         "preview_curve": _curve_to_dict(result.preview_curve),
+        "design_curve": (
+            _curve_to_dict(result.design_curve) if result.design_curve is not None else None
+        ),
     }
 
 
 def format_model_response(result: ModelResponseResult) -> str:
     lines = [
         f"Model dispersion response: {result.section_id}",
+        f"Model source: {result.model_source}",
+        f"Entrance condition: {result.entrance_condition or 'not specified'}",
         "",
         "Observable baseline / target / preview:",
     ]
@@ -211,6 +263,16 @@ def format_model_response(result: ModelResponseResult) -> str:
             f"{np.max(result.preview_curve.beta_y_m):.8g} m",
         ]
     )
+    if result.snapshot_metadata is not None:
+        lines.extend(["", "Quadrupole snapshot:"])
+        created_at = result.snapshot_metadata.get("created_at")
+        if created_at:
+            lines.append(f"  captured: {created_at}")
+        for field in result.snapshot_metadata.get("fields", []):
+            lines.append(
+                f"  {field['element_id']}.{field['field_name']} = {field['value']:.8g}"
+                f"  [{field.get('source_pv') or 'design'}]"
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -237,11 +299,19 @@ def _finite_or_none(values: np.ndarray) -> list[float | None]:
     return [float(value) if np.isfinite(value) else None for value in values]
 
 
-def _base_k1_values(backend, config: RunConfig) -> dict[str, float]:
+def _base_k1_values(
+    backend,
+    config: RunConfig,
+    lattice_overrides: Mapping[str, Mapping[str, float]] | None = None,
+) -> dict[str, float]:
     values: dict[str, float] = {}
     for knob in config.knobs:
         for device in knob.devices:
             if device in values:
+                continue
+            override = (lattice_overrides or {}).get(device, {}).get("K1")
+            if override is not None:
+                values[device] = float(override)
                 continue
             element = backend.get_lattice_element(device)
             try:
@@ -249,6 +319,44 @@ def _base_k1_values(backend, config: RunConfig) -> dict[str, float]:
             except (KeyError, TypeError, ValueError) as exc:
                 raise ValueError(f"Model quadrupole {device} has no numeric K1") from exc
     return values
+
+
+def _section_quadrupole_fields(
+    backend,
+    entrance: str,
+    exit_element: str,
+) -> tuple[tuple[str, str], ...]:
+    fields = []
+    seen = set()
+    for element in backend.get_line_elements(entrance, exit_element):
+        element_id = str(element.get("NAME", "")).strip()
+        element_type = str(element.get("TYPE", "")).strip().upper()
+        if element_type != "QUAD" or "K1" not in element or not element_id:
+            continue
+        field = (element_id, "K1")
+        if field not in seen:
+            fields.append(field)
+            seen.add(field)
+    if not fields:
+        raise ValueError(
+            f"Model section {entrance} -> {exit_element} contains no K1 quadrupoles"
+        )
+    return tuple(fields)
+
+
+def _merge_lattice_overrides(
+    base: Mapping[str, Mapping[str, float]] | None,
+    changes: Mapping[str, Mapping[str, float]] | None,
+) -> dict[str, dict[str, float]]:
+    merged = {
+        str(element_id): {str(field): float(value) for field, value in values.items()}
+        for element_id, values in (base or {}).items()
+    }
+    for element_id, values in (changes or {}).items():
+        merged.setdefault(str(element_id), {}).update(
+            {str(field): float(value) for field, value in values.items()}
+        )
+    return merged
 
 
 def _knob_overrides(
