@@ -60,12 +60,25 @@ class SafetyConfig:
 
 
 @dataclass(frozen=True)
+class ModelObservableConfig:
+    name: str
+    element: str
+    component: str
+    target: float = 0.0
+
+    @property
+    def unit(self) -> str:
+        return "mm" if self.component in {"dx", "dy"} else "mrad"
+
+
+@dataclass(frozen=True)
 class DispersionSectionConfig:
     id: str = "default"
     display_name: str = "Default"
     model_entrance: str | None = None
     model_exit: str | None = None
     target_dispersion_mm: tuple[float, ...] = ()
+    model_observables: tuple[ModelObservableConfig, ...] = ()
     model_only: bool = False
 
 
@@ -199,33 +212,97 @@ class ResponseMatrixResult:
 @dataclass(frozen=True)
 class ModelResponseResult:
     section_id: str
-    bpm_names: tuple[str, ...]
+    observable_names: tuple[str, ...]
+    observable_elements: tuple[str, ...]
+    observable_components: tuple[str, ...]
+    observable_units: tuple[str, ...]
     knob_names: tuple[str, ...]
-    baseline_dispersion_mm: ArrayLike
-    target_dispersion_mm: ArrayLike
+    baseline_values: ArrayLike
+    target_values: ArrayLike
     response_matrix: ArrayLike
     singular_values: ArrayLike
     condition_number: float
     retained_rank: int
     derived_knobs: tuple[KnobConfig, ...]
+    baseline_curve: "ModelOpticsCurve"
+    preview_knob_deltas: dict[str, float]
+    preview_values: ArrayLike
+    preview_curve: "ModelOpticsCurve"
 
     def __post_init__(self) -> None:
-        baseline = np.asarray(self.baseline_dispersion_mm, dtype=float)
-        target = np.asarray(self.target_dispersion_mm, dtype=float)
+        baseline = np.asarray(self.baseline_values, dtype=float)
+        target = np.asarray(self.target_values, dtype=float)
+        preview = np.asarray(self.preview_values, dtype=float)
         matrix = np.asarray(self.response_matrix, dtype=float)
         singular_values = np.asarray(self.singular_values, dtype=float)
-        if baseline.shape != target.shape or baseline.shape != (len(self.bpm_names),):
-            raise ValueError("Model baseline and target must match bpm_names")
-        if matrix.shape != (len(self.bpm_names), len(self.knob_names)):
-            raise ValueError("Model response matrix shape must match BPMs and knobs")
-        object.__setattr__(self, "baseline_dispersion_mm", baseline)
-        object.__setattr__(self, "target_dispersion_mm", target)
+        row_count = len(self.observable_names)
+        metadata_lengths = {
+            len(self.observable_elements),
+            len(self.observable_components),
+            len(self.observable_units),
+        }
+        if metadata_lengths != {row_count}:
+            raise ValueError("Model observable metadata lengths must match")
+        if baseline.shape != target.shape or baseline.shape != preview.shape:
+            raise ValueError("Model baseline, target, and preview values must match")
+        if baseline.shape != (row_count,):
+            raise ValueError("Model values must match observable_names")
+        if matrix.shape != (row_count, len(self.knob_names)):
+            raise ValueError("Model response matrix shape must match observables and knobs")
+        if set(self.preview_knob_deltas) != set(self.knob_names):
+            raise ValueError("Preview knob deltas must match knob_names")
+        object.__setattr__(self, "baseline_values", baseline)
+        object.__setattr__(self, "target_values", target)
+        object.__setattr__(self, "preview_values", preview)
         object.__setattr__(self, "response_matrix", matrix)
         object.__setattr__(self, "singular_values", singular_values)
 
     @property
-    def residual_dispersion_mm(self) -> ArrayLike:
-        return self.baseline_dispersion_mm - self.target_dispersion_mm
+    def residual_values(self) -> ArrayLike:
+        return self.baseline_values - self.target_values
+
+    @property
+    def preview_residual_values(self) -> ArrayLike:
+        return self.preview_values - self.target_values
+
+    @property
+    def baseline_rms(self) -> float:
+        return float(np.sqrt(np.mean(self.residual_values**2)))
+
+    @property
+    def preview_rms(self) -> float:
+        return float(np.sqrt(np.mean(self.preview_residual_values**2)))
+
+
+@dataclass(frozen=True)
+class ModelOpticsCurve:
+    element_names: tuple[str, ...]
+    s_m: ArrayLike
+    dx_mm: ArrayLike
+    dxp_mrad: ArrayLike
+    dy_mm: ArrayLike
+    dyp_mrad: ArrayLike
+    beta_x_m: ArrayLike
+    beta_y_m: ArrayLike
+
+    def __post_init__(self) -> None:
+        arrays = {
+            name: np.asarray(getattr(self, name), dtype=float)
+            for name in (
+                "s_m",
+                "dx_mm",
+                "dxp_mrad",
+                "dy_mm",
+                "dyp_mrad",
+                "beta_x_m",
+                "beta_y_m",
+            )
+        }
+        size = len(self.element_names)
+        if any(values.shape != (size,) for values in arrays.values()):
+            raise ValueError("Model optics curve arrays must match element_names")
+        for name, values in arrays.items():
+            object.__setattr__(self, name, values)
 
 
 @dataclass(frozen=True)

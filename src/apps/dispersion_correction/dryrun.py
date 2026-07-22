@@ -36,6 +36,16 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
             "model_entrance": config.section.model_entrance,
             "model_exit": config.section.model_exit,
             "model_only": config.section.model_only,
+            "model_observables": [
+                {
+                    "name": observable.name,
+                    "element": observable.element,
+                    "component": observable.component,
+                    "target": observable.target,
+                    "unit": observable.unit,
+                }
+                for observable in config.section.model_observables
+            ],
         },
         "backend": {"type": config.backend.type, "mode": config.backend.mode},
         "energy": {
@@ -124,16 +134,29 @@ def format_operation_plan(plan: dict[str, Any]) -> str:
             f"{plan['energy']['name']} +/-{plan['energy']['delta_momentum']} dp/p"
         ),
         f"BPMs: {', '.join(item['name'] for item in plan['bpms'])}",
-        f"Response update: {plan['solver']['response_update']}",
-        f"Gain: {plan['solver']['gain']:g}",
-        f"Max step: {100.0 * plan['solver']['max_step_fraction']:g}% of each knob limit",
-        f"Samples/step: {plan['measurement']['samples_per_step']}",
-        f"Sample interval: {plan['measurement']['sample_interval_s']:g} s",
-        f"Final samples: {plan['measurement']['final_samples']}",
-        f"Settle time: {plan['measurement']['settle_time_s']:g} s",
-        "",
-        "Knobs:",
     ]
+    observables = plan["section"].get("model_observables", [])
+    if observables:
+        lines.append(
+            "Model observables: "
+            + ", ".join(
+                f"{item['name']}={item['target']:.6g} {item['unit']}"
+                for item in observables
+            )
+        )
+    lines.extend(
+        [
+            f"Response update: {plan['solver']['response_update']}",
+            f"Gain: {plan['solver']['gain']:g}",
+            f"Max step: {100.0 * plan['solver']['max_step_fraction']:g}% of each knob limit",
+            f"Samples/step: {plan['measurement']['samples_per_step']}",
+            f"Sample interval: {plan['measurement']['sample_interval_s']:g} s",
+            f"Final samples: {plan['measurement']['final_samples']}",
+            f"Settle time: {plan['measurement']['settle_time_s']:g} s",
+            "",
+            "Knobs:",
+        ]
+    )
     for knob in plan["knobs"]:
         devices = ", ".join(f"{item['name']}*{item['scale']:g}" for item in knob["devices"])
         unit = f" {knob['unit']}" if knob.get("unit") else ""

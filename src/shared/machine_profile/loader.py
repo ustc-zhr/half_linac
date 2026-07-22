@@ -1580,6 +1580,42 @@ def _validate_dispersion_correction_workflow(
                     f"{location}.{endpoint_key}",
                 )
                 profile.get_element(endpoint)
+            observables = _expect_list(
+                section.get("model_observables", []),
+                f"{location}.model_observables",
+            )
+            for observable_index, raw_observable in enumerate(observables):
+                observable_location = (
+                    f"{location}.model_observables[{observable_index}]"
+                )
+                observable = _expect_mapping(raw_observable, observable_location)
+                _expect_non_empty_string(
+                    observable.get("name"),
+                    f"{observable_location}.name",
+                )
+                element_id = _expect_non_empty_string(
+                    observable.get("element"),
+                    f"{observable_location}.element",
+                )
+                profile.get_element(element_id)
+                component = _expect_non_empty_string(
+                    observable.get("component"),
+                    f"{observable_location}.component",
+                ).lower()
+                if component not in {"dx", "dxp", "dy", "dyp"}:
+                    raise MachineProfileError(
+                        f"{observable_location}.component must be dx, dxp, dy, or dyp."
+                    )
+                try:
+                    target = float(observable.get("target", 0.0))
+                except (TypeError, ValueError) as exc:
+                    raise MachineProfileError(
+                        f"{observable_location}.target must be numeric."
+                    ) from exc
+                if not math.isfinite(target):
+                    raise MachineProfileError(
+                        f"{observable_location}.target must be finite."
+                    )
         if len(set(section_ids)) != len(section_ids):
             raise MachineProfileError(
                 "workflows.dispersion_correction.sections contains duplicate ids."

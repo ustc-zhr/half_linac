@@ -11,6 +11,7 @@ from half_linac.src.apps.dispersion_correction.models import (
     EnergyKnobConfig,
     KnobConfig,
     MeasurementConfig,
+    ModelObservableConfig,
     RunConfig,
     SafetyConfig,
     SolverConfig,
@@ -76,6 +77,23 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
     if not isinstance(target_raw, (list, tuple)):
         raise ValueError("section.target_dispersion_mm must be a list")
     target_dispersion_mm = tuple(float(value) for value in target_raw)
+    observables_raw = section_raw.get("model_observables", [])
+    if not isinstance(observables_raw, list):
+        raise ValueError("section.model_observables must be a list")
+    model_observables = tuple(
+        _parse_model_observable(item, index)
+        for index, item in enumerate(observables_raw)
+    )
+    if not model_observables and section_raw.get("model_entrance"):
+        model_observables = tuple(
+            ModelObservableConfig(
+                name=f"{bpm} Dx",
+                element=bpm,
+                component="dx",
+                target=target_dispersion_mm[index],
+            )
+            for index, bpm in enumerate(target_bpms)
+        )
 
     config = RunConfig(
         backend=BackendConfig(
@@ -98,6 +116,7 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
             model_entrance=_optional_string(section_raw.get("model_entrance")),
             model_exit=_optional_string(section_raw.get("model_exit")),
             target_dispersion_mm=target_dispersion_mm,
+            model_observables=model_observables,
             model_only=bool(section_raw.get("model_only", False)),
         ),
         measurement=measurement,
@@ -134,6 +153,17 @@ def validate_config(config: RunConfig) -> None:
         config.section.model_entrance is None or config.section.model_exit is None
     ):
         raise ValueError("model-only sections require model_entrance and model_exit")
+    if config.section.model_only and not config.section.model_observables:
+        raise ValueError("model-only sections require model_observables")
+    for observable in config.section.model_observables:
+        if not observable.name or not observable.element:
+            raise ValueError("model observable name and element must not be empty")
+        if observable.component not in {"dx", "dxp", "dy", "dyp"}:
+            raise ValueError(
+                "model observable component must be one of dx, dxp, dy, or dyp"
+            )
+        if not math.isfinite(observable.target):
+            raise ValueError("model observable target must be finite")
     if config.solver.max_iter <= 0:
         raise ValueError("solver.max_iter must be positive")
     if config.solver.response_update not in {"once", "every_iteration"}:
@@ -177,3 +207,16 @@ def _optional_string(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _parse_model_observable(raw: Any, index: int) -> ModelObservableConfig:
+    item = _mapping(raw, f"section.model_observables[{index}]")
+    element = str(item.get("element", "")).strip()
+    component = str(item.get("component", "")).strip().lower()
+    name = str(item.get("name", f"{element} {component}")).strip()
+    return ModelObservableConfig(
+        name=name,
+        element=element,
+        component=component,
+        target=float(item.get("target", 0.0)),
+    )

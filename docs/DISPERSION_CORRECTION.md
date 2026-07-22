@@ -103,8 +103,18 @@ export HALF_LINAC_CONTROL_BACKEND=vm
 python3 -m half_linac.src.apps.dispersion_correction.cli model-response --section bl01
 ```
 
-The model report includes design and target dispersion, the raw symmetric-pair
-response matrix, retained SVD rank, and model-derived weighted quadrupole modes.
+The model report includes endpoint `D/D'` observables, the raw symmetric-pair
+response matrix, retained SVD rank, model-derived weighted quadrupole modes,
+and a bounded correction preview. The GUI also plots baseline and preview
+horizontal/vertical dispersion curves. One BL01 analysis uses eight isolated
+Elegant runs: baseline, positive/negative scans for three raw knobs, and the
+exact preview lattice.
+
+The preview reports suggested raw-knob deltas and recomputes the lattice rather
+than showing only a linear matrix prediction. It remains read-only: the
+quadrupole changes exist only as overrides in the isolated model workdir.
+The report also compares the baseline and preview peak beta functions as a
+first optics-distortion check.
 
 ## Commissioning steps still required
 

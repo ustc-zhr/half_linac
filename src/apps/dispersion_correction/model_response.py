@@ -7,10 +7,15 @@ import numpy as np
 
 from half_linac.src.apps.dispersion_correction.models import (
     KnobConfig,
+    ModelObservableConfig,
+    ModelOpticsCurve,
     ModelResponseResult,
     RunConfig,
 )
-from half_linac.src.apps.dispersion_correction.solver import condition_number
+from half_linac.src.apps.dispersion_correction.solver import (
+    condition_number,
+    solve_bounded_correction,
+)
 from half_linac.src.shared.machine_profile import AppContext, build_model_backend
 
 
@@ -23,38 +28,45 @@ def calculate_model_response(
     *,
     progress_callback: ProgressCallback | None = None,
 ) -> ModelResponseResult:
-    """Calculate a design-lattice dispersion response without touching VM state."""
+    """Calculate a design response and correction preview without touching VM state."""
 
     entrance = config.section.model_entrance
-    if not entrance:
-        raise ValueError("Model response requires section.model_entrance")
+    exit_element = config.section.model_exit
+    observables = config.section.model_observables
+    if not entrance or not exit_element:
+        raise ValueError("Model response requires section.model_entrance and model_exit")
+    if not observables:
+        raise ValueError("Model response requires section.model_observables")
     if context.model_backend is None:
         raise ValueError("The selected machine profile has no model backend")
 
     backend = build_model_backend(context)
     base_k1 = _base_k1_values(backend, config)
-    total = 1 + 2 * len(config.knobs)
-    _progress(progress_callback, "Calculating design dispersion", 0, total)
-    baseline = _dispersion_vector_mm(backend, entrance, config.target_bpms)
-    matrix = np.zeros((len(config.target_bpms), len(config.knobs)), dtype=float)
+    total = 2 + 2 * len(config.knobs)
+    _progress(progress_callback, "Calculating baseline optics", 0, total)
+    baseline_curve = _optics_curve(backend, entrance, exit_element)
+    baseline = _observable_vector(baseline_curve, observables)
+    matrix = np.zeros((len(observables), len(config.knobs)), dtype=float)
 
     completed = 1
     for column, knob in enumerate(config.knobs):
         _progress(progress_callback, f"{knob.name} +scan", completed, total)
-        plus = _dispersion_vector_mm(
+        plus_curve = _optics_curve(
             backend,
             entrance,
-            config.target_bpms,
+            exit_element,
             lattice_overrides=_knob_overrides(base_k1, knob, knob.scan_step),
         )
+        plus = _observable_vector(plus_curve, observables)
         completed += 1
         _progress(progress_callback, f"{knob.name} -scan", completed, total)
-        minus = _dispersion_vector_mm(
+        minus_curve = _optics_curve(
             backend,
             entrance,
-            config.target_bpms,
+            exit_element,
             lattice_overrides=_knob_overrides(base_k1, knob, -knob.scan_step),
         )
+        minus = _observable_vector(minus_curve, observables)
         completed += 1
         matrix[:, column] = (plus - minus) / (2.0 * knob.scan_step)
 
@@ -65,34 +77,76 @@ def calculate_model_response(
         if largest > 0
         else np.zeros_like(singular_values, dtype=bool)
     )
+    target = np.asarray([observable.target for observable in observables], dtype=float)
+    deltas, _, _ = solve_bounded_correction(
+        matrix,
+        baseline - target,
+        config.solver.svd_cut,
+        1.0,
+        np.asarray([knob.limit for knob in config.knobs], dtype=float),
+        1.0,
+        np.zeros(len(config.knobs), dtype=float),
+        np.zeros(len(config.knobs), dtype=float),
+        config.solver.regularization,
+    )
+    preview_deltas = {
+        knob.name: float(delta)
+        for knob, delta in zip(config.knobs, deltas)
+    }
+    _progress(progress_callback, "Calculating correction preview", completed, total)
+    preview_curve = _optics_curve(
+        backend,
+        entrance,
+        exit_element,
+        lattice_overrides=_combined_knob_overrides(base_k1, config.knobs, deltas),
+    )
+    preview = _observable_vector(preview_curve, observables)
     derived_knobs = _derived_knobs(config, vh, retained)
     _progress(progress_callback, "Model response complete", total, total)
     return ModelResponseResult(
         section_id=config.section.id,
-        bpm_names=config.target_bpms,
+        observable_names=tuple(item.name for item in observables),
+        observable_elements=tuple(item.element for item in observables),
+        observable_components=tuple(item.component for item in observables),
+        observable_units=tuple(item.unit for item in observables),
         knob_names=tuple(knob.name for knob in config.knobs),
-        baseline_dispersion_mm=baseline,
-        target_dispersion_mm=np.asarray(config.section.target_dispersion_mm, dtype=float),
+        baseline_values=baseline,
+        target_values=target,
         response_matrix=matrix,
         singular_values=singular_values,
         condition_number=condition_number(singular_values),
         retained_rank=int(np.count_nonzero(retained)),
         derived_knobs=derived_knobs,
+        baseline_curve=baseline_curve,
+        preview_knob_deltas=preview_deltas,
+        preview_values=preview,
+        preview_curve=preview_curve,
     )
 
 
 def model_response_to_dict(result: ModelResponseResult) -> dict[str, Any]:
     return {
         "section_id": result.section_id,
-        "bpm_names": list(result.bpm_names),
+        "observables": [
+            {
+                "name": result.observable_names[index],
+                "element": result.observable_elements[index],
+                "component": result.observable_components[index],
+                "unit": result.observable_units[index],
+                "baseline": float(result.baseline_values[index]),
+                "target": float(result.target_values[index]),
+                "preview": float(result.preview_values[index]),
+            }
+            for index in range(len(result.observable_names))
+        ],
         "knob_names": list(result.knob_names),
-        "baseline_dispersion_mm": result.baseline_dispersion_mm.tolist(),
-        "target_dispersion_mm": result.target_dispersion_mm.tolist(),
-        "residual_dispersion_mm": result.residual_dispersion_mm.tolist(),
         "response_matrix": result.response_matrix.tolist(),
         "singular_values": result.singular_values.tolist(),
         "condition_number": result.condition_number,
         "retained_rank": result.retained_rank,
+        "baseline_rms": result.baseline_rms,
+        "preview_rms": result.preview_rms,
+        "preview_knob_deltas": dict(result.preview_knob_deltas),
         "derived_knobs": [
             {
                 "name": knob.name,
@@ -102,6 +156,8 @@ def model_response_to_dict(result: ModelResponseResult) -> dict[str, Any]:
             }
             for knob in result.derived_knobs
         ],
+        "baseline_curve": _curve_to_dict(result.baseline_curve),
+        "preview_curve": _curve_to_dict(result.preview_curve),
     }
 
 
@@ -109,22 +165,24 @@ def format_model_response(result: ModelResponseResult) -> str:
     lines = [
         f"Model dispersion response: {result.section_id}",
         "",
-        "BPM design / target / residual (mm):",
+        "Observable baseline / target / preview:",
     ]
-    for index, name in enumerate(result.bpm_names):
+    for index, name in enumerate(result.observable_names):
+        unit = result.observable_units[index]
         lines.append(
-            f"  {name}: {result.baseline_dispersion_mm[index]:.8g} / "
-            f"{result.target_dispersion_mm[index]:.8g} / "
-            f"{result.residual_dispersion_mm[index]:.8g}"
+            f"  {name}: {result.baseline_values[index]:.8g} / "
+            f"{result.target_values[index]:.8g} / "
+            f"{result.preview_values[index]:.8g} {unit}"
         )
     lines.extend(
         [
+            f"  RMS: {result.baseline_rms:.8g} -> {result.preview_rms:.8g}",
             "",
-            "Raw knob response matrix (mm per knob unit):",
+            "Raw knob response matrix (observable unit per knob unit):",
             "  " + "  ".join(result.knob_names),
         ]
     )
-    for index, name in enumerate(result.bpm_names):
+    for index, name in enumerate(result.observable_names):
         values = "  ".join(f"{value:.8g}" for value in result.response_matrix[index])
         lines.append(f"  {name}: {values}")
     lines.extend(
@@ -134,13 +192,39 @@ def format_model_response(result: ModelResponseResult) -> str:
             f"Condition number: {result.condition_number:.8g}",
             f"Retained rank: {result.retained_rank}",
             "",
-            "Model-derived orthogonal knobs:",
+            "Preview raw-knob deltas:",
         ]
     )
+    for name in result.knob_names:
+        lines.append(f"  {name}: {result.preview_knob_deltas[name]:+.8g}")
+    lines.extend(["", "Model-derived orthogonal knobs:"])
     for knob in result.derived_knobs:
         devices = ", ".join(f"{name}*{weight:.8g}" for name, weight in knob.devices.items())
         lines.append(f"  {knob.name}: {devices}")
+    lines.extend(
+        [
+            "",
+            "Optics envelope (baseline -> preview):",
+            f"  max beta_x: {np.max(result.baseline_curve.beta_x_m):.8g} -> "
+            f"{np.max(result.preview_curve.beta_x_m):.8g} m",
+            f"  max beta_y: {np.max(result.baseline_curve.beta_y_m):.8g} -> "
+            f"{np.max(result.preview_curve.beta_y_m):.8g} m",
+        ]
+    )
     return "\n".join(lines) + "\n"
+
+
+def _curve_to_dict(curve: ModelOpticsCurve) -> dict[str, Any]:
+    return {
+        "element_names": list(curve.element_names),
+        "s_m": curve.s_m.tolist(),
+        "dx_mm": curve.dx_mm.tolist(),
+        "dxp_mrad": curve.dxp_mrad.tolist(),
+        "dy_mm": curve.dy_mm.tolist(),
+        "dyp_mrad": curve.dyp_mrad.tolist(),
+        "beta_x_m": curve.beta_x_m.tolist(),
+        "beta_y_m": curve.beta_y_m.tolist(),
+    }
 
 
 def _base_k1_values(backend, config: RunConfig) -> dict[str, float]:
@@ -168,27 +252,71 @@ def _knob_overrides(
     }
 
 
-def _dispersion_vector_mm(
+def _combined_knob_overrides(
+    base_k1: Mapping[str, float],
+    knobs: tuple[KnobConfig, ...],
+    deltas: np.ndarray,
+) -> dict[str, dict[str, float]]:
+    changes = {device: 0.0 for device in base_k1}
+    for knob, delta in zip(knobs, deltas):
+        for device, weight in knob.devices.items():
+            changes[device] += float(weight) * float(delta)
+    return {
+        device: {"K1": base_k1[device] + changes[device]}
+        for device in base_k1
+    }
+
+
+def _optics_curve(
     backend,
     entrance: str,
-    bpm_names: tuple[str, ...],
+    exit_element: str,
     *,
     lattice_overrides: Mapping[str, Mapping[str, float]] | None = None,
-) -> np.ndarray:
-    return np.asarray(
-        [
-            1000.0
-            * backend.get_matrix_element(
-                entrance,
-                bpm,
-                0,
-                5,
-                lattice_overrides=lattice_overrides,
-            )
-            for bpm in bpm_names
-        ],
-        dtype=float,
+) -> ModelOpticsCurve:
+    rows = backend.get_optics_profile(
+        entrance,
+        exit_element,
+        lattice_overrides=lattice_overrides,
     )
+    if not rows:
+        raise ValueError("Elegant model returned an empty optics profile")
+    return ModelOpticsCurve(
+        element_names=tuple(str(row["element_name"]) for row in rows),
+        s_m=np.asarray([row["s_m"] for row in rows], dtype=float),
+        dx_mm=1000.0 * np.asarray([row["dx_m"] for row in rows], dtype=float),
+        dxp_mrad=1000.0 * np.asarray([row["dxp_rad"] for row in rows], dtype=float),
+        dy_mm=1000.0 * np.asarray([row["dy_m"] for row in rows], dtype=float),
+        dyp_mrad=1000.0 * np.asarray([row["dyp_rad"] for row in rows], dtype=float),
+        beta_x_m=np.asarray([row["beta_x_m"] for row in rows], dtype=float),
+        beta_y_m=np.asarray([row["beta_y_m"] for row in rows], dtype=float),
+    )
+
+
+def _observable_vector(
+    curve: ModelOpticsCurve,
+    observables: tuple[ModelObservableConfig, ...],
+) -> np.ndarray:
+    component_values = {
+        "dx": curve.dx_mm,
+        "dxp": curve.dxp_mrad,
+        "dy": curve.dy_mm,
+        "dyp": curve.dyp_mrad,
+    }
+    values = []
+    for observable in observables:
+        matches = [
+            index
+            for index, element_name in enumerate(curve.element_names)
+            if element_name == observable.element
+        ]
+        if not matches:
+            raise ValueError(
+                f"Model observable {observable.name!r} element {observable.element!r} "
+                "is outside the configured section"
+            )
+        values.append(float(component_values[observable.component][matches[-1]]))
+    return np.asarray(values, dtype=float)
 
 
 def _derived_knobs(

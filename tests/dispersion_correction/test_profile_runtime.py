@@ -113,6 +113,14 @@ def test_half_profile_exposes_model_only_bl01_section() -> None:
     assert config.section.model_entrance == "BPM02"
     assert config.target_bpms == ("BPM06", "BPM07")
     assert config.section.target_dispersion_mm == (0.0, 0.0)
+    assert tuple(item.component for item in config.section.model_observables) == (
+        "dx",
+        "dxp",
+    )
+    assert tuple(item.element for item in config.section.model_observables) == (
+        "BPM06",
+        "BPM06",
+    )
     with pytest.raises(PermissionError, match="model-only"):
         AchromatWorkflow(config).measure_dispersion()
 

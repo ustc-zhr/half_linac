@@ -91,6 +91,7 @@ def test_main_window_constructs_offscreen() -> None:
     assert profile_window.status_strip.items["BACKEND"].value_label.text() == "REAL"
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
+    assert profile_window.model_response_button.isHidden()
     assert not profile_window.run_button.isEnabled()
     assert profile_window.bpm_select_button.isVisibleTo(profile_window)
     assert profile_window.bpm_select_button.height() == profile_window.bpm_edit.height() == 34
@@ -145,6 +146,7 @@ def test_main_window_constructs_offscreen() -> None:
     assert half_window.section_combo.currentData() == "bl01"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
+    assert half_window.dispersion_curve.result is None
     assert not half_window.measure_button.isEnabled()
     assert not half_window.response_button.isEnabled()
     assert not half_window.run_button.isEnabled()

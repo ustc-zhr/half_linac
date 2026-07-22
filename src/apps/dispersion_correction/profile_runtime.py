@@ -496,6 +496,7 @@ def _select_workflow_section(
             "target_dispersion_mm",
             [0.0] * len(_string_sequence(selected.get("target_bpms"), "target_bpms")),
         ),
+        "model_observables": selected_section.get("model_observables", []),
         "model_only": bool(selected_section.get("model_only", False)),
     }
     return selected

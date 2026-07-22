@@ -20,6 +20,20 @@
         0.0,
         0.0
       ],
+      "model_observables": [
+        {
+          "name": "BPM06 Dx",
+          "element": "BPM06",
+          "component": "dx",
+          "target": 0.0
+        },
+        {
+          "name": "BPM06 Dx'",
+          "element": "BPM06",
+          "component": "dxp",
+          "target": 0.0
+        }
+      ],
       "knobs": [
         {
           "name": "QL01_QL06_sym",

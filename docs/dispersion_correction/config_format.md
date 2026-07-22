@@ -34,8 +34,25 @@ the small set of facts that cannot be inferred from element kinds alone:
 - `model_entrance` and `model_exit`;
 - recommended `target_bpms` and correction `knobs`;
 - `target_dispersion_mm`, which defaults to zero for legacy configurations;
+- `model_observables`, which defines model constraints by element and component
+  (`dx`, `dxp`, `dy`, or `dyp`); position components use mm and angular
+  components use mrad;
 - `model_only`, which blocks machine measurement and correction while still
   permitting isolated Elegant response calculation.
+
+For example, a horizontal achromat exit can be expressed as:
+
+```json
+"model_observables": [
+  {"name": "BPM06 Dx", "element": "BPM06", "component": "dx", "target": 0.0},
+  {"name": "BPM06 Dx'", "element": "BPM06", "component": "dxp", "target": 0.0}
+]
+```
+
+`model_entrance` and `model_exit` bound the Elegant profile. Observable
+elements must lie inside that interval. If `model_observables` is omitted, the
+model keeps the legacy behavior of using horizontal dispersion at each
+`target_bpms` entry.
 
 The correction objective is the RMS residual `D_eff - target_dispersion`, not
 unconditionally `D_eff -> 0`. Existing IRFEL configurations omit the target and

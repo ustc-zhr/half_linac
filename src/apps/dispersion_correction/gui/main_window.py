@@ -5,7 +5,8 @@ from datetime import datetime
 from pathlib import Path
 import re
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QPointF, QThread, pyqtSignal
+from PyQt5.QtGui import QColor, QPainter, QPen, QPolygonF
 from PyQt5.QtWidgets import (
     QFileDialog,
     QAbstractItemView,
@@ -42,7 +43,7 @@ from PyQt5.QtCore import Qt
 from half_linac.src.apps.dispersion_correction.calibration import load_phase_calibration_csv
 from half_linac.src.apps.dispersion_correction.config import load_config
 from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan, format_operation_plan
-from half_linac.src.apps.dispersion_correction.gui.theme import build_stylesheet
+from half_linac.src.apps.dispersion_correction.gui.theme import build_stylesheet, theme_tokens
 from half_linac.src.apps.dispersion_correction.gui.widgets import StatusStrip
 from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
@@ -162,6 +163,97 @@ class FullWidthTabWidget(QTabWidget):
         self.tabBar().setFixedWidth(self.contentsRect().width())
 
 
+class DispersionCurveWidget(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.result: ModelResponseResult | None = None
+        self.theme_name = "night_shift"
+        self.setMinimumHeight(210)
+        self.setToolTip(
+            "Solid: baseline; dashed: correction preview. Red: horizontal; blue: vertical."
+        )
+
+    def set_result(self, result: ModelResponseResult | None) -> None:
+        self.result = result
+        self.update()
+
+    def set_theme(self, name: str) -> None:
+        self.theme_name = name
+        self.update()
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        tokens = theme_tokens(self.theme_name)
+        painter.fillRect(self.rect(), QColor(tokens["plot_bg"]))
+        plot = self.rect().adjusted(58, 24, -18, -38)
+        painter.setPen(QColor(tokens["text_muted"]))
+        painter.drawText(12, 18, "Dispersion curve (mm)")
+        if self.result is None or plot.width() <= 0 or plot.height() <= 0:
+            painter.drawText(plot, Qt.AlignCenter, "Calculate model response to display optics")
+            return
+
+        curves = (
+            self.result.baseline_curve.dx_mm,
+            self.result.baseline_curve.dy_mm,
+            self.result.preview_curve.dx_mm,
+            self.result.preview_curve.dy_mm,
+        )
+        limit = max((abs(float(value)) for curve in curves for value in curve), default=1.0)
+        limit = max(limit * 1.1, 1.0e-6)
+        s_values = self.result.baseline_curve.s_m
+        s_min = float(s_values[0])
+        s_max = float(s_values[-1])
+        s_span = max(s_max - s_min, 1.0e-12)
+
+        grid_pen = QPen(QColor(tokens["section_border"]))
+        grid_pen.setWidth(1)
+        painter.setPen(grid_pen)
+        for fraction in (0.0, 0.25, 0.5, 0.75, 1.0):
+            y = plot.top() + fraction * plot.height()
+            painter.drawLine(plot.left(), round(y), plot.right(), round(y))
+        zero_y = plot.center().y()
+        painter.setPen(QPen(QColor(tokens["text_muted"]), 1))
+        painter.drawLine(plot.left(), zero_y, plot.right(), zero_y)
+
+        def points(s_axis, values) -> QPolygonF:
+            return QPolygonF(
+                [
+                    QPointF(
+                        plot.left() + (float(s) - s_min) / s_span * plot.width(),
+                        plot.center().y() - float(value) / limit * plot.height() / 2.0,
+                    )
+                    for s, value in zip(s_axis, values)
+                ]
+            )
+
+        horizontal = QColor("#e66b5b")
+        vertical = QColor("#4c9be8")
+        for color, curve in (
+            (horizontal, self.result.baseline_curve.dx_mm),
+            (vertical, self.result.baseline_curve.dy_mm),
+        ):
+            painter.setPen(QPen(color, 1))
+            painter.drawPolyline(points(self.result.baseline_curve.s_m, curve))
+        for color, curve in (
+            (horizontal, self.result.preview_curve.dx_mm),
+            (vertical, self.result.preview_curve.dy_mm),
+        ):
+            pen = QPen(color, 2, Qt.DashLine)
+            painter.setPen(pen)
+            painter.drawPolyline(points(self.result.preview_curve.s_m, curve))
+
+        painter.setPen(QColor(tokens["text_muted"]))
+        painter.drawText(4, plot.top() + 5, f"{limit:.3g}")
+        painter.drawText(4, plot.bottom(), f"{-limit:.3g}")
+        painter.drawText(plot.left(), self.height() - 12, f"{s_min:.3g} m")
+        painter.drawText(plot.right() - 45, self.height() - 12, f"{s_max:.3g} m")
+        painter.setPen(horizontal)
+        painter.drawText(plot.left() + 8, plot.top() + 16, "Dx")
+        painter.setPen(vertical)
+        painter.drawText(plot.left() + 38, plot.top() + 16, "Dy")
+
+
 class MainWindow(QMainWindow):
     def __init__(
         self,
@@ -221,6 +313,16 @@ class MainWindow(QMainWindow):
         fixed_selection = self.config.section.model_only
         self.bpm_select_button.setVisible(not fixed_selection)
         self.knob_select_button.setVisible(not fixed_selection)
+        self.model_response_button.setVisible(self._model_analysis_available())
+
+    def _model_analysis_available(self) -> bool:
+        return bool(
+            self.app_context is not None
+            and self.app_context.model_backend is not None
+            and self.config.section.model_entrance
+            and self.config.section.model_exit
+            and self.config.section.model_observables
+        )
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -507,11 +609,9 @@ class MainWindow(QMainWindow):
         response_layout = QVBoxLayout(self.response_page)
         response_layout.setContentsMargins(8, 8, 8, 8)
         response_actions = QHBoxLayout()
-        self.model_response_button = QPushButton("Calculate Model Response")
+        self.model_response_button = QPushButton("Analyze Model + Preview")
         self.model_response_button.clicked.connect(self._start_model_response)
-        self.model_response_button.setVisible(
-            self.app_context is not None and self.app_context.model_backend is not None
-        )
+        self.model_response_button.setVisible(self._model_analysis_available())
         response_actions.addWidget(self.model_response_button)
         response_actions.addStretch(1)
         self.response_button = QPushButton("Measure Response")
@@ -519,6 +619,8 @@ class MainWindow(QMainWindow):
         response_actions.addWidget(self.response_button)
         response_layout.addLayout(response_actions)
         response_layout.addWidget(self.response_table, 2)
+        self.dispersion_curve = DispersionCurveWidget()
+        response_layout.addWidget(self.dispersion_curve, 3)
         response_layout.addWidget(self.response_info, 1)
 
         self.correction_table = self._table(["Iter", "Gain", "Accepted", "RMS Before", "RMS After", "Reason"])
@@ -638,6 +740,9 @@ class MainWindow(QMainWindow):
         self.config = config
         self.selected_knobs = tuple(config.knobs)
         self.knob_hard_limits = tuple(knob.limit for knob in config.knobs)
+        self.dispersion_curve.set_result(None)
+        self.response_info.clear()
+        self.response_table.setRowCount(0)
         self._configure_profile_mode()
         self._load_config_to_widgets()
 
@@ -1065,14 +1170,15 @@ class MainWindow(QMainWindow):
         )
 
     def _show_model_response(self, response: ModelResponseResult) -> None:
-        self.response_table.setRowCount(len(response.bpm_names))
+        self.response_table.setRowCount(len(response.observable_names))
         self.response_table.setColumnCount(len(response.knob_names) + 1)
-        self.response_table.setHorizontalHeaderLabels(["BPM", *response.knob_names])
-        for row, bpm in enumerate(response.bpm_names):
-            self.response_table.setItem(row, 0, QTableWidgetItem(bpm))
+        self.response_table.setHorizontalHeaderLabels(["Observable", *response.knob_names])
+        for row, observable in enumerate(response.observable_names):
+            self.response_table.setItem(row, 0, QTableWidgetItem(observable))
             for col, value in enumerate(response.response_matrix[row, :], start=1):
                 self.response_table.setItem(row, col, QTableWidgetItem(f"{value:.6g}"))
         self.response_table.resizeColumnsToContents()
+        self.dispersion_curve.set_result(response)
         self.response_info.setPlainText(format_model_response(response))
 
     def _show_result(self, result: CorrectionResult) -> None:
@@ -1119,7 +1225,7 @@ class MainWindow(QMainWindow):
         self.calibration_button.setEnabled(not running)
         self.preflight_button.setEnabled(not running and self.config.backend.type.lower() == "epics")
         self.model_response_button.setEnabled(
-            not running and self.app_context is not None and self.app_context.model_backend is not None
+            not running and self._model_analysis_available()
         )
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
@@ -1218,6 +1324,7 @@ class MainWindow(QMainWindow):
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(build_stylesheet(self.theme_name))
+        self.dispersion_curve.set_theme(self.theme_name)
         self._update_theme_button()
 
     def _update_theme_button(self) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable, Mapping, Protocol
+from typing import Any, Iterable, Mapping, Protocol
 
 import numpy as np
 import sdds
@@ -71,6 +71,15 @@ class BeamModelBackend(Protocol):
     ) -> tuple[Mapping[str, str], ...]: ...
 
     def get_lattice_element(self, element_id: str) -> Mapping[str, str]: ...
+
+    def get_optics_profile(
+        self,
+        elem1: str,
+        elem2: str,
+        *,
+        lattice_overrides: LatticeOverrides | None = None,
+        seq: str = "exit2exit",
+    ) -> tuple[Mapping[str, Any], ...]: ...
 
 
 class ElegantModelBackend:
@@ -310,6 +319,63 @@ class ElegantModelBackend:
             seq=seq,
         )
         return float(matrix[row, col])
+
+    def get_optics_profile(
+        self,
+        elem1: str,
+        elem2: str,
+        *,
+        lattice_overrides: LatticeOverrides | None = None,
+        seq: str = "exit2exit",
+    ) -> tuple[Mapping[str, Any], ...]:
+        """Return one Elegant Twiss/dispersion row per element in a model segment."""
+
+        self.get_map(
+            elem1,
+            elem2,
+            lattice_overrides=lattice_overrides,
+            seq=seq,
+        )
+        twiss_path = self.emit_ele.with_suffix(".twi")
+        twiss = sdds.SDDS(0)
+        twiss.load(str(twiss_path))
+        columns = {
+            name: twiss.columnData[index][0]
+            for index, name in enumerate(twiss.columnName)
+        }
+        required = (
+            "ElementName",
+            "ElementOccurence",
+            "ElementType",
+            "s",
+            "etax",
+            "etaxp",
+            "etay",
+            "etayp",
+            "betax",
+            "betay",
+        )
+        missing = [name for name in required if name not in columns]
+        if missing:
+            raise MachineProfileError(
+                f"Elegant Twiss output {twiss_path} is missing columns: {', '.join(missing)}"
+            )
+        row_count = len(columns["s"])
+        return tuple(
+            {
+                "element_name": str(columns["ElementName"][index]),
+                "element_occurrence": int(columns["ElementOccurence"][index]),
+                "element_type": str(columns["ElementType"][index]),
+                "s_m": float(columns["s"][index]),
+                "dx_m": float(columns["etax"][index]),
+                "dxp_rad": float(columns["etaxp"][index]),
+                "dy_m": float(columns["etay"][index]),
+                "dyp_rad": float(columns["etayp"][index]),
+                "beta_x_m": float(columns["betax"][index]),
+                "beta_y_m": float(columns["betay"][index]),
+            }
+            for index in range(row_count)
+        )
 
     def _new_parser(self) -> ElegantParser:
         return ElegantParser(
