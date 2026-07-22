@@ -111,8 +111,11 @@ axis shows horizontal/vertical bends, focusing/defocusing quadrupoles, BPMs,
 RF elements, and the configured dispersion constraint locations. Hovering over
 the strip reports element name, type, position, length, and applicable K1 or
 bend angle. Quadrupoles use one color: positive K1 is drawn above the beamline
-and negative K1 below it. One BL01 analysis uses eight isolated Elegant runs: baseline,
-positive/negative scans for three raw knobs, and the exact preview lattice.
+and negative K1 below it. WATCH/screens, correctors, and collimator apertures
+are hidden because they do not change this first-order dispersion model; RF is
+recognized from its Elegant element type rather than a `PRF` diagnostic name.
+One BL01 analysis uses eight isolated Elegant runs: baseline, positive/negative
+scans for three raw knobs, and the exact preview lattice.
 
 The preview reports suggested raw-knob deltas and recomputes the lattice rather
 than showing only a linear matrix prediction. It remains read-only: the

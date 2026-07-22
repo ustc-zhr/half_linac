@@ -343,7 +343,7 @@ class DispersionCurveWidget(QWidget):
                 painter.setBrush(color)
                 painter.drawPolygon(triangle)
                 element_rect = None
-            elif self._is_rf(name, element_type):
+            elif self._is_rf(element_type):
                 color = QColor("#b27ad8")
                 element_rect = QRectF(left, center_y - 7.0, width, 14.0)
             else:
@@ -380,20 +380,38 @@ class DispersionCurveWidget(QWidget):
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(QRectF(rect.left(), rect.bottom() - 14.0, 150.0, 14.0), "Lattice")
 
-    @staticmethod
     def _draw_lattice_legend(
+        self,
         painter: QPainter,
         rect: QRectF,
         tokens: dict[str, str],
     ) -> None:
-        entries = (
-            ("Bend-H", QColor("#db8b3d")),
-            ("Bend-V", QColor("#3aa6b9")),
-            ("Quad +", QColor("#9b72cf")),
-            ("Quad -", QColor("#9b72cf")),
-            ("BPM", QColor("#4dbb83")),
-            ("RF", QColor("#b27ad8")),
-        )
+        if self.result is None:
+            return
+        curve = self.result.baseline_curve
+        indices = self._visible_element_indices()
+        bend_indices = [
+            index for index in indices if "BEND" in curve.element_types[index].upper()
+        ]
+        entries = []
+        if any(abs(math.sin(float(curve.element_tilts_rad[index]))) <= 0.7 for index in bend_indices):
+            entries.append(("Bend-H", QColor("#db8b3d")))
+        if any(abs(math.sin(float(curve.element_tilts_rad[index]))) > 0.7 for index in bend_indices):
+            entries.append(("Bend-V", QColor("#3aa6b9")))
+        if any("QUAD" in curve.element_types[index].upper() for index in indices):
+            entries.extend(
+                (
+                    ("Quad +", QColor("#9b72cf")),
+                    ("Quad -", QColor("#9b72cf")),
+                )
+            )
+        if any(
+            self._is_bpm(curve.element_names[index], curve.element_types[index].upper())
+            for index in indices
+        ):
+            entries.append(("BPM", QColor("#4dbb83")))
+        if any(self._is_rf(curve.element_types[index].upper()) for index in indices):
+            entries.append(("RF", QColor("#b27ad8")))
         x = rect.left()
         y = rect.top() - 14.0
         for label, color in entries:
@@ -409,17 +427,28 @@ class DispersionCurveWidget(QWidget):
         return [
             index
             for index, element_type in enumerate(curve.element_types)
-            if element_type.upper() not in {"DRIF", "CSRDRIFT", "MARK"}
-            and curve.element_names[index] != "_BEG_"
+            if self._is_visible_optics_element(
+                curve.element_names[index],
+                element_type.upper(),
+            )
         ]
+
+    @classmethod
+    def _is_visible_optics_element(cls, name: str, element_type: str) -> bool:
+        return bool(
+            "BEND" in element_type
+            or "QUAD" in element_type
+            or cls._is_bpm(name, element_type)
+            or cls._is_rf(element_type)
+        )
 
     @staticmethod
     def _is_bpm(name: str, element_type: str) -> bool:
         return name.upper().startswith("BPM") or element_type == "MONI"
 
     @staticmethod
-    def _is_rf(name: str, element_type: str) -> bool:
-        return name.upper().startswith("PRF") or "RF" in element_type
+    def _is_rf(element_type: str) -> bool:
+        return "RF" in element_type
 
     def mouseMoveEvent(self, event) -> None:
         if self.result is None or self._lattice_geometry is None:

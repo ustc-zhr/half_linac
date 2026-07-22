@@ -198,5 +198,9 @@ def test_main_window_constructs_offscreen() -> None:
     app.processEvents()
     assert half_window.dispersion_curve.result is model_result
     assert not half_window.dispersion_curve.grab().isNull()
+    assert not half_window.dispersion_curve._is_rf("WATCH")
+    assert half_window.dispersion_curve._is_rf("RFCW")
+    assert half_window.dispersion_curve._is_visible_optics_element("BPM06", "MONI")
+    assert not half_window.dispersion_curve._is_visible_optics_element("PRF02", "WATCH")
     half_window.close()
     app.quit()
