@@ -60,11 +60,22 @@ class SafetyConfig:
 
 
 @dataclass(frozen=True)
+class DispersionSectionConfig:
+    id: str = "default"
+    display_name: str = "Default"
+    model_entrance: str | None = None
+    model_exit: str | None = None
+    target_dispersion_mm: tuple[float, ...] = ()
+    model_only: bool = False
+
+
+@dataclass(frozen=True)
 class RunConfig:
     backend: BackendConfig
     energy_knob: EnergyKnobConfig
     target_bpms: tuple[str, ...]
     knobs: tuple[KnobConfig, ...]
+    section: DispersionSectionConfig
     measurement: MeasurementConfig
     solver: SolverConfig
     safety: SafetyConfig
@@ -119,25 +130,51 @@ class DispersionMeasurement:
     valid: ArrayLike
     plus: BPMReading
     minus: BPMReading
+    target_values_mm: ArrayLike | None = None
 
     def __post_init__(self) -> None:
         values = np.asarray(self.values_mm, dtype=float)
         valid = np.asarray(self.valid, dtype=bool)
+        target = (
+            np.zeros_like(values)
+            if self.target_values_mm is None
+            else np.asarray(self.target_values_mm, dtype=float)
+        )
         if values.shape != valid.shape:
             raise ValueError("Dispersion values and valid mask must have same shape")
+        if target.shape != values.shape:
+            raise ValueError("Target dispersion values must match measured values")
         if len(self.bpm_names) != values.size:
             raise ValueError("BPM names length must match dispersion values")
         object.__setattr__(self, "bpm_names", tuple(self.bpm_names))
         object.__setattr__(self, "values_mm", values)
         object.__setattr__(self, "valid", valid)
+        object.__setattr__(self, "target_values_mm", target)
 
     @property
     def valid_values_mm(self) -> ArrayLike:
         return self.values_mm[self.valid]
 
     @property
-    def rms_mm(self) -> float:
+    def residual_values_mm(self) -> ArrayLike:
+        return self.values_mm - self.target_values_mm
+
+    @property
+    def valid_residual_values_mm(self) -> ArrayLike:
+        return self.residual_values_mm[self.valid]
+
+    @property
+    def measured_rms_mm(self) -> float:
         values = self.valid_values_mm
+        if values.size == 0:
+            return float("nan")
+        return float(np.sqrt(np.mean(values * values)))
+
+    @property
+    def rms_mm(self) -> float:
+        """Return RMS residual relative to the configured target dispersion."""
+
+        values = self.valid_residual_values_mm
         if values.size == 0:
             return float("nan")
         return float(np.sqrt(np.mean(values * values)))
@@ -157,6 +194,38 @@ class ResponseMatrixResult:
         singular_values = np.asarray(self.singular_values, dtype=float)
         object.__setattr__(self, "matrix", matrix)
         object.__setattr__(self, "singular_values", singular_values)
+
+
+@dataclass(frozen=True)
+class ModelResponseResult:
+    section_id: str
+    bpm_names: tuple[str, ...]
+    knob_names: tuple[str, ...]
+    baseline_dispersion_mm: ArrayLike
+    target_dispersion_mm: ArrayLike
+    response_matrix: ArrayLike
+    singular_values: ArrayLike
+    condition_number: float
+    retained_rank: int
+    derived_knobs: tuple[KnobConfig, ...]
+
+    def __post_init__(self) -> None:
+        baseline = np.asarray(self.baseline_dispersion_mm, dtype=float)
+        target = np.asarray(self.target_dispersion_mm, dtype=float)
+        matrix = np.asarray(self.response_matrix, dtype=float)
+        singular_values = np.asarray(self.singular_values, dtype=float)
+        if baseline.shape != target.shape or baseline.shape != (len(self.bpm_names),):
+            raise ValueError("Model baseline and target must match bpm_names")
+        if matrix.shape != (len(self.bpm_names), len(self.knob_names)):
+            raise ValueError("Model response matrix shape must match BPMs and knobs")
+        object.__setattr__(self, "baseline_dispersion_mm", baseline)
+        object.__setattr__(self, "target_dispersion_mm", target)
+        object.__setattr__(self, "response_matrix", matrix)
+        object.__setattr__(self, "singular_values", singular_values)
+
+    @property
+    def residual_dispersion_mm(self) -> ArrayLike:
+        return self.baseline_dispersion_mm - self.target_dispersion_mm
 
 
 @dataclass(frozen=True)

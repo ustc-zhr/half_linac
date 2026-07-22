@@ -30,6 +30,13 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
     else:
         actuator_plan = {"calibrated": False, "reason": "Energy knob is already treated as delta"}
     return {
+        "section": {
+            "id": config.section.id,
+            "display_name": config.section.display_name,
+            "model_entrance": config.section.model_entrance,
+            "model_exit": config.section.model_exit,
+            "model_only": config.section.model_only,
+        },
         "backend": {"type": config.backend.type, "mode": config.backend.mode},
         "energy": {
             "name": config.energy_knob.name,
@@ -44,9 +51,10 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
         "bpms": [
             {
                 "name": name,
+                "target_dispersion_mm": config.section.target_dispersion_mm[index],
                 "x_pv": bpm_map.get(name, {}).get("x") if isinstance(bpm_map.get(name), dict) else None,
             }
-            for name in config.target_bpms
+            for index, name in enumerate(config.target_bpms)
         ],
         "knobs": [
             {
@@ -110,6 +118,7 @@ def format_operation_plan(plan: dict[str, Any]) -> str:
         "Dispersion Correction Dry Run",
         "",
         f"Backend: {plan['backend']['type']} ({plan['backend']['mode']})",
+        f"Section: {plan['section']['display_name']} ({plan['section']['id']})",
         (
             "Energy perturbation: "
             f"{plan['energy']['name']} +/-{plan['energy']['delta_momentum']} dp/p"

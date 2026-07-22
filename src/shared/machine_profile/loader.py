@@ -45,7 +45,7 @@ SUPPORTED_APP_NAMES = {
     "hv_feedback",
     "ct_monitor",
 }
-MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum"}
+MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
 APP_WORKFLOW_FILES = {
     "orbit": "orbit_correct.json",
     "beam_monitor": "beam_monitor.json",
@@ -1525,9 +1525,7 @@ def _validate_dispersion_correction_workflow(
 ) -> None:
     required_keys = (
         "control_backends",
-        "target_bpms",
         "energy_knob",
-        "knobs",
         "measurement",
         "solver",
         "safety",
@@ -1557,40 +1555,40 @@ def _validate_dispersion_correction_workflow(
             + ", ".join(unknown_backends)
         )
 
-    target_bpms = _expect_string_list(
-        workflow.get("target_bpms"),
-        "workflows.dispersion_correction.target_bpms",
-    )
-    if not target_bpms:
-        raise MachineProfileError(
-            "workflows.dispersion_correction.target_bpms must not be empty."
+    sections = workflow.get("sections")
+    if sections is None:
+        _validate_dispersion_section(profile, workflow, "workflows.dispersion_correction")
+    else:
+        raw_sections = _expect_list(
+            sections,
+            "workflows.dispersion_correction.sections",
         )
-    for bpm_id in target_bpms:
-        element = profile.get_element(bpm_id)
-        if element.kind != "bpm" or "x" not in element.channels:
+        if not raw_sections:
             raise MachineProfileError(
-                f"Dispersion BPM {bpm_id!r} must reference a bpm with logical channel 'x'."
+                "workflows.dispersion_correction.sections must not be empty."
             )
-
-    knobs = _expect_list(
-        workflow.get("knobs"),
-        "workflows.dispersion_correction.knobs",
-    )
-    if not knobs:
-        raise MachineProfileError("workflows.dispersion_correction.knobs must not be empty.")
-    for index, raw_knob in enumerate(knobs):
-        location = f"workflows.dispersion_correction.knobs[{index}]"
-        knob = _expect_mapping(raw_knob, location)
-        _expect_non_empty_string(knob.get("name"), f"{location}.name")
-        devices = _expect_mapping(knob.get("devices"), f"{location}.devices")
-        if not devices:
-            raise MachineProfileError(f"{location}.devices must not be empty.")
-        for device_id in devices:
-            element = profile.get_element(str(device_id))
-            if element.kind != "quad":
-                raise MachineProfileError(
-                    f"{location}.devices.{device_id} must reference a quad element."
+        section_ids: list[str] = []
+        for index, raw_section in enumerate(raw_sections):
+            location = f"workflows.dispersion_correction.sections[{index}]"
+            section = _expect_mapping(raw_section, location)
+            section_id = _expect_non_empty_string(section.get("id"), f"{location}.id")
+            section_ids.append(section_id)
+            _validate_dispersion_section(profile, section, location)
+            for endpoint_key in ("model_entrance", "model_exit"):
+                endpoint = _expect_non_empty_string(
+                    section.get(endpoint_key),
+                    f"{location}.{endpoint_key}",
                 )
+                profile.get_element(endpoint)
+        if len(set(section_ids)) != len(section_ids):
+            raise MachineProfileError(
+                "workflows.dispersion_correction.sections contains duplicate ids."
+            )
+        default_section = str(workflow.get("default_section", section_ids[0])).strip()
+        if default_section not in section_ids:
+            raise MachineProfileError(
+                "workflows.dispersion_correction.default_section must reference a configured section."
+            )
 
     energy_knob = _expect_mapping(
         workflow.get("energy_knob"),
@@ -1628,6 +1626,48 @@ def _validate_dispersion_correction_workflow(
             workflow.get(key),
             f"workflows.dispersion_correction.{key}",
         )
+
+
+def _validate_dispersion_section(
+    profile: MachineProfile,
+    section: Mapping[str, Any],
+    location: str,
+) -> None:
+    target_bpms = _expect_string_list(
+        section.get("target_bpms"),
+        f"{location}.target_bpms",
+    )
+    if not target_bpms:
+        raise MachineProfileError(f"{location}.target_bpms must not be empty.")
+    for bpm_id in target_bpms:
+        element = profile.get_element(bpm_id)
+        if element.kind != "bpm" or "x" not in element.channels:
+            raise MachineProfileError(
+                f"Dispersion BPM {bpm_id!r} must reference a bpm with logical channel 'x'."
+            )
+
+    target = section.get("target_dispersion_mm", [0.0] * len(target_bpms))
+    if not isinstance(target, list) or len(target) != len(target_bpms):
+        raise MachineProfileError(
+            f"{location}.target_dispersion_mm must match target_bpms length."
+        )
+
+    knobs = _expect_list(section.get("knobs"), f"{location}.knobs")
+    if not knobs:
+        raise MachineProfileError(f"{location}.knobs must not be empty.")
+    for index, raw_knob in enumerate(knobs):
+        knob_location = f"{location}.knobs[{index}]"
+        knob = _expect_mapping(raw_knob, knob_location)
+        _expect_non_empty_string(knob.get("name"), f"{knob_location}.name")
+        devices = _expect_mapping(knob.get("devices"), f"{knob_location}.devices")
+        if not devices:
+            raise MachineProfileError(f"{knob_location}.devices must not be empty.")
+        for device_id in devices:
+            element = profile.get_element(str(device_id))
+            if element.kind != "quad":
+                raise MachineProfileError(
+                    f"{knob_location}.devices.{device_id} must reference a quad element."
+                )
 
 
 def _validate_hv_feedback_workflow(

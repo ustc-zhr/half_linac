@@ -17,6 +17,28 @@ def test_effective_dispersion_uses_two_sided_delta() -> None:
     assert measurement.valid.tolist() == [True, True]
 
 
+def test_effective_dispersion_reports_residual_to_nonzero_target() -> None:
+    names = ("BPM01", "BPM02")
+    delta = 1.0e-4
+    measured = np.asarray([12.0, -8.0])
+    target = np.asarray([10.0, -5.0])
+    plus = BPMReading(names, measured * delta, np.zeros(2), np.ones(2, dtype=bool))
+    minus = BPMReading(names, -measured * delta, np.zeros(2), np.ones(2, dtype=bool))
+
+    measurement = compute_effective_dispersion(
+        names,
+        plus,
+        minus,
+        delta,
+        target_values_mm=target,
+    )
+
+    np.testing.assert_allclose(measurement.target_values_mm, target)
+    np.testing.assert_allclose(measurement.residual_values_mm, [2.0, -3.0])
+    assert measurement.measured_rms_mm == np.sqrt(104.0)
+    assert measurement.rms_mm == np.sqrt(6.5)
+
+
 def test_momentum_delta_uses_configured_delta_directly() -> None:
     assert momentum_delta(1.0e-4) == 1.0e-4
 

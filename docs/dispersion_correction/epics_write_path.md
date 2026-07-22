@@ -46,9 +46,8 @@ corrections that miss the final acceptance threshold all restore the initial
 snapshot. Exception reporting does not perform another dispersion measurement
 after restoration.
 
-The current IRFEL mapping has independent quadrupole current readbacks but no
-independent RF phase readback. Phase writes therefore verify the same setpoint
-PV and must not be described as independently read back.
+The current IRFEL mapping has independent quadrupole current readbacks and an
+independent RF phase readback at `IRFEL:IN-MW:KLY1:GET_CH3_PHASE`.
 
 ## Advanced defaults
 

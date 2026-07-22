@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 from half_linac.src.apps.dispersion_correction.models import (
     BackendConfig,
+    DispersionSectionConfig,
     EnergyKnobConfig,
     KnobConfig,
     MeasurementConfig,
@@ -40,6 +42,7 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
     measurement_raw = _mapping(raw.get("measurement", {}), "measurement")
     solver_raw = _mapping(raw.get("solver", {}), "solver")
     safety_raw = _mapping(raw.get("safety", {}), "safety")
+    section_raw = _mapping(raw.get("section", {}), "section")
 
     knobs_raw = raw.get("knobs", [])
     if not isinstance(knobs_raw, list) or not knobs_raw:
@@ -66,6 +69,13 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
         raise ValueError("measurement.settle_time_s must be non-negative")
 
     knobs = tuple(_parse_knob(item, index) for index, item in enumerate(knobs_raw))
+    target_raw = section_raw.get(
+        "target_dispersion_mm",
+        raw.get("target_dispersion_mm", [0.0] * len(target_bpms)),
+    )
+    if not isinstance(target_raw, (list, tuple)):
+        raise ValueError("section.target_dispersion_mm must be a list")
+    target_dispersion_mm = tuple(float(value) for value in target_raw)
 
     config = RunConfig(
         backend=BackendConfig(
@@ -82,6 +92,14 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
         ),
         target_bpms=tuple(str(name) for name in target_bpms),
         knobs=knobs,
+        section=DispersionSectionConfig(
+            id=str(section_raw.get("id", "default")).strip(),
+            display_name=str(section_raw.get("display_name", "Default")).strip(),
+            model_entrance=_optional_string(section_raw.get("model_entrance")),
+            model_exit=_optional_string(section_raw.get("model_exit")),
+            target_dispersion_mm=target_dispersion_mm,
+            model_only=bool(section_raw.get("model_only", False)),
+        ),
         measurement=measurement,
         solver=SolverConfig(
             svd_cut=float(solver_raw.get("svd_cut", 1.0e-3)),
@@ -106,6 +124,16 @@ def validate_config(config: RunConfig) -> None:
         raise ValueError("energy_knob.delta must be positive")
     if len(set(config.target_bpms)) != len(config.target_bpms):
         raise ValueError("target_bpms must not contain duplicates")
+    if not config.section.id:
+        raise ValueError("section.id must not be empty")
+    if len(config.section.target_dispersion_mm) != len(config.target_bpms):
+        raise ValueError("section.target_dispersion_mm length must match target_bpms")
+    if not all(math.isfinite(value) for value in config.section.target_dispersion_mm):
+        raise ValueError("section.target_dispersion_mm values must be finite")
+    if config.section.model_only and (
+        config.section.model_entrance is None or config.section.model_exit is None
+    ):
+        raise ValueError("model-only sections require model_entrance and model_exit")
     if config.solver.max_iter <= 0:
         raise ValueError("solver.max_iter must be positive")
     if config.solver.response_update not in {"once", "every_iteration"}:
@@ -142,3 +170,10 @@ def _mapping(value: Any, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a mapping")
     return value
+
+
+def _optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None

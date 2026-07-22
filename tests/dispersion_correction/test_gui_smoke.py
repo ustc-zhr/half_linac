@@ -132,4 +132,24 @@ def test_main_window_constructs_offscreen() -> None:
     }
     knob_dialog.close()
     profile_window.close()
+
+    half_context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="vm",
+    )
+    _, half_config = load_profile_run_config(half_context)
+    half_window = MainWindow(half_config, half_context)
+    half_window.show()
+    app.processEvents()
+    assert half_window.section_combo.currentData() == "bl01"
+    assert not half_window.model_response_button.isHidden()
+    assert half_window.model_response_button.isEnabled()
+    assert not half_window.measure_button.isEnabled()
+    assert not half_window.response_button.isEnabled()
+    assert not half_window.run_button.isEnabled()
+    assert not half_window.bpm_select_button.isVisibleTo(half_window)
+    assert not half_window.knob_select_button.isVisibleTo(half_window)
+    assert half_window.status_strip.items["SAFETY"].value_label.text() == "MODEL ONLY"
+    half_window.close()
     app.quit()

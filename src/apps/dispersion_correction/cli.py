@@ -9,6 +9,11 @@ import sys
 from half_linac.src.apps.dispersion_correction.config import load_config
 from half_linac.src.apps.dispersion_correction.calibration import load_phase_calibration_csv
 from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan, format_operation_plan
+from half_linac.src.apps.dispersion_correction.model_response import (
+    calculate_model_response,
+    format_model_response,
+    model_response_to_dict,
+)
 from half_linac.src.apps.dispersion_correction.preflight import format_preflight, run_preflight
 from half_linac.src.apps.dispersion_correction.profile_runtime import load_profile_run_config
 from half_linac.src.apps.dispersion_correction.workflow import create_machine
@@ -22,7 +27,7 @@ def run_command(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-dir", help="Optional directory for JSON/CSV/Markdown report files.")
     args = parser.parse_args(argv)
 
-    config = _load_runtime_config(args.config, write_operation=True)
+    config = _load_runtime_config(args.config, section_id=args.section, write_operation=True)
     workflow = AchromatWorkflow(config, log_callback=_stderr_log if args.verbose else None)
     result = workflow.run()
     if args.output_dir:
@@ -40,7 +45,7 @@ def measure_command(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     args = parser.parse_args(argv)
 
-    config = _load_runtime_config(args.config, write_operation=True)
+    config = _load_runtime_config(args.config, section_id=args.section, write_operation=True)
     measurement = AchromatWorkflow(config).measure_dispersion(config.measurement.final_samples)
     if args.json:
         import json
@@ -71,7 +76,7 @@ def status_command(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     args = parser.parse_args(argv)
 
-    config = _load_runtime_config(args.config)
+    config = _load_runtime_config(args.config, section_id=args.section)
     if config.backend.type.lower() == "epics":
         config = replace(config, backend=replace(config.backend, mode="read_only"))
     machine = create_machine(config)
@@ -119,7 +124,7 @@ def plan_command(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     args = parser.parse_args(argv)
 
-    config = _load_runtime_config(args.config)
+    config = _load_runtime_config(args.config, section_id=args.section)
     plan = build_operation_plan(config)
     print(json.dumps(plan, indent=2, sort_keys=True) if args.json else format_operation_plan(plan))
     return 0
@@ -164,7 +169,7 @@ def preflight_command(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     args = parser.parse_args(argv)
 
-    config = _load_runtime_config(args.config)
+    config = _load_runtime_config(args.config, section_id=args.section)
     result = run_preflight(config)
     print(json.dumps(result.as_dict(), indent=2, sort_keys=True) if args.json else format_preflight(result))
     return 0 if result.ok else 2
@@ -190,6 +195,7 @@ def _base_parser(description: str) -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--verbose", action="store_true", help="Print workflow progress to stderr.")
+    parser.add_argument("--section", help="Optional machine-profile dispersion section id.")
     return parser
 
 
@@ -197,7 +203,12 @@ def _stderr_log(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def _load_runtime_config(config_path: str | None, *, write_operation: bool = False):
+def _load_runtime_config(
+    config_path: str | None,
+    *,
+    section_id: str | None = None,
+    write_operation: bool = False,
+):
     if config_path:
         config = load_config(config_path)
         if write_operation and config.backend.type.lower() == "epics":
@@ -206,8 +217,36 @@ def _load_runtime_config(config_path: str | None, *, write_operation: bool = Fal
                 "external --config files are limited to offline or read-only commands"
             )
         return config
-    _, config = load_profile_run_config()
+    _, config = load_profile_run_config(section_id=section_id)
+    if write_operation and config.section.model_only:
+        raise PermissionError(
+            "This dispersion section is model-only; use model-response instead of machine operations"
+        )
     return config
+
+
+def model_response_command(argv: list[str] | None = None) -> int:
+    parser = _base_parser("Calculate an isolated Elegant dispersion response for one section.")
+    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    args = parser.parse_args(argv)
+    if args.config:
+        raise ValueError("Model response requires a machine-profile configuration")
+    context, config = load_profile_run_config(section_id=args.section)
+    result = calculate_model_response(
+        context,
+        config,
+        progress_callback=(
+            (lambda stage, current, total: _stderr_log(f"[{current}/{total}] {stage}"))
+            if args.verbose
+            else None
+        ),
+    )
+    print(
+        json.dumps(model_response_to_dict(result), indent=2, sort_keys=True)
+        if args.json
+        else format_model_response(result)
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -215,7 +254,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Dispersion correction command-line tools.")
     parser.add_argument(
         "command",
-        choices=("run", "measure", "status", "plan", "preflight", "calibrate-phase"),
+        choices=(
+            "run",
+            "measure",
+            "status",
+            "plan",
+            "preflight",
+            "calibrate-phase",
+            "model-response",
+        ),
     )
     namespace, remaining = parser.parse_known_args(arguments)
     commands = {
@@ -225,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
         "plan": plan_command,
         "preflight": preflight_command,
         "calibrate-phase": calibrate_phase_command,
+        "model-response": model_response_command,
     }
     return commands[namespace.command](remaining)
 

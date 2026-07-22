@@ -74,6 +74,7 @@ def compute_effective_dispersion(
     minus: BPMReading,
     delta: float,
     plane: str = "x",
+    target_values_mm: Sequence[float] | None = None,
 ) -> DispersionMeasurement:
     if delta <= 0:
         raise ValueError("delta must be positive")
@@ -95,6 +96,7 @@ def compute_effective_dispersion(
         valid=valid,
         plus=plus,
         minus=minus,
+        target_values_mm=target_values_mm,
     )
 
 

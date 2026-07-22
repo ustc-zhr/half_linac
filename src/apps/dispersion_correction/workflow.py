@@ -114,6 +114,7 @@ class AchromatWorkflow:
             minus=minus,
             delta=delta,
             plane=self.config.measurement.plane,
+            target_values_mm=self.config.section.target_dispersion_mm,
         )
         self._log(f"Measured D_eff RMS: {measurement.rms_mm:.6g} mm")
         if report_progress:
@@ -259,7 +260,7 @@ class AchromatWorkflow:
                 )
                 delta_knobs, singular_values, condition = solve_bounded_correction(
                     response.matrix[valid_rows, :],
-                    solve_measurement.values_mm[valid_rows],
+                    solve_measurement.residual_values_mm[valid_rows],
                     self.config.solver.svd_cut,
                     self.config.solver.gain,
                     knob_set.limits(),
@@ -542,6 +543,10 @@ class AchromatWorkflow:
         )
 
     def _require_write_ready(self) -> None:
+        if self.config.section.model_only:
+            raise PermissionError(
+                "This dispersion section is model-only; machine measurement and correction are blocked"
+            )
         if self.config.backend.type.lower() == "offline":
             return
         if self.config.backend.mode != "write_enabled":

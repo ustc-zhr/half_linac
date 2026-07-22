@@ -56,9 +56,17 @@ def result_to_json(result: CorrectionResult, indent: int = 2) -> str:
 def result_to_csv(result: CorrectionResult) -> str:
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["bpm", "initial_d_eff_mm", "final_d_eff_mm", "valid"])
+    writer.writerow(["bpm", "target_d_eff_mm", "initial_d_eff_mm", "final_d_eff_mm", "valid"])
     for row in _bpm_table(result.initial, result.final):
-        writer.writerow([row["bpm"], row["initial_d_eff_mm"], row["final_d_eff_mm"], row["valid"]])
+        writer.writerow(
+            [
+                row["bpm"],
+                row["target_d_eff_mm"],
+                row["initial_d_eff_mm"],
+                row["final_d_eff_mm"],
+                row["valid"],
+            ]
+        )
     writer.writerow([])
     writer.writerow(["knob", "initial", "final", "delta"])
     for name, initial in result.initial_knobs.items():
@@ -80,12 +88,13 @@ def result_to_markdown(result: CorrectionResult) -> str:
         "",
         "## BPM D_eff",
         "",
-        "| BPM | Initial (mm) | Final (mm) | Valid |",
-        "| --- | ---: | ---: | :---: |",
+        "| BPM | Target (mm) | Initial (mm) | Final (mm) | Valid |",
+        "| --- | ---: | ---: | ---: | :---: |",
     ]
     for row in _bpm_table(result.initial, result.final):
         lines.append(
-            f"| {row['bpm']} | {row['initial_d_eff_mm']:.6g} | "
+            f"| {row['bpm']} | {row['target_d_eff_mm']:.6g} | "
+            f"{row['initial_d_eff_mm']:.6g} | "
             f"{row['final_d_eff_mm']:.6g} | {row['valid']} |"
         )
     lines.extend(["", "## Knobs", "", "| Knob | Initial | Final | Delta |", "| --- | ---: | ---: | ---: |"])
@@ -115,6 +124,7 @@ def _bpm_table(initial: DispersionMeasurement, final: DispersionMeasurement) -> 
     return [
         {
             "bpm": name,
+            "target_d_eff_mm": float(initial.target_values_mm[index]),
             "initial_d_eff_mm": float(initial.values_mm[index]),
             "final_d_eff_mm": float(final.values_mm[index]),
             "valid": bool(initial.valid[index] and final.valid[index]),

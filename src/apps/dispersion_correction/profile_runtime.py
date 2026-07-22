@@ -32,7 +32,11 @@ WORKFLOW_NAME = "dispersion_correction"
 APP_DIR = Path(__file__).resolve().parent
 
 
-def load_profile_run_config(context: AppContext | None = None) -> tuple[AppContext, RunConfig]:
+def load_profile_run_config(
+    context: AppContext | None = None,
+    *,
+    section_id: str | None = None,
+) -> tuple[AppContext, RunConfig]:
     """Build the app's existing RunConfig from the selected machine profile."""
 
     resolved_context = context or load_app_context(WORKFLOW_NAME)
@@ -48,34 +52,40 @@ def load_profile_run_config(context: AppContext | None = None) -> tuple[AppConte
             f"configured backends: {', '.join(supported_backends)}."
         )
 
+    selected = _select_workflow_section(workflow, section_id)
+    section = dict(selected.pop("_section"))
+    model_only = bool(section.get("model_only", False))
+    options = {
+        "site": resolved_context.profile.machine.id,
+        "profile_backend": backend_name,
+        "ca_timeout": float(selected.get("ca_timeout", 0.5)),
+        "bpm_position_scale_to_mm": _backend_number(
+            selected.get("bpm_position_scale_to_mm"),
+            backend_name,
+            default=1.0,
+        ),
+        "model_only": model_only,
+        "pv_map": {} if model_only else _build_profile_pv_map(resolved_context, selected),
+    }
     backend = {
-        "type": "epics",
+        "type": "offline" if model_only else "epics",
         "mode": (
             "write_enabled"
-            if workflow_writes_allowed(resolved_context, WORKFLOW_NAME)
+            if not model_only and workflow_writes_allowed(resolved_context, WORKFLOW_NAME)
             else "read_only"
         ),
-        "options": {
-            "site": resolved_context.profile.machine.id,
-            "profile_backend": backend_name,
-            "ca_timeout": float(workflow.get("ca_timeout", 0.5)),
-            "bpm_position_scale_to_mm": _backend_number(
-                workflow.get("bpm_position_scale_to_mm"),
-                backend_name,
-                default=1.0,
-            ),
-            "pv_map": _build_profile_pv_map(resolved_context, workflow),
-        },
+        "options": options,
     }
 
     raw_config = {
         "backend": backend,
-        "energy_knob": dict(_mapping(workflow.get("energy_knob"), "energy_knob")),
-        "target_bpms": list(_string_sequence(workflow.get("target_bpms"), "target_bpms")),
-        "knobs": [dict(item) for item in _mapping_sequence(workflow.get("knobs"), "knobs")],
-        "measurement": dict(_mapping(workflow.get("measurement"), "measurement")),
-        "solver": dict(_mapping(workflow.get("solver"), "solver")),
-        "safety": dict(_mapping(workflow.get("safety"), "safety")),
+        "energy_knob": dict(_mapping(selected.get("energy_knob"), "energy_knob")),
+        "target_bpms": list(_string_sequence(selected.get("target_bpms"), "target_bpms")),
+        "knobs": [dict(item) for item in _mapping_sequence(selected.get("knobs"), "knobs")],
+        "section": section,
+        "measurement": dict(_mapping(selected.get("measurement"), "measurement")),
+        "solver": dict(_mapping(selected.get("solver"), "solver")),
+        "safety": dict(_mapping(selected.get("safety"), "safety")),
     }
     return resolved_context, parse_config(raw_config)
 
@@ -108,6 +118,20 @@ def selectable_profile_quadrupoles(context: AppContext) -> tuple[str, ...]:
     return tuple(selected)
 
 
+def profile_section_choices(context: AppContext) -> tuple[tuple[str, str], ...]:
+    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    sections = workflow.get("sections")
+    if not isinstance(sections, list):
+        return (("default", "Default"),)
+    choices = []
+    for index, raw in enumerate(sections):
+        section = _mapping(raw, f"sections[{index}]")
+        section_id = str(section.get("id", "")).strip()
+        display_name = str(section.get("display_name", section_id)).strip()
+        choices.append((section_id, display_name))
+    return tuple(choices)
+
+
 def apply_profile_selection(
     context: AppContext,
     config: RunConfig,
@@ -116,6 +140,11 @@ def apply_profile_selection(
     knobs,
 ) -> RunConfig:
     """Resolve PV mappings for one GUI selection without changing the profile."""
+
+    if config.section.model_only:
+        if tuple(target_bpms) != config.target_bpms or tuple(knobs) != config.knobs:
+            raise MachineProfileError("Model-only section BPMs and knobs are fixed by the machine profile.")
+        return config
 
     allowed_bpms = set(selectable_profile_bpms(context))
     allowed_quads = set(selectable_profile_quadrupoles(context))
@@ -294,8 +323,11 @@ def _measurement_payload(result: DispersionMeasurement) -> dict[str, Any]:
         "plane": result.plane,
         "delta": result.delta,
         "rms_mm": result.rms_mm,
+        "measured_rms_mm": result.measured_rms_mm,
         "bpm_names": list(result.bpm_names),
         "values_mm": result.values_mm.tolist(),
+        "target_values_mm": result.target_values_mm.tolist(),
+        "residual_values_mm": result.residual_values_mm.tolist(),
         "valid": result.valid.tolist(),
         "plus": _bpm_payload(result.plus),
         "minus": _bpm_payload(result.minus),
@@ -422,3 +454,48 @@ def _backend_number(value: object, backend_name: str, *, default: float) -> floa
     if value is None:
         value = default
     return float(value)
+
+
+def _select_workflow_section(
+    workflow: Mapping[str, Any],
+    section_id: str | None,
+) -> dict[str, Any]:
+    sections = workflow.get("sections")
+    if not isinstance(sections, list):
+        selected = dict(workflow)
+        selected["_section"] = dict(_mapping(workflow.get("section", {}), "section"))
+        return selected
+    if not sections:
+        raise MachineProfileError("workflows.dispersion_correction.sections must not be empty.")
+
+    requested = str(section_id or workflow.get("default_section") or "").strip()
+    selected_section: Mapping[str, Any] | None = None
+    if requested:
+        for index, raw in enumerate(sections):
+            section = _mapping(raw, f"sections[{index}]")
+            if str(section.get("id", "")).strip() == requested:
+                selected_section = section
+                break
+        if selected_section is None:
+            raise MachineProfileError(f"Unknown dispersion-correction section {requested!r}.")
+    else:
+        selected_section = _mapping(sections[0], "sections[0]")
+
+    selected = {key: value for key, value in workflow.items() if key not in {"sections", "default_section"}}
+    for key in ("energy_knob", "target_bpms", "knobs", "measurement", "solver", "safety"):
+        if key in selected_section:
+            selected[key] = selected_section[key]
+    selected["_section"] = {
+        "id": str(selected_section.get("id", "")).strip(),
+        "display_name": str(
+            selected_section.get("display_name", selected_section.get("id", ""))
+        ).strip(),
+        "model_entrance": selected_section.get("model_entrance"),
+        "model_exit": selected_section.get("model_exit"),
+        "target_dispersion_mm": selected_section.get(
+            "target_dispersion_mm",
+            [0.0] * len(_string_sequence(selected.get("target_bpms"), "target_bpms")),
+        ),
+        "model_only": bool(selected_section.get("model_only", False)),
+    }
+    return selected

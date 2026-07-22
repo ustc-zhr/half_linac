@@ -16,8 +16,15 @@ The JSON/YAML files under `tests/dispersion_correction/fixtures/` are regression
 fixtures from the former standalone package. They are not a second production PV
 configuration source.
 
-IRFEL currently has an application workflow. HALF intentionally does not, so the
-Control Room disables the application for HALF.
+IRFEL has the commissioned workflow skeleton described below. HALF exposes a
+model-only `bl01` section: it can calculate an isolated Elegant design response,
+but machine measurement and correction remain blocked until an energy actuator
+and its `dp/p` calibration are commissioned.
+
+HALF model analysis uses `configs/machines/half/apps/dispersion_correction.json`
+and the shared Elegant model backend. Generated model files stay under
+`runtime/model_backend/half/simulation/`; the calculation does not mutate the VM
+lattice or write any PV.
 
 ## Current safety boundary
 
@@ -28,13 +35,13 @@ Control Room disables the application for HALF.
   write mode are selected by the machine profile rather than GUI controls.
 - Measure, response, and correction operations all change the energy actuator and
   are therefore treated as write operations.
-- The RF phase has no independent readback. Future writes can only verify the
-  setpoint PV itself.
+- The RF phase has an independent readback at
+  `IRFEL:IN-MW:KLY1:GET_CH3_PHASE`.
 - The configured phase-to-`dp/p` calibration and timing values still require
   onsite confirmation before the machine-profile write policy is enabled.
 
-The confirmed phase setpoint is `IRFEL:IN-MW:KLY1:SET_PHASE`. No
-`phase_readback` channel is declared.
+The confirmed phase setpoint is `IRFEL:IN-MW:KLY1:SET_PHASE`, and the configured
+phase readback is `IRFEL:IN-MW:KLY1:GET_CH3_PHASE`.
 
 The current workflow contains `real_status: write_blocked` and
 `write_control.real: blocked`, so the IRFEL real profile resolves to
@@ -86,6 +93,18 @@ python3 -m half_linac.src.apps.dispersion_correction.cli status --json
 
 `preflight` is configuration-only. `status` performs EPICS reads of the
 configured BPM, quadrupole and phase setpoint PVs. Neither command writes.
+
+Calculate the HALF BL01 design response without machine IO:
+
+```bash
+source scripts/setup.sh
+export HALF_LINAC_MACHINE_ID=half
+export HALF_LINAC_CONTROL_BACKEND=vm
+python3 -m half_linac.src.apps.dispersion_correction.cli model-response --section bl01
+```
+
+The model report includes design and target dispersion, the raw symmetric-pair
+response matrix, retained SVD rank, and model-derived weighted quadrupole modes.
 
 ## Commissioning steps still required
 

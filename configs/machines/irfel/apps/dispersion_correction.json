@@ -1,4 +1,5 @@
 {
+  "model_backend": "simulation",
   "control_backends": [
     "real"
   ],

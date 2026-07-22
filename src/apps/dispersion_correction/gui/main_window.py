@@ -48,13 +48,20 @@ from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
     DispersionMeasurement,
     KnobConfig,
+    ModelResponseResult,
     ResponseMatrixResult,
     RunConfig,
+)
+from half_linac.src.apps.dispersion_correction.model_response import (
+    calculate_model_response,
+    format_model_response,
 )
 from half_linac.src.apps.dispersion_correction.preflight import run_live_preflight, run_preflight
 from half_linac.src.apps.dispersion_correction.profile_runtime import (
     default_offline_config,
     apply_profile_selection,
+    load_profile_run_config,
+    profile_section_choices,
     selectable_profile_bpms,
     selectable_profile_quadrupoles,
     write_profile_operation,
@@ -126,6 +133,29 @@ class LivePreflightWorker(QThread):
         self.completed.emit(result)
 
 
+class ModelResponseWorker(QThread):
+    progress = pyqtSignal(str, int, int)
+    failed = pyqtSignal(str)
+    completed = pyqtSignal(object)
+
+    def __init__(self, context: AppContext, config: RunConfig) -> None:
+        super().__init__()
+        self.context = context
+        self.config = config
+
+    def run(self) -> None:
+        try:
+            result = calculate_model_response(
+                self.context,
+                self.config,
+                progress_callback=self.progress.emit,
+            )
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            return
+        self.completed.emit(result)
+
+
 class FullWidthTabWidget(QTabWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -149,6 +179,7 @@ class MainWindow(QMainWindow):
         )
         self.worker: WorkflowWorker | None = None
         self.preflight_worker: LivePreflightWorker | None = None
+        self.model_worker: ModelResponseWorker | None = None
         self.last_live_preflight = None
         self._loading_widgets = False
         self.config_path: Path | None = None
@@ -187,6 +218,9 @@ class MainWindow(QMainWindow):
         self.load_button.setToolTip("Runtime configuration is managed by the selected machine profile.")
         self.bpm_edit.setReadOnly(True)
         self.config_title_label.setText("Machine Profile")
+        fixed_selection = self.config.section.model_only
+        self.bpm_select_button.setVisible(not fixed_selection)
+        self.knob_select_button.setVisible(not fixed_selection)
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -292,6 +326,16 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self._config_section_label("MACHINE"))
         machine_form = self._config_form()
+
+        self.section_combo = QComboBox()
+        self.section_combo.setFixedHeight(34)
+        if self.app_context is None:
+            self.section_combo.addItem(self.config.section.display_name, self.config.section.id)
+        else:
+            for section_id, display_name in profile_section_choices(self.app_context):
+                self.section_combo.addItem(display_name, section_id)
+        self.section_combo.currentIndexChanged.connect(self._section_changed)
+        self._add_form_row(machine_form, "Section", self.section_combo)
 
         self.bpm_edit = QLineEdit()
         self.bpm_edit.setFixedHeight(34)
@@ -442,7 +486,9 @@ class MainWindow(QMainWindow):
         self.tabs.tabBar().setExpanding(True)
         self.tabs.tabBar().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
-        self.measure_table = self._table(["BPM", "D_eff mm", "Valid"])
+        self.measure_table = self._table(
+            ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
+        )
         self.measure_page = QWidget()
         measure_layout = QVBoxLayout(self.measure_page)
         measure_layout.setContentsMargins(8, 8, 8, 8)
@@ -461,6 +507,12 @@ class MainWindow(QMainWindow):
         response_layout = QVBoxLayout(self.response_page)
         response_layout.setContentsMargins(8, 8, 8, 8)
         response_actions = QHBoxLayout()
+        self.model_response_button = QPushButton("Calculate Model Response")
+        self.model_response_button.clicked.connect(self._start_model_response)
+        self.model_response_button.setVisible(
+            self.app_context is not None and self.app_context.model_backend is not None
+        )
+        response_actions.addWidget(self.model_response_button)
         response_actions.addStretch(1)
         self.response_button = QPushButton("Measure Response")
         self.response_button.clicked.connect(lambda: self._start_task("response"))
@@ -532,6 +584,9 @@ class MainWindow(QMainWindow):
         self._loading_widgets = True
         try:
             self.selected_knobs = tuple(self.config.knobs)
+            section_index = self.section_combo.findData(self.config.section.id)
+            if section_index >= 0:
+                self.section_combo.setCurrentIndex(section_index)
             self.bpm_edit.setText(", ".join(self.config.target_bpms))
             self.delta_spin.setValue(self.config.energy_knob.delta)
             self.samples_per_step_spin.setValue(self.config.measurement.samples_per_step)
@@ -568,6 +623,23 @@ class MainWindow(QMainWindow):
         self.knob_edit.setText("; ".join(summaries))
         self.knob_edit.setCursorPosition(0)
         self.knob_edit.setToolTip("\n".join(tooltip_lines))
+
+    def _section_changed(self, _index: int | None = None) -> None:
+        if self._loading_widgets or self.app_context is None:
+            return
+        section_id = str(self.section_combo.currentData() or "").strip()
+        if not section_id or section_id == self.config.section.id:
+            return
+        try:
+            _, config = load_profile_run_config(self.app_context, section_id=section_id)
+        except Exception as exc:
+            QMessageBox.warning(self, "Dispersion Section", str(exc))
+            return
+        self.config = config
+        self.selected_knobs = tuple(config.knobs)
+        self.knob_hard_limits = tuple(knob.limit for knob in config.knobs)
+        self._configure_profile_mode()
+        self._load_config_to_widgets()
 
     def _select_knobs(self) -> None:
         if self.app_context is None:
@@ -939,12 +1011,42 @@ class MainWindow(QMainWindow):
     def _task_finished(self) -> None:
         self._set_running(False, "")
 
+    def _start_model_response(self) -> None:
+        if self.app_context is None or self.app_context.model_backend is None:
+            QMessageBox.warning(self, "Model Response", "No Elegant model backend is configured.")
+            return
+        if self.model_worker is not None and self.model_worker.isRunning():
+            return
+        try:
+            self.config = self._config_from_widgets()
+        except Exception as exc:
+            QMessageBox.warning(self, "Configuration", str(exc))
+            return
+        self.model_worker = ModelResponseWorker(self.app_context, self.config)
+        self.model_worker.progress.connect(self._update_progress)
+        self.model_worker.failed.connect(self._task_failed)
+        self.model_worker.completed.connect(self._model_response_completed)
+        self.model_worker.finished.connect(self._task_finished)
+        self._set_running(True, "model-response")
+        self.tabs.setCurrentWidget(self.response_page)
+        self.model_worker.start()
+
+    def _model_response_completed(self, result: object) -> None:
+        if not isinstance(result, ModelResponseResult):
+            self._task_failed("Unexpected model response result")
+            return
+        self._show_model_response(result)
+        self._refresh_status(f"Model rank {result.retained_rank}")
+        self._append_log("Model response completed without machine writes")
+
     def _show_measurement(self, measurement: DispersionMeasurement) -> None:
         self.measure_table.setRowCount(len(measurement.bpm_names))
         for row, name in enumerate(measurement.bpm_names):
             self.measure_table.setItem(row, 0, QTableWidgetItem(name))
             self.measure_table.setItem(row, 1, QTableWidgetItem(f"{measurement.values_mm[row]:.6g}"))
-            self.measure_table.setItem(row, 2, QTableWidgetItem("yes" if measurement.valid[row] else "no"))
+            self.measure_table.setItem(row, 2, QTableWidgetItem(f"{measurement.target_values_mm[row]:.6g}"))
+            self.measure_table.setItem(row, 3, QTableWidgetItem(f"{measurement.residual_values_mm[row]:.6g}"))
+            self.measure_table.setItem(row, 4, QTableWidgetItem("yes" if measurement.valid[row] else "no"))
         self.measure_table.resizeColumnsToContents()
 
     def _show_response(self, response: ResponseMatrixResult) -> None:
@@ -961,6 +1063,17 @@ class MainWindow(QMainWindow):
             + ", ".join(f"{value:.6g}" for value in response.singular_values)
             + f"\nCondition number: {response.condition_number:.6g}"
         )
+
+    def _show_model_response(self, response: ModelResponseResult) -> None:
+        self.response_table.setRowCount(len(response.bpm_names))
+        self.response_table.setColumnCount(len(response.knob_names) + 1)
+        self.response_table.setHorizontalHeaderLabels(["BPM", *response.knob_names])
+        for row, bpm in enumerate(response.bpm_names):
+            self.response_table.setItem(row, 0, QTableWidgetItem(bpm))
+            for col, value in enumerate(response.response_matrix[row, :], start=1):
+                self.response_table.setItem(row, col, QTableWidgetItem(f"{value:.6g}"))
+        self.response_table.resizeColumnsToContents()
+        self.response_info.setPlainText(format_model_response(response))
 
     def _show_result(self, result: CorrectionResult) -> None:
         self._show_measurement(result.final)
@@ -1005,6 +1118,9 @@ class MainWindow(QMainWindow):
         self.load_button.setEnabled(not running and not profile_managed)
         self.calibration_button.setEnabled(not running)
         self.preflight_button.setEnabled(not running and self.config.backend.type.lower() == "epics")
+        self.model_response_button.setEnabled(
+            not running and self.app_context is not None and self.app_context.model_backend is not None
+        )
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
         self.run_button.setEnabled(not running and operation_allowed)
@@ -1127,6 +1243,11 @@ class MainWindow(QMainWindow):
             self._append_log("Abort requested; restoring the operation snapshot")
 
     def _operation_block_reason(self) -> str | None:
+        if self.config.section.model_only:
+            return (
+                "This HALF section is model-only. Energy modulation is not commissioned, "
+                "so Measure, Response, and Correction remain disabled."
+            )
         if self.config.backend.type.lower() == "offline":
             return None
         preflight = run_preflight(self.config)
@@ -1148,7 +1269,9 @@ class MainWindow(QMainWindow):
 
     def _update_static_safety_status(self) -> None:
         result = run_preflight(self.config)
-        if self.config.backend.type.lower() == "offline":
+        if self.config.section.model_only:
+            self.status_strip.set_value("SAFETY", "MODEL ONLY", "warning")
+        elif self.config.backend.type.lower() == "offline":
             self.status_strip.set_value("SAFETY", "READY", "success")
         elif not result.ok:
             self.status_strip.set_value("SAFETY", "NOT READY", "danger")

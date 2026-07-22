@@ -27,6 +27,20 @@ The schema is the same for JSON and YAML:
 - `solver`: SVD, response-matrix update policy, and trial-step settings.
 - `safety`: BPM orbit-change protection.
 
+Machine-profile workflows may define multiple `sections`. Each section supplies
+the small set of facts that cannot be inferred from element kinds alone:
+
+- `id` and `display_name`;
+- `model_entrance` and `model_exit`;
+- recommended `target_bpms` and correction `knobs`;
+- `target_dispersion_mm`, which defaults to zero for legacy configurations;
+- `model_only`, which blocks machine measurement and correction while still
+  permitting isolated Elegant response calculation.
+
+The correction objective is the RMS residual `D_eff - target_dispersion`, not
+unconditionally `D_eff -> 0`. Existing IRFEL configurations omit the target and
+therefore retain their original zero-target behavior.
+
 In Control Room mode, `target_bpms` and `knobs` are recommended defaults rather
 than complete selectable lists. The GUI discovers BPM candidates from profile
 elements with `kind: bpm` and a resolvable x channel, and quadrupole candidates

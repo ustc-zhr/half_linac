@@ -55,13 +55,14 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
     assert pv_map["quadrupoles"]["QM13"]["current_set"] == "IRFEL:PS:QM13:current:ao"
     assert pv_map["energy_knob"] == {
         "phase_set": "IRFEL:IN-MW:KLY1:SET_PHASE",
+        "phase_readback": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE",
     }
     preflight = run_preflight(config)
     assert preflight.ok
     assert preflight.level == "read-only-ready"
     assert preflight.checks["energy_calibration_available"]
     assert preflight.checks["real_machine_timing_positive"]
-    assert any("no independent readback" in warning for warning in preflight.warnings)
+    assert not any("no independent readback" in warning for warning in preflight.warnings)
 
 
 def test_profile_selection_derives_bpm_and_quad_pvs_from_machine_elements() -> None:
@@ -93,12 +94,27 @@ def test_profile_selection_derives_bpm_and_quad_pvs_from_machine_elements() -> N
     )
 
 
-def test_half_profile_does_not_claim_dispersion_correction_support() -> None:
+def test_half_profile_exposes_model_only_bl01_section() -> None:
     supported, reason = describe_app_support("half", "dispersion_correction")
 
-    assert not supported
-    assert reason is not None
-    assert "dispersion_correction.json" in reason
+    assert supported
+    assert reason is None
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="vm",
+    )
+    _, config = load_profile_run_config(context)
+    assert context.model_backend is not None
+    assert config.backend.type == "offline"
+    assert config.backend.mode == "read_only"
+    assert config.section.id == "bl01"
+    assert config.section.model_only
+    assert config.section.model_entrance == "BPM02"
+    assert config.target_bpms == ("BPM06", "BPM07")
+    assert config.section.target_dispersion_mm == (0.0, 0.0)
+    with pytest.raises(PermissionError, match="model-only"):
+        AchromatWorkflow(config).measure_dispersion()
 
 
 def test_epics_bpm_values_apply_profile_unit_scale() -> None:
