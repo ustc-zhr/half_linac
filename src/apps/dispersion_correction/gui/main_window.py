@@ -323,7 +323,7 @@ class DispersionCurveWidget(QWidget):
                 element_rect = QRectF(left, center_y - 10.0, width, 20.0)
             elif "QUAD" in element_type:
                 k1 = float(curve.element_k1_m2[index])
-                color = QColor("#d25f8d" if k1 >= 0 else "#7d74d8")
+                color = QColor("#9b72cf")
                 top = center_y - 15.0 if k1 >= 0 else center_y
                 element_rect = QRectF(left, top, width, 15.0)
             elif self._is_bpm(name, element_type):
@@ -389,8 +389,8 @@ class DispersionCurveWidget(QWidget):
         entries = (
             ("Bend-H", QColor("#db8b3d")),
             ("Bend-V", QColor("#3aa6b9")),
-            ("Quad+", QColor("#d25f8d")),
-            ("Quad-", QColor("#7d74d8")),
+            ("Quad +", QColor("#9b72cf")),
+            ("Quad -", QColor("#9b72cf")),
             ("BPM", QColor("#4dbb83")),
             ("RF", QColor("#b27ad8")),
         )

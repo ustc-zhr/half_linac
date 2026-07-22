@@ -110,7 +110,8 @@ horizontal/vertical dispersion curves. A lattice strip on the same longitudinal
 axis shows horizontal/vertical bends, focusing/defocusing quadrupoles, BPMs,
 RF elements, and the configured dispersion constraint locations. Hovering over
 the strip reports element name, type, position, length, and applicable K1 or
-bend angle. One BL01 analysis uses eight isolated Elegant runs: baseline,
+bend angle. Quadrupoles use one color: positive K1 is drawn above the beamline
+and negative K1 below it. One BL01 analysis uses eight isolated Elegant runs: baseline,
 positive/negative scans for three raw knobs, and the exact preview lattice.
 
 The preview reports suggested raw-knob deltas and recomputes the lattice rather
