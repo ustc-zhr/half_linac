@@ -242,9 +242,9 @@ def build_stylesheet(name: str) -> str:
         color: {t['text_primary']};
         border: none;
         border-bottom: 1px solid {t['section_border']};
-        font-size: 9px;
-        font-weight: 700;
-        padding: 3px 0px;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 4px 0px;
     }}
     QPushButton#configLoadButton {{
         border-radius: 9px;
