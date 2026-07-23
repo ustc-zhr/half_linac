@@ -194,6 +194,32 @@ class DispersionMeasurement:
 
 
 @dataclass(frozen=True)
+class ImportedDispersionDataset:
+    section_id: str
+    bpm_names: tuple[str, ...]
+    etax_mm: ArrayLike
+    etax_sigma_mm: ArrayLike
+    source_path: str
+
+    def __post_init__(self) -> None:
+        names = tuple(self.bpm_names)
+        values = np.asarray(self.etax_mm, dtype=float)
+        uncertainties = np.asarray(self.etax_sigma_mm, dtype=float)
+        if values.shape != uncertainties.shape or values.shape != (len(names),):
+            raise ValueError("Imported eta_x values, uncertainties, and BPM names must match")
+        if not np.all(np.isfinite(values)):
+            raise ValueError("Imported eta_x values must be finite")
+        if np.any(np.isinf(uncertainties)):
+            raise ValueError("Imported eta_x uncertainties must be finite or blank")
+        finite_uncertainties = uncertainties[np.isfinite(uncertainties)]
+        if np.any(finite_uncertainties < 0):
+            raise ValueError("Imported eta_x uncertainties must be non-negative")
+        object.__setattr__(self, "bpm_names", names)
+        object.__setattr__(self, "etax_mm", values)
+        object.__setattr__(self, "etax_sigma_mm", uncertainties)
+
+
+@dataclass(frozen=True)
 class ResponseMatrixResult:
     matrix: ArrayLike
     bpm_names: tuple[str, ...]

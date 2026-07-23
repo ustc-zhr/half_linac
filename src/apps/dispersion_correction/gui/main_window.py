@@ -49,11 +49,13 @@ from half_linac.src.apps.dispersion_correction.gui.widgets import StatusStrip
 from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
     DispersionMeasurement,
+    ImportedDispersionDataset,
     KnobConfig,
     ModelResponseResult,
     ResponseMatrixResult,
     RunConfig,
 )
+from half_linac.src.apps.dispersion_correction.measurement_import import load_dispersion_csv
 from half_linac.src.apps.dispersion_correction.model_response import (
     calculate_model_response,
     format_model_response,
@@ -169,13 +171,14 @@ class FullWidthTabWidget(QTabWidget):
 class DispersionCurveWidget(QWidget):
     DEFAULT_TOOLTIP = (
         "Dotted: design reference; solid: selected baseline; dashed: correction preview. "
-        "Red: horizontal; blue: vertical. "
+        "Circles: imported eta_x. Red: horizontal; blue: vertical. "
         "Move over the lattice strip for element details."
     )
 
     def __init__(self) -> None:
         super().__init__()
         self.result: ModelResponseResult | None = None
+        self.measurement: ImportedDispersionDataset | None = None
         self.theme_name = "night_shift"
         self._lattice_geometry: tuple[QRectF, float, float] | None = None
         self.setMinimumHeight(300)
@@ -189,6 +192,10 @@ class DispersionCurveWidget(QWidget):
             self.setToolTip(self.DEFAULT_TOOLTIP)
         self.update()
 
+    def set_measurement(self, measurement: ImportedDispersionDataset | None) -> None:
+        self.measurement = measurement
+        self.update()
+
     def set_theme(self, name: str) -> None:
         self.theme_name = name
         self.update()
@@ -200,7 +207,7 @@ class DispersionCurveWidget(QWidget):
         painter.fillRect(self.rect(), QColor(tokens["plot_bg"]))
         plot = self.rect().adjusted(58, 24, -18, -112)
         painter.setPen(QColor(tokens["text_muted"]))
-        painter.drawText(12, 18, "Dispersion curve (mm)")
+        painter.drawText(12, 18, "Dispersion η (mm)")
         if self.result is None or plot.width() <= 0 or plot.height() <= 0:
             painter.drawText(plot, Qt.AlignCenter, "Calculate model response to display optics")
             return
@@ -217,6 +224,13 @@ class DispersionCurveWidget(QWidget):
                 self.result.design_curve.dy_mm,
             )
         limit = max((abs(float(value)) for curve in curves for value in curve), default=1.0)
+        if self.measurement is not None:
+            for value, sigma in zip(
+                self.measurement.etax_mm,
+                self.measurement.etax_sigma_mm,
+            ):
+                uncertainty = float(sigma) if math.isfinite(float(sigma)) else 0.0
+                limit = max(limit, abs(float(value)) + uncertainty)
         limit = max(limit * 1.1, 1.0e-6)
         s_values = self.result.baseline_curve.s_m
         s_min = float(s_values[0])
@@ -268,19 +282,48 @@ class DispersionCurveWidget(QWidget):
             pen = QPen(color, 2, Qt.DashLine)
             painter.setPen(pen)
             painter.drawPolyline(points(self.result.preview_curve.s_m, curve))
+        if self.measurement is not None:
+            s_by_name = {
+                name: float(self.result.baseline_curve.s_m[index])
+                for index, name in enumerate(self.result.baseline_curve.element_names)
+            }
+            measured_color = QColor("#f2c14e")
+            painter.setPen(QPen(measured_color, 2))
+            painter.setBrush(measured_color)
+            for bpm, value, sigma in zip(
+                self.measurement.bpm_names,
+                self.measurement.etax_mm,
+                self.measurement.etax_sigma_mm,
+            ):
+                if bpm not in s_by_name:
+                    continue
+                x = plot.left() + (s_by_name[bpm] - s_min) / s_span * plot.width()
+                y = plot.center().y() - float(value) / limit * plot.height() / 2.0
+                if math.isfinite(float(sigma)):
+                    half_height = float(sigma) / limit * plot.height() / 2.0
+                    painter.drawLine(QPointF(x, y - half_height), QPointF(x, y + half_height))
+                    painter.drawLine(
+                        QPointF(x - 3.0, y - half_height),
+                        QPointF(x + 3.0, y - half_height),
+                    )
+                    painter.drawLine(
+                        QPointF(x - 3.0, y + half_height),
+                        QPointF(x + 3.0, y + half_height),
+                    )
+                painter.drawEllipse(QPointF(x, y), 4.0, 4.0)
 
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(4, plot.top() + 5, f"{limit:.3g}")
         painter.drawText(4, plot.bottom(), f"{-limit:.3g}")
         painter.setPen(horizontal)
-        painter.drawText(plot.left() + 8, plot.top() + 16, "Dx")
+        painter.drawText(plot.left() + 8, plot.top() + 16, "ηx")
         painter.setPen(vertical)
-        painter.drawText(plot.left() + 38, plot.top() + 16, "Dy")
+        painter.drawText(plot.left() + 38, plot.top() + 16, "ηy")
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(
             plot.left() + 75,
             plot.top() + 16,
-            "design ···  baseline —  preview --",
+            "design ···  baseline —  preview --  measured ●",
         )
         lattice_rect = QRectF(
             float(plot.left()),
@@ -535,6 +578,7 @@ class MainWindow(QMainWindow):
         self.worker: WorkflowWorker | None = None
         self.preflight_worker: LivePreflightWorker | None = None
         self.model_worker: ModelResponseWorker | None = None
+        self.imported_dispersion: ImportedDispersionDataset | None = None
         self.last_live_preflight = None
         self._loading_widgets = False
         self.config_path: Path | None = None
@@ -893,6 +937,15 @@ class MainWindow(QMainWindow):
         self.model_boundary_label = QLabel()
         self.model_boundary_label.setObjectName("modelBoundaryLabel")
         response_actions.addWidget(self.model_boundary_label)
+        self.import_measurement_button = QPushButton("Import ηx CSV")
+        self.import_measurement_button.clicked.connect(self._import_measurement_csv)
+        self.import_measurement_button.setToolTip(
+            "Import bpm, etax_mm, and optional etax_sigma_mm columns for comparison only."
+        )
+        response_actions.addWidget(self.import_measurement_button)
+        self.clear_measurement_button = QPushButton("Clear")
+        self.clear_measurement_button.clicked.connect(self._clear_imported_measurement)
+        response_actions.addWidget(self.clear_measurement_button)
         response_actions.addStretch(1)
         self.response_button = QPushButton("Measure Response")
         self.response_button.clicked.connect(lambda: self._start_task("response"))
@@ -1027,10 +1080,14 @@ class MainWindow(QMainWindow):
         self.selected_knobs = tuple(config.knobs)
         self.knob_hard_limits = tuple(knob.limit for knob in config.knobs)
         self.dispersion_curve.set_result(None)
+        self.imported_dispersion = None
+        self.dispersion_curve.set_measurement(None)
         self.response_info.clear()
         self.response_table.setRowCount(0)
+        self.measure_table.setRowCount(0)
         self._configure_profile_mode()
         self._load_config_to_widgets()
+        self._set_running(False, "")
 
     def _model_source_changed(self, _index: int | None = None) -> None:
         if not hasattr(self, "dispersion_curve"):
@@ -1038,6 +1095,63 @@ class MainWindow(QMainWindow):
         self.dispersion_curve.set_result(None)
         self.response_info.clear()
         self.response_table.setRowCount(0)
+        self._set_running(False, "")
+
+    def _import_measurement_csv(self) -> None:
+        response = self.dispersion_curve.result
+        if response is None:
+            QMessageBox.warning(
+                self,
+                "Import ηx",
+                "Analyze the selected model before importing measurement points.",
+            )
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import external ηx measurement",
+            str(Path.cwd()),
+            "CSV files (*.csv)",
+            options=QFileDialog.Options() | QFileDialog.DontUseNativeDialog,
+        )
+        if not path:
+            return
+        allowed_bpms = tuple(
+            name
+            for name, element_type in zip(
+                response.baseline_curve.element_names,
+                response.baseline_curve.element_types,
+            )
+            if DispersionCurveWidget._is_bpm(name, element_type.upper())
+        )
+        try:
+            imported = load_dispersion_csv(
+                path,
+                section_id=self.config.section.id,
+                allowed_bpms=allowed_bpms,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Import ηx", str(exc))
+            return
+        self.imported_dispersion = imported
+        self.dispersion_curve.set_measurement(imported)
+        self._show_imported_comparison(response, imported)
+        self._append_log(
+            f"Imported {len(imported.bpm_names)} eta_x point(s) from {imported.source_path}"
+        )
+        self._refresh_status(f"Imported {len(imported.bpm_names)} ηx points")
+        self._set_running(False, "")
+
+    def _clear_imported_measurement(self) -> None:
+        self.imported_dispersion = None
+        self.dispersion_curve.set_measurement(None)
+        self.measure_table.setHorizontalHeaderLabels(
+            ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
+        )
+        self.measure_table.setRowCount(0)
+        response = self.dispersion_curve.result
+        if response is not None:
+            self.response_info.setPlainText(format_model_response(response))
+        self._set_running(False, "")
 
     def _select_knobs(self) -> None:
         if self.app_context is None:
@@ -1445,6 +1559,9 @@ class MainWindow(QMainWindow):
         )
 
     def _show_measurement(self, measurement: DispersionMeasurement) -> None:
+        self.measure_table.setHorizontalHeaderLabels(
+            ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
+        )
         self.measure_table.setRowCount(len(measurement.bpm_names))
         for row, name in enumerate(measurement.bpm_names):
             self.measure_table.setItem(row, 0, QTableWidgetItem(name))
@@ -1453,6 +1570,42 @@ class MainWindow(QMainWindow):
             self.measure_table.setItem(row, 3, QTableWidgetItem(f"{measurement.residual_values_mm[row]:.6g}"))
             self.measure_table.setItem(row, 4, QTableWidgetItem("yes" if measurement.valid[row] else "no"))
         self.measure_table.resizeColumnsToContents()
+
+    def _show_imported_comparison(
+        self,
+        response: ModelResponseResult,
+        imported: ImportedDispersionDataset,
+    ) -> None:
+        model_etax = {
+            name: float(response.baseline_curve.dx_mm[index])
+            for index, name in enumerate(response.baseline_curve.element_names)
+        }
+        self.measure_table.setHorizontalHeaderLabels(
+            ["BPM", "Imported ηx (mm)", "Model ηx (mm)", "Residual (mm)", "σηx (mm)"]
+        )
+        self.measure_table.setRowCount(len(imported.bpm_names))
+        for row, (bpm, measured, sigma) in enumerate(
+            zip(imported.bpm_names, imported.etax_mm, imported.etax_sigma_mm)
+        ):
+            model_value = model_etax[bpm]
+            sigma_text = f"{sigma:.6g}" if math.isfinite(float(sigma)) else ""
+            self.measure_table.setItem(row, 0, QTableWidgetItem(bpm))
+            self.measure_table.setItem(row, 1, QTableWidgetItem(f"{measured:.6g}"))
+            self.measure_table.setItem(row, 2, QTableWidgetItem(f"{model_value:.6g}"))
+            self.measure_table.setItem(
+                row,
+                3,
+                QTableWidgetItem(f"{float(measured) - model_value:.6g}"),
+            )
+            self.measure_table.setItem(row, 4, QTableWidgetItem(sigma_text))
+        self.measure_table.resizeColumnsToContents()
+        self.response_info.setPlainText(format_model_response(response))
+        self.response_info.appendPlainText(
+            "\nImported effective ηx:\n"
+            f"  file: {imported.source_path}\n"
+            f"  BPM points: {len(imported.bpm_names)}\n"
+            "  warning: imported measurement may not correspond to the current lattice snapshot"
+        )
 
     def _show_response(self, response: ResponseMatrixResult) -> None:
         self.response_table.setRowCount(len(response.bpm_names))
@@ -1480,6 +1633,9 @@ class MainWindow(QMainWindow):
         self.response_table.resizeColumnsToContents()
         self.dispersion_curve.set_result(response)
         self.response_info.setPlainText(format_model_response(response))
+        if self.imported_dispersion is not None:
+            self.dispersion_curve.set_measurement(self.imported_dispersion)
+            self._show_imported_comparison(response, self.imported_dispersion)
 
     def _show_result(self, result: CorrectionResult) -> None:
         self._show_measurement(result.final)
@@ -1528,6 +1684,12 @@ class MainWindow(QMainWindow):
             not running and self._model_analysis_available()
         )
         self.model_source_combo.setEnabled(not running)
+        self.import_measurement_button.setEnabled(
+            not running and self.dispersion_curve.result is not None
+        )
+        self.clear_measurement_button.setEnabled(
+            not running and self.imported_dispersion is not None
+        )
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
         self.run_button.setEnabled(not running and operation_allowed)

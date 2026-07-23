@@ -159,6 +159,7 @@ def test_main_window_constructs_offscreen() -> None:
     assert not half_window.knob_select_button.isVisibleTo(half_window)
     assert half_window.status_strip.items["SAFETY"].value_label.text() == "MODEL ONLY"
     from half_linac.src.apps.dispersion_correction.models import (
+        ImportedDispersionDataset,
         ModelOpticsCurve,
         ModelResponseResult,
     )
@@ -199,8 +200,25 @@ def test_main_window_constructs_offscreen() -> None:
         preview_curve=curve,
     )
     half_window._show_model_response(model_result)
+    half_window._set_running(False, "")
     app.processEvents()
     assert half_window.dispersion_curve.result is model_result
+    assert half_window.import_measurement_button.isEnabled()
+    assert not half_window.clear_measurement_button.isEnabled()
+    imported = ImportedDispersionDataset(
+        section_id="bl01",
+        bpm_names=("BPM06",),
+        etax_mm=np.asarray([0.25]),
+        etax_sigma_mm=np.asarray([0.08]),
+        source_path="/tmp/bl01_etax.csv",
+    )
+    half_window.imported_dispersion = imported
+    half_window.dispersion_curve.set_measurement(imported)
+    half_window._show_imported_comparison(model_result, imported)
+    half_window._set_running(False, "")
+    assert half_window.clear_measurement_button.isEnabled()
+    assert half_window.measure_table.horizontalHeaderItem(1).text() == "Imported ηx (mm)"
+    assert half_window.measure_table.item(0, 3).text() == "0.15"
     assert not half_window.dispersion_curve.grab().isNull()
     assert not half_window.dispersion_curve._is_rf("WATCH")
     assert half_window.dispersion_curve._is_rf("RFCW")
