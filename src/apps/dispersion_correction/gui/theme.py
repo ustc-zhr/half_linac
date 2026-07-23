@@ -148,6 +148,46 @@ def build_stylesheet(name: str) -> str:
         font-size: 15px;
         font-weight: 800;
     }}
+    QLabel#workspaceIntro {{
+        color: {t['text_muted']};
+        font-size: 12px;
+        font-weight: 600;
+        padding: 2px 2px 5px 2px;
+    }}
+    QLabel#modelSafetyNotice {{
+        color: {t['status_success']};
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 2px;
+    }}
+    QLabel#energyStepSummary {{
+        background: {t['status_strip_bg']};
+        border: 1px solid {t['status_strip_border']};
+        border-radius: 9px;
+        color: {t['text_muted']};
+        font-size: 11px;
+        font-weight: 600;
+        padding: 7px 9px;
+    }}
+    QLabel#operationBanner {{
+        background: {t['status_strip_bg']};
+        border: 1px solid {t['status_strip_border']};
+        border-left: 4px solid {t['status_warning']};
+        border-radius: 9px;
+        color: {t['text_primary']};
+        font-size: 11px;
+        font-weight: 600;
+        padding: 8px 9px;
+    }}
+    QLabel#operationBanner[tone="success"] {{
+        border-left-color: {t['status_success']};
+    }}
+    QLabel#operationBanner[tone="danger"] {{
+        border-left-color: {t['status_danger']};
+    }}
+    QLabel#operationBanner[tone="subtle"] {{
+        border-left-color: {t['status_item_bar']};
+    }}
     QLabel[role="configSection"] {{
         color: {t['text_primary']};
         border: none;
@@ -167,6 +207,20 @@ def build_stylesheet(name: str) -> str:
         min-height: 28px;
         max-height: 28px;
         padding: 2px 10px;
+    }}
+    QToolButton#advancedSettingsButton {{
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid {t['section_border']};
+        border-radius: 0px;
+        color: {t['text_muted']};
+        min-height: 26px;
+        padding: 2px 0px;
+        text-align: left;
+    }}
+    QToolButton#advancedSettingsButton:hover {{
+        color: {t['text_primary']};
+        background: transparent;
     }}
     QFrame#statusItem {{
         background: transparent;
@@ -229,7 +283,7 @@ def build_stylesheet(name: str) -> str:
         color: {t['text_muted']};
         border-color: {t['section_border']};
     }}
-    QPushButton[role="control"] {{
+    QPushButton[role="control"]:enabled {{
         border-color: {t['focus']};
     }}
     QPushButton[role="danger"]:enabled {{

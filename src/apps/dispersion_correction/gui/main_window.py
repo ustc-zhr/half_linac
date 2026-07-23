@@ -31,7 +31,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QSplitter,
-    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -42,6 +41,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 
 from half_linac.src.apps.dispersion_correction.calibration import (
+    actuator_step_for_delta,
+    is_direct_delta_actuator,
     load_energy_knob_calibration_csv,
 )
 from half_linac.src.apps.dispersion_correction.config import load_config
@@ -623,7 +624,19 @@ class MainWindow(QMainWindow):
         fixed_selection = self.config.section.model_only
         self.bpm_select_button.setVisible(not fixed_selection)
         self.knob_select_button.setVisible(not fixed_selection)
-        self.model_response_button.setVisible(self._model_analysis_available())
+        model_available = self._model_analysis_available()
+        self.model_response_button.setVisible(model_available)
+        model_tab_index = self.tabs.indexOf(self.model_page)
+        if model_tab_index >= 0:
+            self.tabs.setTabEnabled(model_tab_index, model_available)
+            self.tabs.setTabToolTip(
+                model_tab_index,
+                (
+                    "Read-only model analysis and external ηx comparison."
+                    if model_available
+                    else "No model section is configured for this workflow."
+                ),
+            )
 
     def _model_analysis_available(self) -> bool:
         return bool(
@@ -697,11 +710,11 @@ class MainWindow(QMainWindow):
 
         self.status_strip = StatusStrip(
             [
+                ("MACHINE", "-"),
                 ("BACKEND", "-"),
-                ("PLANE", "X"),
-                ("BPMS", "-"),
-                ("KNOBS", "-"),
-                ("SAFETY", "UNCHECKED"),
+                ("ACCESS", "-"),
+                ("ENERGY STEP", "-"),
+                ("READINESS", "UNCHECKED"),
                 ("LAST RESULT", "-"),
             ]
         )
@@ -729,11 +742,6 @@ class MainWindow(QMainWindow):
         self.load_button.setObjectName("configLoadButton")
         self.load_button.clicked.connect(self._load_config_dialog)
         heading_layout.addWidget(self.load_button)
-        self.preflight_button = QPushButton("Check PVs")
-        self.preflight_button.setObjectName("preflightButton")
-        self.preflight_button.setFixedHeight(34)
-        self.preflight_button.clicked.connect(self._start_live_preflight)
-        heading_layout.addWidget(self.preflight_button, 0, Qt.AlignVCenter)
         layout.addLayout(heading_layout)
 
         layout.addWidget(self._config_section_label("MACHINE"))
@@ -788,28 +796,22 @@ class MainWindow(QMainWindow):
         self.delta_spin.setRange(1.0e-7, 1.0e-2)
         self.delta_spin.setSingleStep(1.0e-4)
         self.delta_spin.setToolTip("Relative momentum perturbation used at +dp/p and -dp/p to measure D_eff.")
+        self.delta_spin.valueChanged.connect(self._energy_step_changed)
         self._add_form_row(machine_form, "Energy Step (Δp/p)", self.delta_spin)
         layout.addLayout(machine_form)
 
-        layout.addWidget(self._config_section_label("SAMPLING"))
+        self.energy_step_summary = QLabel()
+        self.energy_step_summary.setObjectName("energyStepSummary")
+        self.energy_step_summary.setWordWrap(True)
+        layout.addWidget(self.energy_step_summary)
+
+        layout.addWidget(self._config_section_label("MEASUREMENT"))
         sampling_form = self._config_form()
 
         self.samples_per_step_spin = QSpinBox()
         self.samples_per_step_spin.setRange(1, 100)
         self.samples_per_step_spin.setToolTip("BPM samples collected at each measurement step.")
         self._add_form_row(sampling_form, "Samples/step", self.samples_per_step_spin)
-
-        self.sample_interval_spin = QDoubleSpinBox()
-        self.sample_interval_spin.setDecimals(3)
-        self.sample_interval_spin.setRange(0.0, 60.0)
-        self.sample_interval_spin.setSingleStep(0.05)
-        self.sample_interval_spin.setToolTip("Wait between consecutive BPM samples; no wait follows the final sample.")
-        self._add_form_row(sampling_form, "Sample Interval (s)", self.sample_interval_spin)
-
-        self.final_samples_spin = QSpinBox()
-        self.final_samples_spin.setRange(1, 200)
-        self.final_samples_spin.setToolTip("BPM samples used for the final acceptance measurement.")
-        self._add_form_row(sampling_form, "Final Samples", self.final_samples_spin)
 
         self.settle_time_spin = QDoubleSpinBox()
         self.settle_time_spin.setDecimals(2)
@@ -819,7 +821,38 @@ class MainWindow(QMainWindow):
         self._add_form_row(sampling_form, "Settle Time (s)", self.settle_time_spin)
         layout.addLayout(sampling_form)
 
-        layout.addWidget(self._config_section_label("SOLVER"))
+        self.advanced_button = QToolButton()
+        self.advanced_button.setObjectName("advancedSettingsButton")
+        self.advanced_button.setText("Advanced settings")
+        self.advanced_button.setCheckable(True)
+        self.advanced_button.setChecked(False)
+        self.advanced_button.setArrowType(Qt.RightArrow)
+        self.advanced_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.advanced_button.toggled.connect(self._toggle_advanced_settings)
+        layout.addWidget(self.advanced_button)
+
+        self.advanced_settings = QWidget()
+        advanced_layout = QVBoxLayout(self.advanced_settings)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(7)
+
+        advanced_layout.addWidget(self._config_section_label("SAMPLING DETAILS"))
+        sampling_details_form = self._config_form()
+
+        self.sample_interval_spin = QDoubleSpinBox()
+        self.sample_interval_spin.setDecimals(3)
+        self.sample_interval_spin.setRange(0.0, 60.0)
+        self.sample_interval_spin.setSingleStep(0.05)
+        self.sample_interval_spin.setToolTip("Wait between consecutive BPM samples; no wait follows the final sample.")
+        self._add_form_row(sampling_details_form, "Sample Interval (s)", self.sample_interval_spin)
+
+        self.final_samples_spin = QSpinBox()
+        self.final_samples_spin.setRange(1, 200)
+        self.final_samples_spin.setToolTip("BPM samples used for the final acceptance measurement.")
+        self._add_form_row(sampling_details_form, "Final Samples", self.final_samples_spin)
+        advanced_layout.addLayout(sampling_details_form)
+
+        advanced_layout.addWidget(self._config_section_label("SOLVER"))
         solver_form = self._config_form()
 
         self.max_iter_spin = QSpinBox()
@@ -842,23 +875,22 @@ class MainWindow(QMainWindow):
         self.response_update_combo = QComboBox()
         self.response_update_combo.addItems(["once", "every_iteration"])
         self._add_form_row(solver_form, "Response", self.response_update_combo)
-        layout.addLayout(solver_form)
+        advanced_layout.addLayout(solver_form)
+        self.advanced_settings.setVisible(False)
+        layout.addWidget(self.advanced_settings)
 
-        self.run_button = QPushButton("Run Correction")
-        self.run_button.setProperty("role", "control")
-        self.run_button.clicked.connect(lambda: self._start_task("run"))
+        self.operation_banner = QLabel()
+        self.operation_banner.setObjectName("operationBanner")
+        self.operation_banner.setWordWrap(True)
+        self.operation_banner.setProperty("tone", "warning")
+        layout.addWidget(self.operation_banner)
 
         self.abort_button = QPushButton("Abort")
         self.abort_button.setProperty("role", "danger")
         self.abort_button.setEnabled(False)
+        self.abort_button.setVisible(False)
         self.abort_button.clicked.connect(self._request_abort)
-
-        self.primary_action_stack = QStackedWidget()
-        self.primary_action_stack.addWidget(self.run_button)
-        self.primary_action_stack.addWidget(self.abort_button)
-        self.primary_action_stack.setCurrentWidget(self.run_button)
-        layout.addSpacing(5)
-        layout.addWidget(self.primary_action_stack)
+        layout.addWidget(self.abort_button)
 
         self.progress_widget = QWidget()
         progress_layout = QVBoxLayout(self.progress_widget)
@@ -898,18 +930,73 @@ class MainWindow(QMainWindow):
         self.tabs.tabBar().setExpanding(True)
         self.tabs.tabBar().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
+        self.online_page = QWidget()
+        online_layout = QVBoxLayout(self.online_page)
+        online_layout.setContentsMargins(8, 8, 8, 8)
+        online_layout.setSpacing(8)
+        online_intro = QLabel(
+            "Online workflow · connection checks are read-only; measurement and "
+            "correction require energy-actuator writes."
+        )
+        online_intro.setObjectName("workspaceIntro")
+        online_intro.setWordWrap(True)
+        online_layout.addWidget(online_intro)
+
+        online_actions = QHBoxLayout()
+        online_actions.setSpacing(8)
+        self.preflight_button = QPushButton("1  Check Connections")
+        self.preflight_button.setObjectName("preflightButton")
+        self.preflight_button.clicked.connect(self._start_live_preflight)
+        online_actions.addWidget(self.preflight_button)
+        self.measure_button = QPushButton("2  Measure Dispersion")
+        self.measure_button.clicked.connect(lambda: self._start_task("measure"))
+        online_actions.addWidget(self.measure_button)
+        self.response_button = QPushButton("3  Measure Q Response")
+        self.response_button.clicked.connect(lambda: self._start_task("response"))
+        online_actions.addWidget(self.response_button)
+        self.run_button = QPushButton("4  Automated Correction")
+        self.run_button.setProperty("role", "control")
+        self.run_button.clicked.connect(lambda: self._start_task("run"))
+        online_actions.addWidget(self.run_button)
+        online_layout.addLayout(online_actions)
+
+        self.online_details = FullWidthTabWidget()
+        self.online_details.setUsesScrollButtons(False)
+        self.online_details.tabBar().setExpanding(True)
+        self.preflight_text = QPlainTextEdit()
+        self.preflight_text.setReadOnly(True)
+        self.preflight_text.setPlainText(
+            "Run “Check Connections” to read the configured energy actuator, "
+            "quadrupoles, and BPMs. This check does not write any PV."
+        )
+        self.plan_text = QPlainTextEdit()
+        self.plan_text.setReadOnly(True)
+        self.calibration_text = QPlainTextEdit()
+        self.calibration_text.setReadOnly(True)
+        self.calibration_page = QWidget()
+        calibration_layout = QVBoxLayout(self.calibration_page)
+        calibration_layout.setContentsMargins(8, 8, 8, 8)
+        calibration_actions = QHBoxLayout()
+        calibration_actions.addStretch(1)
+        self.calibration_button = QPushButton("Import Energy Knob Calibration")
+        self.calibration_button.clicked.connect(self._load_calibration_dialog)
+        calibration_actions.addWidget(self.calibration_button)
+        calibration_layout.addLayout(calibration_actions)
+        calibration_layout.addWidget(self.calibration_text, 1)
+        self.online_details.addTab(self.preflight_text, "Readiness")
+        self.online_details.addTab(self.plan_text, "Operation Summary")
+        self.online_details.addTab(self.calibration_page, "Energy Knob")
+        online_layout.addWidget(self.online_details, 1)
+
         self.measure_table = self._table(
             ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
         )
         self.measure_page = QWidget()
         measure_layout = QVBoxLayout(self.measure_page)
         measure_layout.setContentsMargins(8, 8, 8, 8)
-        measure_actions = QHBoxLayout()
-        measure_actions.addStretch(1)
-        self.measure_button = QPushButton("Measure D_eff")
-        self.measure_button.clicked.connect(lambda: self._start_task("measure"))
-        measure_actions.addWidget(self.measure_button)
-        measure_layout.addLayout(measure_actions)
+        measure_title = QLabel("Measured horizontal effective dispersion")
+        measure_title.setObjectName("workspaceIntro")
+        measure_layout.addWidget(measure_title)
         measure_layout.addWidget(self.measure_table, 1)
 
         self.response_table = self._table([])
@@ -918,8 +1005,32 @@ class MainWindow(QMainWindow):
         self.response_page = QWidget()
         response_layout = QVBoxLayout(self.response_page)
         response_layout.setContentsMargins(8, 8, 8, 8)
-        response_actions = QHBoxLayout()
-        response_actions.addWidget(QLabel("Model source"))
+        response_title = QLabel("Measured quadrupole response matrix")
+        response_title.setObjectName("workspaceIntro")
+        response_layout.addWidget(response_title)
+        response_layout.addWidget(self.response_table, 3)
+        response_layout.addWidget(self.response_info, 1)
+
+        self.correction_table = self._table(
+            ["Iter", "Gain", "Accepted", "RMS Before", "RMS After", "Reason"]
+        )
+        self.correction_page = QWidget()
+        correction_layout = QVBoxLayout(self.correction_page)
+        correction_layout.setContentsMargins(8, 8, 8, 8)
+        correction_title = QLabel(
+            "Automated correction history · recommendation review and separate "
+            "application will be introduced in the next GUI batch."
+        )
+        correction_title.setObjectName("workspaceIntro")
+        correction_title.setWordWrap(True)
+        correction_layout.addWidget(correction_title)
+        correction_layout.addWidget(self.correction_table, 1)
+
+        self.model_page = QWidget()
+        model_layout = QVBoxLayout(self.model_page)
+        model_layout.setContentsMargins(8, 8, 8, 8)
+        model_actions = QHBoxLayout()
+        model_actions.addWidget(QLabel("Model source"))
         self.model_source_combo = QComboBox()
         self.model_source_combo.addItem("Design lattice", "design")
         if self.app_context is not None:
@@ -935,57 +1046,54 @@ class MainWindow(QMainWindow):
             snapshot_tooltip
         )
         self.model_source_combo.currentIndexChanged.connect(self._model_source_changed)
-        response_actions.addWidget(self.model_source_combo)
-        self.model_response_button = QPushButton("Compare Model References")
+        model_actions.addWidget(self.model_source_combo)
+        self.model_response_button = QPushButton("Analyze Model")
         self.model_response_button.clicked.connect(self._start_model_response)
         self.model_response_button.setVisible(self._model_analysis_available())
-        response_actions.addWidget(self.model_response_button)
+        model_actions.addWidget(self.model_response_button)
         self.model_boundary_label = QLabel()
         self.model_boundary_label.setObjectName("modelBoundaryLabel")
-        response_actions.addWidget(self.model_boundary_label)
+        model_actions.addWidget(self.model_boundary_label)
+        model_actions.addStretch(1)
         self.import_measurement_button = QPushButton("Import ηx CSV")
         self.import_measurement_button.clicked.connect(self._import_measurement_csv)
         self.import_measurement_button.setToolTip(
             "Import bpm, etax_mm, and optional etax_sigma_mm columns for comparison only."
         )
-        response_actions.addWidget(self.import_measurement_button)
+        model_actions.addWidget(self.import_measurement_button)
         self.clear_measurement_button = QPushButton("Clear")
         self.clear_measurement_button.clicked.connect(self._clear_imported_measurement)
-        response_actions.addWidget(self.clear_measurement_button)
-        response_actions.addStretch(1)
-        self.response_button = QPushButton("Measure Response")
-        self.response_button.clicked.connect(lambda: self._start_task("response"))
-        response_actions.addWidget(self.response_button)
-        response_layout.addLayout(response_actions)
-        response_layout.addWidget(self.response_table, 2)
+        model_actions.addWidget(self.clear_measurement_button)
+        model_layout.addLayout(model_actions)
+        model_notice = QLabel(
+            "Model analysis and imported ηx comparison never write machine PVs."
+        )
+        model_notice.setObjectName("modelSafetyNotice")
+        model_layout.addWidget(model_notice)
+        self.model_table = self._table([])
+        model_layout.addWidget(self.model_table, 1)
         self.dispersion_curve = DispersionCurveWidget()
-        response_layout.addWidget(self.dispersion_curve, 3)
-        response_layout.addWidget(self.response_info, 1)
+        model_layout.addWidget(self.dispersion_curve, 3)
+        self.model_measure_table = self._table(
+            ["BPM", "Imported ηx (mm)", "Selected model ηx (mm)", "Residual (mm)", "σηx (mm)"]
+        )
+        self.model_measure_table.setVisible(False)
+        model_layout.addWidget(self.model_measure_table, 1)
+        self.model_info = QPlainTextEdit()
+        self.model_info.setReadOnly(True)
+        model_layout.addWidget(self.model_info, 1)
 
-        self.correction_table = self._table(["Iter", "Gain", "Accepted", "RMS Before", "RMS After", "Reason"])
-        self.plan_text = QPlainTextEdit()
-        self.plan_text.setReadOnly(True)
-        self.calibration_text = QPlainTextEdit()
-        self.calibration_text.setReadOnly(True)
-        self.calibration_page = QWidget()
-        calibration_layout = QVBoxLayout(self.calibration_page)
-        calibration_layout.setContentsMargins(8, 8, 8, 8)
-        calibration_actions = QHBoxLayout()
-        calibration_actions.addStretch(1)
-        self.calibration_button = QPushButton("Load Energy Knob Calibration")
-        self.calibration_button.clicked.connect(self._load_calibration_dialog)
-        calibration_actions.addWidget(self.calibration_button)
-        calibration_layout.addLayout(calibration_actions)
-        calibration_layout.addWidget(self.calibration_text, 1)
         self.report_text = QPlainTextEdit()
         self.report_text.setReadOnly(True)
 
-        self.tabs.addTab(self.plan_text, "Plan")
-        self.tabs.addTab(self.calibration_page, "Calibration")
-        self.tabs.addTab(self.measure_page, "Measure")
-        self.tabs.addTab(self.response_page, "Response")
-        self.tabs.addTab(self.correction_table, "Correction")
+        self.tabs.addTab(self.online_page, "Online")
+        self.tabs.addTab(self.measure_page, "Dispersion")
+        self.tabs.addTab(self.response_page, "Q Response")
+        self.tabs.addTab(self.correction_page, "Correction")
+        self.tabs.addTab(self.model_page, "Model / Import")
         self.tabs.addTab(self.report_text, "Report")
+        model_tab_index = self.tabs.indexOf(self.model_page)
+        self.tabs.setTabEnabled(model_tab_index, self._model_analysis_available())
         layout.addWidget(self.tabs)
         return frame
 
@@ -1045,11 +1153,15 @@ class MainWindow(QMainWindow):
                 "dispersion and slope."
             )
             self._update_knob_summary()
+            self._update_energy_step_summary()
         finally:
             self._loading_widgets = False
         self._show_plan()
         self._show_calibration_summary()
         self._update_static_safety_status()
+        self.tabs.setCurrentWidget(
+            self.model_page if self.config.section.model_only else self.online_page
+        )
         self._refresh_status("Config loaded")
 
     def _update_knob_summary(self) -> None:
@@ -1103,6 +1215,10 @@ class MainWindow(QMainWindow):
         self.dispersion_curve.set_result(None)
         self.imported_dispersion = None
         self.dispersion_curve.set_measurement(None)
+        self.model_info.clear()
+        self.model_table.setRowCount(0)
+        self.model_measure_table.setRowCount(0)
+        self.model_measure_table.setVisible(False)
         self.response_info.clear()
         self.response_table.setRowCount(0)
         self.measure_table.setRowCount(0)
@@ -1114,8 +1230,10 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "dispersion_curve"):
             return
         self.dispersion_curve.set_result(None)
-        self.response_info.clear()
-        self.response_table.setRowCount(0)
+        self.model_info.clear()
+        self.model_table.setRowCount(0)
+        self.model_measure_table.setRowCount(0)
+        self.model_measure_table.setVisible(False)
         self._set_running(False, "")
 
     def _import_measurement_csv(self) -> None:
@@ -1165,13 +1283,11 @@ class MainWindow(QMainWindow):
     def _clear_imported_measurement(self) -> None:
         self.imported_dispersion = None
         self.dispersion_curve.set_measurement(None)
-        self.measure_table.setHorizontalHeaderLabels(
-            ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
-        )
-        self.measure_table.setRowCount(0)
         response = self.dispersion_curve.result
         if response is not None:
-            self.response_info.setPlainText(format_model_response(response))
+            self.model_info.setPlainText(format_model_response(response))
+        self.model_measure_table.setRowCount(0)
+        self.model_measure_table.setVisible(False)
         self._set_running(False, "")
 
     def _select_knobs(self) -> None:
@@ -1397,12 +1513,18 @@ class MainWindow(QMainWindow):
             plan = build_operation_plan(self.config)
         except Exception as exc:
             self.plan_text.setPlainText(f"Selection error: {exc}")
-            self.status_strip.set_value("SAFETY", "NOT READY", "danger")
+            self.status_strip.set_value("READINESS", "NOT READY", "danger")
             self.measure_button.setEnabled(False)
             self.response_button.setEnabled(False)
             self.run_button.setEnabled(False)
             return
         self.plan_text.setPlainText(format_operation_plan(plan))
+        self._update_energy_step_summary()
+        if self.config.backend.type.lower() == "epics":
+            self.preflight_text.setPlainText(
+                "Configuration changed. Run “Check Connections” again before "
+                "any machine operation.\n\nNo setpoint has been changed."
+            )
         self._update_static_safety_status()
         self._refresh_status("Selection updated")
         self._set_running(False, "")
@@ -1498,7 +1620,7 @@ class MainWindow(QMainWindow):
         self._set_running(True, task)
         self._update_progress("Starting", 0, 1)
         if task == "run":
-            self.tabs.setCurrentWidget(self.correction_table)
+            self.tabs.setCurrentWidget(self.correction_page)
         self.worker.start()
 
     def _task_completed(self, task: str, result: object) -> None:
@@ -1509,14 +1631,18 @@ class MainWindow(QMainWindow):
         elif isinstance(result, ResponseMatrixResult):
             self._show_response(result)
             self._show_measurement(result.measurement)
-            self.tabs.setCurrentIndex(3)
+            self.tabs.setCurrentWidget(self.response_page)
             self._refresh_status(f"Cond {result.condition_number:.4g}")
         elif isinstance(result, CorrectionResult):
             self._show_result(result)
-            self.tabs.setCurrentWidget(self.correction_table)
+            self.tabs.setCurrentWidget(self.correction_page)
             status = "Accepted" if result.success else "Aborted" if result.reason.startswith("Aborted") else "Not accepted"
             self._refresh_status(status)
-            self.status_strip.set_value("SAFETY", result.safety.reason, "success" if result.safety.ok else "danger")
+            self.status_strip.set_value(
+                "READINESS",
+                result.safety.reason,
+                "success" if result.safety.ok else "danger",
+            )
         if self.app_context is not None and isinstance(
             result,
             (DispersionMeasurement, ResponseMatrixResult, CorrectionResult),
@@ -1537,7 +1663,7 @@ class MainWindow(QMainWindow):
             self._refresh_status("Aborted")
             return
         self._append_log(f"ERROR: {message}")
-        self.status_strip.set_value("SAFETY", "NOT READY", "danger")
+        self.status_strip.set_value("READINESS", "NOT READY", "danger")
         self._refresh_status("Failed")
         QMessageBox.warning(self, "Workflow", message)
 
@@ -1566,7 +1692,7 @@ class MainWindow(QMainWindow):
         self.model_worker.completed.connect(self._model_response_completed)
         self.model_worker.finished.connect(self._task_finished)
         self._set_running(True, "model-response")
-        self.tabs.setCurrentWidget(self.response_page)
+        self.tabs.setCurrentWidget(self.model_page)
         self.model_worker.start()
 
     def _model_response_completed(self, result: object) -> None:
@@ -1601,7 +1727,7 @@ class MainWindow(QMainWindow):
             name: float(response.selected_curve.dx_mm[index])
             for index, name in enumerate(response.selected_curve.element_names)
         }
-        self.measure_table.setHorizontalHeaderLabels(
+        self.model_measure_table.setHorizontalHeaderLabels(
             [
                 "BPM",
                 "Imported ηx (mm)",
@@ -1610,24 +1736,25 @@ class MainWindow(QMainWindow):
                 "σηx (mm)",
             ]
         )
-        self.measure_table.setRowCount(len(imported.bpm_names))
+        self.model_measure_table.setRowCount(len(imported.bpm_names))
+        self.model_measure_table.setVisible(True)
         for row, (bpm, measured, sigma) in enumerate(
             zip(imported.bpm_names, imported.etax_mm, imported.etax_sigma_mm)
         ):
             model_value = model_etax[bpm]
             sigma_text = f"{sigma:.6g}" if math.isfinite(float(sigma)) else ""
-            self.measure_table.setItem(row, 0, QTableWidgetItem(bpm))
-            self.measure_table.setItem(row, 1, QTableWidgetItem(f"{measured:.6g}"))
-            self.measure_table.setItem(row, 2, QTableWidgetItem(f"{model_value:.6g}"))
-            self.measure_table.setItem(
+            self.model_measure_table.setItem(row, 0, QTableWidgetItem(bpm))
+            self.model_measure_table.setItem(row, 1, QTableWidgetItem(f"{measured:.6g}"))
+            self.model_measure_table.setItem(row, 2, QTableWidgetItem(f"{model_value:.6g}"))
+            self.model_measure_table.setItem(
                 row,
                 3,
                 QTableWidgetItem(f"{float(measured) - model_value:.6g}"),
             )
-            self.measure_table.setItem(row, 4, QTableWidgetItem(sigma_text))
-        self.measure_table.resizeColumnsToContents()
-        self.response_info.setPlainText(format_model_response(response))
-        self.response_info.appendPlainText(
+            self.model_measure_table.setItem(row, 4, QTableWidgetItem(sigma_text))
+        self.model_measure_table.resizeColumnsToContents()
+        self.model_info.setPlainText(format_model_response(response))
+        self.model_info.appendPlainText(
             "\nImported effective ηx:\n"
             f"  file: {imported.source_path}\n"
             f"  BPM points: {len(imported.bpm_names)}\n"
@@ -1650,27 +1777,27 @@ class MainWindow(QMainWindow):
         )
 
     def _show_model_response(self, response: ModelResponseResult) -> None:
-        self.response_table.setRowCount(len(response.device_names))
-        self.response_table.setColumnCount(4)
-        self.response_table.setHorizontalHeaderLabels(
+        self.model_table.setRowCount(len(response.device_names))
+        self.model_table.setColumnCount(4)
+        self.model_table.setHorizontalHeaderLabels(
             ["Quadrupole", "Selected K1", "Design K1", "Design-reference ΔK1"]
         )
         for row, device in enumerate(response.device_names):
-            self.response_table.setItem(row, 0, QTableWidgetItem(device))
-            self.response_table.setItem(
+            self.model_table.setItem(row, 0, QTableWidgetItem(device))
+            self.model_table.setItem(
                 row, 1, QTableWidgetItem(f"{response.selected_k1[device]:.8g}")
             )
-            self.response_table.setItem(
+            self.model_table.setItem(
                 row, 2, QTableWidgetItem(f"{response.design_k1[device]:.8g}")
             )
-            self.response_table.setItem(
+            self.model_table.setItem(
                 row,
                 3,
                 QTableWidgetItem(f"{response.design_reference_deltas[device]:+.8g}"),
             )
-        self.response_table.resizeColumnsToContents()
+        self.model_table.resizeColumnsToContents()
         self.dispersion_curve.set_result(response)
-        self.response_info.setPlainText(format_model_response(response))
+        self.model_info.setPlainText(format_model_response(response))
         if self.imported_dispersion is not None:
             self.dispersion_curve.set_measurement(self.imported_dispersion)
             self._show_imported_comparison(response, self.imported_dispersion)
@@ -1692,30 +1819,63 @@ class MainWindow(QMainWindow):
         self.report_text.setPlainText(result_to_markdown(result))
 
     def _refresh_status(self, last_result: str) -> None:
+        machine = (
+            self.app_context.profile.machine.id.upper()
+            if self.app_context is not None
+            else "STANDALONE"
+        )
         backend = (
             self.app_context.control_backend.name.upper()
             if self.app_context is not None
             else self.config.backend.type.upper()
         )
         backend_tone = "warning" if backend == "VM" else "success"
-        safety_value = self.status_strip.items["SAFETY"].value_label.text()
-        safety_tone = "success" if safety_value in {"READY", "OK"} else "warning"
-        if safety_value == "NOT READY":
-            safety_tone = "danger"
+        if self.config.section.model_only:
+            access = "MODEL ONLY"
+        elif self.config.backend.type.lower() == "offline":
+            access = "OFFLINE"
+        elif self.config.backend.mode == "write_enabled":
+            access = "WRITE ENABLED"
+        else:
+            access = "READ ONLY"
+        access_tone = "danger" if access == "WRITE ENABLED" else "warning"
+        if access == "OFFLINE":
+            access_tone = "subtle"
+        readiness = self.status_strip.items["READINESS"].value_label.text()
+        readiness_tone = "success" if readiness in {"READY", "OK"} else "warning"
+        if readiness == "NOT READY":
+            readiness_tone = "danger"
         result_tone = "success" if last_result in {"Accepted", "Plan ready", "Ready", "Config loaded"} else "subtle"
         if "Fail" in last_result or "Not accepted" in last_result:
             result_tone = "danger"
+        self.status_strip.set_value("MACHINE", machine, "subtle")
         self.status_strip.set_value("BACKEND", backend, backend_tone)
-        self.status_strip.set_value("PLANE", "X", "success")
-        self.status_strip.set_value("BPMS", str(len(self.config.target_bpms)), "subtle")
-        self.status_strip.set_value("KNOBS", str(len(self.config.knobs)), "subtle")
-        self.status_strip.set_value("SAFETY", self.status_strip.items["SAFETY"].value_label.text(), safety_tone)
+        self.status_strip.set_value("ACCESS", access, access_tone)
+        self.status_strip.set_value("ENERGY STEP", self._energy_step_compact(), "subtle")
+        self.status_strip.set_value("READINESS", readiness, readiness_tone)
         self.status_strip.set_value("LAST RESULT", last_result, result_tone)
+        self._update_operation_banner()
 
     def _set_running(self, running: bool, task: str) -> None:
         profile_managed = self.app_context is not None
-        operation_allowed = self._operation_block_reason() is None
+        block_reason = self._operation_block_reason()
+        operation_allowed = block_reason is None
         self.load_button.setEnabled(not running and not profile_managed)
+        for widget in (
+            self.section_combo,
+            self.bpm_select_button,
+            self.knob_select_button,
+            self.delta_spin,
+            self.samples_per_step_spin,
+            self.settle_time_spin,
+            self.sample_interval_spin,
+            self.final_samples_spin,
+            self.max_iter_spin,
+            self.gain_spin,
+            self.max_step_pct_spin,
+            self.response_update_combo,
+        ):
+            widget.setEnabled(not running)
         self.calibration_button.setEnabled(not running)
         self.preflight_button.setEnabled(not running and self.config.backend.type.lower() == "epics")
         self.model_response_button.setEnabled(
@@ -1731,10 +1891,25 @@ class MainWindow(QMainWindow):
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
         self.run_button.setEnabled(not running and operation_allowed)
+        action_tooltip = (
+            "Another operation is running."
+            if running
+            else block_reason
+            or "This operation changes machine settings and performs live safety checks."
+        )
+        for button in (self.measure_button, self.response_button, self.run_button):
+            button.setToolTip(action_tooltip)
+        self.preflight_button.setToolTip(
+            "Read-only check: reads all configured PVs without changing any setpoint."
+            if self.preflight_button.isEnabled()
+            else "Connection checks require an EPICS backend."
+        )
+        self.advanced_button.setEnabled(not running)
         abortable = running and task != "preflight"
         self.abort_button.setEnabled(abortable)
-        self.primary_action_stack.setCurrentWidget(self.abort_button if abortable else self.run_button)
+        self.abort_button.setVisible(abortable)
         self.progress_widget.setVisible(running)
+        self._update_operation_banner()
         if running:
             self._refresh_status(task)
 
@@ -1750,13 +1925,152 @@ class MainWindow(QMainWindow):
         self.operation_progress.setValue(percent)
         self.progress_percent_label.setText(f"{percent}%")
 
+    def _toggle_advanced_settings(self, checked: bool) -> None:
+        self.advanced_settings.setVisible(checked)
+        self.advanced_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+
+    def _energy_step_changed(self, _value: float) -> None:
+        self._update_energy_step_summary()
+        if self._loading_widgets:
+            return
+        self.last_live_preflight = None
+        self._selection_changed()
+
+    def _energy_step_plan(self) -> dict[str, object]:
+        delta = (
+            float(self.delta_spin.value())
+            if hasattr(self, "delta_spin")
+            else self.config.energy_knob.delta
+        )
+        if is_direct_delta_actuator(self.config.energy_knob.actuator):
+            return {
+                "calibrated": True,
+                "actuator_step": delta,
+                "plus_offset": delta,
+                "minus_offset": -delta,
+            }
+        return actuator_step_for_delta(delta, self.config.energy_knob.calibration)
+
+    def _energy_step_compact(self) -> str:
+        delta = (
+            float(self.delta_spin.value())
+            if hasattr(self, "delta_spin")
+            else self.config.energy_knob.delta
+        )
+        plan = self._energy_step_plan()
+        if not plan.get("calibrated"):
+            return f"±{delta:g} Δp/p"
+        step = abs(float(plan["actuator_step"]))
+        return f"±{delta:g} / ±{step:g} {self.config.energy_knob.actuator_unit}"
+
+    def _update_energy_step_summary(self) -> None:
+        if not hasattr(self, "energy_step_summary"):
+            return
+        delta = float(self.delta_spin.value())
+        plan = self._energy_step_plan()
+        lines = [
+            f"{self.config.energy_knob.name} · {self.config.energy_knob.actuator}",
+        ]
+        if plan.get("calibrated"):
+            plus = float(plan["plus_offset"])
+            minus = float(plan["minus_offset"])
+            unit = self.config.energy_knob.actuator_unit
+            lines.append(
+                f"+{delta:g} Δp/p → {plus:+g} {unit}; "
+                f"-{delta:g} Δp/p → {minus:+g} {unit}"
+            )
+        else:
+            lines.append(
+                f"±{delta:g} Δp/p · actuator calibration is incomplete"
+            )
+        self.energy_step_summary.setText("\n".join(lines))
+
+    def _update_operation_banner(self) -> None:
+        if not hasattr(self, "operation_banner"):
+            return
+        if self.progress_widget.isVisible():
+            text = "Operation in progress. Abort restores the operation snapshot."
+            tone = "warning"
+        elif self.config.section.model_only:
+            text = (
+                "Model-only section: use “Model / Import”. Online energy modulation "
+                "and correction are unavailable."
+            )
+            tone = "warning"
+        elif self.config.backend.type.lower() == "offline":
+            text = "Offline demonstration: no live machine PVs are connected."
+            tone = "subtle"
+        else:
+            static = run_preflight(self.config)
+            if not static.ok:
+                text = "Configuration is not ready: " + static.blockers[0]
+                tone = "danger"
+            elif self.config.backend.mode != "write_enabled":
+                text = (
+                    "Online readback is available. This profile is READ ONLY, so "
+                    "dispersion measurement and correction cannot change the energy actuator."
+                )
+                tone = "warning"
+            elif self.last_live_preflight is None:
+                text = "Write access is enabled. Check connections before any machine operation."
+                tone = "warning"
+            elif not self.last_live_preflight.ok:
+                text = "Live checks failed. Machine operations remain blocked."
+                tone = "danger"
+            else:
+                text = "Live checks passed. Review the energy step before starting an operation."
+                tone = "success"
+        self.operation_banner.setText(text)
+        self.operation_banner.setProperty("tone", tone)
+        self.operation_banner.style().unpolish(self.operation_banner)
+        self.operation_banner.style().polish(self.operation_banner)
+        self.operation_banner.update()
+
+    def _format_live_preflight(self, result) -> str:
+        lines = [
+            "Connection and Readback Check",
+            "",
+            f"Result: {'READY' if result.ok else 'NOT READY'}",
+            "Write activity: none — no setpoint was changed",
+        ]
+        readings = result.readings
+        energy = readings.get("energy_value")
+        if energy is not None:
+            lines.extend(["", f"Energy actuator: {energy:.8g} Δp/p"])
+
+        readbacks = readings.get("quadrupole_readbacks", {})
+        setpoints = readings.get("quadrupole_setpoints", {})
+        if readbacks:
+            lines.extend(["", "Quadrupoles:"])
+            for name, readback in readbacks.items():
+                setpoint = setpoints.get(name)
+                setpoint_text = "-" if setpoint is None else f"{float(setpoint):.8g}"
+                lines.append(
+                    f"  {name}: set={setpoint_text}, readback={float(readback):.8g}"
+                )
+
+        bpms = readings.get("bpms", {})
+        if bpms:
+            lines.extend(["", "BPMs:"])
+            for name, values in bpms.items():
+                lines.append(
+                    f"  {name}: x={values.get('x_mm')}, y={values.get('y_mm')}, "
+                    f"valid={values.get('valid')}"
+                )
+
+        blockers = [*result.static.blockers, *result.blockers]
+        warnings = [*result.static.warnings, *result.warnings]
+        if blockers:
+            lines.extend(["", "Blockers:", *(f"  - {item}" for item in blockers)])
+        if warnings:
+            lines.extend(["", "Warnings:", *(f"  - {item}" for item in warnings)])
+        return "\n".join(lines) + "\n"
+
     def _show_plan(self) -> None:
         try:
             self.config = self._config_from_widgets() if hasattr(self, "bpm_edit") else self.config
             plan = build_operation_plan(self.config)
             self.plan_text.setPlainText(format_operation_plan(plan))
-            if hasattr(self, "tabs"):
-                self.tabs.setCurrentWidget(self.plan_text)
             self._refresh_status("Plan ready")
         except Exception as exc:
             if hasattr(self, "plan_text"):
@@ -1819,7 +2133,8 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = None
         self._update_static_safety_status()
         self._set_running(False, "")
-        self.tabs.setCurrentWidget(self.calibration_page)
+        self.tabs.setCurrentWidget(self.online_page)
+        self.online_details.setCurrentWidget(self.calibration_page)
         self._refresh_status("Calibration loaded")
 
     def _toggle_theme(self) -> None:
@@ -1881,13 +2196,14 @@ class MainWindow(QMainWindow):
     def _update_static_safety_status(self) -> None:
         result = run_preflight(self.config)
         if self.config.section.model_only:
-            self.status_strip.set_value("SAFETY", "MODEL ONLY", "warning")
+            self.status_strip.set_value("READINESS", "MODEL ONLY", "warning")
         elif self.config.backend.type.lower() == "offline":
-            self.status_strip.set_value("SAFETY", "READY", "success")
+            self.status_strip.set_value("READINESS", "READY", "success")
         elif not result.ok:
-            self.status_strip.set_value("SAFETY", "NOT READY", "danger")
+            self.status_strip.set_value("READINESS", "NOT READY", "danger")
         else:
-            self.status_strip.set_value("SAFETY", "UNCHECKED", "warning")
+            self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
+        self._update_operation_banner()
 
     def _start_live_preflight(self) -> None:
         if self.preflight_worker is not None and self.preflight_worker.isRunning():
@@ -1898,7 +2214,13 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Configuration", str(exc))
             return
         self.last_live_preflight = None
-        self.status_strip.set_value("SAFETY", "CHECKING", "warning")
+        self.status_strip.set_value("READINESS", "CHECKING", "warning")
+        self.preflight_text.setPlainText(
+            "Checking configured energy actuator, quadrupoles, and BPM readbacks…\n\n"
+            "No setpoint will be changed."
+        )
+        self.tabs.setCurrentWidget(self.online_page)
+        self.online_details.setCurrentWidget(self.preflight_text)
         self.preflight_worker = LivePreflightWorker(self.config)
         self.preflight_worker.completed.connect(self._live_preflight_completed)
         self.preflight_worker.failed.connect(self._live_preflight_failed)
@@ -1910,10 +2232,13 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = result
         ready = result.ok
         self.status_strip.set_value(
-            "SAFETY",
+            "READINESS",
             "READY" if ready else "NOT READY",
             "success" if ready else "danger",
         )
+        self.preflight_text.setPlainText(self._format_live_preflight(result))
+        self.tabs.setCurrentWidget(self.online_page)
+        self.online_details.setCurrentWidget(self.preflight_text)
         messages = [*result.static.blockers, *result.blockers]
         warnings = [*result.static.warnings, *result.warnings]
         if messages:
@@ -1925,7 +2250,11 @@ class MainWindow(QMainWindow):
 
     def _live_preflight_failed(self, message: str) -> None:
         self.last_live_preflight = None
-        self.status_strip.set_value("SAFETY", "NOT READY", "danger")
+        self.status_strip.set_value("READINESS", "NOT READY", "danger")
+        self.preflight_text.setPlainText(
+            "Connection and readback check failed\n\n"
+            f"{message}\n\nNo setpoint was changed."
+        )
         self._append_log(f"Live preflight failed: {message}")
         QMessageBox.warning(self, "PV Preflight", message)
 

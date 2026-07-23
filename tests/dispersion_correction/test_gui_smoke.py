@@ -28,18 +28,30 @@ def test_main_window_constructs_offscreen() -> None:
     window = MainWindow()
     assert window.windowTitle() == "Dispersion Correction"
     assert window.tabs.count() == 6
-    assert window.tabs.tabText(0) == "Plan"
-    assert window.tabs.tabText(1) == "Calibration"
+    assert [window.tabs.tabText(index) for index in range(window.tabs.count())] == [
+        "Online",
+        "Dispersion",
+        "Q Response",
+        "Correction",
+        "Model / Import",
+        "Report",
+    ]
     assert not hasattr(window, "plan_button")
     assert not hasattr(window, "backend_combo")
     assert not hasattr(window, "mode_combo")
+    assert window.status_strip.items["MACHINE"].value_label.text() == "STANDALONE"
     assert window.status_strip.items["BACKEND"].value_label.text() == "OFFLINE"
-    assert window.status_strip.items["SAFETY"].value_label.text() == "READY"
+    assert window.status_strip.items["ACCESS"].value_label.text() == "OFFLINE"
+    assert window.status_strip.items["READINESS"].value_label.text() == "READY"
     assert window.calibration_button.parentWidget() is window.calibration_page
-    assert window.measure_button.parentWidget() is window.measure_page
-    assert window.response_button.parentWidget() is window.response_page
-    assert window.measure_button.text() == "Measure D_eff"
-    assert window.response_button.text() == "Measure Response"
+    assert window.measure_button.parentWidget() is window.online_page
+    assert window.response_button.parentWidget() is window.online_page
+    assert window.run_button.parentWidget() is window.online_page
+    assert window.measure_button.text() == "2  Measure Dispersion"
+    assert window.response_button.text() == "3  Measure Q Response"
+    assert window.run_button.text() == "4  Automated Correction"
+    assert not window.advanced_settings.isVisible()
+    assert window.advanced_button.text() == "Advanced settings"
     assert "Dispersion Correction Dry Run" in window.plan_text.toPlainText()
     assert not hasattr(window, "knob_table")
     assert window.knob_edit.text() == "Q1L/Q1R; Q2L/Q2R"
@@ -50,26 +62,36 @@ def test_main_window_constructs_offscreen() -> None:
     window._load_config_to_widgets()
     assert window._config_from_widgets().backend == window.config.backend
     assert window.status_strip.items["BACKEND"].value_label.text() == "EPICS"
-    assert window.status_strip.items["SAFETY"].value_label.text() == "NOT READY"
+    assert window.status_strip.items["ACCESS"].value_label.text() == "READ ONLY"
+    assert window.status_strip.items["READINESS"].value_label.text() == "NOT READY"
+    assert "actuator_per_delta" in window.operation_banner.text()
     assert window.knob_edit.text() == "QM13/QM16; QM14/QM15"
     assert " A" in window.knob_edit.toolTip()
     window.resize(1248, 803)
     window.show()
     app.processEvents()
-    assert window.primary_action_stack.currentWidget() is window.run_button
-    assert window.load_button.width() < window.primary_action_stack.width()
     assert abs(window.load_button.geometry().center().y() - window.config_title_label.geometry().center().y()) <= 1
     assert window.load_button.property("role") is None
+    assert not window.abort_button.isVisible()
     assert not window.abort_button.isEnabled()
+    window.advanced_button.setChecked(True)
+    app.processEvents()
+    assert window.advanced_settings.isVisible()
+    window.advanced_button.setChecked(False)
+    app.processEvents()
+    assert not window.advanced_settings.isVisible()
     window._set_running(True, "measure")
-    assert window.primary_action_stack.currentWidget() is window.abort_button
+    assert window.abort_button.isVisible()
     assert window.abort_button.isEnabled()
+    assert not window.measure_button.isEnabled()
+    assert not window.delta_spin.isEnabled()
     assert window.progress_widget.isVisible()
     window._update_progress("Sampling +Δp/p", 2, 5)
     assert window.operation_progress.value() == 40
     assert window.progress_percent_label.text() == "40%"
     window._set_running(False, "")
-    assert window.primary_action_stack.currentWidget() is window.run_button
+    assert not window.abort_button.isVisible()
+    assert window.delta_spin.isEnabled()
     assert not window.progress_widget.isVisible()
     tab_bar = window.tabs.tabBar()
     tab_widths = [tab_bar.tabRect(index).width() for index in range(tab_bar.count())]
@@ -90,18 +112,25 @@ def test_main_window_constructs_offscreen() -> None:
     profile_window.show()
     app.processEvents()
     assert profile_window.status_strip.items["BACKEND"].value_label.text() == "REAL"
+    assert profile_window.status_strip.items["ACCESS"].value_label.text() == "READ ONLY"
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
     assert profile_window.model_response_button.isHidden()
+    assert not profile_window.tabs.isTabEnabled(
+        profile_window.tabs.indexOf(profile_window.model_page)
+    )
     assert not profile_window.run_button.isEnabled()
+    assert "READ ONLY" in profile_window.operation_banner.text()
+    assert "±0.0001 / ±0.25 deg" == profile_window._energy_step_compact()
+    assert profile_window.preflight_button.isEnabled()
+    assert "read-only" in profile_window.preflight_button.toolTip().lower()
+    assert "read-only" in profile_window.measure_button.toolTip().lower()
+    assert "does not write" in profile_window.preflight_text.toPlainText().lower()
     assert profile_window.bpm_select_button.isVisibleTo(profile_window)
     assert profile_window.bpm_select_button.height() == profile_window.bpm_edit.height() == 34
     assert profile_window.knob_select_button.height() == profile_window.knob_edit.height() == 34
-    assert profile_window.preflight_button.height() == profile_window.config_title_label.height() == 34
     assert profile_window.bpm_select_button.geometry().top() == profile_window.bpm_edit.geometry().top()
     assert profile_window.bpm_select_button.geometry().bottom() == profile_window.bpm_edit.geometry().bottom()
-    assert profile_window.preflight_button.geometry().top() == profile_window.config_title_label.geometry().top()
-    assert profile_window.preflight_button.geometry().bottom() == profile_window.config_title_label.geometry().bottom()
     assert "QListWidget#bpmSelectionList" in profile_window.styleSheet()
     bpm_item = QListWidgetItem()
     profile_window._set_bpm_choice_item(bpm_item, "BPM01", True)
@@ -150,9 +179,10 @@ def test_main_window_constructs_offscreen() -> None:
     assert half_window.model_source_combo.itemData(1) == "live"
     assert "VM backend" in half_window.model_source_combo.toolTip()
     assert half_window.model_boundary_label.text() == "Assume D=D'=0 at BPM02"
-    assert half_window.model_response_button.text() == "Compare Model References"
+    assert half_window.model_response_button.text() == "Analyze Model"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
+    assert half_window.tabs.isTabEnabled(half_window.tabs.indexOf(half_window.model_page))
     assert "does not use scan" in half_window.knob_edit.toolTip()
     assert "limit ±" not in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
@@ -161,7 +191,8 @@ def test_main_window_constructs_offscreen() -> None:
     assert not half_window.run_button.isEnabled()
     assert not half_window.bpm_select_button.isVisibleTo(half_window)
     assert not half_window.knob_select_button.isVisibleTo(half_window)
-    assert half_window.status_strip.items["SAFETY"].value_label.text() == "MODEL ONLY"
+    assert half_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
+    assert half_window.tabs.currentWidget() is half_window.model_page
     from half_linac.src.apps.dispersion_correction.models import (
         ImportedDispersionDataset,
         ModelOpticsCurve,
@@ -205,10 +236,11 @@ def test_main_window_constructs_offscreen() -> None:
     half_window._set_running(False, "")
     app.processEvents()
     assert half_window.dispersion_curve.result is model_result
-    assert half_window.response_table.horizontalHeaderItem(0).text() == "Quadrupole"
-    assert half_window.response_table.horizontalHeaderItem(3).text() == "Design-reference ΔK1"
-    assert half_window.response_table.item(0, 0).text() == "QL01"
-    assert half_window.response_table.item(0, 3).text() == "-0.1"
+    assert half_window.model_table.horizontalHeaderItem(0).text() == "Quadrupole"
+    assert half_window.model_table.horizontalHeaderItem(3).text() == "Design-reference ΔK1"
+    assert half_window.model_table.item(0, 0).text() == "QL01"
+    assert half_window.model_table.item(0, 3).text() == "-0.1"
+    assert half_window.response_table.rowCount() == 0
     assert half_window.import_measurement_button.isEnabled()
     assert not half_window.clear_measurement_button.isEnabled()
     imported = ImportedDispersionDataset(
@@ -223,9 +255,11 @@ def test_main_window_constructs_offscreen() -> None:
     half_window._show_imported_comparison(model_result, imported)
     half_window._set_running(False, "")
     assert half_window.clear_measurement_button.isEnabled()
-    assert half_window.measure_table.horizontalHeaderItem(1).text() == "Imported ηx (mm)"
-    assert half_window.measure_table.horizontalHeaderItem(2).text() == "Selected model ηx (mm)"
-    assert half_window.measure_table.item(0, 3).text() == "0.15"
+    assert half_window.model_measure_table.isVisible()
+    assert half_window.model_measure_table.horizontalHeaderItem(1).text() == "Imported ηx (mm)"
+    assert half_window.model_measure_table.horizontalHeaderItem(2).text() == "Selected model ηx (mm)"
+    assert half_window.model_measure_table.item(0, 3).text() == "0.15"
+    assert half_window.measure_table.rowCount() == 0
     assert not half_window.dispersion_curve.grab().isNull()
     assert not half_window.dispersion_curve._is_rf("WATCH")
     assert half_window.dispersion_curve._is_rf("RFCW")

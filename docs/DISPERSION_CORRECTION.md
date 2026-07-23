@@ -66,7 +66,24 @@ response solve requires at least as many selected BPMs as knobs.
 Before any enabled operation writes, the workflow performs a read-only live
 preflight of the energy actuator, quadrupole setpoint/readback agreement, and all
 target BPMs. A failed check prevents the first `caput`. The GUI exposes this as
-`Check PVs` and shows `READY`, `UNCHECKED`, or `NOT READY` in the status bar.
+`Check Connections` and shows `READY`, `UNCHECKED`, or `NOT READY` in the status
+bar. The Readiness view lists the values it read and explicitly confirms that no
+setpoint changed.
+
+The GUI separates the operator workflow from model work:
+
+- `Online` presents connection check, dispersion measurement, quadrupole-response
+  measurement, and automated correction in execution order. In read-only mode it
+  explains why write-dependent actions are disabled instead of silently greying
+  them out.
+- `Dispersion`, `Q Response`, and `Correction` contain the corresponding online
+  results.
+- `Model / Import` contains Elegant comparison and external eta-x import. These
+  actions never enable or perform machine writes.
+
+The main configuration panel shows the energy step in both normalized `dp/p` and
+physical actuator units. Less frequently changed sampling and solver parameters
+are under `Advanced settings`.
 
 ## Running and checking
 
