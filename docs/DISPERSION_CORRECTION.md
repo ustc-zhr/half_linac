@@ -73,9 +73,9 @@ setpoint changed.
 The GUI separates the operator workflow from model work:
 
 - `Online` presents connection check, dispersion measurement, quadrupole-response
-  measurement, and automated correction in execution order. In read-only mode it
-  explains why write-dependent actions are disabled instead of silently greying
-  them out.
+  measurement, and recommendation review in execution order. In read-only mode
+  it explains why write-dependent actions are disabled instead of silently
+  greying them out.
 - `Dispersion`, `Q Response`, and `Correction` contain the corresponding online
   results.
 - `Model / Import` contains Elegant comparison and external eta-x import. These
@@ -84,6 +84,29 @@ The GUI separates the operator workflow from model work:
 The main configuration panel shows the energy step in both normalized `dp/p` and
 physical actuator units. Less frequently changed sampling and solver parameters
 are under `Advanced settings`.
+
+The normal correction path is deliberately staged:
+
+1. `Measure Dispersion` records the current beam-based effective dispersion.
+2. `Measure Q Response` measures the response columns and records a fresh
+   dispersion baseline.
+3. `Review Recommendation` performs a pure bounded SVD calculation. It neither
+   reads nor writes the backend. The Correction page shows measured and predicted
+   dispersion at every BPM, predicted RMS, knob changes, and physical
+   quadrupole targets when live readbacks are available.
+4. `Apply & Remeasure` is a separate write action. It first shows the exact
+   physical targets and PVs, requires explicit confirmation, reruns live
+   preflight, and verifies that the quadrupoles still match the reviewed
+   baseline. It applies the reviewed targets once and remeasures dispersion.
+   Failed safety checks or insufficient improvement restore the pre-apply
+   snapshot.
+
+Changing the section, BPMs, knobs, energy step, measurement settings, solver
+gain, or step limit discards staged measurements and recommendations. This
+prevents an old response matrix or target preview from being applied after the
+configuration changes. The former multi-iteration automatic correction remains
+available on the Correction page as `Advanced: Automatic Loop`; it is not the
+default operator path.
 
 ## Running and checking
 

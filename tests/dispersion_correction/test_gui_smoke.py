@@ -46,16 +46,42 @@ def test_main_window_constructs_offscreen() -> None:
     assert window.calibration_button.parentWidget() is window.calibration_page
     assert window.measure_button.parentWidget() is window.online_page
     assert window.response_button.parentWidget() is window.online_page
-    assert window.run_button.parentWidget() is window.online_page
+    assert window.review_button.parentWidget() is window.online_page
+    assert window.run_button.parentWidget() is window.correction_page
+    assert window.apply_recommendation_button.parentWidget() is window.correction_page
     assert window.measure_button.text() == "2  Measure Dispersion"
     assert window.response_button.text() == "3  Measure Q Response"
-    assert window.run_button.text() == "4  Automated Correction"
+    assert window.review_button.text() == "4  Review Recommendation"
+    assert window.apply_recommendation_button.text() == "5  Apply & Remeasure"
+    assert window.run_button.text() == "Advanced: Automatic Loop"
+    assert window.recommendation_table.columnCount() == 6
     assert not window.advanced_settings.isVisible()
     assert window.advanced_button.text() == "Advanced settings"
     assert "Dispersion Correction Dry Run" in window.plan_text.toPlainText()
     assert not hasattr(window, "knob_table")
     assert window.knob_edit.text() == "Q1L/Q1R; Q2L/Q2R"
     assert "Q1_sym" in window.knob_edit.toolTip()
+    from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
+
+    response = AchromatWorkflow(window._config_from_widgets()).build_response_matrix()
+    window.latest_response = response
+    window.latest_measurement = response.measurement
+    window._compute_recommendation()
+    assert window.correction_recommendation is not None
+    assert window.correction_recommendation.ready
+    assert window.tabs.currentWidget() is window.correction_page
+    assert window.recommendation_table.rowCount() == 4
+    assert window.recommendation_prediction_table.rowCount() == len(
+        response.bpm_names
+    )
+    assert window.apply_recommendation_button.isEnabled()
+    assert "no backend" in window.correction_state_label.text().lower()
+    old_gain = window.gain_spin.value()
+    window.gain_spin.setValue(max(0.001, old_gain - 0.1))
+    app.processEvents()
+    assert window.correction_recommendation is None
+    assert not window.review_button.isEnabled()
+    assert "discarded" in window.correction_state_label.text().lower()
     from half_linac.src.apps.dispersion_correction.config import load_config
 
     window.config = load_config("tests/dispersion_correction/fixtures/irfel_achromat.json")

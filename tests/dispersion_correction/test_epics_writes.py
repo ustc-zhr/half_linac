@@ -7,6 +7,9 @@ import pytest
 from half_linac.src.apps.dispersion_correction.config import load_config
 from half_linac.src.apps.dispersion_correction.machine.epics import EpicsMachine
 from half_linac.src.apps.dispersion_correction.preflight import run_live_preflight, run_preflight
+from half_linac.src.apps.dispersion_correction.recommendation import (
+    build_correction_recommendation,
+)
 from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
 
 
@@ -276,3 +279,73 @@ def test_full_epics_workflow_corrects_dynamic_model_and_restores_phase() -> None
         epics.values[pv] != pytest.approx(initial_values()[pv])
         for pv in QUAD_PVS.values()
     )
+
+
+def test_reviewed_recommendation_blocks_changed_quadrupole_before_writing() -> None:
+    config = write_config()
+    config = replace(
+        config,
+        measurement=replace(
+            config.measurement,
+            samples_per_step=1,
+            sample_interval_s=1.0e-6,
+            final_samples=1,
+            settle_time_s=1.0e-6,
+        ),
+    )
+    epics = DynamicFakeEpics(initial_values())
+    machine = EpicsMachine(config, epics_client=epics)
+    workflow = AchromatWorkflow(config, machine=machine)
+    response = workflow.build_response_matrix()
+    baseline = machine.read_quadrupole_readbacks()
+    recommendation = build_correction_recommendation(
+        config,
+        response.measurement,
+        response,
+        baseline_device_values=baseline,
+    )
+
+    changed_value = baseline["QM13"] + 0.2
+    epics.values[QUAD_PVS["QM13"]] = changed_value
+    epics.values[QUAD_READBACK_PVS["QM13"]] = changed_value
+    writes_before_apply = list(epics.caput_calls)
+
+    with pytest.raises(RuntimeError, match="QM13 changed after review"):
+        workflow.apply_recommendation(recommendation)
+
+    assert epics.caput_calls == writes_before_apply
+
+
+def test_reviewed_recommendation_writes_the_displayed_physical_targets() -> None:
+    config = write_config()
+    config = replace(
+        config,
+        measurement=replace(
+            config.measurement,
+            samples_per_step=1,
+            sample_interval_s=1.0e-6,
+            final_samples=1,
+            settle_time_s=1.0e-6,
+        ),
+    )
+    epics = DynamicFakeEpics(initial_values())
+    machine = EpicsMachine(config, epics_client=epics)
+    workflow = AchromatWorkflow(config, machine=machine)
+    response = workflow.build_response_matrix()
+    recommendation = build_correction_recommendation(
+        config,
+        response.measurement,
+        response,
+        baseline_device_values=machine.read_quadrupole_readbacks(),
+    )
+    call_count = len(epics.caput_calls)
+
+    result = workflow.apply_recommendation(recommendation)
+
+    assert result.success
+    apply_calls = epics.caput_calls[call_count:]
+    for device, target in recommendation.target_device_values.items():
+        assert any(
+            pv == QUAD_PVS[device] and value == pytest.approx(target)
+            for pv, value in apply_calls
+        )

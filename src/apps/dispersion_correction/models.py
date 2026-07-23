@@ -237,6 +237,48 @@ class ResponseMatrixResult:
 
 
 @dataclass(frozen=True)
+class CorrectionRecommendation:
+    measurement: DispersionMeasurement
+    response: ResponseMatrixResult
+    delta_knobs: dict[str, float]
+    device_deltas: dict[str, float]
+    baseline_device_values: dict[str, float]
+    target_device_values: dict[str, float]
+    predicted_values_mm: ArrayLike
+    predicted_residual_values_mm: ArrayLike
+    valid: ArrayLike
+    predicted_rms_mm: float
+    singular_values: ArrayLike
+    condition_number: float
+    reason: str = "Ready for review"
+
+    def __post_init__(self) -> None:
+        predicted = np.asarray(self.predicted_values_mm, dtype=float)
+        residual = np.asarray(self.predicted_residual_values_mm, dtype=float)
+        valid = np.asarray(self.valid, dtype=bool)
+        singular_values = np.asarray(self.singular_values, dtype=float)
+        expected = self.measurement.values_mm.shape
+        if predicted.shape != expected or residual.shape != expected or valid.shape != expected:
+            raise ValueError("Recommendation arrays must match the dispersion measurement")
+        if tuple(self.delta_knobs) != self.response.knob_names:
+            raise ValueError("Recommendation knob order must match response columns")
+        if not np.isfinite(self.predicted_rms_mm):
+            raise ValueError("Recommendation predicted RMS must be finite")
+        object.__setattr__(self, "predicted_values_mm", predicted)
+        object.__setattr__(self, "predicted_residual_values_mm", residual)
+        object.__setattr__(self, "valid", valid)
+        object.__setattr__(self, "singular_values", singular_values)
+
+    @property
+    def ready(self) -> bool:
+        return bool(
+            np.any(self.valid)
+            and self.delta_knobs
+            and any(abs(value) > 0 for value in self.delta_knobs.values())
+        )
+
+
+@dataclass(frozen=True)
 class ModelResponseResult:
     section_id: str
     observable_names: tuple[str, ...]

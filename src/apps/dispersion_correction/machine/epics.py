@@ -156,6 +156,17 @@ class EpicsMachine(MachineInterface):
             targets[name] = self._device_baseline[name] + numeric
         self._write_quadrupole_targets(targets)
 
+    def set_device_targets(self, device_targets: Mapping[str, float]) -> None:
+        """Write explicitly reviewed physical quadrupole targets."""
+
+        self._require_write_enabled()
+        targets = {str(name): float(value) for name, value in device_targets.items()}
+        if not targets:
+            raise ValueError("At least one quadrupole target is required")
+        if not all(np.isfinite(value) for value in targets.values()):
+            raise ValueError("Quadrupole targets must be finite")
+        self._write_quadrupole_targets(targets)
+
     def snapshot(self) -> MachineSnapshot:
         energy = self.get_energy_delta()
         device_values = self.read_quadrupole_readbacks()

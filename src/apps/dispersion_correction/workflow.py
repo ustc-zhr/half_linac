@@ -11,6 +11,7 @@ from half_linac.src.apps.dispersion_correction.machine.epics import EpicsMachine
 from half_linac.src.apps.dispersion_correction.machine.offline import OfflineMachine
 from half_linac.src.apps.dispersion_correction.models import (
     BPMReading,
+    CorrectionRecommendation,
     CorrectionResult,
     CorrectionStep,
     DispersionMeasurement,
@@ -202,6 +203,136 @@ class AchromatWorkflow:
             return self._run_correction()
         finally:
             self._progress_depth -= 1
+
+    def apply_recommendation(
+        self,
+        recommendation: CorrectionRecommendation,
+    ) -> CorrectionResult:
+        """Apply one reviewed correction step, remeasure, and roll back on rejection."""
+
+        self._require_write_ready()
+        self._progress_depth += 1
+        try:
+            return self._apply_recommendation(recommendation)
+        finally:
+            self._progress_depth -= 1
+
+    def _apply_recommendation(
+        self,
+        recommendation: CorrectionRecommendation,
+    ) -> CorrectionResult:
+        if recommendation.measurement.bpm_names != self.config.target_bpms:
+            raise ValueError("Recommendation BPMs do not match the current configuration")
+        if recommendation.response.knob_names != self.knob_names:
+            raise ValueError("Recommendation knobs do not match the current configuration")
+        if tuple(recommendation.delta_knobs) != self.knob_names:
+            raise ValueError("Recommendation knob order does not match the current configuration")
+        if not recommendation.ready:
+            raise ValueError(recommendation.reason)
+
+        self._progress("Preparing reviewed correction", 0, 4)
+        initial_state = self.machine.snapshot()
+        initial_knobs = self.machine.get_knobs(self.knob_names)
+        knob_set = SymmetricKnobSet(self.config.knobs, initial_knobs)
+        step_vector = knob_set.vector_from_mapping(recommendation.delta_knobs)
+        target_knobs = knob_set.add_step(initial_knobs, step_vector)
+        if not knob_set.within_total_limits(target_knobs):
+            raise ValueError("Reviewed correction exceeds configured cumulative limits")
+
+        self._validate_recommendation_baseline(
+            initial_state,
+            recommendation,
+        )
+        baseline_reference = self._average_bpm(
+            self.config.measurement.samples_per_step
+        )
+        steps: list[CorrectionStep] = []
+        try:
+            self._check_cancelled()
+            self._progress("Applying reviewed quadrupole targets", 1, 4)
+            self._apply_reviewed_knobs(
+                knob_set,
+                target_knobs,
+                recommendation,
+            )
+            self.machine.wait_stable()
+            self._check_cancelled()
+            if not self.machine.is_safe():
+                raise RuntimeError("Machine unsafe after reviewed correction step")
+
+            safety_status = evaluate_safety(
+                self.config.safety,
+                baseline_reference,
+                self._average_bpm(self.config.measurement.samples_per_step),
+            )
+            if not safety_status.ok:
+                raise RuntimeError(safety_status.reason)
+
+            self._progress("Remeasuring dispersion", 2, 4)
+            trial_measurement = self.measure_dispersion(
+                self.config.measurement.final_samples
+            )
+            target_rms = recommendation.measurement.rms_mm * (
+                1.0 - self.config.solver.min_step_improvement
+            )
+            accepted = trial_measurement.rms_mm <= target_rms
+            steps.append(
+                CorrectionStep(
+                    iteration=1,
+                    gain=self.config.solver.gain,
+                    delta_knobs=dict(recommendation.delta_knobs),
+                    accepted=accepted,
+                    reason=(
+                        "Accepted"
+                        if accepted
+                        else "D_eff RMS did not improve enough; initial state restored"
+                    ),
+                    rms_before_mm=recommendation.measurement.rms_mm,
+                    rms_after_mm=trial_measurement.rms_mm,
+                )
+            )
+            if not accepted:
+                self._progress("Restoring initial state", 3, 4)
+                self.machine.restore(initial_state)
+                self.machine.wait_stable()
+                final_knobs = self.machine.get_knobs(self.knob_names)
+                final_measurement = recommendation.measurement
+                reason = steps[-1].reason
+            else:
+                final_knobs = self.machine.get_knobs(self.knob_names)
+                final_measurement = trial_measurement
+                reason = "Accepted reviewed correction"
+
+            result = CorrectionResult(
+                success=accepted,
+                reason=reason,
+                initial=recommendation.measurement,
+                final=final_measurement,
+                initial_knobs=dict(initial_knobs),
+                final_knobs=final_knobs,
+                steps=tuple(steps),
+                response=recommendation.response,
+                safety=SafetyStatus(ok=True, reason="OK"),
+            )
+            self._progress("Reviewed correction complete", 4, 4)
+            return result
+        except WorkflowCancelled:
+            return self._restore_after_abort(
+                initial_state,
+                recommendation.measurement,
+                initial_knobs,
+                steps,
+                recommendation.response,
+            )
+        except Exception as exc:
+            return self._failure_result_after_restore(
+                exc,
+                initial_state,
+                recommendation.measurement,
+                initial_knobs,
+                steps,
+                recommendation.response,
+            )
 
     def _run_correction(self) -> CorrectionResult:
         total_steps = self.config.solver.max_iter + 2
@@ -478,6 +609,62 @@ class AchromatWorkflow:
         self._check_cancelled()
         self.machine.set_knobs(knob_values)
         self.machine.apply_device_deltas(knob_set.device_deltas(knob_values))
+
+    def _apply_reviewed_knobs(
+        self,
+        knob_set: SymmetricKnobSet,
+        knob_values: Mapping[str, float],
+        recommendation: CorrectionRecommendation,
+    ) -> None:
+        self._check_cancelled()
+        self.machine.set_knobs(knob_values)
+        target_writer = getattr(self.machine, "set_device_targets", None)
+        if recommendation.target_device_values and callable(target_writer):
+            target_writer(recommendation.target_device_values)
+            return
+        self.machine.apply_device_deltas(knob_set.device_deltas(knob_values))
+
+    def _validate_recommendation_baseline(
+        self,
+        snapshot,
+        recommendation: CorrectionRecommendation,
+    ) -> None:
+        if self.config.backend.type.lower() != "epics":
+            return
+        if not recommendation.baseline_device_values:
+            raise RuntimeError(
+                "Reviewed correction has no quadrupole baseline; run live checks and recompute"
+            )
+        required = set(recommendation.device_deltas)
+        if set(recommendation.baseline_device_values) != required:
+            raise RuntimeError(
+                "Reviewed correction does not contain a baseline for every quadrupole"
+            )
+        if set(recommendation.target_device_values) != required:
+            raise RuntimeError(
+                "Reviewed correction does not contain a target for every quadrupole"
+            )
+        tolerance_reader = getattr(
+            self.machine,
+            "quadrupole_readback_tolerance",
+            None,
+        )
+        for device, reviewed_value in recommendation.baseline_device_values.items():
+            if device not in snapshot.device_values:
+                raise RuntimeError(
+                    f"Reviewed quadrupole baseline is missing current readback for {device}"
+                )
+            tolerance = (
+                float(tolerance_reader(device))
+                if callable(tolerance_reader)
+                else 1.0e-6
+            )
+            actual = float(snapshot.device_values[device])
+            if abs(actual - float(reviewed_value)) > tolerance:
+                raise RuntimeError(
+                    f"{device} changed after review: reviewed={reviewed_value:g}, "
+                    f"current={actual:g}, tolerance={tolerance:g}; recompute recommendation"
+                )
 
     def _restore_after_abort(
         self,

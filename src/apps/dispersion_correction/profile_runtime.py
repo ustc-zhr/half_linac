@@ -248,7 +248,7 @@ def write_profile_operation(
 ) -> dict[str, Path]:
     """Archive every operator operation with config and preflight context."""
 
-    if task not in {"measure", "response", "run"}:
+    if task not in {"measure", "response", "apply", "run"}:
         raise ValueError(f"Unsupported dispersion-correction task: {task}")
 
     runtime_paths = resolve_app_runtime_paths(APP_DIR, context)

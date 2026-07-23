@@ -50,6 +50,7 @@ from half_linac.src.apps.dispersion_correction.dryrun import build_operation_pla
 from half_linac.src.apps.dispersion_correction.gui.theme import build_stylesheet, theme_tokens
 from half_linac.src.apps.dispersion_correction.gui.widgets import StatusStrip
 from half_linac.src.apps.dispersion_correction.models import (
+    CorrectionRecommendation,
     CorrectionResult,
     DispersionMeasurement,
     ImportedDispersionDataset,
@@ -57,6 +58,9 @@ from half_linac.src.apps.dispersion_correction.models import (
     ModelResponseResult,
     ResponseMatrixResult,
     RunConfig,
+)
+from half_linac.src.apps.dispersion_correction.recommendation import (
+    build_correction_recommendation,
 )
 from half_linac.src.apps.dispersion_correction.measurement_import import load_dispersion_csv
 from half_linac.src.apps.dispersion_correction.model_response import (
@@ -87,10 +91,16 @@ class WorkflowWorker(QThread):
     completed = pyqtSignal(str, object)
     preflight = pyqtSignal(object)
 
-    def __init__(self, task: str, config: RunConfig) -> None:
+    def __init__(
+        self,
+        task: str,
+        config: RunConfig,
+        recommendation: CorrectionRecommendation | None = None,
+    ) -> None:
         super().__init__()
         self.task = task
         self.config = config
+        self.recommendation = recommendation
 
     def run(self) -> None:
         try:
@@ -107,6 +117,10 @@ class WorkflowWorker(QThread):
                 result = workflow.build_response_matrix()
             elif self.task == "run":
                 result = workflow.run()
+            elif self.task == "apply":
+                if self.recommendation is None:
+                    raise ValueError("No reviewed recommendation was supplied")
+                result = workflow.apply_recommendation(self.recommendation)
             else:
                 raise ValueError(f"Unknown task: {self.task}")
         except Exception as exc:
@@ -583,6 +597,9 @@ class MainWindow(QMainWindow):
         self.preflight_worker: LivePreflightWorker | None = None
         self.model_worker: ModelResponseWorker | None = None
         self.imported_dispersion: ImportedDispersionDataset | None = None
+        self.latest_measurement: DispersionMeasurement | None = None
+        self.latest_response: ResponseMatrixResult | None = None
+        self.correction_recommendation: CorrectionRecommendation | None = None
         self.last_live_preflight = None
         self._loading_widgets = False
         self.config_path: Path | None = None
@@ -760,6 +777,7 @@ class MainWindow(QMainWindow):
         self.bpm_edit = QLineEdit()
         self.bpm_edit.setFixedHeight(34)
         self.bpm_edit.setReadOnly(self.app_context is not None)
+        self.bpm_edit.editingFinished.connect(self._selection_changed)
         bpm_selector = QWidget()
         bpm_selector.setFixedHeight(34)
         bpm_selector_layout = QHBoxLayout(bpm_selector)
@@ -811,6 +829,7 @@ class MainWindow(QMainWindow):
         self.samples_per_step_spin = QSpinBox()
         self.samples_per_step_spin.setRange(1, 100)
         self.samples_per_step_spin.setToolTip("BPM samples collected at each measurement step.")
+        self.samples_per_step_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(sampling_form, "Samples/step", self.samples_per_step_spin)
 
         self.settle_time_spin = QDoubleSpinBox()
@@ -818,6 +837,7 @@ class MainWindow(QMainWindow):
         self.settle_time_spin.setRange(0.0, 120.0)
         self.settle_time_spin.setSingleStep(0.5)
         self.settle_time_spin.setToolTip("Wait after each machine setting change before reading BPMs.")
+        self.settle_time_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(sampling_form, "Settle Time (s)", self.settle_time_spin)
         layout.addLayout(sampling_form)
 
@@ -844,11 +864,13 @@ class MainWindow(QMainWindow):
         self.sample_interval_spin.setRange(0.0, 60.0)
         self.sample_interval_spin.setSingleStep(0.05)
         self.sample_interval_spin.setToolTip("Wait between consecutive BPM samples; no wait follows the final sample.")
+        self.sample_interval_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(sampling_details_form, "Sample Interval (s)", self.sample_interval_spin)
 
         self.final_samples_spin = QSpinBox()
         self.final_samples_spin.setRange(1, 200)
         self.final_samples_spin.setToolTip("BPM samples used for the final acceptance measurement.")
+        self.final_samples_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(sampling_details_form, "Final Samples", self.final_samples_spin)
         advanced_layout.addLayout(sampling_details_form)
 
@@ -857,12 +879,14 @@ class MainWindow(QMainWindow):
 
         self.max_iter_spin = QSpinBox()
         self.max_iter_spin.setRange(1, 20)
+        self.max_iter_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(solver_form, "Max Iter", self.max_iter_spin)
 
         self.gain_spin = QDoubleSpinBox()
         self.gain_spin.setDecimals(3)
         self.gain_spin.setRange(0.001, 1.0)
         self.gain_spin.setSingleStep(0.05)
+        self.gain_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(solver_form, "Gain", self.gain_spin)
 
         self.max_step_pct_spin = QDoubleSpinBox()
@@ -870,10 +894,12 @@ class MainWindow(QMainWindow):
         self.max_step_pct_spin.setRange(0.1, 100.0)
         self.max_step_pct_spin.setSingleStep(5.0)
         self.max_step_pct_spin.valueChanged.connect(lambda _value: self._update_knob_summary())
+        self.max_step_pct_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(solver_form, "Max Step (%)", self.max_step_pct_spin)
 
         self.response_update_combo = QComboBox()
         self.response_update_combo.addItems(["once", "every_iteration"])
+        self.response_update_combo.currentTextChanged.connect(self._workflow_input_changed)
         self._add_form_row(solver_form, "Response", self.response_update_combo)
         advanced_layout.addLayout(solver_form)
         self.advanced_settings.setVisible(False)
@@ -954,10 +980,9 @@ class MainWindow(QMainWindow):
         self.response_button = QPushButton("3  Measure Q Response")
         self.response_button.clicked.connect(lambda: self._start_task("response"))
         online_actions.addWidget(self.response_button)
-        self.run_button = QPushButton("4  Automated Correction")
-        self.run_button.setProperty("role", "control")
-        self.run_button.clicked.connect(lambda: self._start_task("run"))
-        online_actions.addWidget(self.run_button)
+        self.review_button = QPushButton("4  Review Recommendation")
+        self.review_button.clicked.connect(self._review_recommendation)
+        online_actions.addWidget(self.review_button)
         online_layout.addLayout(online_actions)
 
         self.online_details = FullWidthTabWidget()
@@ -1011,19 +1036,63 @@ class MainWindow(QMainWindow):
         response_layout.addWidget(self.response_table, 3)
         response_layout.addWidget(self.response_info, 1)
 
-        self.correction_table = self._table(
-            ["Iter", "Gain", "Accepted", "RMS Before", "RMS After", "Reason"]
-        )
         self.correction_page = QWidget()
         correction_layout = QVBoxLayout(self.correction_page)
         correction_layout.setContentsMargins(8, 8, 8, 8)
         correction_title = QLabel(
-            "Automated correction history · recommendation review and separate "
-            "application will be introduced in the next GUI batch."
+            "Review one bounded correction step calculated from the measured dispersion "
+            "and measured Q response. Calculation does not access or write the backend."
         )
         correction_title.setObjectName("workspaceIntro")
         correction_title.setWordWrap(True)
         correction_layout.addWidget(correction_title)
+        self.correction_state_label = QLabel(
+            "Measure the Q response to prepare a correction recommendation."
+        )
+        self.correction_state_label.setWordWrap(True)
+        correction_layout.addWidget(self.correction_state_label)
+        self.recommendation_summary_label = QLabel(
+            "No recommendation has been calculated."
+        )
+        self.recommendation_summary_label.setWordWrap(True)
+        correction_layout.addWidget(self.recommendation_summary_label)
+        prediction_title = QLabel("Predicted dispersion after the reviewed step")
+        prediction_title.setObjectName("workspaceIntro")
+        correction_layout.addWidget(prediction_title)
+        self.recommendation_prediction_table = self._table(
+            ["BPM", "Measured mm", "Target mm", "Predicted mm", "Predicted residual mm"]
+        )
+        correction_layout.addWidget(self.recommendation_prediction_table, 1)
+        device_title = QLabel("Reviewed quadrupole changes")
+        device_title.setObjectName("workspaceIntro")
+        correction_layout.addWidget(device_title)
+        self.recommendation_table = self._table(
+            ["Device", "Current", "Change", "Target", "Source knob", "Status"]
+        )
+        correction_layout.addWidget(self.recommendation_table, 1)
+
+        correction_actions = QHBoxLayout()
+        self.compute_recommendation_button = QPushButton("Compute Recommendation")
+        self.compute_recommendation_button.clicked.connect(self._compute_recommendation)
+        correction_actions.addWidget(self.compute_recommendation_button)
+        correction_actions.addStretch(1)
+        self.run_button = QPushButton("Advanced: Automatic Loop")
+        self.run_button.clicked.connect(lambda: self._start_task("run"))
+        correction_actions.addWidget(self.run_button)
+        self.apply_recommendation_button = QPushButton("5  Apply & Remeasure")
+        self.apply_recommendation_button.setProperty("role", "control")
+        self.apply_recommendation_button.clicked.connect(
+            self._apply_reviewed_recommendation
+        )
+        correction_actions.addWidget(self.apply_recommendation_button)
+        correction_layout.addLayout(correction_actions)
+
+        history_title = QLabel("Execution history")
+        history_title.setObjectName("workspaceIntro")
+        correction_layout.addWidget(history_title)
+        self.correction_table = self._table(
+            ["Iter", "Gain", "Accepted", "RMS Before", "RMS After", "Reason"]
+        )
         correction_layout.addWidget(self.correction_table, 1)
 
         self.model_page = QWidget()
@@ -1129,6 +1198,9 @@ class MainWindow(QMainWindow):
         return label
 
     def _load_config_to_widgets(self) -> None:
+        self._invalidate_staged_results(
+            "Configuration loaded. Measure the Q response before calculating a recommendation."
+        )
         self.last_live_preflight = None
         self._loading_widgets = True
         try:
@@ -1212,6 +1284,9 @@ class MainWindow(QMainWindow):
         self.config = config
         self.selected_knobs = tuple(config.knobs)
         self.knob_hard_limits = tuple(knob.limit for knob in config.knobs)
+        self._invalidate_staged_results(
+            "Section changed. Previous measurements and recommendations were discarded."
+        )
         self.dispersion_curve.set_result(None)
         self.imported_dispersion = None
         self.dispersion_curve.set_measurement(None)
@@ -1225,6 +1300,27 @@ class MainWindow(QMainWindow):
         self._configure_profile_mode()
         self._load_config_to_widgets()
         self._set_running(False, "")
+
+    def _invalidate_staged_results(self, reason: str) -> None:
+        self.latest_measurement = None
+        self.latest_response = None
+        self.correction_recommendation = None
+        if not hasattr(self, "correction_state_label"):
+            return
+        self.correction_state_label.setText(reason)
+        self.recommendation_summary_label.setText(
+            "No recommendation has been calculated."
+        )
+        self.recommendation_prediction_table.setRowCount(0)
+        self.recommendation_table.setRowCount(0)
+        self.measure_table.setRowCount(0)
+        self.response_table.setRowCount(0)
+        self.response_info.clear()
+
+    def _workflow_input_changed(self, _value=None) -> None:
+        if self._loading_widgets:
+            return
+        self._selection_changed()
 
     def _model_source_changed(self, _index: int | None = None) -> None:
         if not hasattr(self, "dispersion_curve"):
@@ -1507,6 +1603,9 @@ class MainWindow(QMainWindow):
     def _selection_changed(self) -> None:
         if self._loading_widgets:
             return
+        self._invalidate_staged_results(
+            "Configuration changed. Previous measurements and recommendations were discarded."
+        )
         self.last_live_preflight = None
         try:
             self.config = self._config_from_widgets()
@@ -1517,6 +1616,9 @@ class MainWindow(QMainWindow):
             self.measure_button.setEnabled(False)
             self.response_button.setEnabled(False)
             self.run_button.setEnabled(False)
+            self.review_button.setEnabled(False)
+            self.compute_recommendation_button.setEnabled(False)
+            self.apply_recommendation_button.setEnabled(False)
             return
         self.plan_text.setPlainText(format_operation_plan(plan))
         self._update_energy_step_summary()
@@ -1579,7 +1681,11 @@ class MainWindow(QMainWindow):
             )
         return config
 
-    def _start_task(self, task: str) -> None:
+    def _start_task(
+        self,
+        task: str,
+        recommendation: CorrectionRecommendation | None = None,
+    ) -> None:
         if self.worker is not None and self.worker.isRunning():
             return
         try:
@@ -1610,7 +1716,14 @@ class MainWindow(QMainWindow):
                 )
                 if answer != QMessageBox.Yes:
                     return
-        self.worker = WorkflowWorker(task, config)
+        if task == "apply" and recommendation is None:
+            QMessageBox.warning(
+                self,
+                "Apply Recommendation",
+                "Calculate and review a recommendation before applying it.",
+            )
+            return
+        self.worker = WorkflowWorker(task, config, recommendation)
         self.worker.log.connect(self._append_log)
         self.worker.progress.connect(self._update_progress)
         self.worker.preflight.connect(self._live_preflight_completed)
@@ -1619,16 +1732,38 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self._task_finished)
         self._set_running(True, task)
         self._update_progress("Starting", 0, 1)
-        if task == "run":
+        if task in {"run", "apply"}:
             self.tabs.setCurrentWidget(self.correction_page)
         self.worker.start()
 
     def _task_completed(self, task: str, result: object) -> None:
         if isinstance(result, DispersionMeasurement):
+            self.latest_measurement = result
+            self.latest_response = None
+            self.correction_recommendation = None
+            self.correction_state_label.setText(
+                "Dispersion measured. Measure the Q response to calculate a recommendation."
+            )
+            self.recommendation_summary_label.setText(
+                "No recommendation has been calculated."
+            )
+            self.recommendation_prediction_table.setRowCount(0)
+            self.recommendation_table.setRowCount(0)
             self._show_measurement(result)
             self.tabs.setCurrentWidget(self.measure_page)
             self._refresh_status(f"RMS {result.rms_mm:.4g} mm")
         elif isinstance(result, ResponseMatrixResult):
+            self.latest_response = result
+            self.latest_measurement = result.measurement
+            self.correction_recommendation = None
+            self.correction_state_label.setText(
+                "Measured dispersion and Q response are ready. Review the recommendation."
+            )
+            self.recommendation_summary_label.setText(
+                "No recommendation has been calculated."
+            )
+            self.recommendation_prediction_table.setRowCount(0)
+            self.recommendation_table.setRowCount(0)
             self._show_response(result)
             self._show_measurement(result.measurement)
             self.tabs.setCurrentWidget(self.response_page)
@@ -1643,6 +1778,17 @@ class MainWindow(QMainWindow):
                 result.safety.reason,
                 "success" if result.safety.ok else "danger",
             )
+            self.latest_measurement = result.final
+            self.latest_response = None
+            self.correction_recommendation = None
+            self.correction_state_label.setText(
+                "Execution completed. Measure the Q response again before the next recommendation."
+            )
+            self.recommendation_summary_label.setText(
+                "The reviewed recommendation is no longer current."
+            )
+            self.recommendation_prediction_table.setRowCount(0)
+            self.recommendation_table.setRowCount(0)
         if self.app_context is not None and isinstance(
             result,
             (DispersionMeasurement, ResponseMatrixResult, CorrectionResult),
@@ -1776,6 +1922,251 @@ class MainWindow(QMainWindow):
             + f"\nCondition number: {response.condition_number:.6g}"
         )
 
+    def _review_recommendation(self) -> None:
+        self.tabs.setCurrentWidget(self.correction_page)
+        if self.correction_recommendation is not None:
+            return
+        if self.latest_measurement is None or self.latest_response is None:
+            self.correction_state_label.setText(
+                "Measure the Q response first. That operation also records the current "
+                "dispersion used by the recommendation."
+            )
+            return
+        self._compute_recommendation()
+
+    def _compute_recommendation(self) -> None:
+        if self.latest_measurement is None or self.latest_response is None:
+            QMessageBox.warning(
+                self,
+                "Correction Recommendation",
+                "Measure the Q response before calculating a recommendation.",
+            )
+            return
+        try:
+            self.config = self._config_from_widgets()
+            baseline = self._recommendation_device_baseline()
+            recommendation = build_correction_recommendation(
+                self.config,
+                self.latest_measurement,
+                self.latest_response,
+                baseline_device_values=baseline,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Correction Recommendation", str(exc))
+            return
+        self.correction_recommendation = recommendation
+        self._show_recommendation(recommendation)
+        self.tabs.setCurrentWidget(self.correction_page)
+        self._append_log(
+            "Correction recommendation calculated from measured data; no backend was accessed"
+        )
+        self._refresh_status("Recommendation ready")
+        self._set_running(False, "")
+
+    def _recommendation_device_baseline(self) -> dict[str, float]:
+        if self.config.backend.type.lower() == "offline":
+            return {}
+        if self.last_live_preflight is None or not self.last_live_preflight.ok:
+            raise RuntimeError(
+                "A current successful connection check is required to attach physical "
+                "quadrupole targets to the recommendation."
+            )
+        raw = self.last_live_preflight.readings.get("quadrupole_readbacks", {})
+        baseline = {str(name): float(value) for name, value in raw.items()}
+        required = {
+            device for knob in self.config.knobs for device in knob.devices
+        }
+        missing = sorted(required - set(baseline))
+        if missing:
+            raise RuntimeError(
+                "Live preflight did not return quadrupole readbacks for: "
+                + ", ".join(missing)
+            )
+        return baseline
+
+    def _show_recommendation(
+        self,
+        recommendation: CorrectionRecommendation,
+    ) -> None:
+        improvement = recommendation.measurement.rms_mm - recommendation.predicted_rms_mm
+        self.correction_state_label.setText(
+            "Prediction only — no backend read or write occurred. Review every target "
+            "before choosing Apply & Remeasure."
+        )
+        knob_lines = [
+            f"{name}: {value:+.6g}"
+            for name, value in recommendation.delta_knobs.items()
+        ]
+        self.recommendation_summary_label.setText(
+            f"Measured residual RMS: {recommendation.measurement.rms_mm:.6g} mm  →  "
+            f"predicted: {recommendation.predicted_rms_mm:.6g} mm "
+            f"(improvement {improvement:+.6g} mm)\n"
+            f"Response condition number: {recommendation.condition_number:.6g} · "
+            f"gain {self.config.solver.gain:.3g} · "
+            f"max step {100.0 * self.config.solver.max_step_fraction:.1f}%\n"
+            + "Knob changes: "
+            + "; ".join(knob_lines)
+        )
+        measurement = recommendation.measurement
+        self.recommendation_prediction_table.setRowCount(
+            len(measurement.bpm_names)
+        )
+        for row, bpm in enumerate(measurement.bpm_names):
+            self.recommendation_prediction_table.setItem(
+                row, 0, QTableWidgetItem(bpm)
+            )
+            self.recommendation_prediction_table.setItem(
+                row, 1, QTableWidgetItem(f"{measurement.values_mm[row]:.6g}")
+            )
+            self.recommendation_prediction_table.setItem(
+                row,
+                2,
+                QTableWidgetItem(f"{measurement.target_values_mm[row]:.6g}"),
+            )
+            self.recommendation_prediction_table.setItem(
+                row,
+                3,
+                QTableWidgetItem(f"{recommendation.predicted_values_mm[row]:.6g}"),
+            )
+            self.recommendation_prediction_table.setItem(
+                row,
+                4,
+                QTableWidgetItem(
+                    f"{recommendation.predicted_residual_values_mm[row]:.6g}"
+                ),
+            )
+        self.recommendation_prediction_table.resizeColumnsToContents()
+        source_knobs = {
+            device: knob.name
+            for knob in self.config.knobs
+            for device in knob.devices
+        }
+        devices = tuple(recommendation.device_deltas)
+        self.recommendation_table.setRowCount(len(devices))
+        for row, device in enumerate(devices):
+            current = recommendation.baseline_device_values.get(device)
+            target = recommendation.target_device_values.get(device)
+            current_text = "" if current is None else f"{current:.8g}"
+            target_text = "" if target is None else f"{target:.8g}"
+            status = (
+                "Ready for reviewed write"
+                if target is not None
+                else "Offline logical prediction"
+            )
+            self.recommendation_table.setItem(row, 0, QTableWidgetItem(device))
+            self.recommendation_table.setItem(row, 1, QTableWidgetItem(current_text))
+            self.recommendation_table.setItem(
+                row,
+                2,
+                QTableWidgetItem(f"{recommendation.device_deltas[device]:+.8g}"),
+            )
+            self.recommendation_table.setItem(row, 3, QTableWidgetItem(target_text))
+            self.recommendation_table.setItem(
+                row,
+                4,
+                QTableWidgetItem(source_knobs.get(device, "")),
+            )
+            self.recommendation_table.setItem(row, 5, QTableWidgetItem(status))
+        self.recommendation_table.resizeColumnsToContents()
+
+    def _apply_reviewed_recommendation(self) -> None:
+        recommendation = self.correction_recommendation
+        if recommendation is None or not recommendation.ready:
+            QMessageBox.warning(
+                self,
+                "Apply Recommendation",
+                "Calculate and review a non-zero recommendation first.",
+            )
+            return
+        blocked_reason = self._recommendation_apply_block_reason()
+        if blocked_reason is not None:
+            QMessageBox.warning(self, "Apply Recommendation", blocked_reason)
+            return
+        answer = QMessageBox.question(
+            self,
+            "Confirm Reviewed Quadrupole Targets",
+            self._format_recommendation_confirmation(recommendation),
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self._start_task("apply", recommendation)
+
+    def _recommendation_apply_block_reason(self) -> str | None:
+        recommendation = self.correction_recommendation
+        if recommendation is None or not recommendation.ready:
+            return "No reviewed recommendation is ready."
+        operation_reason = self._operation_block_reason()
+        if operation_reason is not None:
+            return operation_reason
+        if self.config.backend.type.lower() == "offline":
+            return None
+        if self.last_live_preflight is None or not self.last_live_preflight.ok:
+            return (
+                "Run Check Connections after the most recent configuration change "
+                "before applying the recommendation."
+            )
+        required = set(recommendation.device_deltas)
+        if set(recommendation.target_device_values) != required:
+            return "The recommendation does not contain physical targets for every quadrupole."
+        return None
+
+    def _format_recommendation_confirmation(
+        self,
+        recommendation: CorrectionRecommendation,
+    ) -> str:
+        lines = [
+            "The following reviewed targets will be applied once:",
+            "",
+        ]
+        if self.config.backend.type.lower() == "offline":
+            lines.extend(
+                f"  {name}: {value:+.8g}"
+                for name, value in recommendation.delta_knobs.items()
+            )
+            lines.extend(["", "Backend: OFFLINE demonstration"])
+        else:
+            pv_map = self.config.backend.options.get("pv_map", {})
+            quadrupoles = (
+                pv_map.get("quadrupoles", {}) if isinstance(pv_map, dict) else {}
+            )
+            unit = self._knob_control_unit() or "configured unit"
+            for device, change in recommendation.device_deltas.items():
+                current = recommendation.baseline_device_values[device]
+                target = recommendation.target_device_values[device]
+                entry = quadrupoles.get(device, {})
+                control = (
+                    str(entry.get("control", "k1")).lower()
+                    if isinstance(entry, dict)
+                    else "k1"
+                )
+                pv = ""
+                if isinstance(entry, dict):
+                    pv = str(
+                        entry.get("current_set")
+                        if control == "current"
+                        else entry.get("K1_set") or entry.get("K1") or ""
+                    )
+                lines.append(
+                    f"  {device}: {current:.8g} → {target:.8g} {unit} "
+                    f"(Δ {change:+.8g})"
+                )
+                if pv:
+                    lines.append(f"    PV: {pv}")
+        lines.extend(
+            [
+                "",
+                "The workflow will recheck connections and verify that the current "
+                "quadrupole readbacks still match this review.",
+                "It will then remeasure dispersion. If safety checks fail or the RMS "
+                "does not improve enough, the pre-apply snapshot is restored.",
+                "",
+                "Proceed?",
+            ]
+        )
+        return "\n".join(lines)
+
     def _show_model_response(self, response: ModelResponseResult) -> None:
         self.model_table.setRowCount(len(response.device_names))
         self.model_table.setColumnCount(4)
@@ -1891,6 +2282,17 @@ class MainWindow(QMainWindow):
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
         self.run_button.setEnabled(not running and operation_allowed)
+        recommendation_inputs_ready = (
+            self.latest_measurement is not None and self.latest_response is not None
+        )
+        self.review_button.setEnabled(not running and recommendation_inputs_ready)
+        self.compute_recommendation_button.setEnabled(
+            not running and recommendation_inputs_ready
+        )
+        apply_reason = self._recommendation_apply_block_reason()
+        self.apply_recommendation_button.setEnabled(
+            not running and apply_reason is None
+        )
         action_tooltip = (
             "Another operation is running."
             if running
@@ -1899,6 +2301,27 @@ class MainWindow(QMainWindow):
         )
         for button in (self.measure_button, self.response_button, self.run_button):
             button.setToolTip(action_tooltip)
+        recommendation_tooltip = (
+            "Another operation is running."
+            if running
+            else (
+                "Uses the measured dispersion and Q response. Calculation does not "
+                "access or write the backend."
+                if recommendation_inputs_ready
+                else "Measure the Q response first."
+            )
+        )
+        self.review_button.setToolTip(recommendation_tooltip)
+        self.compute_recommendation_button.setToolTip(recommendation_tooltip)
+        self.apply_recommendation_button.setToolTip(
+            "Another operation is running."
+            if running
+            else apply_reason
+            or (
+                "Applies exactly the reviewed targets, remeasures dispersion, and "
+                "restores the pre-apply snapshot if the step is rejected."
+            )
+        )
         self.preflight_button.setToolTip(
             "Read-only check: reads all configured PVs without changing any setpoint."
             if self.preflight_button.isEnabled()
@@ -2120,6 +2543,9 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Calibration", str(exc))
             return
+        self._invalidate_staged_results(
+            "Energy calibration changed. Previous measurements and recommendations were discarded."
+        )
         self.calibration_text.setPlainText(
             "Energy knob calibration fit\n\n"
             f"slope_delta_per_actuator: {fit.slope_delta_per_actuator:.12g}\n"
