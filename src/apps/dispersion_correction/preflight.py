@@ -5,6 +5,10 @@ from dataclasses import replace
 import math
 from typing import Any
 
+from half_linac.src.apps.dispersion_correction.calibration import (
+    calibration_actuator_per_delta,
+    is_direct_delta_actuator,
+)
 from half_linac.src.apps.dispersion_correction.models import RunConfig
 
 
@@ -76,9 +80,7 @@ def run_preflight(config: RunConfig) -> PreflightResult:
         blockers.append("Every knob device needs quadrupole PV mapping")
 
     energy_map = pv_map.get("energy_knob", {}) if pv_map_ok else {}
-    energy_pv_ok = isinstance(energy_map, dict) and bool(
-        energy_map.get("readback") or energy_map.get("phase_readback") or energy_map.get("phase_set") or energy_map.get("set")
-    )
+    energy_pv_ok = isinstance(energy_map, dict) and bool(_energy_read_pv(energy_map))
     checks["energy_pv_configured"] = energy_pv_ok
     if config.backend.type == "epics" and not energy_pv_ok:
         blockers.append("Energy knob PV is not configured")
@@ -89,18 +91,20 @@ def run_preflight(config: RunConfig) -> PreflightResult:
     if config.backend.type == "epics" and energy_pv_ok and not energy_independent_readback:
         warnings.append("Energy verification uses the setpoint PV because no independent readback is configured")
 
-    is_phase = config.energy_knob.actuator == "phase" or "phase" in config.energy_knob.name.lower()
-    calibration_value = config.energy_knob.calibration.get("phase_per_delta")
+    direct_delta = is_direct_delta_actuator(config.energy_knob.actuator)
     try:
-        calibration_numeric = float(calibration_value)
+        actuator_per_delta = calibration_actuator_per_delta(
+            config.energy_knob.calibration
+        )
     except (TypeError, ValueError):
-        calibration_numeric = float("nan")
-    calibration_ok = (not is_phase) or (
-        math.isfinite(calibration_numeric) and calibration_numeric != 0
-    )
+        actuator_per_delta = None
+    calibration_ok = direct_delta or actuator_per_delta is not None
     checks["energy_calibration_available"] = calibration_ok
-    if is_phase and not calibration_ok:
-        blockers.append("RF phase energy knob requires calibration.phase_per_delta before quantitative D_eff measurement")
+    if not direct_delta and not calibration_ok:
+        blockers.append(
+            "Physical energy actuator requires calibration.actuator_per_delta "
+            "before quantitative D_eff measurement"
+        )
 
     safe_limits_ok = (
         config.safety.max_reference_orbit_change_mm > 0
@@ -138,12 +142,12 @@ def run_preflight(config: RunConfig) -> PreflightResult:
         )
 
     if config.backend.type == "epics" and config.backend.mode == "write_enabled":
-        energy_write_ok = isinstance(energy_map, dict) and bool(energy_map.get("phase_set") or energy_map.get("set"))
+        energy_write_ok = isinstance(energy_map, dict) and bool(_energy_set_pv(energy_map))
         quadrupole_write_ok = _configured_quadrupole_writes(config, quadrupoles)
         checks["energy_write_pv_configured"] = energy_write_ok
         checks["quadrupole_write_pvs_configured"] = quadrupole_write_ok
         if not energy_write_ok:
-            blockers.append("write_enabled requires an energy phase_set or set PV")
+            blockers.append("write_enabled requires an energy set PV")
         if not quadrupole_write_ok:
             blockers.append("write_enabled requires same-unit setpoint and readback PVs for every knob device")
         quadrupole_independent_readbacks = _configured_independent_quadrupole_readbacks(config, quadrupoles)
@@ -314,6 +318,19 @@ def _configured_bpms(config: RunConfig, bpms: Any) -> bool:
         if not isinstance(item, dict) or not item.get("x"):
             return False
     return True
+
+
+def _energy_read_pv(energy_map: dict[str, Any]) -> object:
+    return (
+        energy_map.get("readback")
+        or energy_map.get("phase_readback")
+        or energy_map.get("set")
+        or energy_map.get("phase_set")
+    )
+
+
+def _energy_set_pv(energy_map: dict[str, Any]) -> object:
+    return energy_map.get("set") or energy_map.get("phase_set")
 
 
 def _configured_quadrupoles(config: RunConfig, quadrupoles: Any) -> bool:

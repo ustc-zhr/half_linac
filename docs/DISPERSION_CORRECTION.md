@@ -31,21 +31,27 @@ lattice or write any PV.
 - IRFEL `vm` is unsupported and the Control Room disables the application in
   that backend.
 - IRFEL `real` resolves BPM, quadrupole, and
-  `KLY1_CH3_PHASE.phase_set -> IRFEL:IN-MW:KLY1:SET_PHASE`. Backend and
+  energy-knob channels from the machine profile. Its current actuator happens
+  to be `KLY1_CH3_PHASE`, mapped to `IRFEL:IN-MW:KLY1:SET_PHASE`. Backend and
   write mode are selected by the machine profile rather than GUI controls.
 - Measure, response, and correction operations all change the energy actuator and
   are therefore treated as write operations.
-- The RF phase has an independent readback at
+- The current RF-phase actuator has an independent readback at
   `IRFEL:IN-MW:KLY1:GET_CH3_PHASE`.
-- The configured phase-to-`dp/p` calibration and timing values still require
+- The configured actuator-to-`dp/p` calibration and timing values still require
   onsite confirmation before the machine-profile write policy is enabled.
 
-The confirmed phase setpoint is `IRFEL:IN-MW:KLY1:SET_PHASE`, and the configured
-phase readback is `IRFEL:IN-MW:KLY1:GET_CH3_PHASE`.
+The measurement workflow itself only requests normalized `delta_p_over_p`.
+The machine profile selects the physical actuator (RF phase, modulator voltage,
+or another energy control), its unit, generic `set`/`readback` channels, and the
+linear-relative `actuator_per_delta` conversion. Changing actuator type therefore
+does not change the dispersion algorithm. The old `phase_set`, `phase_readback`,
+and `phase_per_delta` fields remain accepted only as compatibility aliases for
+standalone regression fixtures.
 
 The current workflow contains `real_status: write_blocked` and
 `write_control.real: blocked`, so the IRFEL real profile resolves to
-`read_only`. The current `phase_per_delta`, sampling interval, and settle time
+`read_only`. The current `actuator_per_delta`, sampling interval, and settle time
 are present, but the write policy remains the final independent commissioning
 gate until those values are confirmed onsite.
 
@@ -58,7 +64,7 @@ or entering PV names. A quadrupole cannot be used in two knob pairs, and the
 response solve requires at least as many selected BPMs as knobs.
 
 Before any enabled operation writes, the workflow performs a read-only live
-preflight of the phase setpoint, quadrupole setpoint/readback agreement, and all
+preflight of the energy actuator, quadrupole setpoint/readback agreement, and all
 target BPMs. A failed check prevents the first `caput`. The GUI exposes this as
 `Check PVs` and shows `READY`, `UNCHECKED`, or `NOT READY` in the status bar.
 
@@ -92,7 +98,18 @@ python3 -m half_linac.src.apps.dispersion_correction.cli status --json
 ```
 
 `preflight` is configuration-only. `status` performs EPICS reads of the
-configured BPM, quadrupole and phase setpoint PVs. Neither command writes.
+configured BPM, quadrupole and energy-actuator PVs. Neither command writes.
+
+Fit a local energy-actuator calibration CSV without machine IO:
+
+```bash
+python3 -m half_linac.src.apps.dispersion_correction.cli \
+  calibrate-energy-knob --csv energy_knob.csv
+```
+
+The default columns are `actuator_value` and `delta_p_over_p`. The result is an
+`actuator_per_delta` profile fragment. The GUI Calibration tab performs the same
+local fit; `phase_deg` is auto-detected for legacy phase CSV files.
 
 Compare the HALF BL01 design optics without machine IO:
 
@@ -126,11 +143,12 @@ under backend limits, and remeasure.
 ## Commissioning steps still required
 
 1. Run static preflight and read-only status checks against the real IOC.
-2. Measure and record the phase-to-`dp/p` calibration, sign, valid range, and units.
-3. Agree on the smallest permitted phase perturbation and restoration tolerance.
+2. Choose the physical energy actuator and measure its actuator-to-`dp/p`
+   calibration, sign, valid range, and units.
+3. Agree on the smallest permitted actuator perturbation and restoration tolerance.
 4. Validate setpoint-only verification and rollback with fake EPICS before a real
    write smoke test.
-5. Perform an explicitly approved `+phase -> baseline -> -phase -> baseline`
+5. Perform an explicitly approved `+actuator -> baseline -> -actuator -> baseline`
    smoke test while an operator observes machine protection and beam state.
 6. Record the write-smoke outcome and keep `write_control`/`real_status` aligned
    with the accepted commissioning state.

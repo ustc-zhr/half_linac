@@ -84,7 +84,7 @@ def write_config():
         backend=replace(config.backend, mode="write_enabled"),
         energy_knob=replace(
             config.energy_knob,
-            calibration={"kind": "linear", "phase_per_delta": 2500.0},
+            calibration={"kind": "linear_relative", "actuator_per_delta": 2500.0},
         ),
     )
 
@@ -118,6 +118,52 @@ def test_phase_energy_delta_is_calibrated_and_verified() -> None:
 
     assert baseline_delta == pytest.approx(12.3 / 2500.0)
     assert epics.values[ENERGY_PV] == pytest.approx(12.55)
+
+
+def test_modulator_voltage_uses_same_normalized_energy_delta_interface() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    options["pv_map"]["energy_knob"] = {
+        "set": "TEST:MODULATOR:HV",
+        "readback": "TEST:MODULATOR:HV",
+    }
+    config = replace(
+        config,
+        backend=replace(config.backend, options=options),
+        energy_knob=replace(
+            config.energy_knob,
+            name="MODULATOR_HV",
+            actuator="modulator_voltage",
+            actuator_unit="kV",
+            calibration={
+                "kind": "linear_relative",
+                "actuator_per_delta": 5000.0,
+            },
+        ),
+    )
+    epics = FakeEpics({"TEST:MODULATOR:HV": 20.0})
+    machine = EpicsMachine(config, epics_client=epics)
+
+    baseline_delta = machine.get_energy_delta()
+    machine.set_energy_delta(baseline_delta + 1.0e-4)
+
+    assert baseline_delta == pytest.approx(20.0 / 5000.0)
+    assert epics.values["TEST:MODULATOR:HV"] == pytest.approx(20.5)
+
+
+def test_legacy_phase_calibration_and_pv_aliases_remain_supported() -> None:
+    config = write_config()
+    config = replace(
+        config,
+        energy_knob=replace(
+            config.energy_knob,
+            calibration={"kind": "linear", "phase_per_delta": 2500.0},
+        ),
+    )
+
+    machine = EpicsMachine(config, epics_client=FakeEpics(initial_values()))
+
+    assert machine.get_energy_delta() == pytest.approx(12.3 / 2500.0)
 
 
 def test_current_deltas_are_relative_to_snapshot_and_restore_exactly() -> None:

@@ -2,14 +2,14 @@ from half_linac.src.apps.dispersion_correction.config import load_config
 from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan, format_operation_plan
 
 
-def test_irfel_real_config_dryrun_warns_about_phase_calibration() -> None:
+def test_irfel_real_config_dryrun_warns_about_actuator_calibration() -> None:
     plan = build_operation_plan(load_config("tests/dispersion_correction/fixtures/irfel_achromat.json"))
 
     assert plan["backend"] == {"type": "epics", "mode": "read_only"}
     assert plan["energy"]["name"] == "KLY1_CH3_PHASE"
     assert [item["name"] for item in plan["bpms"]] == ["BPM9", "BPM10"]
     assert [item["name"] for item in plan["knobs"]] == ["Q13_Q16_sym", "Q14_Q15_sym"]
-    assert any("phase-to-dp/p" in warning for warning in plan["warnings"])
+    assert any("actuator-to-dp/p" in warning for warning in plan["warnings"])
     assert not any("Charge PV" in warning for warning in plan["warnings"])
     assert not any("Loss PV" in warning for warning in plan["warnings"])
 

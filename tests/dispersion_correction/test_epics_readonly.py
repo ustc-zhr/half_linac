@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from half_linac.src.apps.dispersion_correction.config import load_config
@@ -14,6 +16,16 @@ class FakeEpics:
 
 def test_irfel_epics_readonly_pv_mapping() -> None:
     config = load_config("tests/dispersion_correction/fixtures/irfel_achromat.json")
+    config = replace(
+        config,
+        energy_knob=replace(
+            config.energy_knob,
+            calibration={
+                "kind": "linear_relative",
+                "actuator_per_delta": 2500.0,
+            },
+        ),
+    )
     epics = FakeEpics(
         {
             "IRFEL-BI:BPM09:BPM_PX2": 1.25,
@@ -37,7 +49,7 @@ def test_irfel_epics_readonly_pv_mapping() -> None:
     assert bpm.names == ("BPM9", "BPM10")
     assert bpm.x_mm.tolist() == [1.25, -0.5]
     assert bpm.valid.tolist() == [True, True]
-    assert snapshot.energy_delta == 12.3
+    assert snapshot.energy_delta == pytest.approx(12.3 / 2500.0)
     assert snapshot.device_values == {"QM13": 1.3, "QM14": 1.4, "QM15": 1.5, "QM16": 1.6}
 
 

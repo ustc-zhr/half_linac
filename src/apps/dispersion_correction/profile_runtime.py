@@ -397,11 +397,11 @@ def _build_selection_pv_map(
     energy_mapping: dict[str, str] = {}
     element_id = str(energy_knob.get("element", "")).strip()
     if element_id:
-        set_channel = str(energy_knob.get("set_channel", "phase_set"))
-        readback_channel = str(energy_knob.get("readback_channel", "phase_readback"))
-        energy_mapping["phase_set"] = resolve_channel(context, element_id, set_channel)
+        set_channel = str(energy_knob.get("set_channel", "set"))
+        readback_channel = str(energy_knob.get("readback_channel", "readback"))
+        energy_mapping["set"] = resolve_channel(context, element_id, set_channel)
         try:
-            energy_mapping["phase_readback"] = resolve_channel(context, element_id, readback_channel)
+            energy_mapping["readback"] = resolve_channel(context, element_id, readback_channel)
         except MachineProfileError:
             pass
 

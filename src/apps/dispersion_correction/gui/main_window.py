@@ -41,7 +41,9 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
-from half_linac.src.apps.dispersion_correction.calibration import load_phase_calibration_csv
+from half_linac.src.apps.dispersion_correction.calibration import (
+    load_energy_knob_calibration_csv,
+)
 from half_linac.src.apps.dispersion_correction.config import load_config
 from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan, format_operation_plan
 from half_linac.src.apps.dispersion_correction.gui.theme import build_stylesheet, theme_tokens
@@ -970,7 +972,7 @@ class MainWindow(QMainWindow):
         calibration_layout.setContentsMargins(8, 8, 8, 8)
         calibration_actions = QHBoxLayout()
         calibration_actions.addStretch(1)
-        self.calibration_button = QPushButton("Load Calibration CSV")
+        self.calibration_button = QPushButton("Load Energy Knob Calibration")
         self.calibration_button.clicked.connect(self._load_calibration_dialog)
         calibration_actions.addWidget(self.calibration_button)
         calibration_layout.addLayout(calibration_actions)
@@ -1781,7 +1783,7 @@ class MainWindow(QMainWindow):
     def _load_calibration_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Load Phase Calibration CSV",
+            "Load Energy Knob Calibration CSV",
             str(Path.cwd() / "configs"),
             "CSV Files (*.csv)",
             options=QFileDialog.Options() | QFileDialog.DontUseNativeDialog,
@@ -1789,22 +1791,25 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            fit = load_phase_calibration_csv(path)
+            fit = load_energy_knob_calibration_csv(path)
             base_config = self._config_from_widgets()
             self.config = replace(
                 base_config,
                 energy_knob=replace(
                     base_config.energy_knob,
-                    calibration={"kind": "linear", "phase_per_delta": fit.phase_per_delta},
+                    calibration={
+                        "kind": "linear_relative",
+                        "actuator_per_delta": fit.actuator_per_delta,
+                    },
                 ),
             )
         except Exception as exc:
             QMessageBox.warning(self, "Calibration", str(exc))
             return
         self.calibration_text.setPlainText(
-            "Phase calibration fit\n\n"
-            f"slope_delta_per_phase: {fit.slope_delta_per_phase:.12g}\n"
-            f"phase_per_delta: {fit.phase_per_delta:.12g}\n"
+            "Energy knob calibration fit\n\n"
+            f"slope_delta_per_actuator: {fit.slope_delta_per_actuator:.12g}\n"
+            f"actuator_per_delta: {fit.actuator_per_delta:.12g}\n"
             f"intercept_delta: {fit.intercept_delta:.12g}\n"
             f"r_squared: {fit.r_squared:.12g}\n"
             f"n_samples: {fit.n_samples}\n\n"

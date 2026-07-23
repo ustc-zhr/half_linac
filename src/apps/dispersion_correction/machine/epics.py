@@ -5,6 +5,10 @@ import time
 
 import numpy as np
 
+from half_linac.src.apps.dispersion_correction.calibration import (
+    calibration_actuator_per_delta,
+    is_direct_delta_actuator,
+)
 from half_linac.src.apps.dispersion_correction.machine.base import MachineInterface
 from half_linac.src.apps.dispersion_correction.models import BPMReading, MachineSnapshot, RunConfig
 
@@ -25,7 +29,11 @@ class EpicsMachine(MachineInterface):
         )
         if not np.isfinite(self._bpm_position_scale_to_mm) or self._bpm_position_scale_to_mm <= 0:
             raise ValueError("backend.options.bpm_position_scale_to_mm must be finite and positive")
-        default_energy_tolerance = 0.01 if config.energy_knob.actuator == "phase" else 1.0e-6
+        default_energy_tolerance = (
+            config.energy_knob.readback_tolerance
+            if config.energy_knob.readback_tolerance is not None
+            else 1.0e-6
+        )
         self._energy_tolerance = float(
             config.backend.options.get(
                 "energy_knob_readback_tolerance",
@@ -95,17 +103,17 @@ class EpicsMachine(MachineInterface):
 
     def get_energy_delta(self) -> float:
         actuator_value = self._read_energy_actuator()
-        scale = self._energy_actuator_per_delta(required=False)
-        return actuator_value if scale is None else actuator_value / scale
+        scale = self._energy_actuator_per_delta()
+        return actuator_value / scale
 
     def set_energy_delta(self, value: float) -> None:
         self._require_write_enabled()
         item = self._mapping("energy_knob")
-        set_pv = item.get("phase_set") or item.get("set")
+        set_pv = item.get("set") or item.get("phase_set")
         if not set_pv:
-            raise ValueError("pv_map.energy_knob requires phase_set or set for writes")
-        readback_pv = item.get("phase_readback") or item.get("readback") or set_pv
-        scale = self._energy_actuator_per_delta(required=True)
+            raise ValueError("pv_map.energy_knob requires set for writes")
+        readback_pv = item.get("readback") or item.get("phase_readback") or set_pv
+        scale = self._energy_actuator_per_delta()
         actuator_target = float(value) * scale
         self._write_and_verify(
             str(set_pv),
@@ -243,26 +251,30 @@ class EpicsMachine(MachineInterface):
 
     def _read_energy_actuator(self) -> float:
         item = self._mapping("energy_knob")
-        pv = item.get("phase_readback") or item.get("readback") or item.get("phase_set") or item.get("set")
+        pv = (
+            item.get("readback")
+            or item.get("phase_readback")
+            or item.get("set")
+            or item.get("phase_set")
+        )
         if not pv:
-            raise ValueError("pv_map.energy_knob requires readback, phase_readback, phase_set, or set")
+            raise ValueError("pv_map.energy_knob requires readback or set")
         value = self._caget_float(str(pv))
         if not np.isfinite(value):
             raise RuntimeError(f"Energy knob readback is unavailable: {pv}")
         return value
 
-    def _energy_actuator_per_delta(self, required: bool) -> float | None:
-        is_phase = self.config.energy_knob.actuator == "phase"
-        if not is_phase:
+    def _energy_actuator_per_delta(self) -> float:
+        if is_direct_delta_actuator(self.config.energy_knob.actuator):
             return 1.0
-        value = self.config.energy_knob.calibration.get("phase_per_delta")
-        if value is None:
-            if required:
-                raise ValueError("Phase energy writes require calibration.phase_per_delta")
-            return None
-        scale = float(value)
-        if not np.isfinite(scale) or scale == 0:
-            raise ValueError("calibration.phase_per_delta must be finite and non-zero")
+        try:
+            scale = calibration_actuator_per_delta(self.config.energy_knob.calibration)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(str(exc)) from exc
+        if scale is None:
+            raise ValueError(
+                "Physical energy actuator requires calibration.actuator_per_delta"
+            )
         return scale
 
     def _write_quadrupole_targets(self, targets: Mapping[str, float]) -> None:
@@ -385,10 +397,10 @@ class EpicsMachine(MachineInterface):
             raise ValueError("EPICS readback tolerances must be non-negative")
         if self._quadrupole_tolerance_override is not None and self._quadrupole_tolerance_override < 0:
             raise ValueError("EPICS readback tolerances must be non-negative")
-        self._energy_actuator_per_delta(required=True)
+        self._energy_actuator_per_delta()
         energy = self._mapping("energy_knob")
-        if not (energy.get("phase_set") or energy.get("set")):
-            raise ValueError("write_enabled requires pv_map.energy_knob.phase_set or set")
+        if not (energy.get("set") or energy.get("phase_set")):
+            raise ValueError("write_enabled requires pv_map.energy_knob.set")
         for knob in self.config.knobs:
             for device in knob.devices:
                 self._quadrupole_write_pvs(device)

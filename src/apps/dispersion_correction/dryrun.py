@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from half_linac.src.apps.dispersion_correction.models import RunConfig
-from half_linac.src.apps.dispersion_correction.calibration import actuator_step_for_delta
+from half_linac.src.apps.dispersion_correction.calibration import (
+    actuator_step_for_delta,
+    is_direct_delta_actuator,
+)
 from half_linac.src.apps.dispersion_correction.physics import momentum_delta
 
 
@@ -19,16 +22,25 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
     warnings = []
     if config.backend.type == "epics" and config.backend.mode != "read_only":
         warnings.append("EPICS config is not read_only; verify write permission and machine protection before use.")
-    if "phase" in config.energy_knob.name.lower() or "phase_set" in energy_map:
+    if not is_direct_delta_actuator(config.energy_knob.actuator):
         if config.energy_knob.calibration:
             actuator_plan = actuator_step_for_delta(delta, config.energy_knob.calibration)
             if not actuator_plan.get("calibrated"):
                 warnings.append(f"Energy actuator calibration is incomplete: {actuator_plan.get('reason')}")
         else:
             actuator_plan = {"calibrated": False, "reason": "Missing energy_knob.calibration"}
-            warnings.append("Energy knob is an RF phase PV; phase-to-dp/p calibration is required.")
+            warnings.append(
+                "Physical energy actuator requires actuator-to-dp/p calibration."
+            )
     else:
-        actuator_plan = {"calibrated": False, "reason": "Energy knob is already treated as delta"}
+        actuator_plan = {
+            "calibrated": True,
+            "direct_delta": True,
+            "actuator_step": delta,
+            "plus_offset": delta,
+            "minus_offset": -delta,
+            "actuator_per_delta": 1.0,
+        }
     return {
         "section": {
             "id": config.section.id,

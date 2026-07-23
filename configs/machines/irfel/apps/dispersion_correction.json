@@ -12,15 +12,17 @@
   },
   "energy_knob": {
     "name": "KLY1_CH3_PHASE",
-    "actuator": "phase",
+    "actuator": "rf_phase",
     "actuator_unit": "deg",
     "delta": 0.0001,
     "calibration": {
-      "kind": "linear",
-      "phase_per_delta": 2500.0
+      "kind": "linear_relative",
+      "actuator_per_delta": 2500.0
     },
+    "readback_tolerance": 0.01,
     "element": "KLY1_CH3_PHASE",
-    "set_channel": "phase_set"
+    "set_channel": "phase_set",
+    "readback_channel": "phase_readback"
   },
   "knobs": [
     {

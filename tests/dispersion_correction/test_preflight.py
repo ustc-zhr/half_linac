@@ -13,13 +13,13 @@ def test_irfel_mock_preflight_is_offline_ready() -> None:
     assert result.checks["energy_calibration_available"]
 
 
-def test_irfel_real_preflight_blocks_missing_phase_calibration() -> None:
+def test_irfel_real_preflight_blocks_missing_energy_actuator_calibration() -> None:
     result = run_preflight(load_config("tests/dispersion_correction/fixtures/irfel_achromat.json"))
     text = format_preflight(result)
 
     assert not result.ok
     assert result.level == "blocked"
-    assert any("calibration.phase_per_delta" in item for item in result.blockers)
+    assert any("calibration.actuator_per_delta" in item for item in result.blockers)
     assert not any("Charge PV" in item for item in result.warnings)
     assert not any("Loss PV" in item for item in result.warnings)
     assert "FAIL  energy_calibration_available" in text
@@ -31,7 +31,7 @@ def test_irfel_real_preflight_allows_missing_optional_signals() -> None:
         config,
         energy_knob=replace(
             config.energy_knob,
-            calibration={"kind": "linear", "phase_per_delta": 2500.0},
+            calibration={"kind": "linear_relative", "actuator_per_delta": 2500.0},
         ),
     )
 
@@ -40,3 +40,16 @@ def test_irfel_real_preflight_allows_missing_optional_signals() -> None:
     assert result.ok
     assert result.level == "read-only-ready"
     assert result.checks["energy_calibration_available"]
+
+
+def test_preflight_accepts_legacy_phase_calibration_alias() -> None:
+    config = load_config("tests/dispersion_correction/fixtures/irfel_achromat.json")
+    config = replace(
+        config,
+        energy_knob=replace(
+            config.energy_knob,
+            calibration={"kind": "linear", "phase_per_delta": 2500.0},
+        ),
+    )
+
+    assert run_preflight(config).checks["energy_calibration_available"]

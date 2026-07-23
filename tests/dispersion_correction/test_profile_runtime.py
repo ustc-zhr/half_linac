@@ -54,8 +54,8 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
     assert pv_map["bpms"]["BPM09"]["x"] == "IRFEL-BI:BPM09:BPM_PX2"
     assert pv_map["quadrupoles"]["QM13"]["current_set"] == "IRFEL:PS:QM13:current:ao"
     assert pv_map["energy_knob"] == {
-        "phase_set": "IRFEL:IN-MW:KLY1:SET_PHASE",
-        "phase_readback": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE",
+        "set": "IRFEL:IN-MW:KLY1:SET_PHASE",
+        "readback": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE",
     }
     preflight = run_preflight(config)
     assert preflight.ok

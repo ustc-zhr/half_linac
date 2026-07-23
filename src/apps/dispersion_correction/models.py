@@ -23,6 +23,7 @@ class EnergyKnobConfig:
     actuator: str = "delta"
     actuator_unit: str = "delta_p_over_p"
     calibration: dict[str, Any] = field(default_factory=dict)
+    readback_tolerance: float | None = None
 
 
 @dataclass(frozen=True)

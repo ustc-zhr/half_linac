@@ -7,7 +7,10 @@ import math
 import sys
 
 from half_linac.src.apps.dispersion_correction.config import load_config
-from half_linac.src.apps.dispersion_correction.calibration import load_phase_calibration_csv
+from half_linac.src.apps.dispersion_correction.calibration import (
+    load_energy_knob_calibration_csv,
+    load_phase_calibration_csv,
+)
 from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan, format_operation_plan
 from half_linac.src.apps.dispersion_correction.model_response import (
     calculate_model_response,
@@ -130,8 +133,56 @@ def plan_command(argv: list[str] | None = None) -> int:
     return 0
 
 
+def calibrate_energy_knob_command(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Fit an energy actuator to dp/p calibration from a local CSV file."
+    )
+    parser.add_argument("--csv", required=True, help="CSV path with actuator and delta columns.")
+    parser.add_argument(
+        "--actuator-column",
+        default="actuator_value",
+        help="Column containing physical actuator values.",
+    )
+    parser.add_argument("--delta-column", default="delta_p_over_p", help="Column containing measured dp/p values.")
+    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    args = parser.parse_args(argv)
+
+    fit = load_energy_knob_calibration_csv(
+        args.csv,
+        args.actuator_column,
+        args.delta_column,
+    )
+    if args.json:
+        print(json.dumps(fit.as_dict(), indent=2, sort_keys=True))
+    else:
+        print("Energy knob calibration fit")
+        print(f"  slope_delta_per_actuator: {fit.slope_delta_per_actuator:.12g}")
+        print(f"  actuator_per_delta: {fit.actuator_per_delta:.12g}")
+        print(f"  intercept_delta: {fit.intercept_delta:.12g}")
+        print(f"  r_squared: {fit.r_squared:.12g}")
+        print(f"  n_samples: {fit.n_samples}")
+        print("")
+        print("JSON calibration fragment:")
+        print(
+            json.dumps(
+                {
+                    "calibration": {
+                        "kind": "linear_relative",
+                        "actuator_per_delta": fit.actuator_per_delta,
+                    }
+                },
+                indent=2,
+            )
+        )
+    return 0
+
+
 def calibrate_phase_command(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Fit RF phase to dp/p calibration from a local CSV file.")
+    """Compatibility command for existing phase calibration scripts."""
+
+    parser = argparse.ArgumentParser(
+        description="Legacy alias: fit RF phase to dp/p calibration."
+    )
     parser.add_argument("--csv", required=True, help="CSV path with phase and delta columns.")
     parser.add_argument("--phase-column", default="phase_deg", help="Column containing RF phase values.")
     parser.add_argument("--delta-column", default="delta_p_over_p", help="Column containing measured dp/p values.")
@@ -262,6 +313,7 @@ def main(argv: list[str] | None = None) -> int:
             "status",
             "plan",
             "preflight",
+            "calibrate-energy-knob",
             "calibrate-phase",
             "model-response",
         ),
@@ -273,6 +325,7 @@ def main(argv: list[str] | None = None) -> int:
         "status": status_command,
         "plan": plan_command,
         "preflight": preflight_command,
+        "calibrate-energy-knob": calibrate_energy_knob_command,
         "calibrate-phase": calibrate_phase_command,
         "model-response": model_response_command,
     }

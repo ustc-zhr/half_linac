@@ -107,6 +107,11 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
             actuator=str(energy_raw.get("actuator", "delta")),
             actuator_unit=str(energy_raw.get("actuator_unit", "delta_p_over_p")),
             calibration=dict(energy_raw.get("calibration", {}) or {}),
+            readback_tolerance=(
+                None
+                if energy_raw.get("readback_tolerance") is None
+                else float(energy_raw["readback_tolerance"])
+            ),
         ),
         target_bpms=tuple(str(name) for name in target_bpms),
         knobs=knobs,
@@ -141,6 +146,20 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
 def validate_config(config: RunConfig) -> None:
     if config.energy_knob.delta <= 0:
         raise ValueError("energy_knob.delta must be positive")
+    if not config.energy_knob.name.strip():
+        raise ValueError("energy_knob.name must not be empty")
+    if not config.energy_knob.actuator.strip():
+        raise ValueError("energy_knob.actuator must not be empty")
+    if not config.energy_knob.actuator_unit.strip():
+        raise ValueError("energy_knob.actuator_unit must not be empty")
+    if (
+        config.energy_knob.readback_tolerance is not None
+        and (
+            not math.isfinite(config.energy_knob.readback_tolerance)
+            or config.energy_knob.readback_tolerance < 0
+        )
+    ):
+        raise ValueError("energy_knob.readback_tolerance must be finite and non-negative")
     if len(set(config.target_bpms)) != len(config.target_bpms):
         raise ValueError("target_bpms must not contain duplicates")
     if not config.section.id:
