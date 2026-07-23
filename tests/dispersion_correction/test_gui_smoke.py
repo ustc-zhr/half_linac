@@ -27,21 +27,14 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     assert window.windowTitle() == "Dispersion Correction"
-    assert window.tabs.count() == 3
+    assert window.tabs.count() == 2
     assert [window.tabs.tabText(index) for index in range(window.tabs.count())] == [
-        "Measure & Correct",
-        "Dispersion Comparison",
+        "Online Correction",
         "History",
     ]
-    assert [
-        window.workflow_tabs.tabText(index)
-        for index in range(window.workflow_tabs.count())
-    ] == [
-        "Workflow",
-        "Measured Dispersion",
-        "Response Quality",
-        "Recommendation",
-    ]
+    assert not hasattr(window, "workflow_tabs")
+    assert len(window.detail_sections) == 5
+    assert all(not button.isChecked() for button in window.detail_sections.values())
     assert window.workspace_splitter.widget(0) is window.dispersion_overview
     assert window.workspace_splitter.widget(1) is window.tabs
     assert window.dispersion_curve.parentWidget() is window.dispersion_overview
@@ -60,15 +53,21 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert "MODEL_DELTA" not in window.energy_step_summary.text()
     assert window.calibration_button.parentWidget() is window.calibration_page
     assert window.calibration_button.text() == "Open Calibration Editor"
-    assert window.measure_button.parentWidget() is window.online_page
-    assert window.response_button.parentWidget() is window.online_page
-    assert window.review_button.parentWidget() is window.online_page
+    assert window.measure_button.parentWidget() is window.online_content
+    assert window.response_button.parentWidget() is window.online_content
+    assert window.review_button.parentWidget() is window.online_content
+    assert window.measure_button.isHidden()
+    assert window.response_button.isHidden()
+    assert window.review_button.isHidden()
     assert window.run_button.parentWidget() is window.correction_page
     assert window.apply_recommendation_button.parentWidget() is window.correction_page
-    assert window.measure_button.text() == "2  Measure Dispersion"
-    assert window.response_button.text() == "3  Measure Q Response"
-    assert window.review_button.text() == "4  Review Recommendation"
-    assert window.apply_recommendation_button.text() == "5  Apply & Remeasure"
+    assert window.apply_recommendation_button.isHidden()
+    assert window.next_action_button.text() == "Measure Dispersion"
+    assert window.next_action_button.property("workflowAction") == "measure"
+    next_actions = []
+    window._start_task = lambda task: next_actions.append(task)
+    window.next_action_button.click()
+    assert next_actions == ["measure"]
     assert window.run_button.text() == "Advanced: Automatic Loop"
     assert window.recommendation_table.columnCount() == 6
     assert not window.advanced_settings.isVisible()
@@ -81,8 +80,11 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
 
     response = AchromatWorkflow(window._config_from_widgets()).build_response_matrix()
     window._task_completed("measure", response.measurement)
-    assert window.tabs.currentWidget() is window.workflow_page
-    assert window.workflow_tabs.currentWidget() is window.measure_page
+    window._set_running(False, "")
+    assert window.tabs.currentWidget() is window.online_page
+    assert all(not button.isChecked() for button in window.detail_sections.values())
+    assert window.next_action_button.text() == "Measure Q Response"
+    assert window.next_action_button.property("workflowAction") == "response"
     assert window.dispersion_curve.result is None
     assert window.dispersion_curve.measurement.label == "Latest measured"
     assert window.measurement_source_combo.currentData() == "live"
@@ -92,19 +94,24 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert window.model_measure_table.columnCount() == 4
     assert not window.dispersion_curve.grab().isNull()
     window._task_completed("response", response)
-    assert window.workflow_tabs.currentWidget() is window.response_page
+    window._set_running(False, "")
+    assert window.detail_sections[window.response_page].isChecked()
+    assert window.next_action_button.text() == "Review Recommendation"
+    assert window.next_action_button.property("workflowAction") == "review"
     assert window.dispersion_curve.measurement.label == "Response baseline"
     assert "Response baseline" in window.plot_state_label.text()
     window._compute_recommendation()
     assert window.correction_recommendation is not None
     assert window.correction_recommendation.ready
-    assert window.tabs.currentWidget() is window.workflow_page
-    assert window.workflow_tabs.currentWidget() is window.correction_page
+    assert window.tabs.currentWidget() is window.online_page
+    assert window.detail_sections[window.correction_page].isChecked()
     assert window.recommendation_table.rowCount() == 4
     assert window.recommendation_prediction_table.rowCount() == len(
         response.bpm_names
     )
     assert window.apply_recommendation_button.isEnabled()
+    assert window.next_action_button.text() == "Apply & Remeasure"
+    assert window.next_action_button.property("workflowAction") == "apply"
     assert "no backend" in window.correction_state_label.text().lower()
     old_gain = window.gain_spin.value()
     window.gain_spin.setValue(max(0.001, old_gain - 0.1))
@@ -199,7 +206,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     window.tabs.setCurrentWidget(window.history_page)
     app.processEvents()
     assert window.dispersion_curve.isVisibleTo(window)
-    window.tabs.setCurrentWidget(window.workflow_page)
+    window.tabs.setCurrentWidget(window.online_page)
     assert abs(window.load_button.geometry().center().y() - window.config_title_label.geometry().center().y()) <= 1
     assert window.load_button.property("role") is None
     assert not window.abort_button.isVisible()
@@ -214,6 +221,8 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert window.abort_button.isVisible()
     assert window.abort_button.isEnabled()
     assert not window.measure_button.isEnabled()
+    assert not window.next_action_button.isEnabled()
+    assert window.next_action_button.text() == "Measuring Dispersion…"
     assert not window.delta_spin.isEnabled()
     assert window.progress_widget.isVisible()
     assert "Measuring dispersion" in window.plot_state_label.text()
@@ -275,13 +284,13 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
         "focus_comparison": False,
     }
     profile_window.show_snapshot_model_checkbox.setChecked(False)
-    assert profile_window.tabs.isTabEnabled(
-        profile_window.tabs.indexOf(profile_window.model_page)
-    )
+    assert profile_window.model_page in profile_window.detail_sections
     assert not profile_window.run_button.isEnabled()
     assert "READ ONLY" in profile_window.operation_banner.text()
     assert "±0.0001 / ±0.25 deg" == profile_window._energy_step_compact()
     assert profile_window.preflight_button.isEnabled()
+    assert profile_window.next_action_button.text() == "Check Connections"
+    assert profile_window.next_action_button.property("workflowAction") == "preflight"
     assert "read-only" in profile_window.preflight_button.toolTip().lower()
     assert "read-only" in profile_window.measure_button.toolTip().lower()
     assert "does not write" in profile_window.preflight_text.toPlainText().lower()
@@ -341,7 +350,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert half_window.model_response_button.text() == "Analyze Model"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
-    assert half_window.tabs.isTabEnabled(half_window.tabs.indexOf(half_window.model_page))
+    assert half_window.model_page in half_window.detail_sections
     assert "does not use scan" in half_window.knob_edit.toolTip()
     assert "limit ±" not in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
@@ -360,7 +369,10 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert "calculates dispersion directly" in half_window.energy_step_summary.text()
     assert "No energy scan" in half_window.energy_step_summary.text()
     assert "MODEL_DELTA" not in half_window.energy_step_summary.text()
-    assert half_window.tabs.currentWidget() is half_window.model_page
+    assert half_window.tabs.currentWidget() is half_window.online_page
+    assert half_window.detail_sections[half_window.model_page].isChecked()
+    assert half_window.next_action_button.text() == "Calculate Design Model"
+    assert half_window.next_action_button.property("workflowAction") == "model-design"
     from half_linac.src.apps.dispersion_correction.models import (
         ImportedDispersionDataset,
         ModelOpticsCurve,

@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
@@ -1072,37 +1073,59 @@ class MainWindow(QMainWindow):
         self.tabs.tabBar().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.online_page = QWidget()
-        online_layout = QVBoxLayout(self.online_page)
-        online_layout.setContentsMargins(8, 8, 8, 8)
+        online_page_layout = QVBoxLayout(self.online_page)
+        online_page_layout.setContentsMargins(0, 0, 0, 0)
+        self.online_scroll = QScrollArea()
+        self.online_scroll.setObjectName("workflowScroll")
+        self.online_scroll.setWidgetResizable(True)
+        self.online_scroll.setFrameShape(QFrame.NoFrame)
+        self.online_content = QWidget()
+        self.online_content.setObjectName("workflowContent")
+        online_layout = QVBoxLayout(self.online_content)
+        online_layout.setContentsMargins(10, 10, 10, 10)
         online_layout.setSpacing(8)
+        self.online_scroll.setWidget(self.online_content)
+        online_page_layout.addWidget(self.online_scroll)
+
         online_intro = QLabel(
-            "Online workflow · connection checks are read-only; measurement and "
-            "correction require energy-actuator writes."
+            "Follow the single highlighted action below. Connection checks and model "
+            "analysis are read-only; measurement and correction use the configured "
+            "machine write policy."
         )
         online_intro.setObjectName("workspaceIntro")
         online_intro.setWordWrap(True)
         online_layout.addWidget(online_intro)
 
-        online_actions = QHBoxLayout()
-        online_actions.setSpacing(8)
-        self.preflight_button = QPushButton("1  Check Connections")
+        self.workflow_state_label = QLabel("Current state")
+        self.workflow_state_label.setObjectName("workflowState")
+        self.workflow_state_label.setWordWrap(True)
+        online_layout.addWidget(self.workflow_state_label)
+        self.next_action_button = QPushButton("Check Connections")
+        self.next_action_button.setObjectName("nextWorkflowAction")
+        self.next_action_button.setProperty("role", "control")
+        self.next_action_button.clicked.connect(self._run_next_workflow_action)
+        online_layout.addWidget(self.next_action_button)
+        self.workflow_hint_label = QLabel()
+        self.workflow_hint_label.setObjectName("workflowHint")
+        self.workflow_hint_label.setWordWrap(True)
+        online_layout.addWidget(self.workflow_hint_label)
+
+        # These operation-specific buttons remain as internal state holders for the
+        # existing safety/tool-tip logic. Operators use only next_action_button.
+        self.preflight_button = QPushButton("Check Connections", self.online_content)
         self.preflight_button.setObjectName("preflightButton")
         self.preflight_button.clicked.connect(self._start_live_preflight)
-        online_actions.addWidget(self.preflight_button)
-        self.measure_button = QPushButton("2  Measure Dispersion")
+        self.preflight_button.hide()
+        self.measure_button = QPushButton("Measure Dispersion", self.online_content)
         self.measure_button.clicked.connect(lambda: self._start_task("measure"))
-        online_actions.addWidget(self.measure_button)
-        self.response_button = QPushButton("3  Measure Q Response")
+        self.measure_button.hide()
+        self.response_button = QPushButton("Measure Q Response", self.online_content)
         self.response_button.clicked.connect(lambda: self._start_task("response"))
-        online_actions.addWidget(self.response_button)
-        self.review_button = QPushButton("4  Review Recommendation")
+        self.response_button.hide()
+        self.review_button = QPushButton("Review Recommendation", self.online_content)
         self.review_button.clicked.connect(self._review_recommendation)
-        online_actions.addWidget(self.review_button)
-        online_layout.addLayout(online_actions)
+        self.review_button.hide()
 
-        self.online_details = FullWidthTabWidget()
-        self.online_details.setUsesScrollButtons(False)
-        self.online_details.tabBar().setExpanding(True)
         self.preflight_text = QPlainTextEdit()
         self.preflight_text.setReadOnly(True)
         self.preflight_text.setPlainText(
@@ -1111,11 +1134,19 @@ class MainWindow(QMainWindow):
         )
         self.plan_text = QPlainTextEdit()
         self.plan_text.setReadOnly(True)
+        self.readiness_page = QWidget()
+        readiness_layout = QVBoxLayout(self.readiness_page)
+        readiness_layout.setContentsMargins(8, 4, 8, 8)
+        readiness_layout.addWidget(QLabel("Connection and readback check"))
+        readiness_layout.addWidget(self.preflight_text, 1)
+        readiness_layout.addWidget(QLabel("Operation summary"))
+        readiness_layout.addWidget(self.plan_text, 1)
+
         self.calibration_text = QPlainTextEdit()
         self.calibration_text.setReadOnly(True)
         self.calibration_page = QWidget()
         calibration_layout = QVBoxLayout(self.calibration_page)
-        calibration_layout.setContentsMargins(8, 8, 8, 8)
+        calibration_layout.setContentsMargins(8, 4, 8, 8)
         calibration_actions = QHBoxLayout()
         calibration_actions.addStretch(1)
         self.restore_calibration_button = QPushButton("Restore Configured Calibration")
@@ -1128,28 +1159,26 @@ class MainWindow(QMainWindow):
         calibration_actions.addWidget(self.calibration_button)
         calibration_layout.addLayout(calibration_actions)
         calibration_layout.addWidget(self.calibration_text, 1)
-        self.online_details.addTab(self.preflight_text, "Readiness")
-        self.online_details.addTab(self.plan_text, "Operation Summary")
-        self.online_details.addTab(self.calibration_page, "Energy Knob")
-        online_layout.addWidget(self.online_details, 1)
 
         self.measure_table = self._table(
             ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
         )
         self.measure_page = QWidget()
         measure_layout = QVBoxLayout(self.measure_page)
-        measure_layout.setContentsMargins(8, 8, 8, 8)
+        measure_layout.setContentsMargins(8, 4, 8, 8)
         measure_title = QLabel("Measured horizontal effective dispersion")
         measure_title.setObjectName("workspaceIntro")
         measure_layout.addWidget(measure_title)
         measure_layout.addWidget(self.measure_table, 1)
+        self.measure_page.setParent(self.online_content)
+        self.measure_page.hide()
 
         self.response_table = self._table([])
         self.response_info = QPlainTextEdit()
         self.response_info.setReadOnly(True)
         self.response_page = QWidget()
         response_layout = QVBoxLayout(self.response_page)
-        response_layout.setContentsMargins(8, 8, 8, 8)
+        response_layout.setContentsMargins(8, 4, 8, 8)
         response_title = QLabel("Measured quadrupole response matrix")
         response_title.setObjectName("workspaceIntro")
         response_layout.addWidget(response_title)
@@ -1158,7 +1187,7 @@ class MainWindow(QMainWindow):
 
         self.correction_page = QWidget()
         correction_layout = QVBoxLayout(self.correction_page)
-        correction_layout.setContentsMargins(8, 8, 8, 8)
+        correction_layout.setContentsMargins(8, 4, 8, 8)
         correction_title = QLabel(
             "Review one bounded correction step calculated from the measured dispersion "
             "and measured Q response. Calculation does not access or write the backend."
@@ -1199,12 +1228,15 @@ class MainWindow(QMainWindow):
         self.run_button = QPushButton("Advanced: Automatic Loop")
         self.run_button.clicked.connect(lambda: self._start_task("run"))
         correction_actions.addWidget(self.run_button)
-        self.apply_recommendation_button = QPushButton("5  Apply & Remeasure")
+        self.apply_recommendation_button = QPushButton(
+            "Apply & Remeasure",
+            self.correction_page,
+        )
         self.apply_recommendation_button.setProperty("role", "control")
         self.apply_recommendation_button.clicked.connect(
             self._apply_reviewed_recommendation
         )
-        correction_actions.addWidget(self.apply_recommendation_button)
+        self.apply_recommendation_button.hide()
         correction_layout.addLayout(correction_actions)
 
         self.correction_table = self._table(
@@ -1213,7 +1245,7 @@ class MainWindow(QMainWindow):
 
         self.model_page = QWidget()
         model_layout = QVBoxLayout(self.model_page)
-        model_layout.setContentsMargins(8, 8, 8, 8)
+        model_layout.setContentsMargins(8, 4, 8, 8)
         model_intro = QLabel(
             "Measured BPM dispersion is the primary result. Add design or current-"
             "snapshot model curves only when they help explain the measurement."
@@ -1281,20 +1313,36 @@ class MainWindow(QMainWindow):
         self.model_info.setVisible(False)
         model_layout.addWidget(self.model_info, 1)
 
+        self.detail_sections: dict[QWidget, QToolButton] = {}
+        self._add_detail_section(
+            online_layout,
+            "Connection and Operation Details",
+            self.readiness_page,
+        )
+        self._add_detail_section(
+            online_layout,
+            "Q Response Diagnostics",
+            self.response_page,
+        )
+        self._add_detail_section(
+            online_layout,
+            "Recommendation Details",
+            self.correction_page,
+        )
+        self._add_detail_section(
+            online_layout,
+            "Energy Knob & Settings",
+            self.calibration_page,
+        )
+        self._add_detail_section(
+            online_layout,
+            "Model Details",
+            self.model_page,
+        )
+        online_layout.addStretch(1)
+
         self.report_text = QPlainTextEdit()
         self.report_text.setReadOnly(True)
-
-        self.workflow_page = QWidget()
-        workflow_layout = QVBoxLayout(self.workflow_page)
-        workflow_layout.setContentsMargins(0, 0, 0, 0)
-        self.workflow_tabs = FullWidthTabWidget()
-        self.workflow_tabs.setUsesScrollButtons(False)
-        self.workflow_tabs.tabBar().setExpanding(True)
-        self.workflow_tabs.addTab(self.online_page, "Workflow")
-        self.workflow_tabs.addTab(self.measure_page, "Measured Dispersion")
-        self.workflow_tabs.addTab(self.response_page, "Response Quality")
-        self.workflow_tabs.addTab(self.correction_page, "Recommendation")
-        workflow_layout.addWidget(self.workflow_tabs)
 
         self.history_page = QWidget()
         history_layout = QVBoxLayout(self.history_page)
@@ -1311,8 +1359,7 @@ class MainWindow(QMainWindow):
         history_layout.addWidget(QLabel("Latest report"))
         history_layout.addWidget(self.report_text, 2)
 
-        self.tabs.addTab(self.workflow_page, "Measure & Correct")
-        self.tabs.addTab(self.model_page, "Dispersion Comparison")
+        self.tabs.addTab(self.online_page, "Online Correction")
         self.tabs.addTab(self.history_page, "History")
 
         self.dispersion_overview = QWidget()
@@ -1386,9 +1433,52 @@ class MainWindow(QMainWindow):
             table.setHorizontalHeaderLabels(headers)
         return table
 
+    def _add_detail_section(
+        self,
+        layout: QVBoxLayout,
+        title: str,
+        content: QWidget,
+    ) -> None:
+        button = QToolButton()
+        button.setObjectName("detailSectionButton")
+        button.setText(title)
+        button.setCheckable(True)
+        button.setChecked(False)
+        button.setArrowType(Qt.RightArrow)
+        button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        button.toggled.connect(
+            lambda checked, trigger=button, body=content: self._toggle_detail_section(
+                trigger,
+                body,
+                checked,
+            )
+        )
+        content.setVisible(False)
+        self.detail_sections[content] = button
+        layout.addWidget(button)
+        layout.addWidget(content)
+
+    @staticmethod
+    def _toggle_detail_section(
+        button: QToolButton,
+        content: QWidget,
+        checked: bool,
+    ) -> None:
+        button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        content.setVisible(checked)
+
     def _show_workflow_detail(self, page: QWidget) -> None:
-        self.tabs.setCurrentWidget(self.workflow_page)
-        self.workflow_tabs.setCurrentWidget(page)
+        self.tabs.setCurrentWidget(self.online_page)
+        button = self.detail_sections.get(page)
+        if button is None:
+            for other in self.detail_sections.values():
+                if other.isChecked():
+                    other.setChecked(False)
+            return
+        for other in self.detail_sections.values():
+            if other is not button and other.isChecked():
+                other.setChecked(False)
+        button.setChecked(True)
 
     def _add_form_row(self, form: QFormLayout, label_text: str, widget) -> QLabel:
         label = QLabel(label_text)
@@ -1450,7 +1540,7 @@ class MainWindow(QMainWindow):
         self._show_calibration_summary()
         self._update_static_safety_status()
         if self.config.section.model_only:
-            self.tabs.setCurrentWidget(self.model_page)
+            self._show_workflow_detail(self.model_page)
         else:
             self._show_workflow_detail(self.online_page)
         self._refresh_status("Config loaded")
@@ -2085,7 +2175,7 @@ class MainWindow(QMainWindow):
         self.model_worker.finished.connect(self._task_finished)
         self._set_running(True, "model-response")
         if focus_comparison:
-            self.tabs.setCurrentWidget(self.model_page)
+            self._show_workflow_detail(self.model_page)
         self.model_worker.start()
 
     def _model_response_completed(self, result: object) -> None:
@@ -2708,6 +2798,131 @@ class MainWindow(QMainWindow):
         self.status_strip.set_value("LAST RESULT", last_result, result_tone)
         self._update_operation_banner()
 
+    def _next_workflow_action(self) -> tuple[str | None, str, str, str]:
+        if self.config.section.model_only:
+            if self.dispersion_curve.result is None:
+                return (
+                    "model-design",
+                    "Calculate Design Model",
+                    "Model-only section",
+                    "Calculates and displays the design curve without a measurement or "
+                    "machine write.",
+                )
+            return (
+                "model-details",
+                "Show Model Details",
+                "Model curve available",
+                "The model curve is already displayed in the dispersion overview.",
+            )
+
+        backend_type = self.config.backend.type.lower()
+        if backend_type == "epics" and (
+            self.last_live_preflight is None or not self.last_live_preflight.ok
+        ):
+            return (
+                "preflight",
+                "Check Connections",
+                "Connections not checked",
+                "Reads the configured energy actuator, quadrupoles, and BPMs without "
+                "writing any PV.",
+            )
+
+        block_reason = self._operation_block_reason()
+        if block_reason is not None:
+            return (
+                None,
+                "Online Measurement Unavailable",
+                "Online correction is unavailable",
+                block_reason.replace("\n", " "),
+            )
+        if self.latest_measurement is None:
+            return (
+                "measure",
+                "Measure Dispersion",
+                "Ready to measure dispersion",
+                "Runs the configured energy scan and updates the persistent dispersion "
+                "plot.",
+            )
+        if self.latest_response is None:
+            return (
+                "response",
+                "Measure Q Response",
+                "Dispersion measured",
+                "Measures the selected quadrupole response around the latest dispersion "
+                "baseline.",
+            )
+        if self.correction_recommendation is None:
+            return (
+                "review",
+                "Review Recommendation",
+                "Dispersion and Q response ready",
+                "Calculates one bounded recommendation from measured data without "
+                "accessing the backend.",
+            )
+        apply_reason = self._recommendation_apply_block_reason()
+        return (
+            "apply" if apply_reason is None else None,
+            "Apply & Remeasure",
+            "Recommendation ready for review",
+            apply_reason
+            or "Applies the reviewed targets once, remeasures dispersion, and restores "
+            "the snapshot if the step is rejected.",
+        )
+
+    def _run_next_workflow_action(self) -> None:
+        action = str(self.next_action_button.property("workflowAction") or "")
+        if action == "preflight":
+            self._start_live_preflight()
+        elif action == "measure":
+            self._start_task("measure")
+        elif action == "response":
+            self._start_task("response")
+        elif action == "review":
+            self._review_recommendation()
+        elif action == "apply":
+            self._apply_reviewed_recommendation()
+        elif action == "model-design":
+            if self.dispersion_curve.result is None:
+                if self.show_design_model_checkbox.isChecked():
+                    self._start_model_response(
+                        model_source="design",
+                        focus_comparison=False,
+                    )
+                else:
+                    self.show_design_model_checkbox.setChecked(True)
+            self._show_workflow_detail(self.model_page)
+        elif action == "model-details":
+            self._show_workflow_detail(self.model_page)
+
+    def _update_next_workflow_action(self, running: bool, task: str) -> None:
+        if running:
+            labels = {
+                "preflight": ("Checking Connections…", "Checking connections"),
+                "measure": ("Measuring Dispersion…", "Dispersion measurement running"),
+                "response": ("Measuring Q Response…", "Q response measurement running"),
+                "apply": ("Applying & Remeasuring…", "Reviewed correction running"),
+                "run": ("Automatic Loop Running…", "Automatic correction running"),
+                "model-response": ("Calculating Model…", "Model analysis running"),
+            }
+            button_text, state_text = labels.get(
+                task,
+                ("Operation Running…", "Operation in progress"),
+            )
+            self.next_action_button.setProperty("workflowAction", "")
+            self.next_action_button.setText(button_text)
+            self.next_action_button.setEnabled(False)
+            self.workflow_state_label.setText(state_text)
+            self.workflow_hint_label.setText(
+                "Wait for the current operation to finish or use Abort when available."
+            )
+            return
+        action, button_text, state_text, hint = self._next_workflow_action()
+        self.next_action_button.setProperty("workflowAction", action or "")
+        self.next_action_button.setText(button_text)
+        self.next_action_button.setEnabled(action is not None)
+        self.workflow_state_label.setText(state_text)
+        self.workflow_hint_label.setText(hint)
+
     def _set_running(self, running: bool, task: str) -> None:
         profile_managed = self.app_context is not None
         block_reason = self._operation_block_reason()
@@ -2806,6 +3021,7 @@ class MainWindow(QMainWindow):
         self.abort_button.setEnabled(abortable)
         self.abort_button.setVisible(abortable)
         self.progress_widget.setVisible(running)
+        self._update_next_workflow_action(running, task)
         self._update_operation_banner()
         if running:
             self._refresh_status(task)
@@ -3098,8 +3314,7 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = None
         self._update_static_safety_status()
         self._set_running(False, "")
-        self._show_workflow_detail(self.online_page)
-        self.online_details.setCurrentWidget(self.calibration_page)
+        self._show_workflow_detail(self.calibration_page)
         self._refresh_status("Calibration loaded")
 
     def _restore_configured_calibration(self) -> None:
@@ -3138,8 +3353,7 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = None
         self._update_static_safety_status()
         self._set_running(False, "")
-        self._show_workflow_detail(self.online_page)
-        self.online_details.setCurrentWidget(self.calibration_page)
+        self._show_workflow_detail(self.calibration_page)
         self._refresh_status("Configured calibration restored")
 
     def _toggle_theme(self) -> None:
@@ -3224,8 +3438,7 @@ class MainWindow(QMainWindow):
             "Checking configured energy actuator, quadrupoles, and BPM readbacks…\n\n"
             "No setpoint will be changed."
         )
-        self._show_workflow_detail(self.online_page)
-        self.online_details.setCurrentWidget(self.preflight_text)
+        self._show_workflow_detail(self.readiness_page)
         self.preflight_worker = LivePreflightWorker(self.config)
         self.preflight_worker.completed.connect(self._live_preflight_completed)
         self.preflight_worker.failed.connect(self._live_preflight_failed)
@@ -3242,8 +3455,7 @@ class MainWindow(QMainWindow):
             "success" if ready else "danger",
         )
         self.preflight_text.setPlainText(self._format_live_preflight(result))
-        self._show_workflow_detail(self.online_page)
-        self.online_details.setCurrentWidget(self.preflight_text)
+        self._show_workflow_detail(self.readiness_page)
         messages = [*result.static.blockers, *result.blockers]
         warnings = [*result.static.warnings, *result.warnings]
         if messages:

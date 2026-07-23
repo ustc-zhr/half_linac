@@ -131,6 +131,12 @@ def build_stylesheet(name: str) -> str:
         border: 1px solid {t['section_border']};
         border-radius: 14px;
     }}
+    QScrollArea#workflowScroll,
+    QScrollArea#workflowScroll > QWidget#qt_scrollarea_viewport,
+    QWidget#workflowContent {{
+        background: {t['panel_bg']};
+        border: none;
+    }}
     QFrame#statusStrip {{
         background: transparent;
         border: none;
@@ -153,6 +159,18 @@ def build_stylesheet(name: str) -> str:
         font-size: 12px;
         font-weight: 600;
         padding: 2px 2px 5px 2px;
+    }}
+    QLabel#workflowState {{
+        color: {t['text_primary']};
+        font-size: 15px;
+        font-weight: 800;
+        padding: 3px 2px 0px 2px;
+    }}
+    QLabel#workflowHint {{
+        color: {t['text_muted']};
+        font-size: 11px;
+        font-weight: 600;
+        padding: 0px 2px 5px 2px;
     }}
     QLabel#modelSafetyNotice {{
         color: {t['status_success']};
@@ -222,6 +240,23 @@ def build_stylesheet(name: str) -> str:
         color: {t['text_primary']};
         background: transparent;
     }}
+    QToolButton#detailSectionButton {{
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid {t['section_border']};
+        border-radius: 0px;
+        color: {t['text_muted']};
+        min-height: 28px;
+        padding: 3px 2px;
+        text-align: left;
+    }}
+    QToolButton#detailSectionButton:checked {{
+        color: {t['text_primary']};
+    }}
+    QToolButton#detailSectionButton:hover {{
+        color: {t['text_primary']};
+        background: {t['button_hover']};
+    }}
     QFrame#statusItem {{
         background: transparent;
         border: none;
@@ -285,6 +320,10 @@ def build_stylesheet(name: str) -> str:
     }}
     QPushButton[role="control"]:enabled {{
         border-color: {t['focus']};
+    }}
+    QPushButton#nextWorkflowAction {{
+        min-height: 38px;
+        font-size: 14px;
     }}
     QPushButton[role="danger"]:enabled {{
         border-color: {t['danger']};
