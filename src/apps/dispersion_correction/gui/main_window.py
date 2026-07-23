@@ -1032,6 +1032,17 @@ class MainWindow(QMainWindow):
         self.advanced_settings.setVisible(False)
         layout.addWidget(self.advanced_settings)
 
+        self.connection_controls = QWidget()
+        connection_layout = QVBoxLayout(self.connection_controls)
+        connection_layout.setContentsMargins(0, 0, 0, 0)
+        connection_layout.setSpacing(7)
+        connection_layout.addWidget(self._config_section_label("CONNECTION"))
+        self.preflight_button = QPushButton("Check Connections")
+        self.preflight_button.setObjectName("preflightButton")
+        self.preflight_button.clicked.connect(self._start_live_preflight)
+        connection_layout.addWidget(self.preflight_button)
+        layout.addWidget(self.connection_controls)
+
         self.operation_banner = QLabel()
         self.operation_banner.setObjectName("operationBanner")
         self.operation_banner.setWordWrap(True)
@@ -1099,9 +1110,8 @@ class MainWindow(QMainWindow):
         online_page_layout.addWidget(self.online_scroll)
 
         online_intro = QLabel(
-            "Follow the single highlighted action below. Connection checks and model "
-            "analysis are read-only; measurement and correction use the configured "
-            "machine write policy."
+            "For online operation, run Check Connections in the left panel, then "
+            "follow the highlighted action below."
         )
         online_intro.setObjectName("workspaceIntro")
         online_intro.setWordWrap(True)
@@ -1123,10 +1133,6 @@ class MainWindow(QMainWindow):
 
         # These operation-specific buttons remain as internal state holders for the
         # existing safety/tool-tip logic. Operators use only next_action_button.
-        self.preflight_button = QPushButton("Check Connections", self.online_content)
-        self.preflight_button.setObjectName("preflightButton")
-        self.preflight_button.clicked.connect(self._start_live_preflight)
-        self.preflight_button.hide()
         self.measure_button = QPushButton("Measure Dispersion", self.online_content)
         self.measure_button.clicked.connect(lambda: self._start_task("measure"))
         self.measure_button.hide()
@@ -2832,11 +2838,11 @@ class MainWindow(QMainWindow):
             self.last_live_preflight is None or not self.last_live_preflight.ok
         ):
             return (
-                "preflight",
-                "Check Connections",
-                "Connections not checked",
-                "Reads the configured energy actuator, quadrupoles, and BPMs without "
-                "writing any PV.",
+                None,
+                "Measure Dispersion",
+                "Connection check required",
+                "Run Check Connections in the left configuration panel before "
+                "starting an online measurement.",
             )
 
         block_reason = self._operation_block_reason()
@@ -2883,9 +2889,7 @@ class MainWindow(QMainWindow):
 
     def _run_next_workflow_action(self) -> None:
         action = str(self.next_action_button.property("workflowAction") or "")
-        if action == "preflight":
-            self._start_live_preflight()
-        elif action == "measure":
+        if action == "measure":
             self._start_task("measure")
         elif action == "response":
             self._start_task("response")
@@ -2909,7 +2913,7 @@ class MainWindow(QMainWindow):
     def _update_next_workflow_action(self, running: bool, task: str) -> None:
         if running:
             labels = {
-                "preflight": ("Checking Connections…", "Checking connections"),
+                "preflight": ("Measure Dispersion", "Checking connections"),
                 "measure": ("Measuring Dispersion…", "Dispersion measurement running"),
                 "response": ("Measuring Q Response…", "Q response measurement running"),
                 "apply": ("Applying & Remeasuring…", "Reviewed correction running"),
@@ -2963,7 +2967,13 @@ class MainWindow(QMainWindow):
             and not self.config.section.model_only
             and self.session_energy_calibration_source is not None
         )
-        self.preflight_button.setEnabled(not running and self.config.backend.type.lower() == "epics")
+        connection_available = (
+            self.config.backend.type.lower() == "epics"
+            and not self.config.section.model_only
+        )
+        self.connection_controls.setVisible(connection_available)
+        self.preflight_button.setVisible(connection_available)
+        self.preflight_button.setEnabled(not running and connection_available)
         self.model_response_button.setEnabled(
             not running and self._model_analysis_available()
         )
@@ -3024,9 +3034,14 @@ class MainWindow(QMainWindow):
             )
         )
         self.preflight_button.setToolTip(
-            "Read-only check: reads all configured PVs without changing any setpoint."
-            if self.preflight_button.isEnabled()
-            else "Connection checks require an EPICS backend."
+            "Another operation is running."
+            if running and connection_available
+            else (
+                "Read-only check: reads all configured PVs without changing any "
+                "setpoint."
+                if connection_available
+                else "Connection checks are only used by online EPICS workflows."
+            )
         )
         self.advanced_button.setEnabled(not running)
         abortable = running and task != "preflight"

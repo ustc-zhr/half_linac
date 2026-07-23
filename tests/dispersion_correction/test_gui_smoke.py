@@ -62,6 +62,8 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert window.measure_button.isHidden()
     assert window.response_button.isHidden()
     assert window.review_button.isHidden()
+    assert window.connection_controls.isHidden()
+    assert window.preflight_button.isHidden()
     assert window.run_button.parentWidget() is window.correction_page
     assert window.apply_recommendation_button.parentWidget() is window.correction_page
     assert window.apply_recommendation_button.isHidden()
@@ -291,9 +293,17 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert not profile_window.run_button.isEnabled()
     assert "READ ONLY" in profile_window.operation_banner.text()
     assert "±0.0001 / ±0.25 deg" == profile_window._energy_step_compact()
+    assert profile_window.connection_controls.isVisibleTo(profile_window)
+    assert profile_window.preflight_button.isVisibleTo(profile_window)
     assert profile_window.preflight_button.isEnabled()
-    assert profile_window.next_action_button.text() == "Check Connections"
-    assert profile_window.next_action_button.property("workflowAction") == "preflight"
+    assert (
+        profile_window.preflight_button.parentWidget()
+        is profile_window.connection_controls
+    )
+    assert profile_window.next_action_button.text() == "Measure Dispersion"
+    assert profile_window.next_action_button.property("workflowAction") == ""
+    assert not profile_window.next_action_button.isEnabled()
+    assert "left configuration panel" in profile_window.workflow_hint_label.text()
     assert "read-only" in profile_window.preflight_button.toolTip().lower()
     assert "read-only" in profile_window.measure_button.toolTip().lower()
     assert "does not write" in profile_window.preflight_text.toPlainText().lower()
@@ -350,6 +360,8 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert irfel_vm_window.section_combo.currentData() == "dogleg"
     assert irfel_vm_window.detail_sections[irfel_vm_window.model_page].isChecked()
     assert irfel_vm_window.next_action_button.text() == "Calculate Design Model"
+    assert irfel_vm_window.connection_controls.isHidden()
+    assert irfel_vm_window.preflight_button.isHidden()
     assert irfel_vm_window.show_design_model_checkbox.isEnabled()
     assert irfel_vm_window.show_snapshot_model_checkbox.isEnabled()
     assert not irfel_vm_window.measure_button.isEnabled()
@@ -398,6 +410,8 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert half_window.detail_sections[half_window.model_page].isChecked()
     assert half_window.next_action_button.text() == "Calculate Design Model"
     assert half_window.next_action_button.property("workflowAction") == "model-design"
+    assert half_window.connection_controls.isHidden()
+    assert half_window.preflight_button.isHidden()
     from half_linac.src.apps.dispersion_correction.models import (
         ImportedDispersionDataset,
         ModelOpticsCurve,
