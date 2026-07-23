@@ -242,29 +242,24 @@ class ModelResponseResult:
     observable_elements: tuple[str, ...]
     observable_components: tuple[str, ...]
     observable_units: tuple[str, ...]
-    knob_names: tuple[str, ...]
-    baseline_values: ArrayLike
+    device_names: tuple[str, ...]
+    selected_values: ArrayLike
     target_values: ArrayLike
-    response_matrix: ArrayLike
-    singular_values: ArrayLike
-    condition_number: float
-    retained_rank: int
-    derived_knobs: tuple[KnobConfig, ...]
-    baseline_curve: "ModelOpticsCurve"
-    preview_knob_deltas: dict[str, float]
-    preview_values: ArrayLike
-    preview_curve: "ModelOpticsCurve"
+    design_reference_values: ArrayLike
+    selected_curve: "ModelOpticsCurve"
+    design_reference_curve: "ModelOpticsCurve"
+    selected_k1: dict[str, float]
+    design_k1: dict[str, float]
+    design_reference_deltas: dict[str, float]
     model_source: str = "design"
     design_curve: "ModelOpticsCurve | None" = None
     snapshot_metadata: dict[str, Any] | None = None
     entrance_condition: str = ""
 
     def __post_init__(self) -> None:
-        baseline = np.asarray(self.baseline_values, dtype=float)
+        selected = np.asarray(self.selected_values, dtype=float)
         target = np.asarray(self.target_values, dtype=float)
-        preview = np.asarray(self.preview_values, dtype=float)
-        matrix = np.asarray(self.response_matrix, dtype=float)
-        singular_values = np.asarray(self.singular_values, dtype=float)
+        design_reference = np.asarray(self.design_reference_values, dtype=float)
         row_count = len(self.observable_names)
         metadata_lengths = {
             len(self.observable_elements),
@@ -273,35 +268,71 @@ class ModelResponseResult:
         }
         if metadata_lengths != {row_count}:
             raise ValueError("Model observable metadata lengths must match")
-        if baseline.shape != target.shape or baseline.shape != preview.shape:
-            raise ValueError("Model baseline, target, and preview values must match")
-        if baseline.shape != (row_count,):
+        if selected.shape != target.shape or selected.shape != design_reference.shape:
+            raise ValueError("Selected, target, and design-reference values must match")
+        if selected.shape != (row_count,):
             raise ValueError("Model values must match observable_names")
-        if matrix.shape != (row_count, len(self.knob_names)):
-            raise ValueError("Model response matrix shape must match observables and knobs")
-        if set(self.preview_knob_deltas) != set(self.knob_names):
-            raise ValueError("Preview knob deltas must match knob_names")
-        object.__setattr__(self, "baseline_values", baseline)
+        device_names = set(self.device_names)
+        if set(self.selected_k1) != device_names:
+            raise ValueError("Selected K1 values must match device_names")
+        if set(self.design_k1) != device_names:
+            raise ValueError("Design K1 values must match device_names")
+        if set(self.design_reference_deltas) != device_names:
+            raise ValueError("Design-reference deltas must match device_names")
+        object.__setattr__(self, "selected_values", selected)
         object.__setattr__(self, "target_values", target)
-        object.__setattr__(self, "preview_values", preview)
-        object.__setattr__(self, "response_matrix", matrix)
-        object.__setattr__(self, "singular_values", singular_values)
+        object.__setattr__(self, "design_reference_values", design_reference)
+
+    @property
+    def baseline_values(self) -> ArrayLike:
+        """Compatibility alias for the selected model values."""
+        return self.selected_values
+
+    @property
+    def preview_values(self) -> ArrayLike:
+        """Compatibility alias for the design-reference values."""
+        return self.design_reference_values
+
+    @property
+    def baseline_curve(self) -> "ModelOpticsCurve":
+        """Compatibility alias for the selected model curve."""
+        return self.selected_curve
+
+    @property
+    def preview_curve(self) -> "ModelOpticsCurve":
+        """Compatibility alias for the design-reference curve."""
+        return self.design_reference_curve
 
     @property
     def residual_values(self) -> ArrayLike:
-        return self.baseline_values - self.target_values
+        return self.selected_values - self.target_values
 
     @property
-    def preview_residual_values(self) -> ArrayLike:
-        return self.preview_values - self.target_values
+    def design_reference_residual_values(self) -> ArrayLike:
+        return self.design_reference_values - self.target_values
 
     @property
-    def baseline_rms(self) -> float:
+    def selected_rms(self) -> float:
         return float(np.sqrt(np.mean(self.residual_values**2)))
 
     @property
+    def design_reference_rms(self) -> float:
+        return float(np.sqrt(np.mean(self.design_reference_residual_values**2)))
+
+    @property
+    def preview_residual_values(self) -> ArrayLike:
+        """Compatibility alias for design_reference_residual_values."""
+        return self.design_reference_residual_values
+
+    @property
+    def baseline_rms(self) -> float:
+        """Compatibility alias for selected_rms."""
+        return self.selected_rms
+
+    @property
     def preview_rms(self) -> float:
-        return float(np.sqrt(np.mean(self.preview_residual_values**2)))
+        """Compatibility alias for design_reference_rms."""
+        return self.design_reference_rms
 
 
 @dataclass(frozen=True)

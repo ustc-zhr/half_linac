@@ -226,11 +226,13 @@ def _load_runtime_config(
 
 
 def model_response_command(argv: list[str] | None = None) -> int:
-    parser = _base_parser("Calculate an isolated Elegant dispersion response for one section.")
+    parser = _base_parser(
+        "Compare selected Elegant optics with a read-only design-reference prediction."
+    )
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     args = parser.parse_args(argv)
     if args.config:
-        raise ValueError("Model response requires a machine-profile configuration")
+        raise ValueError("Model comparison requires a machine-profile configuration")
     context, config = load_profile_run_config(section_id=args.section)
     result = calculate_model_response(
         context,

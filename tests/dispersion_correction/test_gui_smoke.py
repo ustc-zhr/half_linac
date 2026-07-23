@@ -150,9 +150,11 @@ def test_main_window_constructs_offscreen() -> None:
     assert half_window.model_source_combo.itemData(1) == "live"
     assert "VM backend" in half_window.model_source_combo.toolTip()
     assert half_window.model_boundary_label.text() == "Assume D=D'=0 at BPM02"
-    assert half_window.model_response_button.text() == "Analyze + Predict Correction"
+    assert half_window.model_response_button.text() == "Compare Model References"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
+    assert "does not use scan" in half_window.knob_edit.toolTip()
+    assert "limit ±" not in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
     assert not half_window.measure_button.isEnabled()
     assert not half_window.response_button.isEnabled()
@@ -188,23 +190,25 @@ def test_main_window_constructs_offscreen() -> None:
         observable_elements=("BPM06", "BPM06"),
         observable_components=("dx", "dxp"),
         observable_units=("mm", "mrad"),
-        knob_names=("QL01_QL06_sym",),
-        baseline_values=np.asarray([0.1, 0.01]),
+        device_names=("QL01",),
+        selected_values=np.asarray([0.1, 0.01]),
         target_values=np.zeros(2),
-        response_matrix=np.asarray([[1.0], [0.1]]),
-        singular_values=np.asarray([1.0]),
-        condition_number=1.0,
-        retained_rank=1,
-        derived_knobs=(),
-        baseline_curve=curve,
-        preview_knob_deltas={"QL01_QL06_sym": -0.1},
-        preview_values=np.zeros(2),
-        preview_curve=curve,
+        design_reference_values=np.zeros(2),
+        selected_curve=curve,
+        design_reference_curve=curve,
+        selected_k1={"QL01": 6.1},
+        design_k1={"QL01": 6.0},
+        design_reference_deltas={"QL01": -0.1},
+        design_curve=curve,
     )
     half_window._show_model_response(model_result)
     half_window._set_running(False, "")
     app.processEvents()
     assert half_window.dispersion_curve.result is model_result
+    assert half_window.response_table.horizontalHeaderItem(0).text() == "Quadrupole"
+    assert half_window.response_table.horizontalHeaderItem(3).text() == "Design-reference ΔK1"
+    assert half_window.response_table.item(0, 0).text() == "QL01"
+    assert half_window.response_table.item(0, 3).text() == "-0.1"
     assert half_window.import_measurement_button.isEnabled()
     assert not half_window.clear_measurement_button.isEnabled()
     imported = ImportedDispersionDataset(
@@ -220,6 +224,7 @@ def test_main_window_constructs_offscreen() -> None:
     half_window._set_running(False, "")
     assert half_window.clear_measurement_button.isEnabled()
     assert half_window.measure_table.horizontalHeaderItem(1).text() == "Imported ηx (mm)"
+    assert half_window.measure_table.horizontalHeaderItem(2).text() == "Selected model ηx (mm)"
     assert half_window.measure_table.item(0, 3).text() == "0.15"
     assert not half_window.dispersion_curve.grab().isNull()
     assert not half_window.dispersion_curve._is_rf("WATCH")

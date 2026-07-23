@@ -94,7 +94,7 @@ python3 -m half_linac.src.apps.dispersion_correction.cli status --json
 `preflight` is configuration-only. `status` performs EPICS reads of the
 configured BPM, quadrupole and phase setpoint PVs. Neither command writes.
 
-Calculate the HALF BL01 design response without machine IO:
+Compare the HALF BL01 design optics without machine IO:
 
 ```bash
 source scripts/setup.sh
@@ -103,10 +103,14 @@ export HALF_LINAC_CONTROL_BACKEND=vm
 python3 -m half_linac.src.apps.dispersion_correction.cli model-response --section bl01
 ```
 
-The model report includes endpoint `D/D'` observables, the raw symmetric-pair
-response matrix, retained SVD rank, model-derived weighted quadrupole modes,
-and a bounded correction preview. The GUI also plots baseline and preview
-horizontal/vertical dispersion curves. A lattice strip on the same longitudinal
+The model report includes endpoint `D/D'` observables and the selected, design,
+and design-reference K1 values for the configured correction quadrupoles. With
+`Current snapshot` selected, the app reads the active VM or REAL K1 PVs, then
+recomputes an isolated curve after restoring only the configured correction
+quadrupoles to their lattice design values. This is a design-reference prediction,
+not a beam-based correction recommendation, and it never writes a PV. The GUI
+plots selected, full-design, and design-reference horizontal/vertical dispersion
+curves. A lattice strip on the same longitudinal
 axis shows horizontal/vertical bends, focusing/defocusing quadrupoles, BPMs,
 RF elements, and the configured dispersion constraint locations. Hovering over
 the strip reports element name, type, position, length, and applicable K1 or
@@ -114,14 +118,10 @@ bend angle. Quadrupoles use one color: positive K1 is drawn above the beamline
 and negative K1 below it. WATCH/screens, correctors, and collimator apertures
 are hidden because they do not change this first-order dispersion model; RF is
 recognized from its Elegant element type rather than a `PRF` diagnostic name.
-One BL01 analysis uses eight isolated Elegant runs: baseline, positive/negative
-scans for three raw knobs, and the exact preview lattice.
-
-The preview reports suggested raw-knob deltas and recomputes the lattice rather
-than showing only a linear matrix prediction. It remains read-only: the
-quadrupole changes exist only as overrides in the isolated model workdir.
-The report also compares the baseline and preview peak beta functions as a
-first optics-distortion check.
+The report also compares selected and design-reference peak beta functions.
+Actual correction remains a separate beam-based workflow: measure dispersion
+with the calibrated energy knob, calculate a small quadrupole step, apply it
+under backend limits, and remeasure.
 
 ## Commissioning steps still required
 

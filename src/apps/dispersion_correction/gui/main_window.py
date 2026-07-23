@@ -170,8 +170,8 @@ class FullWidthTabWidget(QTabWidget):
 
 class DispersionCurveWidget(QWidget):
     DEFAULT_TOOLTIP = (
-        "Dotted: design; solid: model before correction; dashed: prediction using "
-        "the recommended quadrupole settings. "
+        "Dotted: full design lattice; solid: selected model source; dashed: prediction "
+        "after restoring the correction quadrupoles to their design K1 values. "
         "Circles: imported eta_x. Red: horizontal; blue: vertical. "
         "Move over the lattice strip for element details."
     )
@@ -210,14 +210,14 @@ class DispersionCurveWidget(QWidget):
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(12, 18, "Dispersion η (mm)")
         if self.result is None or plot.width() <= 0 or plot.height() <= 0:
-            painter.drawText(plot, Qt.AlignCenter, "Calculate model response to display optics")
+            painter.drawText(plot, Qt.AlignCenter, "Compare model references to display optics")
             return
 
         curves = (
-            self.result.baseline_curve.dx_mm,
-            self.result.baseline_curve.dy_mm,
-            self.result.preview_curve.dx_mm,
-            self.result.preview_curve.dy_mm,
+            self.result.selected_curve.dx_mm,
+            self.result.selected_curve.dy_mm,
+            self.result.design_reference_curve.dx_mm,
+            self.result.design_reference_curve.dy_mm,
         )
         if self.result.design_curve is not None:
             curves = curves + (
@@ -233,7 +233,7 @@ class DispersionCurveWidget(QWidget):
                 uncertainty = float(sigma) if math.isfinite(float(sigma)) else 0.0
                 limit = max(limit, abs(float(value)) + uncertainty)
         limit = max(limit * 1.1, 1.0e-6)
-        s_values = self.result.baseline_curve.s_m
+        s_values = self.result.selected_curve.s_m
         s_min = float(s_values[0])
         s_max = float(s_values[-1])
         s_span = max(s_max - s_min, 1.0e-12)
@@ -271,22 +271,22 @@ class DispersionCurveWidget(QWidget):
                 painter.setPen(QPen(design_color, 2, Qt.DotLine))
                 painter.drawPolyline(points(self.result.design_curve.s_m, curve))
         for color, curve in (
-            (horizontal, self.result.baseline_curve.dx_mm),
-            (vertical, self.result.baseline_curve.dy_mm),
+            (horizontal, self.result.selected_curve.dx_mm),
+            (vertical, self.result.selected_curve.dy_mm),
         ):
             painter.setPen(QPen(color, 1))
-            painter.drawPolyline(points(self.result.baseline_curve.s_m, curve))
+            painter.drawPolyline(points(self.result.selected_curve.s_m, curve))
         for color, curve in (
-            (horizontal, self.result.preview_curve.dx_mm),
-            (vertical, self.result.preview_curve.dy_mm),
+            (horizontal, self.result.design_reference_curve.dx_mm),
+            (vertical, self.result.design_reference_curve.dy_mm),
         ):
             pen = QPen(color, 2, Qt.DashLine)
             painter.setPen(pen)
-            painter.drawPolyline(points(self.result.preview_curve.s_m, curve))
+            painter.drawPolyline(points(self.result.design_reference_curve.s_m, curve))
         if self.measurement is not None:
             s_by_name = {
-                name: float(self.result.baseline_curve.s_m[index])
-                for index, name in enumerate(self.result.baseline_curve.element_names)
+                name: float(self.result.selected_curve.s_m[index])
+                for index, name in enumerate(self.result.selected_curve.element_names)
             }
             measured_color = QColor("#f2c14e")
             painter.setPen(QPen(measured_color, 2))
@@ -324,7 +324,7 @@ class DispersionCurveWidget(QWidget):
         painter.drawText(
             plot.left() + 75,
             plot.top() + 16,
-            "design ···  before correction —  recommended-Q prediction --  measured ●",
+            "design ···  selected model —  design-reference --  measured ●",
         )
         lattice_rect = QRectF(
             float(plot.left()),
@@ -356,7 +356,7 @@ class DispersionCurveWidget(QWidget):
     ) -> None:
         if self.result is None:
             return
-        curve = self.result.baseline_curve
+        curve = self.result.selected_curve
         span = max(s_max - s_min, 1.0e-12)
         center_y = rect.top() + 28.0
 
@@ -455,7 +455,7 @@ class DispersionCurveWidget(QWidget):
     ) -> None:
         if self.result is None:
             return
-        curve = self.result.baseline_curve
+        curve = self.result.selected_curve
         indices = self._visible_element_indices()
         bend_indices = [
             index for index in indices if "BEND" in curve.element_types[index].upper()
@@ -490,7 +490,7 @@ class DispersionCurveWidget(QWidget):
     def _visible_element_indices(self) -> list[int]:
         if self.result is None:
             return []
-        curve = self.result.baseline_curve
+        curve = self.result.selected_curve
         return [
             index
             for index, element_type in enumerate(curve.element_types)
@@ -525,7 +525,7 @@ class DispersionCurveWidget(QWidget):
         if not rect.adjusted(-4.0, -8.0, 4.0, 8.0).contains(event.localPos()):
             self.setToolTip(self.DEFAULT_TOOLTIP)
             return super().mouseMoveEvent(event)
-        curve = self.result.baseline_curve
+        curve = self.result.selected_curve
         span = max(s_max - s_min, 1.0e-12)
         indices = self._visible_element_indices()
         if not indices:
@@ -934,7 +934,7 @@ class MainWindow(QMainWindow):
         )
         self.model_source_combo.currentIndexChanged.connect(self._model_source_changed)
         response_actions.addWidget(self.model_source_combo)
-        self.model_response_button = QPushButton("Analyze + Predict Correction")
+        self.model_response_button = QPushButton("Compare Model References")
         self.model_response_button.clicked.connect(self._start_model_response)
         self.model_response_button.setVisible(self._model_analysis_available())
         response_actions.addWidget(self.model_response_button)
@@ -1052,6 +1052,21 @@ class MainWindow(QMainWindow):
 
     def _update_knob_summary(self) -> None:
         summaries = []
+        if self.config.section.model_only:
+            tooltip_lines = [
+                "Design-reference quadrupoles. Model comparison does not use scan, "
+                "step, or backend execution limits."
+            ]
+            for knob in self.selected_knobs:
+                devices = tuple(knob.devices)
+                summaries.append("/".join(devices))
+                tooltip_lines.append(
+                    f"{knob.name}: restore device K1 values to lattice design"
+                )
+            self.knob_edit.setText("; ".join(summaries))
+            self.knob_edit.setCursorPosition(0)
+            self.knob_edit.setToolTip("\n".join(tooltip_lines))
+            return
         tooltip_lines = ["Symmetric device weights: +1 / +1"]
         unit = self._knob_control_unit()
         unit_suffix = f" {unit}" if unit else ""
@@ -1122,8 +1137,8 @@ class MainWindow(QMainWindow):
         allowed_bpms = tuple(
             name
             for name, element_type in zip(
-                response.baseline_curve.element_names,
-                response.baseline_curve.element_types,
+                response.selected_curve.element_names,
+                response.selected_curve.element_types,
             )
             if DispersionCurveWidget._is_bpm(name, element_type.upper())
         )
@@ -1529,7 +1544,7 @@ class MainWindow(QMainWindow):
 
     def _start_model_response(self) -> None:
         if self.app_context is None or self.app_context.model_backend is None:
-            QMessageBox.warning(self, "Model Response", "No Elegant model backend is configured.")
+            QMessageBox.warning(self, "Model Comparison", "No Elegant model backend is configured.")
             return
         if self.model_worker is not None and self.model_worker.isRunning():
             return
@@ -1554,12 +1569,12 @@ class MainWindow(QMainWindow):
 
     def _model_response_completed(self, result: object) -> None:
         if not isinstance(result, ModelResponseResult):
-            self._task_failed("Unexpected model response result")
+            self._task_failed("Unexpected model comparison result")
             return
         self._show_model_response(result)
-        self._refresh_status(f"Model rank {result.retained_rank}")
+        self._refresh_status("Model comparison ready")
         self._append_log(
-            f"Model response completed from {result.model_source} without machine writes"
+            f"Model comparison completed from {result.model_source} without machine writes"
         )
 
     def _show_measurement(self, measurement: DispersionMeasurement) -> None:
@@ -1581,14 +1596,14 @@ class MainWindow(QMainWindow):
         imported: ImportedDispersionDataset,
     ) -> None:
         model_etax = {
-            name: float(response.baseline_curve.dx_mm[index])
-            for index, name in enumerate(response.baseline_curve.element_names)
+            name: float(response.selected_curve.dx_mm[index])
+            for index, name in enumerate(response.selected_curve.element_names)
         }
         self.measure_table.setHorizontalHeaderLabels(
             [
                 "BPM",
                 "Imported ηx (mm)",
-                "Before-correction model ηx (mm)",
+                "Selected model ηx (mm)",
                 "Residual (mm)",
                 "σηx (mm)",
             ]
@@ -1633,13 +1648,24 @@ class MainWindow(QMainWindow):
         )
 
     def _show_model_response(self, response: ModelResponseResult) -> None:
-        self.response_table.setRowCount(len(response.observable_names))
-        self.response_table.setColumnCount(len(response.knob_names) + 1)
-        self.response_table.setHorizontalHeaderLabels(["Observable", *response.knob_names])
-        for row, observable in enumerate(response.observable_names):
-            self.response_table.setItem(row, 0, QTableWidgetItem(observable))
-            for col, value in enumerate(response.response_matrix[row, :], start=1):
-                self.response_table.setItem(row, col, QTableWidgetItem(f"{value:.6g}"))
+        self.response_table.setRowCount(len(response.device_names))
+        self.response_table.setColumnCount(4)
+        self.response_table.setHorizontalHeaderLabels(
+            ["Quadrupole", "Selected K1", "Design K1", "Design-reference ΔK1"]
+        )
+        for row, device in enumerate(response.device_names):
+            self.response_table.setItem(row, 0, QTableWidgetItem(device))
+            self.response_table.setItem(
+                row, 1, QTableWidgetItem(f"{response.selected_k1[device]:.8g}")
+            )
+            self.response_table.setItem(
+                row, 2, QTableWidgetItem(f"{response.design_k1[device]:.8g}")
+            )
+            self.response_table.setItem(
+                row,
+                3,
+                QTableWidgetItem(f"{response.design_reference_deltas[device]:+.8g}"),
+            )
         self.response_table.resizeColumnsToContents()
         self.dispersion_curve.set_result(response)
         self.response_info.setPlainText(format_model_response(response))

@@ -6,15 +6,10 @@ from typing import Any
 import numpy as np
 
 from half_linac.src.apps.dispersion_correction.models import (
-    KnobConfig,
     ModelObservableConfig,
     ModelOpticsCurve,
     ModelResponseResult,
     RunConfig,
-)
-from half_linac.src.apps.dispersion_correction.solver import (
-    condition_number,
-    solve_bounded_correction,
 )
 from half_linac.src.shared.machine_profile import (
     MODEL_SNAPSHOT_SOURCE_DESIGN,
@@ -35,25 +30,28 @@ def calculate_model_response(
     pv_reader: Callable[[str], Any] | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> ModelResponseResult:
-    """Calculate an isolated response from design or a read-only machine snapshot."""
+    """Compare selected optics with a read-only design-reference prediction."""
 
     entrance = config.section.model_entrance
     exit_element = config.section.model_exit
     observables = config.section.model_observables
     if not entrance or not exit_element:
-        raise ValueError("Model response requires section.model_entrance and model_exit")
+        raise ValueError("Model comparison requires section.model_entrance and model_exit")
     if not observables:
-        raise ValueError("Model response requires section.model_observables")
+        raise ValueError("Model comparison requires section.model_observables")
     if context.model_backend is None:
         raise ValueError("The selected machine profile has no model backend")
 
     backend = build_model_backend(context)
+    correction_devices = _correction_devices(config)
+    design_k1 = _design_k1_values(backend, correction_devices)
     snapshot = None
-    base_overrides: dict[str, dict[str, float]] = {}
+    selected_overrides: dict[str, dict[str, float]] = {}
     source_name = str(model_source).strip().lower().replace("-", "_")
-    design_curve = None
+    _progress(progress_callback, "Calculating design reference", 0, 3)
+    design_curve = _optics_curve(backend, entrance, exit_element)
     if source_name not in {"design", "lattice"}:
-        _progress(progress_callback, "Reading current quadrupole snapshot", 0, 1)
+        _progress(progress_callback, "Reading current quadrupole snapshot", 1, 3)
         snapshot = build_model_snapshot(
             context,
             _section_quadrupole_fields(backend, entrance, exit_element),
@@ -61,111 +59,61 @@ def calculate_model_response(
             pv_reader=pv_reader,
         )
         source_name = snapshot.source
-        base_overrides = snapshot.lattice_overrides
-        _progress(progress_callback, "Calculating design reference", 0, 1)
-        design_curve = _optics_curve(backend, entrance, exit_element)
+        selected_overrides = snapshot.lattice_overrides
     else:
         source_name = MODEL_SNAPSHOT_SOURCE_DESIGN
 
-    base_k1 = _base_k1_values(backend, config, base_overrides)
-    total = 2 + 2 * len(config.knobs)
-    _progress(progress_callback, "Calculating before-correction optics", 0, total)
-    baseline_curve = _optics_curve(
-        backend,
-        entrance,
-        exit_element,
-        lattice_overrides=base_overrides or None,
-    )
-    baseline = _observable_vector(baseline_curve, observables)
-    matrix = np.zeros((len(observables), len(config.knobs)), dtype=float)
-
-    completed = 1
-    for column, knob in enumerate(config.knobs):
-        _progress(progress_callback, f"{knob.name} +scan", completed, total)
-        plus_curve = _optics_curve(
+    if selected_overrides:
+        _progress(progress_callback, "Calculating selected snapshot optics", 2, 3)
+        selected_curve = _optics_curve(
             backend,
             entrance,
             exit_element,
-            lattice_overrides=_merge_lattice_overrides(
-                base_overrides,
-                _knob_overrides(base_k1, knob, knob.scan_step),
-            ),
+            lattice_overrides=selected_overrides,
         )
-        plus = _observable_vector(plus_curve, observables)
-        completed += 1
-        _progress(progress_callback, f"{knob.name} -scan", completed, total)
-        minus_curve = _optics_curve(
+        design_reference_overrides = _merge_lattice_overrides(
+            selected_overrides,
+            {device: {"K1": design_k1[device]} for device in correction_devices},
+        )
+        _progress(progress_callback, "Calculating design-reference optics", 2, 3)
+        design_reference_curve = _optics_curve(
             backend,
             entrance,
             exit_element,
-            lattice_overrides=_merge_lattice_overrides(
-                base_overrides,
-                _knob_overrides(base_k1, knob, -knob.scan_step),
-            ),
+            lattice_overrides=design_reference_overrides,
         )
-        minus = _observable_vector(minus_curve, observables)
-        completed += 1
-        matrix[:, column] = (plus - minus) / (2.0 * knob.scan_step)
+        selected_k1 = {
+            device: float(selected_overrides[device]["K1"])
+            for device in correction_devices
+        }
+    else:
+        selected_curve = design_curve
+        design_reference_curve = design_curve
+        selected_k1 = dict(design_k1)
 
-    _, singular_values, vh = np.linalg.svd(matrix, full_matrices=False)
-    largest = float(np.max(singular_values)) if singular_values.size else 0.0
-    retained = (
-        singular_values / largest > config.solver.svd_cut
-        if largest > 0
-        else np.zeros_like(singular_values, dtype=bool)
-    )
+    selected = _observable_vector(selected_curve, observables)
+    design_reference = _observable_vector(design_reference_curve, observables)
     target = np.asarray([observable.target for observable in observables], dtype=float)
-    deltas, _, _ = solve_bounded_correction(
-        matrix,
-        baseline - target,
-        config.solver.svd_cut,
-        1.0,
-        np.asarray([knob.limit for knob in config.knobs], dtype=float),
-        1.0,
-        np.zeros(len(config.knobs), dtype=float),
-        np.zeros(len(config.knobs), dtype=float),
-        config.solver.regularization,
-    )
-    preview_deltas = {
-        knob.name: float(delta)
-        for knob, delta in zip(config.knobs, deltas)
+    design_reference_deltas = {
+        device: design_k1[device] - selected_k1[device]
+        for device in correction_devices
     }
-    _progress(
-        progress_callback,
-        "Calculating prediction with recommended Q settings",
-        completed,
-        total,
-    )
-    preview_curve = _optics_curve(
-        backend,
-        entrance,
-        exit_element,
-        lattice_overrides=_merge_lattice_overrides(
-            base_overrides,
-            _combined_knob_overrides(base_k1, config.knobs, deltas),
-        ),
-    )
-    preview = _observable_vector(preview_curve, observables)
-    derived_knobs = _derived_knobs(config, vh, retained)
-    _progress(progress_callback, "Model response complete", total, total)
+    _progress(progress_callback, "Model comparison complete", 3, 3)
     return ModelResponseResult(
         section_id=config.section.id,
         observable_names=tuple(item.name for item in observables),
         observable_elements=tuple(item.element for item in observables),
         observable_components=tuple(item.component for item in observables),
         observable_units=tuple(item.unit for item in observables),
-        knob_names=tuple(knob.name for knob in config.knobs),
-        baseline_values=baseline,
+        device_names=correction_devices,
+        selected_values=selected,
         target_values=target,
-        response_matrix=matrix,
-        singular_values=singular_values,
-        condition_number=condition_number(singular_values),
-        retained_rank=int(np.count_nonzero(retained)),
-        derived_knobs=derived_knobs,
-        baseline_curve=baseline_curve,
-        preview_knob_deltas=preview_deltas,
-        preview_values=preview,
-        preview_curve=preview_curve,
+        design_reference_values=design_reference,
+        selected_curve=selected_curve,
+        design_reference_curve=design_reference_curve,
+        selected_k1=selected_k1,
+        design_k1=design_k1,
+        design_reference_deltas=design_reference_deltas,
         model_source=source_name,
         design_curve=design_curve,
         snapshot_metadata=snapshot.as_metadata() if snapshot is not None else None,
@@ -185,87 +133,68 @@ def model_response_to_dict(result: ModelResponseResult) -> dict[str, Any]:
                 "element": result.observable_elements[index],
                 "component": result.observable_components[index],
                 "unit": result.observable_units[index],
-                "baseline": float(result.baseline_values[index]),
+                "selected": float(result.selected_values[index]),
                 "target": float(result.target_values[index]),
-                "preview": float(result.preview_values[index]),
+                "design_reference": float(result.design_reference_values[index]),
             }
             for index in range(len(result.observable_names))
         ],
-        "knob_names": list(result.knob_names),
-        "response_matrix": result.response_matrix.tolist(),
-        "singular_values": result.singular_values.tolist(),
-        "condition_number": result.condition_number,
-        "retained_rank": result.retained_rank,
-        "baseline_rms": result.baseline_rms,
-        "preview_rms": result.preview_rms,
-        "preview_knob_deltas": dict(result.preview_knob_deltas),
-        "derived_knobs": [
+        "quadrupole_design_reference": [
             {
-                "name": knob.name,
-                "devices": dict(knob.devices),
-                "scan_step": knob.scan_step,
-                "limit": knob.limit,
+                "device": device,
+                "selected_k1": result.selected_k1[device],
+                "design_k1": result.design_k1[device],
+                "design_reference_delta_k1": result.design_reference_deltas[device],
             }
-            for knob in result.derived_knobs
+            for device in result.device_names
         ],
-        "baseline_curve": _curve_to_dict(result.baseline_curve),
-        "preview_curve": _curve_to_dict(result.preview_curve),
-        "design_curve": (
-            _curve_to_dict(result.design_curve) if result.design_curve is not None else None
-        ),
+        "selected_rms": result.selected_rms,
+        "design_reference_rms": result.design_reference_rms,
+        "selected_curve": _curve_to_dict(result.selected_curve),
+        "design_reference_curve": _curve_to_dict(result.design_reference_curve),
+        "design_curve": _curve_to_dict(result.design_curve),
     }
 
 
 def format_model_response(result: ModelResponseResult) -> str:
     lines = [
-        f"Model dispersion response: {result.section_id}",
+        f"Model design comparison: {result.section_id}",
         f"Model source: {_model_source_label(result.model_source)}",
         f"Entrance condition: {result.entrance_condition or 'not specified'}",
+        "Machine writes: none",
         "",
-        "Observable before correction / target / predicted with recommended Q settings:",
+        "Observable selected / target / design-reference prediction:",
     ]
     for index, name in enumerate(result.observable_names):
         unit = result.observable_units[index]
         lines.append(
-            f"  {name}: {result.baseline_values[index]:.8g} / "
+            f"  {name}: {result.selected_values[index]:.8g} / "
             f"{result.target_values[index]:.8g} / "
-            f"{result.preview_values[index]:.8g} {unit}"
+            f"{result.design_reference_values[index]:.8g} {unit}"
         )
     lines.extend(
         [
-            f"  RMS: {result.baseline_rms:.8g} -> {result.preview_rms:.8g}",
+            f"  RMS: {result.selected_rms:.8g} -> {result.design_reference_rms:.8g}",
             "",
-            "Raw knob response matrix (observable unit per knob unit):",
-            "  " + "  ".join(result.knob_names),
+            "Quadrupole design reference (K1 in 1/m^2):",
         ]
     )
-    for index, name in enumerate(result.observable_names):
-        values = "  ".join(f"{value:.8g}" for value in result.response_matrix[index])
-        lines.append(f"  {name}: {values}")
+    for device in result.device_names:
+        lines.append(
+            f"  {device}: selected {result.selected_k1[device]:.8g}, "
+            f"design {result.design_k1[device]:.8g}, "
+            f"design-reference delta {result.design_reference_deltas[device]:+.8g}"
+        )
     lines.extend(
         [
             "",
-            "Singular values: " + ", ".join(f"{value:.8g}" for value in result.singular_values),
-            f"Condition number: {result.condition_number:.8g}",
-            f"Retained rank: {result.retained_rank}",
+            "Optics envelope (selected -> design-reference prediction):",
+            f"  max beta_x: {np.max(result.selected_curve.beta_x_m):.8g} -> "
+            f"{np.max(result.design_reference_curve.beta_x_m):.8g} m",
+            f"  max beta_y: {np.max(result.selected_curve.beta_y_m):.8g} -> "
+            f"{np.max(result.design_reference_curve.beta_y_m):.8g} m",
             "",
-            "Predicted correction knob deltas:",
-        ]
-    )
-    for name in result.knob_names:
-        lines.append(f"  {name}: {result.preview_knob_deltas[name]:+.8g}")
-    lines.extend(["", "Model-derived orthogonal knobs:"])
-    for knob in result.derived_knobs:
-        devices = ", ".join(f"{name}*{weight:.8g}" for name, weight in knob.devices.items())
-        lines.append(f"  {knob.name}: {devices}")
-    lines.extend(
-        [
-            "",
-            "Optics envelope (before correction -> predicted with recommended Q settings):",
-            f"  max beta_x: {np.max(result.baseline_curve.beta_x_m):.8g} -> "
-            f"{np.max(result.preview_curve.beta_x_m):.8g} m",
-            f"  max beta_y: {np.max(result.baseline_curve.beta_y_m):.8g} -> "
-            f"{np.max(result.preview_curve.beta_y_m):.8g} m",
+            "Note: the design-reference delta is not a beam-based correction recommendation.",
         ]
     )
     if result.snapshot_metadata is not None:
@@ -313,25 +242,30 @@ def _finite_or_none(values: np.ndarray) -> list[float | None]:
     return [float(value) if np.isfinite(value) else None for value in values]
 
 
-def _base_k1_values(
-    backend,
-    config: RunConfig,
-    lattice_overrides: Mapping[str, Mapping[str, float]] | None = None,
-) -> dict[str, float]:
-    values: dict[str, float] = {}
+def _correction_devices(config: RunConfig) -> tuple[str, ...]:
+    devices = []
+    seen = set()
     for knob in config.knobs:
         for device in knob.devices:
-            if device in values:
-                continue
-            override = (lattice_overrides or {}).get(device, {}).get("K1")
-            if override is not None:
-                values[device] = float(override)
-                continue
-            element = backend.get_lattice_element(device)
-            try:
-                values[device] = float(element["K1"])
-            except (KeyError, TypeError, ValueError) as exc:
-                raise ValueError(f"Model quadrupole {device} has no numeric K1") from exc
+            if device not in seen:
+                devices.append(device)
+                seen.add(device)
+    if not devices:
+        raise ValueError("Model design comparison requires at least one quadrupole")
+    return tuple(sorted(devices))
+
+
+def _design_k1_values(
+    backend,
+    devices: tuple[str, ...],
+) -> dict[str, float]:
+    values: dict[str, float] = {}
+    for device in devices:
+        element = backend.get_lattice_element(device)
+        try:
+            values[device] = float(element["K1"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Model quadrupole {device} has no numeric design K1") from exc
     return values
 
 
@@ -371,32 +305,6 @@ def _merge_lattice_overrides(
             {str(field): float(value) for field, value in values.items()}
         )
     return merged
-
-
-def _knob_overrides(
-    base_k1: Mapping[str, float],
-    knob: KnobConfig,
-    step: float,
-) -> dict[str, dict[str, float]]:
-    return {
-        device: {"K1": base_k1[device] + float(weight) * float(step)}
-        for device, weight in knob.devices.items()
-    }
-
-
-def _combined_knob_overrides(
-    base_k1: Mapping[str, float],
-    knobs: tuple[KnobConfig, ...],
-    deltas: np.ndarray,
-) -> dict[str, dict[str, float]]:
-    changes = {device: 0.0 for device in base_k1}
-    for knob, delta in zip(knobs, deltas):
-        for device, weight in knob.devices.items():
-            changes[device] += float(weight) * float(delta)
-    return {
-        device: {"K1": base_k1[device] + changes[device]}
-        for device in base_k1
-    }
 
 
 def _optics_curve(
@@ -463,37 +371,6 @@ def _observable_vector(
             )
         values.append(float(component_values[observable.component][matches[-1]]))
     return np.asarray(values, dtype=float)
-
-
-def _derived_knobs(
-    config: RunConfig,
-    vh: np.ndarray,
-    retained: np.ndarray,
-) -> tuple[KnobConfig, ...]:
-    derived = []
-    for mode_index in np.flatnonzero(retained):
-        coefficients = np.asarray(vh[mode_index], dtype=float)
-        scale = float(np.max(np.abs(coefficients)))
-        if scale <= 0:
-            continue
-        coefficients = coefficients / scale
-        first_nonzero = next((value for value in coefficients if abs(value) > 1.0e-12), 1.0)
-        if first_nonzero < 0:
-            coefficients = -coefficients
-        devices: dict[str, float] = {}
-        for coefficient, raw_knob in zip(coefficients, config.knobs):
-            for device, weight in raw_knob.devices.items():
-                devices[device] = devices.get(device, 0.0) + float(coefficient) * float(weight)
-        devices = {name: value for name, value in devices.items() if abs(value) > 1.0e-12}
-        derived.append(
-            KnobConfig(
-                name=f"{config.section.id}_model_mode_{mode_index + 1}",
-                devices=devices,
-                scan_step=min(knob.scan_step for knob in config.knobs),
-                limit=min(knob.limit for knob in config.knobs),
-            )
-        )
-    return tuple(derived)
 
 
 def _progress(callback: ProgressCallback | None, stage: str, current: int, total: int) -> None:

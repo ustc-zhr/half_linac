@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from half_linac.src.apps.dispersion_correction import model_response
 from half_linac.src.apps.dispersion_correction.model_response import (
@@ -104,7 +105,7 @@ class FakeModelBackend:
         )
 
 
-def test_half_bl01_model_response_builds_ranked_orthogonal_knobs(monkeypatch) -> None:
+def test_half_bl01_design_source_reports_zero_design_reference_deltas(monkeypatch) -> None:
     context = load_app_context(
         "dispersion_correction",
         machine_id="half",
@@ -115,29 +116,20 @@ def test_half_bl01_model_response_builds_ranked_orthogonal_knobs(monkeypatch) ->
 
     result = calculate_model_response(context, config)
 
-    np.testing.assert_allclose(result.baseline_values, [0.25, -0.1])
-    assert result.response_matrix.shape == (2, 3)
-    assert result.retained_rank == 2
-    assert len(result.derived_knobs) == 2
+    np.testing.assert_allclose(result.selected_values, [0.25, -0.1])
+    np.testing.assert_allclose(result.design_reference_values, [0.25, -0.1])
     assert result.observable_components == ("dx", "dxp")
     assert result.observable_units == ("mm", "mrad")
-    assert result.baseline_curve.element_names[-1] == "BPM07"
-    assert result.preview_rms < result.baseline_rms
-    assert set(result.preview_knob_deltas) == set(result.knob_names)
+    assert result.selected_curve.element_names[-1] == "BPM07"
+    assert result.device_names == ("QL01", "QL02", "QL03", "QL04", "QL05", "QL06")
+    assert all(value == 0.0 for value in result.design_reference_deltas.values())
     payload = model_response_to_dict(result)
     assert payload["observables"][1]["unit"] == "mrad"
-    assert payload["preview_curve"]["element_names"][-1] == "BPM07"
+    assert payload["design_reference_curve"]["element_names"][-1] == "BPM07"
     report = format_model_response(result)
-    assert "Predicted correction knob deltas" in report
-    assert "predicted with recommended Q settings" in report
-    assert set(result.derived_knobs[0].devices) == {
-        "QL01",
-        "QL02",
-        "QL03",
-        "QL04",
-        "QL05",
-        "QL06",
-    }
+    assert "Quadrupole design reference" in report
+    assert "not a beam-based correction recommendation" in report
+    assert "response matrix" not in report.lower()
 
 
 def test_half_bl01_current_vm_snapshot_overlays_design_and_preserves_section_quads(
@@ -168,8 +160,44 @@ def test_half_bl01_current_vm_snapshot_overlays_design_and_preserves_section_qua
     assert result.model_source == "live_from_vm"
     assert result.design_curve is not None
     np.testing.assert_allclose(result.design_curve.dx_mm[-2], 0.25)
-    np.testing.assert_allclose(result.baseline_values[0], 1.05)
+    np.testing.assert_allclose(result.selected_values[0], 1.05)
+    np.testing.assert_allclose(result.design_reference_values[0], 0.95)
+    assert result.selected_k1["QL01"] == 1.1
+    assert result.design_k1["QL01"] == 1.0
+    assert result.design_reference_deltas["QL01"] == pytest.approx(-0.1)
+    assert "QL07" not in result.device_names
     assert result.snapshot_metadata is not None
     assert len(result.snapshot_metadata["fields"]) == 12
     assert result.entrance_condition == "D=D'=0 assumed at BPM02"
     assert "QL07.K1 = 2" in format_model_response(result)
+
+
+def test_design_reference_restores_large_ql03_ql04_deviation_without_solver_limit(
+    monkeypatch,
+) -> None:
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="vm",
+    )
+    _, config = load_profile_run_config(context)
+    monkeypatch.setattr(model_response, "build_model_backend", lambda _context: FakeModelBackend())
+    live_k1 = dict(FakeModelBackend._base)
+    live_k1["QL03"] = 12.0
+    live_k1["QL04"] = 12.0
+    pv_values = {
+        resolve_channel(context, name, "k1", "vm"): value
+        for name, value in live_k1.items()
+    }
+
+    result = calculate_model_response(
+        context,
+        config,
+        model_source="live",
+        pv_reader=pv_values.__getitem__,
+    )
+
+    assert result.design_reference_deltas["QL03"] == pytest.approx(-11.0)
+    assert result.design_reference_deltas["QL04"] == pytest.approx(-11.0)
+    np.testing.assert_allclose(result.selected_values, [11.25, 6.5])
+    np.testing.assert_allclose(result.design_reference_values, [0.25, -0.1])
