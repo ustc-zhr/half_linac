@@ -406,7 +406,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
 
     curve = ModelOpticsCurve(
         element_names=("_BEG_", "BL01A", "QL01", "BPM06"),
-        element_types=("MARK", "CSBEND", "QUAD", "MONI"),
+        element_types=("MARK", "SBEN", "QUAD", "MONI"),
         element_occurrences=(1, 1, 1, 1),
         element_lengths_m=np.asarray([0.0, 0.35, 0.15, 0.0]),
         element_k1_m2=np.asarray([np.nan, np.nan, 6.0, np.nan]),
@@ -477,7 +477,11 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert not half_window.dispersion_curve.grab().isNull()
     assert not half_window.dispersion_curve._is_rf("WATCH")
     assert half_window.dispersion_curve._is_rf("RFCW")
+    assert half_window.dispersion_curve._is_bend("SBEN")
+    assert half_window.dispersion_curve._is_bend("RBEN")
+    assert half_window.dispersion_curve._is_bend("CSBEND")
     assert half_window.dispersion_curve._is_visible_optics_element("BPM06", "MONI")
+    assert half_window.dispersion_curve._is_visible_optics_element("DM8", "SBEN")
     assert not half_window.dispersion_curve._is_visible_optics_element("PRF02", "WATCH")
     half_window.close()
 

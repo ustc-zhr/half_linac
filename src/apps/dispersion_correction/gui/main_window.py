@@ -513,7 +513,7 @@ class DispersionCurveWidget(QWidget):
                 width = 3.0
                 left = center_x - width / 2.0
 
-            if "BEND" in element_type:
+            if self._is_bend(element_type):
                 tilt = float(curve.element_tilts_rad[index])
                 vertical_bend = abs(math.sin(tilt)) > 0.7
                 color = QColor("#3aa6b9" if vertical_bend else "#db8b3d")
@@ -566,7 +566,7 @@ class DispersionCurveWidget(QWidget):
                     Qt.AlignCenter,
                     name,
                 )
-            elif "BEND" in element_type:
+            elif self._is_bend(element_type):
                 painter.setPen(QColor(tokens["text_primary"]))
                 painter.drawText(
                     QRectF(center_x - 35.0, rect.top(), 70.0, 14.0),
@@ -588,7 +588,9 @@ class DispersionCurveWidget(QWidget):
         curve = self.result.selected_curve
         indices = self._visible_element_indices()
         bend_indices = [
-            index for index in indices if "BEND" in curve.element_types[index].upper()
+            index
+            for index in indices
+            if self._is_bend(curve.element_types[index])
         ]
         entries = []
         if any(abs(math.sin(float(curve.element_tilts_rad[index]))) <= 0.7 for index in bend_indices):
@@ -614,8 +616,12 @@ class DispersionCurveWidget(QWidget):
         for label, color in entries:
             painter.fillRect(QRectF(x, y + 3.0, 9.0, 7.0), color)
             painter.setPen(QColor(tokens["text_muted"]))
-            painter.drawText(QRectF(x + 12.0, y, 45.0, 14.0), label)
-            x += 56.0
+            label_width = float(painter.fontMetrics().horizontalAdvance(label))
+            painter.drawText(
+                QRectF(x + 12.0, y, label_width + 2.0, 14.0),
+                label,
+            )
+            x += 12.0 + label_width + 12.0
 
     def _visible_element_indices(self) -> list[int]:
         if self.result is None:
@@ -633,11 +639,16 @@ class DispersionCurveWidget(QWidget):
     @classmethod
     def _is_visible_optics_element(cls, name: str, element_type: str) -> bool:
         return bool(
-            "BEND" in element_type
+            cls._is_bend(element_type)
             or "QUAD" in element_type
             or cls._is_bpm(name, element_type)
             or cls._is_rf(element_type)
         )
+
+    @staticmethod
+    def _is_bend(element_type: str) -> bool:
+        normalized = element_type.upper()
+        return "BEND" in normalized or normalized in {"SBEN", "RBEN"}
 
     @staticmethod
     def _is_bpm(name: str, element_type: str) -> bool:
