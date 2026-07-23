@@ -127,7 +127,9 @@ def test_half_bl01_model_response_builds_ranked_orthogonal_knobs(monkeypatch) ->
     payload = model_response_to_dict(result)
     assert payload["observables"][1]["unit"] == "mrad"
     assert payload["preview_curve"]["element_names"][-1] == "BPM07"
-    assert "Predicted correction knob deltas" in format_model_response(result)
+    report = format_model_response(result)
+    assert "Predicted correction knob deltas" in report
+    assert "predicted with recommended Q settings" in report
     assert set(result.derived_knobs[0].devices) == {
         "QL01",
         "QL02",

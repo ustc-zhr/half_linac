@@ -170,7 +170,8 @@ class FullWidthTabWidget(QTabWidget):
 
 class DispersionCurveWidget(QWidget):
     DEFAULT_TOOLTIP = (
-        "Dotted: design; solid: model before correction; dashed: corrected model. "
+        "Dotted: design; solid: model before correction; dashed: prediction using "
+        "the recommended quadrupole settings. "
         "Circles: imported eta_x. Red: horizontal; blue: vertical. "
         "Move over the lattice strip for element details."
     )
@@ -323,7 +324,7 @@ class DispersionCurveWidget(QWidget):
         painter.drawText(
             plot.left() + 75,
             plot.top() + 16,
-            "design ···  before correction —  corrected model --  measured ●",
+            "design ···  before correction —  recommended-Q prediction --  measured ●",
         )
         lattice_rect = QRectF(
             float(plot.left()),

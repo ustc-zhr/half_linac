@@ -130,7 +130,12 @@ def calculate_model_response(
         knob.name: float(delta)
         for knob, delta in zip(config.knobs, deltas)
     }
-    _progress(progress_callback, "Calculating corrected model", completed, total)
+    _progress(
+        progress_callback,
+        "Calculating prediction with recommended Q settings",
+        completed,
+        total,
+    )
     preview_curve = _optics_curve(
         backend,
         entrance,
@@ -217,7 +222,7 @@ def format_model_response(result: ModelResponseResult) -> str:
         f"Model source: {_model_source_label(result.model_source)}",
         f"Entrance condition: {result.entrance_condition or 'not specified'}",
         "",
-        "Observable before correction / target / corrected model:",
+        "Observable before correction / target / predicted with recommended Q settings:",
     ]
     for index, name in enumerate(result.observable_names):
         unit = result.observable_units[index]
@@ -256,7 +261,7 @@ def format_model_response(result: ModelResponseResult) -> str:
     lines.extend(
         [
             "",
-            "Optics envelope (before correction -> corrected model):",
+            "Optics envelope (before correction -> predicted with recommended Q settings):",
             f"  max beta_x: {np.max(result.baseline_curve.beta_x_m):.8g} -> "
             f"{np.max(result.preview_curve.beta_x_m):.8g} m",
             f"  max beta_y: {np.max(result.baseline_curve.beta_y_m):.8g} -> "
