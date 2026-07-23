@@ -48,7 +48,7 @@ from half_linac.src.apps.dispersion_correction.calibration import (
     is_direct_delta_actuator,
 )
 from half_linac.src.apps.dispersion_correction.config import load_config
-from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan, format_operation_plan
+from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan
 from half_linac.src.apps.dispersion_correction.gui.calibration_editor import (
     CalibrationEditorDialog,
 )
@@ -728,6 +728,7 @@ class MainWindow(QMainWindow):
         self.latest_response: ResponseMatrixResult | None = None
         self.correction_recommendation: CorrectionRecommendation | None = None
         self.last_live_preflight = None
+        self.operation_plan: dict | None = None
         self._loading_widgets = False
         self.config_path: Path | None = None
         self.config = config or default_offline_config()
@@ -1143,22 +1144,6 @@ class MainWindow(QMainWindow):
         self.review_button.clicked.connect(self._review_recommendation)
         self.review_button.hide()
 
-        self.preflight_text = QPlainTextEdit()
-        self.preflight_text.setReadOnly(True)
-        self.preflight_text.setPlainText(
-            "Run “Check Connections” to read the configured energy actuator, "
-            "quadrupoles, and BPMs. This check does not write any PV."
-        )
-        self.plan_text = QPlainTextEdit()
-        self.plan_text.setReadOnly(True)
-        self.readiness_page = QWidget()
-        readiness_layout = QVBoxLayout(self.readiness_page)
-        readiness_layout.setContentsMargins(8, 4, 8, 8)
-        readiness_layout.addWidget(QLabel("Connection and readback check"))
-        readiness_layout.addWidget(self.preflight_text, 1)
-        readiness_layout.addWidget(QLabel("Operation summary"))
-        readiness_layout.addWidget(self.plan_text, 1)
-
         self.calibration_text = QPlainTextEdit()
         self.calibration_text.setReadOnly(True)
         self.calibration_page = QWidget()
@@ -1331,11 +1316,6 @@ class MainWindow(QMainWindow):
         model_layout.addWidget(self.model_info, 1)
 
         self.detail_sections: dict[QWidget, QToolButton] = {}
-        self._add_detail_section(
-            online_layout,
-            "Connection and Operation Details",
-            self.readiness_page,
-        )
         self._add_detail_section(
             online_layout,
             "Q Response Diagnostics",
@@ -1554,7 +1534,7 @@ class MainWindow(QMainWindow):
             self.delta_spin.setVisible(not model_only)
         finally:
             self._loading_widgets = False
-        self._show_plan()
+        self._refresh_operation_plan()
         self._show_calibration_summary()
         self._update_static_safety_status()
         if self.config.section.model_only:
@@ -1942,9 +1922,10 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = None
         try:
             self.config = self._config_from_widgets()
-            plan = build_operation_plan(self.config)
+            self.operation_plan = build_operation_plan(self.config)
         except Exception as exc:
-            self.plan_text.setPlainText(f"Selection error: {exc}")
+            self.operation_plan = None
+            self._append_log(f"Operation plan validation failed: {exc}")
             self.status_strip.set_value("READINESS", "NOT READY", "danger")
             self.measure_button.setEnabled(False)
             self.response_button.setEnabled(False)
@@ -1953,13 +1934,7 @@ class MainWindow(QMainWindow):
             self.compute_recommendation_button.setEnabled(False)
             self.apply_recommendation_button.setEnabled(False)
             return
-        self.plan_text.setPlainText(format_operation_plan(plan))
         self._update_energy_step_summary()
-        if self.config.backend.type.lower() == "epics":
-            self.preflight_text.setPlainText(
-                "Configuration changed. Run “Check Connections” again before "
-                "any machine operation.\n\nNo setpoint has been changed."
-            )
         self._update_static_safety_status()
         self._refresh_status("Selection updated")
         self._set_running(False, "")
@@ -3222,15 +3197,14 @@ class MainWindow(QMainWindow):
             lines.extend(["", "Warnings:", *(f"  - {item}" for item in warnings)])
         return "\n".join(lines) + "\n"
 
-    def _show_plan(self) -> None:
+    def _refresh_operation_plan(self) -> None:
         try:
             self.config = self._config_from_widgets() if hasattr(self, "bpm_edit") else self.config
-            plan = build_operation_plan(self.config)
-            self.plan_text.setPlainText(format_operation_plan(plan))
-            self._refresh_status("Plan ready")
+            self.operation_plan = build_operation_plan(self.config)
         except Exception as exc:
-            if hasattr(self, "plan_text"):
-                self.plan_text.setPlainText(f"Plan error: {exc}")
+            self.operation_plan = None
+            if hasattr(self, "log_view"):
+                self._append_log(f"Operation plan validation failed: {exc}")
 
     def _show_calibration_summary(self) -> None:
         calibration = self.config.energy_knob.calibration
@@ -3335,7 +3309,7 @@ class MainWindow(QMainWindow):
             "Session energy calibration activated. Previous measurements and "
             "recommendations were discarded."
         )
-        self._show_plan()
+        self._refresh_operation_plan()
         self._show_calibration_summary()
         self._update_energy_step_summary()
         self.last_live_preflight = None
@@ -3374,7 +3348,7 @@ class MainWindow(QMainWindow):
             "Configured energy calibration restored. Previous measurements and "
             "recommendations were discarded."
         )
-        self._show_plan()
+        self._refresh_operation_plan()
         self._show_calibration_summary()
         self._update_energy_step_summary()
         self.last_live_preflight = None
@@ -3461,11 +3435,10 @@ class MainWindow(QMainWindow):
             return
         self.last_live_preflight = None
         self.status_strip.set_value("READINESS", "CHECKING", "warning")
-        self.preflight_text.setPlainText(
-            "Checking configured energy actuator, quadrupoles, and BPM readbacks…\n\n"
-            "No setpoint will be changed."
+        self._append_log(
+            "Checking configured energy actuator, quadrupoles, and BPM readbacks; "
+            "no setpoint will be changed"
         )
-        self._show_workflow_detail(self.readiness_page)
         self.preflight_worker = LivePreflightWorker(self.config)
         self.preflight_worker.completed.connect(self._live_preflight_completed)
         self.preflight_worker.failed.connect(self._live_preflight_failed)
@@ -3481,26 +3454,48 @@ class MainWindow(QMainWindow):
             "READY" if ready else "NOT READY",
             "success" if ready else "danger",
         )
-        self.preflight_text.setPlainText(self._format_live_preflight(result))
-        self._show_workflow_detail(self.readiness_page)
         messages = [*result.static.blockers, *result.blockers]
         warnings = [*result.static.warnings, *result.warnings]
+        self._append_log(
+            "Live preflight diagnostics:\n"
+            + self._format_live_preflight(result).rstrip()
+        )
         if messages:
             self._append_log("Live preflight blockers: " + "; ".join(messages))
         if warnings:
             self._append_log("Live preflight warnings: " + "; ".join(warnings))
         if ready:
             self._append_log("Live read-only preflight passed; no setpoint was changed")
+        if messages:
+            details = "\n".join(f"• {item}" for item in messages)
+            if warnings:
+                details += "\n\nWarnings:\n" + "\n".join(
+                    f"• {item}" for item in warnings
+                )
+            QMessageBox.warning(
+                self,
+                "Connection Check Failed",
+                "The connection check did not pass:\n\n"
+                f"{details}\n\nFull diagnostics were written to Log.",
+            )
+        elif warnings:
+            QMessageBox.warning(
+                self,
+                "Connection Check Warnings",
+                "The connection check passed with warnings:\n\n"
+                + "\n".join(f"• {item}" for item in warnings)
+                + "\n\nFull diagnostics were written to Log.",
+            )
 
     def _live_preflight_failed(self, message: str) -> None:
         self.last_live_preflight = None
         self.status_strip.set_value("READINESS", "NOT READY", "danger")
-        self.preflight_text.setPlainText(
-            "Connection and readback check failed\n\n"
-            f"{message}\n\nNo setpoint was changed."
-        )
         self._append_log(f"Live preflight failed: {message}")
-        QMessageBox.warning(self, "PV Preflight", message)
+        QMessageBox.warning(
+            self,
+            "Connection Check Failed",
+            f"{message}\n\nNo setpoint was changed. See Log for details.",
+        )
 
     def _load_config_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

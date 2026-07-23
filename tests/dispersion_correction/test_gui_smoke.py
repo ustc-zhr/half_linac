@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 
-def test_main_window_constructs_offscreen(tmp_path) -> None:
+def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     pytest.importorskip("PyQt5")
     from PyQt5.QtCore import QLibraryInfo
 
@@ -20,7 +20,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     else:
         pytest.skip("No offscreen/minimal Qt platform plugin is installed")
 
-    from PyQt5.QtWidgets import QApplication, QListWidgetItem
+    from PyQt5.QtWidgets import QApplication, QListWidgetItem, QMessageBox
 
     from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
 
@@ -34,8 +34,11 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
         "History",
     ]
     assert not hasattr(window, "workflow_tabs")
-    assert len(window.detail_sections) == 5
+    assert len(window.detail_sections) == 4
     assert all(not button.isChecked() for button in window.detail_sections.values())
+    assert not hasattr(window, "readiness_page")
+    assert not hasattr(window, "preflight_text")
+    assert not hasattr(window, "plan_text")
     assert window.workspace_splitter.widget(0) is window.dispersion_overview
     assert window.workspace_splitter.widget(1) is window.tabs
     assert window.workspace_splitter.parentWidget().objectName() == "workspacePanel"
@@ -77,7 +80,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert window.recommendation_table.columnCount() == 6
     assert not window.advanced_settings.isVisible()
     assert window.advanced_button.text() == "Advanced settings"
-    assert "Dispersion Correction Dry Run" in window.plan_text.toPlainText()
+    assert window.operation_plan is not None
     assert not hasattr(window, "knob_table")
     assert window.knob_edit.text() == "Q1L/Q1R; Q2L/Q2R"
     assert "Q1_sym" in window.knob_edit.toolTip()
@@ -306,7 +309,50 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert "left configuration panel" in profile_window.workflow_hint_label.text()
     assert "read-only" in profile_window.preflight_button.toolTip().lower()
     assert "read-only" in profile_window.measure_button.toolTip().lower()
-    assert "does not write" in profile_window.preflight_text.toPlainText().lower()
+    from half_linac.src.apps.dispersion_correction.preflight import (
+        LivePreflightResult,
+        PreflightResult,
+    )
+
+    connection_dialogs = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda _parent, title, message: connection_dialogs.append((title, message)),
+    )
+    profile_window._live_preflight_completed(
+        LivePreflightResult(
+            static=PreflightResult(
+                level="read-only-ready",
+                blockers=(),
+                warnings=("Calibration should be reviewed.",),
+                checks={},
+            ),
+            blockers=(),
+            warnings=(),
+            checks={},
+            readings={},
+        )
+    )
+    assert connection_dialogs[-1][0] == "Connection Check Warnings"
+    assert "Calibration should be reviewed." in connection_dialogs[-1][1]
+    profile_window._live_preflight_completed(
+        LivePreflightResult(
+            static=PreflightResult(
+                level="blocked",
+                blockers=(),
+                warnings=(),
+                checks={},
+            ),
+            blockers=("BPM09 is disconnected.",),
+            warnings=(),
+            checks={},
+            readings={},
+        )
+    )
+    assert connection_dialogs[-1][0] == "Connection Check Failed"
+    assert "BPM09 is disconnected." in connection_dialogs[-1][1]
+    assert "Live preflight diagnostics" in profile_window.log_view.toPlainText()
     assert profile_window.bpm_select_button.isVisibleTo(profile_window)
     assert profile_window.bpm_select_button.height() == profile_window.bpm_edit.height() == 34
     assert profile_window.knob_select_button.height() == profile_window.knob_edit.height() == 34
