@@ -41,8 +41,10 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.dispersion_overview.objectName() == "dispersionOverviewCard"
     assert window.workflow_title_label.objectName() == "cardTitle"
     assert window.overview_title_label.objectName() == "cardTitle"
+    assert window.measurement_header_label.text() == "Measurement"
+    assert window.overlays_header_label.text() == "Overlays"
     assert window.dispersion_curve.parentWidget() is window.dispersion_overview
-    assert window.model_details_button.parentWidget() is window.dispersion_overview
+    assert window.model_details_button.parentWidget() is window.overview_controls
     assert window.model_details_button.text() == "Model Details…"
     assert window.model_dialog.isHidden()
     assert window.response_dialog.isHidden()
@@ -53,6 +55,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.response_details_button.isHidden()
     assert window.recommendation_details_button.isHidden()
     assert window.plot_state_label.text() == "No measured data"
+    assert window.plot_state_label.isHidden()
     assert not hasattr(window, "plan_button")
     assert not hasattr(window, "backend_combo")
     assert not hasattr(window, "mode_combo")
@@ -119,6 +122,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.measurement_source_combo.currentData() == "live"
     assert "Latest measured" in window.plot_state_label.text()
     assert "4/4 valid BPMs" in window.plot_state_label.text()
+    assert not window.plot_state_label.isHidden()
     assert not window.model_measure_table.isHidden()
     assert window.model_measure_table.columnCount() == 4
     assert not window.dispersion_curve.grab().isNull()
@@ -250,6 +254,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window.resize(1248, 803)
     window.show()
     app.processEvents()
+    assert window.overview_controls.compact
     assert window.dispersion_curve.isVisibleTo(window)
     assert window.online_page.isVisibleTo(window)
     window.correction_table.setRowCount(1)
@@ -288,6 +293,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.delta_spin.isEnabled()
     assert not window.progress_widget.isVisible()
     assert window.plot_state_label.text() == "No measured data"
+    assert window.plot_state_label.isHidden()
     window.close()
 
     from half_linac.src.apps.dispersion_correction.profile_runtime import load_profile_run_config

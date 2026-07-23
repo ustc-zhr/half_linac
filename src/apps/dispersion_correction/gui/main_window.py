@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -190,6 +191,80 @@ class DispersionPlotDataset:
     sigma_mm: np.ndarray
     valid: np.ndarray
     label: str
+
+
+class OverviewControls(QWidget):
+    """Keep overview controls on one line when space permits."""
+
+    COMPACT_WIDTH = 900
+
+    def __init__(
+        self,
+        title: QLabel,
+        measurement_label: QLabel,
+        measurement_combo: QComboBox,
+        overlays_label: QLabel,
+        design_checkbox: QCheckBox,
+        snapshot_checkbox: QCheckBox,
+        details_button: QPushButton,
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._measurement_label = measurement_label
+        self._measurement_combo = measurement_combo
+        self._overlays_label = overlays_label
+        self._design_checkbox = design_checkbox
+        self._snapshot_checkbox = snapshot_checkbox
+        self._details_button = details_button
+        self.compact: bool | None = None
+        self._layout = QGridLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setHorizontalSpacing(8)
+        self._layout.setVerticalSpacing(5)
+        self._relayout(False)
+
+    def _relayout(self, compact: bool) -> None:
+        if self.compact == compact:
+            return
+        self.compact = compact
+        widgets = (
+            self._title,
+            self._measurement_label,
+            self._measurement_combo,
+            self._overlays_label,
+            self._design_checkbox,
+            self._snapshot_checkbox,
+            self._details_button,
+        )
+        for widget in widgets:
+            self._layout.removeWidget(widget)
+        for column in range(8):
+            self._layout.setColumnStretch(column, 0)
+
+        if compact:
+            self._layout.addWidget(self._title, 0, 0, 1, 4)
+            self._layout.setColumnStretch(4, 1)
+            self._layout.addWidget(self._details_button, 0, 7)
+            self._layout.addWidget(self._measurement_label, 1, 0)
+            self._layout.addWidget(self._measurement_combo, 1, 1, 1, 2)
+            self._layout.setColumnStretch(3, 1)
+            self._layout.addWidget(self._overlays_label, 1, 4)
+            self._layout.addWidget(self._design_checkbox, 1, 5)
+            self._layout.addWidget(self._snapshot_checkbox, 1, 6, 1, 2)
+            return
+
+        self._layout.addWidget(self._title, 0, 0)
+        self._layout.addWidget(self._measurement_label, 0, 1)
+        self._layout.addWidget(self._measurement_combo, 0, 2)
+        self._layout.setColumnStretch(3, 1)
+        self._layout.addWidget(self._overlays_label, 0, 4)
+        self._layout.addWidget(self._design_checkbox, 0, 5)
+        self._layout.addWidget(self._snapshot_checkbox, 0, 6)
+        self._layout.addWidget(self._details_button, 0, 7)
+
+    def resizeEvent(self, event) -> None:
+        self._relayout(event.size().width() < self.COMPACT_WIDTH)
+        super().resizeEvent(event)
 
 
 class DispersionCurveWidget(QWidget):
@@ -759,6 +834,7 @@ class MainWindow(QMainWindow):
         self.model_source_combo.setVisible(model_available)
         self.model_source_label.setVisible(model_available)
         self.model_boundary_label.setVisible(model_available)
+        self.overlays_header_label.setVisible(model_available)
         self.show_design_model_checkbox.setVisible(model_available)
         self.show_snapshot_model_checkbox.setVisible(model_available)
         if self.app_context is None:
@@ -1409,28 +1485,18 @@ class MainWindow(QMainWindow):
         overview_layout = QVBoxLayout(self.dispersion_overview)
         overview_layout.setContentsMargins(12, 10, 12, 12)
         overview_layout.setSpacing(4)
-        overview_display_row = QHBoxLayout()
-        overview_display_row.setSpacing(8)
         self.overview_title_label = QLabel("Dispersion Overview")
         self.overview_title_label.setObjectName("cardTitle")
-        overview_display_row.addWidget(self.overview_title_label)
-        overview_display_row.addWidget(QLabel("Displayed"))
+        self.measurement_header_label = QLabel("Measurement")
         self.measurement_source_combo = QComboBox()
         self.measurement_source_combo.setMinimumWidth(180)
+        self.measurement_source_combo.setMaximumWidth(240)
         self.measurement_source_combo.addItem("No measurement available", "none")
         self.measurement_source_combo.currentIndexChanged.connect(
             self._comparison_measurement_changed
         )
-        overview_display_row.addWidget(self.measurement_source_combo)
-        overview_display_row.addStretch(1)
-        overview_layout.addLayout(overview_display_row)
-
-        overview_options_row = QHBoxLayout()
-        overview_options_row.setSpacing(8)
-        self.plot_state_label = QLabel("No measured data")
-        self.plot_state_label.setObjectName("modelBoundaryLabel")
-        overview_options_row.addWidget(self.plot_state_label)
-        overview_options_row.addStretch(1)
+        self.overlays_header_label = QLabel("Overlays")
+        self.overlays_header_label.setProperty("muted", "true")
         self.show_design_model_checkbox = QCheckBox("Design model")
         self.show_design_model_checkbox.setChecked(False)
         self.show_design_model_checkbox.setToolTip(
@@ -1440,7 +1506,6 @@ class MainWindow(QMainWindow):
         self.show_design_model_checkbox.toggled.connect(
             self._model_visibility_changed
         )
-        overview_options_row.addWidget(self.show_design_model_checkbox)
         self.show_snapshot_model_checkbox = QCheckBox("Current snapshot")
         self.show_snapshot_model_checkbox.setChecked(False)
         self.show_snapshot_model_checkbox.setEnabled(False)
@@ -1451,12 +1516,23 @@ class MainWindow(QMainWindow):
         self.show_snapshot_model_checkbox.toggled.connect(
             self._model_visibility_changed
         )
-        overview_options_row.addWidget(self.show_snapshot_model_checkbox)
         self.model_details_button = QPushButton("Model Details…")
         self.model_details_button.setObjectName("modelDetailsButton")
         self.model_details_button.clicked.connect(self._show_model_details)
-        overview_options_row.addWidget(self.model_details_button)
-        overview_layout.addLayout(overview_options_row)
+        self.overview_controls = OverviewControls(
+            self.overview_title_label,
+            self.measurement_header_label,
+            self.measurement_source_combo,
+            self.overlays_header_label,
+            self.show_design_model_checkbox,
+            self.show_snapshot_model_checkbox,
+            self.model_details_button,
+        )
+        overview_layout.addWidget(self.overview_controls)
+        self.plot_state_label = QLabel("No measured data")
+        self.plot_state_label.setObjectName("modelBoundaryLabel")
+        self.plot_state_label.hide()
+        overview_layout.addWidget(self.plot_state_label)
         self.dispersion_curve = DispersionCurveWidget()
         overview_layout.addWidget(self.dispersion_curve, 1)
 
@@ -2347,18 +2423,22 @@ class MainWindow(QMainWindow):
                 "preflight": "Checking connections · measurement remains unchanged",
             }
             self.plot_state_label.setText(messages.get(task, "Operation in progress"))
+            self.plot_state_label.show()
             return
         measurement = self._active_plot_measurement()
         if measurement is None:
             if self.dispersion_curve.result is None:
                 self.plot_state_label.setText("No measured data")
+                self.plot_state_label.hide()
             else:
                 self.plot_state_label.setText("Model reference only · no measured data")
+                self.plot_state_label.show()
             return
         valid_count = int(np.count_nonzero(measurement.valid))
         self.plot_state_label.setText(
             f"{measurement.label} · {valid_count}/{len(measurement.bpm_names)} valid BPMs"
         )
+        self.plot_state_label.show()
 
     def _model_visibility_changed(self, _checked: bool | None = None) -> None:
         self.dispersion_curve.set_model_visibility(
