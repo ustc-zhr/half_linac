@@ -2848,6 +2848,14 @@ class MainWindow(QMainWindow):
                 "The model curve is already displayed in the dispersion overview.",
             )
 
+        block_reason = self._operation_block_reason()
+        if block_reason is not None:
+            return (
+                None,
+                "Online Measurement Unavailable",
+                "Online correction is unavailable",
+                block_reason.replace("\n", " "),
+            )
         backend_type = self.config.backend.type.lower()
         if backend_type == "epics" and (
             self.last_live_preflight is None or not self.last_live_preflight.ok
@@ -2858,15 +2866,6 @@ class MainWindow(QMainWindow):
                 "Connection check required",
                 "Run Check Connections in the left configuration panel before "
                 "starting an online measurement.",
-            )
-
-        block_reason = self._operation_block_reason()
-        if block_reason is not None:
-            return (
-                None,
-                "Online Measurement Unavailable",
-                "Online correction is unavailable",
-                block_reason.replace("\n", " "),
             )
         if self.latest_measurement is None:
             return (
@@ -3220,6 +3219,7 @@ class MainWindow(QMainWindow):
     def _update_operation_banner(self) -> None:
         if not hasattr(self, "operation_banner"):
             return
+        visible = True
         if self.progress_widget.isVisible():
             text = "Operation in progress. Abort restores the operation snapshot."
             tone = "warning"
@@ -3229,13 +3229,21 @@ class MainWindow(QMainWindow):
                 "and correction are unavailable."
             )
             tone = "warning"
+            visible = False
         elif self.config.backend.type.lower() == "offline":
             text = "Offline demonstration: no live machine PVs are connected."
             tone = "subtle"
+            visible = False
         else:
             static = run_preflight(self.config)
             if not static.ok:
                 text = "Configuration is not ready: " + static.blockers[0]
+                tone = "danger"
+            elif (
+                self.last_live_preflight is not None
+                and not self.last_live_preflight.ok
+            ):
+                text = "Live checks failed. Machine operations remain blocked."
                 tone = "danger"
             elif self.config.backend.mode != "write_enabled":
                 text = (
@@ -3243,16 +3251,17 @@ class MainWindow(QMainWindow):
                     "dispersion measurement and correction cannot change the energy actuator."
                 )
                 tone = "warning"
+                visible = False
             elif self.last_live_preflight is None:
                 text = "Write access is enabled. Check connections before any machine operation."
                 tone = "warning"
-            elif not self.last_live_preflight.ok:
-                text = "Live checks failed. Machine operations remain blocked."
-                tone = "danger"
+                visible = False
             else:
                 text = "Live checks passed. Review the energy step before starting an operation."
                 tone = "success"
+                visible = False
         self.operation_banner.setText(text)
+        self.operation_banner.setVisible(visible)
         self.operation_banner.setProperty("tone", tone)
         self.operation_banner.style().unpolish(self.operation_banner)
         self.operation_banner.style().polish(self.operation_banner)

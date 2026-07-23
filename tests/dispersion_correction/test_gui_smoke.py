@@ -65,6 +65,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.status_strip.items["ENERGY STEP"].value_label.text().startswith(
         "SIM "
     )
+    assert window.operation_banner.isHidden()
     assert "Simulated energy step" in window.energy_step_summary.text()
     assert "MODEL_DELTA" not in window.energy_step_summary.text()
     assert not hasattr(window, "calibration_page")
@@ -243,6 +244,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.status_strip.items["ACCESS"].value_label.text() == "READ ONLY"
     assert window.status_strip.items["READINESS"].value_label.text() == "NOT READY"
     assert "actuator_per_delta" in window.operation_banner.text()
+    assert not window.operation_banner.isHidden()
     assert window.knob_edit.text() == "QM13/QM16; QM14/QM15"
     assert " A" in window.knob_edit.toolTip()
     window.resize(1248, 803)
@@ -336,6 +338,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.model_details_button.isVisibleTo(profile_window)
     assert not profile_window.run_button.isEnabled()
     assert "READ ONLY" in profile_window.operation_banner.text()
+    assert profile_window.operation_banner.isHidden()
     assert "±0.0001 / ±0.25 deg" == profile_window._energy_step_compact()
     assert profile_window.connection_controls.isVisibleTo(profile_window)
     assert profile_window.preflight_button.isVisibleTo(profile_window)
@@ -344,10 +347,10 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         profile_window.preflight_button.parentWidget()
         is profile_window.connection_controls
     )
-    assert profile_window.next_action_button.text() == "Measure Dispersion"
+    assert profile_window.next_action_button.text() == "Online Measurement Unavailable"
     assert profile_window.next_action_button.property("workflowAction") == ""
     assert not profile_window.next_action_button.isEnabled()
-    assert "left configuration panel" in profile_window.workflow_hint_label.text()
+    assert "read-only" in profile_window.workflow_hint_label.text().lower()
     assert "read-only" in profile_window.preflight_button.toolTip().lower()
     assert "read-only" in profile_window.measure_button.toolTip().lower()
     from half_linac.src.apps.dispersion_correction.preflight import (
@@ -391,8 +394,11 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
             readings={},
         )
     )
+    profile_window._set_running(False, "")
     assert connection_dialogs[-1][0] == "Connection Check Failed"
     assert "BPM09 is disconnected." in connection_dialogs[-1][1]
+    assert profile_window.operation_banner.isVisibleTo(profile_window)
+    assert "Live checks failed" in profile_window.operation_banner.text()
     assert "Live preflight diagnostics" in profile_window.log_view.toPlainText()
     assert profile_window.bpm_select_button.isVisibleTo(profile_window)
     assert profile_window.bpm_select_button.height() == profile_window.bpm_edit.height() == 34
@@ -444,6 +450,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert irfel_vm_window.status_strip.items["BACKEND"].value_label.text() == "VM"
     assert irfel_vm_window.status_strip.items["ACCESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
+    assert irfel_vm_window.operation_banner.isHidden()
     assert irfel_vm_window.section_combo.currentData() == "dogleg"
     assert irfel_vm_window.model_dialog.isHidden()
     assert irfel_vm_window.next_action_button.text() == "Calculate Design Model"
