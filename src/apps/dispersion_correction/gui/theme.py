@@ -77,7 +77,8 @@ def build_stylesheet(name: str) -> str:
         font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif;
         font-size: 12px;
     }}
-    QDialog#bpmSelectionDialog, QDialog#knobSelectionDialog {{
+    QDialog#bpmSelectionDialog, QDialog#knobSelectionDialog,
+    QDialog#energyCalibrationDialog, QDialog#modelDetailsDialog {{
         background: {t['panel_bg']};
         color: {t['text_primary']};
     }}
@@ -343,6 +344,12 @@ def build_stylesheet(name: str) -> str:
     QPushButton#nextWorkflowAction {{
         min-height: 38px;
         font-size: 14px;
+    }}
+    QPushButton#modelDetailsButton {{
+        border-radius: 9px;
+        min-height: 24px;
+        max-height: 24px;
+        padding: 2px 9px;
     }}
     QPushButton[role="danger"]:enabled {{
         border-color: {t['danger']};

@@ -1248,7 +1248,12 @@ class MainWindow(QMainWindow):
             ["Iter", "Gain", "Accepted", "RMS Before", "RMS After", "Reason"]
         )
 
-        self.model_page = QWidget()
+        self.model_dialog = QDialog(self)
+        self.model_dialog.setObjectName("modelDetailsDialog")
+        self.model_dialog.setWindowTitle("Model Details")
+        self.model_dialog.resize(1100, 720)
+        model_dialog_layout = QVBoxLayout(self.model_dialog)
+        self.model_page = QWidget(self.model_dialog)
         model_layout = QVBoxLayout(self.model_page)
         model_layout.setContentsMargins(8, 4, 8, 8)
         model_intro = QLabel(
@@ -1307,6 +1312,14 @@ class MainWindow(QMainWindow):
         )
         model_notice.setObjectName("modelSafetyNotice")
         model_layout.addWidget(model_notice)
+        self.model_empty_label = QLabel(
+            "Choose a model source and click Analyze Model. Model and measurement "
+            "comparison details will appear here."
+        )
+        self.model_empty_label.setObjectName("workspaceIntro")
+        self.model_empty_label.setAlignment(Qt.AlignCenter)
+        self.model_empty_label.setWordWrap(True)
+        model_layout.addWidget(self.model_empty_label, 1)
         self.model_table = self._table([])
         self.model_table.setVisible(False)
         model_layout.addWidget(self.model_table, 1)
@@ -1317,6 +1330,13 @@ class MainWindow(QMainWindow):
         self.model_info.setReadOnly(True)
         self.model_info.setVisible(False)
         model_layout.addWidget(self.model_info, 1)
+        model_dialog_layout.addWidget(self.model_page, 1)
+        model_dialog_actions = QHBoxLayout()
+        model_dialog_actions.addStretch(1)
+        self.close_model_details_button = QPushButton("Close")
+        self.close_model_details_button.clicked.connect(self.model_dialog.close)
+        model_dialog_actions.addWidget(self.close_model_details_button)
+        model_dialog_layout.addLayout(model_dialog_actions)
 
         self.detail_sections: dict[QWidget, QToolButton] = {}
         self._add_detail_section(
@@ -1328,11 +1348,6 @@ class MainWindow(QMainWindow):
             online_layout,
             "Recommendation Details",
             self.correction_page,
-        )
-        self._add_detail_section(
-            online_layout,
-            "Model Details",
-            self.model_page,
         )
         online_layout.addStretch(1)
 
@@ -1405,6 +1420,10 @@ class MainWindow(QMainWindow):
             self._model_visibility_changed
         )
         overview_options_row.addWidget(self.show_snapshot_model_checkbox)
+        self.model_details_button = QPushButton("Model Details…")
+        self.model_details_button.setObjectName("modelDetailsButton")
+        self.model_details_button.clicked.connect(self._show_model_details)
+        overview_options_row.addWidget(self.model_details_button)
         overview_layout.addLayout(overview_options_row)
         self.dispersion_curve = DispersionCurveWidget()
         overview_layout.addWidget(self.dispersion_curve, 1)
@@ -1465,6 +1484,9 @@ class MainWindow(QMainWindow):
 
     def _show_workflow_detail(self, page: QWidget) -> None:
         self.tabs.setCurrentWidget(self.online_page)
+        if page is self.model_page:
+            self._show_model_details()
+            return
         button = self.detail_sections.get(page)
         if button is None:
             for other in self.detail_sections.values():
@@ -1475,6 +1497,12 @@ class MainWindow(QMainWindow):
             if other is not button and other.isChecked():
                 other.setChecked(False)
         button.setChecked(True)
+
+    def _show_model_details(self) -> None:
+        self.model_dialog.setStyleSheet(build_stylesheet(self.theme_name))
+        self.model_dialog.show()
+        self.model_dialog.raise_()
+        self.model_dialog.activateWindow()
 
     def _add_form_row(self, form: QFormLayout, label_text: str, widget) -> QLabel:
         label = QLabel(label_text)
@@ -1535,10 +1563,7 @@ class MainWindow(QMainWindow):
         self._refresh_operation_plan()
         self._update_calibration_controls()
         self._update_static_safety_status()
-        if self.config.section.model_only:
-            self._show_workflow_detail(self.model_page)
-        else:
-            self._show_workflow_detail(self.online_page)
+        self._show_workflow_detail(self.online_page)
         self._refresh_status("Config loaded")
 
     def _update_knob_summary(self) -> None:
@@ -1602,6 +1627,7 @@ class MainWindow(QMainWindow):
         self._refresh_measurement_source_combo()
         self.model_info.clear()
         self.model_info.setVisible(False)
+        self.model_empty_label.setVisible(True)
         self.model_table.setRowCount(0)
         self.model_table.setVisible(False)
         self.model_measure_table.setRowCount(0)
@@ -2352,7 +2378,11 @@ class MainWindow(QMainWindow):
         if measurement is None:
             self.model_measure_table.setRowCount(0)
             self.model_measure_table.setVisible(False)
+            self.model_empty_label.setVisible(
+                self.dispersion_curve.result is None
+            )
             return
+        self.model_empty_label.setVisible(False)
         response = self.dispersion_curve.result
         model_columns: list[tuple[str, dict[str, float]]] = []
         if response is not None and self.show_design_model_checkbox.isChecked():
@@ -2699,6 +2729,7 @@ class MainWindow(QMainWindow):
         return "\n".join(lines)
 
     def _show_model_response(self, response: ModelResponseResult) -> None:
+        self.model_empty_label.setVisible(False)
         self.model_table.setVisible(True)
         self.model_info.setVisible(True)
         self.model_table.setRowCount(len(response.device_names))
@@ -3367,6 +3398,7 @@ class MainWindow(QMainWindow):
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(build_stylesheet(self.theme_name))
+        self.model_dialog.setStyleSheet(build_stylesheet(self.theme_name))
         self.dispersion_curve.set_theme(self.theme_name)
         self._update_theme_button()
 

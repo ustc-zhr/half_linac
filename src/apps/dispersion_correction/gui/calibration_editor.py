@@ -32,11 +32,16 @@ from half_linac.src.apps.dispersion_correction.calibration_draft import (
     load_energy_calibration_draft,
     save_energy_calibration_draft,
 )
+from half_linac.src.apps.dispersion_correction.gui.theme import (
+    build_stylesheet,
+    theme_tokens,
+)
 
 
 class CalibrationPlotWidget(QWidget):
-    def __init__(self) -> None:
+    def __init__(self, theme_name: str = "night_shift") -> None:
         super().__init__()
+        self.theme_name = theme_name
         self.analysis: EnergyCalibrationAnalysis | None = None
         self.setMinimumHeight(150)
 
@@ -45,14 +50,15 @@ class CalibrationPlotWidget(QWidget):
         self.update()
 
     def paintEvent(self, _event) -> None:
+        tokens = theme_tokens(self.theme_name)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#111a22"))
+        painter.fillRect(self.rect(), QColor(tokens["plot_bg"]))
         rect = QRectF(self.rect()).adjusted(52, 16, -18, -32)
-        painter.setPen(QPen(QColor("#536675"), 1))
+        painter.setPen(QPen(QColor(tokens["status_item_bar"]), 1))
         painter.drawLine(rect.bottomLeft(), rect.bottomRight())
         painter.drawLine(rect.bottomLeft(), rect.topLeft())
-        painter.setPen(QColor("#9eb0bd"))
+        painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(8, 18, "Δp/p")
         painter.drawText(
             int(rect.right() - 88),
@@ -88,7 +94,7 @@ class CalibrationPlotWidget(QWidget):
 
         if analysis.fit is not None:
             fit = analysis.fit
-            painter.setPen(QPen(QColor("#f0a35e"), 2))
+            painter.setPen(QPen(QColor(tokens["status_warning"]), 2))
             painter.drawLine(
                 point(
                     x_min,
@@ -99,8 +105,8 @@ class CalibrationPlotWidget(QWidget):
                     fit.slope_delta_per_actuator * x_max + fit.intercept_delta,
                 ),
             )
-        painter.setPen(QPen(QColor("#60c6d9"), 2))
-        painter.setBrush(QColor("#60c6d9"))
+        painter.setPen(QPen(QColor(tokens["focus"]), 2))
+        painter.setBrush(QColor(tokens["focus"]))
         for x_value, y_value in zip(x, y):
             center = point(float(x_value), float(y_value))
             painter.drawEllipse(center, 3.5, 3.5)
@@ -130,6 +136,9 @@ class CalibrationEditorDialog(QDialog):
         self.activated_source: str | None = None
         self._updating = False
 
+        self.theme_name = str(getattr(parent, "theme_name", "night_shift"))
+        self.setObjectName("energyCalibrationDialog")
+        self.setStyleSheet(build_stylesheet(self.theme_name))
         self.setWindowTitle("Energy Knob Calibration Editor")
         self.resize(1000, 760)
         layout = QVBoxLayout(self)
@@ -212,7 +221,7 @@ class CalibrationEditorDialog(QDialog):
         table_actions.addWidget(self.save_button)
         layout.addLayout(table_actions)
 
-        self.plot = CalibrationPlotWidget()
+        self.plot = CalibrationPlotWidget(self.theme_name)
         layout.addWidget(self.plot, 1)
         self.preview = QPlainTextEdit()
         self.preview.setReadOnly(True)

@@ -34,7 +34,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         "History",
     ]
     assert not hasattr(window, "workflow_tabs")
-    assert len(window.detail_sections) == 3
+    assert len(window.detail_sections) == 2
     assert all(not button.isChecked() for button in window.detail_sections.values())
     assert not hasattr(window, "readiness_page")
     assert not hasattr(window, "preflight_text")
@@ -44,6 +44,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.workspace_splitter.parentWidget().objectName() == "workspacePanel"
     assert window.dispersion_overview.objectName() == "dispersionOverviewCard"
     assert window.dispersion_curve.parentWidget() is window.dispersion_overview
+    assert window.model_details_button.parentWidget() is window.dispersion_overview
+    assert window.model_details_button.text() == "Model Details…"
+    assert window.model_dialog.isHidden()
     assert window.plot_state_label.text() == "No measured data"
     assert not hasattr(window, "plan_button")
     assert not hasattr(window, "backend_combo")
@@ -151,6 +154,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         backend="real",
         parent=window,
     )
+    assert calibration_dialog.objectName() == "energyCalibrationDialog"
+    assert calibration_dialog.styleSheet()
+    assert calibration_dialog.plot.theme_name == window.theme_name
     calibration_draft = EnergyCalibrationDraft(
         actuator="rf_phase",
         actuator_unit="deg",
@@ -303,7 +309,8 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         "focus_comparison": False,
     }
     profile_window.show_snapshot_model_checkbox.setChecked(False)
-    assert profile_window.model_page in profile_window.detail_sections
+    assert profile_window.model_page not in profile_window.detail_sections
+    assert profile_window.model_details_button.isVisibleTo(profile_window)
     assert not profile_window.run_button.isEnabled()
     assert "READ ONLY" in profile_window.operation_banner.text()
     assert "±0.0001 / ±0.25 deg" == profile_window._energy_step_compact()
@@ -415,7 +422,8 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert irfel_vm_window.status_strip.items["ACCESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.section_combo.currentData() == "dogleg"
-    assert irfel_vm_window.detail_sections[irfel_vm_window.model_page].isChecked()
+    assert irfel_vm_window.model_page not in irfel_vm_window.detail_sections
+    assert irfel_vm_window.model_dialog.isHidden()
     assert irfel_vm_window.next_action_button.text() == "Calculate Design Model"
     assert irfel_vm_window.connection_controls.isHidden()
     assert irfel_vm_window.preflight_button.isHidden()
@@ -444,7 +452,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.model_response_button.text() == "Analyze Model"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
-    assert half_window.model_page in half_window.detail_sections
+    assert half_window.model_page not in half_window.detail_sections
     assert "does not use scan" in half_window.knob_edit.toolTip()
     assert "limit ±" not in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
@@ -465,7 +473,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert "No energy scan" in half_window.energy_step_summary.text()
     assert "MODEL_DELTA" not in half_window.energy_step_summary.text()
     assert half_window.tabs.currentWidget() is half_window.online_page
-    assert half_window.detail_sections[half_window.model_page].isChecked()
+    assert half_window.model_dialog.isHidden()
     assert half_window.next_action_button.text() == "Calculate Design Model"
     assert half_window.next_action_button.property("workflowAction") == "model-design"
     assert half_window.connection_controls.isHidden()
@@ -521,6 +529,11 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.model_table.horizontalHeaderItem(3).text() == "Design-reference ΔK1"
     assert half_window.model_table.item(0, 0).text() == "QL01"
     assert half_window.model_table.item(0, 3).text() == "-0.1"
+    half_window.model_details_button.click()
+    app.processEvents()
+    assert half_window.model_dialog.isVisible()
+    assert half_window.model_page.parentWidget() is half_window.model_dialog
+    assert half_window.model_empty_label.isHidden()
     assert half_window.response_table.rowCount() == 0
     assert half_window.import_measurement_button.isEnabled()
     assert not half_window.clear_measurement_button.isEnabled()
