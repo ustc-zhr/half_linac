@@ -60,6 +60,8 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.status_strip.items["BACKEND"].value_label.text() == "OFFLINE"
     assert window.status_strip.items["ACCESS"].value_label.text() == "OFFLINE"
     assert window.status_strip.items["READINESS"].value_label.text() == "READY"
+    assert window.status_strip.items["ENERGY STEP"].minimumWidth() == 160
+    assert not window.status_strip.items["ENERGY STEP"].value_label.wordWrap()
     assert window.status_strip.items["ENERGY STEP"].value_label.text().startswith(
         "SIM "
     )

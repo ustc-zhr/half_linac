@@ -851,6 +851,9 @@ class MainWindow(QMainWindow):
                 ("LAST RESULT", "-"),
             ]
         )
+        energy_status = self.status_strip.items["ENERGY STEP"]
+        energy_status.setMinimumWidth(160)
+        energy_status.value_label.setWordWrap(False)
         outer_layout.addWidget(self.status_strip)
         return frame
 
