@@ -43,6 +43,11 @@ def test_main_window_constructs_offscreen() -> None:
     assert window.status_strip.items["BACKEND"].value_label.text() == "OFFLINE"
     assert window.status_strip.items["ACCESS"].value_label.text() == "OFFLINE"
     assert window.status_strip.items["READINESS"].value_label.text() == "READY"
+    assert window.status_strip.items["ENERGY STEP"].value_label.text().startswith(
+        "SIM "
+    )
+    assert "Simulated energy step" in window.energy_step_summary.text()
+    assert "MODEL_DELTA" not in window.energy_step_summary.text()
     assert window.calibration_button.parentWidget() is window.calibration_page
     assert window.measure_button.parentWidget() is window.online_page
     assert window.response_button.parentWidget() is window.online_page
@@ -218,6 +223,12 @@ def test_main_window_constructs_offscreen() -> None:
     assert not half_window.bpm_select_button.isVisibleTo(half_window)
     assert not half_window.knob_select_button.isVisibleTo(half_window)
     assert half_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
+    assert half_window.status_strip.items["ENERGY STEP"].value_label.text() == "NOT USED"
+    assert not half_window.delta_spin.isVisibleTo(half_window)
+    assert not half_window.energy_step_field_label.isVisibleTo(half_window)
+    assert "calculates dispersion directly" in half_window.energy_step_summary.text()
+    assert "No energy scan" in half_window.energy_step_summary.text()
+    assert "MODEL_DELTA" not in half_window.energy_step_summary.text()
     assert half_window.tabs.currentWidget() is half_window.model_page
     from half_linac.src.apps.dispersion_correction.models import (
         ImportedDispersionDataset,

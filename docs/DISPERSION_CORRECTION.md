@@ -85,6 +85,12 @@ The main configuration panel shows the energy step in both normalized `dp/p` and
 physical actuator units. Less frequently changed sampling and solver parameters
 are under `Advanced settings`.
 
+For model-only sections, the GUI hides the energy-step input and states that
+Elegant calculates dispersion directly without an energy scan. Standalone
+offline measurement demonstrations instead label the step as simulated and make
+clear that no backend or PV write occurs. Only online VM/REAL measurement
+workflows show the configured physical energy actuator conversion.
+
 The normal correction path is deliberately staged:
 
 1. `Measure Dispersion` records the current beam-based effective dispersion.

@@ -815,7 +815,11 @@ class MainWindow(QMainWindow):
         self.delta_spin.setSingleStep(1.0e-4)
         self.delta_spin.setToolTip("Relative momentum perturbation used at +dp/p and -dp/p to measure D_eff.")
         self.delta_spin.valueChanged.connect(self._energy_step_changed)
-        self._add_form_row(machine_form, "Energy Step (Δp/p)", self.delta_spin)
+        self.energy_step_field_label = self._add_form_row(
+            machine_form,
+            "Energy Step (Δp/p)",
+            self.delta_spin,
+        )
         layout.addLayout(machine_form)
 
         self.energy_step_summary = QLabel()
@@ -1176,13 +1180,14 @@ class MainWindow(QMainWindow):
             table.setHorizontalHeaderLabels(headers)
         return table
 
-    def _add_form_row(self, form: QFormLayout, label_text: str, widget) -> None:
+    def _add_form_row(self, form: QFormLayout, label_text: str, widget) -> QLabel:
         label = QLabel(label_text)
         label.setProperty("role", "field")
         label.setFixedWidth(124)
         label.setMinimumHeight(34)
         label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         form.addRow(label, widget)
+        return label
 
     def _config_form(self) -> QFormLayout:
         form = QFormLayout()
@@ -1226,6 +1231,9 @@ class MainWindow(QMainWindow):
             )
             self._update_knob_summary()
             self._update_energy_step_summary()
+            model_only = self.config.section.model_only
+            self.energy_step_field_label.setVisible(not model_only)
+            self.delta_spin.setVisible(not model_only)
         finally:
             self._loading_widgets = False
         self._show_plan()
@@ -2380,6 +2388,10 @@ class MainWindow(QMainWindow):
             if hasattr(self, "delta_spin")
             else self.config.energy_knob.delta
         )
+        if self.config.section.model_only:
+            return "NOT USED"
+        if self.config.backend.type.lower() == "offline":
+            return f"SIM ±{delta:g} Δp/p"
         plan = self._energy_step_plan()
         if not plan.get("calibrated"):
             return f"±{delta:g} Δp/p"
@@ -2390,6 +2402,18 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "energy_step_summary"):
             return
         delta = float(self.delta_spin.value())
+        if self.config.section.model_only:
+            self.energy_step_summary.setText(
+                "Model analysis calculates dispersion directly.\n"
+                "No energy scan or energy-knob write is used."
+            )
+            return
+        if self.config.backend.type.lower() == "offline":
+            self.energy_step_summary.setText(
+                f"Simulated energy step: ±{delta:g} Δp/p\n"
+                "Software calculation only; no backend or PV write."
+            )
+            return
         plan = self._energy_step_plan()
         lines = [
             f"{self.config.energy_knob.name} · {self.config.energy_knob.actuator}",
