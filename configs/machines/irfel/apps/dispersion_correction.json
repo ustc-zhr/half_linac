@@ -1,7 +1,11 @@
 {
   "model_backend": "simulation",
   "control_backends": [
+    "vm",
     "real"
+  ],
+  "model_only_control_backends": [
+    "vm"
   ],
   "default_section": "dogleg",
   "sections": [

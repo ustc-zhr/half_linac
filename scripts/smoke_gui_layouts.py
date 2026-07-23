@@ -209,6 +209,8 @@ def _run_child(app_name: str) -> None:
         raise AssertionError("IRFEL real launcher did not enable CT Monitor.")
     if app_name == "launcher_irfel_vm" and window.ct_monitor_button.isEnabled():
         raise AssertionError("IRFEL VM launcher incorrectly enabled the real-only CT Monitor.")
+    if app_name == "launcher_irfel_vm" and not window.dispersion_correction_button.isEnabled():
+        raise AssertionError("IRFEL VM launcher did not enable model-only Dispersion Correction.")
 
     if spec.uses_selector:
         selectors = window.findChildren(RuntimeSelectorWidget)

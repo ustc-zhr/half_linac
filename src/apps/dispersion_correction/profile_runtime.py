@@ -54,7 +54,19 @@ def load_profile_run_config(
 
     selected = _select_workflow_section(workflow, section_id)
     section = dict(selected.pop("_section"))
-    model_only = bool(section.get("model_only", False))
+    raw_model_only_backends = workflow.get("model_only_control_backends")
+    model_only_backends = (
+        ()
+        if raw_model_only_backends is None
+        else _string_sequence(
+            raw_model_only_backends,
+            "model_only_control_backends",
+        )
+    )
+    model_only = bool(
+        section.get("model_only", False) or backend_name in model_only_backends
+    )
+    section["model_only"] = model_only
     options = {
         "site": resolved_context.profile.machine.id,
         "profile_backend": backend_name,

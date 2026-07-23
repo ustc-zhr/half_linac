@@ -335,6 +335,28 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     knob_dialog.close()
     profile_window.close()
 
+    irfel_vm_context = load_app_context(
+        "dispersion_correction",
+        machine_id="irfel",
+        control_backend="vm",
+    )
+    _, irfel_vm_config = load_profile_run_config(irfel_vm_context)
+    irfel_vm_window = MainWindow(irfel_vm_config, irfel_vm_context)
+    irfel_vm_window.show()
+    app.processEvents()
+    assert irfel_vm_window.status_strip.items["BACKEND"].value_label.text() == "VM"
+    assert irfel_vm_window.status_strip.items["ACCESS"].value_label.text() == "MODEL ONLY"
+    assert irfel_vm_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
+    assert irfel_vm_window.section_combo.currentData() == "dogleg"
+    assert irfel_vm_window.detail_sections[irfel_vm_window.model_page].isChecked()
+    assert irfel_vm_window.next_action_button.text() == "Calculate Design Model"
+    assert irfel_vm_window.show_design_model_checkbox.isEnabled()
+    assert irfel_vm_window.show_snapshot_model_checkbox.isEnabled()
+    assert not irfel_vm_window.measure_button.isEnabled()
+    assert not irfel_vm_window.response_button.isEnabled()
+    assert not irfel_vm_window.run_button.isEnabled()
+    irfel_vm_window.close()
+
     half_context = load_app_context(
         "dispersion_correction",
         machine_id="half",

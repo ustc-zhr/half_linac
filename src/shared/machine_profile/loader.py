@@ -1554,6 +1554,25 @@ def _validate_dispersion_correction_workflow(
             "workflows.dispersion_correction.control_backends contains unconfigured backend(s): "
             + ", ".join(unknown_backends)
         )
+    model_only_backends = tuple(
+        normalize_mode(
+            value,
+            "workflows.dispersion_correction.model_only_control_backends[]",
+        )
+        for value in _expect_optional_string_list(
+            workflow.get("model_only_control_backends"),
+            "workflows.dispersion_correction.model_only_control_backends",
+        )
+    )
+    invalid_model_only_backends = sorted(
+        set(model_only_backends) - set(supported_backends)
+    )
+    if invalid_model_only_backends:
+        raise MachineProfileError(
+            "workflows.dispersion_correction.model_only_control_backends contains "
+            "backend(s) not listed in control_backends: "
+            + ", ".join(invalid_model_only_backends)
+        )
 
     sections = workflow.get("sections")
     if sections is None:
@@ -1648,8 +1667,15 @@ def _validate_dispersion_correction_workflow(
                 f"Dispersion energy element {element.id!r} is missing logical channel "
                 f"{set_channel!r}."
             )
+        measurement_backends = tuple(
+            backend_name
+            for backend_name in supported_backends
+            if backend_name not in model_only_backends
+        )
         missing_channel_backends = [
-            backend_name for backend_name in supported_backends if backend_name not in channel_modes
+            backend_name
+            for backend_name in measurement_backends
+            if backend_name not in channel_modes
         ]
         if missing_channel_backends:
             raise MachineProfileError(

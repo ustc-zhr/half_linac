@@ -32,14 +32,23 @@ class FakeEpics:
         return self.values.get(pv)
 
 
-def test_irfel_vm_profile_is_explicitly_unsupported() -> None:
+def test_irfel_vm_profile_opens_as_model_only_without_energy_knob_pvs() -> None:
     context = load_app_context(
         "dispersion_correction",
         machine_id="irfel",
         control_backend="vm",
     )
-    with pytest.raises(MachineProfileError, match="does not support control backend 'vm'"):
-        load_profile_run_config(context)
+    _, config = load_profile_run_config(context)
+
+    assert config.backend.type == "offline"
+    assert config.backend.mode == "read_only"
+    assert config.backend.options["profile_backend"] == "vm"
+    assert config.backend.options["pv_map"] == {}
+    assert config.section.model_only
+    assert config.section.id == "dogleg"
+    assert context.model_backend is not None
+    with pytest.raises(PermissionError, match="model-only"):
+        AchromatWorkflow(config).measure_dispersion()
 
 
 def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> None:
@@ -80,15 +89,22 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
     assert not any("no independent readback" in warning for warning in preflight.warnings)
 
 
-def test_irfel_dogleg_current_snapshot_maps_all_section_quadrupoles() -> None:
+@pytest.mark.parametrize(
+    ("backend", "expected_source"),
+    (("vm", "live_from_vm"), ("real", "live_from_real")),
+)
+def test_irfel_dogleg_current_snapshot_maps_all_section_quadrupoles(
+    backend,
+    expected_source,
+) -> None:
     context = load_app_context(
         "dispersion_correction",
         machine_id="irfel",
-        control_backend="real",
+        control_backend=backend,
     )
     names = tuple(f"QM{index:02d}" for index in range(12, 19))
     pv_values = {
-        resolve_channel(context, name, "K1", "real"): float(index)
+        resolve_channel(context, name, "K1", backend): float(index)
         for index, name in enumerate(names, start=12)
     }
 
@@ -99,7 +115,7 @@ def test_irfel_dogleg_current_snapshot_maps_all_section_quadrupoles() -> None:
         pv_reader=pv_values.__getitem__,
     )
 
-    assert snapshot.source == "live_from_real"
+    assert snapshot.source == expected_source
     assert snapshot.lattice_overrides == {
         name: {"K1": float(index)}
         for index, name in enumerate(names, start=12)

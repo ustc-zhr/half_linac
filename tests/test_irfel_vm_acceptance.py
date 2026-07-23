@@ -42,6 +42,7 @@ class IRFELVmAcceptanceTests(unittest.TestCase):
                     "energy_spectrum",
                     "emit_measure",
                     "bba",
+                    "dispersion_correction",
                 )
             }
 

@@ -50,6 +50,7 @@ contexts = {
         "energy_spectrum",
         "emit_measure",
         "bba",
+        "dispersion_correction",
     )
 }
 for app_name, context in contexts.items():
