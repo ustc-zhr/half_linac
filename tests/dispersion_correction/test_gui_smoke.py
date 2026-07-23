@@ -27,6 +27,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     assert window.windowTitle() == "Dispersion Correction"
+    assert (window.width(), window.height()) == (1600, 1000)
     assert window.tabs.count() == 2
     assert [window.tabs.tabText(index) for index in range(window.tabs.count())] == [
         "Online Correction",

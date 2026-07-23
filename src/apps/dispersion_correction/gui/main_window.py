@@ -702,7 +702,7 @@ class MainWindow(QMainWindow):
         self.app_context = app_context
         self.setWindowTitle(self._window_title())
         self.setMinimumSize(1120, 760)
-        self.resize(1440, 920)
+        self.resize(1600, 1000)
         self.theme_name = (
             "control_room" if resolve_initial_theme() == "light" else "night_shift"
         )
