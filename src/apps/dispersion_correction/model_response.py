@@ -69,7 +69,7 @@ def calculate_model_response(
 
     base_k1 = _base_k1_values(backend, config, base_overrides)
     total = 2 + 2 * len(config.knobs)
-    _progress(progress_callback, "Calculating baseline optics", 0, total)
+    _progress(progress_callback, "Calculating before-correction optics", 0, total)
     baseline_curve = _optics_curve(
         backend,
         entrance,
@@ -130,7 +130,7 @@ def calculate_model_response(
         knob.name: float(delta)
         for knob, delta in zip(config.knobs, deltas)
     }
-    _progress(progress_callback, "Calculating correction preview", completed, total)
+    _progress(progress_callback, "Calculating corrected model", completed, total)
     preview_curve = _optics_curve(
         backend,
         entrance,
@@ -214,10 +214,10 @@ def model_response_to_dict(result: ModelResponseResult) -> dict[str, Any]:
 def format_model_response(result: ModelResponseResult) -> str:
     lines = [
         f"Model dispersion response: {result.section_id}",
-        f"Model source: {result.model_source}",
+        f"Model source: {_model_source_label(result.model_source)}",
         f"Entrance condition: {result.entrance_condition or 'not specified'}",
         "",
-        "Observable baseline / target / preview:",
+        "Observable before correction / target / corrected model:",
     ]
     for index, name in enumerate(result.observable_names):
         unit = result.observable_units[index]
@@ -244,7 +244,7 @@ def format_model_response(result: ModelResponseResult) -> str:
             f"Condition number: {result.condition_number:.8g}",
             f"Retained rank: {result.retained_rank}",
             "",
-            "Preview raw-knob deltas:",
+            "Predicted correction knob deltas:",
         ]
     )
     for name in result.knob_names:
@@ -256,7 +256,7 @@ def format_model_response(result: ModelResponseResult) -> str:
     lines.extend(
         [
             "",
-            "Optics envelope (baseline -> preview):",
+            "Optics envelope (before correction -> corrected model):",
             f"  max beta_x: {np.max(result.baseline_curve.beta_x_m):.8g} -> "
             f"{np.max(result.preview_curve.beta_x_m):.8g} m",
             f"  max beta_y: {np.max(result.baseline_curve.beta_y_m):.8g} -> "
@@ -274,6 +274,15 @@ def format_model_response(result: ModelResponseResult) -> str:
                 f"  [{field.get('source_pv') or 'design'}]"
             )
     return "\n".join(lines) + "\n"
+
+
+def _model_source_label(source: str) -> str:
+    labels = {
+        "design": "Design lattice",
+        "live_from_vm": "Current snapshot (VM backend)",
+        "live_from_real": "Current snapshot (REAL backend)",
+    }
+    return labels.get(str(source), str(source))
 
 
 def _curve_to_dict(curve: ModelOpticsCurve) -> dict[str, Any]:

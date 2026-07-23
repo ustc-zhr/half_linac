@@ -170,7 +170,7 @@ class FullWidthTabWidget(QTabWidget):
 
 class DispersionCurveWidget(QWidget):
     DEFAULT_TOOLTIP = (
-        "Dotted: design reference; solid: selected baseline; dashed: correction preview. "
+        "Dotted: design; solid: model before correction; dashed: corrected model. "
         "Circles: imported eta_x. Red: horizontal; blue: vertical. "
         "Move over the lattice strip for element details."
     )
@@ -323,7 +323,7 @@ class DispersionCurveWidget(QWidget):
         painter.drawText(
             plot.left() + 75,
             plot.top() + 16,
-            "design ···  baseline —  preview --  measured ●",
+            "design ···  before correction —  corrected model --  measured ●",
         )
         lattice_rect = QRectF(
             float(plot.left()),
@@ -921,16 +921,19 @@ class MainWindow(QMainWindow):
         self.model_source_combo.addItem("Design lattice", "design")
         if self.app_context is not None:
             backend_name = self.app_context.control_backend.name.lower()
-            self.model_source_combo.addItem(
-                f"Current {backend_name.upper()} snapshot",
-                "live",
+            self.model_source_combo.addItem("Current snapshot", "live")
+            snapshot_tooltip = (
+                f"Reads quadrupole K1 PVs from the active {backend_name.upper()} backend "
+                "without writing machine state."
             )
+        else:
+            snapshot_tooltip = "Current snapshot requires a machine-profile backend."
         self.model_source_combo.setToolTip(
-            "Current snapshot reads quadrupole K1 PVs without writing machine state."
+            snapshot_tooltip
         )
         self.model_source_combo.currentIndexChanged.connect(self._model_source_changed)
         response_actions.addWidget(self.model_source_combo)
-        self.model_response_button = QPushButton("Analyze Model + Preview")
+        self.model_response_button = QPushButton("Analyze + Predict Correction")
         self.model_response_button.clicked.connect(self._start_model_response)
         self.model_response_button.setVisible(self._model_analysis_available())
         response_actions.addWidget(self.model_response_button)
@@ -1581,7 +1584,13 @@ class MainWindow(QMainWindow):
             for index, name in enumerate(response.baseline_curve.element_names)
         }
         self.measure_table.setHorizontalHeaderLabels(
-            ["BPM", "Imported ηx (mm)", "Model ηx (mm)", "Residual (mm)", "σηx (mm)"]
+            [
+                "BPM",
+                "Imported ηx (mm)",
+                "Before-correction model ηx (mm)",
+                "Residual (mm)",
+                "σηx (mm)",
+            ]
         )
         self.measure_table.setRowCount(len(imported.bpm_names))
         for row, (bpm, measured, sigma) in enumerate(
