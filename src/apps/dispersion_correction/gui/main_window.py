@@ -708,6 +708,7 @@ class MainWindow(QMainWindow):
         self.worker: WorkflowWorker | None = None
         self.preflight_worker: LivePreflightWorker | None = None
         self.model_worker: ModelResponseWorker | None = None
+        self.pending_model_source: str | None = None
         self.imported_dispersion: ImportedDispersionDataset | None = None
         self.live_plot_measurement: DispersionPlotDataset | None = None
         self.reference_plot_measurement: DispersionPlotDataset | None = None
@@ -1254,7 +1255,9 @@ class MainWindow(QMainWindow):
         self.model_source_combo.currentIndexChanged.connect(self._model_source_changed)
         model_actions.addWidget(self.model_source_combo)
         self.model_response_button = QPushButton("Analyze Model")
-        self.model_response_button.clicked.connect(self._start_model_response)
+        self.model_response_button.clicked.connect(
+            lambda: self._start_model_response()
+        )
         self.model_response_button.setVisible(self._model_analysis_available())
         model_actions.addWidget(self.model_response_button)
         self.model_boundary_label = QLabel()
@@ -1341,7 +1344,8 @@ class MainWindow(QMainWindow):
         self.show_design_model_checkbox = QCheckBox("Design model")
         self.show_design_model_checkbox.setChecked(False)
         self.show_design_model_checkbox.setToolTip(
-            "Analyze a model first, then toggle the design-lattice reference curve."
+            "Calculate and show the read-only design-lattice model. "
+            "No dispersion measurement is required."
         )
         self.show_design_model_checkbox.toggled.connect(
             self._model_visibility_changed
@@ -1351,8 +1355,8 @@ class MainWindow(QMainWindow):
         self.show_snapshot_model_checkbox.setChecked(False)
         self.show_snapshot_model_checkbox.setEnabled(False)
         self.show_snapshot_model_checkbox.setToolTip(
-            "In Dispersion Comparison, select Current snapshot and run Analyze Model "
-            "before enabling this curve."
+            "Read the configured quadrupole K1 snapshot and calculate its model curve. "
+            "No dispersion measurement or machine write is required."
         )
         self.show_snapshot_model_checkbox.toggled.connect(
             self._model_visibility_changed
@@ -1560,7 +1564,6 @@ class MainWindow(QMainWindow):
         self.model_measure_table.setVisible(False)
         self.show_design_model_checkbox.setChecked(False)
         self.show_snapshot_model_checkbox.setChecked(False)
-        self.show_snapshot_model_checkbox.setEnabled(False)
         self._set_running(False, "")
 
     def _import_measurement_csv(self) -> None:
@@ -2046,7 +2049,12 @@ class MainWindow(QMainWindow):
     def _task_finished(self) -> None:
         self._set_running(False, "")
 
-    def _start_model_response(self) -> None:
+    def _start_model_response(
+        self,
+        *,
+        model_source: str | None = None,
+        focus_comparison: bool = True,
+    ) -> None:
         if self.app_context is None or self.app_context.model_backend is None:
             QMessageBox.warning(self, "Model Comparison", "No Elegant model backend is configured.")
             return
@@ -2057,21 +2065,31 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Configuration", str(exc))
             return
-        model_source = str(self.model_source_combo.currentData() or "design")
+        selected_source = model_source or str(
+            self.model_source_combo.currentData() or "design"
+        )
+        source_index = self.model_source_combo.findData(selected_source)
+        if source_index >= 0 and source_index != self.model_source_combo.currentIndex():
+            self.model_source_combo.blockSignals(True)
+            self.model_source_combo.setCurrentIndex(source_index)
+            self.model_source_combo.blockSignals(False)
+        self.pending_model_source = selected_source
         self.model_worker = ModelResponseWorker(
             self.app_context,
             self.config,
-            model_source,
+            selected_source,
         )
         self.model_worker.progress.connect(self._update_progress)
-        self.model_worker.failed.connect(self._task_failed)
+        self.model_worker.failed.connect(self._model_response_failed)
         self.model_worker.completed.connect(self._model_response_completed)
         self.model_worker.finished.connect(self._task_finished)
         self._set_running(True, "model-response")
-        self.tabs.setCurrentWidget(self.model_page)
+        if focus_comparison:
+            self.tabs.setCurrentWidget(self.model_page)
         self.model_worker.start()
 
     def _model_response_completed(self, result: object) -> None:
+        self.pending_model_source = None
         if not isinstance(result, ModelResponseResult):
             self._task_failed("Unexpected model comparison result")
             return
@@ -2080,6 +2098,23 @@ class MainWindow(QMainWindow):
         self._append_log(
             f"Model comparison completed from {result.model_source} without machine writes"
         )
+
+    def _model_response_failed(self, message: str) -> None:
+        failed_source = self.pending_model_source
+        self.pending_model_source = None
+        response = self.dispersion_curve.result
+        if failed_source == "design" and response is None:
+            self.show_design_model_checkbox.blockSignals(True)
+            self.show_design_model_checkbox.setChecked(False)
+            self.show_design_model_checkbox.blockSignals(False)
+        elif failed_source not in {None, "design"} and (
+            response is None or response.model_source == "design"
+        ):
+            self.show_snapshot_model_checkbox.blockSignals(True)
+            self.show_snapshot_model_checkbox.setChecked(False)
+            self.show_snapshot_model_checkbox.blockSignals(False)
+        self._model_visibility_changed()
+        self._task_failed(message)
 
     def _show_measurement(self, measurement: DispersionMeasurement) -> None:
         self.measure_table.setHorizontalHeaderLabels(
@@ -2213,6 +2248,21 @@ class MainWindow(QMainWindow):
             snapshot=self.show_snapshot_model_checkbox.isChecked(),
         )
         self._show_measurement_comparison(self._active_plot_measurement())
+        if self.model_worker is not None and self.model_worker.isRunning():
+            return
+        response = self.dispersion_curve.result
+        if self.show_snapshot_model_checkbox.isChecked() and (
+            response is None or response.model_source == "design"
+        ):
+            self._start_model_response(
+                model_source="live",
+                focus_comparison=False,
+            )
+        elif self.show_design_model_checkbox.isChecked() and response is None:
+            self._start_model_response(
+                model_source="design",
+                focus_comparison=False,
+            )
 
     def _show_measurement_comparison(
         self,
@@ -2592,7 +2642,6 @@ class MainWindow(QMainWindow):
         self.dispersion_curve.set_result(response)
         self.model_info.setPlainText(format_model_response(response))
         has_snapshot = response.model_source != "design"
-        self.show_snapshot_model_checkbox.setEnabled(has_snapshot)
         if has_snapshot:
             self.show_snapshot_model_checkbox.setChecked(True)
         else:
@@ -2695,12 +2744,10 @@ class MainWindow(QMainWindow):
         self.import_measurement_button.setEnabled(not running)
         self.measurement_source_combo.setEnabled(not running)
         self.show_design_model_checkbox.setEnabled(
-            not running and self.dispersion_curve.result is not None
+            not running and self._model_analysis_available()
         )
         self.show_snapshot_model_checkbox.setEnabled(
-            not running
-            and self.dispersion_curve.result is not None
-            and self.dispersion_curve.result.model_source != "design"
+            not running and self._model_analysis_available()
         )
         self.clear_measurement_button.setEnabled(
             not running and self.imported_dispersion is not None

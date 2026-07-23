@@ -257,6 +257,24 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert profile_window.model_response_button.isEnabled()
     assert profile_window.show_design_model_checkbox.isVisibleTo(profile_window)
     assert profile_window.show_snapshot_model_checkbox.isVisibleTo(profile_window)
+    assert profile_window.show_design_model_checkbox.isEnabled()
+    assert profile_window.show_snapshot_model_checkbox.isEnabled()
+    assert profile_window.dispersion_curve.result is None
+    assert profile_window.dispersion_curve.measurement is None
+    model_requests = []
+    profile_window._start_model_response = lambda **kwargs: model_requests.append(kwargs)
+    profile_window.show_design_model_checkbox.setChecked(True)
+    assert model_requests[-1] == {
+        "model_source": "design",
+        "focus_comparison": False,
+    }
+    profile_window.show_design_model_checkbox.setChecked(False)
+    profile_window.show_snapshot_model_checkbox.setChecked(True)
+    assert model_requests[-1] == {
+        "model_source": "live",
+        "focus_comparison": False,
+    }
+    profile_window.show_snapshot_model_checkbox.setChecked(False)
     assert profile_window.tabs.isTabEnabled(
         profile_window.tabs.indexOf(profile_window.model_page)
     )
@@ -387,7 +405,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     app.processEvents()
     assert half_window.dispersion_curve.result is model_result
     assert half_window.show_design_model_checkbox.isChecked()
-    assert not half_window.show_snapshot_model_checkbox.isEnabled()
+    assert half_window.show_snapshot_model_checkbox.isEnabled()
     assert half_window.dispersion_curve.show_design_model
     assert not half_window.dispersion_curve.show_snapshot_model
     assert half_window.model_table.horizontalHeaderItem(0).text() == "Quadrupole"
