@@ -30,13 +30,11 @@ from PyQt5.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -183,12 +181,6 @@ class ModelResponseWorker(QThread):
             self.failed.emit(str(exc))
             return
         self.completed.emit(result)
-
-
-class FullWidthTabWidget(QTabWidget):
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self.tabBar().setFixedWidth(self.contentsRect().width())
 
 
 @dataclass(frozen=True)
@@ -1111,38 +1103,34 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        self.tabs = FullWidthTabWidget()
-        self.tabs.setUsesScrollButtons(False)
-        self.tabs.tabBar().setExpanding(True)
-        self.tabs.tabBar().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.online_page = QFrame()
+        self.online_page.setObjectName("workflowActionCard")
+        self.online_page.setMinimumHeight(190)
+        self.online_page.setMaximumHeight(290)
+        self.online_content = self.online_page
+        online_layout = QVBoxLayout(self.online_page)
+        online_layout.setContentsMargins(14, 10, 14, 12)
+        online_layout.setSpacing(6)
 
-        self.online_page = QWidget()
-        online_page_layout = QVBoxLayout(self.online_page)
-        online_page_layout.setContentsMargins(0, 0, 0, 0)
-        self.online_scroll = QScrollArea()
-        self.online_scroll.setObjectName("workflowScroll")
-        self.online_scroll.setWidgetResizable(True)
-        self.online_scroll.setFrameShape(QFrame.NoFrame)
-        self.online_content = QWidget()
-        self.online_content.setObjectName("workflowContent")
-        online_layout = QVBoxLayout(self.online_content)
-        online_layout.setContentsMargins(10, 10, 10, 10)
-        online_layout.setSpacing(8)
-        self.online_scroll.setWidget(self.online_content)
-        online_page_layout.addWidget(self.online_scroll)
-
-        online_intro = QLabel(
-            "For online operation, run Check Connections in the left panel, then "
-            "follow the highlighted action below."
-        )
-        online_intro.setObjectName("workspaceIntro")
-        online_intro.setWordWrap(True)
-        online_layout.addWidget(online_intro)
+        workflow_header = QHBoxLayout()
+        self.workflow_title_label = QLabel("Correction Workflow")
+        self.workflow_title_label.setObjectName("workflowCardTitle")
+        workflow_header.addWidget(self.workflow_title_label)
+        workflow_header.addStretch(1)
+        self.last_run_button = QPushButton("Last Run…")
+        self.last_run_button.setObjectName("workflowSecondaryButton")
+        self.last_run_button.clicked.connect(self._show_last_run)
+        workflow_header.addWidget(self.last_run_button)
+        online_layout.addLayout(workflow_header)
 
         self.workflow_state_label = QLabel("Current state")
         self.workflow_state_label.setObjectName("workflowState")
         self.workflow_state_label.setWordWrap(True)
         online_layout.addWidget(self.workflow_state_label)
+        self.workflow_summary_label = QLabel()
+        self.workflow_summary_label.setObjectName("workflowSummary")
+        self.workflow_summary_label.setWordWrap(True)
+        online_layout.addWidget(self.workflow_summary_label)
         self.next_action_button = QPushButton("Check Connections")
         self.next_action_button.setObjectName("nextWorkflowAction")
         self.next_action_button.setProperty("role", "control")
@@ -1152,6 +1140,21 @@ class MainWindow(QMainWindow):
         self.workflow_hint_label.setObjectName("workflowHint")
         self.workflow_hint_label.setWordWrap(True)
         online_layout.addWidget(self.workflow_hint_label)
+        workflow_secondary_actions = QHBoxLayout()
+        workflow_secondary_actions.addStretch(1)
+        self.response_details_button = QPushButton("Q Response…")
+        self.response_details_button.setObjectName("workflowSecondaryButton")
+        self.response_details_button.clicked.connect(self._show_response_details)
+        workflow_secondary_actions.addWidget(self.response_details_button)
+        self.recommendation_details_button = QPushButton("Review Details…")
+        self.recommendation_details_button.setObjectName(
+            "workflowSecondaryButton"
+        )
+        self.recommendation_details_button.clicked.connect(
+            self._show_recommendation_details
+        )
+        workflow_secondary_actions.addWidget(self.recommendation_details_button)
+        online_layout.addLayout(workflow_secondary_actions)
 
         # These operation-specific buttons remain as internal state holders for the
         # existing safety/tool-tip logic. Operators use only next_action_button.
@@ -1178,10 +1181,15 @@ class MainWindow(QMainWindow):
         self.measure_page.setParent(self.online_content)
         self.measure_page.hide()
 
+        self.response_dialog = QDialog(self)
+        self.response_dialog.setObjectName("workflowDetailsDialog")
+        self.response_dialog.setWindowTitle("Q Response Diagnostics")
+        self.response_dialog.resize(900, 620)
+        response_dialog_layout = QVBoxLayout(self.response_dialog)
         self.response_table = self._table([])
         self.response_info = QPlainTextEdit()
         self.response_info.setReadOnly(True)
-        self.response_page = QWidget()
+        self.response_page = QWidget(self.response_dialog)
         response_layout = QVBoxLayout(self.response_page)
         response_layout.setContentsMargins(8, 4, 8, 8)
         response_title = QLabel("Measured quadrupole response matrix")
@@ -1189,8 +1197,22 @@ class MainWindow(QMainWindow):
         response_layout.addWidget(response_title)
         response_layout.addWidget(self.response_table, 3)
         response_layout.addWidget(self.response_info, 1)
+        response_dialog_layout.addWidget(self.response_page, 1)
+        response_dialog_actions = QHBoxLayout()
+        response_dialog_actions.addStretch(1)
+        self.close_response_details_button = QPushButton("Close")
+        self.close_response_details_button.clicked.connect(
+            self.response_dialog.close
+        )
+        response_dialog_actions.addWidget(self.close_response_details_button)
+        response_dialog_layout.addLayout(response_dialog_actions)
 
-        self.correction_page = QWidget()
+        self.recommendation_dialog = QDialog(self)
+        self.recommendation_dialog.setObjectName("workflowDetailsDialog")
+        self.recommendation_dialog.setWindowTitle("Recommendation Review")
+        self.recommendation_dialog.resize(1100, 760)
+        recommendation_dialog_layout = QVBoxLayout(self.recommendation_dialog)
+        self.correction_page = QWidget(self.recommendation_dialog)
         correction_layout = QVBoxLayout(self.correction_page)
         correction_layout.setContentsMargins(8, 4, 8, 8)
         correction_title = QLabel(
@@ -1243,6 +1265,17 @@ class MainWindow(QMainWindow):
         )
         self.apply_recommendation_button.hide()
         correction_layout.addLayout(correction_actions)
+        recommendation_dialog_layout.addWidget(self.correction_page, 1)
+        recommendation_dialog_actions = QHBoxLayout()
+        recommendation_dialog_actions.addStretch(1)
+        self.close_recommendation_details_button = QPushButton("Close")
+        self.close_recommendation_details_button.clicked.connect(
+            self.recommendation_dialog.close
+        )
+        recommendation_dialog_actions.addWidget(
+            self.close_recommendation_details_button
+        )
+        recommendation_dialog_layout.addLayout(recommendation_dialog_actions)
 
         self.correction_table = self._table(
             ["Iter", "Gain", "Accepted", "RMS Before", "RMS After", "Reason"]
@@ -1338,23 +1371,15 @@ class MainWindow(QMainWindow):
         model_dialog_actions.addWidget(self.close_model_details_button)
         model_dialog_layout.addLayout(model_dialog_actions)
 
-        self.detail_sections: dict[QWidget, QToolButton] = {}
-        self._add_detail_section(
-            online_layout,
-            "Q Response Diagnostics",
-            self.response_page,
-        )
-        self._add_detail_section(
-            online_layout,
-            "Recommendation Details",
-            self.correction_page,
-        )
-        online_layout.addStretch(1)
-
         self.report_text = QPlainTextEdit()
         self.report_text.setReadOnly(True)
 
-        self.history_page = QWidget()
+        self.last_run_dialog = QDialog(self)
+        self.last_run_dialog.setObjectName("workflowDetailsDialog")
+        self.last_run_dialog.setWindowTitle("Last Run")
+        self.last_run_dialog.resize(1000, 700)
+        last_run_dialog_layout = QVBoxLayout(self.last_run_dialog)
+        self.history_page = QWidget(self.last_run_dialog)
         history_layout = QVBoxLayout(self.history_page)
         history_layout.setContentsMargins(8, 8, 8, 8)
         history_intro = QLabel(
@@ -1368,9 +1393,13 @@ class MainWindow(QMainWindow):
         history_layout.addWidget(self.correction_table, 1)
         history_layout.addWidget(QLabel("Latest report"))
         history_layout.addWidget(self.report_text, 2)
-
-        self.tabs.addTab(self.online_page, "Online Correction")
-        self.tabs.addTab(self.history_page, "History")
+        last_run_dialog_layout.addWidget(self.history_page, 1)
+        last_run_dialog_actions = QHBoxLayout()
+        last_run_dialog_actions.addStretch(1)
+        self.close_last_run_button = QPushButton("Close")
+        self.close_last_run_button.clicked.connect(self.last_run_dialog.close)
+        last_run_dialog_actions.addWidget(self.close_last_run_button)
+        last_run_dialog_layout.addLayout(last_run_dialog_actions)
 
         self.dispersion_overview = QFrame()
         self.dispersion_overview.setObjectName("dispersionOverviewCard")
@@ -1431,10 +1460,10 @@ class MainWindow(QMainWindow):
         self.workspace_splitter = QSplitter(Qt.Vertical)
         self.workspace_splitter.setChildrenCollapsible(False)
         self.workspace_splitter.addWidget(self.dispersion_overview)
-        self.workspace_splitter.addWidget(self.tabs)
+        self.workspace_splitter.addWidget(self.online_page)
         self.workspace_splitter.setStretchFactor(0, 1)
-        self.workspace_splitter.setStretchFactor(1, 1)
-        self.workspace_splitter.setSizes([380, 350])
+        self.workspace_splitter.setStretchFactor(1, 0)
+        self.workspace_splitter.setSizes([560, 220])
         layout.addWidget(self.workspace_splitter, 1)
         return frame
 
@@ -1448,55 +1477,39 @@ class MainWindow(QMainWindow):
             table.setHorizontalHeaderLabels(headers)
         return table
 
-    def _add_detail_section(
-        self,
-        layout: QVBoxLayout,
-        title: str,
-        content: QWidget,
-    ) -> None:
-        button = QToolButton()
-        button.setObjectName("detailSectionButton")
-        button.setText(title)
-        button.setCheckable(True)
-        button.setChecked(False)
-        button.setArrowType(Qt.RightArrow)
-        button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        button.toggled.connect(
-            lambda checked, trigger=button, body=content: self._toggle_detail_section(
-                trigger,
-                body,
-                checked,
-            )
-        )
-        content.setVisible(False)
-        self.detail_sections[content] = button
-        layout.addWidget(button)
-        layout.addWidget(content)
-
-    @staticmethod
-    def _toggle_detail_section(
-        button: QToolButton,
-        content: QWidget,
-        checked: bool,
-    ) -> None:
-        button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        content.setVisible(checked)
-
     def _show_workflow_detail(self, page: QWidget) -> None:
-        self.tabs.setCurrentWidget(self.online_page)
         if page is self.model_page:
             self._show_model_details()
+        elif page is self.response_page:
+            self._show_response_details()
+        elif page is self.correction_page:
+            self._show_recommendation_details()
+        elif page is self.history_page:
+            self._show_last_run()
+
+    def _show_response_details(self) -> None:
+        if self.latest_response is None:
             return
-        button = self.detail_sections.get(page)
-        if button is None:
-            for other in self.detail_sections.values():
-                if other.isChecked():
-                    other.setChecked(False)
+        self.response_dialog.setStyleSheet(build_stylesheet(self.theme_name))
+        self.response_dialog.show()
+        self.response_dialog.raise_()
+        self.response_dialog.activateWindow()
+
+    def _show_recommendation_details(self) -> None:
+        self.recommendation_dialog.setStyleSheet(
+            build_stylesheet(self.theme_name)
+        )
+        self.recommendation_dialog.show()
+        self.recommendation_dialog.raise_()
+        self.recommendation_dialog.activateWindow()
+
+    def _show_last_run(self) -> None:
+        if self.correction_table.rowCount() == 0 and not self.report_text.toPlainText():
             return
-        for other in self.detail_sections.values():
-            if other is not button and other.isChecked():
-                other.setChecked(False)
-        button.setChecked(True)
+        self.last_run_dialog.setStyleSheet(build_stylesheet(self.theme_name))
+        self.last_run_dialog.show()
+        self.last_run_dialog.raise_()
+        self.last_run_dialog.activateWindow()
 
     def _show_model_details(self) -> None:
         self.model_dialog.setStyleSheet(build_stylesheet(self.theme_name))
@@ -2064,8 +2077,6 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self._task_finished)
         self._set_running(True, task)
         self._update_progress("Starting", 0, 1)
-        if task in {"run", "apply"}:
-            self._show_workflow_detail(self.correction_page)
         self.worker.start()
 
     def _task_completed(self, task: str, result: object) -> None:
@@ -2086,7 +2097,6 @@ class MainWindow(QMainWindow):
                 result,
                 label="Latest measured",
             )
-            self._show_workflow_detail(self.measure_page)
             self._refresh_status(f"RMS {result.rms_mm:.4g} mm")
         elif isinstance(result, ResponseMatrixResult):
             self.latest_response = result
@@ -2106,11 +2116,9 @@ class MainWindow(QMainWindow):
                 result.measurement,
                 label="Response baseline",
             )
-            self._show_workflow_detail(self.response_page)
             self._refresh_status(f"Cond {result.condition_number:.4g}")
         elif isinstance(result, CorrectionResult):
             self._show_result(result)
-            self._show_workflow_detail(self.correction_page)
             status = "Accepted" if result.success else "Aborted" if result.reason.startswith("Aborted") else "Not accepted"
             self._refresh_status(status)
             self.status_strip.set_value(
@@ -2914,7 +2922,61 @@ class MainWindow(QMainWindow):
         elif action == "model-details":
             self._show_workflow_detail(self.model_page)
 
+    def _workflow_summary_text(self) -> str:
+        if self.config.section.model_only:
+            if self.dispersion_curve.result is None:
+                return "Read-only model workflow · no energy scan or machine write"
+            return "Model reference available · no energy scan or machine write"
+        recommendation = self.correction_recommendation
+        if recommendation is not None:
+            target_count = len(recommendation.device_deltas)
+            return (
+                f"Predicted residual RMS "
+                f"{recommendation.measurement.rms_mm:.4g} → "
+                f"{recommendation.predicted_rms_mm:.4g} mm · "
+                f"{target_count} quadrupole target(s)"
+            )
+        response = self.latest_response
+        if response is not None:
+            return (
+                f"Baseline residual RMS {response.measurement.rms_mm:.4g} mm · "
+                f"response condition number {response.condition_number:.4g}"
+            )
+        measurement = self.latest_measurement
+        if measurement is not None:
+            valid_count = int(np.count_nonzero(measurement.valid))
+            return (
+                f"Measured residual RMS {measurement.rms_mm:.4g} mm · "
+                f"{valid_count}/{len(measurement.bpm_names)} valid BPMs"
+            )
+        return (
+            f"Energy step {self._energy_step_compact()} · "
+            f"{self.samples_per_step_spin.value()} samples/step"
+        )
+
+    def _update_workflow_auxiliary_actions(self, running: bool) -> None:
+        has_response = self.latest_response is not None
+        has_recommendation = self.correction_recommendation is not None
+        has_last_run = (
+            self.correction_table.rowCount() > 0
+            or bool(self.report_text.toPlainText())
+        )
+        self.response_details_button.setVisible(has_response)
+        self.response_details_button.setEnabled(not running and has_response)
+        self.recommendation_details_button.setVisible(has_recommendation)
+        self.recommendation_details_button.setEnabled(
+            not running and has_recommendation
+        )
+        self.last_run_button.setEnabled(not running and has_last_run)
+        self.last_run_button.setToolTip(
+            "Open the latest correction execution and report."
+            if has_last_run
+            else "No correction execution is available yet."
+        )
+
     def _update_next_workflow_action(self, running: bool, task: str) -> None:
+        self.workflow_summary_label.setText(self._workflow_summary_text())
+        self._update_workflow_auxiliary_actions(running)
         if running:
             labels = {
                 "preflight": ("Measure Dispersion", "Checking connections"),
@@ -3399,6 +3461,11 @@ class MainWindow(QMainWindow):
     def _apply_theme(self) -> None:
         self.setStyleSheet(build_stylesheet(self.theme_name))
         self.model_dialog.setStyleSheet(build_stylesheet(self.theme_name))
+        self.response_dialog.setStyleSheet(build_stylesheet(self.theme_name))
+        self.recommendation_dialog.setStyleSheet(
+            build_stylesheet(self.theme_name)
+        )
+        self.last_run_dialog.setStyleSheet(build_stylesheet(self.theme_name))
         self.dispersion_curve.set_theme(self.theme_name)
         self._update_theme_button()
 

@@ -28,25 +28,28 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window = MainWindow()
     assert window.windowTitle() == "Dispersion Correction"
     assert (window.width(), window.height()) == (1600, 1000)
-    assert window.tabs.count() == 2
-    assert [window.tabs.tabText(index) for index in range(window.tabs.count())] == [
-        "Online Correction",
-        "History",
-    ]
+    assert not hasattr(window, "tabs")
     assert not hasattr(window, "workflow_tabs")
-    assert len(window.detail_sections) == 2
-    assert all(not button.isChecked() for button in window.detail_sections.values())
+    assert not hasattr(window, "detail_sections")
     assert not hasattr(window, "readiness_page")
     assert not hasattr(window, "preflight_text")
     assert not hasattr(window, "plan_text")
     assert window.workspace_splitter.widget(0) is window.dispersion_overview
-    assert window.workspace_splitter.widget(1) is window.tabs
+    assert window.workspace_splitter.widget(1) is window.online_page
     assert window.workspace_splitter.parentWidget().objectName() == "workspacePanel"
+    assert window.online_page.objectName() == "workflowActionCard"
     assert window.dispersion_overview.objectName() == "dispersionOverviewCard"
     assert window.dispersion_curve.parentWidget() is window.dispersion_overview
     assert window.model_details_button.parentWidget() is window.dispersion_overview
     assert window.model_details_button.text() == "Model Details…"
     assert window.model_dialog.isHidden()
+    assert window.response_dialog.isHidden()
+    assert window.recommendation_dialog.isHidden()
+    assert window.last_run_dialog.isHidden()
+    assert window.last_run_button.text() == "Last Run…"
+    assert not window.last_run_button.isEnabled()
+    assert window.response_details_button.isHidden()
+    assert window.recommendation_details_button.isHidden()
     assert window.plot_state_label.text() == "No measured data"
     assert not hasattr(window, "plan_button")
     assert not hasattr(window, "backend_combo")
@@ -81,6 +84,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.apply_recommendation_button.isHidden()
     assert window.next_action_button.text() == "Measure Dispersion"
     assert window.next_action_button.property("workflowAction") == "measure"
+    assert "Energy step" in window.workflow_summary_label.text()
     next_actions = []
     window._start_task = lambda task: next_actions.append(task)
     window.next_action_button.click()
@@ -98,10 +102,12 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     response = AchromatWorkflow(window._config_from_widgets()).build_response_matrix()
     window._task_completed("measure", response.measurement)
     window._set_running(False, "")
-    assert window.tabs.currentWidget() is window.online_page
-    assert all(not button.isChecked() for button in window.detail_sections.values())
+    assert window.response_dialog.isHidden()
+    assert window.recommendation_dialog.isHidden()
     assert window.next_action_button.text() == "Measure Q Response"
     assert window.next_action_button.property("workflowAction") == "response"
+    assert "Measured residual RMS" in window.workflow_summary_label.text()
+    assert "4/4 valid BPMs" in window.workflow_summary_label.text()
     assert window.dispersion_curve.result is None
     assert window.dispersion_curve.measurement.label == "Latest measured"
     assert window.measurement_source_combo.currentData() == "live"
@@ -112,16 +118,22 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not window.dispersion_curve.grab().isNull()
     window._task_completed("response", response)
     window._set_running(False, "")
-    assert window.detail_sections[window.response_page].isChecked()
+    assert window.response_dialog.isHidden()
+    assert not window.response_details_button.isHidden()
+    window.response_details_button.click()
+    app.processEvents()
+    assert window.response_dialog.isVisible()
+    window.response_dialog.close()
     assert window.next_action_button.text() == "Review Recommendation"
     assert window.next_action_button.property("workflowAction") == "review"
+    assert "condition number" in window.workflow_summary_label.text()
     assert window.dispersion_curve.measurement.label == "Response baseline"
     assert "Response baseline" in window.plot_state_label.text()
     window._compute_recommendation()
     assert window.correction_recommendation is not None
     assert window.correction_recommendation.ready
-    assert window.tabs.currentWidget() is window.online_page
-    assert window.detail_sections[window.correction_page].isChecked()
+    assert window.recommendation_dialog.isVisible()
+    assert not window.recommendation_details_button.isHidden()
     assert window.recommendation_table.rowCount() == 4
     assert window.recommendation_prediction_table.rowCount() == len(
         response.bpm_names
@@ -129,7 +141,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.apply_recommendation_button.isEnabled()
     assert window.next_action_button.text() == "Apply & Remeasure"
     assert window.next_action_button.property("workflowAction") == "apply"
+    assert "Predicted residual RMS" in window.workflow_summary_label.text()
     assert "no backend" in window.correction_state_label.text().lower()
+    window.recommendation_dialog.close()
     old_gain = window.gain_spin.value()
     window.gain_spin.setValue(max(0.001, old_gain - 0.1))
     app.processEvents()
@@ -228,10 +242,16 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window.show()
     app.processEvents()
     assert window.dispersion_curve.isVisibleTo(window)
-    window.tabs.setCurrentWidget(window.history_page)
+    assert window.online_page.isVisibleTo(window)
+    window.correction_table.setRowCount(1)
+    window.report_text.setPlainText("Last run report")
+    window._set_running(False, "")
+    assert window.last_run_button.isEnabled()
+    window.last_run_button.click()
     app.processEvents()
+    assert window.last_run_dialog.isVisible()
     assert window.dispersion_curve.isVisibleTo(window)
-    window.tabs.setCurrentWidget(window.online_page)
+    window.last_run_dialog.close()
     assert abs(window.load_button.geometry().center().y() - window.config_title_label.geometry().center().y()) <= 1
     assert window.load_button.property("role") is None
     assert not window.abort_button.isVisible()
@@ -259,10 +279,6 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.delta_spin.isEnabled()
     assert not window.progress_widget.isVisible()
     assert window.plot_state_label.text() == "No measured data"
-    tab_bar = window.tabs.tabBar()
-    tab_widths = [tab_bar.tabRect(index).width() for index in range(tab_bar.count())]
-    assert max(tab_widths) - min(tab_widths) <= 1
-    assert tab_bar.tabRect(tab_bar.count() - 1).right() == tab_bar.width() - 1
     window.close()
 
     from half_linac.src.apps.dispersion_correction.profile_runtime import load_profile_run_config
@@ -309,7 +325,6 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         "focus_comparison": False,
     }
     profile_window.show_snapshot_model_checkbox.setChecked(False)
-    assert profile_window.model_page not in profile_window.detail_sections
     assert profile_window.model_details_button.isVisibleTo(profile_window)
     assert not profile_window.run_button.isEnabled()
     assert "READ ONLY" in profile_window.operation_banner.text()
@@ -422,7 +437,6 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert irfel_vm_window.status_strip.items["ACCESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.section_combo.currentData() == "dogleg"
-    assert irfel_vm_window.model_page not in irfel_vm_window.detail_sections
     assert irfel_vm_window.model_dialog.isHidden()
     assert irfel_vm_window.next_action_button.text() == "Calculate Design Model"
     assert irfel_vm_window.connection_controls.isHidden()
@@ -452,7 +466,6 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.model_response_button.text() == "Analyze Model"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
-    assert half_window.model_page not in half_window.detail_sections
     assert "does not use scan" in half_window.knob_edit.toolTip()
     assert "limit ±" not in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
@@ -472,7 +485,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert "calculates dispersion directly" in half_window.energy_step_summary.text()
     assert "No energy scan" in half_window.energy_step_summary.text()
     assert "MODEL_DELTA" not in half_window.energy_step_summary.text()
-    assert half_window.tabs.currentWidget() is half_window.online_page
+    assert half_window.online_page.isVisibleTo(half_window)
     assert half_window.model_dialog.isHidden()
     assert half_window.next_action_button.text() == "Calculate Design Model"
     assert half_window.next_action_button.property("workflowAction") == "model-design"

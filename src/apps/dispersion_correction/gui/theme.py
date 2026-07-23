@@ -78,7 +78,8 @@ def build_stylesheet(name: str) -> str:
         font-size: 12px;
     }}
     QDialog#bpmSelectionDialog, QDialog#knobSelectionDialog,
-    QDialog#energyCalibrationDialog, QDialog#modelDetailsDialog {{
+    QDialog#energyCalibrationDialog, QDialog#modelDetailsDialog,
+    QDialog#workflowDetailsDialog {{
         background: {t['panel_bg']};
         color: {t['text_primary']};
     }}
@@ -131,6 +132,11 @@ def build_stylesheet(name: str) -> str:
         background: transparent;
         border: none;
     }}
+    QFrame#workflowActionCard {{
+        background: {t['panel_bg']};
+        border: 1px solid {t['section_border']};
+        border-radius: 14px;
+    }}
     QFrame#dispersionOverviewCard {{
         background: {t['panel_bg']};
         border: 1px solid {t['section_border']};
@@ -170,6 +176,17 @@ def build_stylesheet(name: str) -> str:
         font-size: 15px;
         font-weight: 800;
         padding: 3px 2px 0px 2px;
+    }}
+    QLabel#workflowCardTitle {{
+        color: {t['text_primary']};
+        font-size: 13px;
+        font-weight: 800;
+    }}
+    QLabel#workflowSummary {{
+        color: {t['status_success']};
+        font-size: 11px;
+        font-weight: 700;
+        padding: 0px 2px;
     }}
     QLabel#workflowHint {{
         color: {t['text_muted']};
@@ -346,6 +363,12 @@ def build_stylesheet(name: str) -> str:
         font-size: 14px;
     }}
     QPushButton#modelDetailsButton {{
+        border-radius: 9px;
+        min-height: 24px;
+        max-height: 24px;
+        padding: 2px 9px;
+    }}
+    QPushButton#workflowSecondaryButton {{
         border-radius: 9px;
         min-height: 24px;
         max-height: 24px;
