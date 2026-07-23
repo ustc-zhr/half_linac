@@ -27,14 +27,20 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     assert window.windowTitle() == "Dispersion Correction"
-    assert window.tabs.count() == 6
+    assert window.tabs.count() == 3
     assert [window.tabs.tabText(index) for index in range(window.tabs.count())] == [
-        "Online",
-        "Dispersion",
-        "Q Response",
-        "Correction",
-        "Model / Import",
-        "Report",
+        "Measure & Correct",
+        "Dispersion Comparison",
+        "History",
+    ]
+    assert [
+        window.workflow_tabs.tabText(index)
+        for index in range(window.workflow_tabs.count())
+    ] == [
+        "Workflow",
+        "Measured Dispersion",
+        "Response Quality",
+        "Recommendation",
     ]
     assert not hasattr(window, "plan_button")
     assert not hasattr(window, "backend_combo")
@@ -70,12 +76,23 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
 
     response = AchromatWorkflow(window._config_from_widgets()).build_response_matrix()
-    window.latest_response = response
-    window.latest_measurement = response.measurement
+    window._task_completed("measure", response.measurement)
+    assert window.tabs.currentWidget() is window.workflow_page
+    assert window.workflow_tabs.currentWidget() is window.measure_page
+    assert window.dispersion_curve.result is None
+    assert window.dispersion_curve.measurement.label == "Latest measured"
+    assert window.measurement_source_combo.currentData() == "live"
+    assert not window.model_measure_table.isHidden()
+    assert window.model_measure_table.columnCount() == 4
+    assert not window.dispersion_curve.grab().isNull()
+    window._task_completed("response", response)
+    assert window.workflow_tabs.currentWidget() is window.response_page
+    assert window.dispersion_curve.measurement.label == "Response baseline"
     window._compute_recommendation()
     assert window.correction_recommendation is not None
     assert window.correction_recommendation.ready
-    assert window.tabs.currentWidget() is window.correction_page
+    assert window.tabs.currentWidget() is window.workflow_page
+    assert window.workflow_tabs.currentWidget() is window.correction_page
     assert window.recommendation_table.rowCount() == 4
     assert window.recommendation_prediction_table.rowCount() == len(
         response.bpm_names
@@ -218,7 +235,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert profile_window.config_title_label.text() == "Machine Profile"
     assert "CONFIGURED MACHINE PROFILE" in profile_window.calibration_text.toPlainText()
     assert profile_window.model_response_button.isHidden()
-    assert not profile_window.tabs.isTabEnabled(
+    assert profile_window.tabs.isTabEnabled(
         profile_window.tabs.indexOf(profile_window.model_page)
     )
     assert not profile_window.run_button.isEnabled()
@@ -288,6 +305,8 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert "does not use scan" in half_window.knob_edit.toolTip()
     assert "limit ±" not in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
+    assert half_window.dispersion_curve.measurement is None
+    assert half_window.import_measurement_button.isEnabled()
     assert not half_window.measure_button.isEnabled()
     assert not half_window.response_button.isEnabled()
     assert not half_window.run_button.isEnabled()
@@ -345,6 +364,10 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     half_window._set_running(False, "")
     app.processEvents()
     assert half_window.dispersion_curve.result is model_result
+    assert half_window.show_design_model_checkbox.isChecked()
+    assert not half_window.show_snapshot_model_checkbox.isEnabled()
+    assert half_window.dispersion_curve.show_design_model
+    assert not half_window.dispersion_curve.show_snapshot_model
     assert half_window.model_table.horizontalHeaderItem(0).text() == "Quadrupole"
     assert half_window.model_table.horizontalHeaderItem(3).text() == "Design-reference ΔK1"
     assert half_window.model_table.item(0, 0).text() == "QL01"
@@ -360,14 +383,19 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
         source_path="/tmp/bl01_etax.csv",
     )
     half_window.imported_dispersion = imported
-    half_window.dispersion_curve.set_measurement(imported)
     half_window._show_imported_comparison(model_result, imported)
     half_window._set_running(False, "")
     assert half_window.clear_measurement_button.isEnabled()
+    assert half_window.measurement_source_combo.currentData() == "imported"
+    assert half_window.dispersion_curve.measurement.label == "External measurement"
     assert half_window.model_measure_table.isVisible()
-    assert half_window.model_measure_table.horizontalHeaderItem(1).text() == "Imported ηx (mm)"
-    assert half_window.model_measure_table.horizontalHeaderItem(2).text() == "Selected model ηx (mm)"
-    assert half_window.model_measure_table.item(0, 3).text() == "0.15"
+    assert half_window.model_measure_table.horizontalHeaderItem(1).text() == (
+        "Measurement ηx (mm)"
+    )
+    assert half_window.model_measure_table.horizontalHeaderItem(4).text() == (
+        "Design model ηx (mm)"
+    )
+    assert half_window.model_measure_table.item(0, 5).text() == "0.15"
     assert half_window.measure_table.rowCount() == 0
     assert not half_window.dispersion_curve.grab().isNull()
     assert not half_window.dispersion_curve._is_rf("WATCH")

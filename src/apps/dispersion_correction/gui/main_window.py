@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 import math
 from pathlib import Path
 import re
 
+import numpy as np
 from PyQt5.QtCore import QPointF, QRectF, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QPen, QPolygonF
 from PyQt5.QtWidgets import (
     QFileDialog,
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -188,18 +190,29 @@ class FullWidthTabWidget(QTabWidget):
         self.tabBar().setFixedWidth(self.contentsRect().width())
 
 
+@dataclass(frozen=True)
+class DispersionPlotDataset:
+    bpm_names: tuple[str, ...]
+    values_mm: np.ndarray
+    sigma_mm: np.ndarray
+    valid: np.ndarray
+    label: str
+
+
 class DispersionCurveWidget(QWidget):
     DEFAULT_TOOLTIP = (
-        "Dotted: full design lattice; solid: selected model source; dashed: prediction "
-        "after restoring the correction quadrupoles to their design K1 values. "
-        "Circles: imported eta_x. Red: horizontal; blue: vertical. "
-        "Move over the lattice strip for element details."
+        "Measured BPM dispersion is the primary result. Design and current-snapshot "
+        "model curves are optional references. Move over the lattice strip for "
+        "element details when a model has been analyzed."
     )
 
     def __init__(self) -> None:
         super().__init__()
         self.result: ModelResponseResult | None = None
-        self.measurement: ImportedDispersionDataset | None = None
+        self.measurement: DispersionPlotDataset | None = None
+        self.reference_measurement: DispersionPlotDataset | None = None
+        self.show_design_model = False
+        self.show_snapshot_model = False
         self.theme_name = "night_shift"
         self._lattice_geometry: tuple[QRectF, float, float] | None = None
         self.setMinimumHeight(300)
@@ -213,8 +226,18 @@ class DispersionCurveWidget(QWidget):
             self.setToolTip(self.DEFAULT_TOOLTIP)
         self.update()
 
-    def set_measurement(self, measurement: ImportedDispersionDataset | None) -> None:
+    def set_measurement(
+        self,
+        measurement: DispersionPlotDataset | None,
+        reference: DispersionPlotDataset | None = None,
+    ) -> None:
         self.measurement = measurement
+        self.reference_measurement = reference
+        self.update()
+
+    def set_model_visibility(self, *, design: bool, snapshot: bool) -> None:
+        self.show_design_model = bool(design)
+        self.show_snapshot_model = bool(snapshot)
         self.update()
 
     def set_theme(self, name: str) -> None:
@@ -229,33 +252,65 @@ class DispersionCurveWidget(QWidget):
         plot = self.rect().adjusted(58, 24, -18, -112)
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(12, 18, "Dispersion η (mm)")
-        if self.result is None or plot.width() <= 0 or plot.height() <= 0:
-            painter.drawText(plot, Qt.AlignCenter, "Compare model references to display optics")
+        if plot.width() <= 0 or plot.height() <= 0:
+            return
+        if self.result is None and self.measurement is None:
+            painter.drawText(
+                plot,
+                Qt.AlignCenter,
+                "Measure dispersion or import external BPM points to begin",
+            )
             return
 
-        curves = (
-            self.result.selected_curve.dx_mm,
-            self.result.selected_curve.dy_mm,
-            self.result.design_reference_curve.dx_mm,
-            self.result.design_reference_curve.dy_mm,
-        )
-        if self.result.design_curve is not None:
-            curves = curves + (
-                self.result.design_curve.dx_mm,
-                self.result.design_curve.dy_mm,
+        displayed_curves: list[np.ndarray] = []
+        if self.result is not None and self.show_design_model:
+            design_curve = self.result.design_curve or self.result.selected_curve
+            displayed_curves.extend((design_curve.dx_mm, design_curve.dy_mm))
+        if (
+            self.result is not None
+            and self.show_snapshot_model
+            and self.result.model_source != "design"
+        ):
+            displayed_curves.extend(
+                (self.result.selected_curve.dx_mm, self.result.selected_curve.dy_mm)
             )
-        limit = max((abs(float(value)) for curve in curves for value in curve), default=1.0)
-        if self.measurement is not None:
-            for value, sigma in zip(
-                self.measurement.etax_mm,
-                self.measurement.etax_sigma_mm,
+        limit = max(
+            (
+                abs(float(value))
+                for curve in displayed_curves
+                for value in curve
+            ),
+            default=0.0,
+        )
+        for dataset in (self.measurement, self.reference_measurement):
+            if dataset is None:
+                continue
+            for value, sigma, valid in zip(
+                dataset.values_mm,
+                dataset.sigma_mm,
+                dataset.valid,
             ):
+                if not bool(valid) or not math.isfinite(float(value)):
+                    continue
                 uncertainty = float(sigma) if math.isfinite(float(sigma)) else 0.0
                 limit = max(limit, abs(float(value)) + uncertainty)
         limit = max(limit * 1.1, 1.0e-6)
-        s_values = self.result.selected_curve.s_m
-        s_min = float(s_values[0])
-        s_max = float(s_values[-1])
+        if self.result is not None:
+            s_values = self.result.selected_curve.s_m
+            s_min = float(s_values[0])
+            s_max = float(s_values[-1])
+            s_by_name = {
+                name: float(self.result.selected_curve.s_m[index])
+                for index, name in enumerate(self.result.selected_curve.element_names)
+            }
+        else:
+            assert self.measurement is not None
+            s_min = 0.0
+            s_max = float(max(len(self.measurement.bpm_names) - 1, 1))
+            s_by_name = {
+                name: float(index)
+                for index, name in enumerate(self.measurement.bpm_names)
+            }
         s_span = max(s_max - s_min, 1.0e-12)
 
         grid_pen = QPen(QColor(tokens["section_border"]))
@@ -281,45 +336,53 @@ class DispersionCurveWidget(QWidget):
 
         horizontal = QColor("#e66b5b")
         vertical = QColor("#4c9be8")
-        if self.result.design_curve is not None:
+        if self.result is not None and self.show_design_model:
+            design_curve = self.result.design_curve or self.result.selected_curve
             for color, curve in (
-                (horizontal, self.result.design_curve.dx_mm),
-                (vertical, self.result.design_curve.dy_mm),
+                (horizontal, design_curve.dx_mm),
+                (vertical, design_curve.dy_mm),
             ):
                 design_color = QColor(color)
-                design_color.setAlpha(120)
+                design_color.setAlpha(150)
                 painter.setPen(QPen(design_color, 2, Qt.DotLine))
-                painter.drawPolyline(points(self.result.design_curve.s_m, curve))
-        for color, curve in (
-            (horizontal, self.result.selected_curve.dx_mm),
-            (vertical, self.result.selected_curve.dy_mm),
+                painter.drawPolyline(points(design_curve.s_m, curve))
+        if (
+            self.result is not None
+            and self.show_snapshot_model
+            and self.result.model_source != "design"
         ):
-            painter.setPen(QPen(color, 1))
-            painter.drawPolyline(points(self.result.selected_curve.s_m, curve))
-        for color, curve in (
-            (horizontal, self.result.design_reference_curve.dx_mm),
-            (vertical, self.result.design_reference_curve.dy_mm),
-        ):
-            pen = QPen(color, 2, Qt.DashLine)
-            painter.setPen(pen)
-            painter.drawPolyline(points(self.result.design_reference_curve.s_m, curve))
-        if self.measurement is not None:
-            s_by_name = {
-                name: float(self.result.selected_curve.s_m[index])
-                for index, name in enumerate(self.result.selected_curve.element_names)
-            }
-            measured_color = QColor("#f2c14e")
-            painter.setPen(QPen(measured_color, 2))
-            painter.setBrush(measured_color)
-            for bpm, value, sigma in zip(
-                self.measurement.bpm_names,
-                self.measurement.etax_mm,
-                self.measurement.etax_sigma_mm,
+            for color, curve in (
+                (horizontal, self.result.selected_curve.dx_mm),
+                (vertical, self.result.selected_curve.dy_mm),
             ):
+                snapshot_color = QColor(color)
+                snapshot_color.setAlpha(190)
+                painter.setPen(QPen(snapshot_color, 2, Qt.DashLine))
+                painter.drawPolyline(points(self.result.selected_curve.s_m, curve))
+
+        def draw_measurement(
+            dataset: DispersionPlotDataset,
+            color: QColor,
+            *,
+            radius: float,
+            line_width: int,
+        ) -> None:
+            measurement_points = []
+            painter.setPen(QPen(color, line_width))
+            painter.setBrush(color)
+            for bpm, value, sigma, valid in zip(
+                dataset.bpm_names,
+                dataset.values_mm,
+                dataset.sigma_mm,
+                dataset.valid,
+            ):
+                if not bool(valid) or not math.isfinite(float(value)):
+                    continue
                 if bpm not in s_by_name:
                     continue
                 x = plot.left() + (s_by_name[bpm] - s_min) / s_span * plot.width()
                 y = plot.center().y() - float(value) / limit * plot.height() / 2.0
+                measurement_points.append(QPointF(x, y))
                 if math.isfinite(float(sigma)):
                     half_height = float(sigma) / limit * plot.height() / 2.0
                     painter.drawLine(QPointF(x, y - half_height), QPointF(x, y + half_height))
@@ -331,7 +394,29 @@ class DispersionCurveWidget(QWidget):
                         QPointF(x - 3.0, y + half_height),
                         QPointF(x + 3.0, y + half_height),
                     )
-                painter.drawEllipse(QPointF(x, y), 4.0, 4.0)
+                painter.drawEllipse(QPointF(x, y), radius, radius)
+            if len(measurement_points) > 1:
+                line_color = QColor(color)
+                line_color.setAlpha(150)
+                painter.setPen(QPen(line_color, line_width))
+                painter.drawPolyline(QPolygonF(measurement_points))
+
+        if self.reference_measurement is not None:
+            reference_color = QColor(tokens["text_muted"])
+            reference_color.setAlpha(150)
+            draw_measurement(
+                self.reference_measurement,
+                reference_color,
+                radius=3.0,
+                line_width=1,
+            )
+        if self.measurement is not None:
+            draw_measurement(
+                self.measurement,
+                QColor("#f2c14e"),
+                radius=4.5,
+                line_width=2,
+            )
 
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(4, plot.top() + 5, f"{limit:.3g}")
@@ -341,29 +426,53 @@ class DispersionCurveWidget(QWidget):
         painter.setPen(vertical)
         painter.drawText(plot.left() + 38, plot.top() + 16, "ηy")
         painter.setPen(QColor(tokens["text_muted"]))
+        legend_items = []
+        if self.measurement is not None:
+            legend_items.append(f"{self.measurement.label} ●")
+        if self.reference_measurement is not None:
+            legend_items.append(f"{self.reference_measurement.label} ○")
+        if self.result is not None and self.show_design_model:
+            legend_items.append("Design model ···")
+        if (
+            self.result is not None
+            and self.show_snapshot_model
+            and self.result.model_source != "design"
+        ):
+            legend_items.append("Current snapshot --")
         painter.drawText(
             plot.left() + 75,
             plot.top() + 16,
-            "design ···  selected model —  design-reference --  measured ●",
+            "  ".join(legend_items),
         )
-        lattice_rect = QRectF(
-            float(plot.left()),
-            float(plot.bottom() + 20),
-            float(plot.width()),
-            58.0,
-        )
-        self._lattice_geometry = (lattice_rect, s_min, s_max)
-        self._draw_lattice(
-            painter,
-            lattice_rect,
-            s_min,
-            s_max,
-            float(plot.top()),
-            tokens,
-        )
-        painter.setPen(QColor(tokens["text_muted"]))
-        painter.drawText(plot.left(), self.height() - 10, f"{s_min:.3g} m")
-        painter.drawText(plot.right() - 45, self.height() - 10, f"{s_max:.3g} m")
+        if self.result is not None:
+            lattice_rect = QRectF(
+                float(plot.left()),
+                float(plot.bottom() + 20),
+                float(plot.width()),
+                58.0,
+            )
+            self._lattice_geometry = (lattice_rect, s_min, s_max)
+            self._draw_lattice(
+                painter,
+                lattice_rect,
+                s_min,
+                s_max,
+                float(plot.top()),
+                tokens,
+            )
+            painter.setPen(QColor(tokens["text_muted"]))
+            painter.drawText(plot.left(), self.height() - 10, f"{s_min:.3g} m")
+            painter.drawText(plot.right() - 45, self.height() - 10, f"{s_max:.3g} m")
+        else:
+            self._lattice_geometry = None
+            painter.setPen(QColor(tokens["text_muted"]))
+            for name, position in s_by_name.items():
+                x = plot.left() + (position - s_min) / s_span * plot.width()
+                painter.drawText(
+                    QRectF(x - 35.0, plot.bottom() + 16.0, 70.0, 18.0),
+                    Qt.AlignCenter,
+                    name,
+                )
 
     def _draw_lattice(
         self,
@@ -600,6 +709,8 @@ class MainWindow(QMainWindow):
         self.preflight_worker: LivePreflightWorker | None = None
         self.model_worker: ModelResponseWorker | None = None
         self.imported_dispersion: ImportedDispersionDataset | None = None
+        self.live_plot_measurement: DispersionPlotDataset | None = None
+        self.reference_plot_measurement: DispersionPlotDataset | None = None
         self.latest_measurement: DispersionMeasurement | None = None
         self.latest_response: ResponseMatrixResult | None = None
         self.correction_recommendation: CorrectionRecommendation | None = None
@@ -637,6 +748,13 @@ class MainWindow(QMainWindow):
         )
 
     def _configure_profile_mode(self) -> None:
+        model_available = self._model_analysis_available()
+        self.model_response_button.setVisible(model_available)
+        self.model_source_combo.setVisible(model_available)
+        self.model_source_label.setVisible(model_available)
+        self.model_boundary_label.setVisible(model_available)
+        self.show_design_model_checkbox.setVisible(model_available)
+        self.show_snapshot_model_checkbox.setVisible(model_available)
         if self.app_context is None:
             return
         self.load_button.hide()
@@ -646,19 +764,6 @@ class MainWindow(QMainWindow):
         fixed_selection = self.config.section.model_only
         self.bpm_select_button.setVisible(not fixed_selection)
         self.knob_select_button.setVisible(not fixed_selection)
-        model_available = self._model_analysis_available()
-        self.model_response_button.setVisible(model_available)
-        model_tab_index = self.tabs.indexOf(self.model_page)
-        if model_tab_index >= 0:
-            self.tabs.setTabEnabled(model_tab_index, model_available)
-            self.tabs.setTabToolTip(
-                model_tab_index,
-                (
-                    "Read-only model analysis and external ηx comparison."
-                    if model_available
-                    else "No model section is configured for this workflow."
-                ),
-            )
 
     def _model_analysis_available(self) -> bool:
         return bool(
@@ -1101,19 +1206,44 @@ class MainWindow(QMainWindow):
         correction_actions.addWidget(self.apply_recommendation_button)
         correction_layout.addLayout(correction_actions)
 
-        history_title = QLabel("Execution history")
-        history_title.setObjectName("workspaceIntro")
-        correction_layout.addWidget(history_title)
         self.correction_table = self._table(
             ["Iter", "Gain", "Accepted", "RMS Before", "RMS After", "Reason"]
         )
-        correction_layout.addWidget(self.correction_table, 1)
 
         self.model_page = QWidget()
         model_layout = QVBoxLayout(self.model_page)
         model_layout.setContentsMargins(8, 8, 8, 8)
+        model_intro = QLabel(
+            "Measured BPM dispersion is the primary result. Add design or current-"
+            "snapshot model curves only when they help explain the measurement."
+        )
+        model_intro.setObjectName("workspaceIntro")
+        model_intro.setWordWrap(True)
+        model_layout.addWidget(model_intro)
+        measurement_actions = QHBoxLayout()
+        measurement_actions.addWidget(QLabel("Displayed measurement"))
+        self.measurement_source_combo = QComboBox()
+        self.measurement_source_combo.setMinimumWidth(180)
+        self.measurement_source_combo.addItem("No measurement available", "none")
+        self.measurement_source_combo.currentIndexChanged.connect(
+            self._comparison_measurement_changed
+        )
+        measurement_actions.addWidget(self.measurement_source_combo)
+        measurement_actions.addStretch(1)
+        self.import_measurement_button = QPushButton("Import ηx CSV")
+        self.import_measurement_button.clicked.connect(self._import_measurement_csv)
+        self.import_measurement_button.setToolTip(
+            "Import bpm, etax_mm, and optional etax_sigma_mm columns for comparison only."
+        )
+        measurement_actions.addWidget(self.import_measurement_button)
+        self.clear_measurement_button = QPushButton("Clear External")
+        self.clear_measurement_button.clicked.connect(self._clear_imported_measurement)
+        measurement_actions.addWidget(self.clear_measurement_button)
+        model_layout.addLayout(measurement_actions)
+
         model_actions = QHBoxLayout()
-        model_actions.addWidget(QLabel("Model source"))
+        self.model_source_label = QLabel("Calculate")
+        model_actions.addWidget(self.model_source_label)
         self.model_source_combo = QComboBox()
         self.model_source_combo.addItem("Design lattice", "design")
         if self.app_context is not None:
@@ -1134,49 +1264,75 @@ class MainWindow(QMainWindow):
         self.model_response_button.clicked.connect(self._start_model_response)
         self.model_response_button.setVisible(self._model_analysis_available())
         model_actions.addWidget(self.model_response_button)
+        self.show_design_model_checkbox = QCheckBox("Show design model")
+        self.show_design_model_checkbox.setChecked(False)
+        self.show_design_model_checkbox.toggled.connect(
+            self._model_visibility_changed
+        )
+        model_actions.addWidget(self.show_design_model_checkbox)
+        self.show_snapshot_model_checkbox = QCheckBox("Show current snapshot")
+        self.show_snapshot_model_checkbox.setChecked(False)
+        self.show_snapshot_model_checkbox.setEnabled(False)
+        self.show_snapshot_model_checkbox.toggled.connect(
+            self._model_visibility_changed
+        )
+        model_actions.addWidget(self.show_snapshot_model_checkbox)
         self.model_boundary_label = QLabel()
         self.model_boundary_label.setObjectName("modelBoundaryLabel")
         model_actions.addWidget(self.model_boundary_label)
         model_actions.addStretch(1)
-        self.import_measurement_button = QPushButton("Import ηx CSV")
-        self.import_measurement_button.clicked.connect(self._import_measurement_csv)
-        self.import_measurement_button.setToolTip(
-            "Import bpm, etax_mm, and optional etax_sigma_mm columns for comparison only."
-        )
-        model_actions.addWidget(self.import_measurement_button)
-        self.clear_measurement_button = QPushButton("Clear")
-        self.clear_measurement_button.clicked.connect(self._clear_imported_measurement)
-        model_actions.addWidget(self.clear_measurement_button)
         model_layout.addLayout(model_actions)
         model_notice = QLabel(
-            "Model analysis and imported ηx comparison never write machine PVs."
+            "Measurement display and model comparison never write machine PVs."
         )
         model_notice.setObjectName("modelSafetyNotice")
         model_layout.addWidget(model_notice)
         self.model_table = self._table([])
+        self.model_table.setVisible(False)
         model_layout.addWidget(self.model_table, 1)
         self.dispersion_curve = DispersionCurveWidget()
         model_layout.addWidget(self.dispersion_curve, 3)
-        self.model_measure_table = self._table(
-            ["BPM", "Imported ηx (mm)", "Selected model ηx (mm)", "Residual (mm)", "σηx (mm)"]
-        )
+        self.model_measure_table = self._table([])
         self.model_measure_table.setVisible(False)
         model_layout.addWidget(self.model_measure_table, 1)
         self.model_info = QPlainTextEdit()
         self.model_info.setReadOnly(True)
+        self.model_info.setVisible(False)
         model_layout.addWidget(self.model_info, 1)
 
         self.report_text = QPlainTextEdit()
         self.report_text.setReadOnly(True)
 
-        self.tabs.addTab(self.online_page, "Online")
-        self.tabs.addTab(self.measure_page, "Dispersion")
-        self.tabs.addTab(self.response_page, "Q Response")
-        self.tabs.addTab(self.correction_page, "Correction")
-        self.tabs.addTab(self.model_page, "Model / Import")
-        self.tabs.addTab(self.report_text, "Report")
-        model_tab_index = self.tabs.indexOf(self.model_page)
-        self.tabs.setTabEnabled(model_tab_index, self._model_analysis_available())
+        self.workflow_page = QWidget()
+        workflow_layout = QVBoxLayout(self.workflow_page)
+        workflow_layout.setContentsMargins(0, 0, 0, 0)
+        self.workflow_tabs = FullWidthTabWidget()
+        self.workflow_tabs.setUsesScrollButtons(False)
+        self.workflow_tabs.tabBar().setExpanding(True)
+        self.workflow_tabs.addTab(self.online_page, "Workflow")
+        self.workflow_tabs.addTab(self.measure_page, "Measured Dispersion")
+        self.workflow_tabs.addTab(self.response_page, "Response Quality")
+        self.workflow_tabs.addTab(self.correction_page, "Recommendation")
+        workflow_layout.addWidget(self.workflow_tabs)
+
+        self.history_page = QWidget()
+        history_layout = QVBoxLayout(self.history_page)
+        history_layout.setContentsMargins(8, 8, 8, 8)
+        history_intro = QLabel(
+            "Latest correction execution. Profile-managed operations are also archived "
+            "under the application runtime directory."
+        )
+        history_intro.setObjectName("workspaceIntro")
+        history_intro.setWordWrap(True)
+        history_layout.addWidget(history_intro)
+        history_layout.addWidget(QLabel("Iteration summary"))
+        history_layout.addWidget(self.correction_table, 1)
+        history_layout.addWidget(QLabel("Latest report"))
+        history_layout.addWidget(self.report_text, 2)
+
+        self.tabs.addTab(self.workflow_page, "Measure & Correct")
+        self.tabs.addTab(self.model_page, "Dispersion Comparison")
+        self.tabs.addTab(self.history_page, "History")
         layout.addWidget(self.tabs)
         return frame
 
@@ -1189,6 +1345,10 @@ class MainWindow(QMainWindow):
             table.setColumnCount(len(headers))
             table.setHorizontalHeaderLabels(headers)
         return table
+
+    def _show_workflow_detail(self, page: QWidget) -> None:
+        self.tabs.setCurrentWidget(self.workflow_page)
+        self.workflow_tabs.setCurrentWidget(page)
 
     def _add_form_row(self, form: QFormLayout, label_text: str, widget) -> QLabel:
         label = QLabel(label_text)
@@ -1249,9 +1409,10 @@ class MainWindow(QMainWindow):
         self._show_plan()
         self._show_calibration_summary()
         self._update_static_safety_status()
-        self.tabs.setCurrentWidget(
-            self.model_page if self.config.section.model_only else self.online_page
-        )
+        if self.config.section.model_only:
+            self.tabs.setCurrentWidget(self.model_page)
+        else:
+            self._show_workflow_detail(self.online_page)
         self._refresh_status("Config loaded")
 
     def _update_knob_summary(self) -> None:
@@ -1309,9 +1470,14 @@ class MainWindow(QMainWindow):
         )
         self.dispersion_curve.set_result(None)
         self.imported_dispersion = None
+        self.live_plot_measurement = None
+        self.reference_plot_measurement = None
         self.dispersion_curve.set_measurement(None)
+        self._refresh_measurement_source_combo()
         self.model_info.clear()
+        self.model_info.setVisible(False)
         self.model_table.setRowCount(0)
+        self.model_table.setVisible(False)
         self.model_measure_table.setRowCount(0)
         self.model_measure_table.setVisible(False)
         self.response_info.clear()
@@ -1325,6 +1491,10 @@ class MainWindow(QMainWindow):
         self.latest_measurement = None
         self.latest_response = None
         self.correction_recommendation = None
+        self.live_plot_measurement = None
+        self.reference_plot_measurement = None
+        if hasattr(self, "measurement_source_combo"):
+            self._refresh_measurement_source_combo(preferred="imported")
         if not hasattr(self, "correction_state_label"):
             return
         self.correction_state_label.setText(reason)
@@ -1347,20 +1517,18 @@ class MainWindow(QMainWindow):
             return
         self.dispersion_curve.set_result(None)
         self.model_info.clear()
+        self.model_info.setVisible(False)
         self.model_table.setRowCount(0)
+        self.model_table.setVisible(False)
         self.model_measure_table.setRowCount(0)
         self.model_measure_table.setVisible(False)
+        self.show_design_model_checkbox.setChecked(False)
+        self.show_snapshot_model_checkbox.setChecked(False)
+        self.show_snapshot_model_checkbox.setEnabled(False)
         self._set_running(False, "")
 
     def _import_measurement_csv(self) -> None:
         response = self.dispersion_curve.result
-        if response is None:
-            QMessageBox.warning(
-                self,
-                "Import ηx",
-                "Analyze the selected model before importing measurement points.",
-            )
-            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Import external ηx measurement",
@@ -1370,13 +1538,17 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        allowed_bpms = tuple(
-            name
-            for name, element_type in zip(
-                response.selected_curve.element_names,
-                response.selected_curve.element_types,
+        allowed_bpms = (
+            tuple(
+                name
+                for name, element_type in zip(
+                    response.selected_curve.element_names,
+                    response.selected_curve.element_types,
+                )
+                if DispersionCurveWidget._is_bpm(name, element_type.upper())
             )
-            if DispersionCurveWidget._is_bpm(name, element_type.upper())
+            if response is not None
+            else tuple(self.available_bpms or self.config.target_bpms)
         )
         try:
             imported = load_dispersion_csv(
@@ -1388,8 +1560,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Import ηx", str(exc))
             return
         self.imported_dispersion = imported
-        self.dispersion_curve.set_measurement(imported)
-        self._show_imported_comparison(response, imported)
+        self._refresh_measurement_source_combo(preferred="imported")
         self._append_log(
             f"Imported {len(imported.bpm_names)} eta_x point(s) from {imported.source_path}"
         )
@@ -1398,12 +1569,7 @@ class MainWindow(QMainWindow):
 
     def _clear_imported_measurement(self) -> None:
         self.imported_dispersion = None
-        self.dispersion_curve.set_measurement(None)
-        response = self.dispersion_curve.result
-        if response is not None:
-            self.model_info.setPlainText(format_model_response(response))
-        self.model_measure_table.setRowCount(0)
-        self.model_measure_table.setVisible(False)
+        self._refresh_measurement_source_combo(preferred="live")
         self._set_running(False, "")
 
     def _select_knobs(self) -> None:
@@ -1753,7 +1919,7 @@ class MainWindow(QMainWindow):
         self._set_running(True, task)
         self._update_progress("Starting", 0, 1)
         if task in {"run", "apply"}:
-            self.tabs.setCurrentWidget(self.correction_page)
+            self._show_workflow_detail(self.correction_page)
         self.worker.start()
 
     def _task_completed(self, task: str, result: object) -> None:
@@ -1770,7 +1936,11 @@ class MainWindow(QMainWindow):
             self.recommendation_prediction_table.setRowCount(0)
             self.recommendation_table.setRowCount(0)
             self._show_measurement(result)
-            self.tabs.setCurrentWidget(self.measure_page)
+            self._set_live_comparison_measurement(
+                result,
+                label="Latest measured",
+            )
+            self._show_workflow_detail(self.measure_page)
             self._refresh_status(f"RMS {result.rms_mm:.4g} mm")
         elif isinstance(result, ResponseMatrixResult):
             self.latest_response = result
@@ -1786,11 +1956,15 @@ class MainWindow(QMainWindow):
             self.recommendation_table.setRowCount(0)
             self._show_response(result)
             self._show_measurement(result.measurement)
-            self.tabs.setCurrentWidget(self.response_page)
+            self._set_live_comparison_measurement(
+                result.measurement,
+                label="Response baseline",
+            )
+            self._show_workflow_detail(self.response_page)
             self._refresh_status(f"Cond {result.condition_number:.4g}")
         elif isinstance(result, CorrectionResult):
             self._show_result(result)
-            self.tabs.setCurrentWidget(self.correction_page)
+            self._show_workflow_detail(self.correction_page)
             status = "Accepted" if result.success else "Aborted" if result.reason.startswith("Aborted") else "Not accepted"
             self._refresh_status(status)
             self.status_strip.set_value(
@@ -1884,48 +2058,191 @@ class MainWindow(QMainWindow):
             self.measure_table.setItem(row, 4, QTableWidgetItem("yes" if measurement.valid[row] else "no"))
         self.measure_table.resizeColumnsToContents()
 
+    @staticmethod
+    def _plot_dataset_from_measurement(
+        measurement: DispersionMeasurement,
+        label: str,
+    ) -> DispersionPlotDataset:
+        return DispersionPlotDataset(
+            bpm_names=measurement.bpm_names,
+            values_mm=np.asarray(measurement.values_mm, dtype=float),
+            sigma_mm=np.full(len(measurement.bpm_names), np.nan),
+            valid=np.asarray(measurement.valid, dtype=bool),
+            label=label,
+        )
+
+    @staticmethod
+    def _plot_dataset_from_import(
+        imported: ImportedDispersionDataset,
+    ) -> DispersionPlotDataset:
+        return DispersionPlotDataset(
+            bpm_names=imported.bpm_names,
+            values_mm=np.asarray(imported.etax_mm, dtype=float),
+            sigma_mm=np.asarray(imported.etax_sigma_mm, dtype=float),
+            valid=np.ones(len(imported.bpm_names), dtype=bool),
+            label="External measurement",
+        )
+
+    def _set_live_comparison_measurement(
+        self,
+        measurement: DispersionMeasurement,
+        *,
+        label: str,
+        reference: DispersionMeasurement | None = None,
+    ) -> None:
+        self.live_plot_measurement = self._plot_dataset_from_measurement(
+            measurement,
+            label,
+        )
+        self.reference_plot_measurement = (
+            None
+            if reference is None
+            else self._plot_dataset_from_measurement(reference, "Before correction")
+        )
+        self._refresh_measurement_source_combo(preferred="live")
+
+    def _refresh_measurement_source_combo(self, preferred: str | None = None) -> None:
+        if not hasattr(self, "measurement_source_combo"):
+            return
+        current = preferred or str(
+            self.measurement_source_combo.currentData() or "none"
+        )
+        self.measurement_source_combo.blockSignals(True)
+        self.measurement_source_combo.clear()
+        if self.live_plot_measurement is not None:
+            self.measurement_source_combo.addItem(
+                self.live_plot_measurement.label,
+                "live",
+            )
+        if self.imported_dispersion is not None:
+            self.measurement_source_combo.addItem("External measurement", "imported")
+        if self.measurement_source_combo.count() == 0:
+            self.measurement_source_combo.addItem("No measurement available", "none")
+        index = self.measurement_source_combo.findData(current)
+        if index < 0:
+            index = 0
+        self.measurement_source_combo.setCurrentIndex(index)
+        self.measurement_source_combo.blockSignals(False)
+        self._comparison_measurement_changed()
+
+    def _active_plot_measurement(self) -> DispersionPlotDataset | None:
+        source = str(self.measurement_source_combo.currentData() or "none")
+        if source == "live":
+            return self.live_plot_measurement
+        if source == "imported" and self.imported_dispersion is not None:
+            return self._plot_dataset_from_import(self.imported_dispersion)
+        return None
+
+    def _comparison_measurement_changed(self, _index: int | None = None) -> None:
+        measurement = self._active_plot_measurement()
+        source = str(self.measurement_source_combo.currentData() or "none")
+        reference = (
+            self.reference_plot_measurement
+            if source == "live"
+            else None
+        )
+        self.dispersion_curve.set_measurement(measurement, reference)
+        self._show_measurement_comparison(measurement)
+
+    def _model_visibility_changed(self, _checked: bool | None = None) -> None:
+        self.dispersion_curve.set_model_visibility(
+            design=self.show_design_model_checkbox.isChecked(),
+            snapshot=self.show_snapshot_model_checkbox.isChecked(),
+        )
+        self._show_measurement_comparison(self._active_plot_measurement())
+
+    def _show_measurement_comparison(
+        self,
+        measurement: DispersionPlotDataset | None,
+    ) -> None:
+        if measurement is None:
+            self.model_measure_table.setRowCount(0)
+            self.model_measure_table.setVisible(False)
+            return
+        response = self.dispersion_curve.result
+        model_columns: list[tuple[str, dict[str, float]]] = []
+        if response is not None and self.show_design_model_checkbox.isChecked():
+            curve = response.design_curve or response.selected_curve
+            model_columns.append(
+                (
+                    "Design model",
+                    {
+                        name: float(curve.dx_mm[index])
+                        for index, name in enumerate(curve.element_names)
+                    },
+                )
+            )
+        if (
+            response is not None
+            and self.show_snapshot_model_checkbox.isChecked()
+            and response.model_source != "design"
+        ):
+            curve = response.selected_curve
+            model_columns.append(
+                (
+                    "Current snapshot",
+                    {
+                        name: float(curve.dx_mm[index])
+                        for index, name in enumerate(curve.element_names)
+                    },
+                )
+            )
+        headers = ["BPM", "Measurement ηx (mm)", "σηx (mm)", "Valid"]
+        for label, _values in model_columns:
+            headers.extend((f"{label} ηx (mm)", f"Measurement − {label} (mm)"))
+        self.model_measure_table.setColumnCount(len(headers))
+        self.model_measure_table.setHorizontalHeaderLabels(headers)
+        self.model_measure_table.setRowCount(len(measurement.bpm_names))
+        self.model_measure_table.setVisible(True)
+        for row, (bpm, measured, sigma, valid) in enumerate(
+            zip(
+                measurement.bpm_names,
+                measurement.values_mm,
+                measurement.sigma_mm,
+                measurement.valid,
+            )
+        ):
+            sigma_text = f"{sigma:.6g}" if math.isfinite(float(sigma)) else ""
+            self.model_measure_table.setItem(row, 0, QTableWidgetItem(bpm))
+            self.model_measure_table.setItem(row, 1, QTableWidgetItem(f"{measured:.6g}"))
+            self.model_measure_table.setItem(row, 2, QTableWidgetItem(sigma_text))
+            self.model_measure_table.setItem(
+                row,
+                3,
+                QTableWidgetItem("yes" if bool(valid) else "no"),
+            )
+            column = 4
+            for _label, values in model_columns:
+                model_value = values.get(bpm)
+                model_text = "" if model_value is None else f"{model_value:.6g}"
+                residual_text = (
+                    ""
+                    if model_value is None
+                    else f"{float(measured) - model_value:.6g}"
+                )
+                self.model_measure_table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(model_text),
+                )
+                self.model_measure_table.setItem(
+                    row,
+                    column + 1,
+                    QTableWidgetItem(residual_text),
+                )
+                column += 2
+        self.model_measure_table.resizeColumnsToContents()
+
     def _show_imported_comparison(
         self,
         response: ModelResponseResult,
         imported: ImportedDispersionDataset,
     ) -> None:
-        model_etax = {
-            name: float(response.selected_curve.dx_mm[index])
-            for index, name in enumerate(response.selected_curve.element_names)
-        }
-        self.model_measure_table.setHorizontalHeaderLabels(
-            [
-                "BPM",
-                "Imported ηx (mm)",
-                "Selected model ηx (mm)",
-                "Residual (mm)",
-                "σηx (mm)",
-            ]
-        )
-        self.model_measure_table.setRowCount(len(imported.bpm_names))
-        self.model_measure_table.setVisible(True)
-        for row, (bpm, measured, sigma) in enumerate(
-            zip(imported.bpm_names, imported.etax_mm, imported.etax_sigma_mm)
-        ):
-            model_value = model_etax[bpm]
-            sigma_text = f"{sigma:.6g}" if math.isfinite(float(sigma)) else ""
-            self.model_measure_table.setItem(row, 0, QTableWidgetItem(bpm))
-            self.model_measure_table.setItem(row, 1, QTableWidgetItem(f"{measured:.6g}"))
-            self.model_measure_table.setItem(row, 2, QTableWidgetItem(f"{model_value:.6g}"))
-            self.model_measure_table.setItem(
-                row,
-                3,
-                QTableWidgetItem(f"{float(measured) - model_value:.6g}"),
-            )
-            self.model_measure_table.setItem(row, 4, QTableWidgetItem(sigma_text))
-        self.model_measure_table.resizeColumnsToContents()
-        self.model_info.setPlainText(format_model_response(response))
-        self.model_info.appendPlainText(
-            "\nImported effective ηx:\n"
-            f"  file: {imported.source_path}\n"
-            f"  BPM points: {len(imported.bpm_names)}\n"
-            "  warning: imported measurement may not correspond to the current lattice snapshot"
-        )
+        """Compatibility wrapper used by older callers and focused GUI tests."""
+
+        self.imported_dispersion = imported
+        self.dispersion_curve.set_result(response)
+        self._refresh_measurement_source_combo(preferred="imported")
 
     def _show_response(self, response: ResponseMatrixResult) -> None:
         self.response_table.setRowCount(len(response.bpm_names))
@@ -1943,7 +2260,7 @@ class MainWindow(QMainWindow):
         )
 
     def _review_recommendation(self) -> None:
-        self.tabs.setCurrentWidget(self.correction_page)
+        self._show_workflow_detail(self.correction_page)
         if self.correction_recommendation is not None:
             return
         if self.latest_measurement is None or self.latest_response is None:
@@ -1976,7 +2293,7 @@ class MainWindow(QMainWindow):
             return
         self.correction_recommendation = recommendation
         self._show_recommendation(recommendation)
-        self.tabs.setCurrentWidget(self.correction_page)
+        self._show_workflow_detail(self.correction_page)
         self._append_log(
             "Correction recommendation calculated from measured data; no backend was accessed"
         )
@@ -2188,6 +2505,8 @@ class MainWindow(QMainWindow):
         return "\n".join(lines)
 
     def _show_model_response(self, response: ModelResponseResult) -> None:
+        self.model_table.setVisible(True)
+        self.model_info.setVisible(True)
         self.model_table.setRowCount(len(response.device_names))
         self.model_table.setColumnCount(4)
         self.model_table.setHorizontalHeaderLabels(
@@ -2209,12 +2528,22 @@ class MainWindow(QMainWindow):
         self.model_table.resizeColumnsToContents()
         self.dispersion_curve.set_result(response)
         self.model_info.setPlainText(format_model_response(response))
-        if self.imported_dispersion is not None:
-            self.dispersion_curve.set_measurement(self.imported_dispersion)
-            self._show_imported_comparison(response, self.imported_dispersion)
+        has_snapshot = response.model_source != "design"
+        self.show_snapshot_model_checkbox.setEnabled(has_snapshot)
+        if has_snapshot:
+            self.show_snapshot_model_checkbox.setChecked(True)
+        else:
+            self.show_design_model_checkbox.setChecked(True)
+            self.show_snapshot_model_checkbox.setChecked(False)
+        self._model_visibility_changed()
 
     def _show_result(self, result: CorrectionResult) -> None:
         self._show_measurement(result.final)
+        self._set_live_comparison_measurement(
+            result.final,
+            label="Final measured",
+            reference=result.initial,
+        )
         if result.response is not None:
             self._show_response(result.response)
         self.correction_table.setRowCount(len(result.steps))
@@ -2300,8 +2629,15 @@ class MainWindow(QMainWindow):
             not running and self._model_analysis_available()
         )
         self.model_source_combo.setEnabled(not running)
-        self.import_measurement_button.setEnabled(
+        self.import_measurement_button.setEnabled(not running)
+        self.measurement_source_combo.setEnabled(not running)
+        self.show_design_model_checkbox.setEnabled(
             not running and self.dispersion_curve.result is not None
+        )
+        self.show_snapshot_model_checkbox.setEnabled(
+            not running
+            and self.dispersion_curve.result is not None
+            and self.dispersion_curve.result.model_source != "design"
         )
         self.clear_measurement_button.setEnabled(
             not running and self.imported_dispersion is not None
@@ -2651,7 +2987,7 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = None
         self._update_static_safety_status()
         self._set_running(False, "")
-        self.tabs.setCurrentWidget(self.online_page)
+        self._show_workflow_detail(self.online_page)
         self.online_details.setCurrentWidget(self.calibration_page)
         self._refresh_status("Calibration loaded")
 
@@ -2691,7 +3027,7 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = None
         self._update_static_safety_status()
         self._set_running(False, "")
-        self.tabs.setCurrentWidget(self.online_page)
+        self._show_workflow_detail(self.online_page)
         self.online_details.setCurrentWidget(self.calibration_page)
         self._refresh_status("Configured calibration restored")
 
@@ -2777,7 +3113,7 @@ class MainWindow(QMainWindow):
             "Checking configured energy actuator, quadrupoles, and BPM readbacks…\n\n"
             "No setpoint will be changed."
         )
-        self.tabs.setCurrentWidget(self.online_page)
+        self._show_workflow_detail(self.online_page)
         self.online_details.setCurrentWidget(self.preflight_text)
         self.preflight_worker = LivePreflightWorker(self.config)
         self.preflight_worker.completed.connect(self._live_preflight_completed)
@@ -2795,7 +3131,7 @@ class MainWindow(QMainWindow):
             "success" if ready else "danger",
         )
         self.preflight_text.setPlainText(self._format_live_preflight(result))
-        self.tabs.setCurrentWidget(self.online_page)
+        self._show_workflow_detail(self.online_page)
         self.online_details.setCurrentWidget(self.preflight_text)
         messages = [*result.static.blockers, *result.blockers]
         warnings = [*result.static.warnings, *result.warnings]
