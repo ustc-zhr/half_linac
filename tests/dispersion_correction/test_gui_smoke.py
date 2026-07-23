@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 
-def test_main_window_constructs_offscreen() -> None:
+def test_main_window_constructs_offscreen(tmp_path) -> None:
     pytest.importorskip("PyQt5")
     from PyQt5.QtCore import QLibraryInfo
 
@@ -49,6 +49,7 @@ def test_main_window_constructs_offscreen() -> None:
     assert "Simulated energy step" in window.energy_step_summary.text()
     assert "MODEL_DELTA" not in window.energy_step_summary.text()
     assert window.calibration_button.parentWidget() is window.calibration_page
+    assert window.calibration_button.text() == "Open Calibration Editor"
     assert window.measure_button.parentWidget() is window.online_page
     assert window.response_button.parentWidget() is window.online_page
     assert window.review_button.parentWidget() is window.online_page
@@ -87,6 +88,75 @@ def test_main_window_constructs_offscreen() -> None:
     assert window.correction_recommendation is None
     assert not window.review_button.isEnabled()
     assert "discarded" in window.correction_state_label.text().lower()
+    from half_linac.src.apps.dispersion_correction.calibration_draft import (
+        EnergyCalibrationDraft,
+        EnergyCalibrationPoint,
+        calibration_fragment,
+    )
+    from half_linac.src.apps.dispersion_correction.gui.calibration_editor import (
+        CalibrationEditorDialog,
+    )
+
+    calibration_dialog = CalibrationEditorDialog(
+        actuator="rf_phase",
+        actuator_unit="deg",
+        target_delta=1.0e-4,
+        draft_directory=tmp_path,
+        machine_id="irfel",
+        backend="real",
+        parent=window,
+    )
+    calibration_draft = EnergyCalibrationDraft(
+        actuator="rf_phase",
+        actuator_unit="deg",
+        input_mode="direct_delta",
+        baseline_actuator=0.0,
+        reference_energy=None,
+        points=tuple(
+            EnergyCalibrationPoint(
+                actuator_value=actuator,
+                delta_p_over_p=delta,
+            )
+            for actuator, delta in (
+                (-0.50, -0.00020),
+                (-0.25, -0.00010),
+                (0.00, 0.00000),
+                (0.25, 0.00010),
+                (0.50, 0.00020),
+            )
+        ),
+        machine_id="irfel",
+        backend="real",
+    )
+    calibration_dialog.set_draft(calibration_draft)
+    assert calibration_dialog.analysis is not None
+    assert calibration_dialog.analysis.valid
+    assert calibration_dialog.activate_button.isEnabled()
+    assert "Quality: PASS" in calibration_dialog.preview.toPlainText()
+    assert calibration_dialog.table.horizontalHeaderItem(2).text() == (
+        "Measured energy (MeV)"
+    )
+    draft_paths = calibration_dialog._save_draft(show_message=False)
+    assert draft_paths["latest"].exists()
+    calibration = calibration_fragment(
+        calibration_draft,
+        calibration_dialog.analysis,
+        source_path=str(draft_paths["archive"]),
+    )
+    window._activate_session_calibration(
+        calibration,
+        str(draft_paths["archive"]),
+    )
+    assert window.session_energy_calibration_source == str(
+        draft_paths["archive"]
+    )
+    assert "CURRENT SESSION OVERRIDE" in window.calibration_text.toPlainText()
+    assert "machine profile was not modified" in window.calibration_text.toPlainText()
+    assert window.restore_calibration_button.isEnabled()
+    window._apply_configured_calibration()
+    assert window.session_energy_calibration_source is None
+    assert not window.restore_calibration_button.isEnabled()
+    calibration_dialog.close()
     from half_linac.src.apps.dispersion_correction.config import load_config
 
     window.config = load_config("tests/dispersion_correction/fixtures/irfel_achromat.json")
@@ -146,6 +216,7 @@ def test_main_window_constructs_offscreen() -> None:
     assert profile_window.status_strip.items["ACCESS"].value_label.text() == "READ ONLY"
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
+    assert "CONFIGURED MACHINE PROFILE" in profile_window.calibration_text.toPlainText()
     assert profile_window.model_response_button.isHidden()
     assert not profile_window.tabs.isTabEnabled(
         profile_window.tabs.indexOf(profile_window.model_page)
@@ -226,6 +297,7 @@ def test_main_window_constructs_offscreen() -> None:
     assert half_window.status_strip.items["ENERGY STEP"].value_label.text() == "NOT USED"
     assert not half_window.delta_spin.isVisibleTo(half_window)
     assert not half_window.energy_step_field_label.isVisibleTo(half_window)
+    assert not half_window.calibration_button.isEnabled()
     assert "calculates dispersion directly" in half_window.energy_step_summary.text()
     assert "No energy scan" in half_window.energy_step_summary.text()
     assert "MODEL_DELTA" not in half_window.energy_step_summary.text()

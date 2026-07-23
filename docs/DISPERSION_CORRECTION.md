@@ -146,16 +146,36 @@ python3 -m half_linac.src.apps.dispersion_correction.cli status --json
 `preflight` is configuration-only. `status` performs EPICS reads of the
 configured BPM, quadrupole and energy-actuator PVs. Neither command writes.
 
-Fit a local energy-actuator calibration CSV without machine IO:
+Energy-knob calibration is managed as two distinct layers:
+
+- The configured machine-profile value is displayed read-only and remains
+  subject to the profile commissioning/write policy.
+- `Open Calibration Editor` accepts points directly in an editable table. It
+  supports measured energy (the GUI computes `(E-E0)/E0`) or direct `dp/p`,
+  clipboard paste, a fit preview, residual/linearity checks, and runtime draft
+  saving. No editor action writes a PV or modifies the machine profile.
+- A draft that passes the point-count, two-sided coverage, fit quality,
+  directional-slope, baseline, and target-range checks may be activated for the
+  current GUI session after explicit confirmation. Activation invalidates all
+  staged measurements and recommendations. `Restore Configured Calibration`
+  removes the session override.
+
+Drafts preserve raw points, fit diagnostics, actuator/unit, machine/backend, and
+timestamps under
+`src/apps/dispersion_correction/runtime/<machine>/<backend>/calibrations/`.
+They are runtime evidence, not source configuration.
+
+CSV remains an optional commissioning exchange format through the CLI:
 
 ```bash
 python3 -m half_linac.src.apps.dispersion_correction.cli \
   calibrate-energy-knob --csv energy_knob.csv
 ```
 
-The default columns are `actuator_value` and `delta_p_over_p`. The result is an
-`actuator_per_delta` profile fragment. The GUI Calibration tab performs the same
-local fit; `phase_deg` is auto-detected for legacy phase CSV files.
+The default columns are `actuator_value` and `delta_p_over_p`; `phase_deg`
+remains accepted for legacy phase files. A confirmed calibration must still be
+promoted deliberately into the machine profile rather than being written there
+by the GUI.
 
 Compare the HALF BL01 design optics without machine IO:
 

@@ -229,6 +229,16 @@ def default_offline_config() -> RunConfig:
     )
 
 
+def energy_calibration_draft_directory(
+    context: AppContext | None,
+) -> Path:
+    """Return the runtime-only directory for energy calibration drafts."""
+
+    if context is None:
+        return APP_DIR / "runtime" / "standalone" / "offline" / "calibrations"
+    return resolve_app_runtime_paths(APP_DIR, context)["runtime_dir"] / "calibrations"
+
+
 def write_profile_result(
     context: AppContext,
     result: CorrectionResult,

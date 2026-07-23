@@ -43,10 +43,12 @@ from PyQt5.QtCore import Qt
 from half_linac.src.apps.dispersion_correction.calibration import (
     actuator_step_for_delta,
     is_direct_delta_actuator,
-    load_energy_knob_calibration_csv,
 )
 from half_linac.src.apps.dispersion_correction.config import load_config
 from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan, format_operation_plan
+from half_linac.src.apps.dispersion_correction.gui.calibration_editor import (
+    CalibrationEditorDialog,
+)
 from half_linac.src.apps.dispersion_correction.gui.theme import build_stylesheet, theme_tokens
 from half_linac.src.apps.dispersion_correction.gui.widgets import StatusStrip
 from half_linac.src.apps.dispersion_correction.models import (
@@ -70,6 +72,7 @@ from half_linac.src.apps.dispersion_correction.model_response import (
 from half_linac.src.apps.dispersion_correction.preflight import run_live_preflight, run_preflight
 from half_linac.src.apps.dispersion_correction.profile_runtime import (
     default_offline_config,
+    energy_calibration_draft_directory,
     apply_profile_selection,
     load_profile_run_config,
     profile_section_choices,
@@ -604,6 +607,8 @@ class MainWindow(QMainWindow):
         self._loading_widgets = False
         self.config_path: Path | None = None
         self.config = config or default_offline_config()
+        self.configured_energy_calibration = dict(self.config.energy_knob.calibration)
+        self.session_energy_calibration_source: str | None = None
         self.selected_knobs = tuple(self.config.knobs)
         self.knob_hard_limits = tuple(knob.limit for knob in self.config.knobs)
         self.available_bpms = (
@@ -1007,8 +1012,13 @@ class MainWindow(QMainWindow):
         calibration_layout.setContentsMargins(8, 8, 8, 8)
         calibration_actions = QHBoxLayout()
         calibration_actions.addStretch(1)
-        self.calibration_button = QPushButton("Import Energy Knob Calibration")
-        self.calibration_button.clicked.connect(self._load_calibration_dialog)
+        self.restore_calibration_button = QPushButton("Restore Configured Calibration")
+        self.restore_calibration_button.clicked.connect(
+            self._restore_configured_calibration
+        )
+        calibration_actions.addWidget(self.restore_calibration_button)
+        self.calibration_button = QPushButton("Open Calibration Editor")
+        self.calibration_button.clicked.connect(self._open_calibration_editor)
         calibration_actions.addWidget(self.calibration_button)
         calibration_layout.addLayout(calibration_actions)
         calibration_layout.addWidget(self.calibration_text, 1)
@@ -1290,6 +1300,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Dispersion Section", str(exc))
             return
         self.config = config
+        self.configured_energy_calibration = dict(config.energy_knob.calibration)
+        self.session_energy_calibration_source = None
         self.selected_knobs = tuple(config.knobs)
         self.knob_hard_limits = tuple(knob.limit for knob in config.knobs)
         self._invalidate_staged_results(
@@ -2275,7 +2287,14 @@ class MainWindow(QMainWindow):
             self.response_update_combo,
         ):
             widget.setEnabled(not running)
-        self.calibration_button.setEnabled(not running)
+        self.calibration_button.setEnabled(
+            not running and not self.config.section.model_only
+        )
+        self.restore_calibration_button.setEnabled(
+            not running
+            and not self.config.section.model_only
+            and self.session_energy_calibration_source is not None
+        )
         self.preflight_button.setEnabled(not running and self.config.backend.type.lower() == "epics")
         self.model_response_button.setEnabled(
             not running and self._model_analysis_available()
@@ -2525,6 +2544,13 @@ class MainWindow(QMainWindow):
 
     def _show_calibration_summary(self) -> None:
         calibration = self.config.energy_knob.calibration
+        if self.config.section.model_only:
+            self.calibration_text.setPlainText(
+                "Energy Calibration\n\n"
+                "This section is model-only. Elegant calculates dispersion directly, "
+                "so no energy-knob calibration is used.\n"
+            )
+            return
         lines = [
             "Energy Calibration",
             "",
@@ -2532,60 +2558,142 @@ class MainWindow(QMainWindow):
             f"Unit: {self.config.energy_knob.actuator_unit}",
             f"Target momentum perturbation: {self.config.energy_knob.delta:g} dp/p",
         ]
+        if self.session_energy_calibration_source is not None:
+            lines.extend(
+                [
+                    "",
+                    "ACTIVE SOURCE: CURRENT SESSION OVERRIDE",
+                    "The machine profile was not modified.",
+                    f"Draft: {self.session_energy_calibration_source}",
+                    "",
+                    "Active session calibration:",
+                ]
+            )
+        elif self.app_context is not None:
+            lines.extend(
+                [
+                    "",
+                    "ACTIVE SOURCE: CONFIGURED MACHINE PROFILE",
+                    "Commissioning approval remains governed by the profile write policy.",
+                ]
+            )
+        else:
+            lines.extend(["", "ACTIVE SOURCE: LOADED CONFIGURATION"])
         if calibration:
-            lines.extend(["", "Current calibration:"])
+            if self.session_energy_calibration_source is None:
+                lines.extend(["", "Current calibration:"])
             for key, value in calibration.items():
                 lines.append(f"  {key}: {value}")
         else:
             lines.extend(["", "Current calibration: missing"])
+        if self.session_energy_calibration_source is not None:
+            lines.extend(["", "Configured machine-profile calibration:"])
+            for key, value in self.configured_energy_calibration.items():
+                lines.append(f"  {key}: {value}")
         if hasattr(self, "calibration_text"):
             self.calibration_text.setPlainText("\n".join(lines) + "\n")
 
-    def _load_calibration_dialog(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load Energy Knob Calibration CSV",
-            str(Path.cwd() / "configs"),
-            "CSV Files (*.csv)",
-            options=QFileDialog.Options() | QFileDialog.DontUseNativeDialog,
+    def _open_calibration_editor(self) -> None:
+        if self.config.section.model_only:
+            return
+        machine_id = (
+            self.app_context.profile.machine.id
+            if self.app_context is not None
+            else "standalone"
         )
-        if not path:
+        backend = (
+            self.app_context.control_backend.name
+            if self.app_context is not None
+            else self.config.backend.type
+        )
+        dialog = CalibrationEditorDialog(
+            actuator=self.config.energy_knob.actuator,
+            actuator_unit=self.config.energy_knob.actuator_unit,
+            target_delta=self.config.energy_knob.delta,
+            draft_directory=energy_calibration_draft_directory(self.app_context),
+            machine_id=machine_id,
+            backend=backend,
+            parent=self,
+        )
+        if dialog.exec_() != QDialog.Accepted:
             return
-        try:
-            fit = load_energy_knob_calibration_csv(path)
-            base_config = self._config_from_widgets()
-            self.config = replace(
-                base_config,
-                energy_knob=replace(
-                    base_config.energy_knob,
-                    calibration={
-                        "kind": "linear_relative",
-                        "actuator_per_delta": fit.actuator_per_delta,
-                    },
-                ),
-            )
-        except Exception as exc:
-            QMessageBox.warning(self, "Calibration", str(exc))
+        if (
+            dialog.activated_calibration is None
+            or dialog.activated_source is None
+        ):
             return
+        self._activate_session_calibration(
+            dialog.activated_calibration,
+            dialog.activated_source,
+        )
+
+    def _activate_session_calibration(
+        self,
+        calibration: dict,
+        source: str,
+    ) -> None:
+        base_config = self._config_from_widgets()
+        self.config = replace(
+            base_config,
+            energy_knob=replace(
+                base_config.energy_knob,
+                calibration=dict(calibration),
+            ),
+        )
+        self.session_energy_calibration_source = str(source)
         self._invalidate_staged_results(
-            "Energy calibration changed. Previous measurements and recommendations were discarded."
-        )
-        self.calibration_text.setPlainText(
-            "Energy knob calibration fit\n\n"
-            f"slope_delta_per_actuator: {fit.slope_delta_per_actuator:.12g}\n"
-            f"actuator_per_delta: {fit.actuator_per_delta:.12g}\n"
-            f"intercept_delta: {fit.intercept_delta:.12g}\n"
-            f"r_squared: {fit.r_squared:.12g}\n"
-            f"n_samples: {fit.n_samples}\n\n"
-            "Current session config updated.\n"
+            "Session energy calibration activated. Previous measurements and "
+            "recommendations were discarded."
         )
         self._show_plan()
+        self._show_calibration_summary()
+        self._update_energy_step_summary()
         self.last_live_preflight = None
         self._update_static_safety_status()
         self._set_running(False, "")
         self.tabs.setCurrentWidget(self.online_page)
         self.online_details.setCurrentWidget(self.calibration_page)
         self._refresh_status("Calibration loaded")
+
+    def _restore_configured_calibration(self) -> None:
+        if self.session_energy_calibration_source is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Restore Configured Calibration",
+            "Restore the calibration from the machine profile/configuration?\n\n"
+            "This does not write a PV. Existing dispersion measurements, response "
+            "matrices, and recommendations will be discarded.",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self._apply_configured_calibration()
+
+    def _apply_configured_calibration(self) -> None:
+        base_config = self._config_from_widgets()
+        self.config = replace(
+            base_config,
+            energy_knob=replace(
+                base_config.energy_knob,
+                calibration=dict(self.configured_energy_calibration),
+            ),
+        )
+        self.session_energy_calibration_source = None
+        self._invalidate_staged_results(
+            "Configured energy calibration restored. Previous measurements and "
+            "recommendations were discarded."
+        )
+        self._show_plan()
+        self._show_calibration_summary()
+        self._update_energy_step_summary()
+        self.last_live_preflight = None
+        self._update_static_safety_status()
+        self._set_running(False, "")
+        self.tabs.setCurrentWidget(self.online_page)
+        self.online_details.setCurrentWidget(self.calibration_page)
+        self._refresh_status("Configured calibration restored")
 
     def _toggle_theme(self) -> None:
         self.theme_name = "control_room" if self.theme_name == "night_shift" else "night_shift"
@@ -2721,6 +2829,10 @@ class MainWindow(QMainWindow):
         try:
             self.config_path = Path(path)
             self.config = load_config(self.config_path)
+            self.configured_energy_calibration = dict(
+                self.config.energy_knob.calibration
+            )
+            self.session_energy_calibration_source = None
         except Exception as exc:
             QMessageBox.warning(self, "Configuration", str(exc))
             return
