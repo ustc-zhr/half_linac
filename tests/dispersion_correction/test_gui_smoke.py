@@ -42,6 +42,10 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
         "Response Quality",
         "Recommendation",
     ]
+    assert window.workspace_splitter.widget(0) is window.dispersion_overview
+    assert window.workspace_splitter.widget(1) is window.tabs
+    assert window.dispersion_curve.parentWidget() is window.dispersion_overview
+    assert window.plot_state_label.text() == "No measured data"
     assert not hasattr(window, "plan_button")
     assert not hasattr(window, "backend_combo")
     assert not hasattr(window, "mode_combo")
@@ -82,12 +86,15 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert window.dispersion_curve.result is None
     assert window.dispersion_curve.measurement.label == "Latest measured"
     assert window.measurement_source_combo.currentData() == "live"
+    assert "Latest measured" in window.plot_state_label.text()
+    assert "4/4 valid BPMs" in window.plot_state_label.text()
     assert not window.model_measure_table.isHidden()
     assert window.model_measure_table.columnCount() == 4
     assert not window.dispersion_curve.grab().isNull()
     window._task_completed("response", response)
     assert window.workflow_tabs.currentWidget() is window.response_page
     assert window.dispersion_curve.measurement.label == "Response baseline"
+    assert "Response baseline" in window.plot_state_label.text()
     window._compute_recommendation()
     assert window.correction_recommendation is not None
     assert window.correction_recommendation.ready
@@ -188,6 +195,11 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     window.resize(1248, 803)
     window.show()
     app.processEvents()
+    assert window.dispersion_curve.isVisibleTo(window)
+    window.tabs.setCurrentWidget(window.history_page)
+    app.processEvents()
+    assert window.dispersion_curve.isVisibleTo(window)
+    window.tabs.setCurrentWidget(window.workflow_page)
     assert abs(window.load_button.geometry().center().y() - window.config_title_label.geometry().center().y()) <= 1
     assert window.load_button.property("role") is None
     assert not window.abort_button.isVisible()
@@ -204,6 +216,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert not window.measure_button.isEnabled()
     assert not window.delta_spin.isEnabled()
     assert window.progress_widget.isVisible()
+    assert "Measuring dispersion" in window.plot_state_label.text()
     window._update_progress("Sampling +Δp/p", 2, 5)
     assert window.operation_progress.value() == 40
     assert window.progress_percent_label.text() == "40%"
@@ -211,6 +224,7 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert not window.abort_button.isVisible()
     assert window.delta_spin.isEnabled()
     assert not window.progress_widget.isVisible()
+    assert window.plot_state_label.text() == "No measured data"
     tab_bar = window.tabs.tabBar()
     tab_widths = [tab_bar.tabRect(index).width() for index in range(tab_bar.count())]
     assert max(tab_widths) - min(tab_widths) <= 1

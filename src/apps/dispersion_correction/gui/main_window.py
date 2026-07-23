@@ -1221,14 +1221,7 @@ class MainWindow(QMainWindow):
         model_intro.setWordWrap(True)
         model_layout.addWidget(model_intro)
         measurement_actions = QHBoxLayout()
-        measurement_actions.addWidget(QLabel("Displayed measurement"))
-        self.measurement_source_combo = QComboBox()
-        self.measurement_source_combo.setMinimumWidth(180)
-        self.measurement_source_combo.addItem("No measurement available", "none")
-        self.measurement_source_combo.currentIndexChanged.connect(
-            self._comparison_measurement_changed
-        )
-        measurement_actions.addWidget(self.measurement_source_combo)
+        measurement_actions.addWidget(QLabel("External measurement"))
         measurement_actions.addStretch(1)
         self.import_measurement_button = QPushButton("Import ηx CSV")
         self.import_measurement_button.clicked.connect(self._import_measurement_csv)
@@ -1264,19 +1257,6 @@ class MainWindow(QMainWindow):
         self.model_response_button.clicked.connect(self._start_model_response)
         self.model_response_button.setVisible(self._model_analysis_available())
         model_actions.addWidget(self.model_response_button)
-        self.show_design_model_checkbox = QCheckBox("Show design model")
-        self.show_design_model_checkbox.setChecked(False)
-        self.show_design_model_checkbox.toggled.connect(
-            self._model_visibility_changed
-        )
-        model_actions.addWidget(self.show_design_model_checkbox)
-        self.show_snapshot_model_checkbox = QCheckBox("Show current snapshot")
-        self.show_snapshot_model_checkbox.setChecked(False)
-        self.show_snapshot_model_checkbox.setEnabled(False)
-        self.show_snapshot_model_checkbox.toggled.connect(
-            self._model_visibility_changed
-        )
-        model_actions.addWidget(self.show_snapshot_model_checkbox)
         self.model_boundary_label = QLabel()
         self.model_boundary_label.setObjectName("modelBoundaryLabel")
         model_actions.addWidget(self.model_boundary_label)
@@ -1290,8 +1270,6 @@ class MainWindow(QMainWindow):
         self.model_table = self._table([])
         self.model_table.setVisible(False)
         model_layout.addWidget(self.model_table, 1)
-        self.dispersion_curve = DispersionCurveWidget()
-        model_layout.addWidget(self.dispersion_curve, 3)
         self.model_measure_table = self._table([])
         self.model_measure_table.setVisible(False)
         model_layout.addWidget(self.model_measure_table, 1)
@@ -1333,7 +1311,58 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.workflow_page, "Measure & Correct")
         self.tabs.addTab(self.model_page, "Dispersion Comparison")
         self.tabs.addTab(self.history_page, "History")
-        layout.addWidget(self.tabs)
+
+        self.dispersion_overview = QWidget()
+        overview_layout = QVBoxLayout(self.dispersion_overview)
+        overview_layout.setContentsMargins(4, 2, 4, 4)
+        overview_layout.setSpacing(4)
+        overview_display_row = QHBoxLayout()
+        overview_display_row.setSpacing(8)
+        overview_title = QLabel("Dispersion Overview")
+        overview_title.setObjectName("workspaceIntro")
+        overview_display_row.addWidget(overview_title)
+        overview_display_row.addWidget(QLabel("Displayed"))
+        self.measurement_source_combo = QComboBox()
+        self.measurement_source_combo.setMinimumWidth(180)
+        self.measurement_source_combo.addItem("No measurement available", "none")
+        self.measurement_source_combo.currentIndexChanged.connect(
+            self._comparison_measurement_changed
+        )
+        overview_display_row.addWidget(self.measurement_source_combo)
+        overview_display_row.addStretch(1)
+        overview_layout.addLayout(overview_display_row)
+
+        overview_options_row = QHBoxLayout()
+        overview_options_row.setSpacing(8)
+        self.plot_state_label = QLabel("No measured data")
+        self.plot_state_label.setObjectName("modelBoundaryLabel")
+        overview_options_row.addWidget(self.plot_state_label)
+        overview_options_row.addStretch(1)
+        self.show_design_model_checkbox = QCheckBox("Design model")
+        self.show_design_model_checkbox.setChecked(False)
+        self.show_design_model_checkbox.toggled.connect(
+            self._model_visibility_changed
+        )
+        overview_options_row.addWidget(self.show_design_model_checkbox)
+        self.show_snapshot_model_checkbox = QCheckBox("Current snapshot")
+        self.show_snapshot_model_checkbox.setChecked(False)
+        self.show_snapshot_model_checkbox.setEnabled(False)
+        self.show_snapshot_model_checkbox.toggled.connect(
+            self._model_visibility_changed
+        )
+        overview_options_row.addWidget(self.show_snapshot_model_checkbox)
+        overview_layout.addLayout(overview_options_row)
+        self.dispersion_curve = DispersionCurveWidget()
+        overview_layout.addWidget(self.dispersion_curve, 1)
+
+        self.workspace_splitter = QSplitter(Qt.Vertical)
+        self.workspace_splitter.setChildrenCollapsible(False)
+        self.workspace_splitter.addWidget(self.dispersion_overview)
+        self.workspace_splitter.addWidget(self.tabs)
+        self.workspace_splitter.setStretchFactor(0, 1)
+        self.workspace_splitter.setStretchFactor(1, 1)
+        self.workspace_splitter.setSizes([380, 350])
+        layout.addWidget(self.workspace_splitter, 1)
         return frame
 
     def _table(self, headers: list[str]) -> QTableWidget:
@@ -2143,6 +2172,33 @@ class MainWindow(QMainWindow):
         )
         self.dispersion_curve.set_measurement(measurement, reference)
         self._show_measurement_comparison(measurement)
+        self._update_plot_state()
+
+    def _update_plot_state(self, *, running: bool = False, task: str = "") -> None:
+        if not hasattr(self, "plot_state_label"):
+            return
+        if running:
+            messages = {
+                "measure": "Measuring dispersion · current plot remains unchanged",
+                "response": "Measuring Q response · current plot remains unchanged",
+                "apply": "Applying correction · current plot remains unchanged",
+                "run": "Automatic correction running · current plot remains unchanged",
+                "model-response": "Analyzing model · measurement remains unchanged",
+                "preflight": "Checking connections · measurement remains unchanged",
+            }
+            self.plot_state_label.setText(messages.get(task, "Operation in progress"))
+            return
+        measurement = self._active_plot_measurement()
+        if measurement is None:
+            if self.dispersion_curve.result is None:
+                self.plot_state_label.setText("No measured data")
+            else:
+                self.plot_state_label.setText("Model reference only · no measured data")
+            return
+        valid_count = int(np.count_nonzero(measurement.valid))
+        self.plot_state_label.setText(
+            f"{measurement.label} · {valid_count}/{len(measurement.bpm_names)} valid BPMs"
+        )
 
     def _model_visibility_changed(self, _checked: bool | None = None) -> None:
         self.dispersion_curve.set_model_visibility(
@@ -2642,6 +2698,7 @@ class MainWindow(QMainWindow):
         self.clear_measurement_button.setEnabled(
             not running and self.imported_dispersion is not None
         )
+        self._update_plot_state(running=running, task=task)
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
         self.run_button.setEnabled(not running and operation_allowed)
