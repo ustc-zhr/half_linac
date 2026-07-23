@@ -75,6 +75,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     assert window.calibration_button.text() == "Edit Energy Knob Calibration…"
     assert window.calibration_status_label.text() == "Calibration: Not required"
+    assert window.calibration_status_label.isHidden()
     assert window.measure_button.parentWidget() is window.online_content
     assert window.response_button.parentWidget() is window.online_content
     assert window.review_button.parentWidget() is window.online_content
@@ -220,6 +221,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         draft_paths["archive"]
     )
     assert window.calibration_status_label.text() == "Calibration: Session override"
+    assert not window.calibration_status_label.isHidden()
     assert "machine profile was not modified" in (
         window.calibration_status_label.toolTip().lower()
     )
@@ -228,6 +230,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window._apply_configured_calibration()
     assert window.session_energy_calibration_source is None
     assert window.calibration_status_label.text() == "Calibration: Not required"
+    assert window.calibration_status_label.isHidden()
     assert window.restore_calibration_button.isHidden()
     assert not window.restore_calibration_button.isEnabled()
     calibration_dialog.close()
@@ -302,6 +305,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
     assert profile_window.calibration_status_label.text() == "Calibration: Machine profile"
+    assert profile_window.calibration_status_label.isHidden()
     assert profile_window.section_combo.currentData() == "dogleg"
     assert profile_window.model_boundary_label.text() == "Assume D=D'=0 at BPM07"
     assert profile_window.model_source_combo.itemText(0) == "Design lattice"

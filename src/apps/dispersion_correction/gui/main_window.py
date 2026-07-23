@@ -3325,6 +3325,9 @@ class MainWindow(QMainWindow):
             source = "Loaded configuration"
             tone = "success"
         self.calibration_status_label.setText(f"Calibration: {source}")
+        self.calibration_status_label.setVisible(
+            source in {"Session override", "Missing"}
+        )
         tooltip_lines = [
             f"Actuator: {self.config.energy_knob.actuator}",
             f"Unit: {self.config.energy_knob.actuator_unit}",
