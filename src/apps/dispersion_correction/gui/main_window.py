@@ -1062,9 +1062,9 @@ class MainWindow(QMainWindow):
 
     def _build_workspace(self) -> QFrame:
         frame = QFrame()
-        frame.setObjectName("plotCard")
+        frame.setObjectName("workspacePanel")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
         self.tabs = FullWidthTabWidget()
@@ -1331,7 +1331,7 @@ class MainWindow(QMainWindow):
         )
         self._add_detail_section(
             online_layout,
-            "Energy Knob & Settings",
+            "Energy Knob and Settings",
             self.calibration_page,
         )
         self._add_detail_section(
@@ -1362,9 +1362,10 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.online_page, "Online Correction")
         self.tabs.addTab(self.history_page, "History")
 
-        self.dispersion_overview = QWidget()
+        self.dispersion_overview = QFrame()
+        self.dispersion_overview.setObjectName("dispersionOverviewCard")
         overview_layout = QVBoxLayout(self.dispersion_overview)
-        overview_layout.setContentsMargins(4, 2, 4, 4)
+        overview_layout.setContentsMargins(12, 10, 12, 12)
         overview_layout.setSpacing(4)
         overview_display_row = QHBoxLayout()
         overview_display_row.setSpacing(8)

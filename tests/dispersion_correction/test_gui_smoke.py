@@ -38,6 +38,8 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert all(not button.isChecked() for button in window.detail_sections.values())
     assert window.workspace_splitter.widget(0) is window.dispersion_overview
     assert window.workspace_splitter.widget(1) is window.tabs
+    assert window.workspace_splitter.parentWidget().objectName() == "workspacePanel"
+    assert window.dispersion_overview.objectName() == "dispersionOverviewCard"
     assert window.dispersion_curve.parentWidget() is window.dispersion_overview
     assert window.plot_state_label.text() == "No measured data"
     assert not hasattr(window, "plan_button")

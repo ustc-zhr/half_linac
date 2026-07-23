@@ -126,7 +126,11 @@ def build_stylesheet(name: str) -> str:
         border: 1px solid {t['section_border']};
         border-radius: 14px;
     }}
-    QFrame#plotCard {{
+    QFrame#workspacePanel {{
+        background: transparent;
+        border: none;
+    }}
+    QFrame#dispersionOverviewCard {{
         background: {t['panel_bg']};
         border: 1px solid {t['section_border']};
         border-radius: 14px;
