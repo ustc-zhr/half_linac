@@ -34,7 +34,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         "History",
     ]
     assert not hasattr(window, "workflow_tabs")
-    assert len(window.detail_sections) == 4
+    assert len(window.detail_sections) == 3
     assert all(not button.isChecked() for button in window.detail_sections.values())
     assert not hasattr(window, "readiness_page")
     assert not hasattr(window, "preflight_text")
@@ -57,8 +57,14 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     assert "Simulated energy step" in window.energy_step_summary.text()
     assert "MODEL_DELTA" not in window.energy_step_summary.text()
-    assert window.calibration_button.parentWidget() is window.calibration_page
-    assert window.calibration_button.text() == "Open Calibration Editor"
+    assert not hasattr(window, "calibration_page")
+    assert not hasattr(window, "calibration_text")
+    assert (
+        window.calibration_button.parentWidget()
+        is window.energy_calibration_controls
+    )
+    assert window.calibration_button.text() == "Edit Energy Knob Calibration…"
+    assert window.calibration_status_label.text() == "Calibration: Not required"
     assert window.measure_button.parentWidget() is window.online_content
     assert window.response_button.parentWidget() is window.online_content
     assert window.review_button.parentWidget() is window.online_content
@@ -189,11 +195,16 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.session_energy_calibration_source == str(
         draft_paths["archive"]
     )
-    assert "CURRENT SESSION OVERRIDE" in window.calibration_text.toPlainText()
-    assert "machine profile was not modified" in window.calibration_text.toPlainText()
+    assert window.calibration_status_label.text() == "Calibration: Session override"
+    assert "machine profile was not modified" in (
+        window.calibration_status_label.toolTip().lower()
+    )
+    assert window.restore_calibration_button.isVisibleTo(window)
     assert window.restore_calibration_button.isEnabled()
     window._apply_configured_calibration()
     assert window.session_energy_calibration_source is None
+    assert window.calibration_status_label.text() == "Calibration: Not required"
+    assert window.restore_calibration_button.isHidden()
     assert not window.restore_calibration_button.isEnabled()
     calibration_dialog.close()
     from half_linac.src.apps.dispersion_correction.config import load_config
@@ -264,7 +275,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.status_strip.items["ACCESS"].value_label.text() == "READ ONLY"
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
-    assert "CONFIGURED MACHINE PROFILE" in profile_window.calibration_text.toPlainText()
+    assert profile_window.calibration_status_label.text() == "Calibration: Machine profile"
     assert profile_window.section_combo.currentData() == "dogleg"
     assert profile_window.model_boundary_label.text() == "Assume D=D'=0 at BPM07"
     assert profile_window.model_source_combo.itemText(0) == "Design lattice"
@@ -448,6 +459,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.status_strip.items["ENERGY STEP"].value_label.text() == "NOT USED"
     assert not half_window.delta_spin.isVisibleTo(half_window)
     assert not half_window.energy_step_field_label.isVisibleTo(half_window)
+    assert half_window.energy_calibration_controls.isHidden()
     assert not half_window.calibration_button.isEnabled()
     assert "calculates dispersion directly" in half_window.energy_step_summary.text()
     assert "No energy scan" in half_window.energy_step_summary.text()

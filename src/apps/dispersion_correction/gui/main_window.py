@@ -951,6 +951,27 @@ class MainWindow(QMainWindow):
         self.energy_step_summary.setWordWrap(True)
         layout.addWidget(self.energy_step_summary)
 
+        self.energy_calibration_controls = QWidget()
+        calibration_layout = QVBoxLayout(self.energy_calibration_controls)
+        calibration_layout.setContentsMargins(0, 0, 0, 0)
+        calibration_layout.setSpacing(5)
+        self.calibration_status_label = QLabel()
+        self.calibration_status_label.setObjectName("energyCalibrationStatus")
+        calibration_layout.addWidget(self.calibration_status_label)
+        calibration_actions = QHBoxLayout()
+        calibration_actions.setContentsMargins(0, 0, 0, 0)
+        calibration_actions.setSpacing(6)
+        self.restore_calibration_button = QPushButton("Restore Configured")
+        self.restore_calibration_button.clicked.connect(
+            self._restore_configured_calibration
+        )
+        calibration_actions.addWidget(self.restore_calibration_button)
+        self.calibration_button = QPushButton("Edit Energy Knob Calibration…")
+        self.calibration_button.clicked.connect(self._open_calibration_editor)
+        calibration_actions.addWidget(self.calibration_button, 1)
+        calibration_layout.addLayout(calibration_actions)
+        layout.addWidget(self.energy_calibration_controls)
+
         layout.addWidget(self._config_section_label("MEASUREMENT"))
         sampling_form = self._config_form()
 
@@ -1144,24 +1165,6 @@ class MainWindow(QMainWindow):
         self.review_button.clicked.connect(self._review_recommendation)
         self.review_button.hide()
 
-        self.calibration_text = QPlainTextEdit()
-        self.calibration_text.setReadOnly(True)
-        self.calibration_page = QWidget()
-        calibration_layout = QVBoxLayout(self.calibration_page)
-        calibration_layout.setContentsMargins(8, 4, 8, 8)
-        calibration_actions = QHBoxLayout()
-        calibration_actions.addStretch(1)
-        self.restore_calibration_button = QPushButton("Restore Configured Calibration")
-        self.restore_calibration_button.clicked.connect(
-            self._restore_configured_calibration
-        )
-        calibration_actions.addWidget(self.restore_calibration_button)
-        self.calibration_button = QPushButton("Open Calibration Editor")
-        self.calibration_button.clicked.connect(self._open_calibration_editor)
-        calibration_actions.addWidget(self.calibration_button)
-        calibration_layout.addLayout(calibration_actions)
-        calibration_layout.addWidget(self.calibration_text, 1)
-
         self.measure_table = self._table(
             ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
         )
@@ -1325,11 +1328,6 @@ class MainWindow(QMainWindow):
             online_layout,
             "Recommendation Details",
             self.correction_page,
-        )
-        self._add_detail_section(
-            online_layout,
-            "Energy Knob and Settings",
-            self.calibration_page,
         )
         self._add_detail_section(
             online_layout,
@@ -1535,7 +1533,7 @@ class MainWindow(QMainWindow):
         finally:
             self._loading_widgets = False
         self._refresh_operation_plan()
-        self._show_calibration_summary()
+        self._update_calibration_controls()
         self._update_static_safety_status()
         if self.config.section.model_only:
             self._show_workflow_detail(self.model_page)
@@ -2937,6 +2935,13 @@ class MainWindow(QMainWindow):
         self.calibration_button.setEnabled(
             not running and not self.config.section.model_only
         )
+        self.energy_calibration_controls.setVisible(
+            not self.config.section.model_only
+        )
+        self.restore_calibration_button.setVisible(
+            not self.config.section.model_only
+            and self.session_energy_calibration_source is not None
+        )
         self.restore_calibration_button.setEnabled(
             not running
             and not self.config.section.model_only
@@ -3206,56 +3211,57 @@ class MainWindow(QMainWindow):
             if hasattr(self, "log_view"):
                 self._append_log(f"Operation plan validation failed: {exc}")
 
-    def _show_calibration_summary(self) -> None:
+    def _update_calibration_controls(self) -> None:
         calibration = self.config.energy_knob.calibration
-        if self.config.section.model_only:
-            self.calibration_text.setPlainText(
-                "Energy Calibration\n\n"
-                "This section is model-only. Elegant calculates dispersion directly, "
-                "so no energy-knob calibration is used.\n"
-            )
-            return
-        lines = [
-            "Energy Calibration",
-            "",
+        if self.session_energy_calibration_source is not None:
+            source = "Session override"
+            tone = "warning"
+        elif is_direct_delta_actuator(self.config.energy_knob.actuator):
+            source = "Not required"
+            tone = "subtle"
+        elif not calibration:
+            source = "Missing"
+            tone = "danger"
+        elif self.app_context is not None:
+            source = "Machine profile"
+            tone = "success"
+        else:
+            source = "Loaded configuration"
+            tone = "success"
+        self.calibration_status_label.setText(f"Calibration: {source}")
+        tooltip_lines = [
             f"Actuator: {self.config.energy_knob.actuator}",
             f"Unit: {self.config.energy_knob.actuator_unit}",
             f"Target momentum perturbation: {self.config.energy_knob.delta:g} dp/p",
         ]
         if self.session_energy_calibration_source is not None:
-            lines.extend(
-                [
-                    "",
-                    "ACTIVE SOURCE: CURRENT SESSION OVERRIDE",
+            tooltip_lines.extend(
+                (
+                    "Source: current session override",
                     "The machine profile was not modified.",
                     f"Draft: {self.session_energy_calibration_source}",
-                    "",
-                    "Active session calibration:",
-                ]
+                )
             )
         elif self.app_context is not None:
-            lines.extend(
-                [
-                    "",
-                    "ACTIVE SOURCE: CONFIGURED MACHINE PROFILE",
-                    "Commissioning approval remains governed by the profile write policy.",
-                ]
-            )
+            tooltip_lines.append("Source: configured machine profile")
         else:
-            lines.extend(["", "ACTIVE SOURCE: LOADED CONFIGURATION"])
+            tooltip_lines.append("Source: loaded configuration")
         if calibration:
-            if self.session_energy_calibration_source is None:
-                lines.extend(["", "Current calibration:"])
             for key, value in calibration.items():
-                lines.append(f"  {key}: {value}")
+                tooltip_lines.append(f"{key}: {value}")
         else:
-            lines.extend(["", "Current calibration: missing"])
-        if self.session_energy_calibration_source is not None:
-            lines.extend(["", "Configured machine-profile calibration:"])
-            for key, value in self.configured_energy_calibration.items():
-                lines.append(f"  {key}: {value}")
-        if hasattr(self, "calibration_text"):
-            self.calibration_text.setPlainText("\n".join(lines) + "\n")
+            tooltip_lines.append("Calibration data: missing")
+        self.calibration_status_label.setToolTip("\n".join(tooltip_lines))
+        self.calibration_status_label.setProperty("tone", tone)
+        self.calibration_status_label.style().unpolish(
+            self.calibration_status_label
+        )
+        self.calibration_status_label.style().polish(
+            self.calibration_status_label
+        )
+        self.restore_calibration_button.setText(
+            "Restore Profile" if self.app_context is not None else "Restore Configured"
+        )
 
     def _open_calibration_editor(self) -> None:
         if self.config.section.model_only:
@@ -3310,12 +3316,11 @@ class MainWindow(QMainWindow):
             "recommendations were discarded."
         )
         self._refresh_operation_plan()
-        self._show_calibration_summary()
+        self._update_calibration_controls()
         self._update_energy_step_summary()
         self.last_live_preflight = None
         self._update_static_safety_status()
         self._set_running(False, "")
-        self._show_workflow_detail(self.calibration_page)
         self._refresh_status("Calibration loaded")
 
     def _restore_configured_calibration(self) -> None:
@@ -3349,12 +3354,11 @@ class MainWindow(QMainWindow):
             "recommendations were discarded."
         )
         self._refresh_operation_plan()
-        self._show_calibration_summary()
+        self._update_calibration_controls()
         self._update_energy_step_summary()
         self.last_live_preflight = None
         self._update_static_safety_status()
         self._set_running(False, "")
-        self._show_workflow_detail(self.calibration_page)
         self._refresh_status("Configured calibration restored")
 
     def _toggle_theme(self) -> None:

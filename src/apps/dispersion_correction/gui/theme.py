@@ -191,6 +191,21 @@ def build_stylesheet(name: str) -> str:
         font-weight: 600;
         padding: 7px 9px;
     }}
+    QLabel#energyCalibrationStatus {{
+        color: {t['text_muted']};
+        font-size: 10px;
+        font-weight: 700;
+        padding: 0px 2px;
+    }}
+    QLabel#energyCalibrationStatus[tone="success"] {{
+        color: {t['status_success']};
+    }}
+    QLabel#energyCalibrationStatus[tone="warning"] {{
+        color: {t['status_warning']};
+    }}
+    QLabel#energyCalibrationStatus[tone="danger"] {{
+        color: {t['status_danger']};
+    }}
     QLabel#operationBanner {{
         background: {t['status_strip_bg']};
         border: 1px solid {t['status_strip_border']};
