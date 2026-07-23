@@ -3,9 +3,56 @@
   "control_backends": [
     "real"
   ],
-  "target_bpms": [
-    "BPM09",
-    "BPM10"
+  "default_section": "dogleg",
+  "sections": [
+    {
+      "id": "dogleg",
+      "display_name": "IRFEL Dogleg",
+      "model_entrance": "BPM07",
+      "model_exit": "BPM10",
+      "target_bpms": [
+        "BPM09",
+        "BPM10"
+      ],
+      "target_dispersion_mm": [
+        0.0,
+        0.0
+      ],
+      "knobs": [
+        {
+          "name": "Q13_Q16_sym",
+          "devices": {
+            "QM13": 1.0,
+            "QM16": 1.0
+          },
+          "scan_step": 0.0005,
+          "limit": 0.012
+        },
+        {
+          "name": "Q14_Q15_sym",
+          "devices": {
+            "QM14": 1.0,
+            "QM15": 1.0
+          },
+          "scan_step": 0.0005,
+          "limit": 0.012
+        }
+      ],
+      "model_observables": [
+        {
+          "name": "BPM09 Dx",
+          "element": "BPM09",
+          "component": "dx",
+          "target": 0.0
+        },
+        {
+          "name": "BPM10 Dx",
+          "element": "BPM10",
+          "component": "dx",
+          "target": 0.0
+        }
+      ]
+    }
   ],
   "bpm_position_scale_to_mm": {
     "real": 1.0
@@ -24,26 +71,6 @@
     "set_channel": "phase_set",
     "readback_channel": "phase_readback"
   },
-  "knobs": [
-    {
-      "name": "Q13_Q16_sym",
-      "devices": {
-        "QM13": 1.0,
-        "QM16": 1.0
-      },
-      "scan_step": 0.0005,
-      "limit": 0.012
-    },
-    {
-      "name": "Q14_Q15_sym",
-      "devices": {
-        "QM14": 1.0,
-        "QM15": 1.0
-      },
-      "scan_step": 0.0005,
-      "limit": 0.012
-    }
-  ],
   "measurement": {
     "plane": "x",
     "samples_per_step": 5,

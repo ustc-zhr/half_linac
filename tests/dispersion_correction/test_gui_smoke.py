@@ -248,7 +248,15 @@ def test_main_window_constructs_offscreen(tmp_path) -> None:
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
     assert "CONFIGURED MACHINE PROFILE" in profile_window.calibration_text.toPlainText()
-    assert profile_window.model_response_button.isHidden()
+    assert profile_window.section_combo.currentData() == "dogleg"
+    assert profile_window.model_boundary_label.text() == "Assume D=D'=0 at BPM07"
+    assert profile_window.model_source_combo.itemText(0) == "Design lattice"
+    assert profile_window.model_source_combo.itemText(1) == "Current snapshot"
+    assert "REAL backend" in profile_window.model_source_combo.toolTip()
+    assert not profile_window.model_response_button.isHidden()
+    assert profile_window.model_response_button.isEnabled()
+    assert profile_window.show_design_model_checkbox.isVisibleTo(profile_window)
+    assert profile_window.show_snapshot_model_checkbox.isVisibleTo(profile_window)
     assert profile_window.tabs.isTabEnabled(
         profile_window.tabs.indexOf(profile_window.model_page)
     )

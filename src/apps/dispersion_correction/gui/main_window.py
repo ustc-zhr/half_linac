@@ -1340,6 +1340,9 @@ class MainWindow(QMainWindow):
         overview_options_row.addStretch(1)
         self.show_design_model_checkbox = QCheckBox("Design model")
         self.show_design_model_checkbox.setChecked(False)
+        self.show_design_model_checkbox.setToolTip(
+            "Analyze a model first, then toggle the design-lattice reference curve."
+        )
         self.show_design_model_checkbox.toggled.connect(
             self._model_visibility_changed
         )
@@ -1347,6 +1350,10 @@ class MainWindow(QMainWindow):
         self.show_snapshot_model_checkbox = QCheckBox("Current snapshot")
         self.show_snapshot_model_checkbox.setChecked(False)
         self.show_snapshot_model_checkbox.setEnabled(False)
+        self.show_snapshot_model_checkbox.setToolTip(
+            "In Dispersion Comparison, select Current snapshot and run Analyze Model "
+            "before enabling this curve."
+        )
         self.show_snapshot_model_checkbox.toggled.connect(
             self._model_visibility_changed
         )

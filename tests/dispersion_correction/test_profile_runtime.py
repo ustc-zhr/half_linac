@@ -17,8 +17,10 @@ from half_linac.src.apps.dispersion_correction.models import KnobConfig
 from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
+    build_model_snapshot,
     describe_app_support,
     load_app_context,
+    resolve_channel,
 )
 
 
@@ -51,6 +53,19 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
     pv_map = config.backend.options["pv_map"]
     assert config.backend.type == "epics"
     assert config.backend.mode == "read_only"
+    assert context.model_backend is not None
+    assert config.section.id == "dogleg"
+    assert config.section.display_name == "IRFEL Dogleg"
+    assert config.section.model_entrance == "BPM07"
+    assert config.section.model_exit == "BPM10"
+    assert tuple(item.element for item in config.section.model_observables) == (
+        "BPM09",
+        "BPM10",
+    )
+    assert tuple(item.component for item in config.section.model_observables) == (
+        "dx",
+        "dx",
+    )
     assert pv_map["bpms"]["BPM09"]["x"] == "IRFEL-BI:BPM09:BPM_PX2"
     assert pv_map["quadrupoles"]["QM13"]["current_set"] == "IRFEL:PS:QM13:current:ao"
     assert pv_map["energy_knob"] == {
@@ -63,6 +78,32 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
     assert preflight.checks["energy_calibration_available"]
     assert preflight.checks["real_machine_timing_positive"]
     assert not any("no independent readback" in warning for warning in preflight.warnings)
+
+
+def test_irfel_dogleg_current_snapshot_maps_all_section_quadrupoles() -> None:
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="irfel",
+        control_backend="real",
+    )
+    names = tuple(f"QM{index:02d}" for index in range(12, 19))
+    pv_values = {
+        resolve_channel(context, name, "K1", "real"): float(index)
+        for index, name in enumerate(names, start=12)
+    }
+
+    snapshot = build_model_snapshot(
+        context,
+        tuple((name, "K1") for name in names),
+        source="live",
+        pv_reader=pv_values.__getitem__,
+    )
+
+    assert snapshot.source == "live_from_real"
+    assert snapshot.lattice_overrides == {
+        name: {"K1": float(index)}
+        for index, name in enumerate(names, start=12)
+    }
 
 
 def test_profile_selection_derives_bpm_and_quad_pvs_from_machine_elements() -> None:
