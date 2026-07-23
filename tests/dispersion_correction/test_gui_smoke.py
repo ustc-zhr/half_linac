@@ -52,6 +52,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.last_run_dialog.isHidden()
     assert window.last_run_button.text() == "Last Run…"
     assert not window.last_run_button.isEnabled()
+    assert window.offline_demo_button.isHidden()
     assert window.response_details_button.isHidden()
     assert window.recommendation_details_button.isHidden()
     assert window.plot_state_label.text() == "No measured data"
@@ -312,6 +313,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.status_strip.items["ACCESS"].value_label.text() == "READ ONLY"
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
+    assert profile_window.offline_demo_button.isVisibleTo(profile_window)
     assert profile_window.calibration_status_label.text() == "Calibration: Machine profile"
     assert profile_window.calibration_status_label.isHidden()
     assert profile_window.section_combo.currentData() == "dogleg"
@@ -356,6 +358,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.next_action_button.text() == "Online Measurement Unavailable"
     assert profile_window.next_action_button.property("workflowAction") == ""
     assert not profile_window.next_action_button.isEnabled()
+    assert profile_window.next_action_button.isHidden()
     assert "read-only" in profile_window.workflow_hint_label.text().lower()
     assert "read-only" in profile_window.preflight_button.toolTip().lower()
     assert "read-only" in profile_window.measure_button.toolTip().lower()
@@ -617,3 +620,96 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_real_window.model_response_button.isEnabled()
     half_real_window.close()
     app.quit()
+
+
+def test_offline_demo_runs_the_reviewed_workflow() -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PyQt5.QtWidgets import QApplication
+
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
+
+    app = QApplication.instance() or QApplication([])
+    demo = MainWindow(offline_demo=True)
+    demo.show()
+    app.processEvents()
+
+    assert demo.windowTitle() == "Dispersion Correction · Offline Demo"
+    assert demo.app_title_label.text() == "Dispersion Correction"
+    assert demo.config_title_label.text() == "Offline Demo"
+    assert demo.load_button.isHidden()
+    assert demo.offline_demo_button.isHidden()
+    assert demo.status_strip.items["MACHINE"].value_label.text() == "STANDALONE"
+    assert demo.status_strip.items["BACKEND"].value_label.text() == "OFFLINE"
+    assert demo.status_strip.items["ACCESS"].value_label.text() == "OFFLINE DEMO"
+    assert demo.next_action_button.text() == "Measure Dispersion"
+    assert demo.next_action_button.isVisibleTo(demo)
+
+    response = AchromatWorkflow(
+        demo._config_from_widgets()
+    ).build_response_matrix()
+    demo._task_completed("measure", response.measurement)
+    demo._set_running(False, "")
+    assert demo.next_action_button.text() == "Measure Q Response"
+
+    demo._task_completed("response", response)
+    demo._set_running(False, "")
+    assert demo.next_action_button.text() == "Review Recommendation"
+
+    demo._compute_recommendation()
+    assert demo.correction_recommendation is not None
+    assert demo.correction_recommendation.ready
+    demo.recommendation_dialog.close()
+    result = AchromatWorkflow(
+        demo._config_from_widgets()
+    ).apply_recommendation(demo.correction_recommendation)
+    demo._task_completed("apply", result)
+    demo._set_running(False, "")
+
+    assert result.success
+    assert demo.correction_table.rowCount() == 1
+    assert demo.last_run_button.isEnabled()
+    assert demo.next_action_button.text() == "Measure Q Response"
+    demo.close()
+
+
+def test_profile_window_opens_an_independent_offline_demo() -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PyQt5.QtWidgets import QApplication
+
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.profile_runtime import (
+        load_profile_run_config,
+    )
+    from half_linac.src.shared.machine_profile import load_app_context
+
+    app = QApplication.instance() or QApplication([])
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="irfel",
+        control_backend="real",
+    )
+    _, config = load_profile_run_config(context)
+    profile = MainWindow(config, context)
+    profile.show()
+    app.processEvents()
+
+    assert profile.offline_demo_button.isVisibleTo(profile)
+    assert profile.next_action_button.isHidden()
+    profile.offline_demo_button.click()
+    app.processEvents()
+    demo = profile._offline_demo_window
+
+    assert demo is not None
+    assert demo.isVisible()
+    assert demo.app_context is None
+    assert demo.config.backend.type == "offline"
+    assert profile.config.backend.type == "epics"
+    assert profile.app_context is context
+
+    demo.close()
+    profile.close()

@@ -774,10 +774,14 @@ class MainWindow(QMainWindow):
         self,
         config: RunConfig | None = None,
         app_context: AppContext | None = None,
+        *,
+        offline_demo: bool = False,
     ) -> None:
         super().__init__()
         install_qt_window_raise_handler(self)
         self.app_context = app_context
+        self.offline_demo = bool(offline_demo)
+        self._offline_demo_window: MainWindow | None = None
         self.setWindowTitle(self._window_title())
         self.setMinimumSize(1120, 760)
         self.resize(1600, 1000)
@@ -821,6 +825,8 @@ class MainWindow(QMainWindow):
         self._refresh_status("Ready")
 
     def _window_title(self) -> str:
+        if self.offline_demo:
+            return "Dispersion Correction · Offline Demo"
         if self.app_context is None:
             return "Dispersion Correction"
         return (
@@ -837,6 +843,9 @@ class MainWindow(QMainWindow):
         self.overlays_header_label.setVisible(model_available)
         self.show_design_model_checkbox.setVisible(model_available)
         self.show_snapshot_model_checkbox.setVisible(model_available)
+        if self.offline_demo:
+            self.config_title_label.setText("Offline Demo")
+            self.load_button.hide()
         if self.app_context is None:
             return
         self.load_button.hide()
@@ -895,9 +904,9 @@ class MainWindow(QMainWindow):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(10)
-        title = QLabel("Dispersion Correction")
-        title.setObjectName("titleLabel")
-        header_layout.addWidget(title)
+        self.app_title_label = QLabel("Dispersion Correction")
+        self.app_title_label.setObjectName("titleLabel")
+        header_layout.addWidget(self.app_title_label)
         header_layout.addStretch(1)
 
         self.log_button = QToolButton()
@@ -930,6 +939,10 @@ class MainWindow(QMainWindow):
         energy_status = self.status_strip.items["ENERGY STEP"]
         energy_status.setMinimumWidth(160)
         energy_status.value_label.setWordWrap(False)
+        if self.offline_demo:
+            access_status = self.status_strip.items["ACCESS"]
+            access_status.setMinimumWidth(125)
+            access_status.value_label.setWordWrap(False)
         outer_layout.addWidget(self.status_strip)
         return frame
 
@@ -1184,7 +1197,7 @@ class MainWindow(QMainWindow):
 
         self.online_page = QFrame()
         self.online_page.setObjectName("workflowActionCard")
-        self.online_page.setMinimumHeight(190)
+        self.online_page.setMinimumHeight(150)
         self.online_page.setMaximumHeight(290)
         self.online_content = self.online_page
         online_layout = QVBoxLayout(self.online_page)
@@ -1196,6 +1209,17 @@ class MainWindow(QMainWindow):
         self.workflow_title_label.setObjectName("cardTitle")
         workflow_header.addWidget(self.workflow_title_label)
         workflow_header.addStretch(1)
+        self.offline_demo_button = QPushButton("Offline Demo…")
+        self.offline_demo_button.setObjectName("workflowSecondaryButton")
+        self.offline_demo_button.setToolTip(
+            "Open an independent deterministic demonstration. It does not access "
+            "or write any machine PV."
+        )
+        self.offline_demo_button.clicked.connect(self._open_offline_demo)
+        self.offline_demo_button.setVisible(
+            self.app_context is not None and not self.offline_demo
+        )
+        workflow_header.addWidget(self.offline_demo_button)
         self.last_run_button = QPushButton("Last Run…")
         self.last_run_button.setObjectName("workflowSecondaryButton")
         self.last_run_button.clicked.connect(self._show_last_run)
@@ -1206,6 +1230,10 @@ class MainWindow(QMainWindow):
         self.workflow_state_label.setObjectName("workflowState")
         self.workflow_state_label.setWordWrap(True)
         online_layout.addWidget(self.workflow_state_label)
+        self.workflow_hint_label = QLabel()
+        self.workflow_hint_label.setObjectName("workflowHint")
+        self.workflow_hint_label.setWordWrap(True)
+        online_layout.addWidget(self.workflow_hint_label)
         self.workflow_summary_label = QLabel()
         self.workflow_summary_label.setObjectName("workflowSummary")
         self.workflow_summary_label.setWordWrap(True)
@@ -1215,10 +1243,6 @@ class MainWindow(QMainWindow):
         self.next_action_button.setProperty("role", "control")
         self.next_action_button.clicked.connect(self._run_next_workflow_action)
         online_layout.addWidget(self.next_action_button)
-        self.workflow_hint_label = QLabel()
-        self.workflow_hint_label.setObjectName("workflowHint")
-        self.workflow_hint_label.setWordWrap(True)
-        online_layout.addWidget(self.workflow_hint_label)
         workflow_secondary_actions = QHBoxLayout()
         workflow_secondary_actions.addStretch(1)
         self.response_details_button = QPushButton("Q Response…")
@@ -1589,6 +1613,28 @@ class MainWindow(QMainWindow):
         self.last_run_dialog.show()
         self.last_run_dialog.raise_()
         self.last_run_dialog.activateWindow()
+
+    def _open_offline_demo(self) -> None:
+        existing = self._offline_demo_window
+        if existing is not None:
+            existing.show()
+            existing.raise_()
+            existing.activateWindow()
+            return
+        demo = MainWindow(
+            config=default_offline_config(),
+            app_context=None,
+            offline_demo=True,
+        )
+        demo.setAttribute(Qt.WA_DeleteOnClose, True)
+        demo.destroyed.connect(self._offline_demo_closed)
+        self._offline_demo_window = demo
+        demo.show()
+        demo.raise_()
+        demo.activateWindow()
+
+    def _offline_demo_closed(self, _object=None) -> None:
+        self._offline_demo_window = None
 
     def _show_model_details(self) -> None:
         self.model_dialog.setStyleSheet(build_stylesheet(self.theme_name))
@@ -2888,13 +2934,13 @@ class MainWindow(QMainWindow):
         if self.config.section.model_only:
             access = "MODEL ONLY"
         elif self.config.backend.type.lower() == "offline":
-            access = "OFFLINE"
+            access = "OFFLINE DEMO" if self.offline_demo else "OFFLINE"
         elif self.config.backend.mode == "write_enabled":
             access = "WRITE ENABLED"
         else:
             access = "READ ONLY"
         access_tone = "danger" if access == "WRITE ENABLED" else "warning"
-        if access == "OFFLINE":
+        if access in {"OFFLINE", "OFFLINE DEMO"}:
             access_tone = "subtle"
         readiness = self.status_strip.items["READINESS"].value_label.text()
         readiness_tone = "success" if readiness in {"READY", "OK"} else "warning"
@@ -3075,6 +3121,7 @@ class MainWindow(QMainWindow):
             self.next_action_button.setProperty("workflowAction", "")
             self.next_action_button.setText(button_text)
             self.next_action_button.setEnabled(False)
+            self.next_action_button.show()
             self.workflow_state_label.setText(state_text)
             self.workflow_hint_label.setText(
                 "Wait for the current operation to finish or use Abort when available."
@@ -3084,6 +3131,7 @@ class MainWindow(QMainWindow):
         self.next_action_button.setProperty("workflowAction", action or "")
         self.next_action_button.setText(button_text)
         self.next_action_button.setEnabled(action is not None)
+        self.next_action_button.setVisible(action is not None)
         self.workflow_state_label.setText(state_text)
         self.workflow_hint_label.setText(hint)
 
