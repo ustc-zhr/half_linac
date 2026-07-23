@@ -161,7 +161,7 @@ def build_stylesheet(name: str) -> str:
     QLabel[muted="true"] {{
         color: {t['text_muted']};
     }}
-    QLabel#configTitle {{
+    QLabel#configTitle, QLabel#cardTitle {{
         font-size: 15px;
         font-weight: 800;
     }}
@@ -176,11 +176,6 @@ def build_stylesheet(name: str) -> str:
         font-size: 15px;
         font-weight: 800;
         padding: 3px 2px 0px 2px;
-    }}
-    QLabel#workflowCardTitle {{
-        color: {t['text_primary']};
-        font-size: 13px;
-        font-weight: 800;
     }}
     QLabel#workflowSummary {{
         color: {t['status_success']};

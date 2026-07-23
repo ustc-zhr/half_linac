@@ -39,6 +39,8 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.workspace_splitter.parentWidget().objectName() == "workspacePanel"
     assert window.online_page.objectName() == "workflowActionCard"
     assert window.dispersion_overview.objectName() == "dispersionOverviewCard"
+    assert window.workflow_title_label.objectName() == "cardTitle"
+    assert window.overview_title_label.objectName() == "cardTitle"
     assert window.dispersion_curve.parentWidget() is window.dispersion_overview
     assert window.model_details_button.parentWidget() is window.dispersion_overview
     assert window.model_details_button.text() == "Model Details…"
