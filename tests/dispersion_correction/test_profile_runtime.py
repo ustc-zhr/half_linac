@@ -99,7 +99,7 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
     assert pv_map["bpms"]["BPM09"]["x"] == "IRFEL-BI:BPM09:BPM_PX2"
     assert pv_map["quadrupoles"]["QM13"] == {
         "control": "k1",
-        "K1": "IRFEL:PS:QM13:K1:ao",
+        "K1": "IRFEL:AP:QUAD:MQ3:K1:ao",
     }
     assert pv_map["energy_knob"] == {
         "set": "IRFEL:modulator1:HV_set:ao",
@@ -176,7 +176,7 @@ def test_profile_selection_derives_bpm_and_quad_pvs_from_machine_elements() -> N
     )
     assert selected.backend.options["pv_map"]["quadrupoles"]["QM11"] == {
         "control": "k1",
-        "K1": "IRFEL:PS:QM11:K1:ao",
+        "K1": "IRFEL:AP:QUAD:MQ1:K1:ao",
     }
 
 

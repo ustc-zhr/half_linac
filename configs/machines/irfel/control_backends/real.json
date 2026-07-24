@@ -182,42 +182,42 @@
       "current_readback": "IRFEL:PS:QM10:current:ai"
     },
     "QM11": {
-      "K1": "IRFEL:PS:QM11:K1:ao",
+      "K1": "IRFEL:AP:QUAD:MQ1:K1:ao",
       "current_set": "IRFEL:PS:QM11:current:ao",
       "current_readback": "IRFEL:PS:QM11:current:ai"
     },
     "QM12": {
-      "K1": "IRFEL:PS:QM12:K1:ao",
+      "K1": "IRFEL:AP:QUAD:MQ2:K1:ao",
       "current_set": "IRFEL:PS:QM12:current:ao",
       "current_readback": "IRFEL:PS:QM12:current:ai"
     },
     "QM13": {
-      "K1": "IRFEL:PS:QM13:K1:ao",
+      "K1": "IRFEL:AP:QUAD:MQ3:K1:ao",
       "current_set": "IRFEL:PS:QM13:current:ao",
       "current_readback": "IRFEL:PS:QM13:current:ai"
     },
     "QM14": {
-      "K1": "IRFEL:PS:QM14:K1:ao",
+      "K1": "IRFEL:AP:QUAD:MQ4:K1:ao",
       "current_set": "IRFEL:PS:QM14:current:ao",
       "current_readback": "IRFEL:PS:QM14:current:ai"
     },
     "QM15": {
-      "K1": "IRFEL:PS:QM15:K1:ao",
+      "K1": "IRFEL:AP:QUAD:MQ5:K1:ao",
       "current_set": "IRFEL:PS:QM15:current:ao",
       "current_readback": "IRFEL:PS:QM15:current:ai"
     },
     "QM16": {
-      "K1": "IRFEL:PS:QM16:K1:ao",
+      "K1": "IRFEL:AP:QUAD:MQ6:K1:ao",
       "current_set": "IRFEL:PS:QM16:current:ao",
       "current_readback": "IRFEL:PS:QM16:current:ai"
     },
     "QM17": {
-      "K1": "IRFEL:PS:QM17:K1:ao",
+      "K1": "IRFEL:AP:QUAD:MQ7:K1:ao",
       "current_set": "IRFEL:PS:QM17:current:ao",
       "current_readback": "IRFEL:PS:QM17:current:ai"
     },
     "QM18": {
-      "K1": "IRFEL:PS:QM18:K1:ao",
+      "K1": "IRFEL:AP:QUAD:MQ8:K1:ao",
       "current_set": "IRFEL:PS:QM18:current:ao",
       "current_readback": "IRFEL:PS:QM18:current:ai"
     },
