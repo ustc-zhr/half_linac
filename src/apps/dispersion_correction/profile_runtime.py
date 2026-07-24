@@ -93,6 +93,7 @@ def load_profile_run_config(
         "backend": backend,
         "energy_knob": dict(_mapping(selected.get("energy_knob"), "energy_knob")),
         "target_bpms": list(_string_sequence(selected.get("target_bpms"), "target_bpms")),
+        "monitor_bpms": list(selected.get("monitor_bpms", [])),
         "knobs": [dict(item) for item in _mapping_sequence(selected.get("knobs"), "knobs")],
         "section": section,
         "measurement": dict(_mapping(selected.get("measurement"), "measurement")),
@@ -159,8 +160,11 @@ def apply_profile_selection(
         return config
 
     allowed_bpms = set(selectable_profile_bpms(context))
+    measurement_bpms = tuple(
+        dict.fromkeys((*config.monitor_bpms, *target_bpms))
+    )
     allowed_quads = set(selectable_profile_quadrupoles(context))
-    unknown_bpms = [name for name in target_bpms if name not in allowed_bpms]
+    unknown_bpms = [name for name in measurement_bpms if name not in allowed_bpms]
     unknown_quads = [
         device
         for knob in knobs
@@ -181,7 +185,7 @@ def apply_profile_selection(
     options = dict(config.backend.options)
     options["pv_map"] = _build_selection_pv_map(
         context,
-        target_bpms,
+        measurement_bpms,
         knobs,
         _mapping(workflow.get("energy_knob"), "energy_knob"),
     )
@@ -349,6 +353,7 @@ def _measurement_payload(result: DispersionMeasurement) -> dict[str, Any]:
         "bpm_names": list(result.bpm_names),
         "values_mm": result.values_mm.tolist(),
         "target_values_mm": result.target_values_mm.tolist(),
+        "target_mask": result.target_mask.tolist(),
         "residual_values_mm": result.residual_values_mm.tolist(),
         "valid": result.valid.tolist(),
         "plus": _bpm_payload(result.plus),
@@ -369,10 +374,20 @@ def _bpm_payload(reading) -> dict[str, Any]:
 
 def _build_profile_pv_map(context: AppContext, workflow: Mapping[str, object]) -> dict[str, Any]:
     target_bpms = _string_sequence(workflow.get("target_bpms"), "target_bpms")
+    raw_monitor_bpms = workflow.get("monitor_bpms", [])
+    if not isinstance(raw_monitor_bpms, list):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.monitor_bpms must be a list."
+        )
+    monitor_bpms = tuple(str(name).strip() for name in raw_monitor_bpms)
+    if any(not name for name in monitor_bpms):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.monitor_bpms contains an empty name."
+        )
     knobs = _mapping_sequence(workflow.get("knobs"), "knobs")
     return _build_selection_pv_map(
         context,
-        target_bpms,
+        tuple(dict.fromkeys((*monitor_bpms, *target_bpms))),
         knobs,
         _mapping(workflow.get("energy_knob"), "energy_knob"),
     )
@@ -380,14 +395,14 @@ def _build_profile_pv_map(context: AppContext, workflow: Mapping[str, object]) -
 
 def _build_selection_pv_map(
     context: AppContext,
-    target_bpms,
+    bpm_names,
     knobs,
     energy_knob: Mapping[str, object],
 ) -> dict[str, Any]:
     backend_name = context.control_backend.name
 
     bpms: dict[str, dict[str, str]] = {}
-    for bpm_name in target_bpms:
+    for bpm_name in bpm_names:
         item = {"x": resolve_channel(context, bpm_name, "x")}
         try:
             item["y"] = resolve_channel(context, bpm_name, "y")
@@ -504,7 +519,15 @@ def _select_workflow_section(
         selected_section = _mapping(sections[0], "sections[0]")
 
     selected = {key: value for key, value in workflow.items() if key not in {"sections", "default_section"}}
-    for key in ("energy_knob", "target_bpms", "knobs", "measurement", "solver", "safety"):
+    for key in (
+        "energy_knob",
+        "target_bpms",
+        "monitor_bpms",
+        "knobs",
+        "measurement",
+        "solver",
+        "safety",
+    ):
         if key in selected_section:
             selected[key] = selected_section[key]
     selected["_section"] = {

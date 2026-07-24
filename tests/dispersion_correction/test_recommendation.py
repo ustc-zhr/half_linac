@@ -61,6 +61,13 @@ def test_reviewed_recommendation_applies_once_and_remeasures() -> None:
 
     assert result.success
     assert result.steps[0].accepted
+    assert result.steps[0].measurement_before is recommendation.measurement
+    assert result.steps[0].measurement_after is result.final
+    assert result.steps[0].knobs_before == result.initial_knobs
+    assert result.steps[0].knobs_trial == result.final_knobs
+    assert result.steps[0].device_values_before
+    assert result.steps[0].device_values_trial
+    assert not result.steps[0].restored
     assert result.final.rms_mm < result.initial.rms_mm
     assert result.response is response
 
@@ -75,3 +82,40 @@ def test_recommendation_rejects_stale_response_knobs() -> None:
             response.measurement,
             stale,
         )
+
+
+def test_monitor_bpms_are_retained_but_excluded_from_response_solve() -> None:
+    config, _machine, _workflow, _response = staged_fixture()
+    config = replace(
+        config,
+        monitor_bpms=("BPM_MON",),
+        backend=replace(
+            config.backend,
+            options={
+                **config.backend.options,
+                "model": {},
+            },
+        ),
+    )
+    machine = OfflineMachine(
+        config,
+        initial_dispersion_mm=[500.0, 90.0, 110.0],
+        response_matrix=[
+            [1.0e7, -1.0e7],
+            [-9000.0, -5000.0],
+            [-11000.0, 6000.0],
+        ],
+    )
+    workflow = AchromatWorkflow(config, machine=machine)
+    response = workflow.build_response_matrix()
+    recommendation = build_correction_recommendation(
+        config,
+        response.measurement,
+        response,
+    )
+
+    assert response.bpm_names == ("BPM_MON", *config.target_bpms)
+    assert response.measurement.target_mask.tolist() == [False, True, True]
+    assert recommendation.valid.tolist() == [False, True, True]
+    assert recommendation.predicted_values_mm.shape == (3,)
+    assert recommendation.predicted_rms_mm < response.measurement.rms_mm

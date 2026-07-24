@@ -24,3 +24,5 @@ def test_irfel_mock_dryrun_text_contains_device_names() -> None:
     assert "Q13_Q16_sym: QM13*1, QM16*1" in text
     assert "Q14_Q15_sym: QM14*1, QM15*1" in text
     assert "scan=+/-0.0005 A" in text
+    assert "Scan samples: 5" in text
+    assert "Verification samples: 10" in text

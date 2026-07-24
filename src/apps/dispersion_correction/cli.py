@@ -49,7 +49,9 @@ def measure_command(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     config = _load_runtime_config(args.config, section_id=args.section, write_operation=True)
-    measurement = AchromatWorkflow(config).measure_dispersion(config.measurement.final_samples)
+    measurement = AchromatWorkflow(config).measure_dispersion(
+        config.measurement.samples_per_step
+    )
     if args.json:
         import json
 
@@ -61,6 +63,7 @@ def measure_command(argv: list[str] | None = None) -> int:
                     "rms_mm": measurement.rms_mm,
                     "bpm_names": list(measurement.bpm_names),
                     "values_mm": measurement.values_mm.tolist(),
+                    "target_mask": measurement.target_mask.tolist(),
                     "valid": measurement.valid.tolist(),
                 },
                 indent=2,
@@ -68,9 +71,15 @@ def measure_command(argv: list[str] | None = None) -> int:
         )
     else:
         print(f"D_eff RMS: {measurement.rms_mm:.6g} mm")
-        for name, value, valid in zip(measurement.bpm_names, measurement.values_mm, measurement.valid):
+        for name, value, valid, is_target in zip(
+            measurement.bpm_names,
+            measurement.values_mm,
+            measurement.valid,
+            measurement.target_mask,
+        ):
             status = "valid" if valid else "invalid"
-            print(f"  {name}: {value:.6g} mm ({status})")
+            role = "correction" if is_target else "monitor"
+            print(f"  {name}: {value:.6g} mm ({role}, {status})")
     return 0
 
 
@@ -83,7 +92,7 @@ def status_command(argv: list[str] | None = None) -> int:
     if config.backend.type.lower() == "epics":
         config = replace(config, backend=replace(config.backend, mode="read_only"))
     machine = create_machine(config)
-    bpm = machine.read_bpm(config.target_bpms)
+    bpm = machine.read_bpm(config.measurement_bpms)
     if hasattr(machine, "read_quadrupole_readbacks"):
         quadrupoles = machine.read_quadrupole_readbacks()
     else:
@@ -101,6 +110,11 @@ def status_command(argv: list[str] | None = None) -> int:
                 "x": _finite_or_none(float(bpm.x_mm[index])),
                 "y": _finite_or_none(float(bpm.y_mm[index])),
                 "valid": bool(bpm.valid[index]),
+                "role": (
+                    "correction"
+                    if name in config.target_bpms
+                    else "monitor"
+                ),
             }
             for index, name in enumerate(bpm.names)
         ],

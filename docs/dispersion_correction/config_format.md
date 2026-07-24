@@ -19,7 +19,10 @@ The schema is the same for JSON and YAML:
 - `backend`: backend type, mode, and optional PV/model settings.
 - `energy_knob`: momentum perturbation request and optional RF phase
   calibration.
-- `target_bpms`: ordered BPM names used for `D_x,eff`.
+- `target_bpms`: correction BPMs used for residual RMS, response solving, and
+  acceptance.
+- `monitor_bpms`: optional diagnostic BPMs measured in the same energy scans
+  and shown in plots, but excluded from the correction objective.
 - `knobs`: high-level symmetric correction knobs, response scan steps, and
   cumulative limits relative to the workflow snapshot.
 - `measurement`: horizontal-plane samples per step, final samples, and settle
@@ -32,7 +35,8 @@ the small set of facts that cannot be inferred from element kinds alone:
 
 - `id` and `display_name`;
 - `model_entrance` and `model_exit`;
-- recommended `target_bpms` and correction `knobs`;
+- recommended correction `target_bpms`, diagnostic `monitor_bpms`, and
+  correction `knobs`;
 - `target_dispersion_mm`, which defaults to zero for legacy configurations;
 - `model_observables`, which defines model constraints by element and component
   (`dx`, `dxp`, `dy`, or `dyp`); position components use mm and angular
@@ -54,9 +58,11 @@ elements must lie inside that interval. If `model_observables` is omitted, the
 model keeps the legacy behavior of using horizontal dispersion at each
 `target_bpms` entry.
 
-The correction objective is the RMS residual `D_eff - target_dispersion`, not
-unconditionally `D_eff -> 0`. Existing IRFEL configurations omit the target and
-therefore retain their original zero-target behavior.
+The correction objective is the RMS residual `D_eff - target_dispersion` over
+`target_bpms`, not unconditionally `D_eff -> 0` at every measured location.
+`monitor_bpms` may therefore retain the nonzero dispersion expected inside a
+bend without driving the solver. Existing configurations that omit
+`monitor_bpms` retain their original behavior.
 
 In Control Room mode, `target_bpms` and `knobs` are recommended defaults rather
 than complete selectable lists. The GUI discovers BPM candidates from profile

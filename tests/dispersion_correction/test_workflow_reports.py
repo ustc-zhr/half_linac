@@ -47,6 +47,39 @@ def test_offline_workflow_improves_dispersion_by_success_threshold() -> None:
     assert result.improvement >= config.solver.success_min_improvement
     assert result.final.rms_mm < result.initial.rms_mm
     assert any(step.accepted for step in result.steps)
+    assert all(step.measurement_before is not None for step in result.steps)
+    accepted = [step for step in result.steps if step.accepted]
+    assert all(step.measurement_after is not None for step in accepted)
+    assert all(step.knobs_before is not None for step in result.steps)
+    assert all(step.knobs_trial is not None for step in accepted)
+
+
+def test_automatic_workflow_streams_completed_generation_measurements() -> None:
+    config = load_config(CONFIG_PATH)
+    updates = []
+    result = AchromatWorkflow(
+        config,
+        correction_measurement_callback=(
+            lambda iteration, total, state, measurement: updates.append(
+                (iteration, total, state, measurement)
+            )
+        ),
+    ).run()
+
+    assert updates[0][2] == "initial"
+    assert updates[0][3] is result.initial
+    assert updates[-1][2] == "final"
+    generation_updates = [
+        update for update in updates if update[2] in {"accepted", "rejected"}
+    ]
+    assert len(generation_updates) == sum(
+        step.measurement_after is not None for step in result.steps
+    )
+    assert [update[0] for update in generation_updates] == [
+        step.iteration
+        for step in result.steps
+        if step.measurement_after is not None
+    ]
 
 
 def test_workflow_reports_structured_progress() -> None:
@@ -192,6 +225,12 @@ def test_reports_include_bpm_knob_and_safety_sections() -> None:
     assert data["bpm_table"]
     assert "Q1_sym" in data["knob_delta"]
     assert "safety" in data
+    assert data["steps"][0]["measurement_before"]["bpm_names"]
+    assert data["steps"][0]["measurement_after"]["values_mm"]
+    assert data["steps"][0]["knobs_before"]
+    assert data["steps"][0]["device_values_before"]
+    assert data["steps"][0]["device_values_trial"]
+    assert "restored" in data["steps"][0]
     assert "initial_rms_mm" in json_text
     assert "BPM01" in csv_text
     assert "## Knobs" in markdown

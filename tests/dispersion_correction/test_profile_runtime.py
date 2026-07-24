@@ -32,6 +32,27 @@ class FakeEpics:
         return self.values.get(pv)
 
 
+def test_irfel_profile_separates_monitor_and_correction_bpms() -> None:
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="irfel",
+        control_backend="real",
+    )
+    _, config = load_profile_run_config(context)
+
+    assert config.monitor_bpms == ("BPM07", "BPM08")
+    assert config.target_bpms == ("BPM09", "BPM10")
+    assert config.measurement_bpms == (
+        "BPM07",
+        "BPM08",
+        "BPM09",
+        "BPM10",
+    )
+    assert set(config.backend.options["pv_map"]["bpms"]) == set(
+        config.measurement_bpms
+    )
+
+
 def test_irfel_vm_profile_opens_as_model_only_without_energy_knob_pvs() -> None:
     context = load_app_context(
         "dispersion_correction",

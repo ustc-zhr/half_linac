@@ -36,11 +36,11 @@ class OfflineMachine(MachineInterface):
         self._reference_orbit = (
             np.asarray(configured_reference_orbit, dtype=float)
             if configured_reference_orbit is not None
-            else np.zeros(len(config.target_bpms), dtype=float)
+            else np.zeros(len(config.measurement_bpms), dtype=float)
         )
         self._rng = np.random.default_rng(int(model_options.get("seed", seed)))
         self._noise_mm = float(model_options.get("noise_mm", noise_mm))
-        n_bpm = len(config.target_bpms)
+        n_bpm = len(config.measurement_bpms)
         n_knob = len(config.knobs)
         configured_initial_dispersion = model_options.get("initial_dispersion_mm")
         configured_response_matrix = model_options.get("response_matrix")
@@ -69,9 +69,9 @@ class OfflineMachine(MachineInterface):
         if self._response.shape != (n_bpm, n_knob):
             raise ValueError("response_matrix shape must be (n_bpm, n_knob)")
         if self._initial_dispersion.shape != (n_bpm,):
-            raise ValueError("initial_dispersion_mm length must match target_bpms")
+            raise ValueError("initial_dispersion_mm length must match measurement_bpms")
         if self._reference_orbit.shape != (n_bpm,):
-            raise ValueError("reference_orbit_mm length must match target_bpms")
+            raise ValueError("reference_orbit_mm length must match measurement_bpms")
         self._charge = 1.0
         self._loss = 1.0
         self.unsafe = False
@@ -85,8 +85,10 @@ class OfflineMachine(MachineInterface):
         return self._mode
 
     def read_bpm(self, bpm_names: Sequence[str]) -> BPMReading:
-        if tuple(bpm_names) != self.config.target_bpms:
-            raise ValueError("OfflineMachine requires reading configured target_bpms in order")
+        if tuple(bpm_names) != self.config.measurement_bpms:
+            raise ValueError(
+                "OfflineMachine requires reading configured measurement_bpms in order"
+            )
         dispersion = self.current_dispersion()
         x = self._reference_orbit + dispersion * self._energy_delta
         if self._noise_mm > 0:

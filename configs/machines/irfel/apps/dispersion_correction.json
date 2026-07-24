@@ -7,16 +7,20 @@
   "model_only_control_backends": [
     "vm"
   ],
-  "default_section": "dogleg",
+  "default_section": "MIR-dogleg",
   "sections": [
     {
-      "id": "dogleg",
-      "display_name": "IRFEL Dogleg",
+      "id": "MIR-dogleg",
+      "display_name": "MIR Dogleg",
       "model_entrance": "BPM07",
       "model_exit": "BPM10",
       "target_bpms": [
         "BPM09",
         "BPM10"
+      ],
+      "monitor_bpms": [
+        "BPM07",
+        "BPM08"
       ],
       "target_dispersion_mm": [
         0.0,

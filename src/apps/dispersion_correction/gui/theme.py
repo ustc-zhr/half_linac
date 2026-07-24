@@ -83,6 +83,38 @@ def build_stylesheet(name: str) -> str:
         background: {t['panel_bg']};
         color: {t['text_primary']};
     }}
+    QMessageBox {{
+        background: {t['panel_bg']};
+        color: {t['text_primary']};
+    }}
+    QMessageBox QLabel {{
+        background: transparent;
+        color: {t['text_primary']};
+        padding: 3px;
+    }}
+    QMessageBox QPushButton {{
+        min-width: 86px;
+        min-height: 30px;
+        border-radius: 9px;
+        padding: 3px 12px;
+    }}
+    QMessageBox QPushButton:default,
+    QDialogButtonBox QPushButton:default {{
+        background: {t['focus']};
+        border-color: {t['focus']};
+        color: {t['window_bg']};
+    }}
+    QMessageBox QPushButton:default:hover,
+    QDialogButtonBox QPushButton:default:hover {{
+        background: {t['status_success']};
+        border-color: {t['status_success']};
+    }}
+    QMessageBox QPushButton:default:pressed,
+    QDialogButtonBox QPushButton:default:pressed {{
+        background: {t['button_pressed']};
+        border-color: {t['focus']};
+        color: {t['text_primary']};
+    }}
     QDialog#bpmSelectionDialog QLabel#bpmSelectionPrompt,
     QDialog#knobSelectionDialog QLabel#knobSelectionPrompt {{
         color: {t['text_muted']};
@@ -147,6 +179,31 @@ def build_stylesheet(name: str) -> str:
     QWidget#workflowContent {{
         background: {t['panel_bg']};
         border: none;
+    }}
+    QScrollArea#advancedSettingsArea,
+    QScrollArea#advancedSettingsArea > QWidget#qt_scrollarea_viewport,
+    QWidget#advancedSettingsContent {{
+        background: {t['panel_bg']};
+        border: none;
+    }}
+    QScrollArea#advancedSettingsArea QScrollBar:vertical {{
+        background: {t['panel_bg']};
+        border: none;
+        width: 8px;
+        margin: 0px;
+    }}
+    QScrollArea#advancedSettingsArea QScrollBar::handle:vertical {{
+        background: {t['button_border']};
+        border-radius: 4px;
+        min-height: 24px;
+    }}
+    QScrollArea#advancedSettingsArea QScrollBar::add-line:vertical,
+    QScrollArea#advancedSettingsArea QScrollBar::sub-line:vertical {{
+        height: 0px;
+    }}
+    QScrollArea#advancedSettingsArea QScrollBar::add-page:vertical,
+    QScrollArea#advancedSettingsArea QScrollBar::sub-page:vertical {{
+        background: transparent;
     }}
     QFrame#statusStrip {{
         background: transparent;
@@ -353,8 +410,10 @@ def build_stylesheet(name: str) -> str:
     QPushButton[role="control"]:enabled {{
         border-color: {t['focus']};
     }}
-    QPushButton#nextWorkflowAction {{
+    QPushButton#nextWorkflowAction,
+    QPushButton#automaticCorrectionButton {{
         min-height: 38px;
+        max-height: 38px;
         font-size: 14px;
     }}
     QPushButton#modelDetailsButton {{

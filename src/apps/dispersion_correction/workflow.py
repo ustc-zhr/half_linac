@@ -29,6 +29,10 @@ LogCallback = Callable[[str], None]
 CancellationCallback = Callable[[], bool]
 ProgressCallback = Callable[[str, int, int], None]
 PreflightCallback = Callable[[object], None]
+CorrectionMeasurementCallback = Callable[
+    [int, int, str, DispersionMeasurement],
+    None,
+]
 
 
 class WorkflowCancelled(RuntimeError):
@@ -55,6 +59,7 @@ class AchromatWorkflow:
         cancellation_callback: CancellationCallback | None = None,
         progress_callback: ProgressCallback | None = None,
         preflight_callback: PreflightCallback | None = None,
+        correction_measurement_callback: CorrectionMeasurementCallback | None = None,
     ) -> None:
         self.config = config
         self.machine = machine if machine is not None else create_machine(config)
@@ -62,6 +67,7 @@ class AchromatWorkflow:
         self.cancellation_callback = cancellation_callback
         self.progress_callback = progress_callback
         self.preflight_callback = preflight_callback
+        self.correction_measurement_callback = correction_measurement_callback
         self.knob_names = tuple(knob.name for knob in config.knobs)
         self._progress_depth = 0
         self.last_live_preflight = None
@@ -109,13 +115,27 @@ class AchromatWorkflow:
             self.machine.set_energy_delta(energy0)
             self.machine.wait_stable()
 
+        target_by_bpm = dict(
+            zip(
+                self.config.target_bpms,
+                self.config.section.target_dispersion_mm,
+            )
+        )
+        measurement_bpms = self.config.measurement_bpms
         measurement = compute_effective_dispersion(
-            bpm_names=self.config.target_bpms,
+            bpm_names=measurement_bpms,
             plus=plus,
             minus=minus,
             delta=delta,
             plane=self.config.measurement.plane,
-            target_values_mm=self.config.section.target_dispersion_mm,
+            target_values_mm=tuple(
+                target_by_bpm.get(name, 0.0)
+                for name in measurement_bpms
+            ),
+            target_mask=tuple(
+                name in target_by_bpm
+                for name in measurement_bpms
+            ),
         )
         self._log(f"Measured D_eff RMS: {measurement.rms_mm:.6g} mm")
         if report_progress:
@@ -148,7 +168,10 @@ class AchromatWorkflow:
         completed_steps = 1
         if report_progress:
             self._progress("Baseline measured", completed_steps, total_steps)
-        matrix = np.zeros((len(self.config.target_bpms), len(self.knob_names)), dtype=float)
+        matrix = np.zeros(
+            (len(self.config.measurement_bpms), len(self.knob_names)),
+            dtype=float,
+        )
         scan_steps = knob_set.scan_steps()
 
         try:
@@ -190,7 +213,12 @@ class AchromatWorkflow:
             self.machine.restore(base_snapshot)
             self.machine.wait_stable()
 
-        result = response_result(matrix, self.config.target_bpms, self.knob_names, base_measurement)
+        result = response_result(
+            matrix,
+            self.config.measurement_bpms,
+            self.knob_names,
+            base_measurement,
+        )
         self._validate_response_quality(result)
         if report_progress:
             self._progress("Response complete", total_steps, total_steps)
@@ -221,7 +249,7 @@ class AchromatWorkflow:
         self,
         recommendation: CorrectionRecommendation,
     ) -> CorrectionResult:
-        if recommendation.measurement.bpm_names != self.config.target_bpms:
+        if recommendation.measurement.bpm_names != self.config.measurement_bpms:
             raise ValueError("Recommendation BPMs do not match the current configuration")
         if recommendation.response.knob_names != self.knob_names:
             raise ValueError("Recommendation knobs do not match the current configuration")
@@ -247,6 +275,7 @@ class AchromatWorkflow:
             self.config.measurement.samples_per_step
         )
         steps: list[CorrectionStep] = []
+        trial_state = None
         try:
             self._check_cancelled()
             self._progress("Applying reviewed quadrupole targets", 1, 4)
@@ -256,6 +285,7 @@ class AchromatWorkflow:
                 recommendation,
             )
             self.machine.wait_stable()
+            trial_state = self.machine.snapshot()
             self._check_cancelled()
             if not self.machine.is_safe():
                 raise RuntimeError("Machine unsafe after reviewed correction step")
@@ -289,6 +319,13 @@ class AchromatWorkflow:
                     ),
                     rms_before_mm=recommendation.measurement.rms_mm,
                     rms_after_mm=trial_measurement.rms_mm,
+                    measurement_before=recommendation.measurement,
+                    measurement_after=trial_measurement,
+                    knobs_before=dict(initial_knobs),
+                    knobs_trial=dict(target_knobs),
+                    device_values_before=dict(initial_state.device_values),
+                    device_values_trial=dict(trial_state.device_values),
+                    restored=not accepted,
                 )
             )
             if not accepted:
@@ -317,6 +354,23 @@ class AchromatWorkflow:
             self._progress("Reviewed correction complete", 4, 4)
             return result
         except WorkflowCancelled:
+            if trial_state is not None and not steps:
+                steps.append(
+                    CorrectionStep(
+                        iteration=1,
+                        gain=self.config.solver.gain,
+                        delta_knobs=dict(recommendation.delta_knobs),
+                        accepted=False,
+                        reason="Aborted during trial; initial state restored",
+                        rms_before_mm=recommendation.measurement.rms_mm,
+                        measurement_before=recommendation.measurement,
+                        knobs_before=dict(initial_knobs),
+                        knobs_trial=dict(target_knobs),
+                        device_values_before=dict(initial_state.device_values),
+                        device_values_trial=dict(trial_state.device_values),
+                        restored=True,
+                    )
+                )
             return self._restore_after_abort(
                 initial_state,
                 recommendation.measurement,
@@ -325,6 +379,23 @@ class AchromatWorkflow:
                 recommendation.response,
             )
         except Exception as exc:
+            if trial_state is not None and not steps:
+                steps.append(
+                    CorrectionStep(
+                        iteration=1,
+                        gain=self.config.solver.gain,
+                        delta_knobs=dict(recommendation.delta_knobs),
+                        accepted=False,
+                        reason=f"Trial failed; initial state restored: {exc}",
+                        rms_before_mm=recommendation.measurement.rms_mm,
+                        measurement_before=recommendation.measurement,
+                        knobs_before=dict(initial_knobs),
+                        knobs_trial=dict(target_knobs),
+                        device_values_before=dict(initial_state.device_values),
+                        device_values_trial=dict(trial_state.device_values),
+                        restored=True,
+                    )
+                )
             return self._failure_result_after_restore(
                 exc,
                 initial_state,
@@ -343,6 +414,12 @@ class AchromatWorkflow:
         baseline_reference = self._average_bpm(self.config.measurement.samples_per_step)
 
         initial_measurement = self.measure_dispersion(self.config.measurement.samples_per_step)
+        self._correction_measurement(
+            0,
+            self.config.solver.max_iter,
+            "initial",
+            initial_measurement,
+        )
         self._progress("Initial D_eff measured", 1, total_steps)
         best_measurement = initial_measurement
         best_state = self.machine.snapshot()
@@ -369,7 +446,11 @@ class AchromatWorkflow:
                     solve_measurement = best_measurement
                     self._log("Reusing response matrix from the first iteration")
 
-                valid_rows = solve_measurement.valid & np.all(np.isfinite(response.matrix), axis=1)
+                current_knobs = self.machine.get_knobs(self.knob_names)
+                valid_rows = (
+                    solve_measurement.correction_valid
+                    & np.all(np.isfinite(response.matrix), axis=1)
+                )
                 if not np.any(valid_rows):
                     steps.append(
                         CorrectionStep(
@@ -379,11 +460,12 @@ class AchromatWorkflow:
                             accepted=False,
                             reason="No valid BPM rows for solve",
                             rms_before_mm=best_measurement.rms_mm,
+                            measurement_before=solve_measurement,
+                            knobs_before=dict(current_knobs),
                         )
                     )
                     break
 
-                current_knobs = self.machine.get_knobs(self.knob_names)
                 self._progress(
                     f"Iteration {iteration}/{self.config.solver.max_iter} · solving",
                     iteration,
@@ -413,6 +495,8 @@ class AchromatWorkflow:
                             accepted=False,
                             reason="SVD correction was zero",
                             rms_before_mm=best_measurement.rms_mm,
+                            measurement_before=solve_measurement,
+                            knobs_before=dict(current_knobs),
                         )
                     )
                     break
@@ -433,6 +517,7 @@ class AchromatWorkflow:
                 )
                 self._apply_knobs(knob_set, trial_knobs)
                 self.machine.wait_stable()
+                trial_state = self.machine.snapshot()
                 self._check_cancelled()
                 if not self.machine.is_safe():
                     self.machine.restore(state_before)
@@ -445,6 +530,12 @@ class AchromatWorkflow:
                             accepted=False,
                             reason="Machine unsafe after trial step",
                             rms_before_mm=best_measurement.rms_mm,
+                            measurement_before=solve_measurement,
+                            knobs_before=dict(current_knobs),
+                            knobs_trial=dict(trial_knobs),
+                            device_values_before=dict(state_before.device_values),
+                            device_values_trial=dict(trial_state.device_values),
+                            restored=True,
                         )
                     )
                 else:
@@ -465,6 +556,12 @@ class AchromatWorkflow:
                                 accepted=False,
                                 reason=safety_status.reason,
                                 rms_before_mm=best_measurement.rms_mm,
+                                measurement_before=solve_measurement,
+                                knobs_before=dict(current_knobs),
+                                knobs_trial=dict(trial_knobs),
+                                device_values_before=dict(state_before.device_values),
+                                device_values_trial=dict(trial_state.device_values),
+                                restored=True,
                             )
                         )
                     else:
@@ -476,6 +573,12 @@ class AchromatWorkflow:
                         trial_measurement = self.measure_dispersion(self.config.measurement.samples_per_step)
                         target_rms = best_measurement.rms_mm * (1.0 - self.config.solver.min_step_improvement)
                         if trial_measurement.rms_mm <= target_rms:
+                            self._correction_measurement(
+                                iteration,
+                                self.config.solver.max_iter,
+                                "accepted",
+                                trial_measurement,
+                            )
                             best_measurement = trial_measurement
                             best_state = self.machine.snapshot()
                             steps.append(
@@ -487,6 +590,12 @@ class AchromatWorkflow:
                                     reason="Accepted",
                                     rms_before_mm=solve_measurement.rms_mm,
                                     rms_after_mm=trial_measurement.rms_mm,
+                                    measurement_before=solve_measurement,
+                                    measurement_after=trial_measurement,
+                                    knobs_before=dict(current_knobs),
+                                    knobs_trial=dict(trial_knobs),
+                                    device_values_before=dict(state_before.device_values),
+                                    device_values_trial=dict(trial_state.device_values),
                                 )
                             )
                             accepted = True
@@ -497,6 +606,12 @@ class AchromatWorkflow:
                             )
                             self._log(f"Accepted iteration {iteration} gain={self.config.solver.gain:g}")
                         else:
+                            self._correction_measurement(
+                                iteration,
+                                self.config.solver.max_iter,
+                                "rejected",
+                                trial_measurement,
+                            )
                             self.machine.restore(state_before)
                             self.machine.wait_stable()
                             steps.append(
@@ -508,6 +623,13 @@ class AchromatWorkflow:
                                     reason="D_eff RMS did not improve enough",
                                     rms_before_mm=best_measurement.rms_mm,
                                     rms_after_mm=trial_measurement.rms_mm,
+                                    measurement_before=solve_measurement,
+                                    measurement_after=trial_measurement,
+                                    knobs_before=dict(current_knobs),
+                                    knobs_trial=dict(trial_knobs),
+                                    device_values_before=dict(state_before.device_values),
+                                    device_values_trial=dict(trial_state.device_values),
+                                    restored=True,
                                 )
                             )
 
@@ -539,6 +661,12 @@ class AchromatWorkflow:
             self.machine.wait_stable()
             self._check_cancelled()
             final_measurement = self.measure_dispersion(self.config.measurement.final_samples)
+            self._correction_measurement(
+                len(steps),
+                self.config.solver.max_iter,
+                "final",
+                final_measurement,
+            )
             final_knobs = self.machine.get_knobs(self.knob_names)
             safety_status = evaluate_safety(
                 self.config.safety,
@@ -597,7 +725,7 @@ class AchromatWorkflow:
         readings = []
         for index in range(samples):
             self._check_cancelled()
-            readings.append(self.machine.read_bpm(self.config.target_bpms))
+            readings.append(self.machine.read_bpm(self.config.measurement_bpms))
             if index + 1 < samples and self.config.measurement.sample_interval_s > 0:
                 time.sleep(self.config.measurement.sample_interval_s)
         return robust_average(readings)
@@ -773,3 +901,18 @@ class AchromatWorkflow:
     def _progress(self, stage: str, current: int, total: int) -> None:
         if self.progress_callback is not None:
             self.progress_callback(stage, current, total)
+
+    def _correction_measurement(
+        self,
+        iteration: int,
+        total: int,
+        state: str,
+        measurement: DispersionMeasurement,
+    ) -> None:
+        if self.correction_measurement_callback is not None:
+            self.correction_measurement_callback(
+                iteration,
+                total,
+                state,
+                measurement,
+            )

@@ -1701,7 +1701,17 @@ def _validate_dispersion_section(
     )
     if not target_bpms:
         raise MachineProfileError(f"{location}.target_bpms must not be empty.")
-    for bpm_id in target_bpms:
+    monitor_bpms = _expect_optional_string_list(
+        section.get("monitor_bpms"),
+        f"{location}.monitor_bpms",
+    )
+    overlap = sorted(set(target_bpms) & set(monitor_bpms))
+    if overlap:
+        raise MachineProfileError(
+            f"{location}.monitor_bpms must not repeat correction target BPMs: "
+            + ", ".join(overlap)
+        )
+    for bpm_id in (*monitor_bpms, *target_bpms):
         element = profile.get_element(bpm_id)
         if element.kind != "bpm" or "x" not in element.channels:
             raise MachineProfileError(

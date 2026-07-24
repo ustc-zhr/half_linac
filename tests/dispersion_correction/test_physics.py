@@ -39,6 +39,38 @@ def test_effective_dispersion_reports_residual_to_nonzero_target() -> None:
     assert measurement.rms_mm == np.sqrt(6.5)
 
 
+def test_monitor_bpms_are_measured_but_excluded_from_residual_rms() -> None:
+    names = ("BPM_MON", "BPM_TARGET")
+    delta = 1.0e-4
+    measured = np.asarray([1000.0, 4.0])
+    plus = BPMReading(
+        names,
+        measured * delta,
+        np.zeros(2),
+        np.ones(2, dtype=bool),
+    )
+    minus = BPMReading(
+        names,
+        -measured * delta,
+        np.zeros(2),
+        np.ones(2, dtype=bool),
+    )
+
+    measurement = compute_effective_dispersion(
+        names,
+        plus,
+        minus,
+        delta,
+        target_values_mm=[0.0, 1.0],
+        target_mask=[False, True],
+    )
+
+    np.testing.assert_allclose(measurement.values_mm, measured)
+    assert measurement.target_mask.tolist() == [False, True]
+    assert measurement.correction_valid.tolist() == [False, True]
+    assert measurement.rms_mm == 3.0
+
+
 def test_momentum_delta_uses_configured_delta_directly() -> None:
     assert momentum_delta(1.0e-4) == 1.0e-4
 

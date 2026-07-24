@@ -24,17 +24,20 @@ def build_correction_recommendation(
     """Calculate one bounded correction step without reading or writing a backend."""
 
     knob_names = tuple(knob.name for knob in config.knobs)
-    if measurement.bpm_names != config.target_bpms:
+    if measurement.bpm_names != config.measurement_bpms:
         raise ValueError("Measurement BPMs do not match the current configuration")
-    if response.bpm_names != config.target_bpms:
+    if response.bpm_names != config.measurement_bpms:
         raise ValueError("Response BPMs do not match the current configuration")
     if response.knob_names != knob_names:
         raise ValueError("Response knobs do not match the current configuration")
-    if response.matrix.shape != (len(config.target_bpms), len(config.knobs)):
+    if response.matrix.shape != (
+        len(config.measurement_bpms),
+        len(config.knobs),
+    ):
         raise ValueError("Response matrix dimensions do not match the current configuration")
 
     valid = (
-        measurement.valid
+        measurement.correction_valid
         & np.isfinite(measurement.residual_values_mm)
         & np.all(np.isfinite(response.matrix), axis=1)
     )

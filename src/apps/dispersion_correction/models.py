@@ -88,11 +88,18 @@ class RunConfig:
     backend: BackendConfig
     energy_knob: EnergyKnobConfig
     target_bpms: tuple[str, ...]
+    monitor_bpms: tuple[str, ...]
     knobs: tuple[KnobConfig, ...]
     section: DispersionSectionConfig
     measurement: MeasurementConfig
     solver: SolverConfig
     safety: SafetyConfig
+
+    @property
+    def measurement_bpms(self) -> tuple[str, ...]:
+        """BPMs read during a scan; monitor points never become solve targets."""
+
+        return tuple(dict.fromkeys((*self.monitor_bpms, *self.target_bpms)))
 
 
 @dataclass(frozen=True)
@@ -145,6 +152,7 @@ class DispersionMeasurement:
     plus: BPMReading
     minus: BPMReading
     target_values_mm: ArrayLike | None = None
+    target_mask: ArrayLike | None = None
 
     def __post_init__(self) -> None:
         values = np.asarray(self.values_mm, dtype=float)
@@ -154,16 +162,26 @@ class DispersionMeasurement:
             if self.target_values_mm is None
             else np.asarray(self.target_values_mm, dtype=float)
         )
+        target_mask = (
+            np.ones_like(valid, dtype=bool)
+            if self.target_mask is None
+            else np.asarray(self.target_mask, dtype=bool)
+        )
         if values.shape != valid.shape:
             raise ValueError("Dispersion values and valid mask must have same shape")
         if target.shape != values.shape:
             raise ValueError("Target dispersion values must match measured values")
+        if target_mask.shape != values.shape:
+            raise ValueError("Target BPM mask must match measured values")
+        if not np.any(target_mask):
+            raise ValueError("At least one BPM must be a correction target")
         if len(self.bpm_names) != values.size:
             raise ValueError("BPM names length must match dispersion values")
         object.__setattr__(self, "bpm_names", tuple(self.bpm_names))
         object.__setattr__(self, "values_mm", values)
         object.__setattr__(self, "valid", valid)
         object.__setattr__(self, "target_values_mm", target)
+        object.__setattr__(self, "target_mask", target_mask)
 
     @property
     def valid_values_mm(self) -> ArrayLike:
@@ -175,7 +193,11 @@ class DispersionMeasurement:
 
     @property
     def valid_residual_values_mm(self) -> ArrayLike:
-        return self.residual_values_mm[self.valid]
+        return self.residual_values_mm[self.valid & self.target_mask]
+
+    @property
+    def correction_valid(self) -> ArrayLike:
+        return self.valid & self.target_mask
 
     @property
     def measured_rms_mm(self) -> float:
@@ -430,6 +452,13 @@ class CorrectionStep:
     reason: str
     rms_before_mm: float
     rms_after_mm: float | None = None
+    measurement_before: DispersionMeasurement | None = None
+    measurement_after: DispersionMeasurement | None = None
+    knobs_before: dict[str, float] | None = None
+    knobs_trial: dict[str, float] | None = None
+    device_values_before: dict[str, float] | None = None
+    device_values_trial: dict[str, float] | None = None
+    restored: bool = False
 
 
 @dataclass(frozen=True)

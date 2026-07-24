@@ -97,9 +97,17 @@ def response_result(
     knob_names: tuple[str, ...],
     measurement,
 ) -> ResponseMatrixResult:
-    singular_values = np.linalg.svd(np.asarray(matrix, dtype=float), compute_uv=False)
+    matrix_array = np.asarray(matrix, dtype=float)
+    correction_rows = np.asarray(
+        getattr(measurement, "target_mask", np.ones(matrix_array.shape[0])),
+        dtype=bool,
+    )
+    singular_values = np.linalg.svd(
+        matrix_array[correction_rows, :],
+        compute_uv=False,
+    )
     return ResponseMatrixResult(
-        matrix=matrix,
+        matrix=matrix_array,
         bpm_names=bpm_names,
         knob_names=knob_names,
         measurement=measurement,

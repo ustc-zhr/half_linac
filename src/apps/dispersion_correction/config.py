@@ -52,6 +52,9 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
     target_bpms = raw.get("target_bpms", [])
     if not isinstance(target_bpms, list) or not target_bpms:
         raise ValueError("Configuration requires target_bpms")
+    monitor_bpms = raw.get("monitor_bpms", [])
+    if not isinstance(monitor_bpms, list):
+        raise ValueError("monitor_bpms must be a list")
 
     measurement = MeasurementConfig(
         plane=str(measurement_raw.get("plane", "x")).lower(),
@@ -114,6 +117,7 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
             ),
         ),
         target_bpms=tuple(str(name) for name in target_bpms),
+        monitor_bpms=tuple(str(name) for name in monitor_bpms),
         knobs=knobs,
         section=DispersionSectionConfig(
             id=str(section_raw.get("id", "default")).strip(),
@@ -162,6 +166,14 @@ def validate_config(config: RunConfig) -> None:
         raise ValueError("energy_knob.readback_tolerance must be finite and non-negative")
     if len(set(config.target_bpms)) != len(config.target_bpms):
         raise ValueError("target_bpms must not contain duplicates")
+    if len(set(config.monitor_bpms)) != len(config.monitor_bpms):
+        raise ValueError("monitor_bpms must not contain duplicates")
+    overlap = sorted(set(config.target_bpms) & set(config.monitor_bpms))
+    if overlap:
+        raise ValueError(
+            "BPMs cannot be both correction targets and monitors: "
+            + ", ".join(overlap)
+        )
     if not config.section.id:
         raise ValueError("section.id must not be empty")
     if len(config.section.target_dispersion_mm) != len(config.target_bpms):

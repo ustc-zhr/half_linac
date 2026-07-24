@@ -73,6 +73,16 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
         "bpms": [
             {
                 "name": name,
+                "role": "monitor",
+                "target_dispersion_mm": None,
+                "x_pv": bpm_map.get(name, {}).get("x") if isinstance(bpm_map.get(name), dict) else None,
+            }
+            for name in config.monitor_bpms
+        ]
+        + [
+            {
+                "name": name,
+                "role": "correction",
                 "target_dispersion_mm": config.section.target_dispersion_mm[index],
                 "x_pv": bpm_map.get(name, {}).get("x") if isinstance(bpm_map.get(name), dict) else None,
             }
@@ -161,9 +171,9 @@ def format_operation_plan(plan: dict[str, Any]) -> str:
             f"Response update: {plan['solver']['response_update']}",
             f"Gain: {plan['solver']['gain']:g}",
             f"Max step: {100.0 * plan['solver']['max_step_fraction']:g}% of each knob limit",
-            f"Samples/step: {plan['measurement']['samples_per_step']}",
+            f"Scan samples: {plan['measurement']['samples_per_step']}",
             f"Sample interval: {plan['measurement']['sample_interval_s']:g} s",
-            f"Final samples: {plan['measurement']['final_samples']}",
+            f"Verification samples: {plan['measurement']['final_samples']}",
             f"Settle time: {plan['measurement']['settle_time_s']:g} s",
             "",
             "Knobs:",

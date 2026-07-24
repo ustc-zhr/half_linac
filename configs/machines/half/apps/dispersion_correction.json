@@ -16,6 +16,12 @@
         "BPM06",
         "BPM07"
       ],
+      "monitor_bpms": [
+        "BPM02",
+        "BPM03",
+        "BPM04",
+        "BPM05"
+      ],
       "target_dispersion_mm": [
         0.0,
         0.0

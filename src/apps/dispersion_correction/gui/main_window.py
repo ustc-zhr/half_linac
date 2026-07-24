@@ -31,6 +31,7 @@ from PyQt5.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
@@ -46,7 +47,10 @@ from half_linac.src.apps.dispersion_correction.calibration import (
     actuator_step_for_delta,
     is_direct_delta_actuator,
 )
-from half_linac.src.apps.dispersion_correction.config import load_config
+from half_linac.src.apps.dispersion_correction.config import (
+    load_config,
+    validate_config,
+)
 from half_linac.src.apps.dispersion_correction.dryrun import build_operation_plan
 from half_linac.src.apps.dispersion_correction.gui.calibration_editor import (
     CalibrationEditorDialog,
@@ -92,6 +96,7 @@ from half_linac.src.shared.window_activation import install_qt_window_raise_hand
 class WorkflowWorker(QThread):
     log = pyqtSignal(str)
     progress = pyqtSignal(str, int, int)
+    correction_measurement = pyqtSignal(int, int, str, object)
     failed = pyqtSignal(str)
     completed = pyqtSignal(str, object)
     preflight = pyqtSignal(object)
@@ -115,9 +120,16 @@ class WorkflowWorker(QThread):
                 cancellation_callback=self.isInterruptionRequested,
                 progress_callback=self._emit_progress,
                 preflight_callback=self.preflight.emit,
+                correction_measurement_callback=(
+                    self.correction_measurement.emit
+                    if self.task == "run"
+                    else None
+                ),
             )
             if self.task == "measure":
-                result = workflow.measure_dispersion(self.config.measurement.final_samples)
+                result = workflow.measure_dispersion(
+                    self.config.measurement.samples_per_step
+                )
             elif self.task == "response":
                 result = workflow.build_response_matrix()
             elif self.task == "run":
@@ -191,6 +203,14 @@ class DispersionPlotDataset:
     sigma_mm: np.ndarray
     valid: np.ndarray
     label: str
+    target_mask: np.ndarray
+
+
+@dataclass(frozen=True)
+class CorrectionSessionRun:
+    label: str
+    task: str
+    result: CorrectionResult
 
 
 class OverviewControls(QWidget):
@@ -279,6 +299,7 @@ class DispersionCurveWidget(QWidget):
         self.result: ModelResponseResult | None = None
         self.measurement: DispersionPlotDataset | None = None
         self.reference_measurement: DispersionPlotDataset | None = None
+        self.measurement_overlays: tuple[DispersionPlotDataset, ...] = ()
         self.show_design_model = False
         self.show_snapshot_model = False
         self.theme_name = "night_shift"
@@ -298,9 +319,11 @@ class DispersionCurveWidget(QWidget):
         self,
         measurement: DispersionPlotDataset | None,
         reference: DispersionPlotDataset | None = None,
+        overlays: tuple[DispersionPlotDataset, ...] = (),
     ) -> None:
         self.measurement = measurement
         self.reference_measurement = reference
+        self.measurement_overlays = tuple(overlays)
         self.update()
 
     def set_model_visibility(self, *, design: bool, snapshot: bool) -> None:
@@ -317,7 +340,7 @@ class DispersionCurveWidget(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         tokens = theme_tokens(self.theme_name)
         painter.fillRect(self.rect(), QColor(tokens["plot_bg"]))
-        plot = self.rect().adjusted(58, 24, -18, -112)
+        plot = self.rect().adjusted(58, 42, -18, -112)
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(12, 18, "Dispersion η (mm)")
         if plot.width() <= 0 or plot.height() <= 0:
@@ -350,7 +373,11 @@ class DispersionCurveWidget(QWidget):
             ),
             default=0.0,
         )
-        for dataset in (self.measurement, self.reference_measurement):
+        for dataset in (
+            self.measurement,
+            self.reference_measurement,
+            *self.measurement_overlays,
+        ):
             if dataset is None:
                 continue
             for value, sigma, valid in zip(
@@ -434,15 +461,14 @@ class DispersionCurveWidget(QWidget):
             *,
             radius: float,
             line_width: int,
+            draw_markers: bool = True,
         ) -> None:
-            measurement_points = []
-            painter.setPen(QPen(color, line_width))
-            painter.setBrush(color)
-            for bpm, value, sigma, valid in zip(
+            for bpm, value, sigma, valid, is_target in zip(
                 dataset.bpm_names,
                 dataset.values_mm,
                 dataset.sigma_mm,
                 dataset.valid,
+                dataset.target_mask,
             ):
                 if not bool(valid) or not math.isfinite(float(value)):
                     continue
@@ -450,8 +476,11 @@ class DispersionCurveWidget(QWidget):
                     continue
                 x = plot.left() + (s_by_name[bpm] - s_min) / s_span * plot.width()
                 y = plot.center().y() - float(value) / limit * plot.height() / 2.0
-                measurement_points.append(QPointF(x, y))
-                if math.isfinite(float(sigma)):
+                point_color = QColor(color)
+                if not bool(is_target):
+                    point_color.setAlpha(150)
+                painter.setPen(QPen(point_color, line_width))
+                if draw_markers and math.isfinite(float(sigma)):
                     half_height = float(sigma) / limit * plot.height() / 2.0
                     painter.drawLine(QPointF(x, y - half_height), QPointF(x, y + half_height))
                     painter.drawLine(
@@ -462,13 +491,27 @@ class DispersionCurveWidget(QWidget):
                         QPointF(x - 3.0, y + half_height),
                         QPointF(x + 3.0, y + half_height),
                     )
-                painter.drawEllipse(QPointF(x, y), radius, radius)
-            if len(measurement_points) > 1:
-                line_color = QColor(color)
-                line_color.setAlpha(150)
-                painter.setPen(QPen(line_color, line_width))
-                painter.drawPolyline(QPolygonF(measurement_points))
+                if draw_markers:
+                    painter.setBrush(
+                        point_color if bool(is_target) else Qt.NoBrush
+                    )
+                    point_radius = radius if bool(is_target) else max(2.5, radius - 0.5)
+                    painter.drawEllipse(
+                        QPointF(x, y),
+                        point_radius,
+                        point_radius,
+                    )
 
+        for dataset in self.measurement_overlays:
+            overlay_color = QColor(tokens["text_muted"])
+            overlay_color.setAlpha(105)
+            draw_measurement(
+                dataset,
+                overlay_color,
+                radius=2.5,
+                line_width=1,
+                draw_markers=True,
+            )
         if self.reference_measurement is not None:
             reference_color = QColor(tokens["text_muted"])
             reference_color.setAlpha(150)
@@ -489,29 +532,99 @@ class DispersionCurveWidget(QWidget):
         painter.setPen(QColor(tokens["text_muted"]))
         painter.drawText(4, plot.top() + 5, f"{limit:.3g}")
         painter.drawText(4, plot.bottom(), f"{-limit:.3g}")
-        painter.setPen(horizontal)
-        painter.drawText(plot.left() + 8, plot.top() + 16, "ηx")
-        painter.setPen(vertical)
-        painter.drawText(plot.left() + 38, plot.top() + 16, "ηy")
-        painter.setPen(QColor(tokens["text_muted"]))
-        legend_items = []
+        legend_y = plot.top() - 9
+        model_curves_visible = bool(
+            self.result is not None
+            and (
+                self.show_design_model
+                or (
+                    self.show_snapshot_model
+                    and self.result.model_source != "design"
+                )
+            )
+        )
+        if model_curves_visible:
+            painter.setPen(horizontal)
+            painter.drawText(plot.left() + 8, legend_y, "ηx")
+            painter.setPen(vertical)
+            painter.drawText(plot.left() + 38, legend_y, "ηy")
+        legend_x = float(plot.left() + (75 if model_curves_visible else 8))
+        text_color = QColor(tokens["text_muted"])
+        font_metrics = painter.fontMetrics()
+
+        def draw_series_key(label: str, color: QColor) -> None:
+            nonlocal legend_x
+            sample_pen = QPen(color, 4)
+            sample_pen.setCapStyle(Qt.RoundCap)
+            painter.setPen(sample_pen)
+            painter.drawLine(
+                QPointF(legend_x, legend_y - 4),
+                QPointF(legend_x + 10, legend_y - 4),
+            )
+            painter.setPen(text_color)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawText(round(legend_x + 16), legend_y, label)
+            legend_x += 24 + font_metrics.horizontalAdvance(label)
+
+        def draw_line_key(label: str, style: Qt.PenStyle) -> None:
+            nonlocal legend_x
+            painter.setPen(QPen(text_color, 2, style))
+            painter.drawLine(
+                QPointF(legend_x, legend_y - 4),
+                QPointF(legend_x + 14, legend_y - 4),
+            )
+            painter.drawText(round(legend_x + 20), legend_y, label)
+            legend_x += 28 + font_metrics.horizontalAdvance(label)
+
+        def draw_role_keys() -> None:
+            nonlocal legend_x
+            label = "BPM:"
+            painter.setPen(text_color)
+            painter.drawText(round(legend_x), legend_y, label)
+            legend_x += font_metrics.horizontalAdvance(label) + 8
+            for role_label, filled in (
+                ("Correction", True),
+                ("Monitor", False),
+            ):
+                painter.setPen(QPen(text_color, 1))
+                painter.setBrush(text_color if filled else Qt.NoBrush)
+                painter.drawEllipse(
+                    QPointF(legend_x + 3, legend_y - 4),
+                    3.0,
+                    3.0,
+                )
+                painter.setPen(text_color)
+                painter.drawText(round(legend_x + 10), legend_y, role_label)
+                legend_x += 18 + font_metrics.horizontalAdvance(role_label)
+
         if self.measurement is not None:
-            legend_items.append(f"{self.measurement.label} ●")
+            draw_series_key(self.measurement.label, QColor("#f2c14e"))
         if self.reference_measurement is not None:
-            legend_items.append(f"{self.reference_measurement.label} ○")
+            reference_key_color = QColor(tokens["text_muted"])
+            reference_key_color.setAlpha(150)
+            draw_series_key(self.reference_measurement.label, reference_key_color)
+        if self.measurement_overlays:
+            overlay_key_color = QColor(tokens["text_muted"])
+            overlay_key_color.setAlpha(105)
+            draw_series_key("Accepted generations", overlay_key_color)
+        role_datasets = (
+            self.measurement,
+            self.reference_measurement,
+            *self.measurement_overlays,
+        )
+        if any(
+            dataset is not None and np.any(~dataset.target_mask)
+            for dataset in role_datasets
+        ):
+            draw_role_keys()
         if self.result is not None and self.show_design_model:
-            legend_items.append("Design model ···")
+            draw_line_key("Design model", Qt.DotLine)
         if (
             self.result is not None
             and self.show_snapshot_model
             and self.result.model_source != "design"
         ):
-            legend_items.append("Current snapshot --")
-        painter.drawText(
-            plot.left() + 75,
-            plot.top() + 16,
-            "  ".join(legend_items),
-        )
+            draw_line_key("Current snapshot", Qt.DashLine)
         if self.result is not None:
             lattice_rect = QRectF(
                 float(plot.left()),
@@ -795,9 +908,14 @@ class MainWindow(QMainWindow):
         self.imported_dispersion: ImportedDispersionDataset | None = None
         self.live_plot_measurement: DispersionPlotDataset | None = None
         self.reference_plot_measurement: DispersionPlotDataset | None = None
+        self._automatic_initial_measurement: DispersionMeasurement | None = None
+        self._active_task = ""
+        self.correction_mode: str | None = None
+        self.latest_measurement_time: datetime | None = None
         self.latest_measurement: DispersionMeasurement | None = None
         self.latest_response: ResponseMatrixResult | None = None
         self.correction_recommendation: CorrectionRecommendation | None = None
+        self.correction_session_runs: list[CorrectionSessionRun] = []
         self.last_live_preflight = None
         self.operation_plan: dict | None = None
         self._loading_widgets = False
@@ -843,6 +961,12 @@ class MainWindow(QMainWindow):
         self.overlays_header_label.setVisible(model_available)
         self.show_design_model_checkbox.setVisible(model_available)
         self.show_snapshot_model_checkbox.setVisible(model_available)
+        self.measurement_action_button.setVisible(
+            not self.config.section.model_only
+        )
+        self.measurement_status_label.setVisible(
+            not self.config.section.model_only
+        )
         if self.offline_demo:
             self.config_title_label.setText("Offline Demo")
             self.load_button.hide()
@@ -967,6 +1091,10 @@ class MainWindow(QMainWindow):
         self.load_button.setObjectName("configLoadButton")
         self.load_button.clicked.connect(self._load_config_dialog)
         heading_layout.addWidget(self.load_button)
+        self.preflight_button = QPushButton("Check")
+        self.preflight_button.setObjectName("preflightButton")
+        self.preflight_button.clicked.connect(self._start_live_preflight)
+        heading_layout.addWidget(self.preflight_button)
         layout.addLayout(heading_layout)
 
         layout.addWidget(self._config_section_label("MACHINE"))
@@ -998,7 +1126,20 @@ class MainWindow(QMainWindow):
         self.bpm_select_button.setVisible(self.app_context is not None)
         self.bpm_select_button.clicked.connect(self._select_bpms)
         bpm_selector_layout.addWidget(self.bpm_select_button, 0, Qt.AlignVCenter)
-        self._add_form_row(machine_form, "BPMs", bpm_selector)
+        self._add_form_row(machine_form, "Correction BPMs", bpm_selector)
+
+        self.monitor_bpm_edit = QLineEdit()
+        self.monitor_bpm_edit.setFixedHeight(34)
+        self.monitor_bpm_edit.setReadOnly(True)
+        self.monitor_bpm_edit.setToolTip(
+            "Measured and displayed for diagnostics, but excluded from correction "
+            "RMS, response solving, and acceptance decisions."
+        )
+        self._add_form_row(
+            machine_form,
+            "Monitor BPMs",
+            self.monitor_bpm_edit,
+        )
 
         self.knob_edit = QLineEdit()
         self.knob_edit.setFixedHeight(34)
@@ -1061,9 +1202,12 @@ class MainWindow(QMainWindow):
 
         self.samples_per_step_spin = QSpinBox()
         self.samples_per_step_spin.setRange(1, 100)
-        self.samples_per_step_spin.setToolTip("BPM samples collected at each measurement step.")
+        self.samples_per_step_spin.setToolTip(
+            "BPM samples per energy setting for Measure Dispersion, Q response "
+            "scans, and intermediate iteration measurements."
+        )
         self.samples_per_step_spin.valueChanged.connect(self._workflow_input_changed)
-        self._add_form_row(sampling_form, "Samples/step", self.samples_per_step_spin)
+        self._add_form_row(sampling_form, "Scan Samples", self.samples_per_step_spin)
 
         self.settle_time_spin = QDoubleSpinBox()
         self.settle_time_spin.setDecimals(2)
@@ -1073,6 +1217,19 @@ class MainWindow(QMainWindow):
         self.settle_time_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(sampling_form, "Settle Time (s)", self.settle_time_spin)
         layout.addLayout(sampling_form)
+
+        self.measurement_action_button = QPushButton("Measure Dispersion")
+        self.measurement_action_button.setObjectName("measurementActionButton")
+        self.measurement_action_button.setProperty("role", "control")
+        self.measurement_action_button.clicked.connect(
+            lambda: self._start_task("measure")
+        )
+        layout.addWidget(self.measurement_action_button)
+        self.measurement_status_label = QLabel("No valid dispersion measurement")
+        self.measurement_status_label.setObjectName("measurementStatus")
+        self.measurement_status_label.setProperty("muted", "true")
+        self.measurement_status_label.setWordWrap(True)
+        layout.addWidget(self.measurement_status_label)
 
         self.advanced_button = QToolButton()
         self.advanced_button.setObjectName("advancedSettingsButton")
@@ -1084,10 +1241,17 @@ class MainWindow(QMainWindow):
         self.advanced_button.toggled.connect(self._toggle_advanced_settings)
         layout.addWidget(self.advanced_button)
 
-        self.advanced_settings = QWidget()
-        advanced_layout = QVBoxLayout(self.advanced_settings)
-        advanced_layout.setContentsMargins(0, 0, 0, 0)
-        advanced_layout.setSpacing(7)
+        self.advanced_settings = QScrollArea()
+        self.advanced_settings.setObjectName("advancedSettingsArea")
+        self.advanced_settings.setWidgetResizable(True)
+        self.advanced_settings.setFrameShape(QFrame.NoFrame)
+        self.advanced_settings.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.advanced_settings_content = QWidget()
+        self.advanced_settings_content.setObjectName("advancedSettingsContent")
+        advanced_layout = QVBoxLayout(self.advanced_settings_content)
+        advanced_layout.setContentsMargins(0, 0, 5, 0)
+        advanced_layout.setSpacing(6)
+        self.advanced_settings.setWidget(self.advanced_settings_content)
 
         advanced_layout.addWidget(self._config_section_label("SAMPLING DETAILS"))
         sampling_details_form = self._config_form()
@@ -1102,52 +1266,80 @@ class MainWindow(QMainWindow):
 
         self.final_samples_spin = QSpinBox()
         self.final_samples_spin.setRange(1, 200)
-        self.final_samples_spin.setToolTip("BPM samples used for the final acceptance measurement.")
+        self.final_samples_spin.setToolTip(
+            "BPM samples per energy setting used to verify an applied correction "
+            "and the final automatic-correction result."
+        )
         self.final_samples_spin.valueChanged.connect(self._workflow_input_changed)
-        self._add_form_row(sampling_details_form, "Final Samples", self.final_samples_spin)
+        self._add_form_row(
+            sampling_details_form,
+            "Verification Samples",
+            self.final_samples_spin,
+        )
         advanced_layout.addLayout(sampling_details_form)
 
-        advanced_layout.addWidget(self._config_section_label("SOLVER"))
-        solver_form = self._config_form()
-
-        self.max_iter_spin = QSpinBox()
-        self.max_iter_spin.setRange(1, 20)
-        self.max_iter_spin.valueChanged.connect(self._workflow_input_changed)
-        self._add_form_row(solver_form, "Max Iter", self.max_iter_spin)
+        advanced_layout.addWidget(self._config_section_label("CORRECTION STEP"))
+        correction_step_form = self._config_form()
 
         self.gain_spin = QDoubleSpinBox()
         self.gain_spin.setDecimals(3)
         self.gain_spin.setRange(0.001, 1.0)
         self.gain_spin.setSingleStep(0.05)
-        self.gain_spin.valueChanged.connect(self._workflow_input_changed)
-        self._add_form_row(solver_form, "Gain", self.gain_spin)
+        self.gain_spin.valueChanged.connect(self._correction_setting_changed)
+        self._add_form_row(correction_step_form, "Gain", self.gain_spin)
 
         self.max_step_pct_spin = QDoubleSpinBox()
         self.max_step_pct_spin.setDecimals(1)
         self.max_step_pct_spin.setRange(0.1, 100.0)
         self.max_step_pct_spin.setSingleStep(5.0)
         self.max_step_pct_spin.valueChanged.connect(lambda _value: self._update_knob_summary())
-        self.max_step_pct_spin.valueChanged.connect(self._workflow_input_changed)
-        self._add_form_row(solver_form, "Max Step (%)", self.max_step_pct_spin)
+        self.max_step_pct_spin.valueChanged.connect(
+            self._correction_setting_changed
+        )
+        self._add_form_row(
+            correction_step_form,
+            "Max Step (%)",
+            self.max_step_pct_spin,
+        )
+        advanced_layout.addLayout(correction_step_form)
 
-        self.response_update_combo = QComboBox()
+        # Automatic-only settings are edited in the confirmation dialog. Keep
+        # these child widgets as session/config state without duplicating their
+        # controls in the left panel.
+        self.max_iter_spin = QSpinBox(self.advanced_settings_content)
+        self.max_iter_spin.setRange(1, 20)
+        self.max_iter_spin.setToolTip(
+            "Maximum automatic correction generations; the loop may stop earlier."
+        )
+        self.max_iter_spin.valueChanged.connect(
+            self._automatic_setting_changed
+        )
+        self.max_iter_spin.valueChanged.connect(
+            self._update_automatic_correction_tooltip
+        )
+        self.max_iter_spin.hide()
+
+        self.response_update_combo = QComboBox(self.advanced_settings_content)
         self.response_update_combo.addItems(["once", "every_iteration"])
-        self.response_update_combo.currentTextChanged.connect(self._workflow_input_changed)
-        self._add_form_row(solver_form, "Response", self.response_update_combo)
-        advanced_layout.addLayout(solver_form)
+        self.response_update_combo.currentTextChanged.connect(
+            self._automatic_setting_changed
+        )
+        self.response_update_combo.currentTextChanged.connect(
+            self._update_automatic_correction_tooltip
+        )
+        self.response_update_combo.hide()
+
+        self.run_button = QPushButton("Automatic Correction…")
+        self.run_button.setObjectName("automaticCorrectionButton")
+        self.run_button.setProperty("role", "control")
+        self.run_button.setToolTip(
+            "Run several correction generations without confirmation between "
+            "accepted steps."
+        )
+        self.run_button.clicked.connect(self._confirm_automatic_correction)
+
         self.advanced_settings.setVisible(False)
         layout.addWidget(self.advanced_settings)
-
-        self.connection_controls = QWidget()
-        connection_layout = QVBoxLayout(self.connection_controls)
-        connection_layout.setContentsMargins(0, 0, 0, 0)
-        connection_layout.setSpacing(7)
-        connection_layout.addWidget(self._config_section_label("CONNECTION"))
-        self.preflight_button = QPushButton("Check Connections")
-        self.preflight_button.setObjectName("preflightButton")
-        self.preflight_button.clicked.connect(self._start_live_preflight)
-        connection_layout.addWidget(self.preflight_button)
-        layout.addWidget(self.connection_controls)
 
         self.operation_banner = QLabel()
         self.operation_banner.setObjectName("operationBanner")
@@ -1220,10 +1412,13 @@ class MainWindow(QMainWindow):
             self.app_context is not None and not self.offline_demo
         )
         workflow_header.addWidget(self.offline_demo_button)
-        self.last_run_button = QPushButton("Last Run…")
-        self.last_run_button.setObjectName("workflowSecondaryButton")
-        self.last_run_button.clicked.connect(self._show_last_run)
-        workflow_header.addWidget(self.last_run_button)
+        self.history_button = QPushButton("History…")
+        self.history_button.setObjectName("workflowSecondaryButton")
+        self.history_button.clicked.connect(self._show_iteration_history)
+        # Keep the former attribute as a compatibility alias for callers that
+        # customized the window before the two history entries were merged.
+        self.last_run_button = self.history_button
+        workflow_header.addWidget(self.history_button)
         online_layout.addLayout(workflow_header)
 
         self.workflow_state_label = QLabel("Current state")
@@ -1238,25 +1433,45 @@ class MainWindow(QMainWindow):
         self.workflow_summary_label.setObjectName("workflowSummary")
         self.workflow_summary_label.setWordWrap(True)
         online_layout.addWidget(self.workflow_summary_label)
-        self.next_action_button = QPushButton("Check Connections")
+        self.correction_mode_actions = QWidget()
+        correction_mode_layout = QHBoxLayout(self.correction_mode_actions)
+        correction_mode_layout.setContentsMargins(0, 0, 0, 0)
+        correction_mode_layout.setSpacing(8)
+        self.next_action_button = QPushButton("Manual Correction")
+        self.manual_correction_button = self.next_action_button
         self.next_action_button.setObjectName("nextWorkflowAction")
         self.next_action_button.setProperty("role", "control")
+        self.next_action_button.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Fixed,
+        )
+        self.run_button.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Fixed,
+        )
         self.next_action_button.clicked.connect(self._run_next_workflow_action)
-        online_layout.addWidget(self.next_action_button)
+        correction_mode_layout.addWidget(self.next_action_button, 1)
+        correction_mode_layout.addWidget(self.run_button, 1)
+        online_layout.addWidget(self.correction_mode_actions)
+        self._update_automatic_correction_tooltip()
         workflow_secondary_actions = QHBoxLayout()
+        self.back_to_correction_methods_button = QPushButton(
+            "Back to Correction Methods"
+        )
+        self.back_to_correction_methods_button.setObjectName(
+            "workflowSecondaryButton"
+        )
+        self.back_to_correction_methods_button.clicked.connect(
+            self._return_to_correction_methods
+        )
+        workflow_secondary_actions.addWidget(
+            self.back_to_correction_methods_button
+        )
         workflow_secondary_actions.addStretch(1)
-        self.response_details_button = QPushButton("Q Response…")
+        self.response_details_button = QPushButton("Response Details…")
         self.response_details_button.setObjectName("workflowSecondaryButton")
         self.response_details_button.clicked.connect(self._show_response_details)
         workflow_secondary_actions.addWidget(self.response_details_button)
-        self.recommendation_details_button = QPushButton("Review Details…")
-        self.recommendation_details_button.setObjectName(
-            "workflowSecondaryButton"
-        )
-        self.recommendation_details_button.clicked.connect(
-            self._show_recommendation_details
-        )
-        workflow_secondary_actions.addWidget(self.recommendation_details_button)
         online_layout.addLayout(workflow_secondary_actions)
 
         # These operation-specific buttons remain as internal state holders for the
@@ -1272,7 +1487,7 @@ class MainWindow(QMainWindow):
         self.review_button.hide()
 
         self.measure_table = self._table(
-            ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
+            ["BPM", "Role", "Measured mm", "Target mm", "Residual mm", "Valid"]
         )
         self.measure_page = QWidget()
         measure_layout = QVBoxLayout(self.measure_page)
@@ -1319,14 +1534,15 @@ class MainWindow(QMainWindow):
         correction_layout = QVBoxLayout(self.correction_page)
         correction_layout.setContentsMargins(8, 4, 8, 8)
         correction_title = QLabel(
-            "Review one bounded correction step calculated from the measured dispersion "
-            "and measured Q response. Calculation does not access or write the backend."
+            "Review one bounded correction generation prepared from measured dispersion "
+            "and Q response. No quadrupole target is written until you confirm below."
         )
         correction_title.setObjectName("workspaceIntro")
         correction_title.setWordWrap(True)
         correction_layout.addWidget(correction_title)
         self.correction_state_label = QLabel(
-            "Measure the Q response to prepare a correction recommendation."
+            "Prepare a correction to measure the Q response and calculate a "
+            "recommendation."
         )
         self.correction_state_label.setWordWrap(True)
         correction_layout.addWidget(self.correction_state_label)
@@ -1339,7 +1555,14 @@ class MainWindow(QMainWindow):
         prediction_title.setObjectName("workspaceIntro")
         correction_layout.addWidget(prediction_title)
         self.recommendation_prediction_table = self._table(
-            ["BPM", "Measured mm", "Target mm", "Predicted mm", "Predicted residual mm"]
+            [
+                "BPM",
+                "Role",
+                "Measured mm",
+                "Target mm",
+                "Predicted mm",
+                "Predicted residual mm",
+            ]
         )
         correction_layout.addWidget(self.recommendation_prediction_table, 1)
         device_title = QLabel("Reviewed quadrupole changes")
@@ -1351,22 +1574,22 @@ class MainWindow(QMainWindow):
         correction_layout.addWidget(self.recommendation_table, 1)
 
         correction_actions = QHBoxLayout()
-        self.compute_recommendation_button = QPushButton("Compute Recommendation")
+        self.compute_recommendation_button = QPushButton(
+            "Recalculate Recommendation",
+            self.correction_page,
+        )
         self.compute_recommendation_button.clicked.connect(self._compute_recommendation)
-        correction_actions.addWidget(self.compute_recommendation_button)
+        self.compute_recommendation_button.hide()
         correction_actions.addStretch(1)
-        self.run_button = QPushButton("Advanced: Automatic Loop")
-        self.run_button.clicked.connect(lambda: self._start_task("run"))
-        correction_actions.addWidget(self.run_button)
         self.apply_recommendation_button = QPushButton(
-            "Apply & Remeasure",
+            "Apply and Verify",
             self.correction_page,
         )
         self.apply_recommendation_button.setProperty("role", "control")
         self.apply_recommendation_button.clicked.connect(
             self._apply_reviewed_recommendation
         )
-        self.apply_recommendation_button.hide()
+        correction_actions.addWidget(self.apply_recommendation_button)
         correction_layout.addLayout(correction_actions)
         recommendation_dialog_layout.addWidget(self.correction_page, 1)
         recommendation_dialog_actions = QHBoxLayout()
@@ -1504,6 +1727,80 @@ class MainWindow(QMainWindow):
         last_run_dialog_actions.addWidget(self.close_last_run_button)
         last_run_dialog_layout.addLayout(last_run_dialog_actions)
 
+        self.iteration_history_dialog = QDialog(self)
+        self.iteration_history_dialog.setObjectName("workflowDetailsDialog")
+        self.iteration_history_dialog.setWindowTitle("Iteration History")
+        self.iteration_history_dialog.resize(1050, 760)
+        iteration_history_layout = QVBoxLayout(self.iteration_history_dialog)
+        iteration_history_intro = QLabel(
+            "Review every attempted generation from this GUI session. The main "
+            "dispersion plot continues to show only the initial and latest/final "
+            "measurement."
+        )
+        iteration_history_intro.setObjectName("workspaceIntro")
+        iteration_history_intro.setWordWrap(True)
+        iteration_history_layout.addWidget(iteration_history_intro)
+        iteration_history_controls = QHBoxLayout()
+        iteration_history_controls.addWidget(QLabel("Correction run"))
+        self.iteration_history_run_combo = QComboBox()
+        self.iteration_history_run_combo.setMinimumWidth(210)
+        self.iteration_history_run_combo.currentIndexChanged.connect(
+            self._iteration_history_run_changed
+        )
+        iteration_history_controls.addWidget(self.iteration_history_run_combo)
+        iteration_history_controls.addWidget(QLabel("Displayed state"))
+        self.iteration_history_generation_combo = QComboBox()
+        self.iteration_history_generation_combo.setMinimumWidth(250)
+        self.iteration_history_generation_combo.currentIndexChanged.connect(
+            self._refresh_iteration_history_view
+        )
+        iteration_history_controls.addWidget(
+            self.iteration_history_generation_combo
+        )
+        self.iteration_history_overlay_checkbox = QCheckBox(
+            "Show accepted generations"
+        )
+        self.iteration_history_overlay_checkbox.setToolTip(
+            "Add accepted intermediate generations as thin muted curves."
+        )
+        self.iteration_history_overlay_checkbox.toggled.connect(
+            self._refresh_iteration_history_view
+        )
+        iteration_history_controls.addWidget(
+            self.iteration_history_overlay_checkbox
+        )
+        iteration_history_controls.addStretch(1)
+        iteration_history_layout.addLayout(iteration_history_controls)
+        self.iteration_history_status_label = QLabel()
+        self.iteration_history_status_label.setObjectName("workflowSummary")
+        self.iteration_history_status_label.setWordWrap(True)
+        iteration_history_layout.addWidget(
+            self.iteration_history_status_label
+        )
+        self.iteration_history_curve = DispersionCurveWidget()
+        self.iteration_history_curve.setMinimumHeight(330)
+        iteration_history_layout.addWidget(self.iteration_history_curve, 2)
+        iteration_history_layout.addWidget(
+            QLabel("Quadrupole / correction-knob state")
+        )
+        self.iteration_history_knob_table = self._table(
+            ["Quadrupole / Knob", "Before", "Trial / Final", "Delta"]
+        )
+        iteration_history_layout.addWidget(
+            self.iteration_history_knob_table,
+            1,
+        )
+        iteration_history_actions = QHBoxLayout()
+        iteration_history_actions.addStretch(1)
+        self.close_iteration_history_button = QPushButton("Close")
+        self.close_iteration_history_button.clicked.connect(
+            self.iteration_history_dialog.close
+        )
+        iteration_history_actions.addWidget(
+            self.close_iteration_history_button
+        )
+        iteration_history_layout.addLayout(iteration_history_actions)
+
         self.dispersion_overview = QFrame()
         self.dispersion_overview.setObjectName("dispersionOverviewCard")
         overview_layout = QVBoxLayout(self.dispersion_overview)
@@ -1588,7 +1885,7 @@ class MainWindow(QMainWindow):
         elif page is self.correction_page:
             self._show_recommendation_details()
         elif page is self.history_page:
-            self._show_last_run()
+            self._show_iteration_history()
 
     def _show_response_details(self) -> None:
         if self.latest_response is None:
@@ -1613,6 +1910,263 @@ class MainWindow(QMainWindow):
         self.last_run_dialog.show()
         self.last_run_dialog.raise_()
         self.last_run_dialog.activateWindow()
+
+    def _record_correction_run(
+        self,
+        task: str,
+        result: CorrectionResult,
+    ) -> None:
+        run_kind = "Automatic" if task == "run" else "Manual"
+        sequence = (
+            sum(entry.task == task for entry in self.correction_session_runs)
+            + 1
+        )
+        self.correction_session_runs.append(
+            CorrectionSessionRun(
+                label=f"{run_kind} {sequence}",
+                task=task,
+                result=result,
+            )
+        )
+        self._refresh_iteration_history_runs(
+            selected=len(self.correction_session_runs) - 1
+        )
+
+    def _refresh_iteration_history_runs(
+        self,
+        *,
+        selected: int | None = None,
+    ) -> None:
+        current = (
+            self.iteration_history_run_combo.currentData()
+            if selected is None
+            else selected
+        )
+        self.iteration_history_run_combo.blockSignals(True)
+        self.iteration_history_run_combo.clear()
+        for index, entry in enumerate(self.correction_session_runs):
+            self.iteration_history_run_combo.addItem(entry.label, index)
+        index = self.iteration_history_run_combo.findData(current)
+        if index < 0 and self.iteration_history_run_combo.count():
+            index = self.iteration_history_run_combo.count() - 1
+        self.iteration_history_run_combo.setCurrentIndex(index)
+        self.iteration_history_run_combo.blockSignals(False)
+        self._iteration_history_run_changed(index)
+
+    def _selected_correction_run(self) -> CorrectionSessionRun | None:
+        index = self.iteration_history_run_combo.currentData()
+        if not isinstance(index, int):
+            return None
+        if not 0 <= index < len(self.correction_session_runs):
+            return None
+        return self.correction_session_runs[index]
+
+    def _iteration_history_run_changed(
+        self,
+        _index: int | None = None,
+    ) -> None:
+        entry = self._selected_correction_run()
+        self.iteration_history_generation_combo.blockSignals(True)
+        self.iteration_history_generation_combo.clear()
+        if entry is not None:
+            self.iteration_history_generation_combo.addItem(
+                "Initial measurement",
+                "initial",
+            )
+            for index, step in enumerate(entry.result.steps):
+                if step.accepted:
+                    state = "accepted"
+                elif step.restored:
+                    state = "restored"
+                else:
+                    state = "stopped"
+                self.iteration_history_generation_combo.addItem(
+                    f"Generation {step.iteration} · {state}",
+                    f"step:{index}",
+                )
+            self.iteration_history_generation_combo.addItem(
+                "Final verification",
+                "final",
+            )
+            self.iteration_history_generation_combo.setCurrentIndex(
+                self.iteration_history_generation_combo.count() - 1
+            )
+        self.iteration_history_generation_combo.blockSignals(False)
+        self._refresh_iteration_history_view()
+
+    def _refresh_iteration_history_view(
+        self,
+        _value: object | None = None,
+    ) -> None:
+        entry = self._selected_correction_run()
+        if entry is None:
+            self.iteration_history_curve.set_measurement(None)
+            self.iteration_history_status_label.setText(
+                "No correction run is available."
+            )
+            self.iteration_history_knob_table.setRowCount(0)
+            return
+
+        result = entry.result
+        selection = str(
+            self.iteration_history_generation_combo.currentData()
+            or "final"
+        )
+        selected_step_index: int | None = None
+        if selection.startswith("step:"):
+            try:
+                selected_step_index = int(selection.split(":", 1)[1])
+            except ValueError:
+                selected_step_index = None
+
+        if selection == "initial":
+            measurement = result.initial
+            reference = None
+            label = "Initial measured"
+            before_knobs = result.initial_knobs
+            target_knobs = None
+            status = (
+                f"{entry.label} · initial RMS {result.initial.rms_mm:.6g} mm"
+            )
+        elif (
+            selected_step_index is not None
+            and 0 <= selected_step_index < len(result.steps)
+        ):
+            step = result.steps[selected_step_index]
+            measurement = (
+                step.measurement_after
+                or step.measurement_before
+                or result.initial
+            )
+            reference = (
+                None if measurement is result.initial else result.initial
+            )
+            label = (
+                f"Generation {step.iteration} measured"
+                if step.measurement_after is not None
+                else f"Generation {step.iteration} baseline"
+            )
+            before_knobs = (
+                step.device_values_before
+                or step.knobs_before
+                or result.initial_knobs
+            )
+            target_knobs = step.device_values_trial or step.knobs_trial
+            if step.accepted:
+                state = "accepted"
+            elif step.restored:
+                state = "rejected and restored"
+            else:
+                state = "stopped before a valid trial"
+            after = (
+                ""
+                if step.rms_after_mm is None
+                else f" → {step.rms_after_mm:.6g} mm"
+            )
+            status = (
+                f"{entry.label} · generation {step.iteration} {state} · "
+                f"RMS {step.rms_before_mm:.6g} mm{after} · {step.reason}"
+            )
+        else:
+            measurement = result.final
+            reference = (
+                None if result.final is result.initial else result.initial
+            )
+            label = "Final verified"
+            before_knobs = result.initial_knobs
+            target_knobs = result.final_knobs
+            state = "accepted" if result.success else "not accepted"
+            status = (
+                f"{entry.label} · final result {state} · RMS "
+                f"{result.initial.rms_mm:.6g} → {result.final.rms_mm:.6g} mm · "
+                f"{result.reason}"
+            )
+
+        overlays: list[DispersionPlotDataset] = []
+        if self.iteration_history_overlay_checkbox.isChecked():
+            for index, step in enumerate(result.steps):
+                if (
+                    step.accepted
+                    and step.measurement_after is not None
+                    and index != selected_step_index
+                ):
+                    overlays.append(
+                        self._plot_dataset_from_measurement(
+                            step.measurement_after,
+                            f"Generation {step.iteration}",
+                        )
+                    )
+        self.iteration_history_curve.set_measurement(
+            self._plot_dataset_from_measurement(measurement, label),
+            (
+                None
+                if reference is None
+                else self._plot_dataset_from_measurement(
+                    reference,
+                    "Initial measured",
+                )
+            ),
+            tuple(overlays),
+        )
+        self.iteration_history_status_label.setText(status)
+        self._fill_iteration_history_knobs(
+            before_knobs,
+            target_knobs,
+        )
+
+    def _fill_iteration_history_knobs(
+        self,
+        before: dict[str, float],
+        target: dict[str, float] | None,
+    ) -> None:
+        names = list(before)
+        if target is not None:
+            names.extend(name for name in target if name not in before)
+        self.iteration_history_knob_table.setRowCount(len(names))
+        for row, name in enumerate(names):
+            before_value = before.get(name)
+            target_value = None if target is None else target.get(name)
+            self.iteration_history_knob_table.setItem(
+                row,
+                0,
+                QTableWidgetItem(name),
+            )
+            self.iteration_history_knob_table.setItem(
+                row,
+                1,
+                QTableWidgetItem(
+                    "" if before_value is None else f"{before_value:.8g}"
+                ),
+            )
+            self.iteration_history_knob_table.setItem(
+                row,
+                2,
+                QTableWidgetItem(
+                    "" if target_value is None else f"{target_value:.8g}"
+                ),
+            )
+            delta = (
+                ""
+                if before_value is None or target_value is None
+                else f"{target_value - before_value:+.8g}"
+            )
+            self.iteration_history_knob_table.setItem(
+                row,
+                3,
+                QTableWidgetItem(delta),
+            )
+        self.iteration_history_knob_table.resizeColumnsToContents()
+
+    def _show_iteration_history(self) -> None:
+        if not self.correction_session_runs:
+            return
+        self._refresh_iteration_history_runs()
+        self.iteration_history_dialog.setStyleSheet(
+            build_stylesheet(self.theme_name)
+        )
+        self.iteration_history_dialog.show()
+        self.iteration_history_dialog.raise_()
+        self.iteration_history_dialog.activateWindow()
 
     def _open_offline_demo(self) -> None:
         existing = self._offline_demo_window
@@ -1676,6 +2230,7 @@ class MainWindow(QMainWindow):
             if section_index >= 0:
                 self.section_combo.setCurrentIndex(section_index)
             self.bpm_edit.setText(", ".join(self.config.target_bpms))
+            self.monitor_bpm_edit.setText(", ".join(self.config.monitor_bpms))
             self.delta_spin.setValue(self.config.energy_knob.delta)
             self.samples_per_step_spin.setValue(self.config.measurement.samples_per_step)
             self.sample_interval_spin.setValue(self.config.measurement.sample_interval_s)
@@ -1778,7 +2333,9 @@ class MainWindow(QMainWindow):
         self._set_running(False, "")
 
     def _invalidate_staged_results(self, reason: str) -> None:
+        self.correction_mode = None
         self.latest_measurement = None
+        self.latest_measurement_time = None
         self.latest_response = None
         self.correction_recommendation = None
         self.live_plot_measurement = None
@@ -1801,6 +2358,42 @@ class MainWindow(QMainWindow):
         if self._loading_widgets:
             return
         self._selection_changed()
+
+    def _correction_setting_changed(self, _value=None) -> None:
+        if self._loading_widgets:
+            return
+        self.correction_recommendation = None
+        self.correction_state_label.setText(
+            "Correction limits changed. The previous recommendation was discarded, "
+            "but the dispersion measurement remains valid."
+        )
+        self.recommendation_summary_label.setText(
+            "No recommendation has been calculated."
+        )
+        self.recommendation_prediction_table.setRowCount(0)
+        self.recommendation_table.setRowCount(0)
+        self._sync_nonmeasurement_settings()
+
+    def _automatic_setting_changed(self, _value=None) -> None:
+        if self._loading_widgets:
+            return
+        self._sync_nonmeasurement_settings()
+
+    def _sync_nonmeasurement_settings(self) -> None:
+        try:
+            self.config = self._config_from_widgets()
+            self.monitor_bpm_edit.setText(
+                ", ".join(self.config.monitor_bpms)
+            )
+            self.operation_plan = build_operation_plan(self.config)
+        except Exception as exc:
+            self.operation_plan = None
+            self._append_log(f"Operation plan validation failed: {exc}")
+            self.status_strip.set_value("READINESS", "NOT READY", "danger")
+            return
+        self._refresh_operation_plan()
+        self._update_static_safety_status()
+        self._set_running(False, "")
 
     def _model_source_changed(self, _index: int | None = None) -> None:
         if not hasattr(self, "dispersion_curve"):
@@ -2121,11 +2714,40 @@ class MainWindow(QMainWindow):
         if not bpms:
             raise ValueError("At least one BPM is required")
         knobs = tuple(self.selected_knobs)
+        target_by_bpm = dict(
+            zip(
+                self.config.target_bpms,
+                self.config.section.target_dispersion_mm,
+            )
+        )
+        monitor_bpms = tuple(
+            dict.fromkeys(
+                (
+                    *self.config.monitor_bpms,
+                    *(
+                        name
+                        for name in self.config.target_bpms
+                        if name not in bpms
+                    ),
+                )
+            )
+        )
+        monitor_bpms = tuple(
+            name for name in monitor_bpms if name not in bpms
+        )
 
         config = replace(
             self.config,
             energy_knob=replace(self.config.energy_knob, delta=float(self.delta_spin.value())),
             target_bpms=bpms,
+            monitor_bpms=monitor_bpms,
+            section=replace(
+                self.config.section,
+                target_dispersion_mm=tuple(
+                    target_by_bpm.get(name, 0.0)
+                    for name in bpms
+                ),
+            ),
             knobs=knobs,
             measurement=replace(
                 self.config.measurement,
@@ -2149,20 +2771,21 @@ class MainWindow(QMainWindow):
                 target_bpms=bpms,
                 knobs=knobs,
             )
+        validate_config(config)
         return config
 
     def _start_task(
         self,
         task: str,
         recommendation: CorrectionRecommendation | None = None,
-    ) -> None:
+    ) -> bool:
         if self.worker is not None and self.worker.isRunning():
-            return
+            return False
         try:
             config = self._config_from_widgets()
         except Exception as exc:
             QMessageBox.warning(self, "Configuration", str(exc))
-            return
+            return False
         self.config = config
         self.last_live_preflight = None
         self._update_static_safety_status()
@@ -2170,12 +2793,12 @@ class MainWindow(QMainWindow):
         if blocked_reason is not None:
             QMessageBox.warning(self, "Dispersion Correction", blocked_reason)
             self._set_running(False, "")
-            return
+            return False
         if config.backend.type.lower() == "epics":
             preflight = run_preflight(config)
             if not preflight.ok:
                 QMessageBox.warning(self, "EPICS Preflight", "\n".join(preflight.blockers))
-                return
+                return False
             if preflight.warnings and config.backend.mode == "write_enabled":
                 answer = QMessageBox.question(
                     self,
@@ -2185,17 +2808,22 @@ class MainWindow(QMainWindow):
                     QMessageBox.Cancel,
                 )
                 if answer != QMessageBox.Yes:
-                    return
+                    return False
         if task == "apply" and recommendation is None:
             QMessageBox.warning(
                 self,
                 "Apply Recommendation",
                 "Calculate and review a recommendation before applying it.",
             )
-            return
+            return False
+        if task == "run":
+            self._automatic_initial_measurement = None
         self.worker = WorkflowWorker(task, config, recommendation)
         self.worker.log.connect(self._append_log)
         self.worker.progress.connect(self._update_progress)
+        self.worker.correction_measurement.connect(
+            self._automatic_measurement_updated
+        )
         self.worker.preflight.connect(self._live_preflight_completed)
         self.worker.failed.connect(self._task_failed)
         self.worker.completed.connect(self._task_completed)
@@ -2203,14 +2831,18 @@ class MainWindow(QMainWindow):
         self._set_running(True, task)
         self._update_progress("Starting", 0, 1)
         self.worker.start()
+        return True
 
     def _task_completed(self, task: str, result: object) -> None:
         if isinstance(result, DispersionMeasurement):
+            self.correction_mode = None
             self.latest_measurement = result
+            self.latest_measurement_time = datetime.now()
             self.latest_response = None
             self.correction_recommendation = None
             self.correction_state_label.setText(
-                "Dispersion measured. Measure the Q response to calculate a recommendation."
+                "Dispersion measured. Prepare a correction when you are ready to scan "
+                "the quadrupole response."
             )
             self.recommendation_summary_label.setText(
                 "No recommendation has been calculated."
@@ -2224,11 +2856,13 @@ class MainWindow(QMainWindow):
             )
             self._refresh_status(f"RMS {result.rms_mm:.4g} mm")
         elif isinstance(result, ResponseMatrixResult):
+            self.correction_mode = "manual"
             self.latest_response = result
             self.latest_measurement = result.measurement
+            self.latest_measurement_time = datetime.now()
             self.correction_recommendation = None
             self.correction_state_label.setText(
-                "Measured dispersion and Q response are ready. Review the recommendation."
+                "Quadrupole response measured. Calculating one bounded recommendation."
             )
             self.recommendation_summary_label.setText(
                 "No recommendation has been calculated."
@@ -2242,7 +2876,9 @@ class MainWindow(QMainWindow):
                 label="Response baseline",
             )
             self._refresh_status(f"Cond {result.condition_number:.4g}")
+            self._compute_recommendation()
         elif isinstance(result, CorrectionResult):
+            self._record_correction_run(task, result)
             self._show_result(result)
             status = "Accepted" if result.success else "Aborted" if result.reason.startswith("Aborted") else "Not accepted"
             self._refresh_status(status)
@@ -2251,11 +2887,23 @@ class MainWindow(QMainWindow):
                 result.safety.reason,
                 "success" if result.safety.ok else "danger",
             )
-            self.latest_measurement = result.final
+            self.latest_measurement = result.final if result.success else None
+            self.latest_measurement_time = (
+                datetime.now() if result.success else None
+            )
             self.latest_response = None
             self.correction_recommendation = None
+            self.correction_mode = None
             self.correction_state_label.setText(
-                "Execution completed. Measure the Q response again before the next recommendation."
+                (
+                    "Execution completed and final dispersion verified. Choose manual "
+                    "or automatic correction to continue."
+                )
+                if result.success
+                else (
+                    "The correction was not accepted or was aborted. Remeasure "
+                    "dispersion before starting another correction."
+                )
             )
             self.recommendation_summary_label.setText(
                 "The reviewed recommendation is no longer current."
@@ -2275,8 +2923,60 @@ class MainWindow(QMainWindow):
             )
             self._append_log(f"Operation archived in {paths['run_metadata'].parent}")
         self._append_log(f"{task} completed")
+        if task == "run":
+            self._automatic_initial_measurement = None
+
+    def _automatic_measurement_updated(
+        self,
+        iteration: int,
+        total: int,
+        state: str,
+        measurement: DispersionMeasurement,
+    ) -> None:
+        if self._active_task != "run":
+            return
+        if state == "initial":
+            self._automatic_initial_measurement = measurement
+            label = "Automatic initial"
+            reference = None
+            summary = (
+                f"Automatic correction · initial dispersion measured · "
+                f"RMS {measurement.rms_mm:.6g} mm"
+            )
+        elif state == "final":
+            label = "Final verification"
+            reference = self._automatic_initial_measurement
+            summary = (
+                f"Automatic correction · final verification measured · "
+                f"RMS {measurement.rms_mm:.6g} mm"
+            )
+        else:
+            label = f"Generation {iteration} · {state}"
+            reference = self._automatic_initial_measurement
+            restored = (
+                " · restoring previous state"
+                if state == "rejected"
+                else ""
+            )
+            summary = (
+                f"Automatic correction · generation {iteration}/{total} "
+                f"{state}{restored} · RMS {measurement.rms_mm:.6g} mm"
+            )
+        self._show_measurement(measurement)
+        self._set_live_comparison_measurement(
+            measurement,
+            label=label,
+            reference=reference,
+        )
+        self.workflow_summary_label.setText(summary)
+        self.plot_state_label.setText(summary)
+        self.plot_state_label.show()
 
     def _task_failed(self, message: str) -> None:
+        failed_task = self._active_task
+        self._automatic_initial_measurement = None
+        if failed_task in {"response", "apply", "run"}:
+            self.correction_mode = None
         if message == "Operation aborted":
             self._append_log("Operation aborted; temporary state restored")
             self._refresh_status("Aborted")
@@ -2358,15 +3058,46 @@ class MainWindow(QMainWindow):
 
     def _show_measurement(self, measurement: DispersionMeasurement) -> None:
         self.measure_table.setHorizontalHeaderLabels(
-            ["BPM", "Measured mm", "Target mm", "Residual mm", "Valid"]
+            ["BPM", "Role", "Measured mm", "Target mm", "Residual mm", "Valid"]
         )
+        self.measure_table.setColumnCount(6)
         self.measure_table.setRowCount(len(measurement.bpm_names))
         for row, name in enumerate(measurement.bpm_names):
+            is_target = bool(measurement.target_mask[row])
             self.measure_table.setItem(row, 0, QTableWidgetItem(name))
-            self.measure_table.setItem(row, 1, QTableWidgetItem(f"{measurement.values_mm[row]:.6g}"))
-            self.measure_table.setItem(row, 2, QTableWidgetItem(f"{measurement.target_values_mm[row]:.6g}"))
-            self.measure_table.setItem(row, 3, QTableWidgetItem(f"{measurement.residual_values_mm[row]:.6g}"))
-            self.measure_table.setItem(row, 4, QTableWidgetItem("yes" if measurement.valid[row] else "no"))
+            self.measure_table.setItem(
+                row,
+                1,
+                QTableWidgetItem("Correction" if is_target else "Monitor"),
+            )
+            self.measure_table.setItem(
+                row,
+                2,
+                QTableWidgetItem(f"{measurement.values_mm[row]:.6g}"),
+            )
+            self.measure_table.setItem(
+                row,
+                3,
+                QTableWidgetItem(
+                    f"{measurement.target_values_mm[row]:.6g}"
+                    if is_target
+                    else "—"
+                ),
+            )
+            self.measure_table.setItem(
+                row,
+                4,
+                QTableWidgetItem(
+                    f"{measurement.residual_values_mm[row]:.6g}"
+                    if is_target
+                    else "—"
+                ),
+            )
+            self.measure_table.setItem(
+                row,
+                5,
+                QTableWidgetItem("yes" if measurement.valid[row] else "no"),
+            )
         self.measure_table.resizeColumnsToContents()
 
     @staticmethod
@@ -2380,10 +3111,11 @@ class MainWindow(QMainWindow):
             sigma_mm=np.full(len(measurement.bpm_names), np.nan),
             valid=np.asarray(measurement.valid, dtype=bool),
             label=label,
+            target_mask=np.asarray(measurement.target_mask, dtype=bool),
         )
 
-    @staticmethod
     def _plot_dataset_from_import(
+        self,
         imported: ImportedDispersionDataset,
     ) -> DispersionPlotDataset:
         return DispersionPlotDataset(
@@ -2392,6 +3124,13 @@ class MainWindow(QMainWindow):
             sigma_mm=np.asarray(imported.etax_sigma_mm, dtype=float),
             valid=np.ones(len(imported.bpm_names), dtype=bool),
             label="External measurement",
+            target_mask=np.asarray(
+                [
+                    name in self.config.target_bpms
+                    for name in imported.bpm_names
+                ],
+                dtype=bool,
+            ),
         )
 
     def _set_live_comparison_measurement(
@@ -2480,10 +3219,19 @@ class MainWindow(QMainWindow):
                 self.plot_state_label.setText("Model reference only · no measured data")
                 self.plot_state_label.show()
             return
-        valid_count = int(np.count_nonzero(measurement.valid))
-        self.plot_state_label.setText(
-            f"{measurement.label} · {valid_count}/{len(measurement.bpm_names)} valid BPMs"
+        target_valid = int(
+            np.count_nonzero(measurement.valid & measurement.target_mask)
         )
+        target_count = int(np.count_nonzero(measurement.target_mask))
+        monitor_mask = ~measurement.target_mask
+        monitor_count = int(np.count_nonzero(monitor_mask))
+        validity = f"{target_valid}/{target_count} correction BPMs valid"
+        if monitor_count:
+            monitor_valid = int(
+                np.count_nonzero(measurement.valid & monitor_mask)
+            )
+            validity += f" · {monitor_valid}/{monitor_count} monitors valid"
+        self.plot_state_label.setText(f"{measurement.label} · {validity}")
         self.plot_state_label.show()
 
     def _model_visibility_changed(self, _checked: bool | None = None) -> None:
@@ -2607,11 +3355,22 @@ class MainWindow(QMainWindow):
 
     def _show_response(self, response: ResponseMatrixResult) -> None:
         self.response_table.setRowCount(len(response.bpm_names))
-        self.response_table.setColumnCount(len(response.knob_names) + 1)
-        self.response_table.setHorizontalHeaderLabels(["BPM", *response.knob_names])
+        self.response_table.setColumnCount(len(response.knob_names) + 2)
+        self.response_table.setHorizontalHeaderLabels(
+            ["BPM", "Role", *response.knob_names]
+        )
         for row, bpm in enumerate(response.bpm_names):
             self.response_table.setItem(row, 0, QTableWidgetItem(bpm))
-            for col, value in enumerate(response.matrix[row, :], start=1):
+            self.response_table.setItem(
+                row,
+                1,
+                QTableWidgetItem(
+                    "Correction"
+                    if bool(response.measurement.target_mask[row])
+                    else "Monitor"
+                ),
+            )
+            for col, value in enumerate(response.matrix[row, :], start=2):
                 self.response_table.setItem(row, col, QTableWidgetItem(f"{value:.6g}"))
         self.response_table.resizeColumnsToContents()
         self.response_info.setPlainText(
@@ -2620,14 +3379,228 @@ class MainWindow(QMainWindow):
             + f"\nCondition number: {response.condition_number:.6g}"
         )
 
+    def _prepare_correction(self) -> None:
+        if self.latest_measurement is None:
+            QMessageBox.warning(
+                self,
+                "Prepare Correction",
+                "Measure the current dispersion before preparing a correction.",
+            )
+            return
+        self.correction_mode = "manual"
+        if self.latest_response is None:
+            scan_count = 1 + 2 * len(self.config.knobs)
+            knob_lines = "\n".join(
+                f"  {knob.name}: ±{knob.scan_step:g}"
+                for knob in self.config.knobs
+            )
+            answer = QMessageBox.question(
+                self,
+                "Measure Q Response",
+                (
+                    "This operation writes temporary quadrupole scan settings and "
+                    "performs a full ±energy scan at each setting.\n\n"
+                    f"Dispersion scans: {scan_count} "
+                    f"(1 baseline + 2 × {len(self.config.knobs)} knobs)\n"
+                    f"Quadrupole scan steps:\n{knob_lines}\n\n"
+                    "Every temporary setting is restored after its response column. "
+                    "Continue?"
+                ),
+                QMessageBox.Yes | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Yes:
+                return
+            self._start_task("response")
+            return
+        self._compute_recommendation()
+
+    def _return_to_correction_methods(self) -> None:
+        if self._active_task:
+            return
+        self.correction_mode = None
+        self.latest_response = None
+        self.correction_recommendation = None
+        self.response_table.setRowCount(0)
+        self.response_info.clear()
+        self.recommendation_prediction_table.setRowCount(0)
+        self.recommendation_table.setRowCount(0)
+        self.recommendation_summary_label.setText(
+            "No recommendation has been calculated."
+        )
+        self.response_dialog.close()
+        self.recommendation_dialog.close()
+        if self.latest_measurement is not None:
+            self._set_live_comparison_measurement(
+                self.latest_measurement,
+                label="Latest measured",
+            )
+            self.correction_state_label.setText(
+                "Manual preparation was discarded. The current dispersion "
+                "measurement remains valid."
+            )
+        self._set_running(False, "")
+
+    def _automatic_correction_settings_tooltip(self) -> str:
+        policy = (
+            "measure Q response every generation"
+            if self.response_update_combo.currentText() == "every_iteration"
+            else "reuse the first measured Q response"
+        )
+        return (
+            f"Maximum {self.max_iter_spin.value()} generations · {policy}. "
+            "The loop may stop earlier."
+        )
+
+    def _update_automatic_correction_tooltip(
+        self,
+        _value: object | None = None,
+    ) -> None:
+        if self._active_task != "run":
+            self.run_button.setToolTip(
+                self._automatic_correction_settings_tooltip()
+            )
+
+    def _confirm_automatic_correction(self) -> None:
+        block_reason = self._operation_block_reason()
+        if block_reason is not None:
+            QMessageBox.warning(self, "Automatic Correction", block_reason)
+            return
+        if self.config.section.model_only:
+            return
+        if self.latest_measurement is None:
+            QMessageBox.warning(
+                self,
+                "Automatic Correction",
+                "Measure dispersion before starting automatic correction.",
+            )
+            return
+        if self.config.backend.type.lower() == "epics" and (
+            self.last_live_preflight is None or not self.last_live_preflight.ok
+        ):
+            QMessageBox.warning(
+                self,
+                "Automatic Correction",
+                "Click Check before starting automatic correction.",
+            )
+            return
+
+        dialog = QDialog(self)
+        dialog.setObjectName("workflowDetailsDialog")
+        dialog.setWindowTitle("Automatic Correction")
+        dialog.setMinimumWidth(560)
+        layout = QVBoxLayout(dialog)
+
+        intro = QLabel(
+            "Automatic correction repeats measurement, solving, application, and "
+            "verification without confirmation between accepted generations."
+        )
+        intro.setObjectName("workspaceIntro")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        safety = QLabel(
+            "The generation count is an upper limit. The loop stops early if a step "
+            "does not improve dispersion or a safety check fails. Unaccepted trial "
+            "steps are restored automatically."
+        )
+        safety.setWordWrap(True)
+        layout.addWidget(safety)
+
+        form = QFormLayout()
+        generations = QSpinBox(dialog)
+        generations.setRange(1, 20)
+        generations.setValue(self.max_iter_spin.value())
+        generations.setToolTip(
+            "Maximum accepted correction attempts; the loop may stop earlier."
+        )
+        form.addRow("Maximum generations", generations)
+
+        response_policy = QComboBox(dialog)
+        response_policy.addItem(
+            "Every generation — recommended for commissioning",
+            "every_iteration",
+        )
+        response_policy.addItem(
+            "Once — reuse the first measured response",
+            "once",
+        )
+        policy_index = response_policy.findData(
+            self.response_update_combo.currentText()
+        )
+        response_policy.setCurrentIndex(max(0, policy_index))
+        form.addRow("Q response measurement", response_policy)
+        form.addRow("Solver gain", QLabel(f"{self.gain_spin.value():.3g}", dialog))
+        form.addRow(
+            "Maximum step",
+            QLabel(
+                f"{self.max_step_pct_spin.value():.3g}% of configured range",
+                dialog,
+            ),
+        )
+        layout.addLayout(form)
+
+        note = QLabel(
+            "Use the manually reviewed single-generation workflow first when "
+            "commissioning a new machine configuration."
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            parent=dialog,
+        )
+        start_button = buttons.button(QDialogButtonBox.Ok)
+        start_button.setText("Start Automatic Correction")
+        start_button.setProperty("role", "control")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        previous_loading = self._loading_widgets
+        self._loading_widgets = True
+        try:
+            self.max_iter_spin.setValue(generations.value())
+            self.response_update_combo.setCurrentText(
+                str(response_policy.currentData())
+            )
+        finally:
+            self._loading_widgets = previous_loading
+        self.correction_mode = "automatic"
+        self.latest_response = None
+        self.correction_recommendation = None
+        self.correction_state_label.setText(
+            "Automatic correction is starting. Any previous single-generation "
+            "recommendation was discarded."
+        )
+        self.recommendation_summary_label.setText(
+            "No manually reviewed recommendation is active."
+        )
+        self.recommendation_prediction_table.setRowCount(0)
+        self.recommendation_table.setRowCount(0)
+        self.response_table.setRowCount(0)
+        self.response_info.clear()
+        if self.latest_measurement is not None:
+            self._set_live_comparison_measurement(
+                self.latest_measurement,
+                label="Latest measured",
+            )
+        started = self._start_task("run")
+        if started is False:
+            self.correction_mode = None
+            self._set_running(False, "")
+
     def _review_recommendation(self) -> None:
         self._show_workflow_detail(self.correction_page)
         if self.correction_recommendation is not None:
             return
         if self.latest_measurement is None or self.latest_response is None:
             self.correction_state_label.setText(
-                "Measure the Q response first. That operation also records the current "
-                "dispersion used by the recommendation."
+                "Prepare the correction first. That operation measures the Q response "
+                "and records the dispersion baseline used by the recommendation."
             )
             return
         self._compute_recommendation()
@@ -2637,7 +3610,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Correction Recommendation",
-                "Measure the Q response before calculating a recommendation.",
+                "Prepare the correction before calculating a recommendation.",
             )
             return
         try:
@@ -2656,10 +3629,10 @@ class MainWindow(QMainWindow):
         self._show_recommendation(recommendation)
         self._show_workflow_detail(self.correction_page)
         self._append_log(
-            "Correction recommendation calculated from measured data; no backend was accessed"
+            "Correction prepared from the measured Q response; no quadrupole target "
+            "was written"
         )
         self._refresh_status("Recommendation ready")
-        self._set_running(False, "")
 
     def _recommendation_device_baseline(self) -> dict[str, float]:
         if self.config.backend.type.lower() == "offline":
@@ -2689,7 +3662,7 @@ class MainWindow(QMainWindow):
         improvement = recommendation.measurement.rms_mm - recommendation.predicted_rms_mm
         self.correction_state_label.setText(
             "Prediction only — no backend read or write occurred. Review every target "
-            "before choosing Apply & Remeasure."
+            "before choosing Apply and Verify."
         )
         knob_lines = [
             f"{name}: {value:+.6g}"
@@ -2710,27 +3683,41 @@ class MainWindow(QMainWindow):
             len(measurement.bpm_names)
         )
         for row, bpm in enumerate(measurement.bpm_names):
+            is_target = bool(measurement.target_mask[row])
             self.recommendation_prediction_table.setItem(
                 row, 0, QTableWidgetItem(bpm)
             )
             self.recommendation_prediction_table.setItem(
-                row, 1, QTableWidgetItem(f"{measurement.values_mm[row]:.6g}")
+                row,
+                1,
+                QTableWidgetItem("Correction" if is_target else "Monitor"),
             )
             self.recommendation_prediction_table.setItem(
                 row,
                 2,
-                QTableWidgetItem(f"{measurement.target_values_mm[row]:.6g}"),
+                QTableWidgetItem(f"{measurement.values_mm[row]:.6g}"),
             )
             self.recommendation_prediction_table.setItem(
                 row,
                 3,
-                QTableWidgetItem(f"{recommendation.predicted_values_mm[row]:.6g}"),
+                QTableWidgetItem(
+                    f"{measurement.target_values_mm[row]:.6g}"
+                    if is_target
+                    else "—"
+                ),
             )
             self.recommendation_prediction_table.setItem(
                 row,
                 4,
+                QTableWidgetItem(f"{recommendation.predicted_values_mm[row]:.6g}"),
+            )
+            self.recommendation_prediction_table.setItem(
+                row,
+                5,
                 QTableWidgetItem(
                     f"{recommendation.predicted_residual_values_mm[row]:.6g}"
+                    if is_target
+                    else "—"
                 ),
             )
         self.recommendation_prediction_table.resizeColumnsToContents()
@@ -2802,7 +3789,7 @@ class MainWindow(QMainWindow):
             return None
         if self.last_live_preflight is None or not self.last_live_preflight.ok:
             return (
-                "Run Check Connections after the most recent configuration change "
+                "Click Check after the most recent configuration change "
                 "before applying the recommendation."
             )
         required = set(recommendation.device_deltas)
@@ -2815,7 +3802,7 @@ class MainWindow(QMainWindow):
         recommendation: CorrectionRecommendation,
     ) -> str:
         lines = [
-            "The following reviewed targets will be applied once:",
+            "The following reviewed targets will be applied for one generation:",
             "",
         ]
         if self.config.backend.type.lower() == "offline":
@@ -2857,7 +3844,8 @@ class MainWindow(QMainWindow):
                 "",
                 "The workflow will recheck connections and verify that the current "
                 "quadrupole readbacks still match this review.",
-                "It will then remeasure dispersion. If safety checks fail or the RMS "
+                "It will then remeasure dispersion to verify the result. If safety "
+                "checks fail or the RMS "
                 "does not improve enough, the pre-apply snapshot is restored.",
                 "",
                 "Proceed?",
@@ -2978,7 +3966,7 @@ class MainWindow(QMainWindow):
         if block_reason is not None:
             return (
                 None,
-                "Online Measurement Unavailable",
+                "Manual Correction",
                 "Online correction is unavailable",
                 block_reason.replace("\n", " "),
             )
@@ -2988,55 +3976,76 @@ class MainWindow(QMainWindow):
         ):
             return (
                 None,
-                "Measure Dispersion",
+                "Manual Correction",
                 "Connection check required",
-                "Run Check Connections in the left configuration panel before "
+                "Click Check in the Machine Profile header before "
                 "starting an online measurement.",
             )
         if self.latest_measurement is None:
             return (
-                "measure",
-                "Measure Dispersion",
-                "Ready to measure dispersion",
-                "Runs the configured energy scan and updates the persistent dispersion "
-                "plot.",
+                None,
+                "Manual Correction",
+                "Correction workflow locked",
+                "Measure dispersion from the left panel before choosing a correction "
+                "method.",
             )
-        if self.latest_response is None:
+        if self.correction_mode is None:
             return (
-                "response",
-                "Measure Q Response",
-                "Dispersion measured",
-                "Measures the selected quadrupole response around the latest dispersion "
-                "baseline.",
+                "select-manual",
+                "Manual Correction",
+                "Choose a correction method",
+                "Manual correction measures the selected quadrupole response, "
+                "then lets you review one recommendation before any target is written.",
             )
         if self.correction_recommendation is None:
+            if self.latest_response is None:
+                hint = (
+                    "Review the configured quadrupole scan range, then explicitly "
+                    "start Q-response measurement. Temporary scan settings are restored."
+                )
+                state = "Manual correction selected"
+            else:
+                hint = (
+                    "Uses the measured response to finish calculating the recommendation. "
+                    "No backend write occurs."
+                )
+                state = "Response measured; recommendation not ready"
             return (
-                "review",
-                "Review Recommendation",
-                "Dispersion and Q response ready",
-                "Calculates one bounded recommendation from measured data without "
-                "accessing the backend.",
+                "prepare",
+                (
+                    "Measure Q Response…"
+                    if self.latest_response is None
+                    else "Calculate Recommendation"
+                ),
+                state,
+                hint,
             )
         apply_reason = self._recommendation_apply_block_reason()
         return (
-            "apply" if apply_reason is None else None,
-            "Apply & Remeasure",
-            "Recommendation ready for review",
-            apply_reason
-            or "Applies the reviewed targets once, remeasures dispersion, and restores "
-            "the snapshot if the step is rejected.",
+            "review",
+            "Review Recommendation…",
+            (
+                "Recommendation ready"
+                if apply_reason is None
+                else "Recommendation ready; application is blocked"
+            ),
+            (
+                "Review the predicted dispersion and every quadrupole target, then "
+                "choose Apply and Verify in the review window."
+                if apply_reason is None
+                else apply_reason
+            ),
         )
 
     def _run_next_workflow_action(self) -> None:
         action = str(self.next_action_button.property("workflowAction") or "")
-        if action == "measure":
-            self._start_task("measure")
-        elif action == "response":
-            self._start_task("response")
+        if action == "select-manual":
+            self.correction_mode = "manual"
+            self._set_running(False, "")
+        elif action == "prepare":
+            self._prepare_correction()
         elif action == "review":
             self._review_recommendation()
-        elif action == "apply":
-            self._apply_reviewed_recommendation()
         elif action == "model-design":
             if self.dispersion_curve.result is None:
                 if self.show_design_model_checkbox.isChecked():
@@ -3072,46 +4081,69 @@ class MainWindow(QMainWindow):
             )
         measurement = self.latest_measurement
         if measurement is not None:
-            valid_count = int(np.count_nonzero(measurement.valid))
+            target_valid = int(
+                np.count_nonzero(
+                    measurement.valid & measurement.target_mask
+                )
+            )
+            target_count = int(np.count_nonzero(measurement.target_mask))
+            monitor_count = int(np.count_nonzero(~measurement.target_mask))
+            monitor_summary = (
+                f" · {monitor_count} monitor BPM(s)"
+                if monitor_count
+                else ""
+            )
             return (
                 f"Measured residual RMS {measurement.rms_mm:.4g} mm · "
-                f"{valid_count}/{len(measurement.bpm_names)} valid BPMs"
+                f"{target_valid}/{target_count} correction BPMs valid"
+                f"{monitor_summary}"
             )
         return (
             f"Energy step {self._energy_step_compact()} · "
-            f"{self.samples_per_step_spin.value()} samples/step"
+            f"{self.samples_per_step_spin.value()} scan samples/setting"
         )
 
     def _update_workflow_auxiliary_actions(self, running: bool) -> None:
-        has_response = self.latest_response is not None
-        has_recommendation = self.correction_recommendation is not None
-        has_last_run = (
-            self.correction_table.rowCount() > 0
-            or bool(self.report_text.toPlainText())
+        manual_mode = self.correction_mode == "manual"
+        has_response = manual_mode and self.latest_response is not None
+        has_history = bool(self.correction_session_runs)
+        self.back_to_correction_methods_button.setVisible(
+            manual_mode and not self.config.section.model_only
+        )
+        self.back_to_correction_methods_button.setEnabled(
+            not running and manual_mode
         )
         self.response_details_button.setVisible(has_response)
         self.response_details_button.setEnabled(not running and has_response)
-        self.recommendation_details_button.setVisible(has_recommendation)
-        self.recommendation_details_button.setEnabled(
-            not running and has_recommendation
-        )
-        self.last_run_button.setEnabled(not running and has_last_run)
-        self.last_run_button.setToolTip(
-            "Open the latest correction execution and report."
-            if has_last_run
-            else "No correction execution is available yet."
+        self.history_button.setEnabled(not running and has_history)
+        self.history_button.setToolTip(
+            "Review manual and automatic correction runs by generation."
+            if has_history
+            else "No correction history is available yet."
         )
 
     def _update_next_workflow_action(self, running: bool, task: str) -> None:
         self.workflow_summary_label.setText(self._workflow_summary_text())
         self._update_workflow_auxiliary_actions(running)
         if running:
+            if task == "run":
+                self.next_action_button.hide()
+                self.run_button.show()
+            elif task in {"response", "apply"}:
+                self.next_action_button.show()
+                self.run_button.hide()
+            else:
+                self.next_action_button.hide()
+                self.run_button.hide()
             labels = {
-                "preflight": ("Measure Dispersion", "Checking connections"),
-                "measure": ("Measuring Dispersion…", "Dispersion measurement running"),
-                "response": ("Measuring Q Response…", "Q response measurement running"),
-                "apply": ("Applying & Remeasuring…", "Reviewed correction running"),
-                "run": ("Automatic Loop Running…", "Automatic correction running"),
+                "preflight": ("Manual Correction", "Checking connections"),
+                "measure": ("Manual Correction", "Dispersion measurement running"),
+                "response": (
+                    "Preparing Manual Correction…",
+                    "Measuring Q response and preparing recommendation",
+                ),
+                "apply": ("Applying and Verifying…", "Reviewed correction running"),
+                "run": ("Manual Correction", "Automatic correction running"),
                 "model-response": ("Calculating Model…", "Model analysis running"),
             }
             button_text, state_text = labels.get(
@@ -3121,21 +4153,89 @@ class MainWindow(QMainWindow):
             self.next_action_button.setProperty("workflowAction", "")
             self.next_action_button.setText(button_text)
             self.next_action_button.setEnabled(False)
-            self.next_action_button.show()
+            self.next_action_button.setVisible(task in {"response", "apply"})
             self.workflow_state_label.setText(state_text)
             self.workflow_hint_label.setText(
                 "Wait for the current operation to finish or use Abort when available."
+            )
+            self.next_action_button.setToolTip(
+                "Wait for the current operation to finish or use Abort."
             )
             return
         action, button_text, state_text, hint = self._next_workflow_action()
         self.next_action_button.setProperty("workflowAction", action or "")
         self.next_action_button.setText(button_text)
         self.next_action_button.setEnabled(action is not None)
-        self.next_action_button.setVisible(action is not None)
+        model_only = self.config.section.model_only
+        manual_mode = self.correction_mode == "manual"
+        automatic_mode = self.correction_mode == "automatic"
+        self.next_action_button.setVisible(model_only or not automatic_mode)
+        self.run_button.setVisible(
+            not model_only and not manual_mode
+        )
+        self.next_action_button.setToolTip(hint)
         self.workflow_state_label.setText(state_text)
         self.workflow_hint_label.setText(hint)
 
+    def _update_measurement_action(self, running: bool, task: str) -> None:
+        model_only = self.config.section.model_only
+        self.measurement_action_button.setVisible(not model_only)
+        self.measurement_status_label.setVisible(not model_only)
+        if model_only:
+            return
+        connection_ready = (
+            self.config.backend.type.lower() != "epics"
+            or (
+                self.last_live_preflight is not None
+                and self.last_live_preflight.ok
+            )
+        )
+        block_reason = self._operation_block_reason()
+        if running and task == "measure":
+            self.measurement_action_button.setText("Measuring Dispersion…")
+            self.measurement_status_label.setText(
+                "Energy scan in progress; the previous valid curve remains visible."
+            )
+        else:
+            self.measurement_action_button.setText(
+                "Remeasure Dispersion"
+                if self.latest_measurement is not None
+                else "Measure Dispersion"
+            )
+            if self.latest_measurement is None:
+                self.measurement_status_label.setText(
+                    "No valid dispersion measurement"
+                )
+            else:
+                measured_at = (
+                    self.latest_measurement_time.strftime("%H:%M:%S")
+                    if self.latest_measurement_time is not None
+                    else "current session"
+                )
+                self.measurement_status_label.setText(
+                    f"RMS {self.latest_measurement.rms_mm:.4g} mm · "
+                    f"{measured_at}"
+                )
+        if running:
+            tooltip = "Another operation is running."
+        elif block_reason is not None:
+            tooltip = block_reason
+        elif not connection_ready:
+            tooltip = "Click Check before measuring dispersion."
+        else:
+            tooltip = (
+                "Run the configured ±energy scan and update the persistent "
+                "dispersion plot."
+            )
+        self.measurement_action_button.setEnabled(
+            not running
+            and block_reason is None
+            and connection_ready
+        )
+        self.measurement_action_button.setToolTip(tooltip)
+
     def _set_running(self, running: bool, task: str) -> None:
+        self._active_task = task if running else ""
         profile_managed = self.app_context is not None
         block_reason = self._operation_block_reason()
         operation_allowed = block_reason is None
@@ -3174,7 +4274,6 @@ class MainWindow(QMainWindow):
             self.config.backend.type.lower() == "epics"
             and not self.config.section.model_only
         )
-        self.connection_controls.setVisible(connection_available)
         self.preflight_button.setVisible(connection_available)
         self.preflight_button.setEnabled(not running and connection_available)
         self.model_response_button.setEnabled(
@@ -3195,7 +4294,26 @@ class MainWindow(QMainWindow):
         self._update_plot_state(running=running, task=task)
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
-        self.run_button.setEnabled(not running and operation_allowed)
+        automatic_visible = not self.config.section.model_only
+        automatic_connection_ready = (
+            self.config.backend.type.lower() != "epics"
+            or (
+                self.last_live_preflight is not None
+                and self.last_live_preflight.ok
+            )
+        )
+        self.run_button.setVisible(automatic_visible)
+        if running and task == "run":
+            self.run_button.setText("Automatic Correction · 0%")
+        elif not running:
+            self.run_button.setText("Automatic Correction…")
+        self.run_button.setEnabled(
+            not running
+            and operation_allowed
+            and automatic_connection_ready
+            and automatic_visible
+            and self.latest_measurement is not None
+        )
         recommendation_inputs_ready = (
             self.latest_measurement is not None and self.latest_response is not None
         )
@@ -3213,8 +4331,23 @@ class MainWindow(QMainWindow):
             else block_reason
             or "This operation changes machine settings and performs live safety checks."
         )
-        for button in (self.measure_button, self.response_button, self.run_button):
+        for button in (self.measure_button, self.response_button):
             button.setToolTip(action_tooltip)
+        if running:
+            automatic_tooltip = "Another operation is running."
+        elif block_reason is not None:
+            automatic_tooltip = block_reason
+        elif not automatic_connection_ready:
+            automatic_tooltip = (
+                "Click Check before starting automatic correction."
+            )
+        elif self.latest_measurement is None:
+            automatic_tooltip = (
+                "Measure dispersion before starting automatic correction."
+            )
+        else:
+            automatic_tooltip = self._automatic_correction_settings_tooltip()
+        self.run_button.setToolTip(automatic_tooltip)
         recommendation_tooltip = (
             "Another operation is running."
             if running
@@ -3251,6 +4384,7 @@ class MainWindow(QMainWindow):
         self.abort_button.setEnabled(abortable)
         self.abort_button.setVisible(abortable)
         self.progress_widget.setVisible(running)
+        self._update_measurement_action(running, task)
         self._update_next_workflow_action(running, task)
         self._update_operation_banner()
         if running:
@@ -3267,6 +4401,30 @@ class MainWindow(QMainWindow):
         self.operation_progress.setRange(0, 100)
         self.operation_progress.setValue(percent)
         self.progress_percent_label.setText(f"{percent}%")
+        if self._active_task == "run":
+            iteration_match = re.search(r"Iteration\s+(\d+)/(\d+)", stage)
+            if iteration_match is not None:
+                generation = (
+                    f"Gen {iteration_match.group(1)}/"
+                    f"{iteration_match.group(2)}"
+                )
+            elif "Final" in stage:
+                generation = "Final"
+            elif "Initial" in stage:
+                generation = "Initial"
+            else:
+                generation = ""
+            parts = ["Automatic"]
+            if generation:
+                parts.append(generation)
+            if "·" in stage:
+                phase = stage.split("·", 1)[1].strip()
+                if phase:
+                    parts.append(phase)
+            parts.append(f"{percent}%")
+            progress_text = " · ".join(parts)
+            self.run_button.setText(progress_text)
+            self.run_button.setToolTip(f"{stage} · {percent}%")
 
     def _toggle_advanced_settings(self, checked: bool) -> None:
         self.advanced_settings.setVisible(checked)
@@ -3609,7 +4767,11 @@ class MainWindow(QMainWindow):
             build_stylesheet(self.theme_name)
         )
         self.last_run_dialog.setStyleSheet(build_stylesheet(self.theme_name))
+        self.iteration_history_dialog.setStyleSheet(
+            build_stylesheet(self.theme_name)
+        )
         self.dispersion_curve.set_theme(self.theme_name)
+        self.iteration_history_curve.set_theme(self.theme_name)
         self._update_theme_button()
 
     def _update_theme_button(self) -> None:
@@ -3631,8 +4793,21 @@ class MainWindow(QMainWindow):
         if self.worker is not None and self.worker.isRunning():
             self.worker.requestInterruption()
             self.abort_button.setEnabled(False)
+            self.progress_stage_label.setText("Stopping at a safe point…")
+            self.workflow_state_label.setText(
+                "Abort requested · waiting for a safe restore boundary"
+            )
             self._refresh_status("Aborting")
-            self._append_log("Abort requested; restoring the operation snapshot")
+            restore_target = {
+                "measure": "the initial energy setting",
+                "response": "the Q-response scan snapshot",
+                "apply": "the pre-apply machine snapshot",
+                "run": "the automatic-correction start snapshot",
+            }.get(self._active_task, "the operation snapshot")
+            self._append_log(
+                f"Abort requested; stopping at a safe point and restoring "
+                f"{restore_target}"
+            )
 
     def _operation_block_reason(self) -> str | None:
         if self.config.section.model_only:

@@ -20,7 +20,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     else:
         pytest.skip("No offscreen/minimal Qt platform plugin is installed")
 
-    from PyQt5.QtWidgets import QApplication, QListWidgetItem, QMessageBox
+    from PyQt5.QtWidgets import QApplication, QLabel, QListWidgetItem, QMessageBox
 
     from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
 
@@ -50,11 +50,15 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.response_dialog.isHidden()
     assert window.recommendation_dialog.isHidden()
     assert window.last_run_dialog.isHidden()
-    assert window.last_run_button.text() == "Last Run…"
-    assert not window.last_run_button.isEnabled()
+    assert window.iteration_history_dialog.isHidden()
+    assert not hasattr(window, "iteration_history_button")
+    assert window.history_button.text() == "History…"
+    assert window.last_run_button is window.history_button
+    assert not window.history_button.isEnabled()
     assert window.offline_demo_button.isHidden()
     assert window.response_details_button.isHidden()
-    assert window.recommendation_details_button.isHidden()
+    assert window.back_to_correction_methods_button.isHidden()
+    assert not hasattr(window, "recommendation_details_button")
     assert window.plot_state_label.text() == "No measured data"
     assert window.plot_state_label.isHidden()
     assert not hasattr(window, "plan_button")
@@ -87,22 +91,48 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.measure_button.isHidden()
     assert window.response_button.isHidden()
     assert window.review_button.isHidden()
-    assert window.connection_controls.isHidden()
+    assert not hasattr(window, "connection_controls")
     assert window.preflight_button.isHidden()
-    assert window.run_button.parentWidget() is window.correction_page
+    assert window.preflight_button.text() == "Check"
+    assert window.run_button.parentWidget() is window.correction_mode_actions
+    assert window.run_button.objectName() == "automaticCorrectionButton"
     assert window.apply_recommendation_button.parentWidget() is window.correction_page
-    assert window.apply_recommendation_button.isHidden()
-    assert window.next_action_button.text() == "Measure Dispersion"
-    assert window.next_action_button.property("workflowAction") == "measure"
+    assert not window.apply_recommendation_button.isHidden()
+    assert window.apply_recommendation_button.text() == "Apply and Verify"
+    assert window.measurement_action_button.text() == "Measure Dispersion"
+    assert window.measurement_action_button.isEnabled()
+    assert window.measurement_status_label.text() == (
+        "No valid dispersion measurement"
+    )
+    assert window.next_action_button.text() == "Manual Correction"
+    assert window.next_action_button.property("workflowAction") == ""
+    assert not window.next_action_button.isEnabled()
+    assert not window.run_button.isEnabled()
     assert "Energy step" in window.workflow_summary_label.text()
     next_actions = []
     window._start_task = lambda task: next_actions.append(task)
-    window.next_action_button.click()
+    window.measurement_action_button.click()
     assert next_actions == ["measure"]
-    assert window.run_button.text() == "Advanced: Automatic Loop"
+    assert window.run_button.text() == "Automatic Correction…"
     assert window.recommendation_table.columnCount() == 6
     assert not window.advanced_settings.isVisible()
     assert window.advanced_button.text() == "Advanced settings"
+    config_labels = {label.text() for label in window.findChildren(QLabel)}
+    assert "Scan Samples" in config_labels
+    assert "Verification Samples" in config_labels
+    assert "Max Generations" not in config_labels
+    assert "Q Response Update" not in config_labels
+    assert window.max_iter_spin.isHidden()
+    assert window.response_update_combo.isHidden()
+    assert "Measure dispersion before" in window.run_button.toolTip()
+    assert window.advanced_settings.widget() is window.advanced_settings_content
+    advanced_sections = {
+        label.text()
+        for label in window.advanced_settings_content.findChildren(QLabel)
+        if label.property("role") == "configSection"
+    }
+    assert "CORRECTION STEP" in advanced_sections
+    assert "AUTOMATIC CORRECTION" not in advanced_sections
     assert window.operation_plan is not None
     assert not hasattr(window, "knob_table")
     assert window.knob_edit.text() == "Q1L/Q1R; Q2L/Q2R"
@@ -114,15 +144,36 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window._set_running(False, "")
     assert window.response_dialog.isHidden()
     assert window.recommendation_dialog.isHidden()
-    assert window.next_action_button.text() == "Measure Q Response"
-    assert window.next_action_button.property("workflowAction") == "response"
+    assert window.measurement_action_button.text() == "Remeasure Dispersion"
+    assert "RMS" in window.measurement_status_label.text()
+    assert window.next_action_button.text() == "Manual Correction"
+    assert window.next_action_button.property("workflowAction") == "select-manual"
+    assert window.run_button.isEnabled()
+    assert not window.back_to_correction_methods_button.isVisibleTo(window)
+    assert f"Maximum {window.max_iter_spin.value()} generations" in (
+        window.run_button.toolTip()
+    )
+    next_actions.clear()
+    window.next_action_button.click()
+    assert next_actions == []
+    assert window.correction_mode == "manual"
+    assert window.next_action_button.text() == "Measure Q Response…"
+    assert window.run_button.isHidden()
+    assert window.next_action_button.height() == window.run_button.height()
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_args, **_kwargs: QMessageBox.Yes,
+    )
+    window.next_action_button.click()
+    assert next_actions == ["response"]
     assert "Measured residual RMS" in window.workflow_summary_label.text()
-    assert "4/4 valid BPMs" in window.workflow_summary_label.text()
+    assert "4/4 correction BPMs valid" in window.workflow_summary_label.text()
     assert window.dispersion_curve.result is None
     assert window.dispersion_curve.measurement.label == "Latest measured"
     assert window.measurement_source_combo.currentData() == "live"
     assert "Latest measured" in window.plot_state_label.text()
-    assert "4/4 valid BPMs" in window.plot_state_label.text()
+    assert "4/4 correction BPMs valid" in window.plot_state_label.text()
     assert not window.plot_state_label.isHidden()
     assert not window.model_measure_table.isHidden()
     assert window.model_measure_table.columnCount() == 4
@@ -130,28 +181,31 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window._task_completed("response", response)
     window._set_running(False, "")
     assert window.response_dialog.isHidden()
+    assert window.correction_recommendation is not None
+    assert window.correction_recommendation.ready
+    assert window.recommendation_dialog.isVisible()
     assert not window.response_details_button.isHidden()
+    window.recommendation_dialog.close()
     window.response_details_button.click()
     app.processEvents()
     assert window.response_dialog.isVisible()
     window.response_dialog.close()
-    assert window.next_action_button.text() == "Review Recommendation"
+    assert window.next_action_button.text() == "Review Recommendation…"
     assert window.next_action_button.property("workflowAction") == "review"
-    assert "condition number" in window.workflow_summary_label.text()
+    assert window.run_button.isHidden()
+    assert window.back_to_correction_methods_button.isVisibleTo(window)
+    assert "Predicted residual RMS" in window.workflow_summary_label.text()
     assert window.dispersion_curve.measurement.label == "Response baseline"
     assert "Response baseline" in window.plot_state_label.text()
-    window._compute_recommendation()
-    assert window.correction_recommendation is not None
-    assert window.correction_recommendation.ready
+    window._review_recommendation()
     assert window.recommendation_dialog.isVisible()
-    assert not window.recommendation_details_button.isHidden()
     assert window.recommendation_table.rowCount() == 4
     assert window.recommendation_prediction_table.rowCount() == len(
         response.bpm_names
     )
     assert window.apply_recommendation_button.isEnabled()
-    assert window.next_action_button.text() == "Apply & Remeasure"
-    assert window.next_action_button.property("workflowAction") == "apply"
+    assert window.next_action_button.text() == "Review Recommendation…"
+    assert window.next_action_button.property("workflowAction") == "review"
     assert "Predicted residual RMS" in window.workflow_summary_label.text()
     assert "no backend" in window.correction_state_label.text().lower()
     window.recommendation_dialog.close()
@@ -159,8 +213,19 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window.gain_spin.setValue(max(0.001, old_gain - 0.1))
     app.processEvents()
     assert window.correction_recommendation is None
-    assert not window.review_button.isEnabled()
+    assert window.latest_measurement is response.measurement
+    assert window.latest_response is response
+    assert window.next_action_button.property("workflowAction") == "prepare"
+    assert window.run_button.isHidden()
+    assert window.review_button.isEnabled()
     assert "discarded" in window.correction_state_label.text().lower()
+    window.back_to_correction_methods_button.click()
+    assert window.correction_mode is None
+    assert window.latest_measurement is response.measurement
+    assert window.latest_response is None
+    assert window.correction_recommendation is None
+    assert window.run_button.isEnabled()
+    assert not window.back_to_correction_methods_button.isVisibleTo(window)
     from half_linac.src.apps.dispersion_correction.calibration_draft import (
         EnergyCalibrationDraft,
         EnergyCalibrationPoint,
@@ -261,12 +326,8 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window.correction_table.setRowCount(1)
     window.report_text.setPlainText("Last run report")
     window._set_running(False, "")
-    assert window.last_run_button.isEnabled()
-    window.last_run_button.click()
-    app.processEvents()
-    assert window.last_run_dialog.isVisible()
+    assert not window.history_button.isEnabled()
     assert window.dispersion_curve.isVisibleTo(window)
-    window.last_run_dialog.close()
     assert abs(window.load_button.geometry().center().y() - window.config_title_label.geometry().center().y()) <= 1
     assert window.load_button.property("role") is None
     assert not window.abort_button.isVisible()
@@ -282,7 +343,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.abort_button.isEnabled()
     assert not window.measure_button.isEnabled()
     assert not window.next_action_button.isEnabled()
-    assert window.next_action_button.text() == "Measuring Dispersion…"
+    assert window.next_action_button.isHidden()
+    assert window.measurement_action_button.text() == "Measuring Dispersion…"
+    assert not window.measurement_action_button.isEnabled()
     assert not window.delta_spin.isEnabled()
     assert window.progress_widget.isVisible()
     assert "Measuring dispersion" in window.plot_state_label.text()
@@ -295,6 +358,37 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not window.progress_widget.isVisible()
     assert window.plot_state_label.text() == "No measured data"
     assert window.plot_state_label.isHidden()
+
+    window._set_running(True, "run")
+    window._update_progress("Iteration 2/5 · validating", 2, 7)
+    assert "Gen 2/5" in window.run_button.text()
+    assert "validating" in window.run_button.text()
+    assert "29%" in window.run_button.text()
+    assert window.next_action_button.isHidden()
+    assert "Iteration 2/5" in window.run_button.toolTip()
+    window._automatic_measurement_updated(
+        0,
+        5,
+        "initial",
+        response.measurement,
+    )
+    assert window.dispersion_curve.measurement.label == "Automatic initial"
+    assert window.dispersion_curve.reference_measurement is None
+    window._automatic_measurement_updated(
+        1,
+        5,
+        "accepted",
+        response.measurement,
+    )
+    assert window.dispersion_curve.measurement.label == (
+        "Generation 1 · accepted"
+    )
+    assert window.dispersion_curve.reference_measurement.label == (
+        "Before correction"
+    )
+    assert "generation 1/5 accepted" in window.plot_state_label.text().lower()
+    window._set_running(False, "")
+    assert window.run_button.text() == "Automatic Correction…"
     window.close()
 
     from half_linac.src.apps.dispersion_correction.profile_runtime import load_profile_run_config
@@ -348,17 +442,22 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert "READ ONLY" in profile_window.operation_banner.text()
     assert profile_window.operation_banner.isHidden()
     assert "±0.0001 / ±0.25 deg" == profile_window._energy_step_compact()
-    assert profile_window.connection_controls.isVisibleTo(profile_window)
+    assert not hasattr(profile_window, "connection_controls")
     assert profile_window.preflight_button.isVisibleTo(profile_window)
     assert profile_window.preflight_button.isEnabled()
+    assert profile_window.preflight_button.parentWidget().objectName() == "controlCard"
     assert (
-        profile_window.preflight_button.parentWidget()
-        is profile_window.connection_controls
+        abs(
+            profile_window.preflight_button.geometry().center().y()
+            - profile_window.config_title_label.geometry().center().y()
+        )
+        <= 1
     )
-    assert profile_window.next_action_button.text() == "Online Measurement Unavailable"
+    assert profile_window.next_action_button.text() == "Manual Correction"
     assert profile_window.next_action_button.property("workflowAction") == ""
     assert not profile_window.next_action_button.isEnabled()
-    assert profile_window.next_action_button.isHidden()
+    assert profile_window.next_action_button.isVisibleTo(profile_window)
+    assert not profile_window.measurement_action_button.isEnabled()
     assert "read-only" in profile_window.workflow_hint_label.text().lower()
     assert "read-only" in profile_window.preflight_button.toolTip().lower()
     assert "read-only" in profile_window.measure_button.toolTip().lower()
@@ -463,7 +562,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert irfel_vm_window.section_combo.currentData() == "dogleg"
     assert irfel_vm_window.model_dialog.isHidden()
     assert irfel_vm_window.next_action_button.text() == "Calculate Design Model"
-    assert irfel_vm_window.connection_controls.isHidden()
+    assert not hasattr(irfel_vm_window, "connection_controls")
     assert irfel_vm_window.preflight_button.isHidden()
     assert irfel_vm_window.show_design_model_checkbox.isEnabled()
     assert irfel_vm_window.show_snapshot_model_checkbox.isEnabled()
@@ -513,7 +612,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.model_dialog.isHidden()
     assert half_window.next_action_button.text() == "Calculate Design Model"
     assert half_window.next_action_button.property("workflowAction") == "model-design"
-    assert half_window.connection_controls.isHidden()
+    assert not hasattr(half_window, "connection_controls")
     assert half_window.preflight_button.isHidden()
     from half_linac.src.apps.dispersion_correction.models import (
         ImportedDispersionDataset,
@@ -626,6 +725,8 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
     pytest.importorskip("PyQt5")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+    from dataclasses import replace
+
     from PyQt5.QtWidgets import QApplication
 
     from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
@@ -644,21 +745,25 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
     assert demo.status_strip.items["MACHINE"].value_label.text() == "STANDALONE"
     assert demo.status_strip.items["BACKEND"].value_label.text() == "OFFLINE"
     assert demo.status_strip.items["ACCESS"].value_label.text() == "OFFLINE DEMO"
-    assert demo.next_action_button.text() == "Measure Dispersion"
-    assert demo.next_action_button.isVisibleTo(demo)
+    assert demo.measurement_action_button.text() == "Measure Dispersion"
+    assert demo.measurement_action_button.isVisibleTo(demo)
+    assert demo.next_action_button.text() == "Manual Correction"
+    assert not demo.next_action_button.isEnabled()
 
     response = AchromatWorkflow(
         demo._config_from_widgets()
     ).build_response_matrix()
     demo._task_completed("measure", response.measurement)
     demo._set_running(False, "")
-    assert demo.next_action_button.text() == "Measure Q Response"
+    assert demo.measurement_action_button.text() == "Remeasure Dispersion"
+    assert demo.next_action_button.text() == "Manual Correction"
+    assert demo.run_button.isEnabled()
 
     demo._task_completed("response", response)
     demo._set_running(False, "")
-    assert demo.next_action_button.text() == "Review Recommendation"
-
-    demo._compute_recommendation()
+    assert demo.next_action_button.text() == "Review Recommendation…"
+    assert demo.run_button.isHidden()
+    assert demo.back_to_correction_methods_button.isVisibleTo(demo)
     assert demo.correction_recommendation is not None
     assert demo.correction_recommendation.ready
     demo.recommendation_dialog.close()
@@ -670,9 +775,117 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
 
     assert result.success
     assert demo.correction_table.rowCount() == 1
-    assert demo.last_run_button.isEnabled()
-    assert demo.next_action_button.text() == "Measure Q Response"
+    assert demo.history_button.isEnabled()
+    assert len(demo.correction_session_runs) == 1
+    demo.history_button.click()
+    app.processEvents()
+    assert demo.iteration_history_dialog.isVisible()
+    assert demo.iteration_history_run_combo.currentText() == "Manual 1"
+    assert demo.iteration_history_generation_combo.count() == 3
+    demo.iteration_history_generation_combo.setCurrentIndex(1)
+    app.processEvents()
+    assert "generation 1 accepted" in (
+        demo.iteration_history_status_label.text().lower()
+    )
+    assert demo.iteration_history_curve.measurement.label == (
+        "Generation 1 measured"
+    )
+    assert demo.iteration_history_knob_table.rowCount() == len(
+        result.steps[0].device_values_before
+    )
+    demo.iteration_history_generation_combo.setCurrentIndex(2)
+    demo.iteration_history_overlay_checkbox.setChecked(True)
+    app.processEvents()
+    assert len(demo.iteration_history_curve.measurement_overlays) == 1
+    demo.iteration_history_dialog.close()
+    assert demo.next_action_button.text() == "Manual Correction"
+
+    automatic = AchromatWorkflow(demo._config_from_widgets()).run()
+    demo._task_completed("run", automatic)
+    assert len(demo.correction_session_runs) == 2
+    assert demo.iteration_history_run_combo.currentText() == "Automatic 1"
+    assert demo.iteration_history_generation_combo.count() == (
+        len(automatic.steps) + 2
+    )
+
+    aborted = replace(
+        automatic,
+        success=False,
+        reason="Aborted; initial state restored",
+    )
+    demo._task_completed("run", aborted)
+    demo._set_running(False, "")
+    assert demo.latest_measurement is None
+    assert demo.measurement_action_button.text() == "Measure Dispersion"
+    assert not demo.next_action_button.isEnabled()
+    assert not demo.run_button.isEnabled()
+    assert "Remeasure dispersion" in demo.correction_state_label.text()
     demo.close()
+
+
+def test_offline_demo_confirms_automatic_correction_settings(monkeypatch) -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PyQt5.QtWidgets import QApplication, QDialog
+
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
+
+    app = QApplication.instance() or QApplication([])
+    demo = MainWindow(offline_demo=True)
+    demo.show()
+    app.processEvents()
+    measurement = AchromatWorkflow(
+        demo._config_from_widgets()
+    ).measure_dispersion()
+    demo._task_completed("measure", measurement)
+    demo._set_running(False, "")
+
+    tasks = []
+    demo._start_task = lambda task: tasks.append(task)
+    monkeypatch.setattr(QDialog, "exec_", lambda _dialog: QDialog.Accepted)
+    demo._confirm_automatic_correction()
+
+    assert tasks == ["run"]
+    assert demo.correction_mode == "automatic"
+    assert demo.run_button.text() == "Automatic Correction…"
+    assert demo.run_button.parentWidget() is demo.correction_mode_actions
+    demo.close()
+
+
+def test_measure_worker_uses_scan_samples(monkeypatch) -> None:
+    pytest.importorskip("PyQt5")
+
+    from dataclasses import replace
+
+    from half_linac.src.apps.dispersion_correction.gui.main_window import (
+        WorkflowWorker,
+    )
+    from half_linac.src.apps.dispersion_correction.profile_runtime import (
+        default_offline_config,
+    )
+    from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
+
+    config = default_offline_config()
+    config = replace(
+        config,
+        measurement=replace(
+            config.measurement,
+            samples_per_step=3,
+            final_samples=11,
+        ),
+    )
+    observed = []
+
+    def record_samples(_workflow, samples=None):
+        observed.append(samples)
+        return object()
+
+    monkeypatch.setattr(AchromatWorkflow, "measure_dispersion", record_samples)
+    WorkflowWorker("measure", config).run()
+
+    assert observed == [3]
 
 
 def test_profile_window_opens_an_independent_offline_demo() -> None:
@@ -699,7 +912,8 @@ def test_profile_window_opens_an_independent_offline_demo() -> None:
     app.processEvents()
 
     assert profile.offline_demo_button.isVisibleTo(profile)
-    assert profile.next_action_button.isHidden()
+    assert profile.next_action_button.isVisibleTo(profile)
+    assert not profile.next_action_button.isEnabled()
     profile.offline_demo_button.click()
     app.processEvents()
     demo = profile._offline_demo_window

@@ -6,6 +6,7 @@
     "BPM01",
     "BPM02"
   ],
+  "monitor_bpms": [],
   "bpm_position_scale_to_mm": {
     "real": 1.0
   },

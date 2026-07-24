@@ -75,6 +75,7 @@ def compute_effective_dispersion(
     delta: float,
     plane: str = "x",
     target_values_mm: Sequence[float] | None = None,
+    target_mask: Sequence[bool] | None = None,
 ) -> DispersionMeasurement:
     if delta <= 0:
         raise ValueError("delta must be positive")
@@ -97,6 +98,7 @@ def compute_effective_dispersion(
         plus=plus,
         minus=minus,
         target_values_mm=target_values_mm,
+        target_mask=target_mask,
     )
 
 
