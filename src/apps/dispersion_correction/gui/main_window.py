@@ -2787,7 +2787,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Configuration", str(exc))
             return False
         self.config = config
-        self.last_live_preflight = None
         self._update_static_safety_status()
         blocked_reason = self._operation_block_reason()
         if blocked_reason is not None:

@@ -71,6 +71,11 @@ def load_profile_run_config(
         "site": resolved_context.profile.machine.id,
         "profile_backend": backend_name,
         "ca_timeout": float(selected.get("ca_timeout", 0.5)),
+        "readback_timeout": _backend_number(
+            selected.get("readback_timeout"),
+            backend_name,
+            default=2.0,
+        ),
         "bpm_position_scale_to_mm": _backend_number(
             selected.get("bpm_position_scale_to_mm"),
             backend_name,

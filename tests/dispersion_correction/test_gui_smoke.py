@@ -537,6 +537,23 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     profile_window._set_running(False, "")
     assert profile_window.measurement_action_button.isEnabled()
+    checked_preflight = profile_window.last_live_preflight
+    preflight_seen_by_measure = []
+    monkeypatch.setattr(
+        profile_window,
+        "_operation_block_reason",
+        lambda: (
+            preflight_seen_by_measure.append(profile_window.last_live_preflight)
+            or "Stop before starting the test worker."
+        ),
+    )
+    assert not profile_window._start_task("measure")
+    assert preflight_seen_by_measure
+    assert all(
+        result is checked_preflight
+        for result in preflight_seen_by_measure
+    )
+    assert profile_window.last_live_preflight is checked_preflight
     assert profile_window.bpm_select_button.isVisibleTo(profile_window)
     assert profile_window.bpm_select_button.height() == profile_window.bpm_edit.height() == 34
     assert profile_window.knob_select_button.height() == profile_window.knob_edit.height() == 34
