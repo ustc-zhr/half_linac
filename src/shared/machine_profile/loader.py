@@ -1573,6 +1573,40 @@ def _validate_dispersion_correction_workflow(
             "backend(s) not listed in control_backends: "
             + ", ".join(invalid_model_only_backends)
         )
+    raw_quadrupole_control = workflow.get("quadrupole_control")
+    if raw_quadrupole_control is not None:
+        quadrupole_control = _expect_mapping(
+            raw_quadrupole_control,
+            "workflows.dispersion_correction.quadrupole_control",
+        )
+        unknown_control_backends = sorted(
+            set(quadrupole_control) - set(supported_backends)
+        )
+        if unknown_control_backends:
+            raise MachineProfileError(
+                "workflows.dispersion_correction.quadrupole_control contains "
+                "backend(s) not listed in control_backends: "
+                + ", ".join(unknown_control_backends)
+            )
+        missing_control_backends = sorted(
+            set(supported_backends) - set(quadrupole_control)
+        )
+        if missing_control_backends:
+            raise MachineProfileError(
+                "workflows.dispersion_correction.quadrupole_control is missing "
+                "configured backend(s): " + ", ".join(missing_control_backends)
+            )
+        for backend_name, raw_control in quadrupole_control.items():
+            control = _expect_non_empty_string(
+                raw_control,
+                "workflows.dispersion_correction."
+                f"quadrupole_control.{backend_name}",
+            ).lower()
+            if control not in {"current", "k1"}:
+                raise MachineProfileError(
+                    "workflows.dispersion_correction."
+                    f"quadrupole_control.{backend_name} must be 'current' or 'K1'."
+                )
 
     sections = workflow.get("sections")
     if sections is None:

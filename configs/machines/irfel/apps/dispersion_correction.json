@@ -7,6 +7,10 @@
   "model_only_control_backends": [
     "vm"
   ],
+  "quadrupole_control": {
+    "vm": "K1",
+    "real": "K1"
+  },
   "default_section": "MIR-dogleg",
   "sections": [
     {
@@ -34,7 +38,7 @@
             "QM16": 1.0
           },
           "scan_step": 0.0005,
-          "limit": 0.012
+          "limit": 5
         },
         {
           "name": "Q14_Q15_sym",
@@ -43,7 +47,7 @@
             "QM15": 1.0
           },
           "scan_step": 0.0005,
-          "limit": 0.012
+          "limit": 5
         }
       ],
       "model_observables": [
@@ -66,18 +70,15 @@
     "real": 1.0
   },
   "energy_knob": {
-    "name": "KLY1_CH3_PHASE",
-    "actuator": "rf_phase",
-    "actuator_unit": "deg",
+    "name": "MODULATOR_HV1",
+    "actuator": "modulator_voltage",
+    "actuator_unit": "kV",
     "delta": 0.0001,
-    "calibration": {
-      "kind": "linear_relative",
-      "actuator_per_delta": 2500.0
-    },
+    "calibration": {},
     "readback_tolerance": 0.01,
-    "element": "KLY1_CH3_PHASE",
-    "set_channel": "phase_set",
-    "readback_channel": "phase_readback"
+    "element": "MODULATOR_HV1",
+    "set_channel": "voltage_set",
+    "readback_channel": "voltage_readback"
   },
   "measurement": {
     "plane": "x",

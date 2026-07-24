@@ -66,7 +66,7 @@ def test_irfel_vm_profile_opens_as_model_only_without_energy_knob_pvs() -> None:
     assert config.backend.options["profile_backend"] == "vm"
     assert config.backend.options["pv_map"] == {}
     assert config.section.model_only
-    assert config.section.id == "dogleg"
+    assert config.section.id == "MIR-dogleg"
     assert context.model_backend is not None
     with pytest.raises(PermissionError, match="model-only"):
         AchromatWorkflow(config).measure_dispersion()
@@ -84,8 +84,8 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
     assert config.backend.type == "epics"
     assert config.backend.mode == "read_only"
     assert context.model_backend is not None
-    assert config.section.id == "dogleg"
-    assert config.section.display_name == "IRFEL Dogleg"
+    assert config.section.id == "MIR-dogleg"
+    assert config.section.display_name == "MIR Dogleg"
     assert config.section.model_entrance == "BPM07"
     assert config.section.model_exit == "BPM10"
     assert tuple(item.element for item in config.section.model_observables) == (
@@ -97,15 +97,22 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
         "dx",
     )
     assert pv_map["bpms"]["BPM09"]["x"] == "IRFEL-BI:BPM09:BPM_PX2"
-    assert pv_map["quadrupoles"]["QM13"]["current_set"] == "IRFEL:PS:QM13:current:ao"
+    assert pv_map["quadrupoles"]["QM13"] == {
+        "control": "k1",
+        "K1": "IRFEL:PS:QM13:K1:ao",
+    }
     assert pv_map["energy_knob"] == {
-        "set": "IRFEL:IN-MW:KLY1:SET_PHASE",
-        "readback": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE",
+        "set": "IRFEL:modulator1:HV_set:ao",
+        "readback": "IRFEL:modulator1:HV:ai",
     }
     preflight = run_preflight(config)
-    assert preflight.ok
-    assert preflight.level == "read-only-ready"
-    assert preflight.checks["energy_calibration_available"]
+    assert not preflight.ok
+    assert preflight.level == "blocked"
+    assert not preflight.checks["energy_calibration_available"]
+    assert any(
+        "calibration.actuator_per_delta" in blocker
+        for blocker in preflight.blockers
+    )
     assert preflight.checks["real_machine_timing_positive"]
     assert not any("no independent readback" in warning for warning in preflight.warnings)
 
@@ -167,9 +174,10 @@ def test_profile_selection_derives_bpm_and_quad_pvs_from_machine_elements() -> N
     assert selected.backend.options["pv_map"]["bpms"]["BPM08"]["x"] == (
         "IRFEL-BI:BPM08:BPM_PX2"
     )
-    assert selected.backend.options["pv_map"]["quadrupoles"]["QM11"]["current_set"] == (
-        "IRFEL:PS:QM11:current:ao"
-    )
+    assert selected.backend.options["pv_map"]["quadrupoles"]["QM11"] == {
+        "control": "k1",
+        "K1": "IRFEL:PS:QM11:K1:ao",
+    }
 
 
 def test_half_profile_exposes_model_only_bl01_section() -> None:

@@ -408,9 +408,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
     assert profile_window.offline_demo_button.isVisibleTo(profile_window)
-    assert profile_window.calibration_status_label.text() == "Calibration: Machine profile"
-    assert profile_window.calibration_status_label.isHidden()
-    assert profile_window.section_combo.currentData() == "dogleg"
+    assert profile_window.calibration_status_label.text() == "Calibration: Missing"
+    assert not profile_window.calibration_status_label.isHidden()
+    assert profile_window.section_combo.currentData() == "MIR-dogleg"
     assert profile_window.model_boundary_label.text() == "Assume D=D'=0 at BPM07"
     assert profile_window.model_source_combo.itemText(0) == "Design lattice"
     assert profile_window.model_source_combo.itemText(1) == "Current snapshot"
@@ -439,9 +439,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     profile_window.show_snapshot_model_checkbox.setChecked(False)
     assert profile_window.model_details_button.isVisibleTo(profile_window)
     assert not profile_window.run_button.isEnabled()
-    assert "READ ONLY" in profile_window.operation_banner.text()
-    assert profile_window.operation_banner.isHidden()
-    assert "±0.0001 / ±0.25 deg" == profile_window._energy_step_compact()
+    assert "calibration.actuator_per_delta" in profile_window.operation_banner.text()
+    assert not profile_window.operation_banner.isHidden()
+    assert "±0.0001 Δp/p" == profile_window._energy_step_compact()
     assert not hasattr(profile_window, "connection_controls")
     assert profile_window.preflight_button.isVisibleTo(profile_window)
     assert profile_window.preflight_button.isEnabled()
@@ -458,9 +458,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not profile_window.next_action_button.isEnabled()
     assert profile_window.next_action_button.isVisibleTo(profile_window)
     assert not profile_window.measurement_action_button.isEnabled()
-    assert "read-only" in profile_window.workflow_hint_label.text().lower()
+    assert "calibration" in profile_window.workflow_hint_label.text().lower()
     assert "read-only" in profile_window.preflight_button.toolTip().lower()
-    assert "read-only" in profile_window.measure_button.toolTip().lower()
+    assert "calibration" in profile_window.measure_button.toolTip().lower()
     from half_linac.src.apps.dispersion_correction.preflight import (
         LivePreflightResult,
         PreflightResult,
@@ -506,7 +506,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert connection_dialogs[-1][0] == "Connection Check Failed"
     assert "BPM09 is disconnected." in connection_dialogs[-1][1]
     assert profile_window.operation_banner.isVisibleTo(profile_window)
-    assert "Live checks failed" in profile_window.operation_banner.text()
+    assert "calibration.actuator_per_delta" in profile_window.operation_banner.text()
     assert "Live preflight diagnostics" in profile_window.log_view.toPlainText()
     assert profile_window.bpm_select_button.isVisibleTo(profile_window)
     assert profile_window.bpm_select_button.height() == profile_window.bpm_edit.height() == 34
@@ -521,7 +521,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not bpm_item.text().startswith("✓")
     profile_window.bpm_edit.setText("BPM08, BPM09, BPM10")
     knob_dialog, knob_table, _buttons = profile_window._build_knob_selection_dialog()
-    assert knob_table.horizontalHeaderItem(3).text() == "Scan ± (A)"
+    assert knob_table.horizontalHeaderItem(3).text() == "Scan ± (K1 [1/m²])"
     knob_table.cellWidget(0, 1).setCurrentText("QM11")
     knob_table.cellWidget(0, 2).setCurrentText("QM12")
     knob_table.cellWidget(1, 1).setCurrentText("QM17")
@@ -535,7 +535,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert selected_config.knobs[0].name == "QM11_QM12_sym"
     assert selected_config.knobs[0].scan_step == pytest.approx(0.0004)
     assert selected_config.knobs[0].limit == pytest.approx(0.01)
-    assert knob_table.cellWidget(0, 4).maximum() == pytest.approx(0.012)
+    assert knob_table.cellWidget(0, 4).maximum() == pytest.approx(
+        profile_window.knob_hard_limits[0]
+    )
     assert profile_window.knob_edit.text() == "QM11/QM12; QM17/QM18"
     assert set(selected_config.backend.options["pv_map"]["quadrupoles"]) == {
         "QM11",
@@ -559,7 +561,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert irfel_vm_window.status_strip.items["ACCESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.operation_banner.isHidden()
-    assert irfel_vm_window.section_combo.currentData() == "dogleg"
+    assert irfel_vm_window.section_combo.currentData() == "MIR-dogleg"
     assert irfel_vm_window.model_dialog.isHidden()
     assert irfel_vm_window.next_action_button.text() == "Calculate Design Model"
     assert not hasattr(irfel_vm_window, "connection_controls")

@@ -23,6 +23,9 @@ The schema is the same for JSON and YAML:
   acceptance.
 - `monitor_bpms`: optional diagnostic BPMs measured in the same energy scans
   and shown in plots, but excluded from the correction objective.
+- `quadrupole_control`: backend-to-control mapping. Use the canonical labels
+  `K1` and `current`; parsing is case-insensitive, while the GUI displays
+  `K1 [1/m²]` or `A`.
 - `knobs`: high-level symmetric correction knobs, response scan steps, and
   cumulative limits relative to the workflow snapshot.
 - `measurement`: horizontal-plane samples per step, final samples, and settle
@@ -70,6 +73,18 @@ elements with `kind: bpm` and a resolvable x channel, and quadrupole candidates
 from `kind: quad` elements with same-unit setpoint/readback channels. The two
 devices in each symmetric knob use fixed `+1` weights. Session scan and limit
 values may be reduced in the GUI, but cannot exceed the profile defaults.
+The control variable itself is fixed by the active backend, for example:
+
+```json
+"quadrupole_control": {
+  "vm": "K1",
+  "real": "current"
+}
+```
+
+The scalar `scan_step` and `limit` values remain session defaults and hard
+ceilings in the selected control variable's unit. IRFEL VM is model-only, so
+its values are not used for a machine response scan.
 
 For IRFEL electron beams in this MVP, the configured `energy_knob.delta` is
 treated as `dp/p`; for the intended tens-of-MeV-plus operation range this is

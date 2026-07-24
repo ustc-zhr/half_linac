@@ -2706,7 +2706,7 @@ class MainWindow(QMainWindow):
         if controls == {"current"}:
             return "A"
         if controls == {"k1"}:
-            return "K1"
+            return "K1 [1/m²]"
         return ""
 
     def _config_from_widgets(self) -> RunConfig:

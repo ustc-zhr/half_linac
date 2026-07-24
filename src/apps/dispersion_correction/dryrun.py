@@ -221,5 +221,5 @@ def _knob_unit(devices: dict[str, float], quadrupole_map: dict) -> str:
     if controls == {"current"}:
         return "A"
     if controls == {"k1"}:
-        return "K1"
+        return "K1 [1/m²]"
     return ""

@@ -4,6 +4,10 @@
     "vm",
     "real"
   ],
+  "quadrupole_control": {
+    "vm": "K1",
+    "real": "current"
+  },
   "default_section": "bl01",
   "sections": [
     {

@@ -116,9 +116,11 @@ def selectable_profile_bpms(context: AppContext) -> tuple[str, ...]:
 def selectable_profile_quadrupoles(context: AppContext) -> tuple[str, ...]:
     """Return quadrupoles with a same-unit setpoint/readback path."""
 
+    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    control = _quadrupole_control(workflow, context.control_backend.name)
     selected = []
     for element in list_elements(context, kind="quad"):
-        if context.control_backend.name == "real":
+        if control == "current":
             if _channel_is_resolvable(context, element.id, "current_set") and _channel_is_resolvable(
                 context,
                 element.id,
@@ -188,6 +190,7 @@ def apply_profile_selection(
         measurement_bpms,
         knobs,
         _mapping(workflow.get("energy_knob"), "energy_knob"),
+        _quadrupole_control(workflow, context.control_backend.name),
     )
     return replace(
         config,
@@ -390,6 +393,7 @@ def _build_profile_pv_map(context: AppContext, workflow: Mapping[str, object]) -
         tuple(dict.fromkeys((*monitor_bpms, *target_bpms))),
         knobs,
         _mapping(workflow.get("energy_knob"), "energy_knob"),
+        _quadrupole_control(workflow, context.control_backend.name),
     )
 
 
@@ -398,9 +402,8 @@ def _build_selection_pv_map(
     bpm_names,
     knobs,
     energy_knob: Mapping[str, object],
+    quadrupole_control: str,
 ) -> dict[str, Any]:
-    backend_name = context.control_backend.name
-
     bpms: dict[str, dict[str, str]] = {}
     for bpm_name in bpm_names:
         item = {"x": resolve_channel(context, bpm_name, "x")}
@@ -418,18 +421,15 @@ def _build_selection_pv_map(
 
     quadrupoles: dict[str, dict[str, str]] = {}
     for device_name in dict.fromkeys(device_names):
-        if backend_name == "real":
-            try:
-                quadrupoles[device_name] = {
-                    "control": "current",
-                    "current_set": resolve_channel(context, device_name, "current_set"),
-                    "current_readback": resolve_channel(context, device_name, "current_readback"),
-                }
-                continue
-            except MachineProfileError:
-                pass
-        k1_pv = resolve_channel(context, device_name, "K1")
-        quadrupoles[device_name] = {"control": "k1", "K1": k1_pv}
+        if quadrupole_control == "current":
+            quadrupoles[device_name] = {
+                "control": "current",
+                "current_set": resolve_channel(context, device_name, "current_set"),
+                "current_readback": resolve_channel(context, device_name, "current_readback"),
+            }
+        else:
+            k1_pv = resolve_channel(context, device_name, "K1")
+            quadrupoles[device_name] = {"control": "k1", "K1": k1_pv}
 
     energy_mapping: dict[str, str] = {}
     element_id = str(energy_knob.get("element", "")).strip()
@@ -447,6 +447,28 @@ def _build_selection_pv_map(
         "quadrupoles": quadrupoles,
         "energy_knob": energy_mapping,
     }
+
+
+def _quadrupole_control(
+    workflow: Mapping[str, object],
+    backend_name: str,
+) -> str:
+    raw = workflow.get("quadrupole_control")
+    if raw is None:
+        return "current" if backend_name == "real" else "k1"
+    controls = _mapping(raw, "quadrupole_control")
+    if backend_name not in controls:
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.quadrupole_control is missing "
+            f"backend {backend_name!r}."
+        )
+    control = str(controls[backend_name]).strip().lower()
+    if control not in {"current", "k1"}:
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.quadrupole_control.{backend_name} "
+            "must be 'current' or 'K1'."
+        )
+    return control
 
 
 def _channel_is_resolvable(context: AppContext, element_id: str, logical_channel: str) -> bool:
