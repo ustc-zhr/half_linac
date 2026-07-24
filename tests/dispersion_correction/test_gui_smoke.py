@@ -404,7 +404,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     profile_window.show()
     app.processEvents()
     assert profile_window.status_strip.items["BACKEND"].value_label.text() == "REAL"
-    assert profile_window.status_strip.items["ACCESS"].value_label.text() == "READ ONLY"
+    assert profile_window.status_strip.items["ACCESS"].value_label.text() == "WRITE ENABLED"
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Machine Profile"
     assert profile_window.offline_demo_button.isVisibleTo(profile_window)
@@ -508,6 +508,35 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.operation_banner.isVisibleTo(profile_window)
     assert "calibration.actuator_per_delta" in profile_window.operation_banner.text()
     assert "Live preflight diagnostics" in profile_window.log_view.toPlainText()
+    profile_window._activate_session_calibration(
+        {
+            "kind": "linear",
+            "actuator_per_delta": 2500.0,
+            "offset": 0.0,
+        },
+        "onsite-session-calibration.json",
+    )
+    assert profile_window.calibration_status_label.text() == (
+        "Calibration: Session override"
+    )
+    assert not profile_window.measurement_action_button.isEnabled()
+    assert "Click Check" in profile_window.measurement_action_button.toolTip()
+    profile_window._live_preflight_completed(
+        LivePreflightResult(
+            static=PreflightResult(
+                level="write-ready",
+                blockers=(),
+                warnings=(),
+                checks={},
+            ),
+            blockers=(),
+            warnings=(),
+            checks={},
+            readings={},
+        )
+    )
+    profile_window._set_running(False, "")
+    assert profile_window.measurement_action_button.isEnabled()
     assert profile_window.bpm_select_button.isVisibleTo(profile_window)
     assert profile_window.bpm_select_button.height() == profile_window.bpm_edit.height() == 34
     assert profile_window.knob_select_button.height() == profile_window.knob_edit.height() == 34

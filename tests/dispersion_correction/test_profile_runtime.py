@@ -82,7 +82,7 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
 
     pv_map = config.backend.options["pv_map"]
     assert config.backend.type == "epics"
-    assert config.backend.mode == "read_only"
+    assert config.backend.mode == "write_enabled"
     assert context.model_backend is not None
     assert config.section.id == "MIR-dogleg"
     assert config.section.display_name == "MIR Dogleg"

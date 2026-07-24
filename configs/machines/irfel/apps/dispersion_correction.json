@@ -104,6 +104,6 @@
   "real_status": "write_blocked",
   "write_control": {
     "vm": "blocked",
-    "real": "blocked"
+    "real": "allowed"
   }
 }
