@@ -17,9 +17,19 @@ try:
     from PyQt5.QtWidgets import QApplication, QMessageBox
 
     from half_linac.src.apps.solenoid_centering.main import MainWindow
+    from half_linac.src.apps.solenoid_centering.mplwidget import MplWidget
     from half_linac.src.apps.solenoid_centering.scan import CenteringResult
 except ImportError:
     QApplication = None
+
+
+@unittest.skipIf(QApplication is None, "PyQt5 or Matplotlib Qt backend is not installed")
+class SolenoidCenteringMatplotlibCompatibilityTests(unittest.TestCase):
+    def test_trajectory_colors_use_supported_colormap_api(self):
+        colors = MplWidget._trajectory_colors(3)
+
+        self.assertEqual(len(colors), 3)
+        self.assertTrue(all(len(color) == 4 for color in colors))
 
 
 @unittest.skipUnless(

@@ -4,7 +4,11 @@ import numpy as np
 
 from PyQt5.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 
-from matplotlib import cm
+try:
+    from matplotlib import colormaps
+except ImportError:  # Matplotlib < 3.5
+    colormaps = None
+    from matplotlib import cm
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -296,7 +300,8 @@ class MplWidget(QWidget):
     def _trajectory_colors(count):
         if count <= 1:
             return ["tab:blue"]
-        color_map = cm.get_cmap("tab20" if count <= 20 else "viridis")
+        name = "tab20" if count <= 20 else "viridis"
+        color_map = colormaps.get_cmap(name) if colormaps is not None else cm.get_cmap(name)
         return [color_map(value) for value in np.linspace(0.0, 1.0, count)]
 
     @staticmethod

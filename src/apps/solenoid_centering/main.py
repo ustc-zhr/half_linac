@@ -176,6 +176,7 @@ class MainWindow(QMainWindow):
         self.workflow = self.context.solenoid_centering_workflow
         self.worker: ScanWorker | None = None
         self.preflight_worker: PreflightWorker | None = None
+        self.live_plot_failed = False
         self.last_result: CenteringResult | None = None
         self.last_result_preset: SolenoidCenteringPreset | None = None
         self.current_theme = resolve_initial_theme()
@@ -815,6 +816,7 @@ class MainWindow(QMainWindow):
         self.restore_button.setEnabled(False)
         self.status_strip.set_value("LAST RESULT", "--")
         self.result_table.setRowCount(0)
+        self.live_plot_failed = False
         self.plot.clear()
         self.plot.start_live()
         self.progress.setVisible(True)
@@ -905,7 +907,14 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"{message} ({completed}/{total})")
 
     def _on_candidate_finished(self, candidate):
-        self.plot.add_live_candidate(candidate)
+        if self.live_plot_failed:
+            return
+        try:
+            self.plot.add_live_candidate(candidate)
+        except Exception as exc:
+            self.live_plot_failed = True
+            self._append_log(f"Live plot update failed; scan continues without plotting: {exc}")
+            self.status_label.setText("Live plot unavailable; scan continues. See Log.")
 
     def _on_preflight_finished(self, report):
         report_text = report.as_text()
@@ -989,7 +998,12 @@ class MainWindow(QMainWindow):
         )
         self.restore_button.setEnabled(False)
         self._populate_result_table(result)
-        self.plot.plot_result(result)
+        try:
+            self.plot.plot_result(result)
+        except Exception as exc:
+            self.live_plot_failed = True
+            self._append_log(f"Final plot update failed; result data remains available: {exc}")
+            self.status_label.setText("Result saved; plot unavailable. See Log.")
 
     def _on_scan_failed(self, message):
         self._set_workflow_status("ERROR", "danger")
