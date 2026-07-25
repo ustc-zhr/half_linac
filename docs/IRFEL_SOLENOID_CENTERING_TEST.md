@@ -175,8 +175,9 @@ Recommended first GUI workflow:
   `HIC01`, `VIC01`, and `BPM01`.
 - `HCOR`, `VCOR`, and `BPM` are preset defaults in the GUI, but they remain
   operator-selectable before running preflight or scan.
-- Scan settings and the selected scoring mode can be saved to or loaded from a
-  JSON config. Loading rejects configs for a different machine or backend.
+- Standard scan settings are owned by the machine-profile presets. Operator
+  overrides are temporary and the complete effective settings are stored in
+  each scan-result archive.
 - The default `MS01` and `SS02` presets retain the field-tested ranges:
   solenoid +/-5 with 5 points and correctors +/-2 with 5 points. Operators
   should reduce these in the GUI when the current machine state requires a

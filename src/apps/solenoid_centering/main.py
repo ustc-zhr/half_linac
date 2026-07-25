@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 from dataclasses import replace
 from datetime import datetime
@@ -23,7 +22,6 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFormLayout,
     QGridLayout,
     QHeaderView,
@@ -185,8 +183,8 @@ class MainWindow(QMainWindow):
         self.current_theme = resolve_initial_theme()
 
         self.setWindowTitle("Solenoid Centering")
-        self.resize(1440, 900)
-        self.setMinimumSize(1120, 760)
+        self.resize(1600, 960)
+        self.setMinimumSize(1120, 720)
         self._build_ui()
         self._load_device_choices()
         self._load_presets()
@@ -416,12 +414,12 @@ class MainWindow(QMainWindow):
 
         fields = [
             ("Score mode", self.scoring_mode_combo),
-            ("Sol from", self.sol_from),
-            ("Sol to", self.sol_to),
-            ("Sol steps", self.sol_steps),
-            ("Cor from", self.cor_from),
-            ("Cor to", self.cor_to),
-            ("Cor steps", self.cor_steps),
+            ("Solenoid offset min", self.sol_from),
+            ("Solenoid offset max", self.sol_to),
+            ("Solenoid steps", self.sol_steps),
+            ("Corrector offset min", self.cor_from),
+            ("Corrector offset max", self.cor_to),
+            ("Corrector steps", self.cor_steps),
             ("Samples", self.samples),
             ("Settle s", self.settle),
             ("Sample interval s", self.sample_interval),
@@ -466,16 +464,6 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.stop_button)
         run_layout.addLayout(buttons)
 
-        config_buttons = QHBoxLayout()
-        self.save_config_button = QPushButton("Save Config", run_card)
-        self.load_config_button = QPushButton("Load Config", run_card)
-        self.save_config_button.setProperty("compact", True)
-        self.load_config_button.setProperty("compact", True)
-        self.save_config_button.clicked.connect(self.save_scan_config)
-        self.load_config_button.clicked.connect(self.load_scan_config)
-        config_buttons.addWidget(self.save_config_button)
-        config_buttons.addWidget(self.load_config_button)
-        run_layout.addLayout(config_buttons)
         layout.addWidget(run_card)
         self.preflight_inputs = (
             self.preset_combo,
@@ -642,140 +630,6 @@ class MainWindow(QMainWindow):
     def _scoring_mode(self) -> str:
         return normalize_scoring_mode(self.scoring_mode_combo.currentData())
 
-    def _set_scoring_mode(self, value: str | None) -> None:
-        mode = normalize_scoring_mode(value)
-        index = self.scoring_mode_combo.findData(mode)
-        if index < 0:
-            raise ValueError(f"Scoring mode {mode!r} is not available.")
-        self.scoring_mode_combo.setCurrentIndex(index)
-
-    def _operation_busy(self) -> bool:
-        return (
-            (self.worker is not None and self.worker.isRunning())
-            or (self.preflight_worker is not None and self.preflight_worker.isRunning())
-        )
-
-    def save_scan_config(self):
-        try:
-            payload = self._current_config_payload()
-        except Exception as exc:
-            QMessageBox.warning(self, "Solenoid Centering", str(exc))
-            return
-
-        default_name = f"solenoid_centering_{payload['machine_id']}_{payload['preset_id']}.json"
-        path, _selected_filter = QFileDialog.getSaveFileName(
-            self,
-            "Save Solenoid Centering Config",
-            default_name,
-            "JSON files (*.json);;All files (*)",
-        )
-        if not path:
-            return
-        target = Path(path)
-        if target.suffix.lower() != ".json":
-            target = target.with_suffix(".json")
-        try:
-            target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-        except Exception as exc:
-            QMessageBox.warning(self, "Solenoid Centering", f"Failed to save config:\n{exc}")
-            return
-        self.status_label.setText(f"Saved config: {target.name}")
-
-    def load_scan_config(self):
-        if self._operation_busy():
-            QMessageBox.warning(
-                self,
-                "Solenoid Centering",
-                "Stop the current operation before loading config.",
-            )
-            return
-        path, _selected_filter = QFileDialog.getOpenFileName(
-            self,
-            "Load Solenoid Centering Config",
-            "",
-            "JSON files (*.json);;All files (*)",
-        )
-        if not path:
-            return
-        source = Path(path)
-        try:
-            payload = json.loads(source.read_text(encoding="utf-8"))
-            self._apply_config_payload(payload)
-        except Exception as exc:
-            QMessageBox.warning(self, "Solenoid Centering", f"Failed to load config:\n{exc}")
-            return
-        self.status_label.setText(f"Loaded config: {source.name}")
-
-    def _current_config_payload(self) -> dict:
-        preset = self._preset_with_overrides()
-        return {
-            "schema_version": 1,
-            "app": "solenoid_centering",
-            "machine_id": self.context.machine.id,
-            "control_backend": self.context.control_backend.name,
-            "preset_id": preset.id,
-            "scoring_mode": self._scoring_mode(),
-            "solenoid": preset.solenoid,
-            "solenoid_setpoint_pv": self._solenoid_setpoint_label(preset),
-            "hcorr": preset.hcorr,
-            "vcorr": preset.vcorr,
-            "bpm": preset.bpm,
-            "solenoid_scan": {
-                "relative_from": preset.solenoid_scan.relative_from,
-                "relative_to": preset.solenoid_scan.relative_to,
-                "steps": preset.solenoid_scan.steps,
-            },
-            "corrector_scan": {
-                "relative_from": preset.corrector_scan.relative_from,
-                "relative_to": preset.corrector_scan.relative_to,
-                "steps": preset.corrector_scan.steps,
-            },
-            "samples_per_point": preset.samples_per_point,
-            "settle_time_s": preset.settle_time_s,
-            "sample_interval_s": preset.sample_interval_s,
-            "max_iters": preset.max_rounds,
-        }
-
-    def _apply_config_payload(self, payload) -> None:
-        if not isinstance(payload, dict):
-            raise ValueError("Config file must contain a JSON object.")
-        if payload.get("app") != "solenoid_centering":
-            raise ValueError("Config file is not for solenoid_centering.")
-        if payload.get("machine_id") not in (None, self.context.machine.id):
-            raise ValueError(
-                f"Config machine {payload.get('machine_id')!r} does not match "
-                f"current machine {self.context.machine.id!r}."
-            )
-        if payload.get("control_backend") not in (None, self.context.control_backend.name):
-            raise ValueError(
-                f"Config backend {payload.get('control_backend')!r} does not match "
-                f"current backend {self.context.control_backend.name!r}."
-            )
-
-        preset_id = _required_str(payload, "preset_id")
-        preset_index = self.preset_combo.findData(preset_id)
-        if preset_index < 0:
-            raise MachineProfileError(f"Preset {preset_id!r} is not available.")
-        self.preset_combo.setCurrentIndex(preset_index)
-
-        self._set_combo_value(self.hcorr_combo, _required_str(payload, "hcorr"), "HCOR")
-        self._set_combo_value(self.vcorr_combo, _required_str(payload, "vcorr"), "VCOR")
-        self._set_combo_value(self.bpm_combo, _required_str(payload, "bpm"), "BPM")
-
-        solenoid_scan = _required_dict(payload, "solenoid_scan")
-        corrector_scan = _required_dict(payload, "corrector_scan")
-        self.sol_from.setValue(_required_float(solenoid_scan, "relative_from"))
-        self.sol_to.setValue(_required_float(solenoid_scan, "relative_to"))
-        self.sol_steps.setValue(_required_int(solenoid_scan, "steps"))
-        self.cor_from.setValue(_required_float(corrector_scan, "relative_from"))
-        self.cor_to.setValue(_required_float(corrector_scan, "relative_to"))
-        self.cor_steps.setValue(_required_int(corrector_scan, "steps"))
-        self.samples.setValue(_required_int(payload, "samples_per_point"))
-        self.settle.setValue(_required_float(payload, "settle_time_s"))
-        self.sample_interval.setValue(_required_float(payload, "sample_interval_s"))
-        self.max_iters.setValue(_required_compatible_int(payload, "max_iters", "max_rounds"))
-        self._set_scoring_mode(payload.get("scoring_mode"))
-
     def _preset_with_overrides(self) -> SolenoidCenteringPreset:
         preset = self._current_preset()
         if self.sol_from.value() == self.sol_to.value():
@@ -829,8 +683,6 @@ class MainWindow(QMainWindow):
     def _set_preflight_inputs_enabled(self, enabled: bool) -> None:
         for widget in self.preflight_inputs:
             widget.setEnabled(enabled)
-        self.save_config_button.setEnabled(enabled)
-        self.load_config_button.setEnabled(enabled)
 
     def run_preflight(self):
         if self.worker is not None and self.worker.isRunning():
@@ -1169,52 +1021,6 @@ class MainWindow(QMainWindow):
             for col, value in enumerate(values):
                 self.result_table.setItem(row, col, QTableWidgetItem(value))
         self.result_table.resizeColumnsToContents()
-
-
-def _required_dict(payload: dict, key: str) -> dict:
-    value = payload.get(key)
-    if not isinstance(value, dict):
-        raise ValueError(f"Config field {key!r} must be an object.")
-    return value
-
-
-def _required_str(payload: dict, key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"Config field {key!r} must be a non-empty string.")
-    return value.strip()
-
-
-def _required_float(payload: dict, key: str) -> float:
-    value = payload.get(key)
-    if isinstance(value, bool):
-        raise ValueError(f"Config field {key!r} must be a number.")
-    try:
-        return float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Config field {key!r} must be a number.") from exc
-
-
-def _required_int(payload: dict, key: str) -> int:
-    value = payload.get(key)
-    if isinstance(value, bool):
-        raise ValueError(f"Config field {key!r} must be an integer.")
-    try:
-        integer = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Config field {key!r} must be an integer.") from exc
-    if integer != value and not (isinstance(value, float) and value.is_integer()):
-        raise ValueError(f"Config field {key!r} must be an integer.")
-    return integer
-
-
-def _required_compatible_int(payload: dict, key: str, legacy_key: str) -> int:
-    if key in payload and legacy_key in payload:
-        raise ValueError(
-            f"Config must not define both {key!r} and legacy {legacy_key!r}."
-        )
-    selected_key = key if key in payload or legacy_key not in payload else legacy_key
-    return _required_int(payload, selected_key)
 
 
 def main() -> int:
