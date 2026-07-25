@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import replace
 import math
+import time
 from typing import Any
 
 from half_linac.src.apps.dispersion_correction.calibration import (
@@ -166,7 +167,63 @@ def run_preflight(config: RunConfig) -> PreflightResult:
 
 
 def run_live_preflight(config: RunConfig, machine=None) -> LivePreflightResult:
-    """Read every required live value without writing any setpoint."""
+    """Read every required live value, retrying transient CA failures without writes."""
+
+    if config.backend.type != "epics":
+        return _run_live_preflight_once(config, machine)
+
+    if machine is None:
+        from half_linac.src.apps.dispersion_correction.machine.epics import EpicsMachine
+
+        readonly_config = replace(
+            config,
+            backend=replace(config.backend, mode="read_only"),
+        )
+        machine = EpicsMachine(readonly_config)
+
+    attempts = max(
+        1,
+        min(
+            5,
+            int(config.backend.options.get("live_preflight_attempts", 2)),
+        ),
+    )
+    retry_interval = max(
+        0.0,
+        min(
+            2.0,
+            float(
+                config.backend.options.get(
+                    "live_preflight_retry_interval_s",
+                    0.25,
+                )
+            ),
+        ),
+    )
+    result: LivePreflightResult | None = None
+    for attempt in range(1, attempts + 1):
+        result = _run_live_preflight_once(config, machine)
+        result = replace(
+            result,
+            readings={
+                **result.readings,
+                "live_preflight_attempt": attempt,
+                "live_preflight_attempts_allowed": attempts,
+            },
+        )
+        if result.ok or not result.static.ok or attempt == attempts:
+            return result
+        if retry_interval > 0:
+            time.sleep(retry_interval)
+    assert result is not None
+    return result
+
+
+def _run_live_preflight_once(
+    config: RunConfig,
+    machine=None,
+) -> LivePreflightResult:
+    """Perform one read-only pass over every required live value."""
 
     static = run_preflight(config)
     if config.backend.type != "epics":
@@ -177,15 +234,6 @@ def run_live_preflight(config: RunConfig, machine=None) -> LivePreflightResult:
             checks={"live_io_required": False},
             readings={},
         )
-
-    if machine is None:
-        from half_linac.src.apps.dispersion_correction.machine.epics import EpicsMachine
-
-        readonly_config = replace(
-            config,
-            backend=replace(config.backend, mode="read_only"),
-        )
-        machine = EpicsMachine(readonly_config)
 
     blockers: list[str] = []
     warnings: list[str] = []

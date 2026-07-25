@@ -49,7 +49,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.workflow_title_label.objectName() == "cardTitle"
     assert window.overview_title_label.objectName() == "cardTitle"
     assert window.measurement_header_label.text() == "Measurement"
-    assert window.overlays_header_label.text() == "Model overlays"
+    assert not hasattr(window, "overlays_header_label")
     assert (
         window.plot_state_label.parentWidget()
         is window.overview_controls.measurement_group
@@ -206,7 +206,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert "4/4 correction BPMs valid" in window.workflow_summary_label.text()
     assert window.dispersion_curve.result is None
     assert window.dispersion_curve.measurement.label == "Latest measured"
-    assert window.measurement_source_combo.currentData() == "live"
+    assert not hasattr(window, "measurement_source_combo")
     assert "Latest measured" in window.plot_state_label.text()
     assert "4/4 correction BPMs valid" in window.plot_state_label.text()
     assert not window.plot_state_label.isHidden()
@@ -705,7 +705,8 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert "limit ±" not in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
     assert half_window.dispersion_curve.measurement is None
-    assert half_window.import_measurement_button.isEnabled()
+    assert not hasattr(half_window, "import_measurement_button")
+    assert not hasattr(half_window, "clear_measurement_button")
     assert not half_window.measure_button.isEnabled()
     assert not half_window.response_button.isEnabled()
     assert not half_window.run_button.isEnabled()
@@ -727,7 +728,6 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not hasattr(half_window, "connection_controls")
     assert half_window.preflight_button.isHidden()
     from half_linac.src.apps.dispersion_correction.models import (
-        ImportedDispersionDataset,
         ModelOpticsCurve,
         ModelResponseResult,
     )
@@ -783,29 +783,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.model_page.parentWidget() is half_window.model_dialog
     assert half_window.model_empty_label.isHidden()
     assert half_window.response_table.rowCount() == 0
-    assert half_window.import_measurement_button.isEnabled()
-    assert not half_window.clear_measurement_button.isEnabled()
-    imported = ImportedDispersionDataset(
-        section_id="bl01",
-        bpm_names=("BPM06",),
-        etax_mm=np.asarray([0.25]),
-        etax_sigma_mm=np.asarray([0.08]),
-        source_path="/tmp/bl01_etax.csv",
-    )
-    half_window.imported_dispersion = imported
-    half_window._show_imported_comparison(model_result, imported)
     half_window._set_running(False, "")
-    assert half_window.clear_measurement_button.isEnabled()
-    assert half_window.measurement_source_combo.currentData() == "imported"
-    assert half_window.dispersion_curve.measurement.label == "External measurement"
-    assert half_window.model_measure_table.isVisible()
-    assert half_window.model_measure_table.horizontalHeaderItem(1).text() == (
-        "Measurement ηx (mm)"
-    )
-    assert half_window.model_measure_table.horizontalHeaderItem(4).text() == (
-        "Design model ηx (mm)"
-    )
-    assert half_window.model_measure_table.item(0, 5).text() == "0.15"
+    assert half_window.dispersion_curve.measurement is None
+    assert half_window.model_measure_table.isHidden()
     assert half_window.measure_table.rowCount() == 0
     assert not half_window.dispersion_curve.grab().isNull()
     assert not half_window.dispersion_curve._is_rf("WATCH")
@@ -915,9 +895,35 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
     automatic = AchromatWorkflow(demo._config_from_widgets()).run()
     demo._task_completed("run", automatic)
     assert len(demo.correction_session_runs) == 2
-    assert demo.iteration_history_run_combo.currentText() == "Automatic 1"
+    assert demo.iteration_history_run_combo.currentText().startswith(
+        "Automatic 1 · "
+    )
     assert demo.iteration_history_generation_combo.count() == (
         len(automatic.steps) + 2
+    )
+
+    stopped_early = replace(
+        automatic,
+        steps=automatic.steps[:2],
+    )
+    demo.config = replace(
+        demo.config,
+        solver=replace(demo.config.solver, max_iter=3),
+    )
+    demo._record_correction_run("run", stopped_early)
+    assert demo.iteration_history_run_combo.currentText() == (
+        "Automatic 2 · 2/3 generations"
+    )
+    assert "Stopped early · 2/3 generations executed" in [
+        demo.iteration_history_generation_combo.itemText(index)
+        for index in range(demo.iteration_history_generation_combo.count())
+    ]
+    early_index = demo.iteration_history_generation_combo.findData(
+        "early-stop"
+    )
+    demo.iteration_history_generation_combo.setCurrentIndex(early_index)
+    assert "later generations were not run" in (
+        demo.iteration_history_status_label.text()
     )
 
     aborted = replace(

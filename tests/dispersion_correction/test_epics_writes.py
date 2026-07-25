@@ -418,6 +418,41 @@ def test_live_preflight_blocks_quadrupole_mismatch_without_writing() -> None:
     assert epics.caput_calls == []
 
 
+def test_live_preflight_retries_transient_read_failure_without_writing() -> None:
+    config = write_config()
+    config = replace(
+        config,
+        backend=replace(
+            config.backend,
+            options={
+                **config.backend.options,
+                "live_preflight_attempts": 2,
+                "live_preflight_retry_interval_s": 0.0,
+            },
+        ),
+    )
+    epics = DynamicFakeEpics(initial_values())
+
+    class TransientEnergyReadMachine(EpicsMachine):
+        def __init__(self):
+            super().__init__(config, epics_client=epics)
+            self.energy_reads = 0
+
+        def get_energy_delta(self) -> float:
+            self.energy_reads += 1
+            if self.energy_reads == 1:
+                raise RuntimeError("channel is still connecting")
+            return super().get_energy_delta()
+
+    machine = TransientEnergyReadMachine()
+    result = run_live_preflight(config, machine)
+
+    assert result.ok
+    assert result.readings["live_preflight_attempt"] == 2
+    assert result.readings["live_preflight_attempts_allowed"] == 2
+    assert epics.caput_calls == []
+
+
 def test_full_epics_workflow_corrects_dynamic_model_and_restores_phase() -> None:
     config = write_config()
     config = replace(

@@ -60,7 +60,6 @@ from half_linac.src.apps.dispersion_correction.models import (
     CorrectionRecommendation,
     CorrectionResult,
     DispersionMeasurement,
-    ImportedDispersionDataset,
     KnobConfig,
     ModelResponseResult,
     ResponseMatrixResult,
@@ -69,7 +68,6 @@ from half_linac.src.apps.dispersion_correction.models import (
 from half_linac.src.apps.dispersion_correction.recommendation import (
     build_correction_recommendation,
 )
-from half_linac.src.apps.dispersion_correction.measurement_import import load_dispersion_csv
 from half_linac.src.apps.dispersion_correction.model_response import (
     calculate_model_response,
     format_model_response,
@@ -220,6 +218,7 @@ class CorrectionSessionRun:
     label: str
     task: str
     result: CorrectionResult
+    requested_generations: int | None = None
 
 
 @dataclass(frozen=True)
@@ -238,9 +237,7 @@ class OverviewControls(QWidget):
         self,
         title: QLabel,
         measurement_label: QLabel,
-        measurement_combo: QComboBox,
         state_label: QLabel,
-        overlays_label: QLabel,
         design_checkbox: QCheckBox,
         snapshot_checkbox: QCheckBox,
         refresh_snapshot_button: QPushButton,
@@ -249,9 +246,7 @@ class OverviewControls(QWidget):
         super().__init__()
         self._title = title
         self._measurement_label = measurement_label
-        self._measurement_combo = measurement_combo
         self._state_label = state_label
-        self._overlays_label = overlays_label
         self._design_checkbox = design_checkbox
         self._snapshot_checkbox = snapshot_checkbox
         self._refresh_snapshot_button = refresh_snapshot_button
@@ -264,7 +259,6 @@ class OverviewControls(QWidget):
         measurement_layout.setContentsMargins(8, 5, 8, 5)
         measurement_layout.setSpacing(7)
         measurement_layout.addWidget(self._measurement_label)
-        measurement_layout.addWidget(self._measurement_combo)
         measurement_layout.addWidget(self._state_label, 1)
 
         self.overlays_group = QFrame(self)
@@ -272,7 +266,6 @@ class OverviewControls(QWidget):
         overlays_layout = QHBoxLayout(self.overlays_group)
         overlays_layout.setContentsMargins(8, 5, 8, 5)
         overlays_layout.setSpacing(9)
-        overlays_layout.addWidget(self._overlays_label)
         overlays_layout.addWidget(self._design_checkbox)
         overlays_layout.addWidget(self._snapshot_checkbox)
         overlays_layout.addStretch(1)
@@ -380,7 +373,7 @@ class DispersionCurveWidget(QWidget):
             painter.drawText(
                 plot,
                 Qt.AlignCenter,
-                "Measure dispersion or import external BPM points to begin",
+                "Measure dispersion to begin",
             )
             return
 
@@ -938,7 +931,6 @@ class MainWindow(QMainWindow):
         self.pending_model_source: str | None = None
         self.current_snapshot_time: datetime | None = None
         self._refresh_snapshot_after_task = False
-        self.imported_dispersion: ImportedDispersionDataset | None = None
         self.live_plot_measurement: DispersionPlotDataset | None = None
         self.reference_plot_measurement: DispersionPlotDataset | None = None
         self._automatic_initial_measurement: DispersionMeasurement | None = None
@@ -991,7 +983,6 @@ class MainWindow(QMainWindow):
         self.model_source_combo.setVisible(model_available)
         self.model_source_label.setVisible(model_available)
         self.model_boundary_label.setVisible(model_available)
-        self.overlays_header_label.setVisible(model_available)
         self.show_design_model_checkbox.setVisible(model_available)
         self.show_snapshot_model_checkbox.setVisible(model_available)
         self.measurement_action_button.setVisible(
@@ -1659,19 +1650,6 @@ class MainWindow(QMainWindow):
         model_intro.setObjectName("workspaceIntro")
         model_intro.setWordWrap(True)
         model_layout.addWidget(model_intro)
-        measurement_actions = QHBoxLayout()
-        measurement_actions.addWidget(QLabel("External measurement"))
-        measurement_actions.addStretch(1)
-        self.import_measurement_button = QPushButton("Import ηx CSV")
-        self.import_measurement_button.clicked.connect(self._import_measurement_csv)
-        self.import_measurement_button.setToolTip(
-            "Import bpm, etax_mm, and optional etax_sigma_mm columns for comparison only."
-        )
-        measurement_actions.addWidget(self.import_measurement_button)
-        self.clear_measurement_button = QPushButton("Clear External")
-        self.clear_measurement_button.clicked.connect(self._clear_imported_measurement)
-        measurement_actions.addWidget(self.clear_measurement_button)
-        model_layout.addLayout(measurement_actions)
 
         model_actions = QHBoxLayout()
         self.model_source_label = QLabel("Calculate")
@@ -1854,13 +1832,6 @@ class MainWindow(QMainWindow):
         self.overview_title_label.setObjectName("cardTitle")
         self.measurement_header_label = QLabel("Measurement")
         self.measurement_header_label.setObjectName("overviewGroupLabel")
-        self.measurement_source_combo = QComboBox()
-        self.measurement_source_combo.setMinimumWidth(180)
-        self.measurement_source_combo.setMaximumWidth(240)
-        self.measurement_source_combo.addItem("No measurement available", "none")
-        self.measurement_source_combo.currentIndexChanged.connect(
-            self._comparison_measurement_changed
-        )
         self.plot_state_label = QLabel("No measured data")
         self.plot_state_label.setObjectName("overviewStateLabel")
         self.plot_state_label.setSizePolicy(
@@ -1868,8 +1839,6 @@ class MainWindow(QMainWindow):
             QSizePolicy.Preferred,
         )
         self.plot_state_label.hide()
-        self.overlays_header_label = QLabel("Model overlays")
-        self.overlays_header_label.setObjectName("overviewGroupLabel")
         self.show_design_model_checkbox = QCheckBox("Design model")
         self.show_design_model_checkbox.setChecked(False)
         self.show_design_model_checkbox.setToolTip(
@@ -1903,9 +1872,7 @@ class MainWindow(QMainWindow):
         self.overview_controls = OverviewControls(
             self.overview_title_label,
             self.measurement_header_label,
-            self.measurement_source_combo,
             self.plot_state_label,
-            self.overlays_header_label,
             self.show_design_model_checkbox,
             self.show_snapshot_model_checkbox,
             self.refresh_snapshot_button,
@@ -1984,6 +1951,11 @@ class MainWindow(QMainWindow):
                 label=f"{run_kind} {sequence}",
                 task=task,
                 result=result,
+                requested_generations=(
+                    int(self.config.solver.max_iter)
+                    if task == "run"
+                    else None
+                ),
             )
         )
         self._refresh_iteration_history_runs(
@@ -2003,7 +1975,16 @@ class MainWindow(QMainWindow):
         self.iteration_history_run_combo.blockSignals(True)
         self.iteration_history_run_combo.clear()
         for index, entry in enumerate(self.correction_session_runs):
-            self.iteration_history_run_combo.addItem(entry.label, index)
+            display = entry.label
+            if entry.requested_generations is not None:
+                executed = max(
+                    (step.iteration for step in entry.result.steps),
+                    default=0,
+                )
+                display += (
+                    f" · {executed}/{entry.requested_generations} generations"
+                )
+            self.iteration_history_run_combo.addItem(display, index)
         index = self.iteration_history_run_combo.findData(current)
         if index < 0 and self.iteration_history_run_combo.count():
             index = self.iteration_history_run_combo.count() - 1
@@ -2041,6 +2022,19 @@ class MainWindow(QMainWindow):
                 self.iteration_history_generation_combo.addItem(
                     f"Generation {step.iteration} · {state}",
                     f"step:{index}",
+                )
+            executed = max(
+                (step.iteration for step in entry.result.steps),
+                default=0,
+            )
+            requested = entry.requested_generations
+            if requested is not None and executed < requested:
+                self.iteration_history_generation_combo.addItem(
+                    (
+                        f"Stopped early · {executed}/{requested} generations "
+                        "executed"
+                    ),
+                    "early-stop",
                 )
             self.iteration_history_generation_combo.addItem(
                 "Final verification",
@@ -2124,6 +2118,28 @@ class MainWindow(QMainWindow):
             status = (
                 f"{entry.label} · generation {step.iteration} {state} · "
                 f"RMS {step.rms_before_mm:.6g} mm{after} · {step.reason}"
+            )
+        elif selection == "early-stop":
+            measurement = result.final
+            reference = (
+                None if result.final is result.initial else result.initial
+            )
+            label = "Stopped early · final verified"
+            before_knobs = result.initial_knobs
+            target_knobs = result.final_knobs
+            executed = max(
+                (step.iteration for step in result.steps),
+                default=0,
+            )
+            requested = entry.requested_generations or executed
+            stop_reason = (
+                result.steps[-1].reason
+                if result.steps
+                else result.reason
+            )
+            status = (
+                f"{entry.label} · stopped after {executed}/{requested} "
+                f"generations; later generations were not run · {stop_reason}"
             )
         else:
             measurement = result.final
@@ -2371,11 +2387,9 @@ class MainWindow(QMainWindow):
             "Section changed. Previous measurements and recommendations were discarded."
         )
         self.dispersion_curve.set_result(None)
-        self.imported_dispersion = None
         self.live_plot_measurement = None
         self.reference_plot_measurement = None
         self.dispersion_curve.set_measurement(None)
-        self._refresh_measurement_source_combo()
         self.model_info.clear()
         self.model_info.setVisible(False)
         self.model_empty_label.setVisible(True)
@@ -2398,8 +2412,8 @@ class MainWindow(QMainWindow):
         self.correction_recommendation = None
         self.live_plot_measurement = None
         self.reference_plot_measurement = None
-        if hasattr(self, "measurement_source_combo"):
-            self._refresh_measurement_source_combo(preferred="imported")
+        if hasattr(self, "dispersion_curve"):
+            self._refresh_plot_measurement()
         if not hasattr(self, "correction_state_label"):
             return
         self.correction_state_label.setText(reason)
@@ -2465,51 +2479,6 @@ class MainWindow(QMainWindow):
         self.model_measure_table.setVisible(False)
         self.show_design_model_checkbox.setChecked(False)
         self.show_snapshot_model_checkbox.setChecked(False)
-        self._set_running(False, "")
-
-    def _import_measurement_csv(self) -> None:
-        response = self.dispersion_curve.result
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import external ηx measurement",
-            str(Path.cwd()),
-            "CSV files (*.csv)",
-            options=QFileDialog.Options() | QFileDialog.DontUseNativeDialog,
-        )
-        if not path:
-            return
-        allowed_bpms = (
-            tuple(
-                name
-                for name, element_type in zip(
-                    response.selected_curve.element_names,
-                    response.selected_curve.element_types,
-                )
-                if DispersionCurveWidget._is_bpm(name, element_type.upper())
-            )
-            if response is not None
-            else tuple(self.available_bpms or self.config.target_bpms)
-        )
-        try:
-            imported = load_dispersion_csv(
-                path,
-                section_id=self.config.section.id,
-                allowed_bpms=allowed_bpms,
-            )
-        except Exception as exc:
-            QMessageBox.warning(self, "Import ηx", str(exc))
-            return
-        self.imported_dispersion = imported
-        self._refresh_measurement_source_combo(preferred="imported")
-        self._append_log(
-            f"Imported {len(imported.bpm_names)} eta_x point(s) from {imported.source_path}"
-        )
-        self._refresh_status(f"Imported {len(imported.bpm_names)} ηx points")
-        self._set_running(False, "")
-
-    def _clear_imported_measurement(self) -> None:
-        self.imported_dispersion = None
-        self._refresh_measurement_source_combo(preferred="live")
         self._set_running(False, "")
 
     def _select_knobs(self) -> None:
@@ -3209,25 +3178,6 @@ class MainWindow(QMainWindow):
             target_mask=np.asarray(measurement.target_mask, dtype=bool),
         )
 
-    def _plot_dataset_from_import(
-        self,
-        imported: ImportedDispersionDataset,
-    ) -> DispersionPlotDataset:
-        return DispersionPlotDataset(
-            bpm_names=imported.bpm_names,
-            values_mm=np.asarray(imported.etax_mm, dtype=float),
-            sigma_mm=np.asarray(imported.etax_sigma_mm, dtype=float),
-            valid=np.ones(len(imported.bpm_names), dtype=bool),
-            label="External measurement",
-            target_mask=np.asarray(
-                [
-                    name in self.config.target_bpms
-                    for name in imported.bpm_names
-                ],
-                dtype=bool,
-            ),
-        )
-
     def _set_live_comparison_measurement(
         self,
         measurement: DispersionMeasurement,
@@ -3244,49 +3194,17 @@ class MainWindow(QMainWindow):
             if reference is None
             else self._plot_dataset_from_measurement(reference, "Before correction")
         )
-        self._refresh_measurement_source_combo(preferred="live")
-
-    def _refresh_measurement_source_combo(self, preferred: str | None = None) -> None:
-        if not hasattr(self, "measurement_source_combo"):
-            return
-        current = preferred or str(
-            self.measurement_source_combo.currentData() or "none"
-        )
-        self.measurement_source_combo.blockSignals(True)
-        self.measurement_source_combo.clear()
-        if self.live_plot_measurement is not None:
-            self.measurement_source_combo.addItem(
-                self.live_plot_measurement.label,
-                "live",
-            )
-        if self.imported_dispersion is not None:
-            self.measurement_source_combo.addItem("External measurement", "imported")
-        if self.measurement_source_combo.count() == 0:
-            self.measurement_source_combo.addItem("No measurement available", "none")
-        index = self.measurement_source_combo.findData(current)
-        if index < 0:
-            index = 0
-        self.measurement_source_combo.setCurrentIndex(index)
-        self.measurement_source_combo.blockSignals(False)
-        self._comparison_measurement_changed()
+        self._refresh_plot_measurement()
 
     def _active_plot_measurement(self) -> DispersionPlotDataset | None:
-        source = str(self.measurement_source_combo.currentData() or "none")
-        if source == "live":
-            return self.live_plot_measurement
-        if source == "imported" and self.imported_dispersion is not None:
-            return self._plot_dataset_from_import(self.imported_dispersion)
-        return None
+        return self.live_plot_measurement
 
-    def _comparison_measurement_changed(self, _index: int | None = None) -> None:
-        measurement = self._active_plot_measurement()
-        source = str(self.measurement_source_combo.currentData() or "none")
-        reference = (
-            self.reference_plot_measurement
-            if source == "live"
-            else None
+    def _refresh_plot_measurement(self) -> None:
+        measurement = self.live_plot_measurement
+        self.dispersion_curve.set_measurement(
+            measurement,
+            self.reference_plot_measurement,
         )
-        self.dispersion_curve.set_measurement(measurement, reference)
         self._show_measurement_comparison(measurement)
         self._update_plot_state()
 
@@ -3456,17 +3374,6 @@ class MainWindow(QMainWindow):
                 column += 2
         self.model_measure_table.resizeColumnsToContents()
 
-    def _show_imported_comparison(
-        self,
-        response: ModelResponseResult,
-        imported: ImportedDispersionDataset,
-    ) -> None:
-        """Compatibility wrapper used by older callers and focused GUI tests."""
-
-        self.imported_dispersion = imported
-        self.dispersion_curve.set_result(response)
-        self._refresh_measurement_source_combo(preferred="imported")
-
     def _show_response(self, response: ResponseMatrixResult) -> None:
         self.response_table.setRowCount(len(response.bpm_names))
         self.response_table.setColumnCount(len(response.knob_names) + 2)
@@ -3606,7 +3513,7 @@ class MainWindow(QMainWindow):
         settings_title.setObjectName("automaticDialogSectionTitle")
         settings.addWidget(settings_title, 0, 0, 1, 4)
 
-        generations_label = QLabel("Maximum generations")
+        generations_label = QLabel("Maximum generations (upper limit)")
         generations_label.setProperty("role", "field")
         settings.addWidget(generations_label, 1, 0)
         generations = QSpinBox(dialog)
@@ -4551,8 +4458,6 @@ class MainWindow(QMainWindow):
             and self.app_context is not None
         )
         self.model_source_combo.setEnabled(not running)
-        self.import_measurement_button.setEnabled(not running)
-        self.measurement_source_combo.setEnabled(not running)
         self.show_design_model_checkbox.setEnabled(
             not running and self._model_analysis_available()
         )
@@ -4573,9 +4478,6 @@ class MainWindow(QMainWindow):
                 "Review and write lattice design K1 values for the active "
                 "correction quadrupoles."
             )
-        )
-        self.clear_measurement_button.setEnabled(
-            not running and self.imported_dispersion is not None
         )
         self._update_plot_state(running=running, task=task)
         self.measure_button.setEnabled(not running and operation_allowed)
@@ -4842,6 +4744,14 @@ class MainWindow(QMainWindow):
             "Write activity: none — no setpoint was changed",
         ]
         readings = result.readings
+        attempt = int(readings.get("live_preflight_attempt", 1))
+        attempts_allowed = int(
+            readings.get("live_preflight_attempts_allowed", attempt)
+        )
+        if attempts_allowed > 1:
+            lines.append(
+                f"Read attempts: {attempt}/{attempts_allowed}"
+            )
         energy = readings.get("energy_value")
         if energy is not None:
             lines.extend(["", f"Energy actuator: {energy:.8g} Δp/p"])
