@@ -1,27 +1,58 @@
 {
+  "control_backends": [
+    "real"
+  ],
   "default_preset": "ms01_centering",
   "presets": [
+    {
+      "id": "ss02_centering",
+      "display_name": "SS02 Centering",
+      "solenoid": "SS02",
+      "hcorr": "HIC01",
+      "vcorr": "VIC01",
+      "bpm": "BPM01",
+      "solenoid_scan": {
+        "relative_from": -5,
+        "relative_to": 5,
+        "steps": 5
+      },
+      "corrector_scan": {
+        "relative_from": -2,
+        "relative_to": 2,
+        "steps": 5
+      },
+      "samples_per_point": 2,
+      "settle_time_s": 1,
+      "sample_interval_s": 0.2,
+      "max_rounds": 1,
+      "quality_gate": {
+        "minimum_relative_score_improvement": 0.05
+      }
+    },
     {
       "id": "ms01_centering",
       "display_name": "MS01 Centering",
       "solenoid": "MS01",
       "hcorr": "MSHC",
       "vcorr": "MSVC",
-      "bpm": "BPM03",
+      "bpm": "BPM01",
       "solenoid_scan": {
-        "relative_from": -0.05,
-        "relative_to": 0.05,
-        "steps": 3
+        "relative_from": -5,
+        "relative_to": 5,
+        "steps": 5
       },
       "corrector_scan": {
-        "relative_from": -0.05,
-        "relative_to": 0.05,
-        "steps": 3
+        "relative_from": -2,
+        "relative_to": 2,
+        "steps": 5
       },
       "samples_per_point": 2,
-      "settle_time_s": 0.5,
+      "settle_time_s": 1,
       "sample_interval_s": 0.2,
-      "max_rounds": 1
+      "max_rounds": 1,
+      "quality_gate": {
+        "minimum_relative_score_improvement": 0.05
+      }
     },
     {
       "id": "ls01_centering",
@@ -41,9 +72,12 @@
         "steps": 3
       },
       "samples_per_point": 2,
-      "settle_time_s": 0.5,
+      "settle_time_s": 1,
       "sample_interval_s": 0.2,
-      "max_rounds": 1
+      "max_rounds": 1,
+      "quality_gate": {
+        "minimum_relative_score_improvement": 0.05
+      }
     }
   ],
   "real_status": "write_smoke_passed",

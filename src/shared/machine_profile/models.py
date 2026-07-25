@@ -293,6 +293,14 @@ class SolenoidCenteringScanRange:
 
 
 @dataclass(frozen=True)
+class SolenoidCenteringMotionVerification:
+    solenoid_readback_tolerance: float
+    corrector_readback_tolerance: float
+    readback_timeout_s: float
+    poll_interval_s: float = 0.1
+
+
+@dataclass(frozen=True)
 class SolenoidCenteringPreset:
     id: str
     display_name: str
@@ -308,6 +316,8 @@ class SolenoidCenteringPreset:
     solenoid: str | None = None
     solenoid_setpoint_pv: str | None = None
     solenoid_readback_pv: str | None = None
+    motion_verification: SolenoidCenteringMotionVerification | None = None
+    minimum_relative_score_improvement: float = 0.05
 
 
 @dataclass(frozen=True)

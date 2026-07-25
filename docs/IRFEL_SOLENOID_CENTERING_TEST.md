@@ -13,6 +13,34 @@ machine configuration.
 The app can first run a read-only preflight check. The preflight reads PVs and
 validates planned scan ranges, but does not write any PV.
 
+## Required Safety Configuration
+
+The checked-in IRFEL profile contains operations-confirmed solenoid physical
+limits for `SS02`, `MS01`, and `LS01`. Motion tolerances remain intentionally
+unset. Until operations provides and reviews these values, every preset reports
+`NOT READY`; scan, Apply, and Restore are blocked. Do not replace these fields
+with estimated values.
+
+Before a field scan, confirm the configured `low` and `high` current limits
+for `SS02`, `MS01`, and `LS01`, then add this object to each corresponding
+preset in
+`configs/machines/irfel/apps/solenoid_centering.json`:
+
+```json
+"motion_verification": {
+  "solenoid_readback_tolerance": "OPERATIONS_CONFIRMED_VALUE",
+  "corrector_readback_tolerance": "OPERATIONS_CONFIRMED_VALUE",
+  "readback_timeout_s": "OPERATIONS_CONFIRMED_VALUE",
+  "poll_interval_s": 0.1
+}
+```
+
+The selected HCOR and VCOR must also retain valid physical limits and
+`current_readback` channels. The GUI records actual device selections,
+preflight values, limits, PV names, baseline data, and quality result in each
+runtime archive. A recommendation is actionable only when its BPM score
+improves at least 5% relative to the baseline trajectory.
+
 ## Required Python Packages
 
 CLI preflight and scan require:
@@ -87,7 +115,8 @@ Expected behavior:
   limits.
 - Prints `READY` when the current preset is safe to run.
 - Prints `NOT READY` and exits nonzero if a PV cannot be read or a planned
-  range exceeds configured limits.
+  range exceeds configured limits, motion verification is missing, or a
+  setpoint/readback pair is not within its configured tolerance.
 
 ## Run The GUI
 
@@ -106,18 +135,31 @@ Recommended first GUI workflow:
 
 1. Select `MS01 Centering`.
 2. Confirm or adjust `HCOR`, `VCOR`, and `BPM` in the Devices section.
-3. Click `Check PVs`.
-4. If the preflight reports `READY`, run the first small scan.
-5. Review the score and BPM-vs-solenoid plots before applying the recommended
-   corrector values.
+3. Keep `Slope score` for the established default behavior, or select
+   `Trajectory length` to reproduce the metric used by the later IRFEL field
+   test.
+4. Click `Check PVs`.
+5. If the preflight reports `READY`, run the first small scan.
+6. Review the live XY trajectories, all BPM-vs-solenoid scans, and best score
+   before applying the recommended corrector values. Apply is unavailable if
+   the result does not clear the 5% baseline quality gate.
+7. Confirm the Apply dialog only after verifying its PV names, limits,
+   original/target deltas, and quality conclusion. Restore revalidates state
+   and verifies every rollback write.
 
 ## Notes
 
 - Do not copy only `src/apps/solenoid_centering/`; the app also needs the
   shared machine-profile code and IRFEL config.
-- `Solenoid PV` currently comes from the preset because the solenoid setpoint
-  PV is directly declared in `configs/machines/irfel/apps/solenoid_centering.json`.
+- `Solenoid PV` is resolved from the preset's `SS02`, `MS01`, or `LS01`
+  machine element and the selected control backend.
+- The merged IRFEL presets include the field-tested `SS02` workflow using
+  `HIC01`, `VIC01`, and `BPM01`.
 - `HCOR`, `VCOR`, and `BPM` are preset defaults in the GUI, but they remain
   operator-selectable before running preflight or scan.
-- The default IRFEL presets use small scan ranges intended for initial online
-  testing.
+- Scan settings and the selected scoring mode can be saved to or loaded from a
+  JSON config. Loading rejects configs for a different machine or backend.
+- The default `MS01` and `SS02` presets retain the field-tested ranges:
+  solenoid +/-5 with 5 points and correctors +/-2 with 5 points. Operators
+  should reduce these in the GUI when the current machine state requires a
+  narrower preflight envelope.

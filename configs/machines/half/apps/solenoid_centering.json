@@ -1,4 +1,7 @@
 {
+  "control_backends": [
+    "real"
+  ],
   "default_preset": "ls_centering",
   "presets": [
     {

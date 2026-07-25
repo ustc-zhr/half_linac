@@ -25,6 +25,7 @@ from .models import (
     OrbitWorkflowConfig,
     SolenoidCenteringPreset,
     SolenoidCenteringScanRange,
+    SolenoidCenteringMotionVerification,
     SolenoidCenteringWorkflowConfig,
     normalize_mode,
     normalize_plane,
@@ -733,6 +734,33 @@ def _validate_basic_app_support(
             raise MachineProfileError(
                 "solenoid_centering requires apps/solenoid_centering.json."
             )
+        configured_backends = workflow.get("control_backends")
+        if configured_backends is not None:
+            if not isinstance(configured_backends, (list, tuple)) or not configured_backends:
+                raise MachineProfileError(
+                    "workflows.solenoid_centering.control_backends must be a non-empty list."
+                )
+            normalized_backends = tuple(
+                normalize_mode(
+                    value,
+                    f"workflows.solenoid_centering.control_backends[{index}]",
+                )
+                for index, value in enumerate(configured_backends)
+            )
+            unknown_backends = sorted(
+                set(normalized_backends) - set(profile.control_backends)
+            )
+            if unknown_backends:
+                raise MachineProfileError(
+                    "workflows.solenoid_centering.control_backends contains "
+                    f"unconfigured backend(s): {', '.join(unknown_backends)}."
+                )
+            if control_backend is not None and control_backend not in normalized_backends:
+                raise MachineProfileError(
+                    "solenoid_centering supports only "
+                    f"{', '.join(normalized_backends)} backend(s); "
+                    f"{control_backend!r} was requested."
+                )
         load_solenoid_centering_workflow(profile)
         return
 
@@ -2713,6 +2741,26 @@ def _parse_solenoid_centering_preset(
     )
     if solenoid is None and solenoid_setpoint_pv is None:
         raise MachineProfileError(f"{location} must define solenoid or solenoid_setpoint_pv.")
+    motion_raw = preset.get("motion_verification")
+    motion_verification = (
+        _parse_solenoid_centering_motion_verification(
+            _expect_mapping(motion_raw, f"{location}.motion_verification"),
+            f"{location}.motion_verification",
+        )
+        if motion_raw is not None
+        else None
+    )
+    quality_raw = _expect_mapping(
+        preset.get("quality_gate", {}),
+        f"{location}.quality_gate",
+    )
+    minimum_relative_score_improvement = float(
+        quality_raw.get("minimum_relative_score_improvement", 0.05)
+    )
+    if not 0.0 <= minimum_relative_score_improvement < 1.0:
+        raise MachineProfileError(
+            f"{location}.quality_gate.minimum_relative_score_improvement must be in [0, 1)."
+        )
 
     return SolenoidCenteringPreset(
         id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
@@ -2743,6 +2791,39 @@ def _parse_solenoid_centering_preset(
         settle_time_s=float(preset.get("settle_time_s")),
         sample_interval_s=float(preset.get("sample_interval_s")),
         max_rounds=int(preset.get("max_rounds")),
+        motion_verification=motion_verification,
+        minimum_relative_score_improvement=minimum_relative_score_improvement,
+    )
+
+
+def _parse_solenoid_centering_motion_verification(
+    raw_motion: Mapping[str, Any],
+    location: str,
+) -> SolenoidCenteringMotionVerification:
+    values = {
+        name: raw_motion.get(name)
+        for name in (
+            "solenoid_readback_tolerance",
+            "corrector_readback_tolerance",
+            "readback_timeout_s",
+        )
+    }
+    missing = [name for name, value in values.items() if value is None]
+    if missing:
+        raise MachineProfileError(f"{location} is missing required field(s): {', '.join(missing)}.")
+    solenoid_tolerance = float(values["solenoid_readback_tolerance"])
+    corrector_tolerance = float(values["corrector_readback_tolerance"])
+    timeout_s = float(values["readback_timeout_s"])
+    poll_interval_s = float(raw_motion.get("poll_interval_s", 0.1))
+    if solenoid_tolerance <= 0 or corrector_tolerance <= 0:
+        raise MachineProfileError(f"{location} readback tolerances must be positive.")
+    if timeout_s <= 0 or poll_interval_s <= 0:
+        raise MachineProfileError(f"{location} timeout and poll interval must be positive.")
+    return SolenoidCenteringMotionVerification(
+        solenoid_readback_tolerance=solenoid_tolerance,
+        corrector_readback_tolerance=corrector_tolerance,
+        readback_timeout_s=timeout_s,
+        poll_interval_s=poll_interval_s,
     )
 
 

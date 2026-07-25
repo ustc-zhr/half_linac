@@ -929,7 +929,10 @@
         "solenoid",
         "focus"
       ],
-      "limits": {},
+      "limits": {
+        "low": 0,
+        "high": 60
+      },
       "logical_channels": [
         "current_set",
         "current_readback"
@@ -944,7 +947,10 @@
         "solenoid",
         "focus"
       ],
-      "limits": {},
+      "limits": {
+        "low": 0,
+        "high": 120
+      },
       "logical_channels": [
         "current_set",
         "current_readback"
@@ -974,7 +980,10 @@
         "solenoid",
         "focus"
       ],
-      "limits": {},
+      "limits": {
+        "low": 0,
+        "high": 25
+      },
       "logical_channels": [
         "current_set",
         "current_readback"

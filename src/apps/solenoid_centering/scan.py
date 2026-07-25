@@ -6,7 +6,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Protocol
+from typing import Any, Callable, Iterable, Protocol
 
 import numpy as np
 
@@ -35,10 +35,25 @@ from half_linac.src.apps.solenoid_centering.profile_runtime import write_scan_re
 
 
 NOISE_FLOOR = 1e-15
+SCORING_MODE_SLOPE = "slope"
+SCORING_MODE_TRAJECTORY_LENGTH = "trajectory_length"
+SCORING_MODES = (SCORING_MODE_SLOPE, SCORING_MODE_TRAJECTORY_LENGTH)
 
 
 class StopRequested(RuntimeError):
     """Raised when a running scan is asked to stop."""
+
+
+class MotionVerificationError(RuntimeError):
+    """Raised when a device does not reach the requested setpoint."""
+
+
+class StateDriftError(RuntimeError):
+    """Raised when the machine no longer matches a scanned baseline."""
+
+
+class RestoreFailed(RuntimeError):
+    """Raised when one or more devices cannot be restored safely."""
 
 
 class ScalarIO(Protocol):
@@ -66,6 +81,9 @@ class ResponseScore:
     mean_y: float
     std_x: float
     std_y: float
+    mode: str = SCORING_MODE_SLOPE
+    slope_score: float = 0.0
+    trajectory_length: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -99,6 +117,15 @@ class CenteringResult:
     recommended_vcorr: float
     best_score: float
     axis_scans: tuple[AxisScanResult, ...]
+    scoring_mode: str = SCORING_MODE_SLOPE
+    baseline_candidate: CandidateResult | None = None
+    relative_improvement: float = 0.0
+    recommendation_available: bool = False
+    recommendation_status: str = "not_evaluated"
+    preflight: dict[str, Any] | None = None
+    selected_devices: dict[str, str] | None = None
+    scan_config: dict[str, Any] | None = None
+    schema_version: int = 2
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -113,6 +140,8 @@ class RangeCheck:
     planned_high: float
     limit_low: float | None
     limit_high: float | None
+    first_scan_low: float | None = None
+    first_scan_high: float | None = None
 
     @property
     def has_limit(self) -> bool:
@@ -121,10 +150,41 @@ class RangeCheck:
     @property
     def is_ok(self) -> bool:
         if not self.has_limit:
-            return True
+            return False
         assert self.limit_low is not None
         assert self.limit_high is not None
         return self.planned_low >= self.limit_low and self.planned_high <= self.limit_high
+
+
+@dataclass(frozen=True)
+class MotionCheck:
+    label: str
+    element_id: str
+    setpoint_pv: str
+    readback_pv: str | None
+    setpoint: float
+    readback: float | None
+    tolerance: float | None
+
+    @property
+    def is_ok(self) -> bool:
+        return (
+            self.readback_pv is not None
+            and self.readback is not None
+            and self.tolerance is not None
+            and abs(self.setpoint - self.readback) <= self.tolerance
+        )
+
+    @property
+    def detail(self) -> str:
+        if self.readback_pv is None:
+            return "readback PV unavailable"
+        if self.readback is None or self.tolerance is None:
+            return "motion verification is not configured"
+        return (
+            f"set={self.setpoint:g}, readback={self.readback:g}, "
+            f"|delta|={abs(self.setpoint - self.readback):g}, tolerance={self.tolerance:g}"
+        )
 
 
 @dataclass(frozen=True)
@@ -142,6 +202,8 @@ class PreflightReport:
     solenoid_readback: float | None
     original_hcorr: float
     original_vcorr: float
+    hcorr_readback: float | None
+    vcorr_readback: float | None
     bpm_x: float
     bpm_y: float
     solenoid_points: int
@@ -149,10 +211,16 @@ class PreflightReport:
     bpm_samples: int
     estimated_duration_s: float
     range_checks: tuple[RangeCheck, ...]
+    motion_checks: tuple[MotionCheck, ...]
+    motion_verification_configured: bool
 
     @property
     def is_ready(self) -> bool:
-        return all(item.is_ok for item in self.range_checks)
+        return (
+            self.motion_verification_configured
+            and all(item.is_ok for item in self.range_checks)
+            and all(item.is_ok for item in self.motion_checks)
+        )
 
     def as_text(self) -> str:
         lines = [
@@ -181,11 +249,20 @@ class PreflightReport:
                 limit = f"[{item.limit_low:g}, {item.limit_high:g}]"
             else:
                 limit = "unconfigured"
-            status = "OK" if item.is_ok else "OUT OF LIMIT"
-            lines.append(
-                f"{status} {item.label} {item.element_id}: planned "
-                f"[{item.planned_low:g}, {item.planned_high:g}], limit {limit}"
+            status = "OK" if item.is_ok else (
+                "LIMIT UNCONFIGURED" if not item.has_limit else "OUT OF LIMIT"
             )
+            if item.first_scan_low is not None and item.first_scan_high is not None:
+                planned = (
+                    f"first-round [{item.first_scan_low:g}, {item.first_scan_high:g}], "
+                    f"multi-round envelope [{item.planned_low:g}, {item.planned_high:g}]"
+                )
+            else:
+                planned = f"planned [{item.planned_low:g}, {item.planned_high:g}]"
+            lines.append(f"{status} {item.label} {item.element_id}: {planned}, limit {limit}")
+        for item in self.motion_checks:
+            status = "OK" if item.is_ok else "NOT VERIFIED"
+            lines.append(f"{status} {item.label} {item.element_id}: {item.detail}")
         return "\n".join(lines)
 
 
@@ -204,8 +281,10 @@ def evaluate_solenoid_response(
     x_samples,
     y_samples,
     *,
+    scoring_mode: str = SCORING_MODE_SLOPE,
     noise_floor: float = NOISE_FLOOR,
 ) -> ResponseScore:
+    scoring_mode = normalize_scoring_mode(scoring_mode)
     sol = np.asarray(list(solenoid_values), dtype=float)
     x = _as_2d_samples(x_samples, "x_samples")
     y = _as_2d_samples(y_samples, "y_samples")
@@ -227,7 +306,13 @@ def evaluate_solenoid_response(
     residual_y = y_means - (slope_y * sol + offset_y)
     centered_x = x_means - x_means.mean()
     centered_y = y_means - y_means.mean()
-    score = float(np.hypot(slope_x / scale_x, slope_y / scale_y))
+    slope_score = float(np.hypot(slope_x / scale_x, slope_y / scale_y))
+    trajectory_length = _trajectory_length(x_means, y_means)
+    score = (
+        slope_score
+        if scoring_mode == SCORING_MODE_SLOPE
+        else trajectory_length
+    )
 
     return ResponseScore(
         score=score,
@@ -245,6 +330,9 @@ def evaluate_solenoid_response(
         mean_y=float(y_means.mean()),
         std_x=float(np.mean(x_stds)),
         std_y=float(np.mean(y_stds)),
+        mode=scoring_mode,
+        slope_score=slope_score,
+        trajectory_length=trajectory_length,
     )
 
 
@@ -324,17 +412,23 @@ class SolenoidCenteringScanner:
         *,
         io: ScalarIO | None = None,
         progress: Callable[[str, int, int], None] | None = None,
+        candidate_finished: Callable[[CandidateResult], None] | None = None,
+        scoring_mode: str = SCORING_MODE_SLOPE,
         stop_requested: Callable[[], bool] | None = None,
     ):
         self.app_context = app_context
         self.preset = preset
         self.io = io or EpicsScalarIO()
         self.progress = progress or (lambda _message, _completed, _total: None)
+        self.candidate_finished = candidate_finished or (lambda _candidate: None)
+        self.scoring_mode = normalize_scoring_mode(scoring_mode)
         self.stop_requested = stop_requested or (lambda: False)
         self.solenoid_pv = self._resolve_solenoid_setpoint_pv()
         self.solenoid_readback_pv = self._resolve_solenoid_readback_pv()
         self.hcorr_pv = resolve_corrector_write_channel(app_context, preset.hcorr)
         self.vcorr_pv = resolve_corrector_write_channel(app_context, preset.vcorr)
+        self.hcorr_readback_pv = self._resolve_readback_pv(preset.hcorr)
+        self.vcorr_readback_pv = self._resolve_readback_pv(preset.vcorr)
         self.bpm_x_pv = resolve_channel(app_context, preset.bpm, "x")
         self.bpm_y_pv = resolve_channel(app_context, preset.bpm, "y")
 
@@ -356,6 +450,12 @@ class SolenoidCenteringScanner:
                 return self.preset.solenoid_readback_pv
         return self.preset.solenoid_readback_pv
 
+    def _resolve_readback_pv(self, element_id: str) -> str | None:
+        try:
+            return resolve_channel(self.app_context, element_id, "current_readback")
+        except MachineProfileError:
+            return None
+
     def run(self) -> CenteringResult:
         require_workflow_write_allowed(
             self.app_context,
@@ -363,10 +463,12 @@ class SolenoidCenteringScanner:
             "Solenoid centering scan",
         )
         report = self.preflight()
+        if not report.is_ready:
+            raise MachineProfileError(report.as_text())
         original_solenoid = report.original_solenoid
         original_hcorr = report.original_hcorr
         original_vcorr = report.original_vcorr
-        total = self._estimated_candidate_count()
+        total = self._estimated_candidate_count() + 1
         completed = 0
 
         def evaluator(axis: str, round_index: int, hcorr: float, vcorr: float) -> CandidateResult:
@@ -376,10 +478,23 @@ class SolenoidCenteringScanner:
             self.progress(message, completed, total)
             result = self._evaluate_candidate(axis, round_index, hcorr, vcorr, original_solenoid)
             completed += 1
+            self.candidate_finished(result)
             self.progress(message, completed, total)
             return result
 
+        operation_error: BaseException | None = None
         try:
+            self.progress("baseline candidate", completed, total)
+            baseline = self._evaluate_candidate(
+                "baseline",
+                0,
+                original_hcorr,
+                original_vcorr,
+                original_solenoid,
+            )
+            completed += 1
+            self.candidate_finished(baseline)
+            self.progress("baseline candidate", completed, total)
             recommended_h, recommended_v, axis_scans = coordinate_descent(
                 original_hcorr,
                 original_vcorr,
@@ -387,7 +502,11 @@ class SolenoidCenteringScanner:
                 self.preset.max_rounds,
                 evaluator,
             )
-            best_score = min(scan.best.score.score for scan in axis_scans)
+            best = min((scan.best for scan in axis_scans), key=lambda candidate: candidate.score.score)
+            best_score = best.score.score
+            relative_improvement, recommendation_available, recommendation_status = (
+                self._recommendation_quality(baseline, best)
+            )
             result = CenteringResult(
                 preset_id=self.preset.id,
                 original_solenoid=original_solenoid,
@@ -397,44 +516,133 @@ class SolenoidCenteringScanner:
                 recommended_vcorr=recommended_v,
                 best_score=float(best_score),
                 axis_scans=axis_scans,
+                scoring_mode=self.scoring_mode,
+                baseline_candidate=baseline,
+                relative_improvement=relative_improvement,
+                recommendation_available=recommendation_available,
+                recommendation_status=recommendation_status,
+                preflight=asdict(report),
+                selected_devices={
+                    "solenoid": self.preset.solenoid or self.solenoid_pv,
+                    "hcorr": self.preset.hcorr,
+                    "vcorr": self.preset.vcorr,
+                    "bpm": self.preset.bpm,
+                    "solenoid_setpoint_pv": self.solenoid_pv,
+                    "solenoid_readback_pv": self.solenoid_readback_pv or "",
+                    "hcorr_setpoint_pv": self.hcorr_pv,
+                    "hcorr_readback_pv": self.hcorr_readback_pv or "",
+                    "vcorr_setpoint_pv": self.vcorr_pv,
+                    "vcorr_readback_pv": self.vcorr_readback_pv or "",
+                    "bpm_x_pv": self.bpm_x_pv,
+                    "bpm_y_pv": self.bpm_y_pv,
+                },
+                scan_config=self._scan_config_payload(),
             )
             write_scan_result(self.app_context, result.as_dict())
             return result
+        except BaseException as exc:
+            operation_error = exc
+            raise
         finally:
-            self._restore(original_solenoid, original_hcorr, original_vcorr)
+            try:
+                self._restore(original_solenoid, original_hcorr, original_vcorr)
+            except Exception as restore_error:
+                if operation_error is not None:
+                    raise RestoreFailed(
+                        f"Scan failed ({operation_error}); device restore also failed: {restore_error}"
+                    ) from operation_error
+                raise RestoreFailed(f"Device restore failed: {restore_error}") from restore_error
 
-    def apply_recommended(self, hcorr: float, vcorr: float) -> None:
+    def apply_recommended(self, result: CenteringResult) -> None:
+        if not result.recommendation_available:
+            raise MachineProfileError(
+                f"Cannot apply recommendation: {result.recommendation_status}."
+            )
+        self._apply_corrector_transaction(
+            target_hcorr=result.recommended_hcorr,
+            target_vcorr=result.recommended_vcorr,
+            expected_solenoid=result.original_solenoid,
+            expected_hcorr=result.original_hcorr,
+            expected_vcorr=result.original_vcorr,
+            action="Apply solenoid centering recommendation",
+        )
+
+    def restore_original(self, result: CenteringResult) -> None:
+        self._apply_corrector_transaction(
+            target_hcorr=result.original_hcorr,
+            target_vcorr=result.original_vcorr,
+            expected_solenoid=result.original_solenoid,
+            expected_hcorr=result.recommended_hcorr,
+            expected_vcorr=result.recommended_vcorr,
+            action="Restore original solenoid centering settings",
+        )
+
+    def _apply_corrector_transaction(
+        self,
+        *,
+        target_hcorr: float,
+        target_vcorr: float,
+        expected_solenoid: float,
+        expected_hcorr: float,
+        expected_vcorr: float,
+        action: str,
+    ) -> None:
         require_workflow_write_allowed(
             self.app_context,
             "solenoid_centering",
-            "Apply solenoid centering recommendation",
+            action,
         )
-        self._check_single_value_limit(self.preset.hcorr, hcorr, self.hcorr_pv)
-        self._check_single_value_limit(self.preset.vcorr, vcorr, self.vcorr_pv)
-        self.io.write(self.hcorr_pv, hcorr)
-        self.io.write(self.vcorr_pv, vcorr)
+        self._assert_expected_state(expected_solenoid, expected_hcorr, expected_vcorr)
+        self._check_single_value_limit(self.preset.hcorr, target_hcorr, self.hcorr_pv)
+        self._check_single_value_limit(self.preset.vcorr, target_vcorr, self.vcorr_pv)
+        try:
+            self._write_and_verify(
+                "HCOR",
+                self.hcorr_pv,
+                self.hcorr_readback_pv,
+                target_hcorr,
+                self._corrector_tolerance(),
+                stop_sensitive=False,
+            )
+            self._write_and_verify(
+                "VCOR",
+                self.vcorr_pv,
+                self.vcorr_readback_pv,
+                target_vcorr,
+                self._corrector_tolerance(),
+                stop_sensitive=False,
+            )
+        except Exception as exc:
+            rollback_errors = self._restore_correctors(expected_hcorr, expected_vcorr)
+            detail = "rollback succeeded" if not rollback_errors else (
+                "rollback failed: " + "; ".join(rollback_errors)
+            )
+            raise MotionVerificationError(f"{action} failed: {exc}; {detail}.") from exc
 
     def preflight(self) -> PreflightReport:
         original_solenoid = self.io.read(self.solenoid_pv)
         original_hcorr = self.io.read(self.hcorr_pv)
         original_vcorr = self.io.read(self.vcorr_pv)
-        solenoid_readback = None
-        if self.solenoid_readback_pv:
-            solenoid_readback = self.io.read(self.solenoid_readback_pv)
+        solenoid_readback = self._read_optional(self.solenoid_readback_pv)
+        hcorr_readback = self._read_optional(self.hcorr_readback_pv)
+        vcorr_readback = self._read_optional(self.vcorr_readback_pv)
         bpm_x = self.io.read(self.bpm_x_pv)
         bpm_y = self.io.read(self.bpm_y_pv)
 
         range_checks: list[RangeCheck] = []
         solenoid_element = self._find_current_set_element(self.solenoid_pv)
-        if solenoid_element is not None:
-            range_checks.append(
-                self._build_range_check(
-                    "solenoid",
-                    solenoid_element,
-                    relative_scan_points(original_solenoid, self.preset.solenoid_scan),
-                    self.solenoid_pv,
-                )
+        if solenoid_element is None:
+            raise MachineProfileError(
+                f"Cannot verify physical limits for solenoid PV {self.solenoid_pv}."
             )
+        range_checks.append(
+            self._build_range_check(
+                "solenoid",
+                solenoid_element,
+                relative_scan_points(original_solenoid, self.preset.solenoid_scan),
+                self.solenoid_pv,
+            )
+        )
 
         range_checks.append(
             self._build_range_check(
@@ -442,6 +650,7 @@ class SolenoidCenteringScanner:
                 self.app_context.profile.get_element(self.preset.hcorr),
                 self._corrector_scan_envelope(original_hcorr),
                 self.hcorr_pv,
+                first_values=relative_scan_points(original_hcorr, self.preset.corrector_scan),
             )
         )
         range_checks.append(
@@ -450,15 +659,41 @@ class SolenoidCenteringScanner:
                 self.app_context.profile.get_element(self.preset.vcorr),
                 self._corrector_scan_envelope(original_vcorr),
                 self.vcorr_pv,
+                first_values=relative_scan_points(original_vcorr, self.preset.corrector_scan),
             )
         )
-        for item in range_checks:
-            if not item.is_ok:
-                raise MachineProfileError(
-                    f"Planned scan for {item.element_id} ({item.pv_name}) is outside configured "
-                    f"limits [{item.limit_low:g}, {item.limit_high:g}]: planned "
-                    f"[{item.planned_low:g}, {item.planned_high:g}]."
-                )
+        motion = self.preset.motion_verification
+        solenoid_tolerance = motion.solenoid_readback_tolerance if motion else None
+        corrector_tolerance = motion.corrector_readback_tolerance if motion else None
+        motion_checks = (
+            MotionCheck(
+                "solenoid",
+                solenoid_element.id,
+                self.solenoid_pv,
+                self.solenoid_readback_pv,
+                original_solenoid,
+                solenoid_readback,
+                solenoid_tolerance,
+            ),
+            MotionCheck(
+                "HCOR",
+                self.preset.hcorr,
+                self.hcorr_pv,
+                self.hcorr_readback_pv,
+                original_hcorr,
+                hcorr_readback,
+                corrector_tolerance,
+            ),
+            MotionCheck(
+                "VCOR",
+                self.preset.vcorr,
+                self.vcorr_pv,
+                self.vcorr_readback_pv,
+                original_vcorr,
+                vcorr_readback,
+                corrector_tolerance,
+            ),
+        )
 
         return PreflightReport(
             machine_id=self.app_context.machine.id,
@@ -474,13 +709,17 @@ class SolenoidCenteringScanner:
             solenoid_readback=solenoid_readback,
             original_hcorr=original_hcorr,
             original_vcorr=original_vcorr,
+            hcorr_readback=hcorr_readback,
+            vcorr_readback=vcorr_readback,
             bpm_x=bpm_x,
             bpm_y=bpm_y,
             solenoid_points=self.preset.solenoid_scan.steps,
-            corrector_candidates=self._estimated_candidate_count(),
+            corrector_candidates=self._estimated_candidate_count() + 1,
             bpm_samples=self.preset.samples_per_point,
             estimated_duration_s=self._estimated_duration_s(),
             range_checks=tuple(range_checks),
+            motion_checks=motion_checks,
+            motion_verification_configured=motion is not None,
         )
 
     def _check_single_value_limit(self, element_id: str, value: float, pv_name: str) -> None:
@@ -491,9 +730,14 @@ class SolenoidCenteringScanner:
             pv_name,
         )
         if not check.is_ok:
+            limit = (
+                f"[{check.limit_low:g}, {check.limit_high:g}]"
+                if check.has_limit
+                else "unconfigured"
+            )
             raise MachineProfileError(
                 f"Planned value for {check.element_id} ({check.pv_name}) is outside configured "
-                f"limits [{check.limit_low:g}, {check.limit_high:g}]: planned "
+                f"limits {limit}: planned "
                 f"[{check.planned_low:g}, {check.planned_high:g}]."
             )
 
@@ -503,12 +747,22 @@ class SolenoidCenteringScanner:
         element: ElementConfig,
         values: Iterable[float],
         pv_name: str,
+        *,
+        first_values: Iterable[float] | None = None,
     ) -> RangeCheck:
         values_tuple = tuple(float(value) for value in values)
         if not values_tuple:
             raise MachineProfileError(f"No planned values for {element.id}.")
         planned_low = min(values_tuple)
         planned_high = max(values_tuple)
+        first_scan_low = None
+        first_scan_high = None
+        if first_values is not None:
+            first_tuple = tuple(float(value) for value in first_values)
+            if not first_tuple:
+                raise MachineProfileError(f"No first-round values for {element.id}.")
+            first_scan_low = min(first_tuple)
+            first_scan_high = max(first_tuple)
         limit = _element_numeric_limit(element)
         if limit is None:
             limit_low = None
@@ -523,6 +777,8 @@ class SolenoidCenteringScanner:
             planned_high=planned_high,
             limit_low=limit_low,
             limit_high=limit_high,
+            first_scan_low=first_scan_low,
+            first_scan_high=first_scan_high,
         )
 
     def _corrector_scan_envelope(self, center: float) -> tuple[float, float]:
@@ -552,6 +808,100 @@ class SolenoidCenteringScanner:
                 return element
         return None
 
+    def _read_optional(self, pv_name: str | None) -> float | None:
+        return self.io.read(pv_name) if pv_name else None
+
+    def _solenoid_tolerance(self) -> float:
+        if self.preset.motion_verification is None:
+            raise MotionVerificationError(
+                f"Preset {self.preset.id!r} has no motion_verification configuration."
+            )
+        return self.preset.motion_verification.solenoid_readback_tolerance
+
+    def _corrector_tolerance(self) -> float:
+        if self.preset.motion_verification is None:
+            raise MotionVerificationError(
+                f"Preset {self.preset.id!r} has no motion_verification configuration."
+            )
+        return self.preset.motion_verification.corrector_readback_tolerance
+
+    def _write_and_verify(
+        self,
+        label: str,
+        setpoint_pv: str,
+        readback_pv: str | None,
+        value: float,
+        tolerance: float,
+        *,
+        stop_sensitive: bool,
+    ) -> None:
+        if readback_pv is None:
+            raise MotionVerificationError(f"{label} has no current_readback PV.")
+        self.io.write(setpoint_pv, value)
+        motion = self.preset.motion_verification
+        if motion is None:
+            raise MotionVerificationError(
+                f"Preset {self.preset.id!r} has no motion_verification configuration."
+            )
+        deadline = time.monotonic() + motion.readback_timeout_s
+        last_readback: float | None = None
+        while True:
+            if stop_sensitive:
+                self._raise_if_stopped()
+            last_readback = self.io.read(readback_pv)
+            if abs(last_readback - value) <= tolerance:
+                return
+            if time.monotonic() >= deadline:
+                raise MotionVerificationError(
+                    f"{label} did not reach {value:g}; readback {last_readback:g}, "
+                    f"tolerance {tolerance:g}, timeout {motion.readback_timeout_s:g}s."
+                )
+            time.sleep(min(motion.poll_interval_s, max(0.0, deadline - time.monotonic())))
+
+    def _assert_expected_state(
+        self,
+        expected_solenoid: float,
+        expected_hcorr: float,
+        expected_vcorr: float,
+    ) -> None:
+        state = (
+            ("solenoid", self.solenoid_pv, self.solenoid_readback_pv, expected_solenoid, self._solenoid_tolerance()),
+            ("HCOR", self.hcorr_pv, self.hcorr_readback_pv, expected_hcorr, self._corrector_tolerance()),
+            ("VCOR", self.vcorr_pv, self.vcorr_readback_pv, expected_vcorr, self._corrector_tolerance()),
+        )
+        for label, setpoint_pv, readback_pv, expected, tolerance in state:
+            if readback_pv is None:
+                raise StateDriftError(f"{label} readback PV is unavailable.")
+            setpoint = self.io.read(setpoint_pv)
+            readback = self.io.read(readback_pv)
+            if abs(setpoint - readback) > tolerance:
+                raise StateDriftError(
+                    f"{label} is not motion-verified: set={setpoint:g}, readback={readback:g}."
+                )
+            if abs(setpoint - expected) > tolerance:
+                raise StateDriftError(
+                    f"{label} changed since scan: expected {expected:g}, current {setpoint:g}."
+                )
+
+    def _restore_correctors(self, hcorr: float, vcorr: float) -> list[str]:
+        errors = []
+        for label, setpoint_pv, readback_pv, value in (
+            ("HCOR", self.hcorr_pv, self.hcorr_readback_pv, hcorr),
+            ("VCOR", self.vcorr_pv, self.vcorr_readback_pv, vcorr),
+        ):
+            try:
+                self._write_and_verify(
+                    label,
+                    setpoint_pv,
+                    readback_pv,
+                    value,
+                    self._corrector_tolerance(),
+                    stop_sensitive=False,
+                )
+            except Exception as exc:
+                errors.append(f"{label} ({setpoint_pv}): {exc}")
+        return errors
+
     def _evaluate_candidate(
         self,
         axis: str,
@@ -560,8 +910,22 @@ class SolenoidCenteringScanner:
         vcorr: float,
         original_solenoid: float,
     ) -> CandidateResult:
-        self.io.write(self.hcorr_pv, hcorr)
-        self.io.write(self.vcorr_pv, vcorr)
+        self._write_and_verify(
+            "HCOR",
+            self.hcorr_pv,
+            self.hcorr_readback_pv,
+            hcorr,
+            self._corrector_tolerance(),
+            stop_sensitive=True,
+        )
+        self._write_and_verify(
+            "VCOR",
+            self.vcorr_pv,
+            self.vcorr_readback_pv,
+            vcorr,
+            self._corrector_tolerance(),
+            stop_sensitive=True,
+        )
         self._sleep(self.preset.settle_time_s)
 
         solenoid_values = []
@@ -570,14 +934,26 @@ class SolenoidCenteringScanner:
         for solenoid in relative_scan_points(original_solenoid, self.preset.solenoid_scan):
             self._raise_if_stopped()
             solenoid = float(solenoid)
-            self.io.write(self.solenoid_pv, solenoid)
+            self._write_and_verify(
+                "solenoid",
+                self.solenoid_pv,
+                self.solenoid_readback_pv,
+                solenoid,
+                self._solenoid_tolerance(),
+                stop_sensitive=True,
+            )
             self._sleep(self.preset.settle_time_s)
             xs, ys = self._sample_bpm()
             solenoid_values.append(solenoid)
             x_samples.append(xs)
             y_samples.append(ys)
 
-        score = evaluate_solenoid_response(solenoid_values, x_samples, y_samples)
+        score = evaluate_solenoid_response(
+            solenoid_values,
+            x_samples,
+            y_samples,
+            scoring_mode=self.scoring_mode,
+        )
         return CandidateResult(
             axis=axis,
             round_index=round_index,
@@ -603,17 +979,24 @@ class SolenoidCenteringScanner:
 
     def _restore(self, solenoid: float, hcorr: float, vcorr: float) -> None:
         errors = []
-        for pv_name, value in (
-            (self.solenoid_pv, solenoid),
-            (self.hcorr_pv, hcorr),
-            (self.vcorr_pv, vcorr),
+        for label, pv_name, readback_pv, value, tolerance in (
+            ("solenoid", self.solenoid_pv, self.solenoid_readback_pv, solenoid, self._solenoid_tolerance()),
+            ("HCOR", self.hcorr_pv, self.hcorr_readback_pv, hcorr, self._corrector_tolerance()),
+            ("VCOR", self.vcorr_pv, self.vcorr_readback_pv, vcorr, self._corrector_tolerance()),
         ):
             try:
-                self.io.write(pv_name, value)
+                self._write_and_verify(
+                    label,
+                    pv_name,
+                    readback_pv,
+                    value,
+                    tolerance,
+                    stop_sensitive=False,
+                )
             except Exception as exc:
-                errors.append(f"{pv_name}: {exc}")
+                errors.append(f"{label} ({pv_name}): {exc}")
         if errors:
-            raise RuntimeError("Restore failed: " + "; ".join(errors))
+            raise RestoreFailed("Restore failed: " + "; ".join(errors))
 
     def _estimated_candidate_count(self) -> int:
         return self.preset.max_rounds * 2 * self.preset.corrector_scan.steps
@@ -623,7 +1006,44 @@ class SolenoidCenteringScanner:
         per_candidate = self.preset.settle_time_s + self.preset.solenoid_scan.steps * (
             self.preset.settle_time_s + samples_delay
         )
-        return float(self._estimated_candidate_count() * per_candidate)
+        return float((self._estimated_candidate_count() + 1) * per_candidate)
+
+    def _recommendation_quality(
+        self,
+        baseline: CandidateResult,
+        best: CandidateResult,
+    ) -> tuple[float, bool, str]:
+        baseline_score = float(baseline.score.score)
+        best_score = float(best.score.score)
+        if not np.isfinite(baseline_score) or baseline_score <= NOISE_FLOOR:
+            return 0.0, False, "baseline score is too small for a reliable recommendation"
+        improvement = (baseline_score - best_score) / abs(baseline_score)
+        if improvement < self.preset.minimum_relative_score_improvement:
+            return (
+                float(improvement),
+                False,
+                f"improvement {improvement:.1%} is below required "
+                f"{self.preset.minimum_relative_score_improvement:.1%}",
+            )
+        return float(improvement), True, "quality gate passed"
+
+    def _scan_config_payload(self) -> dict[str, Any]:
+        return {
+            "preset_id": self.preset.id,
+            "scoring_mode": self.scoring_mode,
+            "solenoid_scan": asdict(self.preset.solenoid_scan),
+            "corrector_scan": asdict(self.preset.corrector_scan),
+            "samples_per_point": self.preset.samples_per_point,
+            "settle_time_s": self.preset.settle_time_s,
+            "sample_interval_s": self.preset.sample_interval_s,
+            "max_rounds": self.preset.max_rounds,
+            "minimum_relative_score_improvement": self.preset.minimum_relative_score_improvement,
+            "motion_verification": (
+                asdict(self.preset.motion_verification)
+                if self.preset.motion_verification is not None
+                else None
+            ),
+        }
 
     def _sleep(self, seconds: float) -> None:
         deadline = time.time() + max(0.0, float(seconds))
@@ -645,6 +1065,29 @@ def _as_2d_samples(values, label: str) -> np.ndarray:
     if not np.all(np.isfinite(array)):
         raise ValueError(f"{label} contains NaN or Inf.")
     return array
+
+
+def normalize_scoring_mode(value: str | None) -> str:
+    normalized = str(value or SCORING_MODE_SLOPE).strip().lower().replace("-", "_")
+    aliases = {
+        "slope": SCORING_MODE_SLOPE,
+        "slope_score": SCORING_MODE_SLOPE,
+        "trajectory": SCORING_MODE_TRAJECTORY_LENGTH,
+        "trajectory_length": SCORING_MODE_TRAJECTORY_LENGTH,
+        "length": SCORING_MODE_TRAJECTORY_LENGTH,
+    }
+    try:
+        return aliases[normalized]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unsupported scoring mode {value!r}; expected one of {', '.join(SCORING_MODES)}."
+        ) from exc
+
+
+def _trajectory_length(x_values: np.ndarray, y_values: np.ndarray) -> float:
+    if x_values.size < 2:
+        return 0.0
+    return float(np.sum(np.hypot(np.diff(x_values), np.diff(y_values))))
 
 
 def _noise_scale(stds: np.ndarray, noise_floor: float) -> float:
@@ -692,6 +1135,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Read current PVs and validate planned ranges without writing any PV.",
     )
+    parser.add_argument(
+        "--scoring-mode",
+        choices=SCORING_MODES,
+        default=SCORING_MODE_SLOPE,
+        help="Candidate ranking metric.",
+    )
     args = parser.parse_args(argv)
 
     stop = {"requested": False}
@@ -711,6 +1160,7 @@ def main(argv: list[str] | None = None) -> int:
     scanner = SolenoidCenteringScanner(
         context,
         preset,
+        scoring_mode=args.scoring_mode,
         progress=lambda message, completed, total: print(f"{completed}/{total} {message}", flush=True),
         stop_requested=lambda: stop["requested"],
     )
@@ -722,7 +1172,7 @@ def main(argv: list[str] | None = None) -> int:
             print(str(exc), file=sys.stderr)
             return 1
         print(report.as_text())
-        return 0
+        return 0 if report.is_ready else 1
     scanner.run()
     return 0
 

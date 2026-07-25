@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -14,29 +15,36 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QGridLayout,
-    QGroupBox,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QFrame,
+    QScrollArea,
+    QSplitter,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
+    RuntimeContextWidget,
     SolenoidCenteringPreset,
     SolenoidCenteringScanRange,
     list_elements,
@@ -46,22 +54,36 @@ from half_linac.src.shared.machine_profile import (
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from half_linac.src.apps.solenoid_centering.mplwidget import MplWidget
+from half_linac.src.apps.solenoid_centering.gui.theme import (
+    HEADER_ACTION_HEIGHT,
+    build_stylesheet,
+    theme_palette,
+)
+from half_linac.src.apps.solenoid_centering.gui.widgets import StatusStrip
 from half_linac.src.apps.solenoid_centering.scan import (
     CenteringResult,
+    MotionVerificationError,
+    RestoreFailed,
+    SCORING_MODE_SLOPE,
+    SCORING_MODE_TRAJECTORY_LENGTH,
+    StateDriftError,
     SolenoidCenteringScanner,
     StopRequested,
+    normalize_scoring_mode,
 )
 
 
 class ScanWorker(QThread):
     progress_changed = pyqtSignal(str, int, int)
+    candidate_finished = pyqtSignal(object)
     finished_ok = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, context, preset, parent=None):
+    def __init__(self, context, preset, scoring_mode=SCORING_MODE_SLOPE, parent=None):
         super().__init__(parent)
         self.context = context
         self.preset = preset
+        self.scoring_mode = scoring_mode
         self._stop_requested = False
 
     def request_stop(self):
@@ -73,6 +95,8 @@ class ScanWorker(QThread):
                 self.context,
                 self.preset,
                 progress=self.progress_changed.emit,
+                candidate_finished=self.candidate_finished.emit,
+                scoring_mode=self.scoring_mode,
                 stop_requested=lambda: self._stop_requested,
             )
             result = scanner.run()
@@ -116,65 +140,198 @@ class MainWindow(QMainWindow):
         self.preflight_worker: PreflightWorker | None = None
         self.last_result: CenteringResult | None = None
         self.last_result_preset: SolenoidCenteringPreset | None = None
+        self.current_theme = resolve_initial_theme()
 
         self.setWindowTitle("Solenoid Centering")
-        self.resize(1120, 760)
+        self.resize(1440, 900)
+        self.setMinimumSize(1120, 760)
         self._build_ui()
         self._load_device_choices()
         self._load_presets()
         self._refresh_write_state()
+        self._apply_theme()
 
     def _build_ui(self):
         central = QWidget(self)
+        central.setObjectName("centralRoot")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        top = QHBoxLayout()
-        self.preset_combo = QComboBox(central)
-        self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
-        self.status_label = QLabel("Idle", central)
-        top.addWidget(QLabel("Preset", central))
-        top.addWidget(self.preset_combo, 1)
-        top.addWidget(self.status_label)
-        layout.addLayout(top)
-
-        content = QHBoxLayout()
-        content.addWidget(self._build_control_panel(central), 0)
-
-        right = QVBoxLayout()
-        self.plot = MplWidget(central)
-        right.addWidget(self.plot, 1)
-        self.result_table = QTableWidget(0, 6, central)
-        self.result_table.setHorizontalHeaderLabels(
-            ["Axis", "Round", "Corrector", "Score", "Slope X", "Slope Y"]
+        header = QFrame(central)
+        header.setObjectName("summaryPanel")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(14, 11, 14, 10)
+        header_layout.setSpacing(8)
+        title_row = QHBoxLayout()
+        title = QLabel("Solenoid Centering", header)
+        title.setObjectName("summaryTitle")
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+        title_row.addWidget(
+            RuntimeContextWidget(
+                machine_id=self.context.machine.id,
+                machine_display_name=self.context.machine.display_name,
+                control_backend=self.context.control_backend.name,
+                parent=header,
+            )
         )
-        right.addWidget(self.result_table, 1)
-        content.addLayout(right, 1)
-        layout.addLayout(content, 1)
+        self.theme_toggle_button = QToolButton(header)
+        self.theme_toggle_button.setObjectName("themeToggleButton")
+        self.theme_toggle_button.setFixedSize(HEADER_ACTION_HEIGHT, HEADER_ACTION_HEIGHT)
+        self.theme_toggle_button.clicked.connect(self._toggle_theme)
+        title_row.addWidget(self.theme_toggle_button)
+        header_layout.addLayout(title_row)
+        self.status_strip = StatusStrip(
+            (
+                ("PRESET", "--"),
+                ("ACCESS", "WRITE ENABLED"),
+                ("WORKFLOW", "IDLE"),
+                ("READINESS", "UNCHECKED"),
+                ("MOTION VERIFIED", "UNCHECKED"),
+                ("RESULT QUALITY", "NOT EVALUATED"),
+                ("LAST RESULT", "--"),
+            ),
+            header,
+        )
+        header_layout.addWidget(self.status_strip)
+        layout.addWidget(header)
+
+        splitter = QSplitter(Qt.Horizontal, central)
+        splitter.setChildrenCollapsible(False)
+        splitter.addWidget(self._build_control_panel(splitter))
+
+        workspace = QFrame(splitter)
+        workspace.setObjectName("workspacePanel")
+        workspace_layout = QVBoxLayout(workspace)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(8)
+        plot_card = QFrame(workspace)
+        plot_card.setObjectName("plotCard")
+        plot_layout = QVBoxLayout(plot_card)
+        plot_layout.setContentsMargins(10, 10, 10, 10)
+        plot_layout.setSpacing(6)
+        self.plot = MplWidget(plot_card)
+        plot_layout.addWidget(self.plot)
+        workspace_layout.addWidget(plot_card, 1)
+
+        result_card = QFrame(workspace)
+        result_card.setObjectName("resultCard")
+        result_layout = QVBoxLayout(result_card)
+        result_layout.setContentsMargins(12, 10, 12, 10)
+        result_layout.setSpacing(7)
+        result_header = QHBoxLayout()
+        result_title = QLabel("Scan Results", result_card)
+        result_title.setObjectName("panelTitle")
+        result_header.addWidget(result_title)
+        result_header.addStretch(1)
+        self.status_label = QLabel("Idle", result_card)
+        self.status_label.setObjectName("resultHint")
+        self.status_label.setProperty("muted", True)
+        result_header.addWidget(self.status_label)
+        result_layout.addLayout(result_header)
+        self.result_table = QTableWidget(0, 7, result_card)
+        self.result_table.setHorizontalHeaderLabels(
+            ["Axis", "Round", "Corrector", "Score", "Length", "Slope X", "Slope Y"]
+        )
+        self.result_table.setAlternatingRowColors(True)
+        self.result_table.setMinimumHeight(135)
+        self.result_table.setMaximumHeight(220)
+        self.result_table.verticalHeader().setVisible(False)
+        self.result_table.horizontalHeader().setStretchLastSection(True)
+        self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        result_layout.addWidget(self.result_table)
+        result_actions = QHBoxLayout()
+        result_actions.setContentsMargins(0, 0, 0, 0)
+        result_actions.setSpacing(8)
+        self.apply_button = QPushButton("Apply Recommended", result_card)
+        self.restore_button = QPushButton("Restore Original", result_card)
+        self.apply_button.setProperty("role", "primary")
+        self.apply_button.setEnabled(False)
+        self.restore_button.setEnabled(False)
+        self.apply_button.clicked.connect(self.apply_recommended)
+        self.restore_button.clicked.connect(self.restore_original)
+        result_actions.addStretch(1)
+        result_actions.addWidget(self.restore_button)
+        result_actions.addWidget(self.apply_button)
+        result_layout.addLayout(result_actions)
+        workspace_layout.addWidget(result_card)
+        splitter.addWidget(workspace)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([410, 1000])
+        layout.addWidget(splitter, 1)
 
         self.setCentralWidget(central)
 
     def _build_control_panel(self, parent):
-        panel = QWidget(parent)
+        panel = QFrame(parent)
+        panel.setObjectName("controlCard")
+        panel.setMinimumWidth(390)
+        panel.setMaximumWidth(460)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
-        device_group = QGroupBox("Devices", panel)
-        device_layout = QFormLayout(device_group)
-        self.solenoid_pv_label = QLabel("--", device_group)
-        self.hcorr_combo = QComboBox(device_group)
-        self.vcorr_combo = QComboBox(device_group)
-        self.bpm_combo = QComboBox(device_group)
-        device_layout.addRow("Solenoid PV", self.solenoid_pv_label)
-        device_layout.addRow("HCOR", self.hcorr_combo)
-        device_layout.addRow("VCOR", self.vcorr_combo)
-        device_layout.addRow("BPM", self.bpm_combo)
-        layout.addWidget(device_group)
+        heading = QHBoxLayout()
+        title = QLabel("Configuration", panel)
+        title.setObjectName("panelTitle")
+        heading.addWidget(title)
+        heading.addStretch(1)
+        layout.addLayout(heading)
 
-        scan_group = QGroupBox("Scan", panel)
-        scan_layout = QGridLayout(scan_group)
+        preset_layout = QFormLayout()
+        preset_layout.setContentsMargins(0, 0, 0, 0)
+        preset_layout.setVerticalSpacing(4)
+        preset_label = QLabel("Preset", panel)
+        preset_label.setProperty("role", "field")
+        self.preset_combo = QComboBox(panel)
+        self.preset_combo.setMinimumWidth(190)
+        self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
+        preset_layout.addRow(preset_label, self.preset_combo)
+        layout.addLayout(preset_layout)
+
+        scroll = QScrollArea(panel)
+        scroll.setObjectName("configurationScroll")
+        scroll.setWidgetResizable(True)
+        content = QWidget(scroll)
+        content.setObjectName("configurationContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(8)
+
+        device_title = QLabel("Devices", content)
+        device_title.setObjectName("sectionTitle")
+        content_layout.addWidget(device_title)
+        device_layout = QFormLayout()
+        device_layout.setContentsMargins(0, 0, 0, 0)
+        device_layout.setVerticalSpacing(4)
+        self.solenoid_pv_label = QLabel("--", content)
+        self.solenoid_pv_label.setWordWrap(True)
+        self.hcorr_combo = QComboBox(content)
+        self.vcorr_combo = QComboBox(content)
+        self.bpm_combo = QComboBox(content)
+        for label, widget in (
+            ("Solenoid PV", self.solenoid_pv_label),
+            ("HCOR", self.hcorr_combo),
+            ("VCOR", self.vcorr_combo),
+            ("BPM", self.bpm_combo),
+        ):
+            field_label = QLabel(label, content)
+            field_label.setProperty("role", "field")
+            device_layout.addRow(field_label, widget)
+        content_layout.addLayout(device_layout)
+        separator = QFrame(content)
+        separator.setObjectName("sectionSeparator")
+        separator.setFrameShape(QFrame.HLine)
+        content_layout.addWidget(separator)
+
+        scan_title = QLabel("Scan Parameters", content)
+        scan_title.setObjectName("sectionTitle")
+        content_layout.addWidget(scan_title)
+        scan_layout = QGridLayout()
+        scan_layout.setContentsMargins(0, 0, 0, 0)
+        scan_layout.setVerticalSpacing(3)
         self.sol_from = self._double_spin(-1e6, 1e6, 0.01, 4)
         self.sol_to = self._double_spin(-1e6, 1e6, 0.01, 4)
         self.sol_steps = self._int_spin(2, 999)
@@ -185,8 +342,12 @@ class MainWindow(QMainWindow):
         self.settle = self._double_spin(0.0, 3600.0, 0.5, 2)
         self.sample_interval = self._double_spin(0.0, 3600.0, 0.1, 2)
         self.max_rounds = self._int_spin(1, 99)
+        self.scoring_mode_combo = QComboBox(content)
+        self.scoring_mode_combo.addItem("Slope score", SCORING_MODE_SLOPE)
+        self.scoring_mode_combo.addItem("Trajectory length", SCORING_MODE_TRAJECTORY_LENGTH)
 
         fields = [
+            ("Score mode", self.scoring_mode_combo),
             ("Sol from", self.sol_from),
             ("Sol to", self.sol_to),
             ("Sol steps", self.sol_steps),
@@ -199,9 +360,15 @@ class MainWindow(QMainWindow):
             ("Max rounds", self.max_rounds),
         ]
         for row, (label, widget) in enumerate(fields):
-            scan_layout.addWidget(QLabel(label, scan_group), row, 0)
+            field_label = QLabel(label, content)
+            field_label.setProperty("role", "field")
+            scan_layout.addWidget(field_label, row, 0)
             scan_layout.addWidget(widget, row, 1)
-        layout.addWidget(scan_group)
+        scan_layout.setColumnStretch(1, 1)
+        content_layout.addLayout(scan_layout)
+        content_layout.addStretch(1)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
 
         self.progress = QProgressBar(panel)
         self.progress.setRange(0, 100)
@@ -212,23 +379,28 @@ class MainWindow(QMainWindow):
         self.check_button = QPushButton("Check PVs", panel)
         self.start_button = QPushButton("Start Scan", panel)
         self.stop_button = QPushButton("Stop", panel)
-        self.apply_button = QPushButton("Apply Recommended", panel)
-        self.restore_button = QPushButton("Restore Original", panel)
+        self.check_button.setProperty("compact", True)
+        self.start_button.setProperty("role", "primary")
+        self.stop_button.setProperty("role", "danger")
         self.stop_button.setEnabled(False)
-        self.apply_button.setEnabled(False)
-        self.restore_button.setEnabled(False)
         self.check_button.clicked.connect(self.run_preflight)
         self.start_button.clicked.connect(self.start_scan)
         self.stop_button.clicked.connect(self.stop_scan)
-        self.apply_button.clicked.connect(self.apply_recommended)
-        self.restore_button.clicked.connect(self.restore_original)
         buttons.addWidget(self.check_button)
         buttons.addWidget(self.start_button)
         buttons.addWidget(self.stop_button)
         layout.addLayout(buttons)
-        layout.addWidget(self.apply_button)
-        layout.addWidget(self.restore_button)
-        layout.addStretch(1)
+
+        config_buttons = QHBoxLayout()
+        self.save_config_button = QPushButton("Save Config", panel)
+        self.load_config_button = QPushButton("Load Config", panel)
+        self.save_config_button.setProperty("compact", True)
+        self.load_config_button.setProperty("compact", True)
+        self.save_config_button.clicked.connect(self.save_scan_config)
+        self.load_config_button.clicked.connect(self.load_scan_config)
+        config_buttons.addWidget(self.save_config_button)
+        config_buttons.addWidget(self.load_config_button)
+        layout.addLayout(config_buttons)
         return panel
 
     @staticmethod
@@ -244,6 +416,21 @@ class MainWindow(QMainWindow):
         spin = QSpinBox()
         spin.setRange(minimum, maximum)
         return spin
+
+    def _apply_theme(self):
+        palette = theme_palette(self.current_theme)
+        self.setStyleSheet(build_stylesheet(palette))
+        self.plot.set_theme(palette)
+        if self.current_theme == "dark":
+            self.theme_toggle_button.setText("\u2600")
+            self.theme_toggle_button.setToolTip("Switch to light theme.")
+        else:
+            self.theme_toggle_button.setText("\u263d")
+            self.theme_toggle_button.setToolTip("Switch to dark theme.")
+
+    def _toggle_theme(self):
+        self.current_theme = "light" if self.current_theme == "dark" else "dark"
+        self._apply_theme()
 
     def _load_device_choices(self):
         self._populate_element_combo(
@@ -300,6 +487,7 @@ class MainWindow(QMainWindow):
         if self.preset_combo.count() <= 0:
             return
         preset = self._current_preset()
+        self.status_strip.set_value("PRESET", preset.display_name)
         self.solenoid_pv_label.setText(self._solenoid_setpoint_label(preset))
         self._set_combo_value(self.hcorr_combo, preset.hcorr, "HCOR")
         self._set_combo_value(self.vcorr_combo, preset.vcorr, "VCOR")
@@ -318,7 +506,7 @@ class MainWindow(QMainWindow):
     def _solenoid_setpoint_label(self, preset: SolenoidCenteringPreset) -> str:
         if preset.solenoid:
             try:
-                return resolve_channel(self.app_context, preset.solenoid, "current_set")
+                return resolve_channel(self.context, preset.solenoid, "current_set")
             except MachineProfileError:
                 return preset.solenoid
         return preset.solenoid_setpoint_pv or ""
@@ -336,6 +524,143 @@ class MainWindow(QMainWindow):
         if value is None:
             raise MachineProfileError(f"{label} selection is empty.")
         return str(value)
+
+    def _scoring_mode(self) -> str:
+        return normalize_scoring_mode(self.scoring_mode_combo.currentData())
+
+    def _set_scoring_mode(self, value: str | None) -> None:
+        mode = normalize_scoring_mode(value)
+        index = self.scoring_mode_combo.findData(mode)
+        if index < 0:
+            raise ValueError(f"Scoring mode {mode!r} is not available.")
+        self.scoring_mode_combo.setCurrentIndex(index)
+
+    def _operation_busy(self) -> bool:
+        return (
+            (self.worker is not None and self.worker.isRunning())
+            or (self.preflight_worker is not None and self.preflight_worker.isRunning())
+        )
+
+    def save_scan_config(self):
+        try:
+            payload = self._current_config_payload()
+        except Exception as exc:
+            QMessageBox.warning(self, "Solenoid Centering", str(exc))
+            return
+
+        default_name = f"solenoid_centering_{payload['machine_id']}_{payload['preset_id']}.json"
+        path, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save Solenoid Centering Config",
+            default_name,
+            "JSON files (*.json);;All files (*)",
+        )
+        if not path:
+            return
+        target = Path(path)
+        if target.suffix.lower() != ".json":
+            target = target.with_suffix(".json")
+        try:
+            target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        except Exception as exc:
+            QMessageBox.warning(self, "Solenoid Centering", f"Failed to save config:\n{exc}")
+            return
+        self.status_label.setText(f"Saved config: {target.name}")
+
+    def load_scan_config(self):
+        if self._operation_busy():
+            QMessageBox.warning(
+                self,
+                "Solenoid Centering",
+                "Stop the current operation before loading config.",
+            )
+            return
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Load Solenoid Centering Config",
+            "",
+            "JSON files (*.json);;All files (*)",
+        )
+        if not path:
+            return
+        source = Path(path)
+        try:
+            payload = json.loads(source.read_text(encoding="utf-8"))
+            self._apply_config_payload(payload)
+        except Exception as exc:
+            QMessageBox.warning(self, "Solenoid Centering", f"Failed to load config:\n{exc}")
+            return
+        self.status_label.setText(f"Loaded config: {source.name}")
+
+    def _current_config_payload(self) -> dict:
+        preset = self._preset_with_overrides()
+        return {
+            "schema_version": 1,
+            "app": "solenoid_centering",
+            "machine_id": self.context.machine.id,
+            "control_backend": self.context.control_backend.name,
+            "preset_id": preset.id,
+            "scoring_mode": self._scoring_mode(),
+            "solenoid": preset.solenoid,
+            "solenoid_setpoint_pv": self._solenoid_setpoint_label(preset),
+            "hcorr": preset.hcorr,
+            "vcorr": preset.vcorr,
+            "bpm": preset.bpm,
+            "solenoid_scan": {
+                "relative_from": preset.solenoid_scan.relative_from,
+                "relative_to": preset.solenoid_scan.relative_to,
+                "steps": preset.solenoid_scan.steps,
+            },
+            "corrector_scan": {
+                "relative_from": preset.corrector_scan.relative_from,
+                "relative_to": preset.corrector_scan.relative_to,
+                "steps": preset.corrector_scan.steps,
+            },
+            "samples_per_point": preset.samples_per_point,
+            "settle_time_s": preset.settle_time_s,
+            "sample_interval_s": preset.sample_interval_s,
+            "max_rounds": preset.max_rounds,
+        }
+
+    def _apply_config_payload(self, payload) -> None:
+        if not isinstance(payload, dict):
+            raise ValueError("Config file must contain a JSON object.")
+        if payload.get("app") != "solenoid_centering":
+            raise ValueError("Config file is not for solenoid_centering.")
+        if payload.get("machine_id") not in (None, self.context.machine.id):
+            raise ValueError(
+                f"Config machine {payload.get('machine_id')!r} does not match "
+                f"current machine {self.context.machine.id!r}."
+            )
+        if payload.get("control_backend") not in (None, self.context.control_backend.name):
+            raise ValueError(
+                f"Config backend {payload.get('control_backend')!r} does not match "
+                f"current backend {self.context.control_backend.name!r}."
+            )
+
+        preset_id = _required_str(payload, "preset_id")
+        preset_index = self.preset_combo.findData(preset_id)
+        if preset_index < 0:
+            raise MachineProfileError(f"Preset {preset_id!r} is not available.")
+        self.preset_combo.setCurrentIndex(preset_index)
+
+        self._set_combo_value(self.hcorr_combo, _required_str(payload, "hcorr"), "HCOR")
+        self._set_combo_value(self.vcorr_combo, _required_str(payload, "vcorr"), "VCOR")
+        self._set_combo_value(self.bpm_combo, _required_str(payload, "bpm"), "BPM")
+
+        solenoid_scan = _required_dict(payload, "solenoid_scan")
+        corrector_scan = _required_dict(payload, "corrector_scan")
+        self.sol_from.setValue(_required_float(solenoid_scan, "relative_from"))
+        self.sol_to.setValue(_required_float(solenoid_scan, "relative_to"))
+        self.sol_steps.setValue(_required_int(solenoid_scan, "steps"))
+        self.cor_from.setValue(_required_float(corrector_scan, "relative_from"))
+        self.cor_to.setValue(_required_float(corrector_scan, "relative_to"))
+        self.cor_steps.setValue(_required_int(corrector_scan, "steps"))
+        self.samples.setValue(_required_int(payload, "samples_per_point"))
+        self.settle.setValue(_required_float(payload, "settle_time_s"))
+        self.sample_interval.setValue(_required_float(payload, "sample_interval_s"))
+        self.max_rounds.setValue(_required_int(payload, "max_rounds"))
+        self._set_scoring_mode(payload.get("scoring_mode"))
 
     def _preset_with_overrides(self) -> SolenoidCenteringPreset:
         preset = self._current_preset()
@@ -367,10 +692,18 @@ class MainWindow(QMainWindow):
     def _refresh_write_state(self):
         allowed = workflow_writes_allowed(self.context, "solenoid_centering")
         self.start_button.setEnabled(allowed)
-        if not allowed:
-            self.status_label.setText(
-                f"Writes blocked for {self.context.machine.id}/{self.context.control_backend.name}"
-            )
+        self.status_strip.set_value("ACCESS", "WRITE ENABLED" if allowed else "READ ONLY",
+                                    "success" if allowed else "warning")
+        if self.context.control_backend.name != "real":
+            self._set_workflow_status("REAL ONLY", "danger")
+        elif not allowed:
+            self._set_workflow_status("READ ONLY", "warning")
+        else:
+            self._set_workflow_status("IDLE", "subtle")
+
+    def _set_workflow_status(self, value: str, tone: str = "subtle") -> None:
+        self.status_strip.set_value("WORKFLOW", value, tone)
+        self.status_label.setText(value)
 
     def run_preflight(self):
         if self.worker is not None and self.worker.isRunning():
@@ -382,7 +715,8 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
-        self.status_label.setText("Checking PVs")
+        self._set_workflow_status("CHECKING PVs", "warning")
+        self.status_strip.set_value("READINESS", "CHECKING", "warning")
         self.progress.setValue(0)
         self.preflight_worker = PreflightWorker(self.context, preset, self)
         self.preflight_worker.finished_ok.connect(self._on_preflight_finished)
@@ -406,12 +740,16 @@ class MainWindow(QMainWindow):
         self.last_result_preset = None
         self.apply_button.setEnabled(False)
         self.restore_button.setEnabled(False)
+        self.status_strip.set_value("LAST RESULT", "--")
         self.result_table.setRowCount(0)
         self.plot.clear()
+        self.plot.start_live()
         self.progress.setValue(0)
-        self.status_label.setText("Running")
-        self.worker = ScanWorker(self.context, preset, self)
+        self._set_workflow_status("RUNNING", "warning")
+        self.status_strip.set_value("READINESS", "SCANNING", "warning")
+        self.worker = ScanWorker(self.context, preset, self._scoring_mode(), self)
         self.worker.progress_changed.connect(self._on_progress)
+        self.worker.candidate_finished.connect(self._on_candidate_finished)
         self.worker.finished_ok.connect(self._on_scan_finished)
         self.worker.failed.connect(self._on_scan_failed)
         self.worker.finished.connect(self._on_worker_done)
@@ -422,49 +760,96 @@ class MainWindow(QMainWindow):
 
     def stop_scan(self):
         if self.worker is not None and self.worker.isRunning():
-            self.status_label.setText("Stopping")
+            self._set_workflow_status("STOPPING", "warning")
             self.worker.request_stop()
 
     def apply_recommended(self):
         if self.last_result is None or self.last_result_preset is None:
             return
+        if not self.last_result.recommendation_available:
+            self._set_workflow_status("NO VALID RECOMMENDATION", "warning")
+            self.status_strip.set_value("RESULT QUALITY", "NO VALID RECOMMENDATION", "warning")
+            return
+        if not self._confirm_result_action("Apply Recommended", self.last_result, apply=True):
+            return
         try:
             scanner = SolenoidCenteringScanner(self.context, self.last_result_preset)
-            scanner.apply_recommended(
-                self.last_result.recommended_hcorr,
-                self.last_result.recommended_vcorr,
-            )
-        except Exception as exc:
+            scanner.apply_recommended(self.last_result)
+        except StateDriftError as exc:
+            self._set_workflow_status("STATE DRIFT", "danger")
+            self.status_strip.set_value("READINESS", "STATE DRIFT", "danger")
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
-        self.status_label.setText("Recommended correctors applied")
+        except MotionVerificationError as exc:
+            self._set_workflow_status("APPLY ROLLED BACK", "warning")
+            self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+            QMessageBox.warning(self, "Solenoid Centering", str(exc))
+            return
+        except Exception as exc:
+            self._set_workflow_status("ERROR", "danger")
+            QMessageBox.warning(self, "Solenoid Centering", str(exc))
+            return
+        self._set_workflow_status("RECOMMENDATION APPLIED", "success")
+        self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
+        self.apply_button.setEnabled(False)
+        self.restore_button.setEnabled(True)
 
     def restore_original(self):
         if self.last_result is None or self.last_result_preset is None:
             return
+        if not self._confirm_result_action("Restore Original", self.last_result, apply=False):
+            return
         try:
             scanner = SolenoidCenteringScanner(self.context, self.last_result_preset)
-            scanner.apply_recommended(
-                self.last_result.original_hcorr,
-                self.last_result.original_vcorr,
-            )
-        except Exception as exc:
+            scanner.restore_original(self.last_result)
+        except StateDriftError as exc:
+            self._set_workflow_status("STATE DRIFT", "danger")
+            self.status_strip.set_value("READINESS", "STATE DRIFT", "danger")
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
-        self.status_label.setText("Original correctors restored")
+        except RestoreFailed as exc:
+            self._set_workflow_status("RESTORE FAILED", "danger")
+            self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+            QMessageBox.warning(self, "Solenoid Centering", str(exc))
+            return
+        except MotionVerificationError as exc:
+            self._set_workflow_status("RESTORE ROLLBACK", "warning")
+            self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+            QMessageBox.warning(self, "Solenoid Centering", str(exc))
+            return
+        except Exception as exc:
+            self._set_workflow_status("ERROR", "danger")
+            QMessageBox.warning(self, "Solenoid Centering", str(exc))
+            return
+        self._set_workflow_status("ORIGINAL RESTORED", "success")
+        self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
+        self.restore_button.setEnabled(False)
 
     def _on_progress(self, message, completed, total):
         percent = int(round(completed / total * 100)) if total else 0
         self.progress.setValue(max(0, min(100, percent)))
         self.status_label.setText(f"{message} ({completed}/{total})")
 
+    def _on_candidate_finished(self, candidate):
+        self.plot.add_live_candidate(candidate)
+
     def _on_preflight_finished(self, report):
-        self.progress.setValue(100)
-        self.status_label.setText("Preflight READY")
-        QMessageBox.information(self, "Solenoid Centering Preflight", report.as_text())
+        if report.is_ready:
+            self.progress.setValue(100)
+            self._set_workflow_status("READY", "success")
+            self.status_strip.set_value("READINESS", "READY", "success")
+            self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
+            QMessageBox.information(self, "Solenoid Centering Preflight", report.as_text())
+            return
+        self._set_workflow_status("NOT READY", "danger")
+        self.status_strip.set_value("READINESS", "NOT READY", "danger")
+        self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+        QMessageBox.warning(self, "Solenoid Centering Preflight", report.as_text())
 
     def _on_preflight_failed(self, message):
-        self.status_label.setText("Preflight NOT READY")
+        self._set_workflow_status("NOT READY", "danger")
+        self.status_strip.set_value("READINESS", "NOT READY", "danger")
+        self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
         QMessageBox.warning(self, "Solenoid Centering Preflight", f"NOT READY\n{message}")
 
     def _on_preflight_done(self):
@@ -475,17 +860,77 @@ class MainWindow(QMainWindow):
         self.last_result = result
         self.last_result_preset = self.worker.preset if self.worker is not None else None
         self.progress.setValue(100)
-        self.status_label.setText(
-            f"Recommended H={result.recommended_hcorr:.6g}, V={result.recommended_vcorr:.6g}"
+        self._set_workflow_status("RESULT READY", "success")
+        self.status_strip.set_value("READINESS", "RESULT READY", "success")
+        self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
+        self.status_strip.set_value(
+            "LAST RESULT",
+            f"H {result.recommended_hcorr:.5g}, V {result.recommended_vcorr:.5g}",
+            "success",
         )
-        self.apply_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
-        self.restore_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
+        if result.recommendation_available:
+            self.status_strip.set_value("RESULT QUALITY", "VALID", "success")
+            self.status_label.setText(
+                f"Quality passed: {result.relative_improvement:.1%} improvement"
+            )
+        else:
+            self.status_strip.set_value("RESULT QUALITY", "NO VALID RECOMMENDATION", "warning")
+            self._set_workflow_status("NO VALID RECOMMENDATION", "warning")
+            self.status_label.setText(result.recommendation_status)
+        self.apply_button.setEnabled(
+            result.recommendation_available
+            and workflow_writes_allowed(self.context, "solenoid_centering")
+        )
+        self.restore_button.setEnabled(False)
         self._populate_result_table(result)
         self.plot.plot_result(result)
 
     def _on_scan_failed(self, message):
-        self.status_label.setText(message)
+        self._set_workflow_status("ERROR", "danger")
+        self.status_strip.set_value("READINESS", "ERROR", "danger")
+        self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
         QMessageBox.warning(self, "Solenoid Centering", message)
+
+    def _confirm_result_action(self, title: str, result: CenteringResult, *, apply: bool) -> bool:
+        preflight = result.preflight or {}
+        selected = result.selected_devices or {}
+        targets = (
+            (result.recommended_hcorr, result.recommended_vcorr)
+            if apply
+            else (result.original_hcorr, result.original_vcorr)
+        )
+        h_limit, v_limit = self._result_limits(preflight)
+        text = (
+            f"HCOR {selected.get('hcorr_setpoint_pv', preflight.get('hcorr_pv', '--'))}\n"
+            f"  original {result.original_hcorr:.8g} -> target {targets[0]:.8g} "
+            f"(delta {targets[0] - result.original_hcorr:+.8g}), limits {h_limit}\n"
+            f"VCOR {selected.get('vcorr_setpoint_pv', preflight.get('vcorr_pv', '--'))}\n"
+            f"  original {result.original_vcorr:.8g} -> target {targets[1]:.8g} "
+            f"(delta {targets[1] - result.original_vcorr:+.8g}), limits {v_limit}\n\n"
+            f"Quality: {result.recommendation_status}; "
+            f"relative improvement {result.relative_improvement:.1%}\n"
+            "Current setpoint and readback will be revalidated before writing."
+        )
+        return QMessageBox.question(
+            self,
+            title,
+            text,
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        ) == QMessageBox.Yes
+
+    @staticmethod
+    def _result_limits(preflight: dict) -> tuple[str, str]:
+        limits = [
+            item for item in preflight.get("range_checks", []) if isinstance(item, dict)
+        ]
+
+        def display(label: str) -> str:
+            item = next((item for item in limits if item.get("label") == label), {})
+            low, high = item.get("limit_low"), item.get("limit_high")
+            return f"[{low:g}, {high:g}]" if low is not None and high is not None else "unconfigured"
+
+        return display("HCOR"), display("VCOR")
 
     def _on_worker_done(self):
         self.check_button.setEnabled(True)
@@ -501,6 +946,7 @@ class MainWindow(QMainWindow):
                 str(candidate.round_index + 1),
                 f"{candidate.corrector_value:.8g}",
                 f"{candidate.score.score:.6g}",
+                f"{candidate.score.trajectory_length:.6g}",
                 f"{candidate.score.slope_x:.6g}",
                 f"{candidate.score.slope_y:.6g}",
             ]
@@ -509,9 +955,54 @@ class MainWindow(QMainWindow):
         self.result_table.resizeColumnsToContents()
 
 
+def _required_dict(payload: dict, key: str) -> dict:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"Config field {key!r} must be an object.")
+    return value
+
+
+def _required_str(payload: dict, key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Config field {key!r} must be a non-empty string.")
+    return value.strip()
+
+
+def _required_float(payload: dict, key: str) -> float:
+    value = payload.get(key)
+    if isinstance(value, bool):
+        raise ValueError(f"Config field {key!r} must be a number.")
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Config field {key!r} must be a number.") from exc
+
+
+def _required_int(payload: dict, key: str) -> int:
+    value = payload.get(key)
+    if isinstance(value, bool):
+        raise ValueError(f"Config field {key!r} must be an integer.")
+    try:
+        integer = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Config field {key!r} must be an integer.") from exc
+    if integer != value and not (isinstance(value, float) and value.is_integer()):
+        raise ValueError(f"Config field {key!r} must be an integer.")
+    return integer
+
+
 def main() -> int:
     app = QApplication(sys.argv)
-    window = MainWindow()
+    try:
+        window = MainWindow()
+    except MachineProfileError as exc:
+        QMessageBox.critical(
+            None,
+            "Solenoid Centering Unavailable",
+            str(exc),
+        )
+        return 2
     window.show()
     return app.exec_()
 

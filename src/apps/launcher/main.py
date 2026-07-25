@@ -697,6 +697,7 @@ APP_DEFINITIONS = {
         "label": "Solenoid Centering",
         "window_title_patterns": ("Solenoid Centering",),
         "description": "Find corrector settings that minimize BPM sensitivity to solenoid scans.",
+        "workflow_name": "solenoid_centering",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/solenoid_centering",
     },

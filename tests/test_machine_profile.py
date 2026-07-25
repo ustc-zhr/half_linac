@@ -55,6 +55,7 @@ from half_linac.src.apps.energy_spectrum.profile_runtime import (
     resolve_energy_spectrum_runtime_paths,
 )
 from half_linac.src.shared.machine_profile.loader import (
+    _parse_solenoid_centering_preset,
     _validate_beam_monitor_workflow,
     _validate_energy_spectrum_workflow,
     load_bba_workflow,
@@ -215,10 +216,13 @@ class MachineProfileTests(unittest.TestCase):
         )
 
     def test_load_solenoid_centering_app_context(self):
-        context = load_app_context("solenoid_centering")
+        with self.assertRaisesRegex(MachineProfileError, "supports only real"):
+            load_app_context("solenoid_centering")
+
+        context = load_app_context("solenoid_centering", control_backend="real")
         self.assertIsInstance(context, AppContext)
         self.assertEqual(context.machine.id, "half")
-        self.assertEqual(context.control_backend.name, "vm")
+        self.assertEqual(context.control_backend.name, "real")
         self.assertIsNone(context.model_backend)
         self.assertIsNotNone(context.solenoid_centering_workflow)
         assert context.solenoid_centering_workflow is not None
@@ -242,10 +246,44 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow.default_preset, "ms01_centering")
         self.assertEqual(workflow.presets_by_id["ms01_centering"].solenoid, "MS01")
         self.assertEqual(workflow.presets_by_id["ms01_centering"].hcorr, "MSHC")
+        self.assertEqual(workflow.presets_by_id["ms01_centering"].bpm, "BPM01")
+        self.assertEqual(
+            workflow.presets_by_id["ms01_centering"].solenoid_scan.relative_from,
+            -5.0,
+        )
+        self.assertEqual(workflow.presets_by_id["ms01_centering"].solenoid_scan.steps, 5)
+        self.assertEqual(workflow.presets_by_id["ms01_centering"].corrector_scan.steps, 5)
+        self.assertEqual(workflow.presets_by_id["ss02_centering"].solenoid, "SS02")
+        self.assertEqual(workflow.presets_by_id["ss02_centering"].hcorr, "HIC01")
+        self.assertEqual(workflow.presets_by_id["ss02_centering"].vcorr, "VIC01")
         self.assertEqual(workflow.presets_by_id["ls01_centering"].vcorr, "VC01")
         self.assertTrue(workflow_writes_allowed(context, "solenoid_centering"))
         self.assertFalse(workflow_writes_allowed(context, "solenoid_centering", mode="vm"))
         self.assertEqual(real_commissioning_status(context), "write_smoke_passed")
+
+    def test_solenoid_centering_rejects_invalid_motion_verification(self):
+        preset = {
+            "id": "test",
+            "display_name": "Test",
+            "solenoid": "MS01",
+            "hcorr": "MSHC",
+            "vcorr": "MSVC",
+            "bpm": "BPM01",
+            "solenoid_scan": {"relative_from": -1, "relative_to": 1, "steps": 3},
+            "corrector_scan": {"relative_from": -1, "relative_to": 1, "steps": 3},
+            "samples_per_point": 1,
+            "settle_time_s": 0,
+            "sample_interval_s": 0,
+            "max_rounds": 1,
+            "motion_verification": {
+                "solenoid_readback_tolerance": 0,
+                "corrector_readback_tolerance": 0.01,
+                "readback_timeout_s": 1,
+            },
+        }
+
+        with self.assertRaisesRegex(MachineProfileError, "tolerances must be positive"):
+            _parse_solenoid_centering_preset(preset, "preset")
 
     def test_describe_app_model_support_reports_model_app_readiness(self):
         for machine_id in ("half", "irfel"):
