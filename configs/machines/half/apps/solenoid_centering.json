@@ -24,7 +24,7 @@
       "samples_per_point": 3,
       "settle_time_s": 2.0,
       "sample_interval_s": 0.2,
-      "max_rounds": 2
+      "max_iters": 2
     },
     {
       "id": "ms_centering",
@@ -46,7 +46,7 @@
       "samples_per_point": 3,
       "settle_time_s": 2.0,
       "sample_interval_s": 0.2,
-      "max_rounds": 2
+      "max_iters": 2
     }
   ],
   "write_control": {

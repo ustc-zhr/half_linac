@@ -711,7 +711,16 @@ def _validate_solenoid_centering_workflow(
         _validate_positive_int(preset.get("samples_per_point"), f"{location}.samples_per_point")
         _validate_nonnegative_float(preset.get("settle_time_s"), f"{location}.settle_time_s")
         _validate_nonnegative_float(preset.get("sample_interval_s"), f"{location}.sample_interval_s")
-        _validate_positive_int(preset.get("max_rounds"), f"{location}.max_rounds")
+        max_iters = preset.get("max_iters")
+        legacy_max_rounds = preset.get("max_rounds")
+        if max_iters is not None and legacy_max_rounds is not None:
+            raise MachineProfileError(
+                f"{location} must not define both max_iters and max_rounds."
+            )
+        _validate_positive_int(
+            max_iters if max_iters is not None else legacy_max_rounds,
+            f"{location}.max_iters",
+        )
 
     if "default_preset" in workflow:
         _validate_preset_ref(

@@ -106,7 +106,7 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         self.assertIn("limits [-1, 1]", captured["text"])
         self.assertIn("relative improvement 10.0%", captured["text"])
 
-    def test_preflight_failure_shows_not_ready_and_motion_failed(self):
+    def test_preflight_failure_shows_not_ready_and_readback_failed(self):
         report = type(
             "Report",
             (),
@@ -128,6 +128,34 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             "NOT READY\nreadback mismatch",
             ready=False,
         )
+
+    def test_parameter_change_invalidates_successful_preflight(self):
+        self.window.preflight_ready = True
+        self.window.start_button.setEnabled(True)
+
+        self.window.sol_from.setValue(self.window.sol_from.value() - 0.1)
+
+        self.assertFalse(self.window.preflight_ready)
+        self.assertFalse(self.window.start_button.isEnabled())
+        self.assertEqual(
+            self.window.status_strip.items["READINESS"].value_label.text(),
+            "UNCHECKED",
+        )
+
+    def test_successful_current_revision_preflight_enables_start(self):
+        report = type(
+            "Report",
+            (),
+            {"is_ready": True, "as_text": lambda self: "READY"},
+        )()
+        self.window.active_preflight_revision = self.window.configuration_revision
+
+        with patch.object(self.window, "_show_preflight_report"):
+            self.window._on_preflight_finished(report)
+        self.window._on_preflight_done()
+
+        self.assertTrue(self.window.preflight_ready)
+        self.assertTrue(self.window.start_button.isEnabled())
 
 
 if __name__ == "__main__":

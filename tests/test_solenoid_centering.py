@@ -221,7 +221,7 @@ class SolenoidCenteringTests(unittest.TestCase):
                 score=_score(value),
             )
 
-        hcorr, vcorr, axis_scans = scan.coordinate_descent(
+        hcorr, vcorr, axis_scans, termination = scan.coordinate_descent(
             0.0,
             0.0,
             scan_range,
@@ -232,6 +232,77 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertAlmostEqual(hcorr, 1.0)
         self.assertAlmostEqual(vcorr, -2.0)
         self.assertEqual(len(axis_scans), 4)
+        self.assertEqual(termination.code, "max_iters_reached")
+
+    def test_coordinate_descent_stops_with_boundary_reason(self):
+        scan_range = SolenoidCenteringScanRange(relative_from=-1.0, relative_to=1.0, steps=3)
+
+        def evaluator(axis, round_index, hcorr, vcorr):
+            return _candidate(
+                (hcorr + 1.0) ** 2 + vcorr**2,
+                axis=axis,
+                hcorr=hcorr,
+                vcorr=vcorr,
+            )
+
+        hcorr, _vcorr, _axis_scans, termination = scan.coordinate_descent(
+            0.0,
+            0.0,
+            scan_range,
+            5,
+            evaluator,
+            hcorr_limits=(-1.0, 1.0),
+            vcorr_limits=(-2.0, 2.0),
+        )
+
+        self.assertEqual(hcorr, -1.0)
+        self.assertEqual(termination.code, "boundary_limited")
+        self.assertTrue(termination.blocks_recommendation)
+        self.assertIn("physical limit", termination.reason)
+
+    def test_coordinate_descent_explains_converged_early_stop(self):
+        scan_range = SolenoidCenteringScanRange(relative_from=-1.0, relative_to=1.0, steps=3)
+
+        def evaluator(axis, round_index, hcorr, vcorr):
+            return _candidate(hcorr**2 + vcorr**2, axis=axis, hcorr=hcorr, vcorr=vcorr)
+
+        hcorr, vcorr, axis_scans, termination = scan.coordinate_descent(
+            0.0,
+            0.0,
+            scan_range,
+            5,
+            evaluator,
+            hcorr_limits=(-2.0, 2.0),
+            vcorr_limits=(-2.0, 2.0),
+        )
+
+        self.assertEqual((hcorr, vcorr), (0.0, 0.0))
+        self.assertEqual(len(axis_scans), 2)
+        self.assertEqual(termination.code, "converged_no_coordinate_change")
+        self.assertTrue(termination.early)
+        self.assertIn("neither HCOR nor VCOR", termination.reason)
+
+    def test_coordinate_descent_never_evaluates_out_of_limit_candidates(self):
+        scan_range = SolenoidCenteringScanRange(relative_from=-1.0, relative_to=1.0, steps=3)
+        evaluated = []
+
+        def evaluator(axis, round_index, hcorr, vcorr):
+            evaluated.append((axis, hcorr, vcorr))
+            return _candidate(hcorr**2 + vcorr**2, axis=axis, hcorr=hcorr, vcorr=vcorr)
+
+        scan.coordinate_descent(
+            0.5,
+            -0.5,
+            scan_range,
+            2,
+            evaluator,
+            hcorr_limits=(-1.0, 1.0),
+            vcorr_limits=(-1.0, 1.0),
+        )
+
+        self.assertTrue(evaluated)
+        self.assertTrue(all(-1.0 <= hcorr <= 1.0 for _axis, hcorr, _vcorr in evaluated))
+        self.assertTrue(all(-1.0 <= vcorr <= 1.0 for _axis, _hcorr, vcorr in evaluated))
 
     def test_scanner_restores_devices_when_stopped(self):
         context = load_app_context(
@@ -364,10 +435,10 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertEqual(report.corrector_candidates, 11)
         self.assertEqual(report.solenoid_points, 5)
         self.assertIn("READY", report.as_text())
-        self.assertIn("first-round", report.as_text())
+        self.assertIn("requested", report.as_text())
         self.assertEqual(io.writes, [])
 
-    def test_scanner_preflight_rejects_corrector_limit_violation_before_writes(self):
+    def test_scanner_preflight_clips_corrector_candidates_to_limits(self):
         context = load_app_context(
             "solenoid_centering",
             machine_id="irfel",
@@ -377,6 +448,7 @@ class SolenoidCenteringTests(unittest.TestCase):
         preset = _verified_preset(
             context.solenoid_centering_workflow.presets_by_id["ms01_centering"]
         )
+        context = _with_limits(context, preset)
         solenoid_pv = _solenoid_setpoint_pv(context, preset)
         solenoid_readback_pv = _solenoid_readback_pv(context, preset)
         hcorr_pv = resolve_channel(context, preset.hcorr, "setpoint")
@@ -397,9 +469,38 @@ class SolenoidCenteringTests(unittest.TestCase):
 
         report = scanner.preflight()
 
-        self.assertFalse(report.is_ready)
-        self.assertIn("OUT OF LIMIT", report.as_text())
+        self.assertTrue(report.is_ready)
+        self.assertIn("CLIPPED TO LIMIT HCOR", report.as_text())
         self.assertEqual(io.writes, [])
+
+    def test_preflight_does_not_block_only_because_max_iters_is_large(self):
+        context, preset, values = _ready_fixture()
+        preset = replace(preset, max_rounds=99)
+
+        report = scan.SolenoidCenteringScanner(context, preset, io=MockIO(values)).preflight()
+
+        self.assertTrue(report.is_ready)
+        self.assertIn("requested [-2, 2], effective [-2, 2]", report.as_text())
+
+    def test_scanner_preflight_rejects_insufficient_in_limit_candidates(self):
+        context, preset, values = _ready_fixture()
+        preset = replace(
+            preset,
+            corrector_scan=SolenoidCenteringScanRange(
+                relative_from=1.0,
+                relative_to=2.0,
+                steps=3,
+            ),
+        )
+        hcorr_pv = resolve_corrector_write_channel(context, preset.hcorr)
+        hcorr_readback_pv = resolve_channel(context, preset.hcorr, "current_readback")
+        values[hcorr_pv] = 10.0
+        values[hcorr_readback_pv] = 10.0
+
+        report = scan.SolenoidCenteringScanner(context, preset, io=MockIO(values)).preflight()
+
+        self.assertFalse(report.is_ready)
+        self.assertIn("INSUFFICIENT CANDIDATES HCOR", report.as_text())
 
     def test_scanner_reports_each_candidate_and_preserves_selected_scoring_mode(self):
         context = load_app_context(
@@ -588,14 +689,15 @@ class SolenoidCenteringTests(unittest.TestCase):
         ):
             result = scanner.run()
 
-        self.assertEqual(archived["schema_version"], 3)
+        self.assertEqual(archived["schema_version"], 4)
         self.assertIn("preflight", archived)
         self.assertIn("baseline_candidate", archived)
         self.assertIn("scan_config", archived)
         self.assertIn("recommendation_status", archived)
         self.assertEqual(archived["selected_devices"]["hcorr"], preset.hcorr)
         self.assertEqual(archived["selected_devices"]["hcorr_setpoint_pv"], scanner.hcorr_pv)
-        self.assertEqual(result.schema_version, 3)
+        self.assertEqual(archived["termination"]["code"], "max_iters_reached")
+        self.assertEqual(result.schema_version, 4)
         self.assertFalse(result.recommendation_available)
         self.assertIn("baseline score is too small", result.recommendation_status)
 

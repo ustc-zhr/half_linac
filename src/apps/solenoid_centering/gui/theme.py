@@ -362,6 +362,10 @@ QTableWidget {{
     selection-background-color: {metric_active_fg};
     selection-color: {window_bg};
 }}
+QHeaderView {{
+    background: {summary_bg};
+    color: {muted_fg};
+}}
 QHeaderView::section {{
     background: {summary_bg};
     border: none;
@@ -371,6 +375,12 @@ QHeaderView::section {{
     padding: 6px;
     font-size: 11px;
     font-weight: 700;
+}}
+QTableCornerButton::section {{
+    background: {summary_bg};
+    border: none;
+    border-right: 1px solid {panel_border};
+    border-bottom: 1px solid {panel_border};
 }}
 QSplitter::handle {{
     background: transparent;

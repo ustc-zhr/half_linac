@@ -2741,6 +2741,13 @@ def _parse_solenoid_centering_preset(
     )
     if solenoid is None and solenoid_setpoint_pv is None:
         raise MachineProfileError(f"{location} must define solenoid or solenoid_setpoint_pv.")
+    max_iters_raw = preset.get("max_iters")
+    legacy_max_rounds_raw = preset.get("max_rounds")
+    if max_iters_raw is not None and legacy_max_rounds_raw is not None:
+        raise MachineProfileError(
+            f"{location} must not define both max_iters and max_rounds."
+        )
+    max_iters = max_iters_raw if max_iters_raw is not None else legacy_max_rounds_raw
     readback_raw = preset.get("readback_verification")
     legacy_motion_raw = preset.get("motion_verification")
     if readback_raw is not None and legacy_motion_raw is not None:
@@ -2802,7 +2809,7 @@ def _parse_solenoid_centering_preset(
         samples_per_point=int(preset.get("samples_per_point")),
         settle_time_s=float(preset.get("settle_time_s")),
         sample_interval_s=float(preset.get("sample_interval_s")),
-        max_rounds=int(preset.get("max_rounds")),
+        max_rounds=int(max_iters),
         motion_verification=motion_verification,
         minimum_relative_score_improvement=minimum_relative_score_improvement,
     )

@@ -154,7 +154,7 @@ class MplWidget(QWidget):
         for scan in axis_scans:
             x_values = [candidate.corrector_value for candidate in scan.candidates]
             scores = [candidate.score.score for candidate in scan.candidates]
-            label = f"{scan.axis.upper()} round {scan.round_index + 1}"
+            label = f"{scan.axis.upper()} iteration {scan.round_index + 1}"
             self.score_axes.plot(x_values, scores, marker="o", label=label)
             self.score_axes.axvline(scan.best.corrector_value, linestyle="--", alpha=0.35)
 
@@ -307,6 +307,6 @@ class MplWidget(QWidget):
     @staticmethod
     def _candidate_label(candidate):
         return (
-            f"{candidate.axis.upper()} r{candidate.round_index + 1} "
+            f"{candidate.axis.upper()} i{candidate.round_index + 1} "
             f"c={candidate.corrector_value:.4g}, score={candidate.score.score:.3g}"
         )

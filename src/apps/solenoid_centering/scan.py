@@ -108,6 +108,15 @@ class AxisScanResult:
 
 
 @dataclass(frozen=True)
+class ScanTermination:
+    code: str
+    reason: str
+    iterations_completed: int
+    early: bool
+    blocks_recommendation: bool = False
+
+
+@dataclass(frozen=True)
 class CenteringResult:
     preset_id: str
     original_solenoid: float
@@ -125,7 +134,8 @@ class CenteringResult:
     preflight: dict[str, Any] | None = None
     selected_devices: dict[str, str] | None = None
     scan_config: dict[str, Any] | None = None
-    schema_version: int = 3
+    termination: ScanTermination | None = None
+    schema_version: int = 4
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -142,6 +152,9 @@ class RangeCheck:
     limit_high: float | None
     first_scan_low: float | None = None
     first_scan_high: float | None = None
+    requested_points: int | None = None
+    feasible_points: int | None = None
+    clipping_allowed: bool = False
 
     @property
     def has_limit(self) -> bool:
@@ -153,7 +166,9 @@ class RangeCheck:
             return False
         assert self.limit_low is not None
         assert self.limit_high is not None
-        return self.planned_low >= self.limit_low and self.planned_high <= self.limit_high
+        in_limit = self.planned_low >= self.limit_low and self.planned_high <= self.limit_high
+        enough_points = self.feasible_points is None or self.feasible_points >= 2
+        return in_limit and enough_points
 
 
 @dataclass(frozen=True)
@@ -238,7 +253,7 @@ class PreflightReport:
                 f"VCOR {self.vcorr_pv} = {self.original_vcorr:g}",
                 f"BPM X {self.bpm_x_pv} = {self.bpm_x:g}",
                 f"BPM Y {self.bpm_y_pv} = {self.bpm_y:g}",
-                f"corrector candidates={self.corrector_candidates}, "
+                f"corrector candidates up to {self.corrector_candidates}, "
                 f"solenoid points={self.solenoid_points}, "
                 f"bpm samples/point={self.bpm_samples}",
                 f"estimated duration ~= {self.estimated_duration_s:.1f} s",
@@ -249,14 +264,27 @@ class PreflightReport:
                 limit = f"[{item.limit_low:g}, {item.limit_high:g}]"
             else:
                 limit = "unconfigured"
-            status = "OK" if item.is_ok else (
-                "LIMIT UNCONFIGURED" if not item.has_limit else "OUT OF LIMIT"
+            clipped = (
+                item.clipping_allowed
+                and item.requested_points is not None
+                and item.feasible_points is not None
+                and item.feasible_points < item.requested_points
             )
+            if item.is_ok and clipped:
+                status = "CLIPPED TO LIMIT"
+            elif item.is_ok:
+                status = "OK"
+            elif not item.has_limit:
+                status = "LIMIT UNCONFIGURED"
+            elif item.feasible_points is not None and item.feasible_points < 2:
+                status = "INSUFFICIENT CANDIDATES"
+            else:
+                status = "OUT OF LIMIT"
             if item.first_scan_low is not None and item.first_scan_high is not None:
-                planned = (
-                    f"first-round [{item.first_scan_low:g}, {item.first_scan_high:g}], "
-                    f"multi-round envelope [{item.planned_low:g}, {item.planned_high:g}]"
-                )
+                planned = f"requested [{item.first_scan_low:g}, {item.first_scan_high:g}], " \
+                    f"effective [{item.planned_low:g}, {item.planned_high:g}]"
+                if item.requested_points is not None and item.feasible_points is not None:
+                    planned += f", candidates {item.feasible_points}/{item.requested_points}"
             else:
                 planned = f"planned [{item.planned_low:g}, {item.planned_high:g}]"
             lines.append(f"{status} {item.label} {item.element_id}: {planned}, limit {limit}")
@@ -274,6 +302,27 @@ def relative_scan_points(center: float, scan_range: SolenoidCenteringScanRange) 
         float(scan_range.relative_to),
         int(scan_range.steps),
     )
+
+
+def _bounded_candidate_values(
+    center: float,
+    scan_range: SolenoidCenteringScanRange,
+    limits: tuple[float, float] | None,
+) -> tuple[float, ...]:
+    requested = tuple(float(value) for value in relative_scan_points(center, scan_range))
+    if limits is None:
+        return requested
+    low, high = limits
+    tolerance = max(1.0, abs(low), abs(high)) * 1e-12
+    return tuple(value for value in requested if low - tolerance <= value <= high + tolerance)
+
+
+def _at_limit(value: float, limits: tuple[float, float] | None) -> bool:
+    if limits is None:
+        return False
+    low, high = limits
+    tolerance = max(1.0, abs(low), abs(high)) * 1e-12
+    return abs(value - low) <= tolerance or abs(value - high) <= tolerance
 
 
 def evaluate_solenoid_response(
@@ -340,18 +389,36 @@ def coordinate_descent(
     initial_hcorr: float,
     initial_vcorr: float,
     corrector_scan: SolenoidCenteringScanRange,
-    max_rounds: int,
+    max_iters: int,
     evaluator: Callable[[str, int, float, float], CandidateResult],
-) -> tuple[float, float, tuple[AxisScanResult, ...]]:
-    if max_rounds <= 0:
-        raise ValueError("max_rounds must be positive.")
+    *,
+    hcorr_limits: tuple[float, float] | None = None,
+    vcorr_limits: tuple[float, float] | None = None,
+) -> tuple[float, float, tuple[AxisScanResult, ...], ScanTermination]:
+    if max_iters <= 0:
+        raise ValueError("max_iters must be positive.")
     hcorr = float(initial_hcorr)
     vcorr = float(initial_vcorr)
     axis_scans: list[AxisScanResult] = []
 
-    for round_index in range(max_rounds):
+    for round_index in range(max_iters):
+        iteration_start_h = hcorr
+        iteration_start_v = vcorr
         h_candidates = []
-        for h_value in relative_scan_points(hcorr, corrector_scan):
+        h_values = _bounded_candidate_values(hcorr, corrector_scan, hcorr_limits)
+        if len(h_values) < 2:
+            termination = ScanTermination(
+                code="insufficient_hcorr_candidates",
+                reason=(
+                    f"Stopped before iteration {round_index + 1}: HCOR has only "
+                    f"{len(h_values)} in-limit candidate(s); at least 2 are required."
+                ),
+                iterations_completed=round_index,
+                early=True,
+                blocks_recommendation=True,
+            )
+            return hcorr, vcorr, tuple(axis_scans), termination
+        for h_value in h_values:
             h_candidates.append(evaluator("h", round_index, float(h_value), vcorr))
         h_best = min(h_candidates, key=lambda item: item.score.score)
         hcorr = h_best.hcorr
@@ -365,7 +432,20 @@ def coordinate_descent(
         )
 
         v_candidates = []
-        for v_value in relative_scan_points(vcorr, corrector_scan):
+        v_values = _bounded_candidate_values(vcorr, corrector_scan, vcorr_limits)
+        if len(v_values) < 2:
+            termination = ScanTermination(
+                code="insufficient_vcorr_candidates",
+                reason=(
+                    f"Stopped during iteration {round_index + 1}: VCOR has only "
+                    f"{len(v_values)} in-limit candidate(s); at least 2 are required."
+                ),
+                iterations_completed=round_index,
+                early=True,
+                blocks_recommendation=True,
+            )
+            return hcorr, vcorr, tuple(axis_scans), termination
+        for v_value in v_values:
             v_candidates.append(evaluator("v", round_index, hcorr, float(v_value)))
         v_best = min(v_candidates, key=lambda item: item.score.score)
         vcorr = v_best.vcorr
@@ -378,7 +458,43 @@ def coordinate_descent(
             )
         )
 
-    return hcorr, vcorr, tuple(axis_scans)
+        if _at_limit(hcorr, hcorr_limits) or _at_limit(vcorr, vcorr_limits):
+            axes = []
+            if _at_limit(hcorr, hcorr_limits):
+                axes.append("HCOR")
+            if _at_limit(vcorr, vcorr_limits):
+                axes.append("VCOR")
+            termination = ScanTermination(
+                code="boundary_limited",
+                reason=(
+                    f"Stopped after iteration {round_index + 1}: best "
+                    f"{' and '.join(axes)} value reached a configured physical limit."
+                ),
+                iterations_completed=round_index + 1,
+                early=True,
+                blocks_recommendation=True,
+            )
+            return hcorr, vcorr, tuple(axis_scans), termination
+
+        if np.isclose(hcorr, iteration_start_h) and np.isclose(vcorr, iteration_start_v):
+            termination = ScanTermination(
+                code="converged_no_coordinate_change",
+                reason=(
+                    f"Converged after iteration {round_index + 1}: neither HCOR nor VCOR "
+                    "selected a different candidate."
+                ),
+                iterations_completed=round_index + 1,
+                early=round_index + 1 < max_iters,
+            )
+            return hcorr, vcorr, tuple(axis_scans), termination
+
+    termination = ScanTermination(
+        code="max_iters_reached",
+        reason=f"Completed configured maximum of {max_iters} iteration(s).",
+        iterations_completed=max_iters,
+        early=False,
+    )
+    return hcorr, vcorr, tuple(axis_scans), termination
 
 
 class EpicsScalarIO:
@@ -474,7 +590,7 @@ class SolenoidCenteringScanner:
         def evaluator(axis: str, round_index: int, hcorr: float, vcorr: float) -> CandidateResult:
             nonlocal completed
             self._raise_if_stopped()
-            message = f"round {round_index + 1} {axis.upper()} candidate"
+            message = f"iteration {round_index + 1} {axis.upper()} candidate"
             self.progress(message, completed, total)
             result = self._evaluate_candidate(axis, round_index, hcorr, vcorr, original_solenoid)
             completed += 1
@@ -495,18 +611,29 @@ class SolenoidCenteringScanner:
             completed += 1
             self.candidate_finished(baseline)
             self.progress("baseline candidate", completed, total)
-            recommended_h, recommended_v, axis_scans = coordinate_descent(
+            hcorr_limits = _element_numeric_limit(
+                self.app_context.profile.get_element(self.preset.hcorr)
+            )
+            vcorr_limits = _element_numeric_limit(
+                self.app_context.profile.get_element(self.preset.vcorr)
+            )
+            recommended_h, recommended_v, axis_scans, termination = coordinate_descent(
                 original_hcorr,
                 original_vcorr,
                 self.preset.corrector_scan,
                 self.preset.max_rounds,
                 evaluator,
+                hcorr_limits=hcorr_limits,
+                vcorr_limits=vcorr_limits,
             )
             best = min((scan.best for scan in axis_scans), key=lambda candidate: candidate.score.score)
             best_score = best.score.score
             relative_improvement, recommendation_available, recommendation_status = (
                 self._recommendation_quality(baseline, best)
             )
+            if termination.blocks_recommendation:
+                recommendation_available = False
+                recommendation_status = termination.reason
             result = CenteringResult(
                 preset_id=self.preset.id,
                 original_solenoid=original_solenoid,
@@ -537,6 +664,7 @@ class SolenoidCenteringScanner:
                     "bpm_y_pv": self.bpm_y_pv,
                 },
                 scan_config=self._scan_config_payload(),
+                termination=termination,
             )
             write_scan_result(self.app_context, result.as_dict())
             return result
@@ -645,21 +773,19 @@ class SolenoidCenteringScanner:
         )
 
         range_checks.append(
-            self._build_range_check(
+            self._build_corrector_range_check(
                 "HCOR",
                 self.app_context.profile.get_element(self.preset.hcorr),
-                self._corrector_scan_envelope(original_hcorr),
+                original_hcorr,
                 self.hcorr_pv,
-                first_values=relative_scan_points(original_hcorr, self.preset.corrector_scan),
             )
         )
         range_checks.append(
-            self._build_range_check(
+            self._build_corrector_range_check(
                 "VCOR",
                 self.app_context.profile.get_element(self.preset.vcorr),
-                self._corrector_scan_envelope(original_vcorr),
+                original_vcorr,
                 self.vcorr_pv,
-                first_values=relative_scan_points(original_vcorr, self.preset.corrector_scan),
             )
         )
         motion = self.preset.motion_verification
@@ -749,6 +875,9 @@ class SolenoidCenteringScanner:
         pv_name: str,
         *,
         first_values: Iterable[float] | None = None,
+        requested_points: int | None = None,
+        feasible_points: int | None = None,
+        clipping_allowed: bool = False,
     ) -> RangeCheck:
         values_tuple = tuple(float(value) for value in values)
         if not values_tuple:
@@ -760,7 +889,7 @@ class SolenoidCenteringScanner:
         if first_values is not None:
             first_tuple = tuple(float(value) for value in first_values)
             if not first_tuple:
-                raise MachineProfileError(f"No first-round values for {element.id}.")
+                raise MachineProfileError(f"No initial-iteration values for {element.id}.")
             first_scan_low = min(first_tuple)
             first_scan_high = max(first_tuple)
         limit = _element_numeric_limit(element)
@@ -779,24 +908,36 @@ class SolenoidCenteringScanner:
             limit_high=limit_high,
             first_scan_low=first_scan_low,
             first_scan_high=first_scan_high,
+            requested_points=requested_points,
+            feasible_points=feasible_points,
+            clipping_allowed=clipping_allowed,
         )
 
-    def _corrector_scan_envelope(self, center: float) -> tuple[float, float]:
-        low_delta = min(
-            0.0,
-            self.preset.max_rounds * min(
-                self.preset.corrector_scan.relative_from,
-                self.preset.corrector_scan.relative_to,
-            ),
+    def _build_corrector_range_check(
+        self,
+        label: str,
+        element: ElementConfig,
+        center: float,
+        pv_name: str,
+    ) -> RangeCheck:
+        requested = tuple(
+            float(value) for value in relative_scan_points(center, self.preset.corrector_scan)
         )
-        high_delta = max(
-            0.0,
-            self.preset.max_rounds * max(
-                self.preset.corrector_scan.relative_from,
-                self.preset.corrector_scan.relative_to,
-            ),
+        feasible = _bounded_candidate_values(
+            center,
+            self.preset.corrector_scan,
+            _element_numeric_limit(element),
         )
-        return (float(center + low_delta), float(center + high_delta))
+        return self._build_range_check(
+            label,
+            element,
+            feasible or requested,
+            pv_name,
+            first_values=requested,
+            requested_points=len(requested),
+            feasible_points=len(feasible),
+            clipping_allowed=True,
+        )
 
     def _find_current_set_element(self, pv_name: str) -> ElementConfig | None:
         backend = self.app_context.control_backend.name
@@ -1036,7 +1177,7 @@ class SolenoidCenteringScanner:
             "samples_per_point": self.preset.samples_per_point,
             "settle_time_s": self.preset.settle_time_s,
             "sample_interval_s": self.preset.sample_interval_s,
-            "max_rounds": self.preset.max_rounds,
+            "max_iters": self.preset.max_rounds,
             "minimum_relative_score_improvement": self.preset.minimum_relative_score_improvement,
             "readback_verification": (
                 asdict(self.preset.motion_verification)

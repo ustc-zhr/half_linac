@@ -176,6 +176,9 @@ class MainWindow(QMainWindow):
         self.workflow = self.context.solenoid_centering_workflow
         self.worker: ScanWorker | None = None
         self.preflight_worker: PreflightWorker | None = None
+        self.preflight_ready = False
+        self.configuration_revision = 0
+        self.active_preflight_revision: int | None = None
         self.live_plot_failed = False
         self.last_result: CenteringResult | None = None
         self.last_result_preset: SolenoidCenteringPreset | None = None
@@ -279,7 +282,7 @@ class MainWindow(QMainWindow):
         result_layout.addLayout(result_header)
         self.result_table = QTableWidget(0, 7, result_card)
         self.result_table.setHorizontalHeaderLabels(
-            ["Axis", "Round", "Corrector", "Score", "Length", "Slope X", "Slope Y"]
+            ["Axis", "Iteration", "Corrector", "Score", "Length", "Slope X", "Slope Y"]
         )
         self.result_table.setAlternatingRowColors(True)
         self.result_table.setMinimumHeight(135)
@@ -406,7 +409,7 @@ class MainWindow(QMainWindow):
         self.samples = self._int_spin(1, 999)
         self.settle = self._double_spin(0.0, 3600.0, 0.5, 2)
         self.sample_interval = self._double_spin(0.0, 3600.0, 0.1, 2)
-        self.max_rounds = self._int_spin(1, 99)
+        self.max_iters = self._int_spin(1, 99)
         self.scoring_mode_combo = QComboBox(content)
         self.scoring_mode_combo.addItem("Slope score", SCORING_MODE_SLOPE)
         self.scoring_mode_combo.addItem("Trajectory length", SCORING_MODE_TRAJECTORY_LENGTH)
@@ -422,7 +425,7 @@ class MainWindow(QMainWindow):
             ("Samples", self.samples),
             ("Settle s", self.settle),
             ("Sample interval s", self.sample_interval),
-            ("Max rounds", self.max_rounds),
+            ("Max iterations", self.max_iters),
         ]
         for row, (label, widget) in enumerate(fields):
             field_label = QLabel(label, scan_card)
@@ -474,6 +477,44 @@ class MainWindow(QMainWindow):
         config_buttons.addWidget(self.load_config_button)
         run_layout.addLayout(config_buttons)
         layout.addWidget(run_card)
+        self.preflight_inputs = (
+            self.preset_combo,
+            self.hcorr_combo,
+            self.vcorr_combo,
+            self.bpm_combo,
+            self.scoring_mode_combo,
+            self.sol_from,
+            self.sol_to,
+            self.sol_steps,
+            self.cor_from,
+            self.cor_to,
+            self.cor_steps,
+            self.samples,
+            self.settle,
+            self.sample_interval,
+            self.max_iters,
+        )
+        for combo in (
+            self.preset_combo,
+            self.hcorr_combo,
+            self.vcorr_combo,
+            self.bpm_combo,
+            self.scoring_mode_combo,
+        ):
+            combo.currentIndexChanged.connect(self._invalidate_preflight)
+        for spin in (
+            self.sol_from,
+            self.sol_to,
+            self.sol_steps,
+            self.cor_from,
+            self.cor_to,
+            self.cor_steps,
+            self.samples,
+            self.settle,
+            self.sample_interval,
+            self.max_iters,
+        ):
+            spin.valueChanged.connect(self._invalidate_preflight)
         return panel
 
     @staticmethod
@@ -574,7 +615,7 @@ class MainWindow(QMainWindow):
         self.samples.setValue(preset.samples_per_point)
         self.settle.setValue(preset.settle_time_s)
         self.sample_interval.setValue(preset.sample_interval_s)
-        self.max_rounds.setValue(preset.max_rounds)
+        self.max_iters.setValue(preset.max_rounds)
 
     def _solenoid_setpoint_label(self, preset: SolenoidCenteringPreset) -> str:
         if preset.solenoid:
@@ -692,7 +733,7 @@ class MainWindow(QMainWindow):
             "samples_per_point": preset.samples_per_point,
             "settle_time_s": preset.settle_time_s,
             "sample_interval_s": preset.sample_interval_s,
-            "max_rounds": preset.max_rounds,
+            "max_iters": preset.max_rounds,
         }
 
     def _apply_config_payload(self, payload) -> None:
@@ -732,7 +773,7 @@ class MainWindow(QMainWindow):
         self.samples.setValue(_required_int(payload, "samples_per_point"))
         self.settle.setValue(_required_float(payload, "settle_time_s"))
         self.sample_interval.setValue(_required_float(payload, "sample_interval_s"))
-        self.max_rounds.setValue(_required_int(payload, "max_rounds"))
+        self.max_iters.setValue(_required_compatible_int(payload, "max_iters", "max_rounds"))
         self._set_scoring_mode(payload.get("scoring_mode"))
 
     def _preset_with_overrides(self) -> SolenoidCenteringPreset:
@@ -759,12 +800,12 @@ class MainWindow(QMainWindow):
             samples_per_point=self.samples.value(),
             settle_time_s=self.settle.value(),
             sample_interval_s=self.sample_interval.value(),
-            max_rounds=self.max_rounds.value(),
+            max_rounds=self.max_iters.value(),
         )
 
     def _refresh_write_state(self):
         allowed = workflow_writes_allowed(self.context, "solenoid_centering")
-        self.start_button.setEnabled(allowed)
+        self.start_button.setEnabled(allowed and self.preflight_ready)
         self.status_strip.set_value("ACCESS", "WRITE ENABLED" if allowed else "READ ONLY",
                                     "success" if allowed else "warning")
         if self.context.control_backend.name != "real":
@@ -778,6 +819,19 @@ class MainWindow(QMainWindow):
         self.status_strip.set_value("WORKFLOW", value, tone)
         self.status_label.setText(value)
 
+    def _invalidate_preflight(self, *_args) -> None:
+        self.configuration_revision += 1
+        self.preflight_ready = False
+        self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
+        self.status_strip.set_value("READBACK VERIFIED", "UNCHECKED", "warning")
+        self.start_button.setEnabled(False)
+
+    def _set_preflight_inputs_enabled(self, enabled: bool) -> None:
+        for widget in self.preflight_inputs:
+            widget.setEnabled(enabled)
+        self.save_config_button.setEnabled(enabled)
+        self.load_config_button.setEnabled(enabled)
+
     def run_preflight(self):
         if self.worker is not None and self.worker.isRunning():
             return
@@ -790,6 +844,8 @@ class MainWindow(QMainWindow):
             return
         self._set_workflow_status("CHECKING PVs", "warning")
         self.status_strip.set_value("READINESS", "CHECKING", "warning")
+        self.preflight_ready = False
+        self.active_preflight_revision = self.configuration_revision
         self._append_log("Starting read-only preflight.")
         self.progress.setValue(0)
         self.preflight_worker = PreflightWorker(self.context, preset, self)
@@ -799,11 +855,19 @@ class MainWindow(QMainWindow):
         self.preflight_worker.start()
         self.check_button.setEnabled(False)
         self.start_button.setEnabled(False)
+        self._set_preflight_inputs_enabled(False)
 
     def start_scan(self):
         if self.worker is not None and self.worker.isRunning():
             return
         if self.preflight_worker is not None and self.preflight_worker.isRunning():
+            return
+        if not self.preflight_ready:
+            QMessageBox.warning(
+                self,
+                "Solenoid Centering",
+                "Configuration changed or has not been checked. Run Check PVs again.",
+            )
             return
         try:
             preset = self._preset_with_overrides()
@@ -833,6 +897,7 @@ class MainWindow(QMainWindow):
         self.check_button.setEnabled(False)
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
+        self._set_preflight_inputs_enabled(False)
 
     def stop_scan(self):
         if self.worker is not None and self.worker.isRunning():
@@ -919,13 +984,18 @@ class MainWindow(QMainWindow):
     def _on_preflight_finished(self, report):
         report_text = report.as_text()
         self._append_log(report_text)
-        if report.is_ready:
+        revision_matches = self.active_preflight_revision == self.configuration_revision
+        self.preflight_ready = report.is_ready and revision_matches
+        if self.preflight_ready:
             self.progress.setValue(100)
             self._set_workflow_status("READY", "success")
             self.status_strip.set_value("READINESS", "READY", "success")
             self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
             self._show_preflight_report(report_text, ready=True)
             return
+        if report.is_ready and not revision_matches:
+            report_text += "\nSTALE: configuration changed while preflight was running."
+            self._append_log("Preflight result discarded because configuration changed.")
         self._set_workflow_status("NOT READY", "danger")
         self.status_strip.set_value("READINESS", "NOT READY", "danger")
         self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
@@ -935,6 +1005,7 @@ class MainWindow(QMainWindow):
     def _on_preflight_failed(self, message):
         report_text = f"NOT READY\n\nPreflight execution failed:\n{message}"
         self._append_log(report_text)
+        self.preflight_ready = False
         self._set_workflow_status("NOT READY", "danger")
         self.status_strip.set_value("READINESS", "NOT READY", "danger")
         self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
@@ -950,6 +1021,7 @@ class MainWindow(QMainWindow):
         blocker_prefixes = (
             "LIMIT UNCONFIGURED",
             "OUT OF LIMIT",
+            "INSUFFICIENT CANDIDATES",
             "NOT VERIFIED",
         )
         for line in report_text.splitlines():
@@ -968,8 +1040,12 @@ class MainWindow(QMainWindow):
             self.log_view.appendPlainText(f"         {line}")
 
     def _on_preflight_done(self):
+        self._set_preflight_inputs_enabled(True)
         self.check_button.setEnabled(True)
-        self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
+        self.start_button.setEnabled(
+            self.preflight_ready
+            and workflow_writes_allowed(self.context, "solenoid_centering")
+        )
 
     def _on_scan_finished(self, result):
         self.last_result = result
@@ -978,6 +1054,12 @@ class MainWindow(QMainWindow):
         self._set_workflow_status("RESULT READY", "success")
         self.status_strip.set_value("READINESS", "RESULT READY", "success")
         self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
+        termination_reason = (
+            result.termination.reason
+            if result.termination is not None
+            else "Scan completed without a termination record."
+        )
+        self._append_log(f"Scan termination: {termination_reason}")
         self.status_strip.set_value(
             "LAST RESULT",
             f"H {result.recommended_hcorr:.5g}, V {result.recommended_vcorr:.5g}",
@@ -985,12 +1067,20 @@ class MainWindow(QMainWindow):
         )
         if result.recommendation_available:
             self.status_strip.set_value("RESULT QUALITY", "VALID", "success")
+            if result.termination is not None and result.termination.early:
+                self._set_workflow_status("CONVERGED", "success")
             self.status_label.setText(
-                f"Quality passed: {result.relative_improvement:.1%} improvement"
+                f"Quality passed: {result.relative_improvement:.1%}. {termination_reason}"
             )
         else:
-            self.status_strip.set_value("RESULT QUALITY", "NO VALID RECOMMENDATION", "warning")
-            self._set_workflow_status("NO VALID RECOMMENDATION", "warning")
+            quality_label = (
+                "BOUNDARY LIMITED"
+                if result.termination is not None
+                and result.termination.code == "boundary_limited"
+                else "NO VALID RECOMMENDATION"
+            )
+            self.status_strip.set_value("RESULT QUALITY", quality_label, "warning")
+            self._set_workflow_status(quality_label, "warning")
             self.status_label.setText(result.recommendation_status)
         self.apply_button.setEnabled(
             result.recommendation_available
@@ -1006,6 +1096,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Result saved; plot unavailable. See Log.")
 
     def _on_scan_failed(self, message):
+        self.preflight_ready = False
         self._set_workflow_status("ERROR", "danger")
         self.status_strip.set_value("READINESS", "ERROR", "danger")
         self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
@@ -1053,8 +1144,12 @@ class MainWindow(QMainWindow):
         return display("HCOR"), display("VCOR")
 
     def _on_worker_done(self):
+        self._set_preflight_inputs_enabled(True)
         self.check_button.setEnabled(True)
-        self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
+        self.start_button.setEnabled(
+            self.preflight_ready
+            and workflow_writes_allowed(self.context, "solenoid_centering")
+        )
         self.stop_button.setEnabled(False)
         self.progress.setVisible(False)
 
@@ -1111,6 +1206,15 @@ def _required_int(payload: dict, key: str) -> int:
     if integer != value and not (isinstance(value, float) and value.is_integer()):
         raise ValueError(f"Config field {key!r} must be an integer.")
     return integer
+
+
+def _required_compatible_int(payload: dict, key: str, legacy_key: str) -> int:
+    if key in payload and legacy_key in payload:
+        raise ValueError(
+            f"Config must not define both {key!r} and legacy {legacy_key!r}."
+        )
+    selected_key = key if key in payload or legacy_key not in payload else legacy_key
+    return _required_int(payload, selected_key)
 
 
 def main() -> int:

@@ -129,6 +129,26 @@ export HALF_LINAC_CONTROL_BACKEND=real
 python3 src/apps/solenoid_centering/main.py
 ```
 
+## Iterations And Limits
+
+`max_iters` is the maximum coordinate-descent iteration count. The application
+does not multiply the corrector span by this count and reject the resulting
+worst-case envelope. Instead, each iteration regenerates HCOR and VCOR
+candidates around the current best value and removes candidates outside the
+configured physical limits before any write.
+
+The scan records and displays one of these termination reasons:
+
+- configured maximum iterations completed;
+- converged because neither HCOR nor VCOR selected a different candidate;
+- stopped because a best corrector value reached a physical limit;
+- stopped because an axis had fewer than two in-limit candidates.
+
+Boundary-limited and insufficient-candidate results are archived but cannot be
+applied. A clipped first iteration is shown as `CLIPPED TO LIMIT` in preflight.
+The legacy `max_rounds` config key remains readable, but new configs use
+`max_iters`.
+
 Recommended first GUI workflow:
 
 1. Select `MS01 Centering`.
