@@ -87,7 +87,7 @@ def theme_palette(name: str) -> dict[str, str]:
 def build_stylesheet(palette: dict[str, str]) -> str:
     values = dict(palette, header_action_height=HEADER_ACTION_HEIGHT)
     return """
-QMainWindow, QWidget#centralRoot {{
+QMainWindow, QDialog, QWidget#centralRoot {{
     background: {window_bg};
     color: {window_fg};
     font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif;
@@ -103,14 +103,19 @@ QFrame#summaryPanel {{
     border: 1px solid {summary_border};
     border-radius: 14px;
 }}
-QFrame#controlCard, QFrame#plotCard, QFrame#resultCard {{
+QFrame#plotCard, QFrame#resultCard {{
     background: {panel_bg};
     border: 1px solid {panel_border};
     border-radius: 14px;
 }}
-QFrame#workspacePanel, QFrame#statusStrip {{
+QFrame#controlPanel, QFrame#workspacePanel, QFrame#statusStrip {{
     background: transparent;
     border: none;
+}}
+QFrame#configSectionCard {{
+    background: {panel_bg};
+    border: 1px solid {panel_border};
+    border-radius: 8px;
 }}
 QLabel#summaryTitle {{
     color: {summary_title_fg};
@@ -169,6 +174,33 @@ QLabel[role="statusValue"] {{
 QLabel[role="statusValue"][tone="success"] {{ color: {metric_active_fg}; }}
 QLabel[role="statusValue"][tone="warning"] {{ color: {metric_warning_fg}; }}
 QLabel[role="statusValue"][tone="danger"] {{ color: {metric_danger_fg}; }}
+QLabel#preflightSummary {{
+    color: {metric_idle_fg};
+    font-size: 16px;
+    font-weight: 700;
+}}
+QLabel#preflightSummary[tone="success"] {{ color: {metric_active_fg}; }}
+QLabel#preflightSummary[tone="danger"] {{ color: {metric_danger_fg}; }}
+QPlainTextEdit#preflightReportView {{
+    background: {input_bg};
+    border: 1px solid {input_border};
+    border-radius: 8px;
+    color: {input_fg};
+    font-family: "DejaVu Sans Mono", "Consolas", monospace;
+    font-size: 12px;
+    padding: 8px;
+    selection-background-color: {metric_active_fg};
+    selection-color: {window_bg};
+}}
+QPlainTextEdit#logView {{
+    background: {input_bg};
+    border: 1px solid {input_border};
+    border-radius: 8px;
+    color: {input_fg};
+    font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+    font-size: 12px;
+    padding: 6px;
+}}
 QScrollArea#configurationScroll,
 QScrollArea#configurationScroll > QWidget#qt_scrollarea_viewport,
 QWidget#configurationContent {{
@@ -255,6 +287,21 @@ QToolButton#themeToggleButton {{
 QToolButton#themeToggleButton:hover {{
     background: {button_hover_bg};
 }}
+QToolButton#headerLogButton {{
+    background: {button_bg};
+    border: 1px solid {button_border};
+    border-radius: 11px;
+    color: {button_fg};
+    min-width: 48px;
+    max-width: 48px;
+    min-height: {header_action_height}px;
+    max-height: {header_action_height}px;
+    font-size: 12px;
+    font-weight: 700;
+}}
+QToolButton#headerLogButton:checked {{ border-color: {metric_active_fg}; }}
+QToolButton#headerLogButton:hover {{ background: {button_hover_bg}; }}
+QToolButton#headerLogButton:pressed {{ background: {button_pressed_bg}; }}
 QProgressBar {{
     background: {input_bg};
     border: 1px solid {input_border};

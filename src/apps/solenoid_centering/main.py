@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -20,6 +21,8 @@ from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
     QDoubleSpinBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QGridLayout,
@@ -29,6 +32,7 @@ from PyQt5.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QProgressBar,
+    QPlainTextEdit,
     QPushButton,
     QFrame,
     QScrollArea,
@@ -128,6 +132,40 @@ class PreflightWorker(QThread):
         self.finished_ok.emit(report)
 
 
+class PreflightReportDialog(QDialog):
+    def __init__(self, report_text: str, *, ready: bool, parent=None):
+        super().__init__(parent)
+        self.setObjectName("preflightReportDialog")
+        self.setWindowTitle("Solenoid Centering Preflight")
+        self.resize(820, 560)
+        self.setMinimumSize(640, 420)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        summary = QLabel("READY" if ready else "NOT READY", self)
+        summary.setObjectName("preflightSummary")
+        summary.setProperty("tone", "success" if ready else "danger")
+        layout.addWidget(summary)
+
+        self.report_view = QPlainTextEdit(self)
+        self.report_view.setObjectName("preflightReportView")
+        self.report_view.setReadOnly(True)
+        self.report_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.report_view.setPlainText(report_text)
+        layout.addWidget(self.report_view, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=self)
+        copy_button = buttons.addButton("Copy Report", QDialogButtonBox.ActionRole)
+        copy_button.clicked.connect(self._copy_report)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _copy_report(self) -> None:
+        QApplication.clipboard().setText(self.report_view.toPlainText())
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -176,6 +214,14 @@ class MainWindow(QMainWindow):
                 parent=header,
             )
         )
+        self.log_button = QToolButton(header)
+        self.log_button.setObjectName("headerLogButton")
+        self.log_button.setText("Log")
+        self.log_button.setCheckable(True)
+        self.log_button.setFixedSize(48, HEADER_ACTION_HEIGHT)
+        self.log_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.log_button.toggled.connect(self._toggle_log)
+        title_row.addWidget(self.log_button)
         self.theme_toggle_button = QToolButton(header)
         self.theme_toggle_button.setObjectName("themeToggleButton")
         self.theme_toggle_button.setFixedSize(HEADER_ACTION_HEIGHT, HEADER_ACTION_HEIGHT)
@@ -262,34 +308,39 @@ class MainWindow(QMainWindow):
         splitter.setSizes([410, 1000])
         layout.addWidget(splitter, 1)
 
+        self.log_view = QPlainTextEdit(central)
+        self.log_view.setObjectName("logView")
+        self.log_view.setReadOnly(True)
+        self.log_view.setMaximumBlockCount(700)
+        self.log_view.setMaximumHeight(170)
+        self.log_view.setPlaceholderText(
+            "Preflight checks, blocking reasons, motion verification, and operation errors"
+        )
+        self.log_view.setVisible(False)
+        layout.addWidget(self.log_view)
+
         self.setCentralWidget(central)
 
     def _build_control_panel(self, parent):
         panel = QFrame(parent)
-        panel.setObjectName("controlCard")
+        panel.setObjectName("controlPanel")
         panel.setMinimumWidth(390)
         panel.setMaximumWidth(460)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
         heading = QHBoxLayout()
+        heading.setContentsMargins(2, 0, 2, 0)
         title = QLabel("Configuration", panel)
         title.setObjectName("panelTitle")
         heading.addWidget(title)
         heading.addStretch(1)
+        self.check_button = QPushButton("Check PVs", panel)
+        self.check_button.setProperty("compact", True)
+        self.check_button.clicked.connect(self.run_preflight)
+        heading.addWidget(self.check_button)
         layout.addLayout(heading)
-
-        preset_layout = QFormLayout()
-        preset_layout.setContentsMargins(0, 0, 0, 0)
-        preset_layout.setVerticalSpacing(4)
-        preset_label = QLabel("Preset", panel)
-        preset_label.setProperty("role", "field")
-        self.preset_combo = QComboBox(panel)
-        self.preset_combo.setMinimumWidth(190)
-        self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
-        preset_layout.addRow(preset_label, self.preset_combo)
-        layout.addLayout(preset_layout)
 
         scroll = QScrollArea(panel)
         scroll.setObjectName("configurationScroll")
@@ -300,17 +351,28 @@ class MainWindow(QMainWindow):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(8)
 
-        device_title = QLabel("Devices", content)
-        device_title.setObjectName("sectionTitle")
-        content_layout.addWidget(device_title)
+        setup_card = QFrame(content)
+        setup_card.setObjectName("configSectionCard")
+        setup_layout = QVBoxLayout(setup_card)
+        setup_layout.setContentsMargins(10, 8, 10, 10)
+        setup_layout.setSpacing(6)
+        setup_title = QLabel("Setup", setup_card)
+        setup_title.setObjectName("sectionTitle")
+        setup_layout.addWidget(setup_title)
         device_layout = QFormLayout()
         device_layout.setContentsMargins(0, 0, 0, 0)
-        device_layout.setVerticalSpacing(4)
-        self.solenoid_pv_label = QLabel("--", content)
+        device_layout.setVerticalSpacing(5)
+        preset_label = QLabel("Preset", setup_card)
+        preset_label.setProperty("role", "field")
+        self.preset_combo = QComboBox(setup_card)
+        self.preset_combo.setMinimumWidth(190)
+        self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
+        device_layout.addRow(preset_label, self.preset_combo)
+        self.solenoid_pv_label = QLabel("--", setup_card)
         self.solenoid_pv_label.setWordWrap(True)
-        self.hcorr_combo = QComboBox(content)
-        self.vcorr_combo = QComboBox(content)
-        self.bpm_combo = QComboBox(content)
+        self.hcorr_combo = QComboBox(setup_card)
+        self.vcorr_combo = QComboBox(setup_card)
+        self.bpm_combo = QComboBox(setup_card)
         for label, widget in (
             ("Solenoid PV", self.solenoid_pv_label),
             ("HCOR", self.hcorr_combo),
@@ -320,18 +382,20 @@ class MainWindow(QMainWindow):
             field_label = QLabel(label, content)
             field_label.setProperty("role", "field")
             device_layout.addRow(field_label, widget)
-        content_layout.addLayout(device_layout)
-        separator = QFrame(content)
-        separator.setObjectName("sectionSeparator")
-        separator.setFrameShape(QFrame.HLine)
-        content_layout.addWidget(separator)
+        setup_layout.addLayout(device_layout)
+        content_layout.addWidget(setup_card)
 
-        scan_title = QLabel("Scan Parameters", content)
+        scan_card = QFrame(content)
+        scan_card.setObjectName("configSectionCard")
+        scan_card_layout = QVBoxLayout(scan_card)
+        scan_card_layout.setContentsMargins(10, 8, 10, 10)
+        scan_card_layout.setSpacing(6)
+        scan_title = QLabel("Scan Parameters", scan_card)
         scan_title.setObjectName("sectionTitle")
-        content_layout.addWidget(scan_title)
+        scan_card_layout.addWidget(scan_title)
         scan_layout = QGridLayout()
         scan_layout.setContentsMargins(0, 0, 0, 0)
-        scan_layout.setVerticalSpacing(3)
+        scan_layout.setVerticalSpacing(5)
         self.sol_from = self._double_spin(-1e6, 1e6, 0.01, 4)
         self.sol_to = self._double_spin(-1e6, 1e6, 0.01, 4)
         self.sol_steps = self._int_spin(2, 999)
@@ -360,47 +424,55 @@ class MainWindow(QMainWindow):
             ("Max rounds", self.max_rounds),
         ]
         for row, (label, widget) in enumerate(fields):
-            field_label = QLabel(label, content)
+            field_label = QLabel(label, scan_card)
             field_label.setProperty("role", "field")
             scan_layout.addWidget(field_label, row, 0)
             scan_layout.addWidget(widget, row, 1)
         scan_layout.setColumnStretch(1, 1)
-        content_layout.addLayout(scan_layout)
+        scan_card_layout.addLayout(scan_layout)
+        content_layout.addWidget(scan_card)
         content_layout.addStretch(1)
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
 
-        self.progress = QProgressBar(panel)
+        run_card = QFrame(panel)
+        run_card.setObjectName("configSectionCard")
+        run_layout = QVBoxLayout(run_card)
+        run_layout.setContentsMargins(10, 8, 10, 10)
+        run_layout.setSpacing(7)
+        run_title = QLabel("Run", run_card)
+        run_title.setObjectName("sectionTitle")
+        run_layout.addWidget(run_title)
+
+        self.progress = QProgressBar(run_card)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        layout.addWidget(self.progress)
+        self.progress.setVisible(False)
+        run_layout.addWidget(self.progress)
 
         buttons = QHBoxLayout()
-        self.check_button = QPushButton("Check PVs", panel)
-        self.start_button = QPushButton("Start Scan", panel)
-        self.stop_button = QPushButton("Stop", panel)
-        self.check_button.setProperty("compact", True)
+        self.start_button = QPushButton("Start Scan", run_card)
+        self.stop_button = QPushButton("Stop", run_card)
         self.start_button.setProperty("role", "primary")
         self.stop_button.setProperty("role", "danger")
         self.stop_button.setEnabled(False)
-        self.check_button.clicked.connect(self.run_preflight)
         self.start_button.clicked.connect(self.start_scan)
         self.stop_button.clicked.connect(self.stop_scan)
-        buttons.addWidget(self.check_button)
         buttons.addWidget(self.start_button)
         buttons.addWidget(self.stop_button)
-        layout.addLayout(buttons)
+        run_layout.addLayout(buttons)
 
         config_buttons = QHBoxLayout()
-        self.save_config_button = QPushButton("Save Config", panel)
-        self.load_config_button = QPushButton("Load Config", panel)
+        self.save_config_button = QPushButton("Save Config", run_card)
+        self.load_config_button = QPushButton("Load Config", run_card)
         self.save_config_button.setProperty("compact", True)
         self.load_config_button.setProperty("compact", True)
         self.save_config_button.clicked.connect(self.save_scan_config)
         self.load_config_button.clicked.connect(self.load_scan_config)
         config_buttons.addWidget(self.save_config_button)
         config_buttons.addWidget(self.load_config_button)
-        layout.addLayout(config_buttons)
+        run_layout.addLayout(config_buttons)
+        layout.addWidget(run_card)
         return panel
 
     @staticmethod
@@ -717,6 +789,7 @@ class MainWindow(QMainWindow):
             return
         self._set_workflow_status("CHECKING PVs", "warning")
         self.status_strip.set_value("READINESS", "CHECKING", "warning")
+        self._append_log("Starting read-only preflight.")
         self.progress.setValue(0)
         self.preflight_worker = PreflightWorker(self.context, preset, self)
         self.preflight_worker.finished_ok.connect(self._on_preflight_finished)
@@ -744,6 +817,7 @@ class MainWindow(QMainWindow):
         self.result_table.setRowCount(0)
         self.plot.clear()
         self.plot.start_live()
+        self.progress.setVisible(True)
         self.progress.setValue(0)
         self._set_workflow_status("RUNNING", "warning")
         self.status_strip.set_value("READINESS", "SCANNING", "warning")
@@ -834,23 +908,55 @@ class MainWindow(QMainWindow):
         self.plot.add_live_candidate(candidate)
 
     def _on_preflight_finished(self, report):
+        report_text = report.as_text()
+        self._append_log(report_text)
         if report.is_ready:
             self.progress.setValue(100)
             self._set_workflow_status("READY", "success")
             self.status_strip.set_value("READINESS", "READY", "success")
             self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
-            QMessageBox.information(self, "Solenoid Centering Preflight", report.as_text())
+            self._show_preflight_report(report_text, ready=True)
             return
         self._set_workflow_status("NOT READY", "danger")
         self.status_strip.set_value("READINESS", "NOT READY", "danger")
         self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
-        QMessageBox.warning(self, "Solenoid Centering Preflight", report.as_text())
+        self.status_label.setText(self._preflight_blocker_summary(report_text))
+        self._show_preflight_report(report_text, ready=False)
 
     def _on_preflight_failed(self, message):
+        report_text = f"NOT READY\n\nPreflight execution failed:\n{message}"
+        self._append_log(report_text)
         self._set_workflow_status("NOT READY", "danger")
         self.status_strip.set_value("READINESS", "NOT READY", "danger")
         self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
-        QMessageBox.warning(self, "Solenoid Centering Preflight", f"NOT READY\n{message}")
+        self.status_label.setText(f"Preflight failed: {message}")
+        self._show_preflight_report(report_text, ready=False)
+
+    def _show_preflight_report(self, report_text: str, *, ready: bool) -> None:
+        dialog = PreflightReportDialog(report_text, ready=ready, parent=self)
+        dialog.exec_()
+
+    @staticmethod
+    def _preflight_blocker_summary(report_text: str) -> str:
+        blocker_prefixes = (
+            "LIMIT UNCONFIGURED",
+            "OUT OF LIMIT",
+            "NOT VERIFIED",
+        )
+        for line in report_text.splitlines():
+            if line.startswith(blocker_prefixes):
+                return f"Blocked: {line}"
+        return "Preflight failed; see Log for details."
+
+    def _toggle_log(self, checked: bool) -> None:
+        self.log_view.setVisible(checked)
+
+    def _append_log(self, message: str) -> None:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        lines = str(message).splitlines() or [""]
+        self.log_view.appendPlainText(f"{timestamp} {lines[0]}")
+        for line in lines[1:]:
+            self.log_view.appendPlainText(f"         {line}")
 
     def _on_preflight_done(self):
         self.check_button.setEnabled(True)
@@ -936,6 +1042,7 @@ class MainWindow(QMainWindow):
         self.check_button.setEnabled(True)
         self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
         self.stop_button.setEnabled(False)
+        self.progress.setVisible(False)
 
     def _populate_result_table(self, result):
         rows = [scan.best for scan in result.axis_scans]

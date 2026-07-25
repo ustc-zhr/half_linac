@@ -102,9 +102,7 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             (),
             {"is_ready": False, "as_text": lambda self: "NOT READY\nreadback mismatch"},
         )()
-        with patch(
-            "half_linac.src.apps.solenoid_centering.main.QMessageBox.warning",
-        ):
+        with patch.object(self.window, "_show_preflight_report") as show_report:
             self.window._on_preflight_finished(report)
 
         self.assertEqual(
@@ -114,6 +112,11 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         self.assertEqual(
             self.window.status_strip.items["MOTION VERIFIED"].value_label.text(),
             "FAILED",
+        )
+        self.assertIn("readback mismatch", self.window.log_view.toPlainText())
+        show_report.assert_called_once_with(
+            "NOT READY\nreadback mismatch",
+            ready=False,
         )
 
 
