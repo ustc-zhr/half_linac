@@ -80,6 +80,19 @@ class DynamicFakeEpics(FakeEpics):
         return float(self.reference_orbit[index] + dispersion[index] * delta)
 
 
+class EnergyReadbackFakeEpics(FakeEpics):
+    def __init__(self, values, set_pv: str, readback_pv: str):
+        super().__init__(values)
+        self.set_pv = set_pv
+        self.readback_pv = readback_pv
+
+    def caput(self, pv, value, *args, **kwargs):
+        result = super().caput(pv, value, *args, **kwargs)
+        if result and pv == self.set_pv:
+            self.values[self.readback_pv] = float(value)
+        return result
+
+
 def write_config():
     config = load_config("tests/dispersion_correction/fixtures/irfel_achromat.json")
     return replace(
@@ -152,6 +165,51 @@ def test_modulator_voltage_uses_same_normalized_energy_delta_interface() -> None
 
     assert baseline_delta == pytest.approx(20.0 / 5000.0)
     assert epics.values["TEST:MODULATOR:HV"] == pytest.approx(20.5)
+
+
+def test_snapshot_and_restore_preserve_energy_setpoint_not_initial_readback() -> None:
+    set_pv = "TEST:MODULATOR:HV:SET"
+    readback_pv = "TEST:MODULATOR:HV:READBACK"
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    options["pv_map"]["energy_knob"] = {
+        "set": set_pv,
+        "readback": readback_pv,
+    }
+    config = replace(
+        config,
+        backend=replace(config.backend, options=options),
+        energy_knob=replace(
+            config.energy_knob,
+            actuator="modulator_voltage",
+            actuator_unit="kV",
+            calibration={
+                "kind": "linear_relative",
+                "actuator_per_delta": 5000.0,
+            },
+        ),
+    )
+    values = initial_values()
+    values[set_pv] = 20.0
+    values[readback_pv] = 19.96
+    epics = EnergyReadbackFakeEpics(values, set_pv, readback_pv)
+    machine = EpicsMachine(config, epics_client=epics)
+
+    snapshot = machine.snapshot()
+    machine.set_energy_delta(snapshot.energy_delta + 1.0e-4)
+    machine.restore(snapshot)
+
+    assert snapshot.energy_delta == pytest.approx(20.0 / 5000.0)
+    assert snapshot.metadata["energy_readback_delta"] == pytest.approx(
+        19.96 / 5000.0
+    )
+    energy_writes = [
+        value
+        for pv, value in epics.caput_calls
+        if pv == set_pv
+    ]
+    assert energy_writes == pytest.approx([20.5, 20.0])
+    assert epics.values[set_pv] == pytest.approx(20.0)
 
 
 def test_legacy_phase_calibration_and_pv_aliases_remain_supported() -> None:
@@ -227,6 +285,112 @@ def test_write_enabled_preflight_accepts_calibrated_irfel_mapping() -> None:
     assert result.checks["quadrupole_write_pvs_configured"]
     assert result.checks["quadrupole_independent_readbacks"]
     assert len(result.warnings) == 1
+
+
+def test_apply_design_targets_writes_reviewed_k1_values() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    for item in options["pv_map"]["quadrupoles"].values():
+        item["control"] = "k1"
+    config = replace(
+        config,
+        backend=replace(config.backend, options=options),
+        measurement=replace(
+            config.measurement,
+            samples_per_step=1,
+            sample_interval_s=1.0e-6,
+            settle_time_s=1.0e-6,
+        ),
+    )
+    epics = DynamicFakeEpics(initial_values())
+    machine = EpicsMachine(config, epics_client=epics)
+    workflow = AchromatWorkflow(config, machine=machine)
+    baseline = machine.read_quadrupole_readbacks()
+    targets = {
+        name: value + 0.001
+        for name, value in baseline.items()
+    }
+
+    result = workflow.apply_design_targets(
+        targets,
+        reviewed_baseline=baseline,
+        max_changes={name: 0.01 for name in targets},
+    )
+
+    assert result["operation"] == "design-k1"
+    assert result["final_values"] == pytest.approx(targets)
+    assert {
+        name: epics.values[pv]
+        for name, pv in QUAD_K1_PVS.items()
+    } == pytest.approx(targets)
+
+
+def test_apply_design_targets_rejects_change_over_configured_limit() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    for item in options["pv_map"]["quadrupoles"].values():
+        item["control"] = "k1"
+    config = replace(config, backend=replace(config.backend, options=options))
+    epics = DynamicFakeEpics(initial_values())
+    machine = EpicsMachine(config, epics_client=epics)
+    workflow = AchromatWorkflow(config, machine=machine)
+    baseline = machine.read_quadrupole_readbacks()
+    targets = dict(baseline)
+    targets["QM13"] += 0.02
+
+    with pytest.raises(ValueError, match="exceeds configured limit"):
+        workflow.apply_design_targets(
+            targets,
+            reviewed_baseline=baseline,
+            max_changes={name: 0.01 for name in targets},
+        )
+
+    assert epics.caput_calls == []
+
+
+def test_apply_design_targets_restores_snapshot_when_safety_fails() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    for item in options["pv_map"]["quadrupoles"].values():
+        item["control"] = "k1"
+    config = replace(
+        config,
+        backend=replace(config.backend, options=options),
+        measurement=replace(
+            config.measurement,
+            samples_per_step=1,
+            sample_interval_s=1.0e-6,
+            settle_time_s=1.0e-6,
+        ),
+    )
+    epics = DynamicFakeEpics(initial_values())
+
+    class UnsafeAfterWriteMachine(EpicsMachine):
+        def is_safe(self) -> bool:
+            return False
+
+    machine = UnsafeAfterWriteMachine(config, epics_client=epics)
+    workflow = AchromatWorkflow(config, machine=machine)
+    baseline = machine.read_quadrupole_readbacks()
+    targets = {
+        name: value + 0.001
+        for name, value in baseline.items()
+    }
+
+    with pytest.raises(
+        RuntimeError,
+        match="pre-write quadrupole setpoints restored",
+    ):
+        workflow.apply_design_targets(
+            targets,
+            reviewed_baseline=baseline,
+            max_changes={name: 0.01 for name in targets},
+        )
+
+    assert {
+        name: epics.values[pv]
+        for name, pv in QUAD_K1_PVS.items()
+    } == pytest.approx(baseline)
 
 
 def test_live_preflight_reads_all_required_pvs_without_writing() -> None:

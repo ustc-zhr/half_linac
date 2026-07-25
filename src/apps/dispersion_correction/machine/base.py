@@ -17,6 +17,11 @@ class MachineInterface(ABC):
     def get_energy_delta(self) -> float:
         raise NotImplementedError
 
+    def get_energy_setpoint_delta(self) -> float:
+        """Return the commanded energy setting used as the scan/restore baseline."""
+
+        return self.get_energy_delta()
+
     @abstractmethod
     def set_energy_delta(self, value: float) -> None:
         raise NotImplementedError

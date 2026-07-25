@@ -79,7 +79,7 @@ def build_stylesheet(name: str) -> str:
     }}
     QDialog#bpmSelectionDialog, QDialog#knobSelectionDialog,
     QDialog#energyCalibrationDialog, QDialog#modelDetailsDialog,
-    QDialog#workflowDetailsDialog {{
+    QDialog#workflowDetailsDialog, QDialog#automaticCorrectionDialog {{
         background: {t['panel_bg']};
         color: {t['text_primary']};
     }}
@@ -160,6 +160,17 @@ def build_stylesheet(name: str) -> str:
         border: 1px solid {t['section_border']};
         border-radius: 14px;
     }}
+    QFrame#controlSectionCard {{
+        background: {t['summary_bg']};
+        border: 1px solid {t['summary_border']};
+        border-radius: 11px;
+    }}
+    QLabel#controlSectionTitle {{
+        color: {t['text_primary']};
+        font-size: 14px;
+        font-weight: 800;
+        padding: 2px 1px 4px 1px;
+    }}
     QFrame#workspacePanel {{
         background: transparent;
         border: none;
@@ -173,6 +184,85 @@ def build_stylesheet(name: str) -> str:
         background: {t['panel_bg']};
         border: 1px solid {t['section_border']};
         border-radius: 14px;
+    }}
+    QFrame#overviewControlGroup {{
+        background: {t['status_strip_bg']};
+        border: 1px solid {t['status_strip_border']};
+        border-radius: 9px;
+    }}
+    QLabel#overviewGroupLabel {{
+        color: {t['text_muted']};
+        font-size: 10px;
+        font-weight: 800;
+        padding: 0px 2px;
+    }}
+    QLabel#overviewStateLabel {{
+        color: {t['text_muted']};
+        font-size: 10px;
+        font-weight: 600;
+        padding: 0px 3px;
+    }}
+    QFrame#calibrationSettingsCard,
+    QFrame#calibrationAnalysisCard {{
+        background: {t['summary_bg']};
+        border: 1px solid {t['summary_border']};
+        border-radius: 12px;
+    }}
+    QFrame#automaticSettingsCard {{
+        background: {t['summary_bg']};
+        border: 1px solid {t['summary_border']};
+        border-radius: 11px;
+    }}
+    QLabel#automaticDialogIntro {{
+        color: {t['text_primary']};
+        font-size: 12px;
+        font-weight: 600;
+        padding: 1px 2px;
+    }}
+    QLabel#automaticDialogSectionTitle {{
+        color: {t['text_primary']};
+        font-size: 13px;
+        font-weight: 800;
+        padding: 1px 1px 4px 1px;
+    }}
+    QLabel#automaticReadOnlyValue {{
+        background: {t['input_bg']};
+        border: 1px solid {t['section_border']};
+        border-radius: 9px;
+        color: {t['text_primary']};
+        min-height: 28px;
+        padding: 2px 8px;
+    }}
+    QLabel#automaticSafetyNote {{
+        background: {t['status_strip_bg']};
+        border: 1px solid {t['status_strip_border']};
+        border-left: 4px solid {t['status_warning']};
+        border-radius: 9px;
+        color: {t['text_muted']};
+        font-size: 11px;
+        font-weight: 600;
+        padding: 8px 9px;
+    }}
+    QLabel#calibrationSectionTitle {{
+        color: {t['text_primary']};
+        font-size: 13px;
+        font-weight: 800;
+        padding: 1px 2px;
+    }}
+    QLabel#calibrationActuatorValue {{
+        background: {t['input_bg']};
+        border: 1px solid {t['section_border']};
+        border-radius: 10px;
+        color: {t['text_primary']};
+        min-height: 28px;
+        padding: 2px 8px;
+    }}
+    QLabel#calibrationTableHint,
+    QLabel#calibrationSessionHint {{
+        color: {t['text_muted']};
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px;
     }}
     QScrollArea#workflowScroll,
     QScrollArea#workflowScroll > QWidget#qt_scrollarea_viewport,
@@ -416,10 +506,11 @@ def build_stylesheet(name: str) -> str:
         max-height: 38px;
         font-size: 14px;
     }}
-    QPushButton#modelDetailsButton {{
+    QPushButton#modelDetailsButton,
+    QPushButton#refreshSnapshotButton {{
         border-radius: 9px;
-        min-height: 24px;
-        max-height: 24px;
+        min-height: 28px;
+        max-height: 28px;
         padding: 2px 9px;
     }}
     QPushButton#workflowSecondaryButton {{
@@ -427,6 +518,14 @@ def build_stylesheet(name: str) -> str:
         min-height: 24px;
         max-height: 24px;
         padding: 2px 9px;
+    }}
+    QPushButton#automaticStartButton {{
+        min-width: 210px;
+        min-height: 34px;
+    }}
+    QPushButton#automaticCancelButton {{
+        min-width: 82px;
+        min-height: 34px;
     }}
     QPushButton[role="danger"]:enabled {{
         border-color: {t['danger']};
@@ -575,6 +674,17 @@ def build_stylesheet(name: str) -> str:
         color: {t['text_primary']};
         selection-background-color: {t['focus']};
         selection-color: {t['window_bg']};
+    }}
+    QTableWidget#calibrationPointsTable {{
+        border-radius: 9px;
+        gridline-color: {t['section_border']};
+    }}
+    QTableWidget#calibrationPointsTable::item {{
+        padding: 4px 6px;
+    }}
+    QPlainTextEdit#calibrationQualityPreview {{
+        border-radius: 9px;
+        padding: 6px;
     }}
     QTableWidget#knobTable {{
         background: transparent;

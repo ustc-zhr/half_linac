@@ -20,7 +20,14 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     else:
         pytest.skip("No offscreen/minimal Qt platform plugin is installed")
 
-    from PyQt5.QtWidgets import QApplication, QLabel, QListWidgetItem, QMessageBox
+    from PyQt5.QtWidgets import (
+        QApplication,
+        QFrame,
+        QLabel,
+        QListWidgetItem,
+        QMessageBox,
+        QPushButton,
+    )
 
     from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
 
@@ -42,7 +49,15 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.workflow_title_label.objectName() == "cardTitle"
     assert window.overview_title_label.objectName() == "cardTitle"
     assert window.measurement_header_label.text() == "Measurement"
-    assert window.overlays_header_label.text() == "Overlays"
+    assert window.overlays_header_label.text() == "Model overlays"
+    assert (
+        window.plot_state_label.parentWidget()
+        is window.overview_controls.measurement_group
+    )
+    assert (
+        window.show_design_model_checkbox.parentWidget()
+        is window.overview_controls.overlays_group
+    )
     assert window.dispersion_curve.parentWidget() is window.dispersion_overview
     assert window.model_details_button.parentWidget() is window.overview_controls
     assert window.model_details_button.text() == "Model Details…"
@@ -93,7 +108,16 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.review_button.isHidden()
     assert not hasattr(window, "connection_controls")
     assert window.preflight_button.isHidden()
-    assert window.preflight_button.text() == "Check"
+    assert window.preflight_button.text() == "Check PVs"
+    assert window.preflight_button.parentWidget() is window.machine_card
+    assert window.machine_card_title.text() == "Machine"
+    assert window.measurement_card_title.text() == "Measurement"
+    assert window.correction_step_card_title.text() == "Correction Step"
+    assert window.machine_card.objectName() == "controlSectionCard"
+    assert window.measurement_card.objectName() == "controlSectionCard"
+    assert window.correction_step_card.objectName() == "controlSectionCard"
+    assert window.measurement_action_button.parentWidget() is window.measurement_card
+    assert window.gain_spin.parentWidget() is window.correction_step_card
     assert window.run_button.parentWidget() is window.correction_mode_actions
     assert window.run_button.objectName() == "automaticCorrectionButton"
     assert window.apply_recommendation_button.parentWidget() is window.correction_page
@@ -114,25 +138,36 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window.measurement_action_button.click()
     assert next_actions == ["measure"]
     assert window.run_button.text() == "Automatic Correction…"
+    automatic_dialog, generations, response_policy = (
+        window._build_automatic_correction_dialog()
+    )
+    assert automatic_dialog.objectName() == "automaticCorrectionDialog"
+    assert automatic_dialog.findChild(QFrame, "automaticSettingsCard") is not None
+    assert generations.objectName() == "automaticGenerationsSpin"
+    assert response_policy.objectName() == "automaticResponsePolicy"
+    assert (
+        automatic_dialog.findChild(QPushButton, "automaticStartButton").text()
+        == "Start Automatic Correction"
+    )
+    automatic_dialog.close()
     assert window.recommendation_table.columnCount() == 6
-    assert not window.advanced_settings.isVisible()
-    assert window.advanced_button.text() == "Advanced settings"
     config_labels = {label.text() for label in window.findChildren(QLabel)}
     assert "Scan Samples" in config_labels
+    assert "Sample Interval (s)" in config_labels
     assert "Verification Samples" in config_labels
+    assert "Gain" in config_labels
+    assert "Max Step (%)" in config_labels
     assert "Max Generations" not in config_labels
     assert "Q Response Update" not in config_labels
     assert window.max_iter_spin.isHidden()
     assert window.response_update_combo.isHidden()
     assert "Measure dispersion before" in window.run_button.toolTip()
-    assert window.advanced_settings.widget() is window.advanced_settings_content
-    advanced_sections = {
+    legacy_sections = {
         label.text()
-        for label in window.advanced_settings_content.findChildren(QLabel)
+        for label in window.findChildren(QLabel)
         if label.property("role") == "configSection"
     }
-    assert "CORRECTION STEP" in advanced_sections
-    assert "AUTOMATIC CORRECTION" not in advanced_sections
+    assert not legacy_sections
     assert window.operation_plan is not None
     assert not hasattr(window, "knob_table")
     assert window.knob_edit.text() == "Q1L/Q1R; Q2L/Q2R"
@@ -247,6 +282,24 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert calibration_dialog.objectName() == "energyCalibrationDialog"
     assert calibration_dialog.styleSheet()
     assert calibration_dialog.plot.theme_name == window.theme_name
+    assert calibration_dialog.settings_card.objectName() == (
+        "calibrationSettingsCard"
+    )
+    assert calibration_dialog.analysis_card.objectName() == (
+        "calibrationAnalysisCard"
+    )
+    assert (
+        calibration_dialog.reference_energy_spin.parentWidget()
+        is calibration_dialog.reference_energy_row
+    )
+    assert (
+        calibration_dialog.energy_unit_combo.parentWidget()
+        is calibration_dialog.reference_energy_row
+    )
+    assert calibration_dialog.paste_button.text() == "Paste Data"
+    assert calibration_dialog.table.verticalHeader().defaultSectionSize() == 36
+    assert calibration_dialog.table.verticalHeader().minimumSectionSize() == 36
+    assert calibration_dialog.table.minimumHeight() >= 184
     calibration_draft = EnergyCalibrationDraft(
         actuator="rf_phase",
         actuator_unit="deg",
@@ -332,12 +385,10 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.load_button.property("role") is None
     assert not window.abort_button.isVisible()
     assert not window.abort_button.isEnabled()
-    window.advanced_button.setChecked(True)
-    app.processEvents()
-    assert window.advanced_settings.isVisible()
-    window.advanced_button.setChecked(False)
-    app.processEvents()
-    assert not window.advanced_settings.isVisible()
+    assert window.sample_interval_spin.isVisibleTo(window)
+    assert window.final_samples_spin.isVisibleTo(window)
+    assert window.gain_spin.isVisibleTo(window)
+    assert window.max_step_pct_spin.isVisibleTo(window)
     window._set_running(True, "measure")
     assert window.abort_button.isVisible()
     assert window.abort_button.isEnabled()
@@ -437,19 +488,32 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         "focus_comparison": False,
     }
     profile_window.show_snapshot_model_checkbox.setChecked(False)
+    assert profile_window.refresh_snapshot_button.isVisibleTo(profile_window)
+    assert profile_window.refresh_snapshot_button.isEnabled()
+    profile_window.refresh_snapshot_button.click()
+    assert model_requests[-1] == {
+        "model_source": "live",
+        "focus_comparison": False,
+    }
     assert profile_window.model_details_button.isVisibleTo(profile_window)
     assert not profile_window.run_button.isEnabled()
     assert "calibration.actuator_per_delta" in profile_window.operation_banner.text()
     assert not profile_window.operation_banner.isHidden()
-    assert "±0.0001 Δp/p" == profile_window._energy_step_compact()
+    assert (
+        f"±{profile_window.config.energy_knob.delta:g} Δp/p"
+        == profile_window._energy_step_compact()
+    )
     assert not hasattr(profile_window, "connection_controls")
     assert profile_window.preflight_button.isVisibleTo(profile_window)
     assert profile_window.preflight_button.isEnabled()
-    assert profile_window.preflight_button.parentWidget().objectName() == "controlCard"
+    assert (
+        profile_window.preflight_button.parentWidget().objectName()
+        == "controlSectionCard"
+    )
     assert (
         abs(
             profile_window.preflight_button.geometry().center().y()
-            - profile_window.config_title_label.geometry().center().y()
+            - profile_window.machine_card_title.geometry().center().y()
         )
         <= 1
     )
@@ -520,7 +584,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         "Calibration: Session override"
     )
     assert not profile_window.measurement_action_button.isEnabled()
-    assert "Click Check" in profile_window.measurement_action_button.toolTip()
+    assert "Click Check PVs" in profile_window.measurement_action_button.toolTip()
     profile_window._live_preflight_completed(
         LivePreflightResult(
             static=PreflightResult(

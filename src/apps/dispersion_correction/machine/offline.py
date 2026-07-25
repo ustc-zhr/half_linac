@@ -106,6 +106,9 @@ class OfflineMachine(MachineInterface):
     def get_energy_delta(self) -> float:
         return self._energy_delta
 
+    def get_energy_setpoint_delta(self) -> float:
+        return self._energy_delta
+
     def set_energy_delta(self, value: float) -> None:
         self._energy_delta = float(value)
 

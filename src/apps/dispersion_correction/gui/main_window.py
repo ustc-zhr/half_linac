@@ -31,7 +31,6 @@ from PyQt5.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
@@ -106,11 +105,13 @@ class WorkflowWorker(QThread):
         task: str,
         config: RunConfig,
         recommendation: CorrectionRecommendation | None = None,
+        design_k1_request: DesignK1Request | None = None,
     ) -> None:
         super().__init__()
         self.task = task
         self.config = config
         self.recommendation = recommendation
+        self.design_k1_request = design_k1_request
 
     def run(self) -> None:
         try:
@@ -138,6 +139,14 @@ class WorkflowWorker(QThread):
                 if self.recommendation is None:
                     raise ValueError("No reviewed recommendation was supplied")
                 result = workflow.apply_recommendation(self.recommendation)
+            elif self.task == "design-k1":
+                if self.design_k1_request is None:
+                    raise ValueError("No reviewed design K1 request was supplied")
+                result = workflow.apply_design_targets(
+                    self.design_k1_request.target_values,
+                    reviewed_baseline=self.design_k1_request.baseline_values,
+                    max_changes=self.design_k1_request.max_changes,
+                )
             else:
                 raise ValueError(f"Unknown task: {self.task}")
         except Exception as exc:
@@ -213,34 +222,66 @@ class CorrectionSessionRun:
     result: CorrectionResult
 
 
-class OverviewControls(QWidget):
-    """Keep overview controls on one line when space permits."""
+@dataclass(frozen=True)
+class DesignK1Request:
+    baseline_values: dict[str, float]
+    target_values: dict[str, float]
+    max_changes: dict[str, float]
 
-    COMPACT_WIDTH = 900
+
+class OverviewControls(QWidget):
+    """Arrange overview actions and data/model controls as a responsive toolbar."""
+
+    COMPACT_WIDTH = 860
 
     def __init__(
         self,
         title: QLabel,
         measurement_label: QLabel,
         measurement_combo: QComboBox,
+        state_label: QLabel,
         overlays_label: QLabel,
         design_checkbox: QCheckBox,
         snapshot_checkbox: QCheckBox,
+        refresh_snapshot_button: QPushButton,
         details_button: QPushButton,
     ) -> None:
         super().__init__()
         self._title = title
         self._measurement_label = measurement_label
         self._measurement_combo = measurement_combo
+        self._state_label = state_label
         self._overlays_label = overlays_label
         self._design_checkbox = design_checkbox
         self._snapshot_checkbox = snapshot_checkbox
+        self._refresh_snapshot_button = refresh_snapshot_button
         self._details_button = details_button
+        self.setObjectName("overviewToolbar")
+
+        self.measurement_group = QFrame(self)
+        self.measurement_group.setObjectName("overviewControlGroup")
+        measurement_layout = QHBoxLayout(self.measurement_group)
+        measurement_layout.setContentsMargins(8, 5, 8, 5)
+        measurement_layout.setSpacing(7)
+        measurement_layout.addWidget(self._measurement_label)
+        measurement_layout.addWidget(self._measurement_combo)
+        measurement_layout.addWidget(self._state_label, 1)
+
+        self.overlays_group = QFrame(self)
+        self.overlays_group.setObjectName("overviewControlGroup")
+        overlays_layout = QHBoxLayout(self.overlays_group)
+        overlays_layout.setContentsMargins(8, 5, 8, 5)
+        overlays_layout.setSpacing(9)
+        overlays_layout.addWidget(self._overlays_label)
+        overlays_layout.addWidget(self._design_checkbox)
+        overlays_layout.addWidget(self._snapshot_checkbox)
+        overlays_layout.addStretch(1)
+
         self.compact: bool | None = None
         self._layout = QGridLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setHorizontalSpacing(8)
-        self._layout.setVerticalSpacing(5)
+        self._layout.setVerticalSpacing(7)
         self._relayout(False)
 
     def _relayout(self, compact: bool) -> None:
@@ -249,38 +290,28 @@ class OverviewControls(QWidget):
         self.compact = compact
         widgets = (
             self._title,
-            self._measurement_label,
-            self._measurement_combo,
-            self._overlays_label,
-            self._design_checkbox,
-            self._snapshot_checkbox,
+            self.measurement_group,
+            self.overlays_group,
+            self._refresh_snapshot_button,
             self._details_button,
         )
         for widget in widgets:
             self._layout.removeWidget(widget)
-        for column in range(8):
+        for column in range(4):
             self._layout.setColumnStretch(column, 0)
 
+        self._layout.addWidget(self._title, 0, 0)
+        self._layout.setColumnStretch(1, 1)
+        self._layout.addWidget(self._refresh_snapshot_button, 0, 2)
+        self._layout.addWidget(self._details_button, 0, 3)
+
         if compact:
-            self._layout.addWidget(self._title, 0, 0, 1, 4)
-            self._layout.setColumnStretch(4, 1)
-            self._layout.addWidget(self._details_button, 0, 7)
-            self._layout.addWidget(self._measurement_label, 1, 0)
-            self._layout.addWidget(self._measurement_combo, 1, 1, 1, 2)
-            self._layout.setColumnStretch(3, 1)
-            self._layout.addWidget(self._overlays_label, 1, 4)
-            self._layout.addWidget(self._design_checkbox, 1, 5)
-            self._layout.addWidget(self._snapshot_checkbox, 1, 6, 1, 2)
+            self._layout.addWidget(self.measurement_group, 1, 0, 1, 4)
+            self._layout.addWidget(self.overlays_group, 2, 0, 1, 4)
             return
 
-        self._layout.addWidget(self._title, 0, 0)
-        self._layout.addWidget(self._measurement_label, 0, 1)
-        self._layout.addWidget(self._measurement_combo, 0, 2)
-        self._layout.setColumnStretch(3, 1)
-        self._layout.addWidget(self._overlays_label, 0, 4)
-        self._layout.addWidget(self._design_checkbox, 0, 5)
-        self._layout.addWidget(self._snapshot_checkbox, 0, 6)
-        self._layout.addWidget(self._details_button, 0, 7)
+        self._layout.addWidget(self.measurement_group, 1, 0, 1, 2)
+        self._layout.addWidget(self.overlays_group, 1, 2, 1, 2)
 
     def resizeEvent(self, event) -> None:
         self._relayout(event.size().width() < self.COMPACT_WIDTH)
@@ -905,6 +936,8 @@ class MainWindow(QMainWindow):
         self.preflight_worker: LivePreflightWorker | None = None
         self.model_worker: ModelResponseWorker | None = None
         self.pending_model_source: str | None = None
+        self.current_snapshot_time: datetime | None = None
+        self._refresh_snapshot_after_task = False
         self.imported_dispersion: ImportedDispersionDataset | None = None
         self.live_plot_measurement: DispersionPlotDataset | None = None
         self.reference_plot_measurement: DispersionPlotDataset | None = None
@@ -1091,13 +1124,25 @@ class MainWindow(QMainWindow):
         self.load_button.setObjectName("configLoadButton")
         self.load_button.clicked.connect(self._load_config_dialog)
         heading_layout.addWidget(self.load_button)
-        self.preflight_button = QPushButton("Check")
-        self.preflight_button.setObjectName("preflightButton")
-        self.preflight_button.clicked.connect(self._start_live_preflight)
-        heading_layout.addWidget(self.preflight_button)
         layout.addLayout(heading_layout)
 
-        layout.addWidget(self._config_section_label("MACHINE"))
+        self.machine_card = QFrame()
+        self.machine_card.setObjectName("controlSectionCard")
+        machine_card_layout = QVBoxLayout(self.machine_card)
+        machine_card_layout.setContentsMargins(10, 8, 10, 10)
+        machine_card_layout.setSpacing(6)
+        machine_header = QHBoxLayout()
+        machine_header.setContentsMargins(0, 0, 0, 0)
+        self.machine_card_title = QLabel("Machine")
+        self.machine_card_title.setObjectName("controlSectionTitle")
+        machine_header.addWidget(self.machine_card_title)
+        machine_header.addStretch(1)
+        self.preflight_button = QPushButton("Check PVs")
+        self.preflight_button.setObjectName("preflightButton")
+        self.preflight_button.clicked.connect(self._start_live_preflight)
+        machine_header.addWidget(self.preflight_button)
+        machine_card_layout.addLayout(machine_header)
+
         machine_form = self._config_form()
 
         self.section_combo = QComboBox()
@@ -1169,12 +1214,12 @@ class MainWindow(QMainWindow):
             "Energy Step (Δp/p)",
             self.delta_spin,
         )
-        layout.addLayout(machine_form)
+        machine_card_layout.addLayout(machine_form)
 
         self.energy_step_summary = QLabel()
         self.energy_step_summary.setObjectName("energyStepSummary")
         self.energy_step_summary.setWordWrap(True)
-        layout.addWidget(self.energy_step_summary)
+        machine_card_layout.addWidget(self.energy_step_summary)
 
         self.energy_calibration_controls = QWidget()
         calibration_layout = QVBoxLayout(self.energy_calibration_controls)
@@ -1195,9 +1240,17 @@ class MainWindow(QMainWindow):
         self.calibration_button.clicked.connect(self._open_calibration_editor)
         calibration_actions.addWidget(self.calibration_button, 1)
         calibration_layout.addLayout(calibration_actions)
-        layout.addWidget(self.energy_calibration_controls)
+        machine_card_layout.addWidget(self.energy_calibration_controls)
+        layout.addWidget(self.machine_card)
 
-        layout.addWidget(self._config_section_label("MEASUREMENT"))
+        self.measurement_card = QFrame()
+        self.measurement_card.setObjectName("controlSectionCard")
+        measurement_card_layout = QVBoxLayout(self.measurement_card)
+        measurement_card_layout.setContentsMargins(10, 8, 10, 10)
+        measurement_card_layout.setSpacing(6)
+        self.measurement_card_title = QLabel("Measurement")
+        self.measurement_card_title.setObjectName("controlSectionTitle")
+        measurement_card_layout.addWidget(self.measurement_card_title)
         sampling_form = self._config_form()
 
         self.samples_per_step_spin = QSpinBox()
@@ -1216,45 +1269,6 @@ class MainWindow(QMainWindow):
         self.settle_time_spin.setToolTip("Wait after each machine setting change before reading BPMs.")
         self.settle_time_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(sampling_form, "Settle Time (s)", self.settle_time_spin)
-        layout.addLayout(sampling_form)
-
-        self.measurement_action_button = QPushButton("Measure Dispersion")
-        self.measurement_action_button.setObjectName("measurementActionButton")
-        self.measurement_action_button.setProperty("role", "control")
-        self.measurement_action_button.clicked.connect(
-            lambda: self._start_task("measure")
-        )
-        layout.addWidget(self.measurement_action_button)
-        self.measurement_status_label = QLabel("No valid dispersion measurement")
-        self.measurement_status_label.setObjectName("measurementStatus")
-        self.measurement_status_label.setProperty("muted", "true")
-        self.measurement_status_label.setWordWrap(True)
-        layout.addWidget(self.measurement_status_label)
-
-        self.advanced_button = QToolButton()
-        self.advanced_button.setObjectName("advancedSettingsButton")
-        self.advanced_button.setText("Advanced settings")
-        self.advanced_button.setCheckable(True)
-        self.advanced_button.setChecked(False)
-        self.advanced_button.setArrowType(Qt.RightArrow)
-        self.advanced_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.advanced_button.toggled.connect(self._toggle_advanced_settings)
-        layout.addWidget(self.advanced_button)
-
-        self.advanced_settings = QScrollArea()
-        self.advanced_settings.setObjectName("advancedSettingsArea")
-        self.advanced_settings.setWidgetResizable(True)
-        self.advanced_settings.setFrameShape(QFrame.NoFrame)
-        self.advanced_settings.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.advanced_settings_content = QWidget()
-        self.advanced_settings_content.setObjectName("advancedSettingsContent")
-        advanced_layout = QVBoxLayout(self.advanced_settings_content)
-        advanced_layout.setContentsMargins(0, 0, 5, 0)
-        advanced_layout.setSpacing(6)
-        self.advanced_settings.setWidget(self.advanced_settings_content)
-
-        advanced_layout.addWidget(self._config_section_label("SAMPLING DETAILS"))
-        sampling_details_form = self._config_form()
 
         self.sample_interval_spin = QDoubleSpinBox()
         self.sample_interval_spin.setDecimals(3)
@@ -1262,7 +1276,11 @@ class MainWindow(QMainWindow):
         self.sample_interval_spin.setSingleStep(0.05)
         self.sample_interval_spin.setToolTip("Wait between consecutive BPM samples; no wait follows the final sample.")
         self.sample_interval_spin.valueChanged.connect(self._workflow_input_changed)
-        self._add_form_row(sampling_details_form, "Sample Interval (s)", self.sample_interval_spin)
+        self._add_form_row(
+            sampling_form,
+            "Sample Interval (s)",
+            self.sample_interval_spin,
+        )
 
         self.final_samples_spin = QSpinBox()
         self.final_samples_spin.setRange(1, 200)
@@ -1272,13 +1290,34 @@ class MainWindow(QMainWindow):
         )
         self.final_samples_spin.valueChanged.connect(self._workflow_input_changed)
         self._add_form_row(
-            sampling_details_form,
+            sampling_form,
             "Verification Samples",
             self.final_samples_spin,
         )
-        advanced_layout.addLayout(sampling_details_form)
+        measurement_card_layout.addLayout(sampling_form)
 
-        advanced_layout.addWidget(self._config_section_label("CORRECTION STEP"))
+        self.measurement_action_button = QPushButton("Measure Dispersion")
+        self.measurement_action_button.setObjectName("measurementActionButton")
+        self.measurement_action_button.setProperty("role", "control")
+        self.measurement_action_button.clicked.connect(
+            lambda: self._start_task("measure")
+        )
+        measurement_card_layout.addWidget(self.measurement_action_button)
+        self.measurement_status_label = QLabel("No valid dispersion measurement")
+        self.measurement_status_label.setObjectName("measurementStatus")
+        self.measurement_status_label.setProperty("muted", "true")
+        self.measurement_status_label.setWordWrap(True)
+        measurement_card_layout.addWidget(self.measurement_status_label)
+        layout.addWidget(self.measurement_card)
+
+        self.correction_step_card = QFrame()
+        self.correction_step_card.setObjectName("controlSectionCard")
+        correction_card_layout = QVBoxLayout(self.correction_step_card)
+        correction_card_layout.setContentsMargins(10, 8, 10, 10)
+        correction_card_layout.setSpacing(6)
+        self.correction_step_card_title = QLabel("Correction Step")
+        self.correction_step_card_title.setObjectName("controlSectionTitle")
+        correction_card_layout.addWidget(self.correction_step_card_title)
         correction_step_form = self._config_form()
 
         self.gain_spin = QDoubleSpinBox()
@@ -1301,12 +1340,13 @@ class MainWindow(QMainWindow):
             "Max Step (%)",
             self.max_step_pct_spin,
         )
-        advanced_layout.addLayout(correction_step_form)
+        correction_card_layout.addLayout(correction_step_form)
+        layout.addWidget(self.correction_step_card)
 
         # Automatic-only settings are edited in the confirmation dialog. Keep
         # these child widgets as session/config state without duplicating their
         # controls in the left panel.
-        self.max_iter_spin = QSpinBox(self.advanced_settings_content)
+        self.max_iter_spin = QSpinBox(frame)
         self.max_iter_spin.setRange(1, 20)
         self.max_iter_spin.setToolTip(
             "Maximum automatic correction generations; the loop may stop earlier."
@@ -1319,7 +1359,7 @@ class MainWindow(QMainWindow):
         )
         self.max_iter_spin.hide()
 
-        self.response_update_combo = QComboBox(self.advanced_settings_content)
+        self.response_update_combo = QComboBox(frame)
         self.response_update_combo.addItems(["once", "every_iteration"])
         self.response_update_combo.currentTextChanged.connect(
             self._automatic_setting_changed
@@ -1337,9 +1377,6 @@ class MainWindow(QMainWindow):
             "accepted steps."
         )
         self.run_button.clicked.connect(self._confirm_automatic_correction)
-
-        self.advanced_settings.setVisible(False)
-        layout.addWidget(self.advanced_settings)
 
         self.operation_banner = QLabel()
         self.operation_banner.setObjectName("operationBanner")
@@ -1691,6 +1728,13 @@ class MainWindow(QMainWindow):
         model_layout.addWidget(self.model_info, 1)
         model_dialog_layout.addWidget(self.model_page, 1)
         model_dialog_actions = QHBoxLayout()
+        self.apply_design_k1_button = QPushButton("Apply Design K1…")
+        self.apply_design_k1_button.setProperty("role", "control")
+        self.apply_design_k1_button.setToolTip(
+            "Review and write the lattice design K1 values for the active correction quadrupoles."
+        )
+        self.apply_design_k1_button.clicked.connect(self._apply_design_k1)
+        model_dialog_actions.addWidget(self.apply_design_k1_button)
         model_dialog_actions.addStretch(1)
         self.close_model_details_button = QPushButton("Close")
         self.close_model_details_button.clicked.connect(self.model_dialog.close)
@@ -1809,6 +1853,7 @@ class MainWindow(QMainWindow):
         self.overview_title_label = QLabel("Dispersion Overview")
         self.overview_title_label.setObjectName("cardTitle")
         self.measurement_header_label = QLabel("Measurement")
+        self.measurement_header_label.setObjectName("overviewGroupLabel")
         self.measurement_source_combo = QComboBox()
         self.measurement_source_combo.setMinimumWidth(180)
         self.measurement_source_combo.setMaximumWidth(240)
@@ -1816,8 +1861,15 @@ class MainWindow(QMainWindow):
         self.measurement_source_combo.currentIndexChanged.connect(
             self._comparison_measurement_changed
         )
-        self.overlays_header_label = QLabel("Overlays")
-        self.overlays_header_label.setProperty("muted", "true")
+        self.plot_state_label = QLabel("No measured data")
+        self.plot_state_label.setObjectName("overviewStateLabel")
+        self.plot_state_label.setSizePolicy(
+            QSizePolicy.Ignored,
+            QSizePolicy.Preferred,
+        )
+        self.plot_state_label.hide()
+        self.overlays_header_label = QLabel("Model overlays")
+        self.overlays_header_label.setObjectName("overviewGroupLabel")
         self.show_design_model_checkbox = QCheckBox("Design model")
         self.show_design_model_checkbox.setChecked(False)
         self.show_design_model_checkbox.setToolTip(
@@ -1837,6 +1889,14 @@ class MainWindow(QMainWindow):
         self.show_snapshot_model_checkbox.toggled.connect(
             self._model_visibility_changed
         )
+        self.refresh_snapshot_button = QPushButton("Refresh")
+        self.refresh_snapshot_button.setObjectName("refreshSnapshotButton")
+        self.refresh_snapshot_button.setToolTip(
+            "Read the current quadrupole K1 PVs again and recalculate the snapshot curve."
+        )
+        self.refresh_snapshot_button.clicked.connect(
+            self._refresh_current_snapshot
+        )
         self.model_details_button = QPushButton("Model Details…")
         self.model_details_button.setObjectName("modelDetailsButton")
         self.model_details_button.clicked.connect(self._show_model_details)
@@ -1844,16 +1904,14 @@ class MainWindow(QMainWindow):
             self.overview_title_label,
             self.measurement_header_label,
             self.measurement_source_combo,
+            self.plot_state_label,
             self.overlays_header_label,
             self.show_design_model_checkbox,
             self.show_snapshot_model_checkbox,
+            self.refresh_snapshot_button,
             self.model_details_button,
         )
         overview_layout.addWidget(self.overview_controls)
-        self.plot_state_label = QLabel("No measured data")
-        self.plot_state_label.setObjectName("modelBoundaryLabel")
-        self.plot_state_label.hide()
-        overview_layout.addWidget(self.plot_state_label)
         self.dispersion_curve = DispersionCurveWidget()
         overview_layout.addWidget(self.dispersion_curve, 1)
 
@@ -2778,6 +2836,7 @@ class MainWindow(QMainWindow):
         self,
         task: str,
         recommendation: CorrectionRecommendation | None = None,
+        design_k1_request: DesignK1Request | None = None,
     ) -> bool:
         if self.worker is not None and self.worker.isRunning():
             return False
@@ -2817,7 +2876,12 @@ class MainWindow(QMainWindow):
             return False
         if task == "run":
             self._automatic_initial_measurement = None
-        self.worker = WorkflowWorker(task, config, recommendation)
+        self.worker = WorkflowWorker(
+            task,
+            config,
+            recommendation,
+            design_k1_request,
+        )
         self.worker.log.connect(self._append_log)
         self.worker.progress.connect(self._update_progress)
         self.worker.correction_measurement.connect(
@@ -2909,6 +2973,27 @@ class MainWindow(QMainWindow):
             )
             self.recommendation_prediction_table.setRowCount(0)
             self.recommendation_table.setRowCount(0)
+            if result.success:
+                self._refresh_snapshot_after_task = True
+        elif (
+            task == "design-k1"
+            and isinstance(result, dict)
+            and result.get("operation") == "design-k1"
+        ):
+            self._invalidate_staged_results(
+                "Design K1 targets were applied. Remeasure dispersion before correction."
+            )
+            self.last_live_preflight = None
+            self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
+            self._refresh_status("Design K1 applied")
+            self._append_log(
+                "Design K1 targets applied and verified: "
+                + ", ".join(
+                    f"{name}={value:.8g}"
+                    for name, value in result.get("final_values", {}).items()
+                )
+            )
+            self._refresh_snapshot_after_task = True
         if self.app_context is not None and isinstance(
             result,
             (DispersionMeasurement, ResponseMatrixResult, CorrectionResult),
@@ -2986,7 +3071,11 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Workflow", message)
 
     def _task_finished(self) -> None:
+        refresh_snapshot = self._refresh_snapshot_after_task
+        self._refresh_snapshot_after_task = False
         self._set_running(False, "")
+        if refresh_snapshot and self._model_analysis_available():
+            self._refresh_current_snapshot()
 
     def _start_model_response(
         self,
@@ -3032,6 +3121,13 @@ class MainWindow(QMainWindow):
         if not isinstance(result, ModelResponseResult):
             self._task_failed("Unexpected model comparison result")
             return
+        if result.model_source != "design":
+            self.current_snapshot_time = datetime.now()
+            refreshed_at = self.current_snapshot_time.strftime("%H:%M:%S")
+            self.show_snapshot_model_checkbox.setToolTip(
+                "Read the configured quadrupole K1 snapshot and calculate its model "
+                f"curve. Last refreshed at {refreshed_at}."
+            )
         self._show_model_response(result)
         self._refresh_status("Model comparison ready")
         self._append_log(
@@ -3205,6 +3301,7 @@ class MainWindow(QMainWindow):
                 "run": "Automatic correction running · current plot remains unchanged",
                 "model-response": "Analyzing model · measurement remains unchanged",
                 "preflight": "Checking connections · measurement remains unchanged",
+                "design-k1": "Applying design K1 · current plot remains unchanged",
             }
             self.plot_state_label.setText(messages.get(task, "Operation in progress"))
             self.plot_state_label.show()
@@ -3254,6 +3351,24 @@ class MainWindow(QMainWindow):
                 model_source="design",
                 focus_comparison=False,
             )
+
+    def _refresh_current_snapshot(self) -> None:
+        if not self._model_analysis_available():
+            return
+        if self.model_worker is not None and self.model_worker.isRunning():
+            return
+        self.show_snapshot_model_checkbox.blockSignals(True)
+        self.show_snapshot_model_checkbox.setChecked(True)
+        self.show_snapshot_model_checkbox.blockSignals(False)
+        self.dispersion_curve.set_model_visibility(
+            design=self.show_design_model_checkbox.isChecked(),
+            snapshot=True,
+        )
+        self._show_measurement_comparison(self._active_plot_measurement())
+        self._start_model_response(
+            model_source="live",
+            focus_comparison=False,
+        )
 
     def _show_measurement_comparison(
         self,
@@ -3460,6 +3575,108 @@ class MainWindow(QMainWindow):
                 self._automatic_correction_settings_tooltip()
             )
 
+    def _build_automatic_correction_dialog(
+        self,
+    ) -> tuple[QDialog, QSpinBox, QComboBox]:
+        dialog = QDialog(self)
+        dialog.setObjectName("automaticCorrectionDialog")
+        dialog.setWindowTitle("Automatic Correction")
+        dialog.setMinimumWidth(680)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
+
+        intro = QLabel(
+            "Runs repeated measure → solve → apply → verify cycles without "
+            "confirmation between accepted generations."
+        )
+        intro.setObjectName("automaticDialogIntro")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        settings_card = QFrame(dialog)
+        settings_card.setObjectName("automaticSettingsCard")
+        settings = QGridLayout(settings_card)
+        settings.setContentsMargins(14, 10, 14, 12)
+        settings.setHorizontalSpacing(10)
+        settings.setVerticalSpacing(8)
+        settings.setColumnStretch(1, 2)
+        settings.setColumnStretch(3, 1)
+        settings_title = QLabel("Run Settings")
+        settings_title.setObjectName("automaticDialogSectionTitle")
+        settings.addWidget(settings_title, 0, 0, 1, 4)
+
+        generations_label = QLabel("Maximum generations")
+        generations_label.setProperty("role", "field")
+        settings.addWidget(generations_label, 1, 0)
+        generations = QSpinBox(dialog)
+        generations.setObjectName("automaticGenerationsSpin")
+        generations.setRange(1, 20)
+        generations.setValue(self.max_iter_spin.value())
+        generations.setToolTip(
+            "Maximum correction generations; the loop may stop earlier."
+        )
+        settings.addWidget(generations, 1, 1)
+
+        gain_label = QLabel("Solver gain")
+        gain_label.setProperty("role", "field")
+        settings.addWidget(gain_label, 1, 2)
+        gain_value = QLabel(f"{self.gain_spin.value():.3g}")
+        gain_value.setObjectName("automaticReadOnlyValue")
+        settings.addWidget(gain_value, 1, 3)
+
+        response_label = QLabel("Q response strategy")
+        response_label.setProperty("role", "field")
+        settings.addWidget(response_label, 2, 0)
+        response_policy = QComboBox(dialog)
+        response_policy.setObjectName("automaticResponsePolicy")
+        response_policy.addItem(
+            "Every generation (recommended)",
+            "every_iteration",
+        )
+        response_policy.addItem(
+            "Once (reuse first response)",
+            "once",
+        )
+        policy_index = response_policy.findData(
+            self.response_update_combo.currentText()
+        )
+        response_policy.setCurrentIndex(max(0, policy_index))
+        settings.addWidget(response_policy, 2, 1)
+
+        max_step_label = QLabel("Maximum step")
+        max_step_label.setProperty("role", "field")
+        settings.addWidget(max_step_label, 2, 2)
+        max_step_value = QLabel(
+            f"{self.max_step_pct_spin.value():.3g}% of range"
+        )
+        max_step_value.setObjectName("automaticReadOnlyValue")
+        settings.addWidget(max_step_value, 2, 3)
+        layout.addWidget(settings_card)
+
+        safety = QLabel(
+            "Stops early if dispersion does not improve or a safety check fails; "
+            "rejected trial settings are restored automatically.\n"
+            "For a new machine configuration, validate one manual correction first."
+        )
+        safety.setObjectName("automaticSafetyNote")
+        safety.setWordWrap(True)
+        layout.addWidget(safety)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("automaticCancelButton")
+        cancel_button.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel_button)
+        start_button = QPushButton("Start Automatic Correction")
+        start_button.setObjectName("automaticStartButton")
+        start_button.setProperty("role", "control")
+        start_button.clicked.connect(dialog.accept)
+        buttons.addWidget(start_button)
+        layout.addLayout(buttons)
+        return dialog, generations, response_policy
+
     def _confirm_automatic_correction(self) -> None:
         block_reason = self._operation_block_reason()
         if block_reason is not None:
@@ -3480,82 +3697,13 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Automatic Correction",
-                "Click Check before starting automatic correction.",
+                "Click Check PVs before starting automatic correction.",
             )
             return
 
-        dialog = QDialog(self)
-        dialog.setObjectName("workflowDetailsDialog")
-        dialog.setWindowTitle("Automatic Correction")
-        dialog.setMinimumWidth(560)
-        layout = QVBoxLayout(dialog)
-
-        intro = QLabel(
-            "Automatic correction repeats measurement, solving, application, and "
-            "verification without confirmation between accepted generations."
+        dialog, generations, response_policy = (
+            self._build_automatic_correction_dialog()
         )
-        intro.setObjectName("workspaceIntro")
-        intro.setWordWrap(True)
-        layout.addWidget(intro)
-
-        safety = QLabel(
-            "The generation count is an upper limit. The loop stops early if a step "
-            "does not improve dispersion or a safety check fails. Unaccepted trial "
-            "steps are restored automatically."
-        )
-        safety.setWordWrap(True)
-        layout.addWidget(safety)
-
-        form = QFormLayout()
-        generations = QSpinBox(dialog)
-        generations.setRange(1, 20)
-        generations.setValue(self.max_iter_spin.value())
-        generations.setToolTip(
-            "Maximum accepted correction attempts; the loop may stop earlier."
-        )
-        form.addRow("Maximum generations", generations)
-
-        response_policy = QComboBox(dialog)
-        response_policy.addItem(
-            "Every generation — recommended for commissioning",
-            "every_iteration",
-        )
-        response_policy.addItem(
-            "Once — reuse the first measured response",
-            "once",
-        )
-        policy_index = response_policy.findData(
-            self.response_update_combo.currentText()
-        )
-        response_policy.setCurrentIndex(max(0, policy_index))
-        form.addRow("Q response measurement", response_policy)
-        form.addRow("Solver gain", QLabel(f"{self.gain_spin.value():.3g}", dialog))
-        form.addRow(
-            "Maximum step",
-            QLabel(
-                f"{self.max_step_pct_spin.value():.3g}% of configured range",
-                dialog,
-            ),
-        )
-        layout.addLayout(form)
-
-        note = QLabel(
-            "Use the manually reviewed single-generation workflow first when "
-            "commissioning a new machine configuration."
-        )
-        note.setWordWrap(True)
-        layout.addWidget(note)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
-            parent=dialog,
-        )
-        start_button = buttons.button(QDialogButtonBox.Ok)
-        start_button.setText("Start Automatic Correction")
-        start_button.setProperty("role", "control")
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
         if dialog.exec_() != QDialog.Accepted:
             return
 
@@ -3788,7 +3936,7 @@ class MainWindow(QMainWindow):
             return None
         if self.last_live_preflight is None or not self.last_live_preflight.ok:
             return (
-                "Click Check after the most recent configuration change "
+                "Click Check PVs after the most recent configuration change "
                 "before applying the recommendation."
             )
         required = set(recommendation.device_deltas)
@@ -3851,6 +3999,122 @@ class MainWindow(QMainWindow):
             ]
         )
         return "\n".join(lines)
+
+    def _design_k1_request(self) -> DesignK1Request:
+        response = self.dispersion_curve.result
+        if response is None or response.model_source == "design":
+            raise RuntimeError("Refresh Current snapshot before reviewing design K1 targets.")
+        baseline = {
+            name: float(response.selected_k1[name])
+            for name in response.device_names
+        }
+        targets = {
+            name: float(response.design_k1[name])
+            for name in response.device_names
+        }
+        limits: dict[str, float] = {}
+        for knob in self.config.knobs:
+            for device, weight in knob.devices.items():
+                weighted_limit = abs(float(weight)) * float(knob.limit)
+                if weighted_limit <= 0:
+                    continue
+                limits[device] = min(
+                    limits.get(device, weighted_limit),
+                    weighted_limit,
+                )
+        missing = sorted(set(targets) - set(limits))
+        if missing:
+            raise RuntimeError(
+                "No configured K1 change limit for: " + ", ".join(missing)
+            )
+        return DesignK1Request(
+            baseline_values=baseline,
+            target_values=targets,
+            max_changes={name: limits[name] for name in targets},
+        )
+
+    def _design_k1_block_reason(self) -> str | None:
+        if self.config.section.model_only:
+            return "The active backend is model-only and cannot write design K1 targets."
+        if self.config.backend.type.lower() != "epics":
+            return "Apply Design K1 is available only for an online EPICS backend."
+        if self.config.backend.mode != "write_enabled":
+            return "The active backend is read-only."
+        if self._knob_control_unit() != "K1 [1/m²]":
+            return "Apply Design K1 requires K1-controlled quadrupole channels."
+        operation_reason = self._operation_block_reason()
+        if operation_reason is not None:
+            return operation_reason
+        if self.last_live_preflight is None or not self.last_live_preflight.ok:
+            return "Click Check PVs before applying design K1 targets."
+        try:
+            request = self._design_k1_request()
+        except Exception as exc:
+            return str(exc)
+        changes = {
+            name: request.target_values[name] - request.baseline_values[name]
+            for name in request.target_values
+        }
+        if all(abs(change) <= 1.0e-15 for change in changes.values()):
+            return "The selected quadrupoles are already at their design K1 values."
+        for name, change in changes.items():
+            if abs(change) > request.max_changes[name] + 1.0e-15:
+                return (
+                    f"{name} requires ΔK1={change:+.8g}, exceeding the configured "
+                    f"limit ±{request.max_changes[name]:.8g}."
+                )
+        return None
+
+    def _apply_design_k1(self) -> None:
+        block_reason = self._design_k1_block_reason()
+        if block_reason is not None:
+            QMessageBox.warning(self, "Apply Design K1", block_reason)
+            return
+        request = self._design_k1_request()
+        pv_map = self.config.backend.options.get("pv_map", {})
+        quadrupoles = (
+            pv_map.get("quadrupoles", {}) if isinstance(pv_map, dict) else {}
+        )
+        lines = [
+            "Apply lattice design K1 to the active dispersion-correction quadrupoles?",
+            "",
+        ]
+        for name, target in request.target_values.items():
+            current = request.baseline_values[name]
+            change = target - current
+            lines.append(
+                f"  {name}: {current:.8g} → {target:.8g} 1/m² "
+                f"(ΔK1 {change:+.8g}, limit ±{request.max_changes[name]:.8g})"
+            )
+            mapping = quadrupoles.get(name, {})
+            if isinstance(mapping, dict):
+                pv = mapping.get("K1_set") or mapping.get("K1")
+                if pv:
+                    lines.append(f"    PV: {pv}")
+        lines.extend(
+            [
+                "",
+                "Connections and reviewed baselines will be checked again before writing.",
+                "Any write, readback, cancellation, or orbit-safety failure restores "
+                "the complete pre-write snapshot.",
+                "After success, Current snapshot is recalculated automatically.",
+                "",
+                "Proceed?",
+            ]
+        )
+        answer = QMessageBox.question(
+            self,
+            "Confirm Design K1 Targets",
+            "\n".join(lines),
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self._start_task(
+            "design-k1",
+            design_k1_request=request,
+        )
 
     def _show_model_response(self, response: ModelResponseResult) -> None:
         self.model_empty_label.setVisible(False)
@@ -3977,7 +4241,7 @@ class MainWindow(QMainWindow):
                 None,
                 "Manual Correction",
                 "Connection check required",
-                "Click Check in the Machine Profile header before "
+                "Click Check PVs in the Machine Profile header before "
                 "starting an online measurement.",
             )
         if self.latest_measurement is None:
@@ -4220,7 +4484,7 @@ class MainWindow(QMainWindow):
         elif block_reason is not None:
             tooltip = block_reason
         elif not connection_ready:
-            tooltip = "Click Check before measuring dispersion."
+            tooltip = "Click Check PVs before measuring dispersion."
         else:
             tooltip = (
                 "Run the configured ±energy scan and update the persistent "
@@ -4278,6 +4542,14 @@ class MainWindow(QMainWindow):
         self.model_response_button.setEnabled(
             not running and self._model_analysis_available()
         )
+        self.refresh_snapshot_button.setVisible(
+            self._model_analysis_available() and self.app_context is not None
+        )
+        self.refresh_snapshot_button.setEnabled(
+            not running
+            and self._model_analysis_available()
+            and self.app_context is not None
+        )
         self.model_source_combo.setEnabled(not running)
         self.import_measurement_button.setEnabled(not running)
         self.measurement_source_combo.setEnabled(not running)
@@ -4286,6 +4558,21 @@ class MainWindow(QMainWindow):
         )
         self.show_snapshot_model_checkbox.setEnabled(
             not running and self._model_analysis_available()
+        )
+        design_k1_reason = (
+            "Another operation is running."
+            if running
+            else self._design_k1_block_reason()
+        )
+        self.apply_design_k1_button.setEnabled(
+            not running and design_k1_reason is None
+        )
+        self.apply_design_k1_button.setToolTip(
+            design_k1_reason
+            or (
+                "Review and write lattice design K1 values for the active "
+                "correction quadrupoles."
+            )
         )
         self.clear_measurement_button.setEnabled(
             not running and self.imported_dispersion is not None
@@ -4338,7 +4625,7 @@ class MainWindow(QMainWindow):
             automatic_tooltip = block_reason
         elif not automatic_connection_ready:
             automatic_tooltip = (
-                "Click Check before starting automatic correction."
+                "Click Check PVs before starting automatic correction."
             )
         elif self.latest_measurement is None:
             automatic_tooltip = (
@@ -4378,7 +4665,6 @@ class MainWindow(QMainWindow):
                 else "Connection checks are only used by online EPICS workflows."
             )
         )
-        self.advanced_button.setEnabled(not running)
         abortable = running and task != "preflight"
         self.abort_button.setEnabled(abortable)
         self.abort_button.setVisible(abortable)
@@ -4424,10 +4710,6 @@ class MainWindow(QMainWindow):
             progress_text = " · ".join(parts)
             self.run_button.setText(progress_text)
             self.run_button.setToolTip(f"{stage} · {percent}%")
-
-    def _toggle_advanced_settings(self, checked: bool) -> None:
-        self.advanced_settings.setVisible(checked)
-        self.advanced_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
 
     def _energy_step_changed(self, _value: float) -> None:
         self._update_energy_step_summary()
@@ -4802,6 +5084,7 @@ class MainWindow(QMainWindow):
                 "response": "the Q-response scan snapshot",
                 "apply": "the pre-apply machine snapshot",
                 "run": "the automatic-correction start snapshot",
+                "design-k1": "the pre-write quadrupole snapshot",
             }.get(self._active_task, "the operation snapshot")
             self._append_log(
                 f"Abort requested; stopping at a safe point and restoring "

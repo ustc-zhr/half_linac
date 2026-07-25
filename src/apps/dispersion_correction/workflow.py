@@ -88,7 +88,7 @@ class AchromatWorkflow:
         delta = momentum_delta(
             self.config.energy_knob.delta,
         )
-        energy0 = self.machine.get_energy_delta()
+        energy0 = self.machine.get_energy_setpoint_delta()
         try:
             self._check_cancelled()
             if report_progress:
@@ -244,6 +244,100 @@ class AchromatWorkflow:
             return self._apply_recommendation(recommendation)
         finally:
             self._progress_depth -= 1
+
+    def apply_design_targets(
+        self,
+        target_values: Mapping[str, float],
+        *,
+        reviewed_baseline: Mapping[str, float],
+        max_changes: Mapping[str, float],
+    ) -> dict[str, object]:
+        """Apply reviewed lattice-design K1 targets with rollback on failure."""
+
+        self._require_write_ready()
+        targets = {str(name): float(value) for name, value in target_values.items()}
+        baseline = {
+            str(name): float(value)
+            for name, value in reviewed_baseline.items()
+        }
+        limits = {str(name): float(value) for name, value in max_changes.items()}
+        required = set(targets)
+        if not required:
+            raise ValueError("At least one design K1 target is required")
+        if set(baseline) != required or set(limits) != required:
+            raise ValueError(
+                "Design K1 review requires matching baseline, target, and limit devices"
+            )
+        if not all(
+            np.isfinite(value)
+            for value in (*targets.values(), *baseline.values())
+        ):
+            raise ValueError("Design K1 baseline and targets must be finite")
+        if not all(
+            np.isfinite(value) and value > 0
+            for value in limits.values()
+        ):
+            raise ValueError("Design K1 change limits must be finite and positive")
+        for device in targets:
+            change = abs(targets[device] - baseline[device])
+            if change > limits[device] + 1.0e-15:
+                raise ValueError(
+                    f"{device} design change {change:g} exceeds configured "
+                    f"limit {limits[device]:g}"
+                )
+
+        initial_state = self.machine.snapshot()
+        self._validate_reviewed_device_baseline(
+            initial_state,
+            baseline,
+            operation="Design K1",
+        )
+        baseline_orbit = self._average_bpm(
+            self.config.measurement.samples_per_step
+        )
+        target_writer = getattr(self.machine, "set_device_targets", None)
+        if not callable(target_writer):
+            raise RuntimeError("The selected backend cannot write explicit K1 targets")
+
+        try:
+            self._check_cancelled()
+            self._progress("Applying design K1 targets", 1, 3)
+            target_writer(targets)
+            self.machine.wait_stable()
+            self._check_cancelled()
+            if not self.machine.is_safe():
+                raise RuntimeError("Machine unsafe after applying design K1 targets")
+            safety = evaluate_safety(
+                self.config.safety,
+                baseline_orbit,
+                self._average_bpm(self.config.measurement.samples_per_step),
+            )
+            if not safety.ok:
+                raise RuntimeError(safety.reason)
+            final_state = self.machine.snapshot()
+        except Exception as exc:
+            try:
+                self.machine.restore(initial_state)
+                self.machine.wait_stable()
+            except Exception as restore_exc:
+                raise RuntimeError(
+                    f"{exc}; design K1 rollback failed: {restore_exc}"
+                ) from exc
+            raise RuntimeError(
+                f"{exc}; pre-write quadrupole setpoints restored"
+            ) from exc
+
+        self._progress("Design K1 applied", 3, 3)
+        return {
+            "operation": "design-k1",
+            "baseline_values": baseline,
+            "target_values": targets,
+            "final_values": {
+                name: float(final_state.device_values[name])
+                for name in targets
+            },
+            "max_orbit_change_mm": safety.max_orbit_change_mm,
+        }
 
     def _apply_recommendation(
         self,
@@ -772,15 +866,28 @@ class AchromatWorkflow:
             raise RuntimeError(
                 "Reviewed correction does not contain a target for every quadrupole"
             )
+        self._validate_reviewed_device_baseline(
+            snapshot,
+            recommendation.baseline_device_values,
+            operation="Reviewed correction",
+        )
+
+    def _validate_reviewed_device_baseline(
+        self,
+        snapshot,
+        baseline: Mapping[str, float],
+        *,
+        operation: str,
+    ) -> None:
         tolerance_reader = getattr(
             self.machine,
             "quadrupole_readback_tolerance",
             None,
         )
-        for device, reviewed_value in recommendation.baseline_device_values.items():
+        for device, reviewed_value in baseline.items():
             if device not in snapshot.device_values:
                 raise RuntimeError(
-                    f"Reviewed quadrupole baseline is missing current readback for {device}"
+                    f"{operation} baseline is missing current readback for {device}"
                 )
             tolerance = (
                 float(tolerance_reader(device))
@@ -791,7 +898,7 @@ class AchromatWorkflow:
             if abs(actual - float(reviewed_value)) > tolerance:
                 raise RuntimeError(
                     f"{device} changed after review: reviewed={reviewed_value:g}, "
-                    f"current={actual:g}, tolerance={tolerance:g}; recompute recommendation"
+                    f"current={actual:g}, tolerance={tolerance:g}; refresh and review again"
                 )
 
     def _restore_after_abort(

@@ -106,6 +106,11 @@ class EpicsMachine(MachineInterface):
         scale = self._energy_actuator_per_delta()
         return actuator_value / scale
 
+    def get_energy_setpoint_delta(self) -> float:
+        actuator_value = self._read_energy_setpoint()
+        scale = self._energy_actuator_per_delta()
+        return actuator_value / scale
+
     def set_energy_delta(self, value: float) -> None:
         self._require_write_enabled()
         item = self._mapping("energy_knob")
@@ -168,7 +173,8 @@ class EpicsMachine(MachineInterface):
         self._write_quadrupole_targets(targets)
 
     def snapshot(self) -> MachineSnapshot:
-        energy = self.get_energy_delta()
+        energy_setpoint = self.get_energy_setpoint_delta()
+        energy_readback = self.get_energy_delta()
         device_values = self.read_quadrupole_readbacks()
         if self._device_baseline is None:
             self._device_baseline = dict(device_values)
@@ -176,13 +182,14 @@ class EpicsMachine(MachineInterface):
         charge = self._optional_caget_float(diagnostics.get("charge")) if isinstance(diagnostics, dict) else None
         loss = self._optional_caget_float(diagnostics.get("loss")) if isinstance(diagnostics, dict) else None
         return MachineSnapshot(
-            energy_delta=energy,
+            energy_delta=energy_setpoint,
             device_values=device_values,
             charge=charge,
             loss=loss,
             metadata={
                 "backend": self.backend_name,
                 "mode": self.mode,
+                "energy_readback_delta": energy_readback,
                 "quadrupole_readbacks": device_values,
                 "knob_values": dict(self._knob_values),
             },
@@ -273,6 +280,16 @@ class EpicsMachine(MachineInterface):
         value = self._caget_float(str(pv))
         if not np.isfinite(value):
             raise RuntimeError(f"Energy knob readback is unavailable: {pv}")
+        return value
+
+    def _read_energy_setpoint(self) -> float:
+        item = self._mapping("energy_knob")
+        pv = item.get("set") or item.get("phase_set")
+        if not pv:
+            raise ValueError("pv_map.energy_knob requires a setpoint PV")
+        value = self._caget_float(str(pv))
+        if not np.isfinite(value):
+            raise RuntimeError(f"Energy knob setpoint is unavailable: {pv}")
         return value
 
     def _energy_actuator_per_delta(self) -> float:

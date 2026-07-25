@@ -39,6 +39,32 @@ class RecordingUnsafeMachine(OfflineMachine):
         super().restore(snapshot)
 
 
+class SplitEnergyBaselineMachine(OfflineMachine):
+    def __init__(self, config) -> None:
+        super().__init__(config)
+        self._energy_delta = 0.01
+        self.energy_targets = []
+
+    def get_energy_delta(self) -> float:
+        return 0.0099
+
+    def set_energy_delta(self, value: float) -> None:
+        self.energy_targets.append(float(value))
+        super().set_energy_delta(value)
+
+
+def test_dispersion_scan_centers_and_restores_on_energy_setpoint() -> None:
+    config = load_config(CONFIG_PATH)
+    machine = SplitEnergyBaselineMachine(config)
+
+    AchromatWorkflow(config, machine=machine).measure_dispersion(samples=1)
+
+    delta = config.energy_knob.delta
+    assert machine.energy_targets == pytest.approx(
+        [0.01 + delta, 0.01 - delta, 0.01]
+    )
+
+
 def test_offline_workflow_improves_dispersion_by_success_threshold() -> None:
     config = load_config(CONFIG_PATH)
     result = AchromatWorkflow(config).run()

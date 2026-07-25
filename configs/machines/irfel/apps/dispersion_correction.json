@@ -73,9 +73,9 @@
     "name": "MODULATOR_HV1",
     "actuator": "modulator_voltage",
     "actuator_unit": "kV",
-    "delta": 0.0001,
+    "delta": 0.004,
     "calibration": {},
-    "readback_tolerance": 0.1,
+    "readback_tolerance": 0.01,
     "element": "MODULATOR_HV1",
     "set_channel": "voltage_set",
     "readback_channel": "voltage_readback"

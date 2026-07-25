@@ -9,7 +9,8 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
-    QFormLayout,
+    QFrame,
+    QGridLayout,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -140,48 +141,97 @@ class CalibrationEditorDialog(QDialog):
         self.setObjectName("energyCalibrationDialog")
         self.setStyleSheet(build_stylesheet(self.theme_name))
         self.setWindowTitle("Energy Knob Calibration Editor")
-        self.resize(1000, 760)
+        self.resize(1080, 860)
         layout = QVBoxLayout(self)
-        notice = QLabel(
-            "Commissioning tool: editing and fitting do not write PVs. Saving creates "
-            "a runtime draft; activation affects only the current GUI session and "
-            "does not modify the machine profile."
-        )
-        notice.setWordWrap(True)
-        notice.setObjectName("modelSafetyNotice")
-        layout.addWidget(notice)
+        layout.setContentsMargins(14, 14, 14, 12)
+        layout.setSpacing(10)
 
-        metadata = QFormLayout()
-        metadata.addRow("Actuator", QLabel(f"{actuator} ({actuator_unit})"))
+        self.settings_card = QFrame()
+        self.settings_card.setObjectName("calibrationSettingsCard")
+        settings = QGridLayout(self.settings_card)
+        settings.setContentsMargins(14, 10, 14, 12)
+        settings.setHorizontalSpacing(12)
+        settings.setVerticalSpacing(7)
+        settings.setColumnStretch(1, 1)
+        settings.setColumnStretch(3, 1)
+        settings_title = QLabel("Calibration Setup")
+        settings_title.setObjectName("calibrationSectionTitle")
+        settings.addWidget(settings_title, 0, 0, 1, 4)
+
+        actuator_label = QLabel("Actuator")
+        actuator_label.setProperty("role", "field")
+        settings.addWidget(actuator_label, 1, 0)
+        self.actuator_value_label = QLabel(f"{actuator} ({actuator_unit})")
+        self.actuator_value_label.setObjectName("calibrationActuatorValue")
+        settings.addWidget(self.actuator_value_label, 1, 1)
+
+        input_mode_label = QLabel("Input mode")
+        input_mode_label.setProperty("role", "field")
+        settings.addWidget(input_mode_label, 1, 2)
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("Measured energy", "measured_energy")
         self.mode_combo.addItem("Direct Δp/p", "direct_delta")
         self.mode_combo.currentIndexChanged.connect(self._mode_changed)
-        metadata.addRow("Input mode", self.mode_combo)
+        settings.addWidget(self.mode_combo, 1, 3)
+
+        baseline_label = QLabel(f"Baseline actuator ({actuator_unit})")
+        baseline_label.setProperty("role", "field")
+        settings.addWidget(baseline_label, 2, 0)
         self.baseline_actuator_spin = self._wide_spin()
         self.baseline_actuator_spin.valueChanged.connect(self._refresh_analysis)
-        metadata.addRow(f"Baseline actuator ({actuator_unit})", self.baseline_actuator_spin)
+        settings.addWidget(self.baseline_actuator_spin, 2, 1)
+
+        reference_label = QLabel("Reference energy E0")
+        reference_label.setProperty("role", "field")
+        settings.addWidget(reference_label, 2, 2)
+        self.reference_energy_row = QWidget(self.settings_card)
+        reference_layout = QHBoxLayout(self.reference_energy_row)
+        reference_layout.setContentsMargins(0, 0, 0, 0)
+        reference_layout.setSpacing(6)
         self.reference_energy_spin = self._wide_spin()
         self.reference_energy_spin.setRange(1.0e-9, 1.0e9)
         self.reference_energy_spin.setValue(1.0)
         self.reference_energy_spin.valueChanged.connect(self._refresh_analysis)
-        metadata.addRow(
-            "Reference energy E0 (table unit)",
-            self.reference_energy_spin,
-        )
+        reference_layout.addWidget(self.reference_energy_spin, 1)
         self.energy_unit_combo = QComboBox()
         self.energy_unit_combo.setEditable(True)
         self.energy_unit_combo.addItems(["MeV", "GeV"])
+        self.energy_unit_combo.setMinimumWidth(88)
+        self.energy_unit_combo.setMaximumWidth(110)
         self.energy_unit_combo.currentTextChanged.connect(self._energy_unit_changed)
-        metadata.addRow("Energy unit", self.energy_unit_combo)
+        reference_layout.addWidget(self.energy_unit_combo)
+        settings.addWidget(self.reference_energy_row, 2, 3)
+
+        note_label = QLabel("Draft note / source")
+        note_label.setProperty("role", "field")
+        settings.addWidget(note_label, 3, 0)
         self.note_edit = QLineEdit()
         self.note_edit.setPlaceholderText(
             "Measurement source, operating point, operator, or commissioning note"
         )
-        metadata.addRow("Draft note / source", self.note_edit)
-        layout.addLayout(metadata)
+        settings.addWidget(self.note_edit, 3, 1, 1, 3)
+        layout.addWidget(self.settings_card)
+
+        points_header = QHBoxLayout()
+        points_title = QLabel("Calibration Points")
+        points_title.setObjectName("calibrationSectionTitle")
+        points_header.addWidget(points_title)
+        self.table_hint_label = QLabel(
+            "Paste columns: actuator, measurement, uncertainty, note"
+        )
+        self.table_hint_label.setObjectName("calibrationTableHint")
+        points_header.addWidget(self.table_hint_label)
+        points_header.addStretch(1)
+        self.load_button = QPushButton("Load Draft")
+        self.load_button.clicked.connect(self._load_latest)
+        points_header.addWidget(self.load_button)
+        self.save_button = QPushButton("Save Draft")
+        self.save_button.clicked.connect(self._save_draft)
+        points_header.addWidget(self.save_button)
+        layout.addLayout(points_header)
 
         self.table = QTableWidget(0, 6)
+        self.table.setObjectName("calibrationPointsTable")
         self.table.setHorizontalHeaderLabels(
             [
                 "Use",
@@ -199,6 +249,11 @@ class CalibrationEditorDialog(QDialog):
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.Stretch)
+        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.verticalHeader().setMinimumSectionSize(36)
+        self.table.setMinimumHeight(
+            self.table.horizontalHeader().sizeHint().height() + 5 * 36 + 4
+        )
         self.table.cellChanged.connect(self._refresh_analysis)
         layout.addWidget(self.table, 3)
 
@@ -209,26 +264,51 @@ class CalibrationEditorDialog(QDialog):
         self.delete_button = QPushButton("Delete Row")
         self.delete_button.clicked.connect(self._delete_rows)
         table_actions.addWidget(self.delete_button)
-        self.paste_button = QPushButton("Paste from Clipboard")
+        self.paste_button = QPushButton("Paste Data")
         self.paste_button.clicked.connect(self._paste_clipboard)
         table_actions.addWidget(self.paste_button)
         table_actions.addStretch(1)
-        self.load_button = QPushButton("Load Latest Draft")
-        self.load_button.clicked.connect(self._load_latest)
-        table_actions.addWidget(self.load_button)
-        self.save_button = QPushButton("Save Draft")
-        self.save_button.clicked.connect(self._save_draft)
-        table_actions.addWidget(self.save_button)
         layout.addLayout(table_actions)
 
+        self.analysis_card = QFrame()
+        self.analysis_card.setObjectName("calibrationAnalysisCard")
+        analysis_layout = QHBoxLayout(self.analysis_card)
+        analysis_layout.setContentsMargins(12, 10, 12, 12)
+        analysis_layout.setSpacing(12)
+        plot_panel = QWidget(self.analysis_card)
+        plot_layout = QVBoxLayout(plot_panel)
+        plot_layout.setContentsMargins(0, 0, 0, 0)
+        plot_layout.setSpacing(6)
+        plot_title = QLabel("Fit Preview")
+        plot_title.setObjectName("calibrationSectionTitle")
+        plot_layout.addWidget(plot_title)
         self.plot = CalibrationPlotWidget(self.theme_name)
-        layout.addWidget(self.plot, 1)
+        self.plot.setMinimumHeight(170)
+        plot_layout.addWidget(self.plot, 1)
+        analysis_layout.addWidget(plot_panel, 2)
+
+        quality_panel = QWidget(self.analysis_card)
+        quality_layout = QVBoxLayout(quality_panel)
+        quality_layout.setContentsMargins(0, 0, 0, 0)
+        quality_layout.setSpacing(6)
+        quality_title = QLabel("Quality")
+        quality_title.setObjectName("calibrationSectionTitle")
+        quality_layout.addWidget(quality_title)
         self.preview = QPlainTextEdit()
+        self.preview.setObjectName("calibrationQualityPreview")
         self.preview.setReadOnly(True)
-        self.preview.setMaximumHeight(155)
-        layout.addWidget(self.preview)
+        self.preview.setMinimumWidth(310)
+        self.preview.setMaximumWidth(380)
+        quality_layout.addWidget(self.preview, 1)
+        analysis_layout.addWidget(quality_panel, 1)
+        layout.addWidget(self.analysis_card, 1)
 
         bottom = QHBoxLayout()
+        session_hint = QLabel(
+            "Activation applies only to this GUI session and does not write PVs."
+        )
+        session_hint.setObjectName("calibrationSessionHint")
+        bottom.addWidget(session_hint)
         bottom.addStretch(1)
         self.close_button = QPushButton("Close")
         self.close_button.clicked.connect(self.reject)
