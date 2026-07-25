@@ -110,7 +110,7 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             "NOT READY",
         )
         self.assertEqual(
-            self.window.status_strip.items["MOTION VERIFIED"].value_label.text(),
+            self.window.status_strip.items["READBACK VERIFIED"].value_label.text(),
             "FAILED",
         )
         self.assertIn("readback mismatch", self.window.log_view.toPlainText())

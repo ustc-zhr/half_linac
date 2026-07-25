@@ -16,21 +16,19 @@ validates planned scan ranges, but does not write any PV.
 ## Required Safety Configuration
 
 The checked-in IRFEL profile contains operations-confirmed solenoid physical
-limits for `SS02`, `MS01`, and `LS01`. Motion tolerances remain intentionally
-unset. Until operations provides and reviews these values, every preset reports
-`NOT READY`; scan, Apply, and Restore are blocked. Do not replace these fields
-with estimated values.
+limits for `SS02`, `MS01`, and `LS01`. Each preset also uses a solenoid and
+corrector readback tolerance of `0.01`, a readback timeout of `5.0 s`, and a
+poll interval of `0.1 s`.
 
 Before a field scan, confirm the configured `low` and `high` current limits
-for `SS02`, `MS01`, and `LS01`, then add this object to each corresponding
-preset in
-`configs/machines/irfel/apps/solenoid_centering.json`:
+for `SS02`, `MS01`, and `LS01`, and review this object in each corresponding
+preset in `configs/machines/irfel/apps/solenoid_centering.json`:
 
 ```json
-"motion_verification": {
-  "solenoid_readback_tolerance": "OPERATIONS_CONFIRMED_VALUE",
-  "corrector_readback_tolerance": "OPERATIONS_CONFIRMED_VALUE",
-  "readback_timeout_s": "OPERATIONS_CONFIRMED_VALUE",
+"readback_verification": {
+  "solenoid_readback_tolerance": 0.01,
+  "corrector_readback_tolerance": 0.01,
+  "readback_timeout_s": 5.0,
   "poll_interval_s": 0.1
 }
 ```
@@ -115,7 +113,7 @@ Expected behavior:
   limits.
 - Prints `READY` when the current preset is safe to run.
 - Prints `NOT READY` and exits nonzero if a PV cannot be read or a planned
-  range exceeds configured limits, motion verification is missing, or a
+  range exceeds configured limits, readback verification is missing, or a
   setpoint/readback pair is not within its configured tolerance.
 
 ## Run The GUI

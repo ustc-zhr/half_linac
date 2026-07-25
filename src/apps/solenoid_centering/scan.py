@@ -125,7 +125,7 @@ class CenteringResult:
     preflight: dict[str, Any] | None = None
     selected_devices: dict[str, str] | None = None
     scan_config: dict[str, Any] | None = None
-    schema_version: int = 2
+    schema_version: int = 3
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -157,7 +157,7 @@ class RangeCheck:
 
 
 @dataclass(frozen=True)
-class MotionCheck:
+class ReadbackCheck:
     label: str
     element_id: str
     setpoint_pv: str
@@ -180,7 +180,7 @@ class MotionCheck:
         if self.readback_pv is None:
             return "readback PV unavailable"
         if self.readback is None or self.tolerance is None:
-            return "motion verification is not configured"
+            return "readback verification is not configured"
         return (
             f"set={self.setpoint:g}, readback={self.readback:g}, "
             f"|delta|={abs(self.setpoint - self.readback):g}, tolerance={self.tolerance:g}"
@@ -211,15 +211,15 @@ class PreflightReport:
     bpm_samples: int
     estimated_duration_s: float
     range_checks: tuple[RangeCheck, ...]
-    motion_checks: tuple[MotionCheck, ...]
-    motion_verification_configured: bool
+    readback_checks: tuple[ReadbackCheck, ...]
+    readback_verification_configured: bool
 
     @property
     def is_ready(self) -> bool:
         return (
-            self.motion_verification_configured
+            self.readback_verification_configured
             and all(item.is_ok for item in self.range_checks)
-            and all(item.is_ok for item in self.motion_checks)
+            and all(item.is_ok for item in self.readback_checks)
         )
 
     def as_text(self) -> str:
@@ -260,7 +260,7 @@ class PreflightReport:
             else:
                 planned = f"planned [{item.planned_low:g}, {item.planned_high:g}]"
             lines.append(f"{status} {item.label} {item.element_id}: {planned}, limit {limit}")
-        for item in self.motion_checks:
+        for item in self.readback_checks:
             status = "OK" if item.is_ok else "NOT VERIFIED"
             lines.append(f"{status} {item.label} {item.element_id}: {item.detail}")
         return "\n".join(lines)
@@ -665,8 +665,8 @@ class SolenoidCenteringScanner:
         motion = self.preset.motion_verification
         solenoid_tolerance = motion.solenoid_readback_tolerance if motion else None
         corrector_tolerance = motion.corrector_readback_tolerance if motion else None
-        motion_checks = (
-            MotionCheck(
+        readback_checks = (
+            ReadbackCheck(
                 "solenoid",
                 solenoid_element.id,
                 self.solenoid_pv,
@@ -675,7 +675,7 @@ class SolenoidCenteringScanner:
                 solenoid_readback,
                 solenoid_tolerance,
             ),
-            MotionCheck(
+            ReadbackCheck(
                 "HCOR",
                 self.preset.hcorr,
                 self.hcorr_pv,
@@ -684,7 +684,7 @@ class SolenoidCenteringScanner:
                 hcorr_readback,
                 corrector_tolerance,
             ),
-            MotionCheck(
+            ReadbackCheck(
                 "VCOR",
                 self.preset.vcorr,
                 self.vcorr_pv,
@@ -718,8 +718,8 @@ class SolenoidCenteringScanner:
             bpm_samples=self.preset.samples_per_point,
             estimated_duration_s=self._estimated_duration_s(),
             range_checks=tuple(range_checks),
-            motion_checks=motion_checks,
-            motion_verification_configured=motion is not None,
+            readback_checks=readback_checks,
+            readback_verification_configured=motion is not None,
         )
 
     def _check_single_value_limit(self, element_id: str, value: float, pv_name: str) -> None:
@@ -814,14 +814,14 @@ class SolenoidCenteringScanner:
     def _solenoid_tolerance(self) -> float:
         if self.preset.motion_verification is None:
             raise MotionVerificationError(
-                f"Preset {self.preset.id!r} has no motion_verification configuration."
+                f"Preset {self.preset.id!r} has no readback_verification configuration."
             )
         return self.preset.motion_verification.solenoid_readback_tolerance
 
     def _corrector_tolerance(self) -> float:
         if self.preset.motion_verification is None:
             raise MotionVerificationError(
-                f"Preset {self.preset.id!r} has no motion_verification configuration."
+                f"Preset {self.preset.id!r} has no readback_verification configuration."
             )
         return self.preset.motion_verification.corrector_readback_tolerance
 
@@ -841,7 +841,7 @@ class SolenoidCenteringScanner:
         motion = self.preset.motion_verification
         if motion is None:
             raise MotionVerificationError(
-                f"Preset {self.preset.id!r} has no motion_verification configuration."
+                f"Preset {self.preset.id!r} has no readback_verification configuration."
             )
         deadline = time.monotonic() + motion.readback_timeout_s
         last_readback: float | None = None
@@ -876,7 +876,7 @@ class SolenoidCenteringScanner:
             readback = self.io.read(readback_pv)
             if abs(setpoint - readback) > tolerance:
                 raise StateDriftError(
-                    f"{label} is not motion-verified: set={setpoint:g}, readback={readback:g}."
+                    f"{label} is not readback-verified: set={setpoint:g}, readback={readback:g}."
                 )
             if abs(setpoint - expected) > tolerance:
                 raise StateDriftError(
@@ -1038,7 +1038,7 @@ class SolenoidCenteringScanner:
             "sample_interval_s": self.preset.sample_interval_s,
             "max_rounds": self.preset.max_rounds,
             "minimum_relative_score_improvement": self.preset.minimum_relative_score_improvement,
-            "motion_verification": (
+            "readback_verification": (
                 asdict(self.preset.motion_verification)
                 if self.preset.motion_verification is not None
                 else None

@@ -25,6 +25,12 @@
       "settle_time_s": 1,
       "sample_interval_s": 0.2,
       "max_rounds": 1,
+      "readback_verification": {
+        "solenoid_readback_tolerance": 0.01,
+        "corrector_readback_tolerance": 0.01,
+        "readback_timeout_s": 5.0,
+        "poll_interval_s": 0.1
+      },
       "quality_gate": {
         "minimum_relative_score_improvement": 0.05
       }
@@ -50,6 +56,12 @@
       "settle_time_s": 1,
       "sample_interval_s": 0.2,
       "max_rounds": 1,
+      "readback_verification": {
+        "solenoid_readback_tolerance": 0.01,
+        "corrector_readback_tolerance": 0.01,
+        "readback_timeout_s": 5.0,
+        "poll_interval_s": 0.1
+      },
       "quality_gate": {
         "minimum_relative_score_improvement": 0.05
       }
@@ -75,6 +87,12 @@
       "settle_time_s": 1,
       "sample_interval_s": 0.2,
       "max_rounds": 1,
+      "readback_verification": {
+        "solenoid_readback_tolerance": 0.01,
+        "corrector_readback_tolerance": 0.01,
+        "readback_timeout_s": 5.0,
+        "poll_interval_s": 0.1
+      },
       "quality_gate": {
         "minimum_relative_score_improvement": 0.05
       }

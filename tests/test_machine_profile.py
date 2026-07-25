@@ -261,7 +261,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertFalse(workflow_writes_allowed(context, "solenoid_centering", mode="vm"))
         self.assertEqual(real_commissioning_status(context), "write_smoke_passed")
 
-    def test_solenoid_centering_rejects_invalid_motion_verification(self):
+    def test_solenoid_centering_rejects_invalid_readback_verification(self):
         preset = {
             "id": "test",
             "display_name": "Test",
@@ -275,7 +275,7 @@ class MachineProfileTests(unittest.TestCase):
             "settle_time_s": 0,
             "sample_interval_s": 0,
             "max_rounds": 1,
-            "motion_verification": {
+            "readback_verification": {
                 "solenoid_readback_tolerance": 0,
                 "corrector_readback_tolerance": 0.01,
                 "readback_timeout_s": 1,

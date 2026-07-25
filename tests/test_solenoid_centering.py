@@ -456,7 +456,7 @@ class SolenoidCenteringTests(unittest.TestCase):
             )
         )
 
-    def test_missing_motion_verification_blocks_scan_before_writes(self):
+    def test_missing_readback_verification_blocks_scan_before_writes(self):
         context, preset, values = _ready_fixture()
         preset = replace(preset, motion_verification=None)
         io = MockIO(values)
@@ -588,14 +588,14 @@ class SolenoidCenteringTests(unittest.TestCase):
         ):
             result = scanner.run()
 
-        self.assertEqual(archived["schema_version"], 2)
+        self.assertEqual(archived["schema_version"], 3)
         self.assertIn("preflight", archived)
         self.assertIn("baseline_candidate", archived)
         self.assertIn("scan_config", archived)
         self.assertIn("recommendation_status", archived)
         self.assertEqual(archived["selected_devices"]["hcorr"], preset.hcorr)
         self.assertEqual(archived["selected_devices"]["hcorr_setpoint_pv"], scanner.hcorr_pv)
-        self.assertEqual(result.schema_version, 2)
+        self.assertEqual(result.schema_version, 3)
         self.assertFalse(result.recommendation_available)
         self.assertIn("baseline score is too small", result.recommendation_status)
 

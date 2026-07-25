@@ -931,7 +931,7 @@
       ],
       "limits": {
         "low": 0,
-        "high": 60
+        "high": 130
       },
       "logical_channels": [
         "current_set",

@@ -2741,11 +2741,23 @@ def _parse_solenoid_centering_preset(
     )
     if solenoid is None and solenoid_setpoint_pv is None:
         raise MachineProfileError(f"{location} must define solenoid or solenoid_setpoint_pv.")
-    motion_raw = preset.get("motion_verification")
+    readback_raw = preset.get("readback_verification")
+    legacy_motion_raw = preset.get("motion_verification")
+    if readback_raw is not None and legacy_motion_raw is not None:
+        raise MachineProfileError(
+            f"{location} must not define both readback_verification and "
+            "motion_verification."
+        )
+    motion_raw = readback_raw if readback_raw is not None else legacy_motion_raw
+    verification_location = (
+        f"{location}.readback_verification"
+        if readback_raw is not None
+        else f"{location}.motion_verification"
+    )
     motion_verification = (
         _parse_solenoid_centering_motion_verification(
-            _expect_mapping(motion_raw, f"{location}.motion_verification"),
-            f"{location}.motion_verification",
+            _expect_mapping(motion_raw, verification_location),
+            verification_location,
         )
         if motion_raw is not None
         else None

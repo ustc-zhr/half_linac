@@ -234,7 +234,7 @@ class MainWindow(QMainWindow):
                 ("ACCESS", "WRITE ENABLED"),
                 ("WORKFLOW", "IDLE"),
                 ("READINESS", "UNCHECKED"),
-                ("MOTION VERIFIED", "UNCHECKED"),
+                ("READBACK VERIFIED", "UNCHECKED"),
                 ("RESULT QUALITY", "NOT EVALUATED"),
                 ("LAST RESULT", "--"),
             ),
@@ -314,7 +314,7 @@ class MainWindow(QMainWindow):
         self.log_view.setMaximumBlockCount(700)
         self.log_view.setMaximumHeight(170)
         self.log_view.setPlaceholderText(
-            "Preflight checks, blocking reasons, motion verification, and operation errors"
+            "Preflight checks, blocking reasons, readback verification, and operation errors"
         )
         self.log_view.setVisible(False)
         layout.addWidget(self.log_view)
@@ -856,7 +856,7 @@ class MainWindow(QMainWindow):
             return
         except MotionVerificationError as exc:
             self._set_workflow_status("APPLY ROLLED BACK", "warning")
-            self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+            self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
         except Exception as exc:
@@ -864,7 +864,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
         self._set_workflow_status("RECOMMENDATION APPLIED", "success")
-        self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
+        self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
         self.apply_button.setEnabled(False)
         self.restore_button.setEnabled(True)
 
@@ -883,12 +883,12 @@ class MainWindow(QMainWindow):
             return
         except RestoreFailed as exc:
             self._set_workflow_status("RESTORE FAILED", "danger")
-            self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+            self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
         except MotionVerificationError as exc:
             self._set_workflow_status("RESTORE ROLLBACK", "warning")
-            self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+            self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
         except Exception as exc:
@@ -896,7 +896,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
         self._set_workflow_status("ORIGINAL RESTORED", "success")
-        self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
+        self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
         self.restore_button.setEnabled(False)
 
     def _on_progress(self, message, completed, total):
@@ -914,12 +914,12 @@ class MainWindow(QMainWindow):
             self.progress.setValue(100)
             self._set_workflow_status("READY", "success")
             self.status_strip.set_value("READINESS", "READY", "success")
-            self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
+            self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
             self._show_preflight_report(report_text, ready=True)
             return
         self._set_workflow_status("NOT READY", "danger")
         self.status_strip.set_value("READINESS", "NOT READY", "danger")
-        self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+        self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
         self.status_label.setText(self._preflight_blocker_summary(report_text))
         self._show_preflight_report(report_text, ready=False)
 
@@ -928,7 +928,7 @@ class MainWindow(QMainWindow):
         self._append_log(report_text)
         self._set_workflow_status("NOT READY", "danger")
         self.status_strip.set_value("READINESS", "NOT READY", "danger")
-        self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+        self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
         self.status_label.setText(f"Preflight failed: {message}")
         self._show_preflight_report(report_text, ready=False)
 
@@ -968,7 +968,7 @@ class MainWindow(QMainWindow):
         self.progress.setValue(100)
         self._set_workflow_status("RESULT READY", "success")
         self.status_strip.set_value("READINESS", "RESULT READY", "success")
-        self.status_strip.set_value("MOTION VERIFIED", "VERIFIED", "success")
+        self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
         self.status_strip.set_value(
             "LAST RESULT",
             f"H {result.recommended_hcorr:.5g}, V {result.recommended_vcorr:.5g}",
@@ -994,7 +994,7 @@ class MainWindow(QMainWindow):
     def _on_scan_failed(self, message):
         self._set_workflow_status("ERROR", "danger")
         self.status_strip.set_value("READINESS", "ERROR", "danger")
-        self.status_strip.set_value("MOTION VERIFIED", "FAILED", "danger")
+        self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
         QMessageBox.warning(self, "Solenoid Centering", message)
 
     def _confirm_result_action(self, title: str, result: CenteringResult, *, apply: bool) -> bool:
