@@ -219,6 +219,10 @@ class AchromatWorkflow:
             self.knob_names,
             base_measurement,
         )
+        self._log(
+            "Measured response matrix:\n"
+            + np.array2string(result.matrix, precision=8, suppress_small=False)
+        )
         self._validate_response_quality(result)
         if report_progress:
             self._progress("Response complete", total_steps, total_steps)
@@ -990,11 +994,20 @@ class AchromatWorkflow:
             np.count_nonzero(singular_values / largest > self.config.solver.svd_cut)
         ) if largest > 0 else 0
         required_rank = len(self.knob_names)
-        if retained_rank < required_rank:
+        if retained_rank == 0:
             raise RuntimeError(
                 "Response matrix quality check failed: "
-                f"retained rank {retained_rank} < required rank {required_rank} "
+                "no SVD modes were retained "
                 f"at svd_cut={self.config.solver.svd_cut:g}"
+            )
+        if retained_rank < required_rank:
+            ratios = singular_values / largest
+            self._log(
+                f"Response matrix is rank-reduced: retained {retained_rank}/"
+                f"{required_rank} SVD modes at svd_cut="
+                f"{self.config.solver.svd_cut:g}; singular-value ratios="
+                + np.array2string(ratios, precision=6, suppress_small=False)
+                + ". The truncated-SVD solver will use only the retained modes."
             )
 
     def _check_cancelled(self) -> None:

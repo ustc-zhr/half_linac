@@ -2826,16 +2826,6 @@ class MainWindow(QMainWindow):
             if not preflight.ok:
                 QMessageBox.warning(self, "EPICS Preflight", "\n".join(preflight.blockers))
                 return False
-            if preflight.warnings and config.backend.mode == "write_enabled":
-                answer = QMessageBox.question(
-                    self,
-                    "EPICS Preflight Warning",
-                    "\n".join(preflight.warnings) + "\n\nContinue to live read-only preflight?",
-                    QMessageBox.Yes | QMessageBox.Cancel,
-                    QMessageBox.Cancel,
-                )
-                if answer != QMessageBox.Yes:
-                    return False
         if task == "apply" and recommendation is None:
             QMessageBox.warning(
                 self,
@@ -2856,7 +2846,7 @@ class MainWindow(QMainWindow):
         self.worker.correction_measurement.connect(
             self._automatic_measurement_updated
         )
-        self.worker.preflight.connect(self._live_preflight_completed)
+        self.worker.preflight.connect(self._workflow_preflight_completed)
         self.worker.failed.connect(self._task_failed)
         self.worker.completed.connect(self._task_completed)
         self.worker.finished.connect(self._task_finished)
@@ -3394,10 +3384,31 @@ class MainWindow(QMainWindow):
             for col, value in enumerate(response.matrix[row, :], start=2):
                 self.response_table.setItem(row, col, QTableWidgetItem(f"{value:.6g}"))
         self.response_table.resizeColumnsToContents()
+        singular_values = np.asarray(response.singular_values, dtype=float)
+        largest = float(np.max(singular_values)) if singular_values.size else 0.0
+        retained_rank = (
+            int(
+                np.count_nonzero(
+                    singular_values / largest > self.config.solver.svd_cut
+                )
+            )
+            if largest > 0
+            else 0
+        )
+        rank_summary = (
+            f"\nRetained SVD modes: {retained_rank}/{len(response.knob_names)} "
+            f"at svd_cut={self.config.solver.svd_cut:g}"
+        )
+        if retained_rank < len(response.knob_names):
+            rank_summary += (
+                "\nRank-reduced response: correction uses only the retained "
+                "independent mode."
+            )
         self.response_info.setPlainText(
             "Singular values: "
             + ", ".join(f"{value:.6g}" for value in response.singular_values)
             + f"\nCondition number: {response.condition_number:.6g}"
+            + rank_summary
         )
 
     def _prepare_correction(self) -> None:
@@ -3714,6 +3725,20 @@ class MainWindow(QMainWindow):
         recommendation: CorrectionRecommendation,
     ) -> None:
         improvement = recommendation.measurement.rms_mm - recommendation.predicted_rms_mm
+        singular_values = np.asarray(recommendation.singular_values, dtype=float)
+        largest_singular_value = (
+            float(np.max(singular_values)) if singular_values.size else 0.0
+        )
+        retained_rank = (
+            int(
+                np.count_nonzero(
+                    singular_values / largest_singular_value
+                    > self.config.solver.svd_cut
+                )
+            )
+            if largest_singular_value > 0
+            else 0
+        )
         self.correction_state_label.setText(
             "Prediction only — no backend read or write occurred. Review every target "
             "before choosing Apply and Verify."
@@ -3727,6 +3752,7 @@ class MainWindow(QMainWindow):
             f"predicted: {recommendation.predicted_rms_mm:.6g} mm "
             f"(improvement {improvement:+.6g} mm)\n"
             f"Response condition number: {recommendation.condition_number:.6g} · "
+            f"retained SVD modes {retained_rank}/{len(recommendation.delta_knobs)} · "
             f"gain {self.config.solver.gain:.3g} · "
             f"max step {100.0 * self.config.solver.max_step_fraction:.1f}%\n"
             + "Knob changes: "
@@ -4002,7 +4028,7 @@ class MainWindow(QMainWindow):
             [
                 "",
                 "Connections and reviewed baselines will be checked again before writing.",
-                "Any write, readback, cancellation, or orbit-safety failure restores "
+                "Any PV write/verification, cancellation, or orbit-safety failure restores "
                 "the complete pre-write snapshot.",
                 "After success, Current snapshot is recalculated automatically.",
                 "",
@@ -5060,6 +5086,12 @@ class MainWindow(QMainWindow):
         self.preflight_worker.start()
 
     def _live_preflight_completed(self, result) -> None:
+        self._handle_live_preflight_result(result, interactive=True)
+
+    def _workflow_preflight_completed(self, result) -> None:
+        self._handle_live_preflight_result(result, interactive=False)
+
+    def _handle_live_preflight_result(self, result, *, interactive: bool) -> None:
         self.last_live_preflight = result
         ready = result.ok
         self.status_strip.set_value(
@@ -5069,6 +5101,8 @@ class MainWindow(QMainWindow):
         )
         messages = [*result.static.blockers, *result.blockers]
         warnings = [*result.static.warnings, *result.warnings]
+        if not interactive:
+            return
         self._append_log(
             "Live preflight diagnostics:\n"
             + self._format_live_preflight(result).rstrip()

@@ -552,6 +552,44 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     assert connection_dialogs[-1][0] == "Connection Check Warnings"
     assert "Calibration should be reviewed." in connection_dialogs[-1][1]
+    dialog_count = len(connection_dialogs)
+    profile_window._workflow_preflight_completed(
+        LivePreflightResult(
+            static=PreflightResult(
+                level="write-ready",
+                blockers=(),
+                warnings=("Quadrupole verification uses the K1 setpoint PV.",),
+                checks={},
+            ),
+            blockers=(),
+            warnings=(),
+            checks={},
+            readings={},
+        )
+    )
+    assert len(connection_dialogs) == dialog_count
+    assert profile_window.last_live_preflight.ok
+    assert "K1 setpoint PV" not in profile_window.log_view.toPlainText()
+    profile_window._workflow_preflight_completed(
+        LivePreflightResult(
+            static=PreflightResult(
+                level="blocked",
+                blockers=(),
+                warnings=(),
+                checks={},
+            ),
+            blockers=("BPM09 is disconnected.",),
+            warnings=(),
+            checks={},
+            readings={},
+        )
+    )
+    assert len(connection_dialogs) == dialog_count
+    assert not profile_window.last_live_preflight.ok
+    assert (
+        profile_window.status_strip.items["READINESS"].value_label.text()
+        == "NOT READY"
+    )
     profile_window._live_preflight_completed(
         LivePreflightResult(
             static=PreflightResult(

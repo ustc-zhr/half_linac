@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+import numpy as np
 import pytest
 
 from half_linac.src.apps.dispersion_correction.config import load_config
@@ -47,6 +48,47 @@ def test_recommendation_is_pure_bounded_prediction() -> None:
         assert abs(recommendation.delta_knobs[knob.name]) <= (
             knob.limit * config.solver.max_step_fraction + 1.0e-15
         )
+
+
+def test_rank_reduced_response_uses_retained_svd_mode() -> None:
+    config, _machine, _workflow, _response = staged_fixture()
+    logs = []
+    machine = OfflineMachine(
+        config,
+        initial_dispersion_mm=[86.0, 112.0],
+        response_matrix=[
+            [-9500.0, -19000.0],
+            [-11800.0, -23600.0],
+        ],
+    )
+    workflow = AchromatWorkflow(config, machine=machine, log_callback=logs.append)
+
+    response = workflow.build_response_matrix()
+    recommendation = build_correction_recommendation(
+        config,
+        response.measurement,
+        response,
+    )
+
+    assert recommendation.ready
+    assert recommendation.predicted_rms_mm < response.measurement.rms_mm
+    assert np.count_nonzero(
+        response.singular_values / np.max(response.singular_values)
+        > config.solver.svd_cut
+    ) == 1
+    assert any("rank-reduced: retained 1/2" in message for message in logs)
+    assert any("Measured response matrix:" in message for message in logs)
+
+
+def test_zero_response_still_fails_quality_check() -> None:
+    config, _machine, _workflow, _response = staged_fixture()
+    machine = OfflineMachine(
+        config,
+        response_matrix=np.zeros((len(config.measurement_bpms), len(config.knobs))),
+    )
+
+    with pytest.raises(RuntimeError, match="no SVD modes were retained"):
+        AchromatWorkflow(config, machine=machine).build_response_matrix()
 
 
 def test_reviewed_recommendation_applies_once_and_remeasures() -> None:
