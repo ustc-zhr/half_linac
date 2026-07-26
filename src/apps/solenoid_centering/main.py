@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -75,11 +75,20 @@ from half_linac.src.apps.solenoid_centering.scan import (
 )
 
 
+@dataclass(frozen=True)
+class ScanFailureReport:
+    status: str
+    termination_code: str
+    reason: str
+    restore_status: str
+    restore_errors: tuple[str, ...] = ()
+
+
 class ScanWorker(QThread):
     progress_changed = pyqtSignal(str, int, int)
     candidate_finished = pyqtSignal(object)
     finished_ok = pyqtSignal(object)
-    failed = pyqtSignal(str)
+    failed = pyqtSignal(object)
 
     def __init__(self, context, preset, scoring_mode=SCORING_MODE_SLOPE, parent=None):
         super().__init__(parent)
@@ -103,10 +112,56 @@ class ScanWorker(QThread):
             )
             result = scanner.run()
         except StopRequested as exc:
-            self.failed.emit(str(exc))
+            self.failed.emit(
+                ScanFailureReport(
+                    status="stopped",
+                    termination_code="operator_stopped",
+                    reason=str(exc),
+                    restore_status="verified",
+                )
+            )
+            return
+        except RestoreFailed as exc:
+            operation_error = exc.operation_error
+            if isinstance(operation_error, StopRequested):
+                termination_code = "operator_stopped"
+            elif isinstance(operation_error, MotionVerificationError):
+                termination_code = "readback_verification_failed"
+            elif operation_error is not None:
+                termination_code = "scan_failed"
+            else:
+                termination_code = "scan_completed"
+            self.failed.emit(
+                ScanFailureReport(
+                    status="restore_failed",
+                    termination_code=termination_code,
+                    reason=str(exc),
+                    restore_status="failed",
+                    restore_errors=(
+                        exc.outcome.errors if exc.outcome is not None else (str(exc),)
+                    ),
+                )
+            )
+            return
+        except MachineProfileError as exc:
+            self.failed.emit(
+                ScanFailureReport(
+                    status="not_ready",
+                    termination_code="preflight_failed",
+                    reason=str(exc),
+                    restore_status="not_attempted",
+                )
+            )
             return
         except Exception as exc:
-            self.failed.emit(str(exc))
+            self.failed.emit(
+                ScanFailureReport(
+                    status="failed",
+                    termination_code="scan_failed",
+                    reason=str(exc),
+                    restore_status="verified",
+                )
+            )
             return
         self.finished_ok.emit(result)
 
@@ -433,11 +488,8 @@ class MainWindow(QMainWindow):
         scan_layout.setColumnStretch(1, 1)
         scan_card_layout.addLayout(scan_layout)
         content_layout.addWidget(scan_card)
-        content_layout.addStretch(1)
-        scroll.setWidget(content)
-        layout.addWidget(scroll, 1)
 
-        run_card = QFrame(panel)
+        run_card = QFrame(content)
         run_card.setObjectName("configSectionCard")
         run_layout = QVBoxLayout(run_card)
         run_layout.setContentsMargins(10, 8, 10, 10)
@@ -464,7 +516,10 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.stop_button)
         run_layout.addLayout(buttons)
 
-        layout.addWidget(run_card)
+        content_layout.addWidget(run_card)
+        content_layout.addStretch(1)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
         self.preflight_inputs = (
             self.preset_combo,
             self.hcorr_combo,
@@ -911,7 +966,12 @@ class MainWindow(QMainWindow):
             if result.termination is not None
             else "Scan completed without a termination record."
         )
-        self._append_log(f"Scan termination: {termination_reason}")
+        termination_code = result.termination.code if result.termination is not None else "unknown"
+        self._append_log(
+            f"Scan termination: {termination_code}\n"
+            f"Reason: {termination_reason}\n"
+            f"Restore status: {result.restore.status.upper() if result.restore else 'UNKNOWN'}"
+        )
         self.status_strip.set_value(
             "LAST RESULT",
             f"H {result.recommended_hcorr:.5g}, V {result.recommended_vcorr:.5g}",
@@ -947,12 +1007,43 @@ class MainWindow(QMainWindow):
             self._append_log(f"Final plot update failed; result data remains available: {exc}")
             self.status_label.setText("Result saved; plot unavailable. See Log.")
 
-    def _on_scan_failed(self, message):
+    def _on_scan_failed(self, report):
+        if not isinstance(report, ScanFailureReport):
+            report = ScanFailureReport(
+                status="failed",
+                termination_code="scan_failed",
+                reason=str(report),
+                restore_status="unknown",
+            )
         self.preflight_ready = False
-        self._set_workflow_status("ERROR", "danger")
-        self.status_strip.set_value("READINESS", "ERROR", "danger")
-        self.status_strip.set_value("READBACK VERIFIED", "FAILED", "danger")
-        QMessageBox.warning(self, "Solenoid Centering", message)
+        labels = {
+            "stopped": ("STOPPED / RESTORED", "warning", "STOPPED"),
+            "failed": ("SCAN FAILED / RESTORED", "danger", "SCAN FAILED"),
+            "restore_failed": ("RESTORE FAILED", "danger", "RESTORE FAILED"),
+            "not_ready": ("NOT READY", "danger", "NOT READY"),
+        }
+        workflow_label, tone, readiness_label = labels.get(
+            report.status,
+            ("ERROR", "danger", "ERROR"),
+        )
+        self._set_workflow_status(workflow_label, tone)
+        self.status_strip.set_value("READINESS", readiness_label, tone)
+        readback_label = {
+            "verified": "VERIFIED",
+            "failed": "FAILED",
+            "not_attempted": "NOT ATTEMPTED",
+        }.get(report.restore_status, "UNKNOWN")
+        readback_tone = "success" if report.restore_status == "verified" else "danger"
+        self.status_strip.set_value("READBACK VERIFIED", readback_label, readback_tone)
+        log_lines = [
+            f"Scan termination: {report.termination_code}",
+            f"Reason: {report.reason}",
+            f"Restore status: {report.restore_status.upper()}",
+        ]
+        log_lines.extend(f"Restore error: {error}" for error in report.restore_errors)
+        self._append_log("\n".join(log_lines))
+        self.status_label.setText(workflow_label)
+        QMessageBox.warning(self, "Solenoid Centering", "\n".join(log_lines))
 
     def _confirm_result_action(self, title: str, result: CenteringResult, *, apply: bool) -> bool:
         preflight = result.preflight or {}

@@ -16,9 +16,9 @@ if str(PARENT) not in sys.path:
 try:
     from PyQt5.QtWidgets import QApplication, QMessageBox
 
-    from half_linac.src.apps.solenoid_centering.main import MainWindow
+    from half_linac.src.apps.solenoid_centering.main import MainWindow, ScanFailureReport
     from half_linac.src.apps.solenoid_centering.mplwidget import MplWidget
-    from half_linac.src.apps.solenoid_centering.scan import CenteringResult
+    from half_linac.src.apps.solenoid_centering.scan import CenteringResult, RestoreOutcome
 except ImportError:
     QApplication = None
 
@@ -73,6 +73,7 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
                 "hcorr_setpoint_pv": "TEST:HCOR:SP",
                 "vcorr_setpoint_pv": "TEST:VCOR:SP",
             },
+            restore=RestoreOutcome(status="verified"),
         )
 
     def test_non_actionable_result_disables_apply(self):
@@ -156,6 +157,51 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
 
         self.assertTrue(self.window.preflight_ready)
         self.assertTrue(self.window.start_button.isEnabled())
+
+    def test_stopped_and_restored_has_structured_log_state(self):
+        report = ScanFailureReport(
+            status="stopped",
+            termination_code="operator_stopped",
+            reason="Solenoid centering scan stopped.",
+            restore_status="verified",
+        )
+
+        with patch(
+            "half_linac.src.apps.solenoid_centering.main.QMessageBox.warning"
+        ):
+            self.window._on_scan_failed(report)
+
+        self.assertEqual(
+            self.window.status_strip.items["READINESS"].value_label.text(),
+            "STOPPED",
+        )
+        self.assertEqual(
+            self.window.status_strip.items["READBACK VERIFIED"].value_label.text(),
+            "VERIFIED",
+        )
+        log = self.window.log_view.toPlainText()
+        self.assertIn("Scan termination: operator_stopped", log)
+        self.assertIn("Restore status: VERIFIED", log)
+
+    def test_restore_failure_lists_error_in_log(self):
+        report = ScanFailureReport(
+            status="restore_failed",
+            termination_code="restore_failed",
+            reason="Device restore failed",
+            restore_status="failed",
+            restore_errors=("HCOR (TEST:HCOR:SP): timeout",),
+        )
+
+        with patch(
+            "half_linac.src.apps.solenoid_centering.main.QMessageBox.warning"
+        ):
+            self.window._on_scan_failed(report)
+
+        self.assertEqual(
+            self.window.status_strip.items["READINESS"].value_label.text(),
+            "RESTORE FAILED",
+        )
+        self.assertIn("HCOR (TEST:HCOR:SP): timeout", self.window.log_view.toPlainText())
 
 
 if __name__ == "__main__":

@@ -260,6 +260,32 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertTrue(termination.blocks_recommendation)
         self.assertIn("physical limit", termination.reason)
 
+    def test_coordinate_descent_detects_clipped_edge_before_physical_limit(self):
+        scan_range = SolenoidCenteringScanRange(relative_from=-2.0, relative_to=2.0, steps=5)
+
+        def evaluator(axis, round_index, hcorr, vcorr):
+            return _candidate(
+                (hcorr - 11.0) ** 2 + vcorr**2,
+                axis=axis,
+                hcorr=hcorr,
+                vcorr=vcorr,
+            )
+
+        hcorr, _vcorr, _axis_scans, termination = scan.coordinate_descent(
+            9.99,
+            0.0,
+            scan_range,
+            5,
+            evaluator,
+            hcorr_limits=(0.0, 10.0),
+            vcorr_limits=(-10.0, 10.0),
+        )
+
+        self.assertAlmostEqual(hcorr, 9.99)
+        self.assertEqual(termination.code, "boundary_limited")
+        self.assertTrue(termination.blocks_recommendation)
+        self.assertIn("HCOR", termination.reason)
+
     def test_coordinate_descent_explains_converged_early_stop(self):
         scan_range = SolenoidCenteringScanRange(relative_from=-1.0, relative_to=1.0, steps=3)
 
@@ -338,7 +364,11 @@ class SolenoidCenteringTests(unittest.TestCase):
             stop_requested=lambda: True,
         )
 
-        with patch.object(scan, "require_workflow_write_allowed", lambda *args, **kwargs: None):
+        archived = {}
+        with (
+            patch.object(scan, "require_workflow_write_allowed", lambda *args, **kwargs: None),
+            patch.object(scan, "write_scan_result", lambda _context, payload: archived.update(payload)),
+        ):
             with self.assertRaises(scan.StopRequested):
                 scanner.run()
 
@@ -348,6 +378,33 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertIn((solenoid_pv, 10.0), io.writes)
         self.assertIn((hcorr_pv, 0.1), io.writes)
         self.assertIn((vcorr_pv, -0.2), io.writes)
+        self.assertEqual(archived["schema_version"], 5)
+        self.assertEqual(archived["record_type"], "scan_attempt")
+        self.assertEqual(archived["operation_status"], "stopped")
+        self.assertEqual(archived["termination"]["code"], "operator_stopped")
+        self.assertEqual(archived["restore"]["status"], "verified")
+
+    def test_restore_failure_is_archived_with_failed_pv(self):
+        context, preset, values = _ready_fixture()
+        scanner = scan.SolenoidCenteringScanner(
+            context,
+            preset,
+            io=MockIO(values, fail_writes=(_solenoid_setpoint_pv(context, preset),)),
+            stop_requested=lambda: True,
+        )
+        archived = {}
+
+        with (
+            patch.object(scan, "require_workflow_write_allowed", lambda *args, **kwargs: None),
+            patch.object(scan, "write_scan_result", lambda _context, payload: archived.update(payload)),
+        ):
+            with self.assertRaises(scan.RestoreFailed):
+                scanner.run()
+
+        self.assertEqual(archived["operation_status"], "restore_failed")
+        self.assertEqual(archived["termination"]["code"], "operator_stopped")
+        self.assertEqual(archived["restore"]["status"], "failed")
+        self.assertIn(scanner.solenoid_pv, archived["restore"]["errors"][0])
 
     def test_scanner_preflight_rejects_solenoid_limit_violation_before_writes(self):
         context = load_app_context(
@@ -689,7 +746,7 @@ class SolenoidCenteringTests(unittest.TestCase):
         ):
             result = scanner.run()
 
-        self.assertEqual(archived["schema_version"], 4)
+        self.assertEqual(archived["schema_version"], 5)
         self.assertIn("preflight", archived)
         self.assertIn("baseline_candidate", archived)
         self.assertIn("scan_config", archived)
@@ -697,7 +754,11 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertEqual(archived["selected_devices"]["hcorr"], preset.hcorr)
         self.assertEqual(archived["selected_devices"]["hcorr_setpoint_pv"], scanner.hcorr_pv)
         self.assertEqual(archived["termination"]["code"], "max_iters_reached")
-        self.assertEqual(result.schema_version, 4)
+        self.assertEqual(archived["operation_status"], "completed")
+        self.assertEqual(archived["restore"]["status"], "verified")
+        self.assertEqual(result.schema_version, 5)
+        self.assertIsNotNone(result.restore)
+        self.assertTrue(result.restore.is_verified)
         self.assertFalse(result.recommendation_available)
         self.assertIn("baseline score is too small", result.recommendation_status)
 

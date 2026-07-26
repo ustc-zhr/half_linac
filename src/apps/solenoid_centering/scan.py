@@ -4,7 +4,7 @@ import argparse
 import signal
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, Protocol
 
@@ -54,6 +54,17 @@ class StateDriftError(RuntimeError):
 
 class RestoreFailed(RuntimeError):
     """Raised when one or more devices cannot be restored safely."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        outcome: RestoreOutcome | None = None,
+        operation_error: Exception | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.outcome = outcome
+        self.operation_error = operation_error
 
 
 class ScalarIO(Protocol):
@@ -117,6 +128,16 @@ class ScanTermination:
 
 
 @dataclass(frozen=True)
+class RestoreOutcome:
+    status: str
+    errors: tuple[str, ...] = ()
+
+    @property
+    def is_verified(self) -> bool:
+        return self.status == "verified"
+
+
+@dataclass(frozen=True)
 class CenteringResult:
     preset_id: str
     original_solenoid: float
@@ -135,7 +156,9 @@ class CenteringResult:
     selected_devices: dict[str, str] | None = None
     scan_config: dict[str, Any] | None = None
     termination: ScanTermination | None = None
-    schema_version: int = 4
+    restore: RestoreOutcome | None = None
+    operation_status: str = "completed"
+    schema_version: int = 5
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -309,12 +332,28 @@ def _bounded_candidate_values(
     scan_range: SolenoidCenteringScanRange,
     limits: tuple[float, float] | None,
 ) -> tuple[float, ...]:
+    values, _clipped_low, _clipped_high = _bounded_candidate_info(
+        center,
+        scan_range,
+        limits,
+    )
+    return values
+
+
+def _bounded_candidate_info(
+    center: float,
+    scan_range: SolenoidCenteringScanRange,
+    limits: tuple[float, float] | None,
+) -> tuple[tuple[float, ...], bool, bool]:
     requested = tuple(float(value) for value in relative_scan_points(center, scan_range))
     if limits is None:
-        return requested
+        return requested, False, False
     low, high = limits
     tolerance = max(1.0, abs(low), abs(high)) * 1e-12
-    return tuple(value for value in requested if low - tolerance <= value <= high + tolerance)
+    feasible = tuple(value for value in requested if low - tolerance <= value <= high + tolerance)
+    clipped_low = any(value < low - tolerance for value in requested)
+    clipped_high = any(value > high + tolerance for value in requested)
+    return feasible, clipped_low, clipped_high
 
 
 def _at_limit(value: float, limits: tuple[float, float] | None) -> bool:
@@ -323,6 +362,23 @@ def _at_limit(value: float, limits: tuple[float, float] | None) -> bool:
     low, high = limits
     tolerance = max(1.0, abs(low), abs(high)) * 1e-12
     return abs(value - low) <= tolerance or abs(value - high) <= tolerance
+
+
+def _at_clipped_edge(
+    value: float,
+    candidates: tuple[float, ...],
+    *,
+    clipped_low: bool,
+    clipped_high: bool,
+) -> bool:
+    if not candidates:
+        return False
+    tolerance = max(1.0, *(abs(candidate) for candidate in candidates)) * 1e-12
+    return (
+        clipped_low and abs(value - min(candidates)) <= tolerance
+    ) or (
+        clipped_high and abs(value - max(candidates)) <= tolerance
+    )
 
 
 def evaluate_solenoid_response(
@@ -405,7 +461,11 @@ def coordinate_descent(
         iteration_start_h = hcorr
         iteration_start_v = vcorr
         h_candidates = []
-        h_values = _bounded_candidate_values(hcorr, corrector_scan, hcorr_limits)
+        h_values, h_clipped_low, h_clipped_high = _bounded_candidate_info(
+            hcorr,
+            corrector_scan,
+            hcorr_limits,
+        )
         if len(h_values) < 2:
             termination = ScanTermination(
                 code="insufficient_hcorr_candidates",
@@ -432,7 +492,11 @@ def coordinate_descent(
         )
 
         v_candidates = []
-        v_values = _bounded_candidate_values(vcorr, corrector_scan, vcorr_limits)
+        v_values, v_clipped_low, v_clipped_high = _bounded_candidate_info(
+            vcorr,
+            corrector_scan,
+            vcorr_limits,
+        )
         if len(v_values) < 2:
             termination = ScanTermination(
                 code="insufficient_vcorr_candidates",
@@ -458,17 +522,30 @@ def coordinate_descent(
             )
         )
 
-        if _at_limit(hcorr, hcorr_limits) or _at_limit(vcorr, vcorr_limits):
+        h_boundary_limited = _at_limit(hcorr, hcorr_limits) or _at_clipped_edge(
+            hcorr,
+            h_values,
+            clipped_low=h_clipped_low,
+            clipped_high=h_clipped_high,
+        )
+        v_boundary_limited = _at_limit(vcorr, vcorr_limits) or _at_clipped_edge(
+            vcorr,
+            v_values,
+            clipped_low=v_clipped_low,
+            clipped_high=v_clipped_high,
+        )
+        if h_boundary_limited or v_boundary_limited:
             axes = []
-            if _at_limit(hcorr, hcorr_limits):
+            if h_boundary_limited:
                 axes.append("HCOR")
-            if _at_limit(vcorr, vcorr_limits):
+            if v_boundary_limited:
                 axes.append("VCOR")
             termination = ScanTermination(
                 code="boundary_limited",
                 reason=(
                     f"Stopped after iteration {round_index + 1}: best "
-                    f"{' and '.join(axes)} value reached a configured physical limit."
+                    f"{' and '.join(axes)} optimum reached the usable boundary "
+                    "defined by configured physical limits."
                 ),
                 iterations_completed=round_index + 1,
                 early=True,
@@ -586,6 +663,7 @@ class SolenoidCenteringScanner:
         original_vcorr = report.original_vcorr
         total = self._estimated_candidate_count() + 1
         completed = 0
+        observed_candidates: list[CandidateResult] = []
 
         def evaluator(axis: str, round_index: int, hcorr: float, vcorr: float) -> CandidateResult:
             nonlocal completed
@@ -594,11 +672,13 @@ class SolenoidCenteringScanner:
             self.progress(message, completed, total)
             result = self._evaluate_candidate(axis, round_index, hcorr, vcorr, original_solenoid)
             completed += 1
+            observed_candidates.append(result)
             self.candidate_finished(result)
             self.progress(message, completed, total)
             return result
 
-        operation_error: BaseException | None = None
+        operation_error: Exception | None = None
+        result: CenteringResult | None = None
         try:
             self.progress("baseline candidate", completed, total)
             baseline = self._evaluate_candidate(
@@ -609,6 +689,7 @@ class SolenoidCenteringScanner:
                 original_solenoid,
             )
             completed += 1
+            observed_candidates.append(baseline)
             self.candidate_finished(baseline)
             self.progress("baseline candidate", completed, total)
             hcorr_limits = _element_numeric_limit(
@@ -649,37 +730,122 @@ class SolenoidCenteringScanner:
                 recommendation_available=recommendation_available,
                 recommendation_status=recommendation_status,
                 preflight=asdict(report),
-                selected_devices={
-                    "solenoid": self.preset.solenoid or self.solenoid_pv,
-                    "hcorr": self.preset.hcorr,
-                    "vcorr": self.preset.vcorr,
-                    "bpm": self.preset.bpm,
-                    "solenoid_setpoint_pv": self.solenoid_pv,
-                    "solenoid_readback_pv": self.solenoid_readback_pv or "",
-                    "hcorr_setpoint_pv": self.hcorr_pv,
-                    "hcorr_readback_pv": self.hcorr_readback_pv or "",
-                    "vcorr_setpoint_pv": self.vcorr_pv,
-                    "vcorr_readback_pv": self.vcorr_readback_pv or "",
-                    "bpm_x_pv": self.bpm_x_pv,
-                    "bpm_y_pv": self.bpm_y_pv,
-                },
+                selected_devices=self._selected_devices_payload(),
                 scan_config=self._scan_config_payload(),
                 termination=termination,
             )
-            write_scan_result(self.app_context, result.as_dict())
-            return result
-        except BaseException as exc:
+        except Exception as exc:
             operation_error = exc
-            raise
-        finally:
-            try:
-                self._restore(original_solenoid, original_hcorr, original_vcorr)
-            except Exception as restore_error:
-                if operation_error is not None:
-                    raise RestoreFailed(
-                        f"Scan failed ({operation_error}); device restore also failed: {restore_error}"
-                    ) from operation_error
-                raise RestoreFailed(f"Device restore failed: {restore_error}") from restore_error
+
+        restore = self._restore_outcome(original_solenoid, original_hcorr, original_vcorr)
+        if result is not None:
+            result = replace(
+                result,
+                restore=restore,
+                operation_status="completed" if restore.is_verified else "restore_failed",
+            )
+            archive_payload = result.as_dict()
+        else:
+            assert operation_error is not None
+            archive_payload = self._failed_attempt_payload(
+                report,
+                operation_error,
+                restore,
+                observed_candidates,
+            )
+        archive_error: Exception | None = None
+        try:
+            write_scan_result(self.app_context, archive_payload)
+        except Exception as exc:
+            archive_error = exc
+
+        if not restore.is_verified:
+            detail = "; ".join(restore.errors)
+            if archive_error is not None:
+                detail += f"; result archive failed: {archive_error}"
+            if operation_error is not None:
+                raise RestoreFailed(
+                    f"Scan failed ({operation_error}); restore failed: {detail}",
+                    outcome=restore,
+                    operation_error=operation_error,
+                ) from operation_error
+            raise RestoreFailed(
+                f"Device restore failed: {detail}",
+                outcome=restore,
+            )
+        if archive_error is not None:
+            if operation_error is not None:
+                raise RuntimeError(
+                    f"{operation_error}; result archive failed: {archive_error}"
+                ) from operation_error
+            raise archive_error
+        if operation_error is not None:
+            raise operation_error.with_traceback(operation_error.__traceback__)
+        assert result is not None
+        return result
+
+    def _selected_devices_payload(self) -> dict[str, str]:
+        return {
+            "solenoid": self.preset.solenoid or self.solenoid_pv,
+            "hcorr": self.preset.hcorr,
+            "vcorr": self.preset.vcorr,
+            "bpm": self.preset.bpm,
+            "solenoid_setpoint_pv": self.solenoid_pv,
+            "solenoid_readback_pv": self.solenoid_readback_pv or "",
+            "hcorr_setpoint_pv": self.hcorr_pv,
+            "hcorr_readback_pv": self.hcorr_readback_pv or "",
+            "vcorr_setpoint_pv": self.vcorr_pv,
+            "vcorr_readback_pv": self.vcorr_readback_pv or "",
+            "bpm_x_pv": self.bpm_x_pv,
+            "bpm_y_pv": self.bpm_y_pv,
+        }
+
+    def _failed_attempt_payload(
+        self,
+        report: PreflightReport,
+        error: Exception,
+        restore: RestoreOutcome,
+        candidates: list[CandidateResult],
+    ) -> dict[str, Any]:
+        if isinstance(error, StopRequested):
+            code = "operator_stopped"
+            reason = "Operator requested stop."
+        elif isinstance(error, MotionVerificationError):
+            code = "readback_verification_failed"
+            reason = f"Readback verification failed: {error}"
+        else:
+            code = "scan_failed"
+            reason = f"{type(error).__name__}: {error}"
+        if restore.is_verified:
+            status = "stopped" if isinstance(error, StopRequested) else "failed"
+            reason += " Original device state was restored and verified."
+        else:
+            status = "restore_failed"
+            reason += " Original device state could not be fully restored."
+        iteration_indexes = [
+            candidate.round_index for candidate in candidates if candidate.axis != "baseline"
+        ]
+        termination = ScanTermination(
+            code=code,
+            reason=reason,
+            iterations_completed=max(iteration_indexes, default=-1) + 1,
+            early=True,
+            blocks_recommendation=True,
+        )
+        return {
+            "schema_version": 5,
+            "record_type": "scan_attempt",
+            "operation_status": status,
+            "preset_id": self.preset.id,
+            "scoring_mode": self.scoring_mode,
+            "termination": asdict(termination),
+            "restore": asdict(restore),
+            "error": {"type": type(error).__name__, "message": str(error)},
+            "preflight": asdict(report),
+            "selected_devices": self._selected_devices_payload(),
+            "scan_config": self._scan_config_payload(),
+            "candidates": [asdict(candidate) for candidate in candidates],
+        }
 
     def apply_recommended(self, result: CenteringResult) -> None:
         if not result.recommendation_available:
@@ -1118,7 +1284,12 @@ class SolenoidCenteringScanner:
             ys.append(self.io.read(self.bpm_y_pv))
         return xs, ys
 
-    def _restore(self, solenoid: float, hcorr: float, vcorr: float) -> None:
+    def _restore_outcome(
+        self,
+        solenoid: float,
+        hcorr: float,
+        vcorr: float,
+    ) -> RestoreOutcome:
         errors = []
         for label, pv_name, readback_pv, value, tolerance in (
             ("solenoid", self.solenoid_pv, self.solenoid_readback_pv, solenoid, self._solenoid_tolerance()),
@@ -1136,8 +1307,18 @@ class SolenoidCenteringScanner:
                 )
             except Exception as exc:
                 errors.append(f"{label} ({pv_name}): {exc}")
-        if errors:
-            raise RestoreFailed("Restore failed: " + "; ".join(errors))
+        return RestoreOutcome(
+            status="failed" if errors else "verified",
+            errors=tuple(errors),
+        )
+
+    def _restore(self, solenoid: float, hcorr: float, vcorr: float) -> None:
+        outcome = self._restore_outcome(solenoid, hcorr, vcorr)
+        if not outcome.is_verified:
+            raise RestoreFailed(
+                "Restore failed: " + "; ".join(outcome.errors),
+                outcome=outcome,
+            )
 
     def _estimated_candidate_count(self) -> int:
         return self.preset.max_rounds * 2 * self.preset.corrector_scan.steps
