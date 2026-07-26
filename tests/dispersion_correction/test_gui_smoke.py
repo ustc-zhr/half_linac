@@ -109,7 +109,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not hasattr(window, "connection_controls")
     assert window.preflight_button.isHidden()
     assert window.preflight_button.text() == "Check PVs"
-    assert window.preflight_button.parentWidget() is window.machine_card
+    assert window.preflight_button.parentWidget().objectName() == "controlCard"
     assert window.machine_card_title.text() == "Machine"
     assert window.measurement_card_title.text() == "Measurement"
     assert window.correction_step_card_title.text() == "Correction Step"
@@ -457,7 +457,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.status_strip.items["BACKEND"].value_label.text() == "REAL"
     assert profile_window.status_strip.items["ACCESS"].value_label.text() == "WRITE ENABLED"
     assert profile_window.load_button.isHidden()
-    assert profile_window.config_title_label.text() == "Machine Profile"
+    assert profile_window.config_title_label.text() == "Configuration"
     assert profile_window.offline_demo_button.isVisibleTo(profile_window)
     assert profile_window.calibration_status_label.text() == "Calibration: Missing"
     assert not profile_window.calibration_status_label.isHidden()
@@ -508,12 +508,12 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.preflight_button.isEnabled()
     assert (
         profile_window.preflight_button.parentWidget().objectName()
-        == "controlSectionCard"
+        == "controlCard"
     )
     assert (
         abs(
             profile_window.preflight_button.geometry().center().y()
-            - profile_window.machine_card_title.geometry().center().y()
+            - profile_window.config_title_label.geometry().center().y()
         )
         <= 1
     )

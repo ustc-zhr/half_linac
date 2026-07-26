@@ -999,7 +999,7 @@ class MainWindow(QMainWindow):
         self.load_button.hide()
         self.load_button.setToolTip("Runtime configuration is managed by the selected machine profile.")
         self.bpm_edit.setReadOnly(True)
-        self.config_title_label.setText("Machine Profile")
+        self.config_title_label.setText("Configuration")
         fixed_selection = self.config.section.model_only
         self.bpm_select_button.setVisible(not fixed_selection)
         self.knob_select_button.setVisible(not fixed_selection)
@@ -1111,6 +1111,10 @@ class MainWindow(QMainWindow):
         self.config_title_label.setFixedHeight(34)
         heading_layout.addWidget(self.config_title_label, 0, Qt.AlignVCenter)
         heading_layout.addStretch(1)
+        self.preflight_button = QPushButton("Check PVs")
+        self.preflight_button.setObjectName("preflightButton")
+        self.preflight_button.clicked.connect(self._start_live_preflight)
+        heading_layout.addWidget(self.preflight_button)
         self.load_button = QPushButton("Load Config")
         self.load_button.setObjectName("configLoadButton")
         self.load_button.clicked.connect(self._load_config_dialog)
@@ -1128,10 +1132,6 @@ class MainWindow(QMainWindow):
         self.machine_card_title.setObjectName("controlSectionTitle")
         machine_header.addWidget(self.machine_card_title)
         machine_header.addStretch(1)
-        self.preflight_button = QPushButton("Check PVs")
-        self.preflight_button.setObjectName("preflightButton")
-        self.preflight_button.clicked.connect(self._start_live_preflight)
-        machine_header.addWidget(self.preflight_button)
         machine_card_layout.addLayout(machine_header)
 
         machine_form = self._config_form()
@@ -4148,7 +4148,7 @@ class MainWindow(QMainWindow):
                 None,
                 "Manual Correction",
                 "Connection check required",
-                "Click Check PVs in the Machine Profile header before "
+                "Click Check PVs in the Configuration header before "
                 "starting an online measurement.",
             )
         if self.latest_measurement is None:

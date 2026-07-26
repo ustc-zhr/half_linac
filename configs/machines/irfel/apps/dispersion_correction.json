@@ -37,7 +37,7 @@
             "QM13": 1.0,
             "QM16": 1.0
           },
-          "scan_step": 0.0005,
+          "scan_step": 1,
           "limit": 5
         },
         {
@@ -46,7 +46,7 @@
             "QM14": 1.0,
             "QM15": 1.0
           },
-          "scan_step": 0.0005,
+          "scan_step": 1,
           "limit": 5
         }
       ],
@@ -91,7 +91,7 @@
     "svd_cut": 0.001,
     "regularization": 0.001,
     "gain": 0.5,
-    "max_step_fraction": 0.25,
+    "max_step_fraction": 0.6,
     "max_iter": 5,
     "response_update": "once",
     "min_step_improvement": 0.05,
