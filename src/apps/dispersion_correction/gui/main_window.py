@@ -1115,8 +1115,6 @@ class MainWindow(QMainWindow):
 
         self.status_strip = StatusStrip(
             [
-                ("MACHINE", "-"),
-                ("BACKEND", "-"),
                 ("ACCESS", "-"),
                 ("ENERGY STEP", "-"),
                 ("READINESS", "UNCHECKED"),
@@ -4293,17 +4291,6 @@ class MainWindow(QMainWindow):
         self.report_text.setPlainText(result_to_markdown(result))
 
     def _refresh_status(self, last_result: str) -> None:
-        machine = (
-            self.app_context.profile.machine.id.upper()
-            if self.app_context is not None
-            else "STANDALONE"
-        )
-        backend = (
-            self.app_context.control_backend.name.upper()
-            if self.app_context is not None
-            else self.config.backend.type.upper()
-        )
-        backend_tone = "warning" if backend == "VM" else "success"
         if self.config.section.model_only:
             access = "MODEL ONLY"
         elif self.config.backend.type.lower() == "offline":
@@ -4322,8 +4309,6 @@ class MainWindow(QMainWindow):
         result_tone = "success" if last_result in {"Accepted", "Plan ready", "Ready", "Config loaded"} else "subtle"
         if "Fail" in last_result or "Not accepted" in last_result:
             result_tone = "danger"
-        self.status_strip.set_value("MACHINE", machine, "subtle")
-        self.status_strip.set_value("BACKEND", backend, backend_tone)
         self.status_strip.set_value("ACCESS", access, access_tone)
         self.status_strip.set_value("ENERGY STEP", self._energy_step_compact(), "subtle")
         self.status_strip.set_value("READINESS", readiness, readiness_tone)

@@ -80,8 +80,10 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not hasattr(window, "plan_button")
     assert not hasattr(window, "backend_combo")
     assert not hasattr(window, "mode_combo")
-    assert window.status_strip.items["MACHINE"].value_label.text() == "STANDALONE"
-    assert window.status_strip.items["BACKEND"].value_label.text() == "OFFLINE"
+    assert "MACHINE" not in window.status_strip.items
+    assert "BACKEND" not in window.status_strip.items
+    assert window.runtime_context_widget.machine_label.text() == "Machine: Standalone"
+    assert window.runtime_context_widget.backend_label.text() == "Backend: offline"
     assert window.status_strip.items["ACCESS"].value_label.text() == "OFFLINE"
     assert window.status_strip.items["READINESS"].value_label.text() == "READY"
     assert window.status_strip.items["ENERGY STEP"].minimumWidth() == 160
@@ -385,7 +387,6 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window.config = load_config("tests/dispersion_correction/fixtures/irfel_achromat.json")
     window._load_config_to_widgets()
     assert window._config_from_widgets().backend == window.config.backend
-    assert window.status_strip.items["BACKEND"].value_label.text() == "EPICS"
     assert window.status_strip.items["ACCESS"].value_label.text() == "READ ONLY"
     assert window.status_strip.items["READINESS"].value_label.text() == "NOT READY"
     assert "actuator_per_delta" in window.operation_banner.text()
@@ -476,7 +477,10 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     profile_window = MainWindow(profile_config, context)
     profile_window.show()
     app.processEvents()
-    assert profile_window.status_strip.items["BACKEND"].value_label.text() == "REAL"
+    assert (
+        profile_window.runtime_context_widget.backend_label.text()
+        == "Backend: Real Machine"
+    )
     assert profile_window.status_strip.items["ACCESS"].value_label.text() == "WRITE ENABLED"
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Configuration"
@@ -800,7 +804,10 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     irfel_vm_window = MainWindow(irfel_vm_config, irfel_vm_context)
     irfel_vm_window.show()
     app.processEvents()
-    assert irfel_vm_window.status_strip.items["BACKEND"].value_label.text() == "VM"
+    assert (
+        irfel_vm_window.runtime_context_widget.backend_label.text()
+        == "Backend: Virtual Machine"
+    )
     assert irfel_vm_window.status_strip.items["ACCESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
     assert irfel_vm_window.operation_banner.isHidden()
@@ -967,8 +974,8 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
     assert demo.config_title_label.text() == "Offline Demo"
     assert demo.load_button.isHidden()
     assert demo.offline_demo_button.isHidden()
-    assert demo.status_strip.items["MACHINE"].value_label.text() == "STANDALONE"
-    assert demo.status_strip.items["BACKEND"].value_label.text() == "OFFLINE"
+    assert demo.runtime_context_widget.machine_label.text() == "Machine: Standalone"
+    assert demo.runtime_context_widget.backend_label.text() == "Backend: offline"
     assert demo.status_strip.items["ACCESS"].value_label.text() == "OFFLINE DEMO"
     assert demo.measurement_action_button.text() == "Measure Dispersion"
     assert demo.measurement_action_button.isVisibleTo(demo)
