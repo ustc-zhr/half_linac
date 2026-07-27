@@ -34,6 +34,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QFrame,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QSpinBox,
     QTableWidget,
@@ -300,70 +301,80 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.status_strip)
         layout.addWidget(header)
 
-        splitter = QSplitter(Qt.Horizontal, central)
-        splitter.setChildrenCollapsible(False)
-        splitter.addWidget(self._build_control_panel(splitter))
+        self.splitter = QSplitter(Qt.Horizontal, central)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(8)
+        self.splitter.addWidget(self._build_control_panel(self.splitter))
 
-        workspace = QFrame(splitter)
+        workspace = QFrame(self.splitter)
         workspace.setObjectName("workspacePanel")
         workspace_layout = QVBoxLayout(workspace)
         workspace_layout.setContentsMargins(0, 0, 0, 0)
-        workspace_layout.setSpacing(8)
-        plot_card = QFrame(workspace)
-        plot_card.setObjectName("plotCard")
-        plot_layout = QVBoxLayout(plot_card)
+        workspace_layout.setSpacing(0)
+        self.workspace_splitter = QSplitter(Qt.Vertical, workspace)
+        self.workspace_splitter.setChildrenCollapsible(False)
+        self.workspace_splitter.setHandleWidth(8)
+
+        self.plot_card = QFrame(self.workspace_splitter)
+        self.plot_card.setObjectName("plotCard")
+        self.plot_card.setMinimumHeight(240)
+        plot_layout = QVBoxLayout(self.plot_card)
         plot_layout.setContentsMargins(10, 10, 10, 10)
         plot_layout.setSpacing(6)
-        self.plot = MplWidget(plot_card)
+        self.plot = MplWidget(self.plot_card)
         plot_layout.addWidget(self.plot)
-        workspace_layout.addWidget(plot_card, 1)
 
-        result_card = QFrame(workspace)
-        result_card.setObjectName("resultCard")
-        result_layout = QVBoxLayout(result_card)
+        self.result_card = QFrame(self.workspace_splitter)
+        self.result_card.setObjectName("resultCard")
+        self.result_card.setMinimumHeight(190)
+        result_layout = QVBoxLayout(self.result_card)
         result_layout.setContentsMargins(12, 10, 12, 10)
         result_layout.setSpacing(7)
         result_header = QHBoxLayout()
-        result_title = QLabel("Scan Results", result_card)
+        result_title = QLabel("Scan Results", self.result_card)
         result_title.setObjectName("panelTitle")
         result_header.addWidget(result_title)
-        result_header.addStretch(1)
-        self.status_label = QLabel("Idle", result_card)
+        self.status_label = QLabel("Idle", self.result_card)
         self.status_label.setObjectName("resultHint")
         self.status_label.setProperty("muted", True)
-        result_header.addWidget(self.status_label)
+        self.status_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        result_header.addWidget(self.status_label, 1)
+        self.apply_button = QPushButton("Apply Recommended", self.result_card)
+        self.restore_button = QPushButton("Restore Original", self.result_card)
+        self.apply_button.setProperty("role", "primary")
+        self.apply_button.setProperty("compact", True)
+        self.restore_button.setProperty("compact", True)
+        self.apply_button.setVisible(False)
+        self.restore_button.setVisible(False)
+        self.apply_button.clicked.connect(self.apply_recommended)
+        self.restore_button.clicked.connect(self.restore_original)
+        result_header.addWidget(self.apply_button)
+        result_header.addWidget(self.restore_button)
         result_layout.addLayout(result_header)
-        self.result_table = QTableWidget(0, 7, result_card)
+        self.result_table = QTableWidget(0, 7, self.result_card)
         self.result_table.setHorizontalHeaderLabels(
             ["Axis", "Iteration", "Corrector", "Score", "Length", "Slope X", "Slope Y"]
         )
         self.result_table.setAlternatingRowColors(True)
         self.result_table.setMinimumHeight(135)
-        self.result_table.setMaximumHeight(220)
         self.result_table.verticalHeader().setVisible(False)
         self.result_table.horizontalHeader().setStretchLastSection(True)
         self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         result_layout.addWidget(self.result_table)
-        result_actions = QHBoxLayout()
-        result_actions.setContentsMargins(0, 0, 0, 0)
-        result_actions.setSpacing(8)
-        self.apply_button = QPushButton("Apply Recommended", result_card)
-        self.restore_button = QPushButton("Restore Original", result_card)
-        self.apply_button.setProperty("role", "primary")
-        self.apply_button.setEnabled(False)
-        self.restore_button.setEnabled(False)
-        self.apply_button.clicked.connect(self.apply_recommended)
-        self.restore_button.clicked.connect(self.restore_original)
-        result_actions.addStretch(1)
-        result_actions.addWidget(self.restore_button)
-        result_actions.addWidget(self.apply_button)
-        result_layout.addLayout(result_actions)
-        workspace_layout.addWidget(result_card)
-        splitter.addWidget(workspace)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([410, 1000])
-        layout.addWidget(splitter, 1)
+
+        self.workspace_splitter.addWidget(self.plot_card)
+        self.workspace_splitter.addWidget(self.result_card)
+        self.workspace_splitter.setStretchFactor(0, 1)
+        self.workspace_splitter.setStretchFactor(1, 0)
+        self.workspace_splitter.setSizes([520, 240])
+        workspace_layout.addWidget(self.workspace_splitter, 1)
+
+        self.splitter.addWidget(workspace)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([410, 1000])
+        layout.addWidget(self.splitter, 1)
 
         self.log_view = QPlainTextEdit(central)
         self.log_view.setObjectName("logView")
@@ -380,12 +391,12 @@ class MainWindow(QMainWindow):
 
     def _build_control_panel(self, parent):
         panel = QFrame(parent)
-        panel.setObjectName("controlPanel")
+        panel.setObjectName("controlCard")
         panel.setMinimumWidth(390)
         panel.setMaximumWidth(460)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(7)
 
         heading = QHBoxLayout()
         heading.setContentsMargins(2, 0, 2, 0)
@@ -413,7 +424,7 @@ class MainWindow(QMainWindow):
         setup_layout = QVBoxLayout(setup_card)
         setup_layout.setContentsMargins(10, 8, 10, 10)
         setup_layout.setSpacing(6)
-        setup_title = QLabel("Setup", setup_card)
+        setup_title = QLabel("Devices", setup_card)
         setup_title.setObjectName("sectionTitle")
         setup_layout.addWidget(setup_title)
         device_layout = QFormLayout()
@@ -432,27 +443,34 @@ class MainWindow(QMainWindow):
         self.bpm_combo = QComboBox(setup_card)
         for label, widget in (
             ("Solenoid PV", self.solenoid_pv_label),
-            ("HCOR", self.hcorr_combo),
-            ("VCOR", self.vcorr_combo),
             ("BPM", self.bpm_combo),
         ):
             field_label = QLabel(label, content)
             field_label.setProperty("role", "field")
             device_layout.addRow(field_label, widget)
+        corrector_selector = QWidget(setup_card)
+        corrector_layout = QHBoxLayout(corrector_selector)
+        corrector_layout.setContentsMargins(0, 0, 0, 0)
+        corrector_layout.setSpacing(5)
+        for plane, combo in (("H", self.hcorr_combo), ("V", self.vcorr_combo)):
+            plane_label = QLabel(plane, corrector_selector)
+            plane_label.setProperty("role", "field")
+            corrector_layout.addWidget(plane_label)
+            corrector_layout.addWidget(combo, 1)
+        corrector_label = QLabel("Correctors", setup_card)
+        corrector_label.setProperty("role", "field")
+        device_layout.insertRow(2, corrector_label, corrector_selector)
         setup_layout.addLayout(device_layout)
         content_layout.addWidget(setup_card)
 
-        scan_card = QFrame(content)
-        scan_card.setObjectName("configSectionCard")
-        scan_card_layout = QVBoxLayout(scan_card)
+        self.scan_card = QFrame(content)
+        self.scan_card.setObjectName("configSectionCard")
+        scan_card_layout = QVBoxLayout(self.scan_card)
         scan_card_layout.setContentsMargins(10, 8, 10, 10)
         scan_card_layout.setSpacing(6)
-        scan_title = QLabel("Scan Parameters", scan_card)
+        scan_title = QLabel("Scan", self.scan_card)
         scan_title.setObjectName("sectionTitle")
         scan_card_layout.addWidget(scan_title)
-        scan_layout = QGridLayout()
-        scan_layout.setContentsMargins(0, 0, 0, 0)
-        scan_layout.setVerticalSpacing(5)
         self.sol_from = self._double_spin(-1e6, 1e6, 0.01, 4)
         self.sol_to = self._double_spin(-1e6, 1e6, 0.01, 4)
         self.sol_steps = self._int_spin(2, 999)
@@ -467,46 +485,84 @@ class MainWindow(QMainWindow):
         self.scoring_mode_combo.addItem("Slope score", SCORING_MODE_SLOPE)
         self.scoring_mode_combo.addItem("Trajectory length", SCORING_MODE_TRAJECTORY_LENGTH)
 
-        fields = [
-            ("Score mode", self.scoring_mode_combo),
-            ("Solenoid offset min", self.sol_from),
-            ("Solenoid offset max", self.sol_to),
-            ("Solenoid steps", self.sol_steps),
-            ("Corrector offset min", self.cor_from),
-            ("Corrector offset max", self.cor_to),
-            ("Corrector steps", self.cor_steps),
-            ("Samples", self.samples),
-            ("Settle s", self.settle),
-            ("Sample interval s", self.sample_interval),
-            ("Max iterations", self.max_iters),
-        ]
-        for row, (label, widget) in enumerate(fields):
-            field_label = QLabel(label, scan_card)
-            field_label.setProperty("role", "field")
-            scan_layout.addWidget(field_label, row, 0)
-            scan_layout.addWidget(widget, row, 1)
-        scan_layout.setColumnStretch(1, 1)
-        scan_card_layout.addLayout(scan_layout)
-        content_layout.addWidget(scan_card)
+        range_title = QLabel("Relative Scan Range", self.scan_card)
+        range_title.setProperty("role", "groupTitle")
+        scan_card_layout.addWidget(range_title)
+        range_layout = QGridLayout()
+        range_layout.setContentsMargins(0, 0, 0, 0)
+        range_layout.setHorizontalSpacing(5)
+        range_layout.setVerticalSpacing(5)
+        for column, label in enumerate(("From", "To", "Steps"), start=1):
+            header_label = QLabel(label, self.scan_card)
+            header_label.setProperty("role", "columnHeader")
+            header_label.setAlignment(Qt.AlignCenter)
+            range_layout.addWidget(header_label, 0, column)
+        for row, (label, widgets) in enumerate(
+            (
+                ("SOL", (self.sol_from, self.sol_to, self.sol_steps)),
+                ("COR", (self.cor_from, self.cor_to, self.cor_steps)),
+            ),
+            start=1,
+        ):
+            row_label = QLabel(label, self.scan_card)
+            row_label.setProperty("role", "field")
+            range_layout.addWidget(row_label, row, 0)
+            for column, widget in enumerate(widgets, start=1):
+                widget.setMinimumWidth(0)
+                widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+                range_layout.addWidget(widget, row, column)
+        range_layout.setColumnStretch(1, 3)
+        range_layout.setColumnStretch(2, 3)
+        range_layout.setColumnStretch(3, 2)
+        scan_card_layout.addLayout(range_layout)
 
-        run_card = QFrame(content)
-        run_card.setObjectName("configSectionCard")
-        run_layout = QVBoxLayout(run_card)
+        acquisition_title = QLabel("Acquisition", self.scan_card)
+        acquisition_title.setProperty("role", "groupTitle")
+        scan_card_layout.addWidget(acquisition_title)
+        acquisition_layout = QFormLayout()
+        acquisition_layout.setContentsMargins(0, 0, 0, 0)
+        acquisition_layout.setVerticalSpacing(5)
+        for label, widget in (
+            ("Samples/Step", self.samples),
+            ("Settle Time", self.settle),
+            ("Sample interval s", self.sample_interval),
+        ):
+            field_label = QLabel(label, self.scan_card)
+            field_label.setProperty("role", "field")
+            acquisition_layout.addRow(field_label, widget)
+        scan_card_layout.addLayout(acquisition_layout)
+        content_layout.addWidget(self.scan_card)
+
+        self.run_card = QFrame(content)
+        self.run_card.setObjectName("configSectionCard")
+        run_layout = QVBoxLayout(self.run_card)
         run_layout.setContentsMargins(10, 8, 10, 10)
         run_layout.setSpacing(7)
-        run_title = QLabel("Run", run_card)
+        run_title = QLabel("Run", self.run_card)
         run_title.setObjectName("sectionTitle")
         run_layout.addWidget(run_title)
 
-        self.progress = QProgressBar(run_card)
+        run_settings = QFormLayout()
+        run_settings.setContentsMargins(0, 0, 0, 0)
+        run_settings.setVerticalSpacing(5)
+        for label, widget in (
+            ("Score mode", self.scoring_mode_combo),
+            ("Max iterations", self.max_iters),
+        ):
+            field_label = QLabel(label, self.run_card)
+            field_label.setProperty("role", "field")
+            run_settings.addRow(field_label, widget)
+        run_layout.addLayout(run_settings)
+
+        self.progress = QProgressBar(self.run_card)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setVisible(False)
         run_layout.addWidget(self.progress)
 
         buttons = QHBoxLayout()
-        self.start_button = QPushButton("Start Scan", run_card)
-        self.stop_button = QPushButton("Stop", run_card)
+        self.start_button = QPushButton("Start Scan", self.run_card)
+        self.stop_button = QPushButton("Stop", self.run_card)
         self.start_button.setProperty("role", "primary")
         self.stop_button.setProperty("role", "danger")
         self.stop_button.setEnabled(False)
@@ -516,7 +572,7 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.stop_button)
         run_layout.addLayout(buttons)
 
-        content_layout.addWidget(run_card)
+        content_layout.addWidget(self.run_card)
         content_layout.addStretch(1)
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
@@ -731,6 +787,7 @@ class MainWindow(QMainWindow):
     def _invalidate_preflight(self, *_args) -> None:
         self.configuration_revision += 1
         self.preflight_ready = False
+        self._set_result_action(None)
         self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
         self.status_strip.set_value("READBACK VERIFIED", "UNCHECKED", "warning")
         self.start_button.setEnabled(False)
@@ -738,6 +795,12 @@ class MainWindow(QMainWindow):
     def _set_preflight_inputs_enabled(self, enabled: bool) -> None:
         for widget in self.preflight_inputs:
             widget.setEnabled(enabled)
+
+    def _set_result_action(self, action: str | None) -> None:
+        self.apply_button.setVisible(action == "apply")
+        self.apply_button.setEnabled(action == "apply")
+        self.restore_button.setVisible(action == "restore")
+        self.restore_button.setEnabled(action == "restore")
 
     def run_preflight(self):
         if self.worker is not None and self.worker.isRunning():
@@ -783,8 +846,7 @@ class MainWindow(QMainWindow):
             return
         self.last_result = None
         self.last_result_preset = None
-        self.apply_button.setEnabled(False)
-        self.restore_button.setEnabled(False)
+        self._set_result_action(None)
         self.status_strip.set_value("LAST RESULT", "--")
         self.result_table.setRowCount(0)
         self.live_plot_failed = False
@@ -826,6 +888,7 @@ class MainWindow(QMainWindow):
         except StateDriftError as exc:
             self._set_workflow_status("STATE DRIFT", "danger")
             self.status_strip.set_value("READINESS", "STATE DRIFT", "danger")
+            self._set_result_action(None)
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
         except MotionVerificationError as exc:
@@ -839,8 +902,7 @@ class MainWindow(QMainWindow):
             return
         self._set_workflow_status("RECOMMENDATION APPLIED", "success")
         self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
-        self.apply_button.setEnabled(False)
-        self.restore_button.setEnabled(True)
+        self._set_result_action("restore")
 
     def restore_original(self):
         if self.last_result is None or self.last_result_preset is None:
@@ -853,6 +915,7 @@ class MainWindow(QMainWindow):
         except StateDriftError as exc:
             self._set_workflow_status("STATE DRIFT", "danger")
             self.status_strip.set_value("READINESS", "STATE DRIFT", "danger")
+            self._set_result_action(None)
             QMessageBox.warning(self, "Solenoid Centering", str(exc))
             return
         except RestoreFailed as exc:
@@ -871,7 +934,7 @@ class MainWindow(QMainWindow):
             return
         self._set_workflow_status("ORIGINAL RESTORED", "success")
         self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
-        self.restore_button.setEnabled(False)
+        self._set_result_action(None)
 
     def _on_progress(self, message, completed, total):
         percent = int(round(completed / total * 100)) if total else 0
@@ -994,11 +1057,13 @@ class MainWindow(QMainWindow):
             self.status_strip.set_value("RESULT QUALITY", quality_label, "warning")
             self._set_workflow_status(quality_label, "warning")
             self.status_label.setText(result.recommendation_status)
-        self.apply_button.setEnabled(
-            result.recommendation_available
+        action = (
+            "apply"
+            if result.recommendation_available
             and workflow_writes_allowed(self.context, "solenoid_centering")
+            else None
         )
-        self.restore_button.setEnabled(False)
+        self._set_result_action(action)
         self._populate_result_table(result)
         try:
             self.plot.plot_result(result)

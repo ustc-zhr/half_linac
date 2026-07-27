@@ -13,6 +13,7 @@ class StatusItem(QFrame):
         self.value_label = QLabel(value, self)
         self.value_label.setProperty("role", "statusValue")
         self.value_label.setProperty("tone", "subtle")
+        self.value_label.setWordWrap(True)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 2, 8, 2)
         layout.setSpacing(2)
@@ -43,9 +44,10 @@ class StatusStrip(QFrame):
                 separator.setObjectName("statusSeparator")
                 layout.addWidget(separator)
             item = StatusItem(title, value, self)
-            item.setMinimumWidth(90)
+            item.setMinimumWidth(94)
             self.items[title] = item
-            layout.addWidget(item, 1)
+            layout.addWidget(item)
+        layout.addStretch(1)
 
     def set_value(self, title: str, value: str, tone: str = "subtle") -> None:
         self.items[title].set_value(value, tone)

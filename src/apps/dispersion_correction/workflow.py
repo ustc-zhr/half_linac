@@ -343,6 +343,104 @@ class AchromatWorkflow:
             "max_orbit_change_mm": safety.max_orbit_change_mm,
         }
 
+    def restore_correction_state(
+        self,
+        target_values: Mapping[str, float],
+        *,
+        reviewed_baseline: Mapping[str, float],
+        max_changes: Mapping[str, float],
+    ) -> dict[str, object]:
+        """Restore reviewed pre-correction quadrupole targets safely."""
+
+        self._require_write_ready()
+        targets = {str(name): float(value) for name, value in target_values.items()}
+        baseline = {
+            str(name): float(value)
+            for name, value in reviewed_baseline.items()
+        }
+        limits = {str(name): float(value) for name, value in max_changes.items()}
+        required = set(targets)
+        if not required:
+            raise ValueError("At least one pre-correction target is required")
+        if set(baseline) != required or set(limits) != required:
+            raise ValueError(
+                "Correction restore requires matching baseline, target, and limit devices"
+            )
+        if not all(
+            np.isfinite(value)
+            for value in (*targets.values(), *baseline.values())
+        ):
+            raise ValueError("Correction restore baseline and targets must be finite")
+        if not all(
+            np.isfinite(value) and value > 0
+            for value in limits.values()
+        ):
+            raise ValueError("Correction restore limits must be finite and positive")
+        for device in targets:
+            change = abs(targets[device] - baseline[device])
+            if change > limits[device] + 1.0e-15:
+                raise ValueError(
+                    f"{device} restore change {change:g} exceeds configured "
+                    f"limit {limits[device]:g}"
+                )
+
+        pre_restore_state = self.machine.snapshot()
+        self._validate_reviewed_device_baseline(
+            pre_restore_state,
+            baseline,
+            operation="Correction restore",
+        )
+        baseline_orbit = self._average_bpm(
+            self.config.measurement.samples_per_step
+        )
+        target_writer = getattr(self.machine, "set_device_targets", None)
+        if not callable(target_writer):
+            raise RuntimeError(
+                "The selected backend cannot restore explicit quadrupole targets"
+            )
+
+        try:
+            self._check_cancelled()
+            self._progress("Restoring pre-correction quadrupole targets", 1, 3)
+            target_writer(targets)
+            self.machine.wait_stable()
+            self._check_cancelled()
+            if not self.machine.is_safe():
+                raise RuntimeError(
+                    "Machine unsafe after restoring pre-correction targets"
+                )
+            safety = evaluate_safety(
+                self.config.safety,
+                baseline_orbit,
+                self._average_bpm(self.config.measurement.samples_per_step),
+            )
+            if not safety.ok:
+                raise RuntimeError(safety.reason)
+            final_state = self.machine.snapshot()
+        except Exception as exc:
+            try:
+                self.machine.restore(pre_restore_state)
+                self.machine.wait_stable()
+            except Exception as restore_exc:
+                raise RuntimeError(
+                    f"{exc}; correction-restore rollback failed: {restore_exc}"
+                ) from exc
+            raise RuntimeError(
+                f"{exc}; pre-restore quadrupole setpoints restored"
+            ) from exc
+
+        self._progress("Pre-correction state restored", 3, 3)
+        return {
+            "operation": "restore-correction",
+            "baseline_values": baseline,
+            "target_values": targets,
+            "final_values": {
+                name: float(final_state.device_values[name])
+                for name in targets
+            },
+            "max_orbit_change_mm": safety.max_orbit_change_mm,
+        }
+
     def _apply_recommendation(
         self,
         recommendation: CorrectionRecommendation,

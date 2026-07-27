@@ -22,6 +22,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
 
     from PyQt5.QtWidgets import (
         QApplication,
+        QFileDialog,
         QFrame,
         QLabel,
         QListWidgetItem,
@@ -297,6 +298,8 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         is calibration_dialog.reference_energy_row
     )
     assert calibration_dialog.paste_button.text() == "Paste Data"
+    assert calibration_dialog.load_button.text() == "Load Latest"
+    assert calibration_dialog.open_button.text() == "Open Draft..."
     assert calibration_dialog.table.verticalHeader().defaultSectionSize() == 36
     assert calibration_dialog.table.verticalHeader().minimumSectionSize() == 36
     assert calibration_dialog.table.minimumHeight() >= 184
@@ -332,6 +335,25 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     draft_paths = calibration_dialog._save_draft(show_message=False)
     assert draft_paths["latest"].exists()
+    calibration_dialog.note_edit.setText("Changed after saving")
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *args, **kwargs: (
+            str(draft_paths["archive"]),
+            "Calibration drafts (*.json)",
+        ),
+    )
+    calibration_dialog.open_button.click()
+    assert calibration_dialog.note_edit.text() == ""
+    calibration_dialog.note_edit.setText("Cancelled selection")
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *args, **kwargs: ("", ""),
+    )
+    calibration_dialog.open_button.click()
+    assert calibration_dialog.note_edit.text() == "Cancelled selection"
     calibration = calibration_fragment(
         calibration_draft,
         calibration_dialog.analysis,
@@ -459,8 +481,82 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.load_button.isHidden()
     assert profile_window.config_title_label.text() == "Configuration"
     assert profile_window.offline_demo_button.isVisibleTo(profile_window)
+    assert profile_window.restore_initial_state_button.isHidden()
     assert profile_window.calibration_status_label.text() == "Calibration: Missing"
     assert not profile_window.calibration_status_label.isHidden()
+    from half_linac.src.apps.dispersion_correction.models import (
+        CorrectionResult,
+        CorrectionStep,
+        SafetyStatus,
+    )
+
+    initial_devices = {
+        "QM13": 1.0,
+        "QM14": 2.0,
+        "QM15": 2.0,
+        "QM16": 1.0,
+    }
+    corrected_devices = {
+        name: value + 0.1
+        for name, value in initial_devices.items()
+    }
+    correction_result = CorrectionResult(
+        success=True,
+        reason="Accepted",
+        initial=response.measurement,
+        final=response.measurement,
+        initial_knobs={"Q13_Q16_sym": 0.0, "Q14_Q15_sym": 0.0},
+        final_knobs={"Q13_Q16_sym": 0.1, "Q14_Q15_sym": 0.1},
+        steps=(
+            CorrectionStep(
+                iteration=1,
+                gain=0.5,
+                delta_knobs={
+                    "Q13_Q16_sym": 0.1,
+                    "Q14_Q15_sym": 0.1,
+                },
+                accepted=True,
+                reason="Accepted",
+                rms_before_mm=1.0,
+                rms_after_mm=0.5,
+                device_values_before=initial_devices,
+                device_values_trial=corrected_devices,
+            ),
+        ),
+        response=None,
+        safety=SafetyStatus(ok=True, reason="OK"),
+    )
+    restore_request = profile_window._build_correction_restore_request(
+        correction_result,
+        run_label="Manual 1",
+    )
+    assert restore_request is not None
+    assert restore_request.target_values == initial_devices
+    assert restore_request.baseline_values == corrected_devices
+    profile_window.correction_restore_request = restore_request
+    profile_window._set_running(False, "")
+    assert profile_window.restore_initial_state_button.isVisibleTo(
+        profile_window
+    )
+    assert profile_window.restore_initial_state_button.isEnabled()
+    restore_tasks = []
+    original_start_task = profile_window._start_task
+    profile_window._start_task = (
+        lambda task, **kwargs: restore_tasks.append((task, kwargs)) or True
+    )
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_args, **_kwargs: QMessageBox.Yes,
+    )
+    profile_window.restore_initial_state_button.click()
+    assert restore_tasks == [
+        ("restore-correction", {"restore_request": restore_request})
+    ]
+    profile_window._start_task = original_start_task
+    profile_window.correction_restore_request = None
+    profile_window._set_running(False, "")
+    assert profile_window.restore_initial_state_button.isHidden()
     assert profile_window.section_combo.currentData() == "MIR-dogleg"
     assert profile_window.model_boundary_label.text() == "Assume D=D'=0 at BPM07"
     assert profile_window.model_source_combo.itemText(0) == "Design lattice"

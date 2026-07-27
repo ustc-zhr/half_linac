@@ -86,7 +86,11 @@ from half_linac.src.apps.dispersion_correction.profile_runtime import (
 from half_linac.src.apps.dispersion_correction.reports import result_to_markdown
 from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
 from half_linac.src.shared.app_theme import resolve_initial_theme
-from half_linac.src.shared.machine_profile import AppContext, workflow_writes_allowed
+from half_linac.src.shared.machine_profile import (
+    AppContext,
+    RuntimeContextWidget,
+    workflow_writes_allowed,
+)
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 
 
@@ -104,12 +108,14 @@ class WorkflowWorker(QThread):
         config: RunConfig,
         recommendation: CorrectionRecommendation | None = None,
         design_k1_request: DesignK1Request | None = None,
+        restore_request: CorrectionRestoreRequest | None = None,
     ) -> None:
         super().__init__()
         self.task = task
         self.config = config
         self.recommendation = recommendation
         self.design_k1_request = design_k1_request
+        self.restore_request = restore_request
 
     def run(self) -> None:
         try:
@@ -144,6 +150,14 @@ class WorkflowWorker(QThread):
                     self.design_k1_request.target_values,
                     reviewed_baseline=self.design_k1_request.baseline_values,
                     max_changes=self.design_k1_request.max_changes,
+                )
+            elif self.task == "restore-correction":
+                if self.restore_request is None:
+                    raise ValueError("No reviewed correction restore was supplied")
+                result = workflow.restore_correction_state(
+                    self.restore_request.target_values,
+                    reviewed_baseline=self.restore_request.baseline_values,
+                    max_changes=self.restore_request.max_changes,
                 )
             else:
                 raise ValueError(f"Unknown task: {self.task}")
@@ -223,6 +237,14 @@ class CorrectionSessionRun:
 
 @dataclass(frozen=True)
 class DesignK1Request:
+    baseline_values: dict[str, float]
+    target_values: dict[str, float]
+    max_changes: dict[str, float]
+
+
+@dataclass(frozen=True)
+class CorrectionRestoreRequest:
+    run_label: str
     baseline_values: dict[str, float]
     target_values: dict[str, float]
     max_changes: dict[str, float]
@@ -941,6 +963,7 @@ class MainWindow(QMainWindow):
         self.latest_response: ResponseMatrixResult | None = None
         self.correction_recommendation: CorrectionRecommendation | None = None
         self.correction_session_runs: list[CorrectionSessionRun] = []
+        self.correction_restore_request: CorrectionRestoreRequest | None = None
         self.last_live_preflight = None
         self.operation_plan: dict | None = None
         self._loading_widgets = False
@@ -1056,6 +1079,22 @@ class MainWindow(QMainWindow):
         self.app_title_label.setObjectName("titleLabel")
         header_layout.addWidget(self.app_title_label)
         header_layout.addStretch(1)
+
+        if self.app_context is None:
+            runtime_machine_id = "standalone"
+            runtime_machine_name = "Standalone"
+            runtime_backend = self.config.backend.type
+        else:
+            runtime_machine_id = self.app_context.profile.machine.id
+            runtime_machine_name = self.app_context.profile.machine.display_name
+            runtime_backend = self.app_context.control_backend.name
+        self.runtime_context_widget = RuntimeContextWidget(
+            machine_id=runtime_machine_id,
+            machine_display_name=runtime_machine_name,
+            control_backend=runtime_backend,
+            parent=frame,
+        )
+        header_layout.addWidget(self.runtime_context_widget)
 
         self.log_button = QToolButton()
         self.log_button.setObjectName("headerLogButton")
@@ -1440,6 +1479,18 @@ class MainWindow(QMainWindow):
             self.app_context is not None and not self.offline_demo
         )
         workflow_header.addWidget(self.offline_demo_button)
+        self.restore_initial_state_button = QPushButton(
+            "Restore Initial State…"
+        )
+        self.restore_initial_state_button.setObjectName(
+            "restoreInitialStateButton"
+        )
+        self.restore_initial_state_button.setProperty("role", "control")
+        self.restore_initial_state_button.clicked.connect(
+            self._restore_initial_correction_state
+        )
+        self.restore_initial_state_button.hide()
+        workflow_header.addWidget(self.restore_initial_state_button)
         self.history_button = QPushButton("History…")
         self.history_button.setObjectName("workflowSecondaryButton")
         self.history_button.clicked.connect(self._show_iteration_history)
@@ -1962,6 +2013,89 @@ class MainWindow(QMainWindow):
             selected=len(self.correction_session_runs) - 1
         )
 
+    def _build_correction_restore_request(
+        self,
+        result: CorrectionResult,
+        *,
+        run_label: str,
+    ) -> CorrectionRestoreRequest | None:
+        accepted_steps = [
+            step
+            for step in result.steps
+            if (
+                step.accepted
+                and step.device_values_before
+                and step.device_values_trial
+            )
+        ]
+        if not result.success or not accepted_steps:
+            return None
+        targets = {
+            str(name): float(value)
+            for name, value in accepted_steps[0].device_values_before.items()
+        }
+        baseline = {
+            str(name): float(value)
+            for name, value in accepted_steps[-1].device_values_trial.items()
+        }
+        if not targets or set(targets) != set(baseline):
+            return None
+        limits: dict[str, float] = {}
+        for knob in self.config.knobs:
+            for device, weight in knob.devices.items():
+                limits[device] = (
+                    limits.get(device, 0.0)
+                    + abs(float(weight)) * float(knob.limit)
+                )
+        if set(targets) != set(limits):
+            return None
+        return CorrectionRestoreRequest(
+            run_label=run_label,
+            baseline_values=baseline,
+            target_values=targets,
+            max_changes={name: limits[name] for name in targets},
+        )
+
+    def _restore_initial_correction_state(self) -> None:
+        request = self.correction_restore_request
+        if request is None:
+            return
+        unit = self._knob_control_unit()
+        lines = [
+            f"Restore the quadrupole state saved before {request.run_label}?",
+            "",
+        ]
+        for name in request.target_values:
+            baseline = request.baseline_values[name]
+            target = request.target_values[name]
+            lines.append(
+                f"{name}: expected current {baseline:.8g} -> "
+                f"{target:.8g} {unit}"
+            )
+        lines.extend(
+            [
+                "",
+                "Connections and the expected current values will be checked again "
+                "before writing. If safety checks fail, the state present before "
+                "this restore attempt is written back.",
+                "",
+                "Existing measurements and recommendations will be discarded.",
+            ]
+        )
+        answer = QMessageBox.question(
+            self,
+            "Restore Initial Correction State",
+            "\n".join(lines),
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self._start_task(
+            "restore-correction",
+            restore_request=request,
+        )
+
     def _refresh_iteration_history_runs(
         self,
         *,
@@ -2293,6 +2427,7 @@ class MainWindow(QMainWindow):
         return label
 
     def _load_config_to_widgets(self) -> None:
+        self.correction_restore_request = None
         self._invalidate_staged_results(
             "Configuration loaded. Measure the Q response before calculating a recommendation."
         )
@@ -2381,6 +2516,7 @@ class MainWindow(QMainWindow):
         self.config = config
         self.configured_energy_calibration = dict(config.energy_knob.calibration)
         self.session_energy_calibration_source = None
+        self.correction_restore_request = None
         self.selected_knobs = tuple(config.knobs)
         self.knob_hard_limits = tuple(knob.limit for knob in config.knobs)
         self._invalidate_staged_results(
@@ -2698,6 +2834,7 @@ class MainWindow(QMainWindow):
     def _selection_changed(self) -> None:
         if self._loading_widgets:
             return
+        self.correction_restore_request = None
         self._invalidate_staged_results(
             "Configuration changed. Previous measurements and recommendations were discarded."
         )
@@ -2806,6 +2943,7 @@ class MainWindow(QMainWindow):
         task: str,
         recommendation: CorrectionRecommendation | None = None,
         design_k1_request: DesignK1Request | None = None,
+        restore_request: CorrectionRestoreRequest | None = None,
     ) -> bool:
         if self.worker is not None and self.worker.isRunning():
             return False
@@ -2833,6 +2971,13 @@ class MainWindow(QMainWindow):
                 "Calculate and review a recommendation before applying it.",
             )
             return False
+        if task == "restore-correction" and restore_request is None:
+            QMessageBox.warning(
+                self,
+                "Restore Initial Correction State",
+                "No successful correction is available to restore.",
+            )
+            return False
         if task == "run":
             self._automatic_initial_measurement = None
         self.worker = WorkflowWorker(
@@ -2840,6 +2985,7 @@ class MainWindow(QMainWindow):
             config,
             recommendation,
             design_k1_request,
+            restore_request,
         )
         self.worker.log.connect(self._append_log)
         self.worker.progress.connect(self._update_progress)
@@ -2901,6 +3047,13 @@ class MainWindow(QMainWindow):
             self._compute_recommendation()
         elif isinstance(result, CorrectionResult):
             self._record_correction_run(task, result)
+            if result.success:
+                self.correction_restore_request = (
+                    self._build_correction_restore_request(
+                        result,
+                        run_label=self.correction_session_runs[-1].label,
+                    )
+                )
             self._show_result(result)
             status = "Accepted" if result.success else "Aborted" if result.reason.startswith("Aborted") else "Not accepted"
             self._refresh_status(status)
@@ -2939,6 +3092,7 @@ class MainWindow(QMainWindow):
             and isinstance(result, dict)
             and result.get("operation") == "design-k1"
         ):
+            self.correction_restore_request = None
             self._invalidate_staged_results(
                 "Design K1 targets were applied. Remeasure dispersion before correction."
             )
@@ -2947,6 +3101,27 @@ class MainWindow(QMainWindow):
             self._refresh_status("Design K1 applied")
             self._append_log(
                 "Design K1 targets applied and verified: "
+                + ", ".join(
+                    f"{name}={value:.8g}"
+                    for name, value in result.get("final_values", {}).items()
+                )
+            )
+            self._refresh_snapshot_after_task = True
+        elif (
+            task == "restore-correction"
+            and isinstance(result, dict)
+            and result.get("operation") == "restore-correction"
+        ):
+            self.correction_restore_request = None
+            self._invalidate_staged_results(
+                "The pre-correction quadrupole state was restored. Remeasure "
+                "dispersion before starting another correction."
+            )
+            self.last_live_preflight = None
+            self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
+            self._refresh_status("Initial state restored")
+            self._append_log(
+                "Pre-correction quadrupole state restored and verified: "
                 + ", ".join(
                     f"{name}={value:.8g}"
                     for name, value in result.get("final_values", {}).items()
@@ -3210,6 +3385,9 @@ class MainWindow(QMainWindow):
                 "model-response": "Analyzing model · measurement remains unchanged",
                 "preflight": "Checking connections · measurement remains unchanged",
                 "design-k1": "Applying design K1 · current plot remains unchanged",
+                "restore-correction": (
+                    "Restoring initial state · current plot remains unchanged"
+                ),
             }
             self.plot_state_label.setText(messages.get(task, "Operation in progress"))
             self.plot_state_label.show()
@@ -4317,6 +4495,22 @@ class MainWindow(QMainWindow):
             if has_history
             else "No correction history is available yet."
         )
+        has_restore = (
+            self.correction_restore_request is not None
+            and self.config.backend.type.lower() == "epics"
+            and self.config.backend.mode == "write_enabled"
+            and not self.config.section.model_only
+        )
+        self.restore_initial_state_button.setVisible(has_restore)
+        self.restore_initial_state_button.setEnabled(
+            not running and has_restore
+        )
+        self.restore_initial_state_button.setToolTip(
+            "Restore the quadrupole values saved immediately before the latest "
+            "successful correction."
+            if has_restore
+            else "No successful online correction is available to restore."
+        )
 
     def _update_next_workflow_action(self, running: bool, task: str) -> None:
         self.workflow_summary_label.setText(self._workflow_summary_text())
@@ -4341,6 +4535,10 @@ class MainWindow(QMainWindow):
                 "apply": ("Applying and Verifying…", "Reviewed correction running"),
                 "run": ("Manual Correction", "Automatic correction running"),
                 "model-response": ("Calculating Model…", "Model analysis running"),
+                "restore-correction": (
+                    "Manual Correction",
+                    "Restoring pre-correction quadrupole state",
+                ),
             }
             button_text, state_text = labels.get(
                 task,
@@ -4922,6 +5120,7 @@ class MainWindow(QMainWindow):
             ),
         )
         self.session_energy_calibration_source = str(source)
+        self.correction_restore_request = None
         self._invalidate_staged_results(
             "Session energy calibration activated. Previous measurements and "
             "recommendations were discarded."
@@ -4960,6 +5159,7 @@ class MainWindow(QMainWindow):
             ),
         )
         self.session_energy_calibration_source = None
+        self.correction_restore_request = None
         self._invalidate_staged_results(
             "Configured energy calibration restored. Previous measurements and "
             "recommendations were discarded."
@@ -5021,6 +5221,7 @@ class MainWindow(QMainWindow):
                 "apply": "the pre-apply machine snapshot",
                 "run": "the automatic-correction start snapshot",
                 "design-k1": "the pre-write quadrupole snapshot",
+                "restore-correction": "the pre-restore quadrupole snapshot",
             }.get(self._active_task, "the operation snapshot")
             self._append_log(
                 f"Abort requested; stopping at a safe point and restoring "
@@ -5161,6 +5362,7 @@ class MainWindow(QMainWindow):
                 self.config.energy_knob.calibration
             )
             self.session_energy_calibration_source = None
+            self.correction_restore_request = None
         except Exception as exc:
             QMessageBox.warning(self, "Configuration", str(exc))
             return

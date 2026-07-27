@@ -14,7 +14,8 @@ if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
 try:
-    from PyQt5.QtWidgets import QApplication, QMessageBox
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QMessageBox
 
     from half_linac.src.apps.solenoid_centering.main import MainWindow, ScanFailureReport
     from half_linac.src.apps.solenoid_centering.mplwidget import MplWidget
@@ -80,9 +81,73 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         self.window._on_scan_finished(self._result(actionable=False))
 
         self.assertFalse(self.window.apply_button.isEnabled())
+        self.assertTrue(self.window.apply_button.isHidden())
+        self.assertTrue(self.window.restore_button.isHidden())
         self.assertEqual(
             self.window.status_strip.items["RESULT QUALITY"].value_label.text(),
             "NO VALID RECOMMENDATION",
+        )
+
+    def test_valid_result_shows_only_header_apply_action(self):
+        self.window._on_scan_finished(self._result(actionable=True))
+
+        self.assertFalse(self.window.apply_button.isHidden())
+        self.assertTrue(self.window.apply_button.isEnabled())
+        self.assertTrue(self.window.restore_button.isHidden())
+        self.assertEqual(self.window.result_card.layout().count(), 2)
+
+        self.window._set_result_action("restore")
+
+        self.assertTrue(self.window.apply_button.isHidden())
+        self.assertFalse(self.window.restore_button.isHidden())
+        self.assertTrue(self.window.restore_button.isEnabled())
+
+    def test_control_panel_uses_outer_card_and_compact_scan_labels(self):
+        self.assertIsNotNone(self.window.findChild(QFrame, "controlCard"))
+        self.assertIs(
+            self.window.hcorr_combo.parentWidget(),
+            self.window.vcorr_combo.parentWidget(),
+        )
+
+        labels = {label.text() for label in self.window.findChildren(QLabel)}
+        self.assertIn("Correctors", labels)
+        self.assertIn("Devices", labels)
+        self.assertIn("Scan", labels)
+        self.assertIn("Relative Scan Range", labels)
+        self.assertIn("Acquisition", labels)
+        self.assertIn("SOL", labels)
+        self.assertIn("COR", labels)
+        self.assertIn("Samples/Step", labels)
+        self.assertIn("Settle Time", labels)
+        self.assertNotIn("Solenoid offset min", labels)
+        self.assertNotIn("Corrector offset min", labels)
+        self.assertIs(
+            self.window.scoring_mode_combo.parentWidget(),
+            self.window.run_card,
+        )
+        self.assertIs(self.window.max_iters.parentWidget(), self.window.run_card)
+
+    def test_workspace_uses_linked_horizontal_and_vertical_splitters(self):
+        self.assertEqual(self.window.splitter.orientation(), Qt.Horizontal)
+        self.assertEqual(self.window.splitter.count(), 2)
+        self.assertFalse(self.window.splitter.childrenCollapsible())
+        self.assertEqual(self.window.workspace_splitter.orientation(), Qt.Vertical)
+        self.assertEqual(self.window.workspace_splitter.count(), 2)
+        self.assertFalse(self.window.workspace_splitter.childrenCollapsible())
+        self.assertIs(self.window.workspace_splitter.widget(0), self.window.plot_card)
+        self.assertIs(self.window.workspace_splitter.widget(1), self.window.result_card)
+        self.assertGreater(self.window.result_table.maximumHeight(), 220)
+
+    def test_status_strip_is_content_packed_with_trailing_stretch(self):
+        layout = self.window.status_strip.layout()
+
+        self.assertIsNotNone(layout.itemAt(layout.count() - 1).spacerItem())
+        self.assertEqual(layout.stretch(layout.count() - 1), 1)
+        self.assertTrue(
+            all(
+                layout.stretch(index) == 0
+                for index in range(layout.count() - 1)
+            )
         )
 
     def test_confirmation_shows_pvs_limits_and_quality(self):

@@ -94,6 +94,18 @@ conda activate half_linac
 python3 --version
 ```
 
+`environment.yml` 声明的新环境名是 `half_linac`。当前控制室工作站上已有的完整
+测试环境名是 `half`；在这台机器上应使用：
+
+```bash
+conda env list
+conda activate half
+python3 -c "import sys, pytest, PyQt5; print(sys.executable); print(pytest.__version__)"
+```
+
+环境名本身不影响程序，关键是 `python3`、pytest 和 PyQt5 来自同一个目标环境。
+如果 `which python3` 仍指向 base 环境，先重新执行 `conda activate half`。
+
 确认 `python3 --version` 显示 Python 3.10 或更高版本，推荐使用 Python 3.11。Python 3.9 或更低版本不支持本仓库中使用的 `dataclass(slots=True)` 和 `type | None` 类型写法，会导致 Jitter Analysis、BBA 等应用在导入阶段报错。
 
 控制室已验证的 SDDS Python binding 安装方式是建好主环境后单独安装：
@@ -247,6 +259,42 @@ bash scripts/check.sh
 - 对 `src/` 做 `compileall`
 - 检查仓库内脚本的 shell 语法
 - 不启动长进程
+
+### pytest 与离屏 GUI 检查
+
+测试文件通过顶层包名 `half_linac` 导入仓库代码，因此从仓库根运行 pytest 前要
+同时激活 Conda 环境并加载仓库路径：
+
+```bash
+conda activate half
+source scripts/setup.sh
+python3 -m pytest -q
+python3 scripts/smoke_gui_layouts.py
+```
+
+在由 `environment.yml` 新建、环境名仍为 `half_linac` 的机器上，把第一行改为
+`conda activate half_linac`。
+
+非交互 shell 或自动化任务可使用：
+
+```bash
+conda run -n half bash -lc \
+  'source scripts/setup.sh && python3 -m pytest -q'
+```
+
+螺线管居中只支持 real backend。运行它的离屏 GUI 测试时必须显式选择 IRFEL，
+同时把 EPICS CA 限制到本机，避免测试发现在线广播地址：
+
+```bash
+QT_QPA_PLATFORM=offscreen \
+HALF_LINAC_MACHINE_ID=irfel \
+HALF_LINAC_CONTROL_BACKEND=real \
+EPICS_CA_AUTO_ADDR_LIST=NO \
+EPICS_CA_ADDR_LIST=127.0.0.1 \
+python3 -m pytest -q tests/test_solenoid_centering_gui.py
+```
+
+上述测试只构造窗口和使用 mock，不启动 IOC、elegant，也不执行实机写入。
 
 ## 10. 常用运行命令
 

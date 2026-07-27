@@ -103,19 +103,19 @@ QFrame#summaryPanel {{
     border: 1px solid {summary_border};
     border-radius: 14px;
 }}
-QFrame#plotCard, QFrame#resultCard {{
+QFrame#controlCard, QFrame#plotCard, QFrame#resultCard {{
     background: {panel_bg};
     border: 1px solid {panel_border};
     border-radius: 14px;
 }}
-QFrame#controlPanel, QFrame#workspacePanel, QFrame#statusStrip {{
+QFrame#workspacePanel, QFrame#statusStrip {{
     background: transparent;
     border: none;
 }}
 QFrame#configSectionCard {{
-    background: {panel_bg};
-    border: 1px solid {panel_border};
-    border-radius: 8px;
+    background: {summary_bg};
+    border: 1px solid {summary_border};
+    border-radius: 11px;
 }}
 QLabel#summaryTitle {{
     color: {summary_title_fg};
@@ -138,6 +138,18 @@ QLabel[role="field"], QLabel[muted="true"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
+}}
+QLabel[role="groupTitle"] {{
+    color: {muted_fg};
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding-top: 2px;
+}}
+QLabel[role="columnHeader"] {{
+    color: {muted_fg};
+    font-size: 9px;
+    font-weight: 700;
 }}
 QFrame#sectionSeparator, QFrame#statusSeparator {{
     background: {status_separator};
@@ -381,8 +393,5 @@ QTableCornerButton::section {{
     border: none;
     border-right: 1px solid {panel_border};
     border-bottom: 1px solid {panel_border};
-}}
-QSplitter::handle {{
-    background: transparent;
 }}
 """.format_map(values)

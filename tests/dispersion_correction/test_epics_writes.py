@@ -393,6 +393,112 @@ def test_apply_design_targets_restores_snapshot_when_safety_fails() -> None:
     } == pytest.approx(baseline)
 
 
+def test_restore_correction_state_writes_reviewed_initial_values() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    for item in options["pv_map"]["quadrupoles"].values():
+        item["control"] = "k1"
+    config = replace(
+        config,
+        backend=replace(config.backend, options=options),
+        measurement=replace(
+            config.measurement,
+            samples_per_step=1,
+            sample_interval_s=1.0e-6,
+            settle_time_s=1.0e-6,
+        ),
+    )
+    epics = DynamicFakeEpics(initial_values())
+    machine = EpicsMachine(config, epics_client=epics)
+    targets = machine.read_quadrupole_readbacks()
+    corrected = {name: value + 0.001 for name, value in targets.items()}
+    for name, value in corrected.items():
+        epics.values[QUAD_K1_PVS[name]] = value
+    workflow = AchromatWorkflow(config, machine=machine)
+
+    result = workflow.restore_correction_state(
+        targets,
+        reviewed_baseline=corrected,
+        max_changes={name: 0.01 for name in targets},
+    )
+
+    assert result["operation"] == "restore-correction"
+    assert result["final_values"] == pytest.approx(targets)
+    assert {
+        name: epics.values[pv]
+        for name, pv in QUAD_K1_PVS.items()
+    } == pytest.approx(targets)
+
+
+def test_restore_correction_state_rejects_stale_current_values() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    for item in options["pv_map"]["quadrupoles"].values():
+        item["control"] = "k1"
+    config = replace(config, backend=replace(config.backend, options=options))
+    epics = DynamicFakeEpics(initial_values())
+    machine = EpicsMachine(config, epics_client=epics)
+    targets = machine.read_quadrupole_readbacks()
+    reviewed = {name: value + 0.001 for name, value in targets.items()}
+    for name, value in reviewed.items():
+        epics.values[QUAD_K1_PVS[name]] = value
+    epics.values[QUAD_K1_PVS["QM13"]] += 0.2
+    workflow = AchromatWorkflow(config, machine=machine)
+
+    with pytest.raises(RuntimeError, match="changed after review"):
+        workflow.restore_correction_state(
+            targets,
+            reviewed_baseline=reviewed,
+            max_changes={name: 0.01 for name in targets},
+        )
+
+    assert epics.caput_calls == []
+
+
+def test_restore_correction_state_rolls_back_when_safety_fails() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    for item in options["pv_map"]["quadrupoles"].values():
+        item["control"] = "k1"
+    config = replace(
+        config,
+        backend=replace(config.backend, options=options),
+        measurement=replace(
+            config.measurement,
+            samples_per_step=1,
+            sample_interval_s=1.0e-6,
+            settle_time_s=1.0e-6,
+        ),
+    )
+    epics = DynamicFakeEpics(initial_values())
+
+    class UnsafeAfterWriteMachine(EpicsMachine):
+        def is_safe(self) -> bool:
+            return False
+
+    machine = UnsafeAfterWriteMachine(config, epics_client=epics)
+    targets = machine.read_quadrupole_readbacks()
+    corrected = {name: value + 0.001 for name, value in targets.items()}
+    for name, value in corrected.items():
+        epics.values[QUAD_K1_PVS[name]] = value
+    workflow = AchromatWorkflow(config, machine=machine)
+
+    with pytest.raises(
+        RuntimeError,
+        match="pre-restore quadrupole setpoints restored",
+    ):
+        workflow.restore_correction_state(
+            targets,
+            reviewed_baseline=corrected,
+            max_changes={name: 0.01 for name in targets},
+        )
+
+    assert {
+        name: epics.values[pv]
+        for name, pv in QUAD_K1_PVS.items()
+    } == pytest.approx(corrected)
+
+
 def test_live_preflight_reads_all_required_pvs_without_writing() -> None:
     epics = DynamicFakeEpics(initial_values())
     machine = EpicsMachine(write_config(), epics_client=epics)

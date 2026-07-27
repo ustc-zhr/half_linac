@@ -15,6 +15,7 @@
 ## Working Rules
 - Default to the smallest safe change.
 - Preserve unrelated local changes in the worktree.
+- Treat “简洁且有效” (“simple and effective”) as two simultaneous requirements for UI and product work, not a compromise where effectiveness merely survives simplification. Remove unnecessary structure, controls, and wording while preserving clarity, discoverability, safety feedback, and full operational capability.
 - Prefer repo-relative scripts under `scripts/` instead of absolute home-directory paths.
 - Prefer `src/shared/machine_profile/` helpers for shared machine runtime/config imports.
 - Treat `src/optimization/GOTAcc/` and `src/apps/jitter_analysis/` as externally maintained integration code: prefer launcher, wrapper, config, or compatibility fixes around them, and avoid large functional changes inside those vendored subtrees unless the user explicitly asks.

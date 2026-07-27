@@ -98,7 +98,7 @@
     "success_min_improvement": 2.0
   },
   "safety": {
-    "max_reference_orbit_change_mm": 0.5
+    "max_reference_orbit_change_mm": 3
   },
   "ca_timeout": 0.5,
   "readback_timeout": 10.0,

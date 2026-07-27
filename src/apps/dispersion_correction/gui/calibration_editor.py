@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHeaderView,
@@ -222,9 +223,12 @@ class CalibrationEditorDialog(QDialog):
         self.table_hint_label.setObjectName("calibrationTableHint")
         points_header.addWidget(self.table_hint_label)
         points_header.addStretch(1)
-        self.load_button = QPushButton("Load Draft")
+        self.load_button = QPushButton("Load Latest")
         self.load_button.clicked.connect(self._load_latest)
         points_header.addWidget(self.load_button)
+        self.open_button = QPushButton("Open Draft...")
+        self.open_button.clicked.connect(self._open_draft)
+        points_header.addWidget(self.open_button)
         self.save_button = QPushButton("Save Draft")
         self.save_button.clicked.connect(self._save_draft)
         points_header.addWidget(self.save_button)
@@ -572,6 +576,20 @@ class CalibrationEditorDialog(QDialog):
                 f"No saved draft exists at:\n{path}",
             )
             return
+        self._load_draft(path)
+
+    def _open_draft(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Calibration Draft",
+            str(self.draft_directory),
+            "Calibration drafts (*.json);;All files (*)",
+            options=QFileDialog.Options() | QFileDialog.DontUseNativeDialog,
+        )
+        if path:
+            self._load_draft(Path(path))
+
+    def _load_draft(self, path: Path) -> None:
         try:
             draft = load_energy_calibration_draft(path)
         except Exception as exc:
