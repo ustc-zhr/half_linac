@@ -562,10 +562,11 @@ class MainWindow(QMainWindow):
 
         buttons = QHBoxLayout()
         self.start_button = QPushButton("Start Scan", self.run_card)
-        self.stop_button = QPushButton("Stop", self.run_card)
+        self.stop_button = QPushButton("Abort", self.run_card)
         self.start_button.setProperty("role", "primary")
         self.stop_button.setProperty("role", "danger")
         self.stop_button.setEnabled(False)
+        self.stop_button.setVisible(False)
         self.start_button.clicked.connect(self.start_scan)
         self.stop_button.clicked.connect(self.stop_scan)
         buttons.addWidget(self.start_button)
@@ -865,13 +866,25 @@ class MainWindow(QMainWindow):
         self.worker.start()
         self.check_button.setEnabled(False)
         self.start_button.setEnabled(False)
-        self.stop_button.setEnabled(True)
+        self._set_scan_action_running(True)
         self._set_preflight_inputs_enabled(False)
 
     def stop_scan(self):
         if self.worker is not None and self.worker.isRunning():
             self._set_workflow_status("STOPPING", "warning")
+            self._set_scan_action_running(True, stopping=True)
             self.worker.request_stop()
+
+    def _set_scan_action_running(
+        self,
+        running: bool,
+        *,
+        stopping: bool = False,
+    ) -> None:
+        self.start_button.setVisible(not running)
+        self.stop_button.setVisible(running)
+        self.stop_button.setText("Stopping..." if stopping else "Abort")
+        self.stop_button.setEnabled(running and not stopping)
 
     def apply_recommended(self):
         if self.last_result is None or self.last_result_preset is None:
@@ -1158,7 +1171,7 @@ class MainWindow(QMainWindow):
             self.preflight_ready
             and workflow_writes_allowed(self.context, "solenoid_centering")
         )
-        self.stop_button.setEnabled(False)
+        self._set_scan_action_running(False)
         self.progress.setVisible(False)
 
     def _populate_result_table(self, result):

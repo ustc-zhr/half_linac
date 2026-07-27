@@ -127,6 +127,27 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         )
         self.assertIs(self.window.max_iters.parentWidget(), self.window.run_card)
 
+    def test_abort_action_is_visible_only_while_scan_is_running(self):
+        self.assertFalse(self.window.start_button.isHidden())
+        self.assertTrue(self.window.stop_button.isHidden())
+
+        self.window._set_scan_action_running(True)
+
+        self.assertTrue(self.window.start_button.isHidden())
+        self.assertFalse(self.window.stop_button.isHidden())
+        self.assertTrue(self.window.stop_button.isEnabled())
+        self.assertEqual(self.window.stop_button.text(), "Abort")
+
+        self.window._set_scan_action_running(True, stopping=True)
+
+        self.assertFalse(self.window.stop_button.isEnabled())
+        self.assertEqual(self.window.stop_button.text(), "Stopping...")
+
+        self.window._set_scan_action_running(False)
+
+        self.assertFalse(self.window.start_button.isHidden())
+        self.assertTrue(self.window.stop_button.isHidden())
+
     def test_workspace_uses_linked_horizontal_and_vertical_splitters(self):
         self.assertEqual(self.window.splitter.orientation(), Qt.Horizontal)
         self.assertEqual(self.window.splitter.count(), 2)
