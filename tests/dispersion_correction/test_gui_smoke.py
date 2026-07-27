@@ -59,6 +59,14 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         window.show_design_model_checkbox.parentWidget()
         is window.overview_controls.overlays_group
     )
+    assert (
+        window.show_design_model_checkbox.property("role")
+        == "modelOverlayToggle"
+    )
+    assert (
+        window.show_snapshot_model_checkbox.property("role")
+        == "modelOverlayToggle"
+    )
     assert window.dispersion_curve.parentWidget() is window.dispersion_overview
     assert window.model_details_button.parentWidget() is window.overview_controls
     assert window.model_details_button.text() == "Model Details…"

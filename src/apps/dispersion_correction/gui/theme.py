@@ -308,6 +308,34 @@ def build_stylesheet(name: str) -> str:
     QLabel[muted="true"] {{
         color: {t['text_muted']};
     }}
+    QCheckBox[role="modelOverlayToggle"] {{
+        color: {t['text_primary']};
+        font-size: 12px;
+        font-weight: 600;
+        spacing: 8px;
+    }}
+    QCheckBox[role="modelOverlayToggle"]:disabled {{
+        color: {t['text_muted']};
+    }}
+    QCheckBox[role="modelOverlayToggle"]::indicator {{
+        width: 16px;
+        height: 16px;
+        border: 1px solid {t['section_border']};
+        border-radius: 8px;
+        background: {t['input_bg']};
+    }}
+    QCheckBox[role="modelOverlayToggle"]::indicator:hover {{
+        border-color: {t['focus']};
+        background: {t['toggle_hover']};
+    }}
+    QCheckBox[role="modelOverlayToggle"]::indicator:checked {{
+        background: {t['focus']};
+        border: 2px solid {t['text_primary']};
+    }}
+    QCheckBox[role="modelOverlayToggle"]::indicator:disabled {{
+        background: {t['toggle_bg']};
+        border-color: {t['toggle_border']};
+    }}
     QLabel#configTitle, QLabel#cardTitle {{
         font-size: 15px;
         font-weight: 800;

@@ -1894,6 +1894,7 @@ class MainWindow(QMainWindow):
         )
         self.plot_state_label.hide()
         self.show_design_model_checkbox = QCheckBox("Design model")
+        self.show_design_model_checkbox.setProperty("role", "modelOverlayToggle")
         self.show_design_model_checkbox.setChecked(False)
         self.show_design_model_checkbox.setToolTip(
             "Calculate and show the read-only design-lattice model. "
@@ -1903,6 +1904,7 @@ class MainWindow(QMainWindow):
             self._model_visibility_changed
         )
         self.show_snapshot_model_checkbox = QCheckBox("Current snapshot")
+        self.show_snapshot_model_checkbox.setProperty("role", "modelOverlayToggle")
         self.show_snapshot_model_checkbox.setChecked(False)
         self.show_snapshot_model_checkbox.setEnabled(False)
         self.show_snapshot_model_checkbox.setToolTip(
