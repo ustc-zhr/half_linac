@@ -35,7 +35,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     assert window.windowTitle() == "Dispersion Correction"
-    assert (window.width(), window.height()) == (1600, 1000)
+    assert (window.width(), window.height()) == (1700, 1020)
     assert not hasattr(window, "tabs")
     assert not hasattr(window, "workflow_tabs")
     assert not hasattr(window, "detail_sections")
@@ -733,7 +733,6 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
             readings={},
         )
     )
-    profile_window._set_running(False, "")
     assert profile_window.measurement_action_button.isEnabled()
     checked_preflight = profile_window.last_live_preflight
     preflight_seen_by_measure = []

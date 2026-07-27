@@ -943,7 +943,7 @@ class MainWindow(QMainWindow):
         self._offline_demo_window: MainWindow | None = None
         self.setWindowTitle(self._window_title())
         self.setMinimumSize(1120, 760)
-        self.resize(1600, 1000)
+        self.resize(1700, 1020)
         self.theme_name = (
             "control_room" if resolve_initial_theme() == "light" else "night_shift"
         )
@@ -1764,7 +1764,12 @@ class MainWindow(QMainWindow):
         )
         self.apply_design_k1_button.clicked.connect(self._apply_design_k1)
         model_dialog_actions.addWidget(self.apply_design_k1_button)
-        model_dialog_actions.addStretch(1)
+        self.design_k1_status_label = QLabel()
+        self.design_k1_status_label.setObjectName("designK1StatusLabel")
+        self.design_k1_status_label.setProperty("role", "field")
+        self.design_k1_status_label.setWordWrap(True)
+        self.design_k1_status_label.hide()
+        model_dialog_actions.addWidget(self.design_k1_status_label, 1)
         self.close_model_details_button = QPushButton("Close")
         self.close_model_details_button.clicked.connect(self.model_dialog.close)
         model_dialog_actions.addWidget(self.close_model_details_button)
@@ -3267,6 +3272,12 @@ class MainWindow(QMainWindow):
         self._append_log(
             f"Model comparison completed from {result.model_source} without machine writes"
         )
+        self._set_running(False, "")
+        design_k1_reason = self._design_k1_block_reason()
+        if design_k1_reason is None:
+            self._append_log("Design K1 targets are ready for operator review")
+        else:
+            self._append_log(f"Design K1 remains blocked: {design_k1_reason}")
 
     def _model_response_failed(self, message: str) -> None:
         failed_source = self.pending_model_source
@@ -4703,6 +4714,12 @@ class MainWindow(QMainWindow):
                 "correction quadrupoles."
             )
         )
+        if design_k1_reason is None:
+            self.design_k1_status_label.clear()
+            self.design_k1_status_label.hide()
+        else:
+            self.design_k1_status_label.setText(design_k1_reason)
+            self.design_k1_status_label.show()
         self._update_plot_state(running=running, task=task)
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(not running and operation_allowed)
@@ -5288,6 +5305,7 @@ class MainWindow(QMainWindow):
 
     def _live_preflight_completed(self, result) -> None:
         self._handle_live_preflight_result(result, interactive=True)
+        self._set_running(False, "")
 
     def _workflow_preflight_completed(self, result) -> None:
         self._handle_live_preflight_result(result, interactive=False)
@@ -5339,6 +5357,7 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = None
         self.status_strip.set_value("READINESS", "NOT READY", "danger")
         self._append_log(f"Live preflight failed: {message}")
+        self._set_running(False, "")
         QMessageBox.warning(
             self,
             "Connection Check Failed",
