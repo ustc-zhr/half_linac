@@ -30,7 +30,10 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         QPushButton,
     )
 
-    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.gui.main_window import (
+        DispersionPlotDataset,
+        MainWindow,
+    )
 
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
@@ -944,6 +947,22 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.dispersion_curve._is_visible_optics_element("BPM06", "MONI")
     assert half_window.dispersion_curve._is_visible_optics_element("DM8", "SBEN")
     assert not half_window.dispersion_curve._is_visible_optics_element("PRF02", "WATCH")
+    entrance_measurement = DispersionPlotDataset(
+        bpm_names=("BPM02", "BPM99"),
+        values_mm=np.asarray([1.0, 2.0]),
+        sigma_mm=np.asarray([0.1, 0.1]),
+        valid=np.asarray([True, True]),
+        label="Measured",
+        target_mask=np.asarray([False, False]),
+    )
+    half_window.live_plot_measurement = entrance_measurement
+    half_window._refresh_plot_measurement()
+    app.processEvents()
+    assert half_window.dispersion_curve._measurement_s_by_name()["BPM02"] == 0.0
+    assert half_window.dispersion_curve.unmapped_measurement_bpms() == ("BPM99",)
+    assert "Measured BPMs missing from the model plot: BPM99" in (
+        half_window.log_view.toPlainText()
+    )
     half_window.close()
 
     half_real_context = load_app_context(

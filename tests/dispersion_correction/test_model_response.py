@@ -55,7 +55,12 @@ class FakeModelBackend:
         "QL12": 0.0,
     }
 
+    def __init__(self):
+        self.optics_sequences = []
+
     def get_lattice_element(self, element_id):
+        if element_id.startswith("BPM"):
+            return {"NAME": element_id, "TYPE": "MONI", "L": "0"}
         return {"K1": str(self._base[element_id])}
 
     def get_line_elements(self, _entrance, _exit):
@@ -64,7 +69,15 @@ class FakeModelBackend:
             for name, value in self._base.items()
         )
 
-    def get_optics_profile(self, _entrance, _exit, *, lattice_overrides=None, **_kwargs):
+    def get_optics_profile(
+        self,
+        _entrance,
+        _exit,
+        *,
+        lattice_overrides=None,
+        seq="exit2exit",
+    ):
+        self.optics_sequences.append(seq)
         dx_mm = 0.25
         dxp_mrad = -0.1
         for device, fields in (lattice_overrides or {}).items():
@@ -105,6 +118,17 @@ class FakeModelBackend:
         )
 
 
+def test_optics_sequence_keeps_thick_entrance_exit_to_exit() -> None:
+    backend = FakeModelBackend()
+    backend.get_lattice_element = lambda _name: {
+        "NAME": "Q_ENTRANCE",
+        "TYPE": "QUAD",
+        "L": "0.1",
+    }
+
+    assert model_response._optics_sequence(backend, "Q_ENTRANCE") == "exit2exit"
+
+
 def test_half_bl01_design_source_reports_zero_design_reference_deltas(monkeypatch) -> None:
     context = load_app_context(
         "dispersion_correction",
@@ -112,10 +136,12 @@ def test_half_bl01_design_source_reports_zero_design_reference_deltas(monkeypatc
         control_backend="vm",
     )
     _, config = load_profile_run_config(context)
-    monkeypatch.setattr(model_response, "build_model_backend", lambda _context: FakeModelBackend())
+    backend = FakeModelBackend()
+    monkeypatch.setattr(model_response, "build_model_backend", lambda _context: backend)
 
     result = calculate_model_response(context, config)
 
+    assert backend.optics_sequences == ["ent2exit"]
     np.testing.assert_allclose(result.selected_values, [0.25, -0.1])
     np.testing.assert_allclose(result.design_reference_values, [0.25, -0.1])
     assert result.observable_components == ("dx", "dxp")

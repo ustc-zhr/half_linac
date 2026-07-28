@@ -340,8 +340,9 @@ class DispersionCurveWidget(QWidget):
         "element details when a model has been analyzed."
     )
 
-    def __init__(self) -> None:
+    def __init__(self, model_entrance: str | None = None) -> None:
         super().__init__()
+        self.model_entrance = model_entrance
         self.result: ModelResponseResult | None = None
         self.measurement: DispersionPlotDataset | None = None
         self.reference_measurement: DispersionPlotDataset | None = None
@@ -353,6 +354,10 @@ class DispersionCurveWidget(QWidget):
         self.setMinimumHeight(300)
         self.setMouseTracking(True)
         self.setToolTip(self.DEFAULT_TOOLTIP)
+
+    def set_model_entrance(self, name: str | None) -> None:
+        self.model_entrance = name
+        self.update()
 
     def set_result(self, result: ModelResponseResult | None) -> None:
         self.result = result
@@ -380,6 +385,39 @@ class DispersionCurveWidget(QWidget):
     def set_theme(self, name: str) -> None:
         self.theme_name = name
         self.update()
+
+    def _measurement_s_by_name(self) -> dict[str, float]:
+        if self.result is not None:
+            curve = self.result.selected_curve
+            positions = {
+                name: float(curve.s_m[index])
+                for index, name in enumerate(curve.element_names)
+            }
+            if self.model_entrance:
+                positions.setdefault(self.model_entrance, float(curve.s_m[0]))
+            return positions
+        if self.measurement is None:
+            return {}
+        return {
+            name: float(index)
+            for index, name in enumerate(self.measurement.bpm_names)
+        }
+
+    def unmapped_measurement_bpms(self) -> tuple[str, ...]:
+        if self.result is None or self.measurement is None:
+            return ()
+        positions = self._measurement_s_by_name()
+        return tuple(
+            bpm
+            for bpm, value, valid in zip(
+                self.measurement.bpm_names,
+                self.measurement.values_mm,
+                self.measurement.valid,
+            )
+            if bool(valid)
+            and math.isfinite(float(value))
+            and bpm not in positions
+        )
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
@@ -440,18 +478,12 @@ class DispersionCurveWidget(QWidget):
             s_values = self.result.selected_curve.s_m
             s_min = float(s_values[0])
             s_max = float(s_values[-1])
-            s_by_name = {
-                name: float(self.result.selected_curve.s_m[index])
-                for index, name in enumerate(self.result.selected_curve.element_names)
-            }
+            s_by_name = self._measurement_s_by_name()
         else:
             assert self.measurement is not None
             s_min = 0.0
             s_max = float(max(len(self.measurement.bpm_names) - 1, 1))
-            s_by_name = {
-                name: float(index)
-                for index, name in enumerate(self.measurement.bpm_names)
-            }
+            s_by_name = self._measurement_s_by_name()
         s_span = max(s_max - s_min, 1.0e-12)
 
         grid_pen = QPen(QColor(tokens["section_border"]))
@@ -955,6 +987,7 @@ class MainWindow(QMainWindow):
         self._refresh_snapshot_after_task = False
         self.live_plot_measurement: DispersionPlotDataset | None = None
         self.reference_plot_measurement: DispersionPlotDataset | None = None
+        self._last_unmapped_plot_bpms: tuple[str, ...] = ()
         self._automatic_initial_measurement: DispersionMeasurement | None = None
         self._active_task = ""
         self.correction_mode: str | None = None
@@ -1853,7 +1886,9 @@ class MainWindow(QMainWindow):
         iteration_history_layout.addWidget(
             self.iteration_history_status_label
         )
-        self.iteration_history_curve = DispersionCurveWidget()
+        self.iteration_history_curve = DispersionCurveWidget(
+            self.config.section.model_entrance
+        )
         self.iteration_history_curve.setMinimumHeight(330)
         iteration_history_layout.addWidget(self.iteration_history_curve, 2)
         iteration_history_layout.addWidget(
@@ -1935,7 +1970,9 @@ class MainWindow(QMainWindow):
             self.model_details_button,
         )
         overview_layout.addWidget(self.overview_controls)
-        self.dispersion_curve = DispersionCurveWidget()
+        self.dispersion_curve = DispersionCurveWidget(
+            self.config.section.model_entrance
+        )
         overview_layout.addWidget(self.dispersion_curve, 1)
 
         self.workspace_splitter = QSplitter(Qt.Vertical)
@@ -2433,6 +2470,14 @@ class MainWindow(QMainWindow):
 
     def _load_config_to_widgets(self) -> None:
         self.correction_restore_request = None
+        if hasattr(self, "dispersion_curve"):
+            self.dispersion_curve.set_model_entrance(
+                self.config.section.model_entrance
+            )
+            self.iteration_history_curve.set_model_entrance(
+                self.config.section.model_entrance
+            )
+            self._last_unmapped_plot_bpms = ()
         self._invalidate_staged_results(
             "Configuration loaded. Measure the Q response before calculating a recommendation."
         )
@@ -3381,8 +3426,20 @@ class MainWindow(QMainWindow):
             measurement,
             self.reference_plot_measurement,
         )
+        self._report_unmapped_plot_bpms()
         self._show_measurement_comparison(measurement)
         self._update_plot_state()
+
+    def _report_unmapped_plot_bpms(self) -> None:
+        unmapped = self.dispersion_curve.unmapped_measurement_bpms()
+        if unmapped == self._last_unmapped_plot_bpms:
+            return
+        self._last_unmapped_plot_bpms = unmapped
+        if unmapped:
+            self._append_log(
+                "Measured BPMs missing from the model plot: "
+                + ", ".join(unmapped)
+            )
 
     def _update_plot_state(self, *, running: bool = False, task: str = "") -> None:
         if not hasattr(self, "plot_state_label"):
@@ -4270,6 +4327,7 @@ class MainWindow(QMainWindow):
             self.show_design_model_checkbox.setChecked(True)
             self.show_snapshot_model_checkbox.setChecked(False)
         self._model_visibility_changed()
+        self._report_unmapped_plot_bpms()
 
     def _show_result(self, result: CorrectionResult) -> None:
         self._show_measurement(result.final)

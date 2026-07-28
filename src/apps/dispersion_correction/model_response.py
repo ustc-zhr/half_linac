@@ -314,10 +314,12 @@ def _optics_curve(
     *,
     lattice_overrides: Mapping[str, Mapping[str, float]] | None = None,
 ) -> ModelOpticsCurve:
+    sequence = _optics_sequence(backend, entrance)
     rows = backend.get_optics_profile(
         entrance,
         exit_element,
         lattice_overrides=lattice_overrides,
+        seq=sequence,
     )
     if not rows:
         raise ValueError("Elegant model returned an empty optics profile")
@@ -345,6 +347,22 @@ def _optics_curve(
         beta_x_m=np.asarray([row["beta_x_m"] for row in rows], dtype=float),
         beta_y_m=np.asarray([row["beta_y_m"] for row in rows], dtype=float),
     )
+
+
+def _optics_sequence(backend, entrance: str) -> str:
+    element = backend.get_lattice_element(entrance)
+    element_type = str(element.get("TYPE", "")).strip().upper()
+    try:
+        length = float(element.get("L", 0.0))
+    except (TypeError, ValueError):
+        length = float("nan")
+    if (
+        element_type in {"MARK", "MONI", "WATCH"}
+        and np.isfinite(length)
+        and abs(length) <= 1.0e-12
+    ):
+        return "ent2exit"
+    return "exit2exit"
 
 
 def _observable_vector(
