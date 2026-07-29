@@ -894,11 +894,17 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.next_action_button.property("workflowAction") == ""
     assert not hasattr(half_window, "connection_controls")
     assert half_window.preflight_button.isVisibleTo(half_window)
+    half_window.show_design_model_checkbox.blockSignals(True)
+    half_window.show_design_model_checkbox.setChecked(True)
+    half_window.show_design_model_checkbox.blockSignals(False)
+    assert half_window.show_design_model_checkbox.isChecked()
     vertical_index = half_window.section_combo.findData("bv01_bv02")
     assert vertical_index >= 0
     half_window.section_combo.setCurrentIndex(vertical_index)
     app.processEvents()
     assert half_window.config.measurement.plane == "y"
+    assert not half_window.show_design_model_checkbox.isChecked()
+    assert not half_window.show_snapshot_model_checkbox.isChecked()
     assert half_window.dispersion_curve.plane == "y"
     assert half_window.iteration_history_curve.plane == "y"
     assert half_window.measure_title.text() == (

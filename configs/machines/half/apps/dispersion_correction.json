@@ -12,7 +12,7 @@
   "sections": [
     {
       "id": "bl01",
-      "display_name": "BL01 Horizontal Dogleg",
+      "display_name": "BL01 Horizontal Achromat",
       "model_entrance": "BPM02",
       "model_exit": "BPM07",
       "target_bpms": [
@@ -251,6 +251,115 @@
           "target": 0.0
         }
       ],
+      "knobs": [],
+      "measurement": {
+        "plane": "xy",
+        "samples_per_step": 5,
+        "sample_interval_s": 0.2,
+        "final_samples": 10,
+        "settle_time_s": 1.0
+      }
+    },
+    {
+      "id": "bh04_sep_joint_correction",
+      "display_name": "BH04–SEP Joint Correction",
+      "model_entrance": "BPM36",
+      "model_exit": "BPM43",
+      "target_bpms": [],
+      "monitor_bpms": [
+        "BPM36",
+        "BPM37",
+        "BPM38",
+        "BPM39",
+        "BPM40",
+        "BPM41",
+        "BPM42",
+        "BPM43"
+      ],
+      "target_dispersion_mm": [],
+      "model_observables": [
+        {
+          "name": "BPM42 Dx",
+          "element": "BPM42",
+          "component": "dx",
+          "target": -497.2145918210241
+        },
+        {
+          "name": "BPM43 Dx",
+          "element": "BPM43",
+          "component": "dx",
+          "target": -192.7016225246745
+        },
+        {
+          "name": "BPM42 Dy",
+          "element": "BPM42",
+          "component": "dy",
+          "target": 0.0
+        },
+        {
+          "name": "BPM43 Dy",
+          "element": "BPM43",
+          "component": "dy",
+          "target": 0.0
+        }
+      ],
+      "joint_response_analysis": {
+        "targets": [
+          {
+            "bpm": "BPM42",
+            "plane": "x",
+            "target_mm": -497.2145918210241,
+            "tolerance_mm": 1.0
+          },
+          {
+            "bpm": "BPM43",
+            "plane": "x",
+            "target_mm": -192.7016225246745,
+            "tolerance_mm": 1.0
+          },
+          {
+            "bpm": "BPM42",
+            "plane": "y",
+            "target_mm": 0.0,
+            "tolerance_mm": 1.0
+          },
+          {
+            "bpm": "BPM43",
+            "plane": "y",
+            "target_mm": 0.0,
+            "tolerance_mm": 1.0
+          }
+        ],
+        "knobs": [
+          {
+            "name": "QT30_QT35_sym",
+            "devices": {
+              "QT30": 1.0,
+              "QT35": 1.0
+            },
+            "scan_step": 0.001,
+            "limit": 0.1
+          },
+          {
+            "name": "QT31_QT34_sym",
+            "devices": {
+              "QT31": 1.0,
+              "QT34": 1.0
+            },
+            "scan_step": 0.001,
+            "limit": 0.1
+          },
+          {
+            "name": "QT32_QT33_sym",
+            "devices": {
+              "QT32": 1.0,
+              "QT33": 1.0
+            },
+            "scan_step": 0.001,
+            "limit": 0.1
+          }
+        ]
+      },
       "knobs": [],
       "measurement": {
         "plane": "xy",

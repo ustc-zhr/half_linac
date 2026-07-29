@@ -262,10 +262,11 @@ def test_half_bh01_bh03_section_uses_symmetric_k1_knobs() -> None:
         control_backend="vm",
     )
     assert profile_section_choices(context) == (
-        ("bl01", "BL01 Horizontal Dogleg"),
+        ("bl01", "BL01 Horizontal Achromat"),
         ("bh01_bh03", "BH01–BH03 Horizontal Achromat"),
         ("bv01_bv02", "BV01–BV02 Vertical Achromat"),
         ("bh04_sep_diagnostics", "BH04–SEP Diagnostics"),
+        ("bh04_sep_joint_correction", "BH04–SEP Joint Correction"),
     )
 
     _, config = load_profile_run_config(context, section_id="bh01_bh03")
@@ -467,6 +468,7 @@ def test_half_bh04_sep_section_is_measurement_only() -> None:
         "WSEP1",
         "WSEP1",
     )
+    assert not config.section.joint_response_analysis.enabled
     assert config.backend.options["pv_map"]["quadrupoles"] == {}
     assert set(config.backend.options["pv_map"]["bpms"]) == set(
         config.monitor_bpms
@@ -475,6 +477,39 @@ def test_half_bh04_sep_section_is_measurement_only() -> None:
         set(mapping) == {"x", "y"}
         for mapping in config.backend.options["pv_map"]["bpms"].values()
     )
+
+
+def test_half_bh04_sep_joint_correction_is_independent() -> None:
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="vm",
+    )
+    _, config = load_profile_run_config(
+        context,
+        section_id="bh04_sep_joint_correction",
+    )
+
+    assert not config.section.diagnostic_only
+    assert config.measurement.plane == "xy"
+    assert config.target_bpms == ()
+    assert config.knobs == ()
+    analysis = config.section.joint_response_analysis
+    assert analysis.enabled
+    assert tuple(target.name for target in analysis.targets) == (
+        "BPM42 ηx",
+        "BPM43 ηx",
+        "BPM42 ηy",
+        "BPM43 ηy",
+    )
+    assert tuple(knob.name for knob in analysis.knobs) == (
+        "QT30_QT35_sym",
+        "QT31_QT34_sym",
+        "QT32_QT33_sym",
+    )
+    assert set(config.backend.options["pv_map"]["quadrupoles"]) == {
+        f"QT{index}" for index in range(30, 36)
+    }
     real_context = load_app_context(
         "dispersion_correction",
         machine_id="half",

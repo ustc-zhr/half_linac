@@ -11,6 +11,32 @@ from half_linac.src.apps.dispersion_correction.profile_runtime import load_profi
 from half_linac.src.shared.machine_profile import load_app_context, resolve_channel
 
 
+def test_half_joint_correction_design_model_uses_joint_quadrupoles() -> None:
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="vm",
+    )
+    _, config = load_profile_run_config(
+        context,
+        section_id="bh04_sep_joint_correction",
+    )
+
+    result = calculate_model_response(
+        context,
+        config,
+        model_source="design",
+    )
+
+    assert result.device_names == tuple(f"QT{index}" for index in range(30, 36))
+    assert result.observable_names == (
+        "BPM42 Dx",
+        "BPM43 Dx",
+        "BPM42 Dy",
+        "BPM43 Dy",
+    )
+
+
 class FakeModelBackend:
     _base = {
         "QL01": 1.0,

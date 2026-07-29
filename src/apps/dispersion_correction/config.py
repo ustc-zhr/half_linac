@@ -9,6 +9,8 @@ from half_linac.src.apps.dispersion_correction.models import (
     BackendConfig,
     DispersionSectionConfig,
     EnergyKnobConfig,
+    JointDispersionTargetConfig,
+    JointResponseAnalysisConfig,
     KnobConfig,
     MeasurementConfig,
     ModelObservableConfig,
@@ -45,17 +47,23 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
     safety_raw = _mapping(raw.get("safety", {}), "safety")
     section_raw = _mapping(raw.get("section", {}), "section")
     diagnostic_only = bool(section_raw.get("diagnostic_only", False))
+    joint_requested = bool(
+        _mapping(
+            section_raw.get("joint_response_analysis", {}),
+            "section.joint_response_analysis",
+        )
+    )
 
     knobs_raw = raw.get("knobs", [])
     if not isinstance(knobs_raw, list):
         raise ValueError("knobs must be a list")
-    if not knobs_raw and not diagnostic_only:
+    if not knobs_raw and not diagnostic_only and not joint_requested:
         raise ValueError("Correction sections require at least one knob")
 
     target_bpms = raw.get("target_bpms", [])
     if not isinstance(target_bpms, list):
         raise ValueError("target_bpms must be a list")
-    if not target_bpms and not diagnostic_only:
+    if not target_bpms and not diagnostic_only and not joint_requested:
         raise ValueError("Correction sections require target_bpms")
     monitor_bpms = raw.get("monitor_bpms", [])
     if not isinstance(monitor_bpms, list):
@@ -104,6 +112,26 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
             )
             for index, bpm in enumerate(target_bpms)
         )
+    joint_raw = _mapping(
+        section_raw.get("joint_response_analysis", {}),
+        "section.joint_response_analysis",
+    )
+    joint_targets_raw = joint_raw.get("targets", [])
+    if not isinstance(joint_targets_raw, list):
+        raise ValueError("section.joint_response_analysis.targets must be a list")
+    joint_knobs_raw = joint_raw.get("knobs", [])
+    if not isinstance(joint_knobs_raw, list):
+        raise ValueError("section.joint_response_analysis.knobs must be a list")
+    joint_analysis = JointResponseAnalysisConfig(
+        targets=tuple(
+            _parse_joint_target(item, index)
+            for index, item in enumerate(joint_targets_raw)
+        ),
+        knobs=tuple(
+            _parse_knob(item, index)
+            for index, item in enumerate(joint_knobs_raw)
+        ),
+    )
 
     config = RunConfig(
         backend=BackendConfig(
@@ -133,6 +161,7 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
             model_exit=_optional_string(section_raw.get("model_exit")),
             target_dispersion_mm=target_dispersion_mm,
             model_observables=model_observables,
+            joint_response_analysis=joint_analysis,
             model_only=bool(section_raw.get("model_only", False)),
             diagnostic_only=diagnostic_only,
         ),
@@ -188,9 +217,36 @@ def validate_config(config: RunConfig) -> None:
         raise ValueError("Diagnostic-only sections must not define target_bpms")
     if config.section.diagnostic_only and config.knobs:
         raise ValueError("Diagnostic-only sections must not define correction knobs")
+    joint = config.section.joint_response_analysis
+    if bool(joint.targets) != bool(joint.knobs):
+        raise ValueError(
+            "section.joint_response_analysis requires both targets and knobs"
+        )
+    if joint.enabled and config.measurement.plane != "xy":
+        raise ValueError(
+            "section.joint_response_analysis requires measurement.plane='xy'"
+        )
+    joint_names = [target.name for target in joint.targets]
+    if len(set(joint_names)) != len(joint_names):
+        raise ValueError("Joint response targets must not contain duplicates")
+    measurement_bpms = set(config.measurement_bpms)
+    for target in joint.targets:
+        if not target.bpm:
+            raise ValueError("Joint response target BPM must not be empty")
+        if target.plane not in {"x", "y"}:
+            raise ValueError("Joint response target plane must be 'x' or 'y'")
+        if target.bpm not in measurement_bpms:
+            raise ValueError(
+                f"Joint response target BPM {target.bpm} is not a measurement BPM"
+            )
+        if not math.isfinite(target.target_mm):
+            raise ValueError("Joint response target values must be finite")
+        if not math.isfinite(target.tolerance_mm) or target.tolerance_mm <= 0:
+            raise ValueError("Joint response target tolerances must be positive")
     if (
         config.measurement.plane == "xy"
         and not config.section.diagnostic_only
+        and not joint.enabled
     ):
         raise ValueError(
             "measurement.plane='xy' currently requires a diagnostic-only section"
@@ -244,6 +300,19 @@ def _parse_knob(raw: Any, index: int) -> KnobConfig:
     if knob.scan_step > knob.limit:
         raise ValueError(f"{knob.name}: scan_step must not exceed limit")
     return knob
+
+
+def _parse_joint_target(raw: Any, index: int) -> JointDispersionTargetConfig:
+    item = _mapping(
+        raw,
+        f"section.joint_response_analysis.targets[{index}]",
+    )
+    return JointDispersionTargetConfig(
+        bpm=str(item.get("bpm", "")).strip(),
+        plane=str(item.get("plane", "")).strip().lower(),
+        target_mm=float(item.get("target_mm", 0.0)),
+        tolerance_mm=float(item.get("tolerance_mm", 1.0)),
+    )
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:

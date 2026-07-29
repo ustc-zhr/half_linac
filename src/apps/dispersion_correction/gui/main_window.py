@@ -56,10 +56,15 @@ from half_linac.src.apps.dispersion_correction.gui.calibration_editor import (
 )
 from half_linac.src.apps.dispersion_correction.gui.theme import build_stylesheet, theme_tokens
 from half_linac.src.apps.dispersion_correction.gui.widgets import StatusStrip
+from half_linac.src.apps.dispersion_correction.joint_analysis import (
+    JointResponseAnalyzer,
+)
 from half_linac.src.apps.dispersion_correction.models import (
     CorrectionRecommendation,
     CorrectionResult,
     DispersionMeasurement,
+    JointCorrectionResult,
+    JointResponseAnalysisResult,
     KnobConfig,
     ModelOpticsCurve,
     ModelResponseResult,
@@ -114,6 +119,7 @@ class WorkflowWorker(QThread):
         task: str,
         config: RunConfig,
         recommendation: CorrectionRecommendation | None = None,
+        joint_recommendation: JointResponseAnalysisResult | None = None,
         design_k1_request: DesignK1Request | None = None,
         restore_request: CorrectionRestoreRequest | None = None,
     ) -> None:
@@ -121,6 +127,7 @@ class WorkflowWorker(QThread):
         self.task = task
         self.config = config
         self.recommendation = recommendation
+        self.joint_recommendation = joint_recommendation
         self.design_k1_request = design_k1_request
         self.restore_request = restore_request
 
@@ -144,6 +151,33 @@ class WorkflowWorker(QThread):
                 )
             elif self.task == "response":
                 result = workflow.build_response_matrix()
+            elif self.task == "joint-response":
+                result = JointResponseAnalyzer(
+                    self.config,
+                    log_callback=self.log.emit,
+                    cancellation_callback=self.isInterruptionRequested,
+                    progress_callback=self._emit_progress,
+                    preflight_callback=self.preflight.emit,
+                ).run()
+            elif self.task == "joint-apply":
+                if self.joint_recommendation is None:
+                    raise ValueError("No reviewed joint recommendation was supplied")
+                result = JointResponseAnalyzer(
+                    self.config,
+                    log_callback=self.log.emit,
+                    cancellation_callback=self.isInterruptionRequested,
+                    progress_callback=self._emit_progress,
+                    preflight_callback=self.preflight.emit,
+                ).apply_recommendation(self.joint_recommendation)
+            elif self.task == "joint-run":
+                result = JointResponseAnalyzer(
+                    self.config,
+                    log_callback=self.log.emit,
+                    cancellation_callback=self.isInterruptionRequested,
+                    progress_callback=self._emit_progress,
+                    preflight_callback=self.preflight.emit,
+                    measurement_callback=self.correction_measurement.emit,
+                ).run_automatic()
             elif self.task == "run":
                 result = workflow.run()
             elif self.task == "apply":
@@ -1032,6 +1066,7 @@ class MainWindow(QMainWindow):
         self.latest_measurement_time: datetime | None = None
         self.latest_measurement: DispersionMeasurement | None = None
         self.latest_response: ResponseMatrixResult | None = None
+        self.latest_joint_response: JointResponseAnalysisResult | None = None
         self.correction_recommendation: CorrectionRecommendation | None = None
         self.correction_session_runs: list[CorrectionSessionRun] = []
         self.correction_restore_request: CorrectionRestoreRequest | None = None
@@ -1674,6 +1709,17 @@ class MainWindow(QMainWindow):
         response_dialog_layout.addWidget(self.response_page, 1)
         response_dialog_actions = QHBoxLayout()
         response_dialog_actions.addStretch(1)
+        self.apply_joint_recommendation_button = QPushButton(
+            "Apply and Verify"
+        )
+        self.apply_joint_recommendation_button.setProperty("role", "control")
+        self.apply_joint_recommendation_button.clicked.connect(
+            self._apply_joint_recommendation
+        )
+        self.apply_joint_recommendation_button.hide()
+        response_dialog_actions.addWidget(
+            self.apply_joint_recommendation_button
+        )
         self.close_response_details_button = QPushButton("Close")
         self.close_response_details_button.clicked.connect(
             self.response_dialog.close
@@ -2067,7 +2113,7 @@ class MainWindow(QMainWindow):
             self._show_iteration_history()
 
     def _show_response_details(self) -> None:
-        if self.latest_response is None:
+        if self.latest_response is None and self.latest_joint_response is None:
             return
         self.response_dialog.setStyleSheet(build_stylesheet(self.theme_name))
         self.response_dialog.show()
@@ -2144,7 +2190,7 @@ class MainWindow(QMainWindow):
         if not targets or set(targets) != set(baseline):
             return None
         limits: dict[str, float] = {}
-        for knob in self.config.knobs:
+        for knob in self.config.runtime_knobs:
             for device, weight in knob.devices.items():
                 limits[device] = (
                     limits.get(device, 0.0)
@@ -2574,7 +2620,16 @@ class MainWindow(QMainWindow):
             self.bpm_edit.setText(
                 ", ".join(self.config.target_bpms)
                 if self.config.target_bpms
-                else "None — diagnostics only"
+                else (
+                    ", ".join(
+                        dict.fromkeys(
+                            target.bpm
+                            for target in self.config.section.joint_response_analysis.targets
+                        )
+                    )
+                    if self._joint_correction_enabled()
+                    else "None — diagnostics only"
+                )
             )
             self.monitor_bpm_edit.setText(", ".join(self.config.monitor_bpms))
             self.delta_spin.setValue(self.config.energy_knob.delta)
@@ -2596,12 +2651,17 @@ class MainWindow(QMainWindow):
             self._update_energy_step_summary()
             model_only = self.config.section.model_only
             fixed_selection = (
-                model_only or self.config.section.diagnostic_only
+                model_only
+                or self.config.section.diagnostic_only
+                or self._joint_correction_enabled()
             )
             diagnostic_only = self.config.section.diagnostic_only
             measurement_only = (
                 diagnostic_only
-                or self.config.measurement.plane == "xy"
+                or (
+                    self.config.measurement.plane == "xy"
+                    and not self._joint_correction_enabled()
+                )
             )
             self.bpm_select_button.setVisible(not fixed_selection)
             self.knob_select_button.setVisible(not fixed_selection)
@@ -2657,7 +2717,12 @@ class MainWindow(QMainWindow):
         unit = self._knob_control_unit()
         unit_suffix = f" {unit}" if unit else ""
         step_fraction = float(self.max_step_pct_spin.value()) / 100.0
-        for knob in self.selected_knobs:
+        display_knobs = (
+            self.config.section.joint_response_analysis.knobs
+            if self._joint_correction_enabled()
+            else self.selected_knobs
+        )
+        for knob in display_knobs:
             devices = tuple(knob.devices)
             summaries.append("/".join(devices))
             step_limit = knob.limit * step_fraction
@@ -2685,6 +2750,15 @@ class MainWindow(QMainWindow):
         self.configured_energy_calibration = dict(config.energy_knob.calibration)
         self.session_energy_calibration_source = None
         self.correction_restore_request = None
+        self.pending_model_source = None
+        self.current_snapshot_time = None
+        for checkbox in (
+            self.show_design_model_checkbox,
+            self.show_snapshot_model_checkbox,
+        ):
+            checkbox.blockSignals(True)
+            checkbox.setChecked(False)
+            checkbox.blockSignals(False)
         self.selected_knobs = tuple(config.knobs)
         self.knob_hard_limits = tuple(knob.limit for knob in config.knobs)
         self._invalidate_staged_results(
@@ -2716,6 +2790,7 @@ class MainWindow(QMainWindow):
         self.latest_measurement_time = None
         self.latest_plane_measurements = {}
         self.latest_response = None
+        self.latest_joint_response = None
         self.correction_recommendation = None
         self.live_plot_measurement = None
         self.reference_plot_measurement = None
@@ -3035,7 +3110,7 @@ class MainWindow(QMainWindow):
         quadrupoles = pv_map.get("quadrupoles", {}) if isinstance(pv_map, dict) else {}
         controls = {
             str(quadrupoles.get(device, {}).get("control", "k1")).lower()
-            for knob in self.config.knobs
+            for knob in self.config.runtime_knobs
             for device in knob.devices
             if isinstance(quadrupoles.get(device), dict)
         }
@@ -3126,6 +3201,7 @@ class MainWindow(QMainWindow):
         self,
         task: str,
         recommendation: CorrectionRecommendation | None = None,
+        joint_recommendation: JointResponseAnalysisResult | None = None,
         design_k1_request: DesignK1Request | None = None,
         restore_request: CorrectionRestoreRequest | None = None,
     ) -> bool:
@@ -3155,6 +3231,13 @@ class MainWindow(QMainWindow):
                 "Calculate and review a recommendation before applying it.",
             )
             return False
+        if task == "joint-apply" and joint_recommendation is None:
+            QMessageBox.warning(
+                self,
+                "Apply Joint Recommendation",
+                "Measure and review the joint Q response before applying it.",
+            )
+            return False
         if task == "restore-correction" and restore_request is None:
             QMessageBox.warning(
                 self,
@@ -3162,14 +3245,15 @@ class MainWindow(QMainWindow):
                 "No successful correction is available to restore.",
             )
             return False
-        if task == "run":
+        if task in {"run", "joint-run"}:
             self._automatic_initial_measurement = None
         self.worker = WorkflowWorker(
-            task,
-            config,
-            recommendation,
-            design_k1_request,
-            restore_request,
+            task=task,
+            config=config,
+            recommendation=recommendation,
+            joint_recommendation=joint_recommendation,
+            design_k1_request=design_k1_request,
+            restore_request=restore_request,
         )
         self.worker.log.connect(self._append_log)
         self.worker.progress.connect(self._update_progress)
@@ -3195,10 +3279,15 @@ class MainWindow(QMainWindow):
             self.latest_measurement = result.primary
             self.latest_measurement_time = datetime.now()
             self.latest_response = None
+            self.latest_joint_response = None
             self.correction_recommendation = None
             self.correction_state_label.setText(
-                "Two-plane dispersion measured from one energy scan. "
-                "Joint Q-response analysis is not enabled yet."
+                (
+                    "Two-plane dispersion measured. Choose manual or automatic "
+                    "joint correction."
+                    if self._joint_correction_enabled()
+                    else "Two-plane dispersion measured from one energy scan."
+                )
             )
             self.recommendation_summary_label.setText(
                 "No joint recommendation has been calculated."
@@ -3222,6 +3311,7 @@ class MainWindow(QMainWindow):
             self.latest_measurement = result
             self.latest_measurement_time = datetime.now()
             self.latest_response = None
+            self.latest_joint_response = None
             self.correction_recommendation = None
             self.correction_state_label.setText(
                 "Dispersion measured. Prepare a correction when you are ready to scan "
@@ -3278,6 +3368,57 @@ class MainWindow(QMainWindow):
             )
             self._refresh_status(f"Cond {result.condition_number:.4g}")
             self._compute_recommendation()
+        elif isinstance(result, JointResponseAnalysisResult):
+            self.latest_joint_response = result
+            self.latest_response = None
+            self.latest_plane_measurements = {
+                measurement.plane: measurement
+                for measurement in result.baseline.measurements
+            }
+            self.latest_measurement = result.baseline.primary
+            self.latest_measurement_time = datetime.now()
+            self._show_joint_response(result)
+            self._show_measurement(result.baseline)
+            self._set_live_multiplane_measurement(
+                result.baseline,
+                label="Joint response baseline",
+            )
+            self.correction_state_label.setText(
+                "Joint Q-response analysis complete. The suggested knob changes "
+                "are a read-only preview and cannot be applied from this workflow."
+            )
+            self._refresh_status(
+                f"Joint modes {result.retained_rank}/"
+                f"{min(result.matrix.shape)}"
+            )
+        elif isinstance(result, JointCorrectionResult):
+            self.latest_plane_measurements = {
+                measurement.plane: measurement
+                for measurement in result.final.measurements
+            }
+            self.latest_measurement = result.final.primary
+            self.latest_measurement_time = datetime.now()
+            self.latest_joint_response = None
+            self.correction_mode = None
+            self._show_measurement(result.final)
+            self._set_live_multiplane_measurement(
+                result.final,
+                label=(
+                    "Joint correction verified"
+                    if result.success
+                    else "Joint correction restored"
+                ),
+            )
+            self.correction_state_label.setText(result.reason)
+            self.response_table.setRowCount(0)
+            self.response_info.clear()
+            self._refresh_status(
+                (
+                    "Joint accepted"
+                    if result.success
+                    else "Joint not accepted"
+                )
+            )
         elif isinstance(result, CorrectionResult):
             self._record_correction_run(task, result)
             if result.success:
@@ -3367,6 +3508,8 @@ class MainWindow(QMainWindow):
                 DispersionMeasurement,
                 MultiPlaneDispersionMeasurement,
                 ResponseMatrixResult,
+                JointResponseAnalysisResult,
+                JointCorrectionResult,
                 CorrectionResult,
             ),
         ):
@@ -3379,7 +3522,7 @@ class MainWindow(QMainWindow):
             )
             self._append_log(f"Operation archived in {paths['run_metadata'].parent}")
         self._append_log(f"{task} completed")
-        if task == "run":
+        if task in {"run", "joint-run"}:
             self._automatic_initial_measurement = None
 
     def _automatic_measurement_updated(
@@ -3387,9 +3530,29 @@ class MainWindow(QMainWindow):
         iteration: int,
         total: int,
         state: str,
-        measurement: DispersionMeasurement,
+        measurement: object,
     ) -> None:
-        if self._active_task != "run":
+        if self._active_task not in {"run", "joint-run"}:
+            return
+        if isinstance(measurement, MultiPlaneDispersionMeasurement):
+            self._show_measurement(measurement)
+            self._set_live_multiplane_measurement(
+                measurement,
+                label=f"Joint generation {iteration} · {state}",
+            )
+            rms_text = " · ".join(
+                f"η{item.plane} {item.measured_rms_mm:.4g} mm"
+                for item in measurement.measurements
+            )
+            summary = (
+                f"Automatic joint correction · generation {iteration}/{total} "
+                f"{state} · {rms_text}"
+            )
+            self.workflow_summary_label.setText(summary)
+            self.plot_state_label.setText(summary)
+            self.plot_state_label.show()
+            return
+        if not isinstance(measurement, DispersionMeasurement):
             return
         if state == "initial":
             self._automatic_initial_measurement = measurement
@@ -3431,7 +3594,14 @@ class MainWindow(QMainWindow):
     def _task_failed(self, message: str) -> None:
         failed_task = self._active_task
         self._automatic_initial_measurement = None
-        if failed_task in {"response", "apply", "run"}:
+        if failed_task in {
+            "response",
+            "joint-response",
+            "apply",
+            "joint-apply",
+            "run",
+            "joint-run",
+        }:
             self.correction_mode = None
         if message == "Operation aborted":
             self._append_log("Operation aborted; temporary state restored")
@@ -3890,6 +4060,8 @@ class MainWindow(QMainWindow):
         self.model_measure_table.resizeColumnsToContents()
 
     def _show_response(self, response: ResponseMatrixResult) -> None:
+        self.response_dialog.setWindowTitle("Q Response Diagnostics")
+        self.apply_joint_recommendation_button.hide()
         self.response_table.setRowCount(len(response.bpm_names))
         self.response_table.setColumnCount(len(response.knob_names) + 2)
         self.response_table.setHorizontalHeaderLabels(
@@ -3932,6 +4104,83 @@ class MainWindow(QMainWindow):
             + ", ".join(f"{value:.6g}" for value in response.singular_values)
             + f"\nCondition number: {response.condition_number:.6g}"
             + rank_summary
+        )
+
+    def _show_joint_response(self, result: JointResponseAnalysisResult) -> None:
+        self.response_dialog.setWindowTitle("Joint ηx / ηy Q Response Analysis")
+        self.response_table.setRowCount(len(result.target_names))
+        self.response_table.setColumnCount(len(result.knob_names) + 4)
+        self.response_table.setHorizontalHeaderLabels(
+            ["Observation", "Measured", "Target", "Predicted", *result.knob_names]
+        )
+        for row, name in enumerate(result.target_names):
+            values = (
+                name,
+                f"{result.baseline_values_mm[row]:.6g}",
+                f"{result.target_values_mm[row]:.6g}",
+                f"{result.predicted_values_mm[row]:.6g}",
+            )
+            for column, value in enumerate(values):
+                self.response_table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(value),
+                )
+            for column, value in enumerate(
+                result.matrix[row, :],
+                start=4,
+            ):
+                self.response_table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(f"{value:.6g}"),
+                )
+        self.response_table.resizeColumnsToContents()
+        recommended = "\n".join(
+            f"  {name}: {value:+.6g}"
+            for name, value in result.delta_knobs.items()
+        )
+        required = min(result.matrix.shape)
+        can_apply = not self.config.section.diagnostic_only
+        self.apply_joint_recommendation_button.setVisible(can_apply)
+        self.apply_joint_recommendation_button.setEnabled(can_apply)
+        self.response_info.setPlainText(
+            (
+                "Review the joint recommendation before Apply and Verify.\n"
+                if can_apply
+                else "Read-only recommendation preview; no Apply action is available.\n"
+            )
+            + f"Effective modes: {result.retained_rank}/{required} "
+            f"at svd_cut={self.config.solver.svd_cut:g}\n"
+            f"Singular values: "
+            + ", ".join(f"{value:.6g}" for value in result.singular_values)
+            + f"\nCondition number: {result.condition_number:.6g}"
+            + f"\nNormalized residual RMS: "
+            f"{result.normalized_rms_before:.6g} → "
+            f"{result.normalized_rms_after:.6g}"
+            + f"\nUncontrollable residual RMS: {result.uncontrollable_rms:.6g}"
+            + "\nSuggested analysis-knob changes:\n"
+            + recommended
+        )
+
+    def _apply_joint_recommendation(self) -> None:
+        recommendation = self.latest_joint_response
+        if recommendation is None or self.config.section.diagnostic_only:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Apply Joint Recommendation",
+            "Apply the reviewed ηx/ηy quadrupole targets and verify both planes? "
+            "The initial state is restored if the residual does not improve.",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self.response_dialog.close()
+        self._start_task(
+            "joint-apply",
+            joint_recommendation=recommendation,
         )
 
     def _prepare_correction(self) -> None:
@@ -4014,7 +4263,7 @@ class MainWindow(QMainWindow):
         self,
         _value: object | None = None,
     ) -> None:
-        if self._active_task != "run":
+        if self._active_task not in {"run", "joint-run"}:
             self.run_button.setToolTip(
                 self._automatic_correction_settings_tooltip()
             )
@@ -4086,6 +4335,12 @@ class MainWindow(QMainWindow):
             self.response_update_combo.currentText()
         )
         response_policy.setCurrentIndex(max(0, policy_index))
+        if self._joint_correction_enabled():
+            response_policy.setCurrentIndex(0)
+            response_policy.setEnabled(False)
+            response_policy.setToolTip(
+                "Joint ηx/ηy correction remeasures the response every generation."
+            )
         settings.addWidget(response_policy, 2, 1)
 
         max_step_label = QLabel("Maximum step")
@@ -4136,7 +4391,10 @@ class MainWindow(QMainWindow):
         if (
             self.config.section.model_only
             or self.config.section.diagnostic_only
-            or self.config.measurement.plane == "xy"
+            or (
+                self.config.measurement.plane == "xy"
+                and not self._joint_correction_enabled()
+            )
         ):
             return
         if self.latest_measurement is None:
@@ -4146,9 +4404,13 @@ class MainWindow(QMainWindow):
                 "Measure dispersion before starting automatic correction.",
             )
             return
-        response_block = automatic_response_block_reason(
-            self.latest_response,
-            self.config.solver.svd_cut,
+        response_block = (
+            None
+            if self._joint_correction_enabled()
+            else automatic_response_block_reason(
+                self.latest_response,
+                self.config.solver.svd_cut,
+            )
         )
         if response_block is not None:
             QMessageBox.warning(self, "Automatic Correction", response_block)
@@ -4174,12 +4436,15 @@ class MainWindow(QMainWindow):
         try:
             self.max_iter_spin.setValue(generations.value())
             self.response_update_combo.setCurrentText(
-                str(response_policy.currentData())
+                "every_iteration"
+                if self._joint_correction_enabled()
+                else str(response_policy.currentData())
             )
         finally:
             self._loading_widgets = previous_loading
         self.correction_mode = "automatic"
         self.latest_response = None
+        self.latest_joint_response = None
         self.correction_recommendation = None
         self.correction_state_label.setText(
             "Automatic correction is starting. Any previous single-generation "
@@ -4197,7 +4462,9 @@ class MainWindow(QMainWindow):
                 self.latest_measurement,
                 label="Latest measured",
             )
-        started = self._start_task("run")
+        started = self._start_task(
+            "joint-run" if self._joint_correction_enabled() else "run"
+        )
         if started is False:
             self.correction_mode = None
             self._set_running(False, "")
@@ -4482,7 +4749,7 @@ class MainWindow(QMainWindow):
             for name in response.device_names
         }
         limits: dict[str, float] = {}
-        for knob in self.config.knobs:
+        for knob in self.config.runtime_knobs:
             for device, weight in knob.devices.items():
                 weighted_limit = abs(float(weight)) * float(knob.limit)
                 if weighted_limit <= 0:
@@ -4503,7 +4770,10 @@ class MainWindow(QMainWindow):
         )
 
     def _design_k1_block_reason(self) -> str | None:
-        if self.config.measurement.plane == "xy":
+        if (
+            self.config.measurement.plane == "xy"
+            and not self._joint_correction_enabled()
+        ):
             return (
                 "Two-plane sections are measurement-only until joint response "
                 "analysis is enabled."
@@ -4692,14 +4962,67 @@ class MainWindow(QMainWindow):
                 "The model curve is already displayed in the dispersion overview.",
             )
         if self.config.section.diagnostic_only:
+            joint = self.config.section.joint_response_analysis
+            if joint.enabled and self.latest_plane_measurements:
+                return (
+                    "joint-response",
+                    "Analyze Joint Q Response…",
+                    "Two-plane baseline available",
+                    "Temporarily scans the configured analysis Q knobs, restores "
+                    "them after every scan, and prepares a read-only ηx/ηy preview.",
+                )
             return (
                 None,
                 "Measurement Only",
                 "Diagnostic section",
-                "Use Measure Dispersion in the left panel. This section has no "
-                "correction BPMs or quadrupole knobs.",
+                (
+                    "Measure ηx and ηy first. Joint response analysis becomes "
+                    "available after a valid baseline measurement."
+                    if joint.enabled
+                    else "Use Measure Dispersion in the left panel. This section "
+                    "has no correction BPMs or quadrupole knobs."
+                ),
             )
         if self.config.measurement.plane == "xy":
+            if self._joint_correction_enabled():
+                block_reason = self._operation_block_reason()
+                if block_reason is not None:
+                    return (
+                        None,
+                        "Manual Joint Correction",
+                        "Joint correction is unavailable",
+                        block_reason.replace("\n", " "),
+                    )
+                if self.latest_measurement is None:
+                    return (
+                        None,
+                        "Manual Joint Correction",
+                        "Joint correction workflow locked",
+                        "Measure ηx and ηy before choosing a correction method.",
+                    )
+                if self.correction_mode is None:
+                    return (
+                        "select-joint-manual",
+                        "Manual Joint Correction",
+                        "Choose a correction method",
+                        "Manual mode measures the joint Q response and lets you "
+                        "review one bounded ηx/ηy recommendation.",
+                    )
+                if self.latest_joint_response is None:
+                    return (
+                        "joint-response",
+                        "Measure Joint Q Response…",
+                        "Manual joint correction selected",
+                        "Temporarily scans the configured Q knobs and restores "
+                        "the baseline before showing a recommendation.",
+                    )
+                return (
+                    "review-joint",
+                    "Review Joint Recommendation…",
+                    "Joint recommendation ready",
+                    "Review every predicted ηx/ηy target and quadrupole change "
+                    "before Apply and Verify.",
+                )
             return (
                 None,
                 "Measurement Only",
@@ -4788,6 +5111,9 @@ class MainWindow(QMainWindow):
         if action == "select-manual":
             self.correction_mode = "manual"
             self._set_running(False, "")
+        elif action == "select-joint-manual":
+            self.correction_mode = "manual"
+            self._set_running(False, "")
         elif action == "prepare":
             self._prepare_correction()
         elif action == "review":
@@ -4804,6 +5130,20 @@ class MainWindow(QMainWindow):
             self._show_workflow_detail(self.model_page)
         elif action == "model-details":
             self._show_workflow_detail(self.model_page)
+        elif action == "joint-response":
+            answer = QMessageBox.question(
+                self,
+                "Joint Q Response Analysis",
+                "This analysis temporarily scans the configured quadrupole knobs "
+                "in both directions and restores the initial state. It only "
+                "previews a recommendation and cannot apply it.\n\nStart now?",
+                QMessageBox.Yes | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer == QMessageBox.Yes:
+                self._start_task("joint-response")
+        elif action == "review-joint":
+            self._show_response_details()
 
     def _workflow_summary_text(self) -> str:
         if self.config.section.model_only:
@@ -4829,6 +5169,22 @@ class MainWindow(QMainWindow):
                 f"{rms} · "
                 f"{valid}/{len(measurement.bpm_names)} monitor BPMs valid"
             )
+        if self._joint_correction_enabled():
+            if self.latest_joint_response is not None:
+                result = self.latest_joint_response
+                return (
+                    f"Joint normalized RMS "
+                    f"{result.normalized_rms_before:.4g} → "
+                    f"{result.normalized_rms_after:.4g} · "
+                    f"{result.retained_rank}/{min(result.matrix.shape)} "
+                    "effective modes"
+                )
+            if self.latest_plane_measurements:
+                return " · ".join(
+                    f"η{item.plane} RMS {item.measured_rms_mm:.4g} mm"
+                    for item in self.latest_plane_measurements.values()
+                )
+            return "Measure ηx and ηy before joint correction"
         recommendation = self.correction_recommendation
         if recommendation is not None:
             target_count = len(recommendation.device_deltas)
@@ -4878,13 +5234,26 @@ class MainWindow(QMainWindow):
             f"{self.samples_per_step_spin.value()} scan samples/setting"
         )
 
+    def _joint_correction_enabled(self) -> bool:
+        return bool(
+            not self.config.section.diagnostic_only
+            and self.config.measurement.plane == "xy"
+            and self.config.section.joint_response_analysis.enabled
+        )
+
     def _update_workflow_auxiliary_actions(self, running: bool) -> None:
         diagnostic_only = self.config.section.diagnostic_only
         measurement_only = (
-            diagnostic_only or self.config.measurement.plane == "xy"
+            diagnostic_only
+            or (
+                self.config.measurement.plane == "xy"
+                and not self._joint_correction_enabled()
+            )
         )
         manual_mode = self.correction_mode == "manual"
-        has_response = manual_mode and self.latest_response is not None
+        has_response = (
+            manual_mode and self.latest_response is not None
+        ) or self.latest_joint_response is not None
         has_history = bool(self.correction_session_runs)
         self.back_to_correction_methods_button.setVisible(
             manual_mode
@@ -4894,9 +5263,7 @@ class MainWindow(QMainWindow):
         self.back_to_correction_methods_button.setEnabled(
             not running and manual_mode
         )
-        self.response_details_button.setVisible(
-            has_response and not measurement_only
-        )
+        self.response_details_button.setVisible(has_response)
         self.response_details_button.setEnabled(not running and has_response)
         self.history_button.setEnabled(not running and has_history)
         self.history_button.setVisible(not measurement_only)
@@ -4926,10 +5293,15 @@ class MainWindow(QMainWindow):
         self.workflow_summary_label.setText(self._workflow_summary_text())
         self._update_workflow_auxiliary_actions(running)
         if running:
-            if task == "run":
+            if task in {"run", "joint-run"}:
                 self.next_action_button.hide()
                 self.run_button.show()
-            elif task in {"response", "apply"}:
+            elif task in {
+                "response",
+                "joint-response",
+                "apply",
+                "joint-apply",
+            }:
                 self.next_action_button.show()
                 self.run_button.hide()
             else:
@@ -4941,6 +5313,18 @@ class MainWindow(QMainWindow):
                 "response": (
                     "Preparing Manual Correction…",
                     "Measuring Q response and preparing recommendation",
+                ),
+                "joint-response": (
+                    "Analyzing Joint Q Response…",
+                    "Scanning ηx/ηy quadrupole response",
+                ),
+                "joint-apply": (
+                    "Applying Joint Correction…",
+                    "Applying and verifying ηx/ηy targets",
+                ),
+                "joint-run": (
+                    "Automatic Joint Correction",
+                    "Automatic ηx/ηy correction running",
                 ),
                 "apply": ("Applying and Verifying…", "Reviewed correction running"),
                 "run": ("Manual Correction", "Automatic correction running"),
@@ -4957,7 +5341,14 @@ class MainWindow(QMainWindow):
             self.next_action_button.setProperty("workflowAction", "")
             self.next_action_button.setText(button_text)
             self.next_action_button.setEnabled(False)
-            self.next_action_button.setVisible(task in {"response", "apply"})
+            self.next_action_button.setVisible(
+                task in {
+                    "response",
+                    "joint-response",
+                    "apply",
+                    "joint-apply",
+                }
+            )
             self.workflow_state_label.setText(state_text)
             self.workflow_hint_label.setText(
                 "Wait for the current operation to finish or use Abort when available."
@@ -4973,12 +5364,22 @@ class MainWindow(QMainWindow):
         model_only = self.config.section.model_only
         diagnostic_only = self.config.section.diagnostic_only
         measurement_only = (
-            diagnostic_only or self.config.measurement.plane == "xy"
+            diagnostic_only
+            or (
+                self.config.measurement.plane == "xy"
+                and not self._joint_correction_enabled()
+            )
         )
         manual_mode = self.correction_mode == "manual"
         automatic_mode = self.correction_mode == "automatic"
         self.next_action_button.setVisible(
-            not measurement_only and (model_only or not automatic_mode)
+            (
+                action == "joint-response"
+                or (
+                    not measurement_only
+                    and (model_only or not automatic_mode)
+                )
+            )
         )
         self.run_button.setVisible(
             not model_only
@@ -5147,7 +5548,10 @@ class MainWindow(QMainWindow):
         correction_enabled = not (
             self.config.section.model_only
             or self.config.section.diagnostic_only
-            or self.config.measurement.plane == "xy"
+            or (
+                self.config.measurement.plane == "xy"
+                and not self._joint_correction_enabled()
+            )
         )
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(
@@ -5166,7 +5570,7 @@ class MainWindow(QMainWindow):
             self.config.solver.svd_cut,
         )
         self.run_button.setVisible(automatic_visible)
-        if running and task == "run":
+        if running and task in {"run", "joint-run"}:
             self.run_button.setText("Automatic Correction · 0%")
         elif not running:
             self.run_button.setText("Automatic Correction…")
@@ -5268,7 +5672,7 @@ class MainWindow(QMainWindow):
         self.operation_progress.setRange(0, 100)
         self.operation_progress.setValue(percent)
         self.progress_percent_label.setText(f"{percent}%")
-        if self._active_task == "run":
+        if self._active_task in {"run", "joint-run"}:
             iteration_match = re.search(r"Iteration\s+(\d+)/(\d+)", stage)
             if iteration_match is not None:
                 generation = (

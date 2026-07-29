@@ -126,18 +126,28 @@ def run_preflight(config: RunConfig) -> PreflightResult:
 
     knob_limits_ok = all(
         knob.scan_step > 0 and knob.limit > 0 and knob.scan_step <= knob.limit
-        for knob in config.knobs
+        for knob in config.runtime_knobs
     )
     checks["knob_limits_ordered"] = knob_limits_ok
     if not knob_limits_ok:
         blockers.append("Require 0 < scan_step <= limit for every knob")
 
-    response_dimensions_ok = len(config.target_bpms) >= len(config.knobs)
+    response_target_count = (
+        len(config.section.joint_response_analysis.targets)
+        if config.section.joint_response_analysis.enabled
+        else len(config.target_bpms)
+    )
+    response_dimensions_ok = response_target_count >= len(config.runtime_knobs)
     checks["response_dimensions_sufficient"] = response_dimensions_ok
     if not response_dimensions_ok and not config.section.diagnostic_only:
+        target_label = (
+            "target observations"
+            if config.section.joint_response_analysis.enabled
+            else "target BPMs"
+        )
         warnings.append(
-            f"Underdetermined response: {len(config.knobs)} correction knobs and "
-            f"{len(config.target_bpms)} target BPMs. Response measurement is allowed; "
+            f"Underdetermined response: {len(config.runtime_knobs)} correction knobs and "
+            f"{response_target_count} {target_label}. Response measurement is allowed; "
             "effective SVD modes will be checked before correction."
         )
 
@@ -340,7 +350,7 @@ def _run_live_preflight_once(
             "cumulative_limit": knob.limit,
             "max_solver_step": knob.limit * config.solver.max_step_fraction,
         }
-        for knob in config.knobs
+        for knob in config.runtime_knobs
     }
     return LivePreflightResult(
         static=static,
@@ -411,7 +421,7 @@ def _configured_quadrupoles(config: RunConfig, quadrupoles: Any) -> bool:
         return True
     if not isinstance(quadrupoles, dict):
         return False
-    for knob in config.knobs:
+    for knob in config.runtime_knobs:
         for device in knob.devices:
             item = quadrupoles.get(device)
             if not isinstance(item, dict):
@@ -429,7 +439,7 @@ def _configured_quadrupoles(config: RunConfig, quadrupoles: Any) -> bool:
 def _configured_quadrupole_writes(config: RunConfig, quadrupoles: Any) -> bool:
     if not isinstance(quadrupoles, dict):
         return False
-    for knob in config.knobs:
+    for knob in config.runtime_knobs:
         for device in knob.devices:
             item = quadrupoles.get(device)
             if not isinstance(item, dict):
@@ -451,7 +461,7 @@ def _configured_quadrupole_writes(config: RunConfig, quadrupoles: Any) -> bool:
 def _configured_independent_quadrupole_readbacks(config: RunConfig, quadrupoles: Any) -> bool:
     if not isinstance(quadrupoles, dict):
         return False
-    for knob in config.knobs:
+    for knob in config.runtime_knobs:
         for device in knob.devices:
             item = quadrupoles.get(device)
             if not isinstance(item, dict):

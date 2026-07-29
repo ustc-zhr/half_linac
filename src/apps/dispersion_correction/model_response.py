@@ -256,7 +256,7 @@ def _finite_or_none(values: np.ndarray) -> list[float | None]:
 def _correction_devices(config: RunConfig) -> tuple[str, ...]:
     devices = []
     seen = set()
-    for knob in config.knobs:
+    for knob in config.runtime_knobs:
         for device in knob.devices:
             if device not in seen:
                 devices.append(device)

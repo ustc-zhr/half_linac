@@ -11,6 +11,8 @@ from half_linac.src.apps.dispersion_correction.config import parse_config
 from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
     DispersionMeasurement,
+    JointCorrectionResult,
+    JointResponseAnalysisResult,
     MultiPlaneDispersionMeasurement,
     ResponseMatrixResult,
     RunConfig,
@@ -197,9 +199,11 @@ def apply_profile_selection(
     )
     allowed_quads = set(selectable_profile_quadrupoles(context))
     unknown_bpms = [name for name in measurement_bpms if name not in allowed_bpms]
+    analysis_knobs = config.section.joint_response_analysis.knobs
+    all_runtime_knobs = tuple(knobs) + tuple(analysis_knobs)
     unknown_quads = [
         device
-        for knob in knobs
+        for knob in all_runtime_knobs
         for device in knob.devices
         if device not in allowed_quads
     ]
@@ -218,7 +222,7 @@ def apply_profile_selection(
     options["pv_map"] = _build_selection_pv_map(
         context,
         measurement_bpms,
-        knobs,
+        all_runtime_knobs,
         _mapping(workflow.get("energy_knob"), "energy_knob"),
         _quadrupole_control(workflow, context.control_backend.name),
         config.measurement.plane,
@@ -306,6 +310,8 @@ def write_profile_operation(
         | DispersionMeasurement
         | MultiPlaneDispersionMeasurement
         | ResponseMatrixResult
+        | JointResponseAnalysisResult
+        | JointCorrectionResult
     ),
     *,
     config: RunConfig | None = None,
@@ -313,7 +319,15 @@ def write_profile_operation(
 ) -> dict[str, Path]:
     """Archive every operator operation with config and preflight context."""
 
-    if task not in {"measure", "response", "apply", "run"}:
+    if task not in {
+        "measure",
+        "response",
+        "joint-response",
+        "joint-apply",
+        "joint-run",
+        "apply",
+        "run",
+    }:
         raise ValueError(f"Unsupported dispersion-correction task: {task}")
 
     runtime_paths = resolve_app_runtime_paths(APP_DIR, context)
@@ -343,8 +357,16 @@ def write_profile_operation(
         "control_backend": context.control_backend.name,
         "app": WORKFLOW_NAME,
         "task": task,
-        "success": result.success if isinstance(result, CorrectionResult) else True,
-        "reason": result.reason if isinstance(result, CorrectionResult) else "Completed",
+        "success": (
+            result.success
+            if isinstance(result, (CorrectionResult, JointCorrectionResult))
+            else True
+        ),
+        "reason": (
+            result.reason
+            if isinstance(result, (CorrectionResult, JointCorrectionResult))
+            else "Completed"
+        ),
         "config": asdict(config) if config is not None else None,
         "live_preflight": (
             live_preflight.as_dict()
@@ -373,6 +395,7 @@ def _operation_payload(
         DispersionMeasurement
         | MultiPlaneDispersionMeasurement
         | ResponseMatrixResult
+        | JointResponseAnalysisResult
     ),
 ) -> dict[str, Any]:
     if isinstance(result, DispersionMeasurement):
@@ -384,6 +407,48 @@ def _operation_payload(
                 measurement.plane: _measurement_payload(measurement)
                 for measurement in result.measurements
             },
+        }
+    if isinstance(result, JointResponseAnalysisResult):
+        return {
+            "matrix": result.matrix.tolist(),
+            "target_names": list(result.target_names),
+            "target_bpms": list(result.target_bpms),
+            "target_planes": list(result.target_planes),
+            "target_values_mm": result.target_values_mm.tolist(),
+            "tolerances_mm": result.tolerances_mm.tolist(),
+            "baseline_values_mm": result.baseline_values_mm.tolist(),
+            "valid": result.valid.tolist(),
+            "knob_names": list(result.knob_names),
+            "delta_knobs": dict(result.delta_knobs),
+            "predicted_values_mm": result.predicted_values_mm.tolist(),
+            "singular_values": result.singular_values.tolist(),
+            "retained_rank": result.retained_rank,
+            "condition_number": result.condition_number,
+            "normalized_rms_before": result.normalized_rms_before,
+            "normalized_rms_after": result.normalized_rms_after,
+            "uncontrollable_rms": result.uncontrollable_rms,
+            "baseline": _operation_payload(result.baseline),
+            "recommendation_is_preview_only": True,
+        }
+    if isinstance(result, JointCorrectionResult):
+        return {
+            "success": result.success,
+            "reason": result.reason,
+            "normalized_rms_before": result.normalized_rms_before,
+            "normalized_rms_after": result.normalized_rms_after,
+            "initial": _operation_payload(result.initial),
+            "final": _operation_payload(result.final),
+            "steps": [
+                {
+                    "iteration": step.iteration,
+                    "accepted": step.accepted,
+                    "reason": step.reason,
+                    "normalized_rms_after": step.normalized_rms_after,
+                    "response": _operation_payload(step.response),
+                    "measured_after": _operation_payload(step.measured_after),
+                }
+                for step in result.steps
+            ],
         }
     return {
         "matrix": result.matrix.tolist(),
@@ -438,9 +503,19 @@ def _build_profile_pv_map(context: AppContext, workflow: Mapping[str, object]) -
         raise MachineProfileError(
             f"workflows.{WORKFLOW_NAME}.monitor_bpms contains an empty name."
         )
-    knobs = _optional_mapping_sequence(
+    knobs = list(_optional_mapping_sequence(
         workflow.get("knobs", []),
         "knobs",
+    ))
+    joint = _mapping(
+        workflow.get("joint_response_analysis", {}),
+        "section.joint_response_analysis",
+    )
+    knobs.extend(
+        _optional_mapping_sequence(
+            joint.get("knobs", []),
+            "section.joint_response_analysis.knobs",
+        )
     )
     return _build_selection_pv_map(
         context,
@@ -687,9 +762,17 @@ def _select_workflow_section(
             ),
         ),
         "model_observables": selected_section.get("model_observables", []),
+        "joint_response_analysis": selected_section.get(
+            "joint_response_analysis",
+            {},
+        ),
         "model_only": bool(selected_section.get("model_only", False)),
         "diagnostic_only": bool(
             selected_section.get("diagnostic_only", False)
         ),
     }
+    selected["joint_response_analysis"] = selected_section.get(
+        "joint_response_analysis",
+        {},
+    )
     return selected

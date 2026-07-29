@@ -44,6 +44,8 @@ class OfflineMachine(MachineInterface):
         n_knob = len(config.knobs)
         configured_initial_dispersion = model_options.get("initial_dispersion_mm")
         configured_response_matrix = model_options.get("response_matrix")
+        configured_initial_dispersion_y = model_options.get("initial_dispersion_y_mm")
+        configured_response_matrix_y = model_options.get("response_matrix_y")
         self._initial_dispersion = (
             np.asarray(initial_dispersion_mm, dtype=float)
             if initial_dispersion_mm is not None
@@ -66,10 +68,24 @@ class OfflineMachine(MachineInterface):
             if configured_response_matrix is not None
             else default_response
         )
+        self._initial_dispersion_y = (
+            np.asarray(configured_initial_dispersion_y, dtype=float)
+            if configured_initial_dispersion_y is not None
+            else np.zeros(n_bpm, dtype=float)
+        )
+        self._response_y = (
+            np.asarray(configured_response_matrix_y, dtype=float)
+            if configured_response_matrix_y is not None
+            else np.zeros((n_bpm, n_knob), dtype=float)
+        )
         if self._response.shape != (n_bpm, n_knob):
             raise ValueError("response_matrix shape must be (n_bpm, n_knob)")
         if self._initial_dispersion.shape != (n_bpm,):
             raise ValueError("initial_dispersion_mm length must match measurement_bpms")
+        if self._response_y.shape != (n_bpm, n_knob):
+            raise ValueError("response_matrix_y shape must be (n_bpm, n_knob)")
+        if self._initial_dispersion_y.shape != (n_bpm,):
+            raise ValueError("initial_dispersion_y_mm length must match measurement_bpms")
         if self._reference_orbit.shape != (n_bpm,):
             raise ValueError("reference_orbit_mm length must match measurement_bpms")
         self._charge = 1.0
@@ -93,7 +109,10 @@ class OfflineMachine(MachineInterface):
         x = self._reference_orbit + dispersion * self._energy_delta
         if self._noise_mm > 0:
             x = x + self._rng.normal(0.0, self._noise_mm, size=x.shape)
-        y = np.zeros_like(x)
+        dispersion_y = self.current_dispersion_y()
+        y = dispersion_y * self._energy_delta
+        if self._noise_mm > 0:
+            y = y + self._rng.normal(0.0, self._noise_mm, size=y.shape)
         return BPMReading(
             names=tuple(bpm_names),
             x_mm=x,
@@ -153,6 +172,13 @@ class OfflineMachine(MachineInterface):
     def current_dispersion(self) -> np.ndarray:
         knob_vector = np.asarray([self._knobs[knob.name] for knob in self.config.knobs], dtype=float)
         return self._initial_dispersion + self._response @ knob_vector
+
+    def current_dispersion_y(self) -> np.ndarray:
+        knob_vector = np.asarray(
+            [self._knobs[knob.name] for knob in self.config.knobs],
+            dtype=float,
+        )
+        return self._initial_dispersion_y + self._response_y @ knob_vector
 
     def read_quadrupole_readbacks(self) -> dict[str, float]:
         if not self._quadrupole_readbacks:

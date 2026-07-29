@@ -1824,16 +1824,33 @@ def _validate_dispersion_section(
     plane: str,
 ) -> None:
     diagnostic_only = bool(section.get("diagnostic_only", False))
-    if plane == "xy" and not diagnostic_only:
+    joint = _expect_mapping(
+        section.get("joint_response_analysis", {}),
+        f"{location}.joint_response_analysis",
+    )
+    joint_targets = _expect_list(
+        joint.get("targets", []),
+        f"{location}.joint_response_analysis.targets",
+    )
+    joint_knobs = _expect_list(
+        joint.get("knobs", []),
+        f"{location}.joint_response_analysis.knobs",
+    )
+    joint_enabled = bool(joint_targets and joint_knobs)
+    if bool(joint_targets) != bool(joint_knobs):
         raise MachineProfileError(
-            f"{location}.measurement.plane='xy' currently requires "
-            "diagnostic_only=true."
+            f"{location}.joint_response_analysis requires targets and knobs."
+        )
+    if plane == "xy" and not diagnostic_only and not joint_enabled:
+        raise MachineProfileError(
+            f"{location}.measurement.plane='xy' requires diagnostic_only=true "
+            "or joint_response_analysis."
         )
     target_bpms = _expect_optional_string_list(
         section.get("target_bpms", []),
         f"{location}.target_bpms",
     )
-    if not target_bpms and not diagnostic_only:
+    if not target_bpms and not diagnostic_only and not joint_enabled:
         raise MachineProfileError(f"{location}.target_bpms must not be empty.")
     monitor_bpms = _expect_optional_string_list(
         section.get("monitor_bpms"),
@@ -1864,6 +1881,28 @@ def _validate_dispersion_section(
                 f"Dispersion BPM {bpm_id!r} must reference a bpm with logical "
                 "channel(s) " + ", ".join(required_planes) + "."
             )
+    measurement_bpms = set((*monitor_bpms, *target_bpms))
+    for index, raw_target in enumerate(joint_targets):
+        target_location = (
+            f"{location}.joint_response_analysis.targets[{index}]"
+        )
+        item = _expect_mapping(raw_target, target_location)
+        bpm_id = _expect_non_empty_string(
+            item.get("bpm"),
+            f"{target_location}.bpm",
+        )
+        target_plane = _expect_non_empty_string(
+            item.get("plane"),
+            f"{target_location}.plane",
+        ).lower()
+        if target_plane not in {"x", "y"}:
+            raise MachineProfileError(
+                f"{target_location}.plane must be 'x' or 'y'."
+            )
+        if bpm_id not in measurement_bpms:
+            raise MachineProfileError(
+                f"{target_location}.bpm must be a measurement BPM."
+            )
 
     target = section.get("target_dispersion_mm", [0.0] * len(target_bpms))
     if not isinstance(target, list) or len(target) != len(target_bpms):
@@ -1872,14 +1911,21 @@ def _validate_dispersion_section(
         )
 
     knobs = _expect_list(section.get("knobs", []), f"{location}.knobs")
-    if not knobs and not diagnostic_only:
+    if not knobs and not diagnostic_only and not joint_enabled:
         raise MachineProfileError(f"{location}.knobs must not be empty.")
     if diagnostic_only and knobs:
         raise MachineProfileError(
             f"{location}.knobs must be empty for diagnostic-only sections."
         )
-    for index, raw_knob in enumerate(knobs):
-        knob_location = f"{location}.knobs[{index}]"
+    for index, raw_knob in enumerate((*knobs, *joint_knobs)):
+        knob_location = (
+            f"{location}.knobs[{index}]"
+            if index < len(knobs)
+            else (
+                f"{location}.joint_response_analysis.knobs"
+                f"[{index - len(knobs)}]"
+            )
+        )
         knob = _expect_mapping(raw_knob, knob_location)
         _expect_non_empty_string(knob.get("name"), f"{knob_location}.name")
         devices = _expect_mapping(knob.get("devices"), f"{knob_location}.devices")

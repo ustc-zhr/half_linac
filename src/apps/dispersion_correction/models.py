@@ -77,6 +77,28 @@ class ModelObservableConfig:
 
 
 @dataclass(frozen=True)
+class JointDispersionTargetConfig:
+    bpm: str
+    plane: str
+    target_mm: float = 0.0
+    tolerance_mm: float = 1.0
+
+    @property
+    def name(self) -> str:
+        return f"{self.bpm} η{self.plane}"
+
+
+@dataclass(frozen=True)
+class JointResponseAnalysisConfig:
+    targets: tuple[JointDispersionTargetConfig, ...] = ()
+    knobs: tuple[KnobConfig, ...] = ()
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.targets and self.knobs)
+
+
+@dataclass(frozen=True)
 class DispersionSectionConfig:
     id: str = "default"
     display_name: str = "Default"
@@ -84,6 +106,9 @@ class DispersionSectionConfig:
     model_exit: str | None = None
     target_dispersion_mm: tuple[float, ...] = ()
     model_observables: tuple[ModelObservableConfig, ...] = ()
+    joint_response_analysis: JointResponseAnalysisConfig = field(
+        default_factory=JointResponseAnalysisConfig
+    )
     model_only: bool = False
     diagnostic_only: bool = False
 
@@ -105,6 +130,16 @@ class RunConfig:
         """BPMs read during a scan; monitor points never become solve targets."""
 
         return tuple(dict.fromkeys((*self.monitor_bpms, *self.target_bpms)))
+
+    @property
+    def runtime_knobs(self) -> tuple[KnobConfig, ...]:
+        """Knobs requiring backend access in correction or joint-analysis mode."""
+
+        return (
+            self.knobs
+            if self.knobs
+            else self.section.joint_response_analysis.knobs
+        )
 
 
 @dataclass(frozen=True)
@@ -302,6 +337,91 @@ class ResponseMatrixResult:
         singular_values = np.asarray(self.singular_values, dtype=float)
         object.__setattr__(self, "matrix", matrix)
         object.__setattr__(self, "singular_values", singular_values)
+
+
+@dataclass(frozen=True)
+class JointResponseAnalysisResult:
+    matrix: ArrayLike
+    target_names: tuple[str, ...]
+    target_bpms: tuple[str, ...]
+    target_planes: tuple[str, ...]
+    target_values_mm: ArrayLike
+    tolerances_mm: ArrayLike
+    baseline_values_mm: ArrayLike
+    valid: ArrayLike
+    knob_names: tuple[str, ...]
+    baseline: MultiPlaneDispersionMeasurement
+    delta_knobs: dict[str, float]
+    baseline_device_values: dict[str, float]
+    target_device_values: dict[str, float]
+    predicted_values_mm: ArrayLike
+    singular_values: ArrayLike
+    retained_rank: int
+    condition_number: float
+    normalized_rms_before: float
+    normalized_rms_after: float
+    uncontrollable_rms: float
+
+    def __post_init__(self) -> None:
+        matrix = np.asarray(self.matrix, dtype=float)
+        targets = np.asarray(self.target_values_mm, dtype=float)
+        tolerances = np.asarray(self.tolerances_mm, dtype=float)
+        baseline = np.asarray(self.baseline_values_mm, dtype=float)
+        valid = np.asarray(self.valid, dtype=bool)
+        predicted = np.asarray(self.predicted_values_mm, dtype=float)
+        singular_values = np.asarray(self.singular_values, dtype=float)
+        row_count = len(self.target_names)
+        if matrix.shape != (row_count, len(self.knob_names)):
+            raise ValueError("Joint response matrix shape does not match rows and knobs")
+        if any(
+            values.shape != (row_count,)
+            for values in (targets, tolerances, baseline, valid, predicted)
+        ):
+            raise ValueError("Joint response row arrays must match target names")
+        if len(self.target_bpms) != row_count or len(self.target_planes) != row_count:
+            raise ValueError("Joint response target metadata lengths must match")
+        if np.any(tolerances <= 0):
+            raise ValueError("Joint response tolerances must be positive")
+        if tuple(self.delta_knobs) != self.knob_names:
+            raise ValueError("Joint recommendation knob order must match response columns")
+        object.__setattr__(self, "matrix", matrix)
+        object.__setattr__(self, "target_values_mm", targets)
+        object.__setattr__(self, "tolerances_mm", tolerances)
+        object.__setattr__(self, "baseline_values_mm", baseline)
+        object.__setattr__(self, "valid", valid)
+        object.__setattr__(self, "predicted_values_mm", predicted)
+        object.__setattr__(self, "singular_values", singular_values)
+
+
+@dataclass(frozen=True)
+class JointCorrectionStep:
+    iteration: int
+    response: JointResponseAnalysisResult
+    measured_after: MultiPlaneDispersionMeasurement
+    normalized_rms_after: float
+    accepted: bool
+    reason: str
+
+
+@dataclass(frozen=True)
+class JointCorrectionResult:
+    success: bool
+    reason: str
+    initial: MultiPlaneDispersionMeasurement
+    final: MultiPlaneDispersionMeasurement
+    steps: tuple[JointCorrectionStep, ...]
+
+    @property
+    def normalized_rms_before(self) -> float:
+        return self.steps[0].response.normalized_rms_before
+
+    @property
+    def normalized_rms_after(self) -> float:
+        return (
+            self.steps[-1].normalized_rms_after
+            if self.steps
+            else self.normalized_rms_before
+        )
 
 
 @dataclass(frozen=True)
