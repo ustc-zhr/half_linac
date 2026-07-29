@@ -70,9 +70,14 @@ def run_preflight(config: RunConfig) -> PreflightResult:
 
     bpms = pv_map.get("bpms", {}) if pv_map_ok else {}
     bpms_ok = _configured_bpms(config, bpms)
-    checks["target_bpm_x_pvs_configured"] = bpms_ok
+    checks["measurement_bpm_pvs_configured"] = bpms_ok
+    if config.measurement.plane == "x":
+        checks["target_bpm_x_pvs_configured"] = bpms_ok
     if config.backend.type == "epics" and not bpms_ok:
-        blockers.append("Every target BPM needs an x PV in pv_map.bpms")
+        blockers.append(
+            f"Every measurement BPM needs a {config.measurement.plane} PV "
+            "in pv_map.bpms"
+        )
 
     quadrupoles = pv_map.get("quadrupoles", {}) if pv_map_ok else {}
     quad_pvs_ok = _configured_quadrupoles(config, quadrupoles)
@@ -124,9 +129,11 @@ def run_preflight(config: RunConfig) -> PreflightResult:
 
     response_dimensions_ok = len(config.target_bpms) >= len(config.knobs)
     checks["response_dimensions_sufficient"] = response_dimensions_ok
-    if not response_dimensions_ok:
-        blockers.append(
-            "Response solve requires at least as many target BPMs as correction knobs"
+    if not response_dimensions_ok and not config.section.diagnostic_only:
+        warnings.append(
+            f"Underdetermined response: {len(config.knobs)} correction knobs and "
+            f"{len(config.target_bpms)} target BPMs. Response measurement is allowed; "
+            "effective SVD modes will be checked before correction."
         )
 
     timing_ok = (
@@ -153,7 +160,7 @@ def run_preflight(config: RunConfig) -> PreflightResult:
             blockers.append("write_enabled requires same-unit setpoint and readback PVs for every knob device")
         quadrupole_independent_readbacks = _configured_independent_quadrupole_readbacks(config, quadrupoles)
         checks["quadrupole_independent_readbacks"] = quadrupole_independent_readbacks
-        if not quadrupole_independent_readbacks:
+        if not quadrupole_independent_readbacks and not config.section.diagnostic_only:
             warnings.append("Quadrupole verification uses setpoint PVs because independent readbacks are not configured")
         write_ready = calibration_ok and safe_limits_ok and knob_limits_ok and not blockers
         checks["write_ready"] = write_ready
@@ -249,14 +256,19 @@ def _run_live_preflight_once(
     checks["energy_setpoint_readable"] = energy_ok
     readings["energy_value"] = energy_value if energy_ok else None
 
-    try:
-        quadrupole_readbacks = machine.read_quadrupole_readbacks()
-        quadrupole_setpoints = machine.read_quadrupole_setpoints()
-    except Exception as exc:
+    if config.section.diagnostic_only:
         quadrupole_readbacks = {}
         quadrupole_setpoints = {}
-        blockers.append(f"Quadrupole values are not readable: {exc}")
-    quadrupoles_ok = bool(quadrupole_readbacks) and set(quadrupole_readbacks) == set(quadrupole_setpoints)
+        quadrupoles_ok = True
+    else:
+        try:
+            quadrupole_readbacks = machine.read_quadrupole_readbacks()
+            quadrupole_setpoints = machine.read_quadrupole_setpoints()
+        except Exception as exc:
+            quadrupole_readbacks = {}
+            quadrupole_setpoints = {}
+            blockers.append(f"Quadrupole values are not readable: {exc}")
+        quadrupoles_ok = bool(quadrupole_readbacks) and set(quadrupole_readbacks) == set(quadrupole_setpoints)
     if quadrupoles_ok:
         quadrupoles_ok = all(
             math.isfinite(float(quadrupole_readbacks[name]))
@@ -287,14 +299,15 @@ def _run_live_preflight_once(
         blockers.append("Quadrupole setpoint/readback mismatch exceeds configured tolerance")
 
     try:
-        bpm = machine.read_bpm(config.target_bpms)
+        bpm = machine.read_bpm(config.measurement_bpms)
         valid_count = int(bpm.valid.sum())
     except Exception as exc:
         bpm = None
         valid_count = 0
-        blockers.append(f"Target BPMs are not readable: {exc}")
-    required_valid = len(config.target_bpms)
+        blockers.append(f"Measurement BPMs are not readable: {exc}")
+    required_valid = len(config.measurement_bpms)
     bpm_ok = valid_count >= required_valid
+    checks["all_measurement_bpms_valid"] = bpm_ok
     checks["all_target_bpms_valid"] = bpm_ok
     readings["valid_bpm_count"] = valid_count
     readings["required_valid_bpm_count"] = required_valid
@@ -307,9 +320,12 @@ def _run_live_preflight_once(
             }
             for index, name in enumerate(bpm.names)
         }
-    if not bpm_ok and not any(item.startswith("Target BPMs") for item in blockers):
+    if not bpm_ok and not any(
+        item.startswith("Measurement BPMs") for item in blockers
+    ):
         blockers.append(
-            f"All target BPMs must be valid before writes ({valid_count}/{required_valid} valid)"
+            "All measurement BPMs must be valid before the energy scan "
+            f"({valid_count}/{required_valid} valid)"
         )
 
     readings["planned_energy_delta"] = config.energy_knob.delta
@@ -361,9 +377,12 @@ def _configured_bpms(config: RunConfig, bpms: Any) -> bool:
         return True
     if not isinstance(bpms, dict):
         return False
-    for name in config.target_bpms:
+    for name in config.measurement_bpms:
         item = bpms.get(name)
-        if not isinstance(item, dict) or not item.get("x"):
+        if (
+            not isinstance(item, dict)
+            or not item.get(config.measurement.plane)
+        ):
             return False
     return True
 

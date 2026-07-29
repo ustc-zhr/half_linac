@@ -91,6 +91,68 @@ def condition_number(singular_values: np.ndarray) -> float:
     return float(np.max(positive) / smallest)
 
 
+def response_mode_counts(
+    result: ResponseMatrixResult,
+    svd_cut: float,
+) -> tuple[int, int, int, int]:
+    """Return retained, required, target-row, and knob mode counts."""
+
+    singular_values = np.asarray(result.singular_values, dtype=float)
+    knob_count = len(result.knob_names)
+    target_count = int(np.count_nonzero(result.measurement.target_mask))
+    required_modes = min(target_count, knob_count)
+    if (
+        singular_values.size == 0
+        or not np.all(np.isfinite(singular_values))
+        or float(np.max(singular_values)) <= 0
+    ):
+        return 0, required_modes, target_count, knob_count
+    largest = float(np.max(singular_values))
+    retained_modes = int(
+        np.count_nonzero(singular_values / largest > float(svd_cut))
+    )
+    return retained_modes, required_modes, target_count, knob_count
+
+
+def automatic_response_block_reason(
+    result: ResponseMatrixResult | None,
+    svd_cut: float,
+) -> str | None:
+    if result is None:
+        return None
+    retained, required, target_count, knob_count = response_mode_counts(
+        result,
+        svd_cut,
+    )
+    if retained > 0:
+        return None
+    return (
+        "Automatic correction is disabled because the measured Q response has "
+        f"{retained}/{required} effective modes for {knob_count} knobs and "
+        f"{target_count} target BPMs at svd_cut={svd_cut:g}."
+    )
+
+
+def rank_reduced_response_warning(
+    result: ResponseMatrixResult | None,
+    svd_cut: float,
+) -> str | None:
+    if result is None:
+        return None
+    retained, required, target_count, knob_count = response_mode_counts(
+        result,
+        svd_cut,
+    )
+    if retained == 0 or retained >= required:
+        return None
+    return (
+        f"Rank-reduced response: {retained}/{required} effective modes for "
+        f"{knob_count} knobs and {target_count} target BPMs. Automatic correction "
+        "will act only on the controllable dispersion component and stop if the "
+        "measured RMS does not improve."
+    )
+
+
 def response_result(
     matrix: np.ndarray,
     bpm_names: tuple[str, ...],

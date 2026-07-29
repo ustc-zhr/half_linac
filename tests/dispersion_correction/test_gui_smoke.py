@@ -271,10 +271,26 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window.back_to_correction_methods_button.click()
     assert window.correction_mode is None
     assert window.latest_measurement is response.measurement
-    assert window.latest_response is None
+    assert window.latest_response is response
     assert window.correction_recommendation is None
     assert window.run_button.isEnabled()
     assert not window.back_to_correction_methods_button.isVisibleTo(window)
+    from dataclasses import replace as dataclass_replace
+
+    rank_reduced_response = dataclass_replace(
+        response,
+        singular_values=np.asarray([10.0, 1.0e-8]),
+        condition_number=1.0e9,
+    )
+    window.latest_response = rank_reduced_response
+    window._show_response(rank_reduced_response)
+    window._set_running(False, "")
+    assert "Correction knobs: 2" in window.response_info.toPlainText()
+    assert "Effective modes: 1/2" in window.response_info.toPlainText()
+    assert window.run_button.isEnabled()
+    assert "controllable dispersion component" in window.run_button.toolTip()
+    window.latest_response = None
+    window._set_running(False, "")
     from half_linac.src.apps.dispersion_correction.calibration_draft import (
         EnergyCalibrationDraft,
         EnergyCalibrationPoint,
@@ -575,7 +591,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert profile_window.section_combo.currentData() == "MIR-dogleg"
     assert profile_window.model_boundary_label.text() == "Assume D=D'=0 at BPM07"
     assert profile_window.model_source_combo.itemText(0) == "Design lattice"
-    assert profile_window.model_source_combo.itemText(1) == "Current snapshot"
+    assert profile_window.model_source_combo.itemText(1) == "Current K1 model"
     assert "REAL backend" in profile_window.model_source_combo.toolTip()
     assert not profile_window.model_response_button.isHidden()
     assert profile_window.model_response_button.isEnabled()
@@ -845,15 +861,15 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     app.processEvents()
     assert half_window.section_combo.currentData() == "bl01"
     assert half_window.model_source_combo.itemText(0) == "Design lattice"
-    assert half_window.model_source_combo.itemText(1) == "Current snapshot"
+    assert half_window.model_source_combo.itemText(1) == "Current K1 model"
     assert half_window.model_source_combo.itemData(1) == "live"
     assert "VM backend" in half_window.model_source_combo.toolTip()
     assert half_window.model_boundary_label.text() == "Assume D=D'=0 at BPM02"
     assert half_window.model_response_button.text() == "Analyze Model"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
-    assert "does not use scan" in half_window.knob_edit.toolTip()
-    assert "limit ±" not in half_window.knob_edit.toolTip()
+    assert "scan ±" in half_window.knob_edit.toolTip()
+    assert "limit ±" in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
     assert half_window.dispersion_curve.measurement is None
     assert not hasattr(half_window, "import_measurement_button")
@@ -861,23 +877,68 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not half_window.measure_button.isEnabled()
     assert not half_window.response_button.isEnabled()
     assert not half_window.run_button.isEnabled()
-    assert not half_window.bpm_select_button.isVisibleTo(half_window)
-    assert not half_window.knob_select_button.isVisibleTo(half_window)
-    assert half_window.status_strip.items["READINESS"].value_label.text() == "MODEL ONLY"
-    assert half_window.status_strip.items["ENERGY STEP"].value_label.text() == "NOT USED"
-    assert not half_window.delta_spin.isVisibleTo(half_window)
-    assert not half_window.energy_step_field_label.isVisibleTo(half_window)
-    assert half_window.energy_calibration_controls.isHidden()
-    assert not half_window.calibration_button.isEnabled()
-    assert "calculates dispersion directly" in half_window.energy_step_summary.text()
-    assert "No energy scan" in half_window.energy_step_summary.text()
-    assert "MODEL_DELTA" not in half_window.energy_step_summary.text()
+    assert half_window.bpm_select_button.isVisibleTo(half_window)
+    assert half_window.knob_select_button.isVisibleTo(half_window)
+    assert half_window.status_strip.items["ACCESS"].value_label.text() == "WRITE ENABLED"
+    assert half_window.status_strip.items["READINESS"].value_label.text() == "NOT READY"
+    assert half_window.status_strip.items["ENERGY STEP"].value_label.text() != "NOT USED"
+    assert half_window.delta_spin.isVisibleTo(half_window)
+    assert half_window.energy_step_field_label.isVisibleTo(half_window)
+    assert half_window.energy_calibration_controls.isVisibleTo(half_window)
+    assert half_window.calibration_button.isEnabled()
+    assert "MODULATOR_HV1" in half_window.energy_step_summary.text()
+    assert "Energy knob PV is not configured" in half_window.operation_banner.text()
     assert half_window.online_page.isVisibleTo(half_window)
     assert half_window.model_dialog.isHidden()
-    assert half_window.next_action_button.text() == "Calculate Design Model"
-    assert half_window.next_action_button.property("workflowAction") == "model-design"
+    assert half_window.next_action_button.text() == "Manual Correction"
+    assert half_window.next_action_button.property("workflowAction") == ""
     assert not hasattr(half_window, "connection_controls")
-    assert half_window.preflight_button.isHidden()
+    assert half_window.preflight_button.isVisibleTo(half_window)
+    vertical_index = half_window.section_combo.findData("bv01_bv02")
+    assert vertical_index >= 0
+    half_window.section_combo.setCurrentIndex(vertical_index)
+    app.processEvents()
+    assert half_window.config.measurement.plane == "y"
+    assert half_window.dispersion_curve.plane == "y"
+    assert half_window.iteration_history_curve.plane == "y"
+    assert half_window.measure_title.text() == (
+        "Measured vertical effective dispersion"
+    )
+    assert half_window.bpm_edit.text() == "BPM42, BPM43"
+    diagnostic_index = half_window.section_combo.findData(
+        "bh04_sep_diagnostics"
+    )
+    assert diagnostic_index >= 0
+    half_window.section_combo.setCurrentIndex(diagnostic_index)
+    app.processEvents()
+    assert half_window.config.section.diagnostic_only
+    assert half_window.config.target_bpms == ()
+    assert half_window.config.knobs == ()
+    assert half_window.bpm_edit.text() == "None — diagnostics only"
+    assert half_window.monitor_bpm_edit.text() == (
+        "BPM36, BPM37, BPM38, BPM39, BPM40, BPM41, BPM42, BPM43"
+    )
+    assert half_window.knob_edit.text() == "None — measurement only"
+    assert half_window.bpm_select_button.isHidden()
+    assert half_window.knob_select_button.isHidden()
+    assert half_window.correction_step_card.isHidden()
+    assert half_window.final_samples_spin.isHidden()
+    assert half_window.measurement_action_button.isVisibleTo(half_window)
+    assert half_window.next_action_button.isHidden()
+    assert half_window.run_button.isHidden()
+    assert half_window.history_button.isHidden()
+    assert half_window.workflow_title_label.text() == (
+        "Diagnostic Measurement"
+    )
+    assert half_window.workflow_state_label.text() == "Diagnostic section"
+    assert not half_window.apply_design_k1_button.isEnabled()
+    assert "do not write quadrupoles" in (
+        half_window.apply_design_k1_button.toolTip()
+    )
+    half_window.section_combo.setCurrentIndex(
+        half_window.section_combo.findData("bl01")
+    )
+    app.processEvents()
     from half_linac.src.apps.dispersion_correction.models import (
         ModelOpticsCurve,
         ModelResponseResult,
@@ -972,7 +1033,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     _, half_real_config = load_profile_run_config(half_real_context)
     half_real_window = MainWindow(half_real_config, half_real_context)
-    assert half_real_window.model_source_combo.itemText(1) == "Current snapshot"
+    assert half_real_window.model_source_combo.itemText(1) == "Current K1 model"
     assert half_real_window.model_source_combo.itemData(1) == "live"
     assert "REAL backend" in half_real_window.model_source_combo.toolTip()
     assert half_real_window.model_response_button.isEnabled()

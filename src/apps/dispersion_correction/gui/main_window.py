@@ -61,6 +61,7 @@ from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
     DispersionMeasurement,
     KnobConfig,
+    ModelOpticsCurve,
     ModelResponseResult,
     ResponseMatrixResult,
     RunConfig,
@@ -84,6 +85,11 @@ from half_linac.src.apps.dispersion_correction.profile_runtime import (
     write_profile_operation,
 )
 from half_linac.src.apps.dispersion_correction.reports import result_to_markdown
+from half_linac.src.apps.dispersion_correction.solver import (
+    automatic_response_block_reason,
+    rank_reduced_response_warning,
+    response_mode_counts,
+)
 from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
@@ -335,14 +341,19 @@ class OverviewControls(QWidget):
 
 class DispersionCurveWidget(QWidget):
     DEFAULT_TOOLTIP = (
-        "Measured BPM dispersion is the primary result. Design and current-snapshot "
+        "Measured BPM dispersion is the primary result. Design and current-K1 "
         "model curves are optional references. Move over the lattice strip for "
         "element details when a model has been analyzed."
     )
 
-    def __init__(self, model_entrance: str | None = None) -> None:
+    def __init__(
+        self,
+        model_entrance: str | None = None,
+        plane: str = "x",
+    ) -> None:
         super().__init__()
         self.model_entrance = model_entrance
+        self.plane = "y" if str(plane).strip().lower() == "y" else "x"
         self.result: ModelResponseResult | None = None
         self.measurement: DispersionPlotDataset | None = None
         self.reference_measurement: DispersionPlotDataset | None = None
@@ -358,6 +369,16 @@ class DispersionCurveWidget(QWidget):
     def set_model_entrance(self, name: str | None) -> None:
         self.model_entrance = name
         self.update()
+
+    def set_plane(self, plane: str) -> None:
+        normalized = str(plane).strip().lower()
+        if normalized not in {"x", "y"}:
+            raise ValueError("plane must be 'x' or 'y'")
+        self.plane = normalized
+        self.update()
+
+    def _model_dispersion(self, curve: ModelOpticsCurve) -> np.ndarray:
+        return curve.dx_mm if self.plane == "x" else curve.dy_mm
 
     def set_result(self, result: ModelResponseResult | None) -> None:
         self.result = result
@@ -426,7 +447,7 @@ class DispersionCurveWidget(QWidget):
         painter.fillRect(self.rect(), QColor(tokens["plot_bg"]))
         plot = self.rect().adjusted(58, 42, -18, -112)
         painter.setPen(QColor(tokens["text_muted"]))
-        painter.drawText(12, 18, "Dispersion η (mm)")
+        painter.drawText(12, 18, f"Dispersion η{self.plane} (mm)")
         if plot.width() <= 0 or plot.height() <= 0:
             return
         if self.result is None and self.measurement is None:
@@ -440,14 +461,14 @@ class DispersionCurveWidget(QWidget):
         displayed_curves: list[np.ndarray] = []
         if self.result is not None and self.show_design_model:
             design_curve = self.result.design_curve or self.result.selected_curve
-            displayed_curves.extend((design_curve.dx_mm, design_curve.dy_mm))
+            displayed_curves.append(self._model_dispersion(design_curve))
         if (
             self.result is not None
             and self.show_snapshot_model
             and self.result.model_source != "design"
         ):
-            displayed_curves.extend(
-                (self.result.selected_curve.dx_mm, self.result.selected_curve.dy_mm)
+            displayed_curves.append(
+                self._model_dispersion(self.result.selected_curve)
             )
         limit = max(
             (
@@ -507,31 +528,34 @@ class DispersionCurveWidget(QWidget):
                 ]
             )
 
-        horizontal = QColor("#e66b5b")
-        vertical = QColor("#4c9be8")
+        model_color = QColor(
+            "#e66b5b" if self.plane == "x" else "#4c9be8"
+        )
         if self.result is not None and self.show_design_model:
             design_curve = self.result.design_curve or self.result.selected_curve
-            for color, curve in (
-                (horizontal, design_curve.dx_mm),
-                (vertical, design_curve.dy_mm),
-            ):
-                design_color = QColor(color)
-                design_color.setAlpha(150)
-                painter.setPen(QPen(design_color, 2, Qt.DotLine))
-                painter.drawPolyline(points(design_curve.s_m, curve))
+            design_color = QColor(model_color)
+            design_color.setAlpha(150)
+            painter.setPen(QPen(design_color, 2, Qt.DotLine))
+            painter.drawPolyline(
+                points(
+                    design_curve.s_m,
+                    self._model_dispersion(design_curve),
+                )
+            )
         if (
             self.result is not None
             and self.show_snapshot_model
             and self.result.model_source != "design"
         ):
-            for color, curve in (
-                (horizontal, self.result.selected_curve.dx_mm),
-                (vertical, self.result.selected_curve.dy_mm),
-            ):
-                snapshot_color = QColor(color)
-                snapshot_color.setAlpha(190)
-                painter.setPen(QPen(snapshot_color, 2, Qt.DashLine))
-                painter.drawPolyline(points(self.result.selected_curve.s_m, curve))
+            snapshot_color = QColor(model_color)
+            snapshot_color.setAlpha(190)
+            painter.setPen(QPen(snapshot_color, 2, Qt.DashLine))
+            painter.drawPolyline(
+                points(
+                    self.result.selected_curve.s_m,
+                    self._model_dispersion(self.result.selected_curve),
+                )
+            )
 
         def draw_measurement(
             dataset: DispersionPlotDataset,
@@ -622,11 +646,15 @@ class DispersionCurveWidget(QWidget):
             )
         )
         if model_curves_visible:
-            painter.setPen(horizontal)
-            painter.drawText(plot.left() + 8, legend_y, "ηx")
-            painter.setPen(vertical)
-            painter.drawText(plot.left() + 38, legend_y, "ηy")
-        legend_x = float(plot.left() + (75 if model_curves_visible else 8))
+            painter.setPen(model_color)
+            painter.drawText(
+                plot.left() + 8,
+                legend_y,
+                f"η{self.plane}",
+            )
+        legend_x = float(
+            plot.left() + (38 if model_curves_visible else 8)
+        )
         text_color = QColor(tokens["text_muted"])
         font_metrics = painter.fontMetrics()
 
@@ -702,7 +730,7 @@ class DispersionCurveWidget(QWidget):
             and self.show_snapshot_model
             and self.result.model_source != "design"
         ):
-            draw_line_key("Current snapshot", Qt.DashLine)
+            draw_line_key("Current K1 model", Qt.DashLine)
         if self.result is not None:
             lattice_rect = QRectF(
                 float(plot.left()),
@@ -1007,7 +1035,12 @@ class MainWindow(QMainWindow):
         self.selected_knobs = tuple(self.config.knobs)
         self.knob_hard_limits = tuple(knob.limit for knob in self.config.knobs)
         self.available_bpms = (
-            selectable_profile_bpms(app_context) if app_context is not None else self.config.target_bpms
+            selectable_profile_bpms(
+                app_context,
+                self.config.measurement.plane,
+            )
+            if app_context is not None
+            else self.config.target_bpms
         )
         self.available_quadrupoles = (
             selectable_profile_quadrupoles(app_context)
@@ -1056,7 +1089,10 @@ class MainWindow(QMainWindow):
         self.load_button.setToolTip("Runtime configuration is managed by the selected machine profile.")
         self.bpm_edit.setReadOnly(True)
         self.config_title_label.setText("Configuration")
-        fixed_selection = self.config.section.model_only
+        fixed_selection = (
+            self.config.section.model_only
+            or self.config.section.diagnostic_only
+        )
         self.bpm_select_button.setVisible(not fixed_selection)
         self.knob_select_button.setVisible(not fixed_selection)
 
@@ -1350,7 +1386,7 @@ class MainWindow(QMainWindow):
             "and the final automatic-correction result."
         )
         self.final_samples_spin.valueChanged.connect(self._workflow_input_changed)
-        self._add_form_row(
+        self.verification_samples_field_label = self._add_form_row(
             sampling_form,
             "Verification Samples",
             self.final_samples_spin,
@@ -1602,9 +1638,9 @@ class MainWindow(QMainWindow):
         self.measure_page = QWidget()
         measure_layout = QVBoxLayout(self.measure_page)
         measure_layout.setContentsMargins(8, 4, 8, 8)
-        measure_title = QLabel("Measured horizontal effective dispersion")
-        measure_title.setObjectName("workspaceIntro")
-        measure_layout.addWidget(measure_title)
+        self.measure_title = QLabel()
+        self.measure_title.setObjectName("workspaceIntro")
+        measure_layout.addWidget(self.measure_title)
         measure_layout.addWidget(self.measure_table, 1)
         self.measure_page.setParent(self.online_content)
         self.measure_page.hide()
@@ -1726,8 +1762,8 @@ class MainWindow(QMainWindow):
         model_layout = QVBoxLayout(self.model_page)
         model_layout.setContentsMargins(8, 4, 8, 8)
         model_intro = QLabel(
-            "Measured BPM dispersion is the primary result. Add design or current-"
-            "snapshot model curves only when they help explain the measurement."
+            "Measured BPM dispersion is the primary result. Add design or current-K1 "
+            "model curves only when they help explain the measurement."
         )
         model_intro.setObjectName("workspaceIntro")
         model_intro.setWordWrap(True)
@@ -1740,13 +1776,13 @@ class MainWindow(QMainWindow):
         self.model_source_combo.addItem("Design lattice", "design")
         if self.app_context is not None:
             backend_name = self.app_context.control_backend.name.lower()
-            self.model_source_combo.addItem("Current snapshot", "live")
+            self.model_source_combo.addItem("Current K1 model", "live")
             snapshot_tooltip = (
                 f"Reads quadrupole K1 PVs from the active {backend_name.upper()} backend "
                 "without writing machine state."
             )
         else:
-            snapshot_tooltip = "Current snapshot requires a machine-profile backend."
+            snapshot_tooltip = "Current K1 model requires a machine-profile backend."
         self.model_source_combo.setToolTip(
             snapshot_tooltip
         )
@@ -1887,7 +1923,8 @@ class MainWindow(QMainWindow):
             self.iteration_history_status_label
         )
         self.iteration_history_curve = DispersionCurveWidget(
-            self.config.section.model_entrance
+            self.config.section.model_entrance,
+            self.config.measurement.plane,
         )
         self.iteration_history_curve.setMinimumHeight(330)
         iteration_history_layout.addWidget(self.iteration_history_curve, 2)
@@ -1938,7 +1975,7 @@ class MainWindow(QMainWindow):
         self.show_design_model_checkbox.toggled.connect(
             self._model_visibility_changed
         )
-        self.show_snapshot_model_checkbox = QCheckBox("Current snapshot")
+        self.show_snapshot_model_checkbox = QCheckBox("Current K1 model")
         self.show_snapshot_model_checkbox.setProperty("role", "modelOverlayToggle")
         self.show_snapshot_model_checkbox.setChecked(False)
         self.show_snapshot_model_checkbox.setEnabled(False)
@@ -1952,7 +1989,7 @@ class MainWindow(QMainWindow):
         self.refresh_snapshot_button = QPushButton("Refresh")
         self.refresh_snapshot_button.setObjectName("refreshSnapshotButton")
         self.refresh_snapshot_button.setToolTip(
-            "Read the current quadrupole K1 PVs again and recalculate the snapshot curve."
+            "Read the current quadrupole K1 PVs again and recalculate the model curve."
         )
         self.refresh_snapshot_button.clicked.connect(
             self._refresh_current_snapshot
@@ -1971,7 +2008,8 @@ class MainWindow(QMainWindow):
         )
         overview_layout.addWidget(self.overview_controls)
         self.dispersion_curve = DispersionCurveWidget(
-            self.config.section.model_entrance
+            self.config.section.model_entrance,
+            self.config.measurement.plane,
         )
         overview_layout.addWidget(self.dispersion_curve, 1)
 
@@ -2474,8 +2512,14 @@ class MainWindow(QMainWindow):
             self.dispersion_curve.set_model_entrance(
                 self.config.section.model_entrance
             )
+            self.dispersion_curve.set_plane(
+                self.config.measurement.plane
+            )
             self.iteration_history_curve.set_model_entrance(
                 self.config.section.model_entrance
+            )
+            self.iteration_history_curve.set_plane(
+                self.config.measurement.plane
             )
             self._last_unmapped_plot_bpms = ()
         self._invalidate_staged_results(
@@ -2485,10 +2529,27 @@ class MainWindow(QMainWindow):
         self._loading_widgets = True
         try:
             self.selected_knobs = tuple(self.config.knobs)
+            if self.app_context is not None:
+                self.available_bpms = selectable_profile_bpms(
+                    self.app_context,
+                    self.config.measurement.plane,
+                )
+            plane_name = (
+                "horizontal"
+                if self.config.measurement.plane == "x"
+                else "vertical"
+            )
+            self.measure_title.setText(
+                f"Measured {plane_name} effective dispersion"
+            )
             section_index = self.section_combo.findData(self.config.section.id)
             if section_index >= 0:
                 self.section_combo.setCurrentIndex(section_index)
-            self.bpm_edit.setText(", ".join(self.config.target_bpms))
+            self.bpm_edit.setText(
+                ", ".join(self.config.target_bpms)
+                if self.config.target_bpms
+                else "None — diagnostics only"
+            )
             self.monitor_bpm_edit.setText(", ".join(self.config.monitor_bpms))
             self.delta_spin.setValue(self.config.energy_knob.delta)
             self.samples_per_step_spin.setValue(self.config.measurement.samples_per_step)
@@ -2508,6 +2569,22 @@ class MainWindow(QMainWindow):
             self._update_knob_summary()
             self._update_energy_step_summary()
             model_only = self.config.section.model_only
+            fixed_selection = (
+                model_only or self.config.section.diagnostic_only
+            )
+            diagnostic_only = self.config.section.diagnostic_only
+            self.bpm_select_button.setVisible(not fixed_selection)
+            self.knob_select_button.setVisible(not fixed_selection)
+            self.correction_step_card.setVisible(not diagnostic_only)
+            self.verification_samples_field_label.setVisible(
+                not diagnostic_only
+            )
+            self.final_samples_spin.setVisible(not diagnostic_only)
+            self.workflow_title_label.setText(
+                "Diagnostic Measurement"
+                if diagnostic_only
+                else "Correction Workflow"
+            )
             self.energy_step_field_label.setVisible(not model_only)
             self.delta_spin.setVisible(not model_only)
         finally:
@@ -2520,6 +2597,13 @@ class MainWindow(QMainWindow):
 
     def _update_knob_summary(self) -> None:
         summaries = []
+        if self.config.section.diagnostic_only:
+            self.knob_edit.setText("None — measurement only")
+            self.knob_edit.setCursorPosition(0)
+            self.knob_edit.setToolTip(
+                "Diagnostic sections do not scan or write quadrupoles."
+            )
+            return
         if self.config.section.model_only:
             tooltip_lines = [
                 "Design-reference quadrupoles. Model comparison does not use scan, "
@@ -2924,10 +3008,22 @@ class MainWindow(QMainWindow):
         return ""
 
     def _config_from_widgets(self) -> RunConfig:
-        bpms = tuple(item for item in re.split(r"[\s,]+", self.bpm_edit.text().strip()) if item)
-        if not bpms:
+        diagnostic_only = self.config.section.diagnostic_only
+        bpms = (
+            ()
+            if diagnostic_only
+            else tuple(
+                item
+                for item in re.split(
+                    r"[\s,]+",
+                    self.bpm_edit.text().strip(),
+                )
+                if item
+            )
+        )
+        if not bpms and not diagnostic_only:
             raise ValueError("At least one BPM is required")
-        knobs = tuple(self.selected_knobs)
+        knobs = () if diagnostic_only else tuple(self.selected_knobs)
         target_by_bpm = dict(
             zip(
                 self.config.target_bpms,
@@ -3079,8 +3175,26 @@ class MainWindow(QMainWindow):
             self.latest_measurement = result.measurement
             self.latest_measurement_time = datetime.now()
             self.correction_recommendation = None
+            automatic_block = automatic_response_block_reason(
+                result,
+                self.config.solver.svd_cut,
+            )
+            rank_warning = rank_reduced_response_warning(
+                result,
+                self.config.solver.svd_cut,
+            )
             self.correction_state_label.setText(
-                "Quadrupole response measured. Calculating one bounded recommendation."
+                (
+                    automatic_block
+                    + " A manually reviewed bounded recommendation is still available."
+                )
+                if automatic_block is not None
+                else (
+                    rank_warning
+                    + " Calculating one bounded manual recommendation."
+                    if rank_warning is not None
+                    else "Quadrupole response measured. Calculating one bounded recommendation."
+                )
             )
             self.recommendation_summary_label.setText(
                 "No recommendation has been calculated."
@@ -3537,6 +3651,12 @@ class MainWindow(QMainWindow):
             return
         self.model_empty_label.setVisible(False)
         response = self.dispersion_curve.result
+        plane = self.config.measurement.plane
+        eta_label = f"η{plane}"
+
+        def curve_values(curve: ModelOpticsCurve) -> np.ndarray:
+            return curve.dx_mm if plane == "x" else curve.dy_mm
+
         model_columns: list[tuple[str, dict[str, float]]] = []
         if response is not None and self.show_design_model_checkbox.isChecked():
             curve = response.design_curve or response.selected_curve
@@ -3544,7 +3664,7 @@ class MainWindow(QMainWindow):
                 (
                     "Design model",
                     {
-                        name: float(curve.dx_mm[index])
+                        name: float(curve_values(curve)[index])
                         for index, name in enumerate(curve.element_names)
                     },
                 )
@@ -3557,16 +3677,26 @@ class MainWindow(QMainWindow):
             curve = response.selected_curve
             model_columns.append(
                 (
-                    "Current snapshot",
+                    "Current K1 model",
                     {
-                        name: float(curve.dx_mm[index])
+                        name: float(curve_values(curve)[index])
                         for index, name in enumerate(curve.element_names)
                     },
                 )
             )
-        headers = ["BPM", "Measurement ηx (mm)", "σηx (mm)", "Valid"]
+        headers = [
+            "BPM",
+            f"Measurement {eta_label} (mm)",
+            f"σ{eta_label} (mm)",
+            "Valid",
+        ]
         for label, _values in model_columns:
-            headers.extend((f"{label} ηx (mm)", f"Measurement − {label} (mm)"))
+            headers.extend(
+                (
+                    f"{label} {eta_label} (mm)",
+                    f"Measurement − {label} (mm)",
+                )
+            )
         self.model_measure_table.setColumnCount(len(headers))
         self.model_measure_table.setHorizontalHeaderLabels(headers)
         self.model_measure_table.setRowCount(len(measurement.bpm_names))
@@ -3630,25 +3760,23 @@ class MainWindow(QMainWindow):
             for col, value in enumerate(response.matrix[row, :], start=2):
                 self.response_table.setItem(row, col, QTableWidgetItem(f"{value:.6g}"))
         self.response_table.resizeColumnsToContents()
-        singular_values = np.asarray(response.singular_values, dtype=float)
-        largest = float(np.max(singular_values)) if singular_values.size else 0.0
-        retained_rank = (
-            int(
-                np.count_nonzero(
-                    singular_values / largest > self.config.solver.svd_cut
-                )
+        retained_rank, required_rank, target_count, knob_count = (
+            response_mode_counts(
+                response,
+                self.config.solver.svd_cut,
             )
-            if largest > 0
-            else 0
         )
         rank_summary = (
-            f"\nRetained SVD modes: {retained_rank}/{len(response.knob_names)} "
+            f"\nCorrection knobs: {knob_count}"
+            f"\nTarget BPM modes: {target_count}"
+            f"\nEffective modes: {retained_rank}/{required_rank} "
             f"at svd_cut={self.config.solver.svd_cut:g}"
         )
-        if retained_rank < len(response.knob_names):
+        if retained_rank < required_rank:
             rank_summary += (
-                "\nRank-reduced response: correction uses only the retained "
-                "independent mode."
+                "\nRank-reduced response: manual correction uses only the retained "
+                "independent mode; automatic correction uses the same controllable "
+                "mode and stops if measured RMS does not improve."
             )
         self.response_info.setPlainText(
             "Singular values: "
@@ -3697,9 +3825,7 @@ class MainWindow(QMainWindow):
         if self._active_task:
             return
         self.correction_mode = None
-        self.latest_response = None
         self.correction_recommendation = None
-        self.response_table.setRowCount(0)
         self.response_info.clear()
         self.recommendation_prediction_table.setRowCount(0)
         self.recommendation_table.setRowCount(0)
@@ -3725,10 +3851,15 @@ class MainWindow(QMainWindow):
             if self.response_update_combo.currentText() == "every_iteration"
             else "reuse the first measured Q response"
         )
-        return (
+        text = (
             f"Maximum {self.max_iter_spin.value()} generations · {policy}. "
             "The loop may stop earlier."
         )
+        rank_warning = rank_reduced_response_warning(
+            self.latest_response,
+            self.config.solver.svd_cut,
+        )
+        return f"{text} {rank_warning}" if rank_warning is not None else text
 
     def _update_automatic_correction_tooltip(
         self,
@@ -3818,11 +3949,18 @@ class MainWindow(QMainWindow):
         settings.addWidget(max_step_value, 2, 3)
         layout.addWidget(settings_card)
 
-        safety = QLabel(
+        safety_text = (
             "Stops early if dispersion does not improve or a safety check fails; "
             "rejected trial settings are restored automatically.\n"
             "For a new machine configuration, validate one manual correction first."
         )
+        rank_warning = rank_reduced_response_warning(
+            self.latest_response,
+            self.config.solver.svd_cut,
+        )
+        if rank_warning is not None:
+            safety_text += "\n\n" + rank_warning
+        safety = QLabel(safety_text)
         safety.setObjectName("automaticSafetyNote")
         safety.setWordWrap(True)
         layout.addWidget(safety)
@@ -3846,7 +3984,10 @@ class MainWindow(QMainWindow):
         if block_reason is not None:
             QMessageBox.warning(self, "Automatic Correction", block_reason)
             return
-        if self.config.section.model_only:
+        if (
+            self.config.section.model_only
+            or self.config.section.diagnostic_only
+        ):
             return
         if self.latest_measurement is None:
             QMessageBox.warning(
@@ -3854,6 +3995,13 @@ class MainWindow(QMainWindow):
                 "Automatic Correction",
                 "Measure dispersion before starting automatic correction.",
             )
+            return
+        response_block = automatic_response_block_reason(
+            self.latest_response,
+            self.config.solver.svd_cut,
+        )
+        if response_block is not None:
+            QMessageBox.warning(self, "Automatic Correction", response_block)
             return
         if self.config.backend.type.lower() == "epics" and (
             self.last_live_preflight is None or not self.last_live_preflight.ok
@@ -3971,19 +4119,11 @@ class MainWindow(QMainWindow):
         recommendation: CorrectionRecommendation,
     ) -> None:
         improvement = recommendation.measurement.rms_mm - recommendation.predicted_rms_mm
-        singular_values = np.asarray(recommendation.singular_values, dtype=float)
-        largest_singular_value = (
-            float(np.max(singular_values)) if singular_values.size else 0.0
-        )
-        retained_rank = (
-            int(
-                np.count_nonzero(
-                    singular_values / largest_singular_value
-                    > self.config.solver.svd_cut
-                )
+        retained_rank, required_rank, _target_count, knob_count = (
+            response_mode_counts(
+                recommendation.response,
+                self.config.solver.svd_cut,
             )
-            if largest_singular_value > 0
-            else 0
         )
         self.correction_state_label.setText(
             "Prediction only — no backend read or write occurred. Review every target "
@@ -3998,7 +4138,7 @@ class MainWindow(QMainWindow):
             f"predicted: {recommendation.predicted_rms_mm:.6g} mm "
             f"(improvement {improvement:+.6g} mm)\n"
             f"Response condition number: {recommendation.condition_number:.6g} · "
-            f"retained SVD modes {retained_rank}/{len(recommendation.delta_knobs)} · "
+            f"{knob_count} knobs · effective modes {retained_rank}/{required_rank} · "
             f"gain {self.config.solver.gain:.3g} · "
             f"max step {100.0 * self.config.solver.max_step_fraction:.1f}%\n"
             + "Knob changes: "
@@ -4182,7 +4322,7 @@ class MainWindow(QMainWindow):
     def _design_k1_request(self) -> DesignK1Request:
         response = self.dispersion_curve.result
         if response is None or response.model_source == "design":
-            raise RuntimeError("Refresh Current snapshot before reviewing design K1 targets.")
+            raise RuntimeError("Refresh Current K1 model before reviewing design K1 targets.")
         baseline = {
             name: float(response.selected_k1[name])
             for name in response.device_names
@@ -4213,6 +4353,11 @@ class MainWindow(QMainWindow):
         )
 
     def _design_k1_block_reason(self) -> str | None:
+        if self.config.section.diagnostic_only:
+            return (
+                "Diagnostic sections measure and display dispersion but do not "
+                "write quadrupoles."
+            )
         if self.config.section.model_only:
             return "The active backend is model-only and cannot write design K1 targets."
         if self.config.backend.type.lower() != "epics":
@@ -4276,7 +4421,7 @@ class MainWindow(QMainWindow):
                 "Connections and reviewed baselines will be checked again before writing.",
                 "Any PV write/verification, cancellation, or orbit-safety failure restores "
                 "the complete pre-write snapshot.",
-                "After success, Current snapshot is recalculated automatically.",
+                "After success, Current K1 model is recalculated automatically.",
                 "",
                 "Proceed?",
             ]
@@ -4391,6 +4536,14 @@ class MainWindow(QMainWindow):
                 "Model curve available",
                 "The model curve is already displayed in the dispersion overview.",
             )
+        if self.config.section.diagnostic_only:
+            return (
+                None,
+                "Measurement Only",
+                "Diagnostic section",
+                "Use Measure Dispersion in the left panel. This section has no "
+                "correction BPMs or quadrupole knobs.",
+            )
 
         block_reason = self._operation_block_reason()
         if block_reason is not None:
@@ -4494,20 +4647,42 @@ class MainWindow(QMainWindow):
             if self.dispersion_curve.result is None:
                 return "Read-only model workflow · no energy scan or machine write"
             return "Model reference available · no energy scan or machine write"
+        if self.config.section.diagnostic_only:
+            measurement = self.latest_measurement
+            if measurement is None:
+                return (
+                    f"Measurement-only diagnostics · "
+                    f"{len(self.config.monitor_bpms)} monitor BPMs"
+                )
+            valid = int(np.count_nonzero(measurement.valid))
+            return (
+                f"Measured RMS {measurement.measured_rms_mm:.4g} mm · "
+                f"{valid}/{len(measurement.names)} monitor BPMs valid"
+            )
         recommendation = self.correction_recommendation
         if recommendation is not None:
             target_count = len(recommendation.device_deltas)
+            retained, required, _targets, knobs = response_mode_counts(
+                recommendation.response,
+                self.config.solver.svd_cut,
+            )
             return (
                 f"Predicted residual RMS "
                 f"{recommendation.measurement.rms_mm:.4g} → "
                 f"{recommendation.predicted_rms_mm:.4g} mm · "
-                f"{target_count} quadrupole target(s)"
+                f"{target_count} quadrupole target(s) · "
+                f"{knobs} knobs · {retained}/{required} effective modes"
             )
         response = self.latest_response
         if response is not None:
+            retained, required, _targets, knobs = response_mode_counts(
+                response,
+                self.config.solver.svd_cut,
+            )
             return (
                 f"Baseline residual RMS {response.measurement.rms_mm:.4g} mm · "
-                f"response condition number {response.condition_number:.4g}"
+                f"{knobs} knobs · {retained}/{required} effective modes · "
+                f"condition {response.condition_number:.4g}"
             )
         measurement = self.latest_measurement
         if measurement is not None:
@@ -4534,18 +4709,24 @@ class MainWindow(QMainWindow):
         )
 
     def _update_workflow_auxiliary_actions(self, running: bool) -> None:
+        diagnostic_only = self.config.section.diagnostic_only
         manual_mode = self.correction_mode == "manual"
         has_response = manual_mode and self.latest_response is not None
         has_history = bool(self.correction_session_runs)
         self.back_to_correction_methods_button.setVisible(
-            manual_mode and not self.config.section.model_only
+            manual_mode
+            and not self.config.section.model_only
+            and not diagnostic_only
         )
         self.back_to_correction_methods_button.setEnabled(
             not running and manual_mode
         )
-        self.response_details_button.setVisible(has_response)
+        self.response_details_button.setVisible(
+            has_response and not diagnostic_only
+        )
         self.response_details_button.setEnabled(not running and has_response)
         self.history_button.setEnabled(not running and has_history)
+        self.history_button.setVisible(not diagnostic_only)
         self.history_button.setToolTip(
             "Review manual and automatic correction runs by generation."
             if has_history
@@ -4617,11 +4798,16 @@ class MainWindow(QMainWindow):
         self.next_action_button.setText(button_text)
         self.next_action_button.setEnabled(action is not None)
         model_only = self.config.section.model_only
+        diagnostic_only = self.config.section.diagnostic_only
         manual_mode = self.correction_mode == "manual"
         automatic_mode = self.correction_mode == "automatic"
-        self.next_action_button.setVisible(model_only or not automatic_mode)
+        self.next_action_button.setVisible(
+            not diagnostic_only and (model_only or not automatic_mode)
+        )
         self.run_button.setVisible(
-            not model_only and not manual_mode
+            not model_only
+            and not diagnostic_only
+            and not manual_mode
         )
         self.next_action_button.setToolTip(hint)
         self.workflow_state_label.setText(state_text)
@@ -4629,6 +4815,7 @@ class MainWindow(QMainWindow):
 
     def _update_measurement_action(self, running: bool, task: str) -> None:
         model_only = self.config.section.model_only
+        diagnostic_only = self.config.section.diagnostic_only
         self.measurement_action_button.setVisible(not model_only)
         self.measurement_status_label.setVisible(not model_only)
         if model_only:
@@ -4662,8 +4849,13 @@ class MainWindow(QMainWindow):
                     if self.latest_measurement_time is not None
                     else "current session"
                 )
+                displayed_rms = (
+                    self.latest_measurement.measured_rms_mm
+                    if diagnostic_only
+                    else self.latest_measurement.rms_mm
+                )
                 self.measurement_status_label.setText(
-                    f"RMS {self.latest_measurement.rms_mm:.4g} mm · "
+                    f"RMS {displayed_rms:.4g} mm · "
                     f"{measured_at}"
                 )
         if running:
@@ -4766,15 +4958,25 @@ class MainWindow(QMainWindow):
             self.design_k1_status_label.setText(design_k1_reason)
             self.design_k1_status_label.show()
         self._update_plot_state(running=running, task=task)
+        correction_enabled = not (
+            self.config.section.model_only
+            or self.config.section.diagnostic_only
+        )
         self.measure_button.setEnabled(not running and operation_allowed)
-        self.response_button.setEnabled(not running and operation_allowed)
-        automatic_visible = not self.config.section.model_only
+        self.response_button.setEnabled(
+            not running and operation_allowed and correction_enabled
+        )
+        automatic_visible = correction_enabled
         automatic_connection_ready = (
             self.config.backend.type.lower() != "epics"
             or (
                 self.last_live_preflight is not None
                 and self.last_live_preflight.ok
             )
+        )
+        automatic_response_reason = automatic_response_block_reason(
+            self.latest_response,
+            self.config.solver.svd_cut,
         )
         self.run_button.setVisible(automatic_visible)
         if running and task == "run":
@@ -4787,9 +4989,12 @@ class MainWindow(QMainWindow):
             and automatic_connection_ready
             and automatic_visible
             and self.latest_measurement is not None
+            and automatic_response_reason is None
         )
         recommendation_inputs_ready = (
-            self.latest_measurement is not None and self.latest_response is not None
+            correction_enabled
+            and self.latest_measurement is not None
+            and self.latest_response is not None
         )
         self.review_button.setEnabled(not running and recommendation_inputs_ready)
         self.compute_recommendation_button.setEnabled(
@@ -4819,6 +5024,8 @@ class MainWindow(QMainWindow):
             automatic_tooltip = (
                 "Measure dispersion before starting automatic correction."
             )
+        elif automatic_response_reason is not None:
+            automatic_tooltip = automatic_response_reason
         else:
             automatic_tooltip = self._automatic_correction_settings_tooltip()
         self.run_button.setToolTip(automatic_tooltip)

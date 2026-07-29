@@ -346,6 +346,26 @@ class MachineProfileTests(unittest.TestCase):
             "IN:MG:L001:QUAD:QL01:K1",
         )
 
+    def test_half_dispersion_hv_draft_is_real_only(self):
+        profile = load_profile("half")
+
+        self.assertEqual(
+            resolve_channel(
+                profile,
+                "MODULATOR_HV1",
+                "voltage_set",
+                "real",
+            ),
+            "HALF:modulator1:HV_set:ao",
+        )
+        with self.assertRaises(MachineProfileError):
+            resolve_channel(
+                profile,
+                "MODULATOR_HV1",
+                "voltage_set",
+                "vm",
+            )
+
     def test_model_snapshot_conversion_helpers(self):
         self.assertEqual(apply_snapshot_conversion(2.0, {"type": "direct"}), 2.0)
         self.assertEqual(
@@ -738,6 +758,8 @@ class MachineProfileTests(unittest.TestCase):
             resolve_channel(profile, "QL27", "k1", "vm"),
             "HALF:IN:AP:QUAD:QL27:K1:ao",
         )
+        with self.assertRaisesRegex(MachineProfileError, "QL27.*K1.*real"):
+            resolve_channel(profile, "QL27", "k1", "real")
         self.assertEqual(
             resolve_channel(profile, "PRF07", "sigx", "Virtual Machine"),
             "HALF:IN:FLAG:PRF07:sigx",

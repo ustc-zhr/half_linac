@@ -51,7 +51,7 @@ def calculate_model_response(
     _progress(progress_callback, "Calculating design reference", 0, 3)
     design_curve = _optics_curve(backend, entrance, exit_element)
     if source_name not in {"design", "lattice"}:
-        _progress(progress_callback, "Reading current quadrupole snapshot", 1, 3)
+        _progress(progress_callback, "Reading current K1 values", 1, 3)
         snapshot = build_model_snapshot(
             context,
             _section_quadrupole_fields(backend, entrance, exit_element),
@@ -64,24 +64,35 @@ def calculate_model_response(
         source_name = MODEL_SNAPSHOT_SOURCE_DESIGN
 
     if selected_overrides:
-        _progress(progress_callback, "Calculating selected snapshot optics", 2, 3)
+        _progress(progress_callback, "Calculating current K1 model optics", 2, 3)
         selected_curve = _optics_curve(
             backend,
             entrance,
             exit_element,
             lattice_overrides=selected_overrides,
         )
-        design_reference_overrides = _merge_lattice_overrides(
-            selected_overrides,
-            {device: {"K1": design_k1[device]} for device in correction_devices},
-        )
-        _progress(progress_callback, "Calculating design-reference optics", 2, 3)
-        design_reference_curve = _optics_curve(
-            backend,
-            entrance,
-            exit_element,
-            lattice_overrides=design_reference_overrides,
-        )
+        if correction_devices:
+            design_reference_overrides = _merge_lattice_overrides(
+                selected_overrides,
+                {
+                    device: {"K1": design_k1[device]}
+                    for device in correction_devices
+                },
+            )
+            _progress(
+                progress_callback,
+                "Calculating design-reference optics",
+                2,
+                3,
+            )
+            design_reference_curve = _optics_curve(
+                backend,
+                entrance,
+                exit_element,
+                lattice_overrides=design_reference_overrides,
+            )
+        else:
+            design_reference_curve = design_curve
         selected_k1 = {
             device: float(selected_overrides[device]["K1"])
             for device in correction_devices
@@ -198,7 +209,7 @@ def format_model_response(result: ModelResponseResult) -> str:
         ]
     )
     if result.snapshot_metadata is not None:
-        lines.extend(["", "Quadrupole snapshot:"])
+        lines.extend(["", "Current K1 model input:"])
         created_at = result.snapshot_metadata.get("created_at")
         if created_at:
             lines.append(f"  captured: {created_at}")
@@ -213,8 +224,8 @@ def format_model_response(result: ModelResponseResult) -> str:
 def _model_source_label(source: str) -> str:
     labels = {
         "design": "Design lattice",
-        "live_from_vm": "Current snapshot (VM backend)",
-        "live_from_real": "Current snapshot (REAL backend)",
+        "live_from_vm": "Current K1 model (VM backend)",
+        "live_from_real": "Current K1 model (REAL backend)",
     }
     return labels.get(str(source), str(source))
 
@@ -250,7 +261,7 @@ def _correction_devices(config: RunConfig) -> tuple[str, ...]:
             if device not in seen:
                 devices.append(device)
                 seen.add(device)
-    if not devices:
+    if not devices and not config.section.diagnostic_only:
         raise ValueError("Model design comparison requires at least one quadrupole")
     return tuple(sorted(devices))
 

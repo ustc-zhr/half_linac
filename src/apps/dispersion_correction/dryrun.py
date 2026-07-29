@@ -18,6 +18,7 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
     energy_map = pv_map.get("energy_knob", {}) if isinstance(pv_map, dict) else {}
     bpm_map = pv_map.get("bpms", {}) if isinstance(pv_map, dict) else {}
     quadrupole_map = pv_map.get("quadrupoles", {}) if isinstance(pv_map, dict) else {}
+    bpm_plane = config.measurement.plane
 
     warnings = []
     if config.backend.type == "epics" and config.backend.mode != "read_only":
@@ -48,6 +49,7 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
             "model_entrance": config.section.model_entrance,
             "model_exit": config.section.model_exit,
             "model_only": config.section.model_only,
+            "diagnostic_only": config.section.diagnostic_only,
             "model_observables": [
                 {
                     "name": observable.name,
@@ -75,7 +77,9 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
                 "name": name,
                 "role": "monitor",
                 "target_dispersion_mm": None,
-                "x_pv": bpm_map.get(name, {}).get("x") if isinstance(bpm_map.get(name), dict) else None,
+                "read_pv": bpm_map.get(name, {}).get(bpm_plane)
+                if isinstance(bpm_map.get(name), dict)
+                else None,
             }
             for name in config.monitor_bpms
         ]
@@ -84,7 +88,9 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
                 "name": name,
                 "role": "correction",
                 "target_dispersion_mm": config.section.target_dispersion_mm[index],
-                "x_pv": bpm_map.get(name, {}).get("x") if isinstance(bpm_map.get(name), dict) else None,
+                "read_pv": bpm_map.get(name, {}).get(bpm_plane)
+                if isinstance(bpm_map.get(name), dict)
+                else None,
             }
             for index, name in enumerate(config.target_bpms)
         ],
@@ -109,19 +115,28 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
             }
             for knob in config.knobs
         ],
-        "workflow": [
-            "snapshot current state",
-            "measure initial D_eff with +delta and -delta energy settings",
-            (
-                "measure the response matrix once and reuse it for later iterations"
-                if config.solver.response_update == "once"
-                else "remeasure the response matrix in every correction iteration"
-            ),
-            "restore the pre-scan state after each response column",
-            "solve a normalized bounded least-squares correction step",
-            "accept only if D_eff RMS improves and safety checks pass",
-            "restore best accepted state and produce report",
-        ],
+        "workflow": (
+            [
+                "save the initial energy setpoint",
+                "measure monitor BPM dispersion with +delta and -delta energy settings",
+                "restore the initial energy setpoint",
+                "display the measured points and optional model references",
+            ]
+            if config.section.diagnostic_only
+            else [
+                "snapshot current state",
+                "measure initial D_eff with +delta and -delta energy settings",
+                (
+                    "measure the response matrix once and reuse it for later iterations"
+                    if config.solver.response_update == "once"
+                    else "remeasure the response matrix in every correction iteration"
+                ),
+                "restore the pre-scan state after each response column",
+                "solve a normalized bounded least-squares correction step",
+                "accept only if D_eff RMS improves and safety checks pass",
+                "restore best accepted state and produce report",
+            ]
+        ),
         "solver": {
             "svd_cut": config.solver.svd_cut,
             "regularization": config.solver.regularization,

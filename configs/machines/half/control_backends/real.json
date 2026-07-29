@@ -611,78 +611,63 @@
     },
     "QL13": {
       "current_set": "IN:PS:LE07:QL13:current:ao",
-      "current_readback": "IN:PS:LE07:QL13:current:ai",
-      "K1": "IN:PS:LE07:QL13:current:ao"
+      "current_readback": "IN:PS:LE07:QL13:current:ai"
     },
     "QL14": {
       "current_set": "IN:PS:LE07:QL14:current:ao",
-      "current_readback": "IN:PS:LE07:QL14:current:ai",
-      "K1": "IN:PS:LE07:QL14:current:ao"
+      "current_readback": "IN:PS:LE07:QL14:current:ai"
     },
     "QL15": {
       "current_set": "IN:PS:LE07:QL15:current:ao",
-      "current_readback": "IN:PS:LE07:QL15:current:ai",
-      "K1": "IN:PS:LE07:QL15:current:ao"
+      "current_readback": "IN:PS:LE07:QL15:current:ai"
     },
     "QL16": {
       "current_set": "IN:PS:LE07:QL16:current:ao",
-      "current_readback": "IN:PS:LE07:QL16:current:ai",
-      "K1": "IN:PS:LE07:QL16:current:ao"
+      "current_readback": "IN:PS:LE07:QL16:current:ai"
     },
     "QL17": {
       "current_set": "IN:PS:LE07:QL17:current:ao",
-      "current_readback": "IN:PS:LE07:QL17:current:ai",
-      "K1": "IN:PS:LE07:QL17:current:ao"
+      "current_readback": "IN:PS:LE07:QL17:current:ai"
     },
     "QL18": {
       "current_set": "IN:PS:LE07:QL18:current:ao",
-      "current_readback": "IN:PS:LE07:QL18:current:ai",
-      "K1": "IN:PS:LE07:QL18:current:ao"
+      "current_readback": "IN:PS:LE07:QL18:current:ai"
     },
     "QL19": {
       "current_set": "IN:PS:LE07:QL19:current:ao",
-      "current_readback": "IN:PS:LE07:QL19:current:ai",
-      "K1": "IN:PS:LE07:QL19:current:ao"
+      "current_readback": "IN:PS:LE07:QL19:current:ai"
     },
     "QL20": {
       "current_set": "IN:PS:LE07:QL20:current:ao",
-      "current_readback": "IN:PS:LE07:QL20:current:ai",
-      "K1": "IN:PS:LE07:QL20:current:ao"
+      "current_readback": "IN:PS:LE07:QL20:current:ai"
     },
     "QL21": {
       "current_set": "IN:PS:LE07:QL21:current:ao",
-      "current_readback": "IN:PS:LE07:QL21:current:ai",
-      "K1": "IN:PS:LE07:QL21:current:ao"
+      "current_readback": "IN:PS:LE07:QL21:current:ai"
     },
     "QL22": {
       "current_set": "IN:PS:LE07:QL22:current:ao",
-      "current_readback": "IN:PS:LE07:QL22:current:ai",
-      "K1": "IN:PS:LE07:QL22:current:ao"
+      "current_readback": "IN:PS:LE07:QL22:current:ai"
     },
     "QL23": {
       "current_set": "IN:PS:LE07:QL23:current:ao",
-      "current_readback": "IN:PS:LE07:QL23:current:ai",
-      "K1": "IN:PS:LE07:QL23:current:ao"
+      "current_readback": "IN:PS:LE07:QL23:current:ai"
     },
     "QL24": {
       "current_set": "IN:PS:LE07:QL24:current:ao",
-      "current_readback": "IN:PS:LE07:QL24:current:ai",
-      "K1": "IN:PS:LE07:QL24:current:ao"
+      "current_readback": "IN:PS:LE07:QL24:current:ai"
     },
     "QL25": {
       "current_set": "IN:PS:LE07:QL25:current:ao",
-      "current_readback": "IN:PS:LE07:QL25:current:ai",
-      "K1": "IN:PS:LE07:QL25:current:ao"
+      "current_readback": "IN:PS:LE07:QL25:current:ai"
     },
     "QL26": {
       "current_set": "IN:PS:LE07:QL26:current:ao",
-      "current_readback": "IN:PS:LE07:QL26:current:ai",
-      "K1": "IN:PS:LE07:QL26:current:ao"
+      "current_readback": "IN:PS:LE07:QL26:current:ai"
     },
     "QL27": {
       "current_set": "IN:PS:LE07:QL27:current:ao",
-      "current_readback": "IN:PS:LE07:QL27:current:ai",
-      "K1": "IN:PS:LE07:QL27:current:ao"
+      "current_readback": "IN:PS:LE07:QL27:current:ai"
     },
     "QT01": {
       "K1": "IN:MG:L002:QUAD:QT01:K1",
@@ -1066,6 +1051,10 @@
     },
     "LINAC_ENERGY": {
       "setpoint": "IN:LA:ENG"
+    },
+    "MODULATOR_HV1": {
+      "voltage_set": "HALF:modulator1:HV_set:ao",
+      "voltage_readback": "HALF:modulator1:HV:ai"
     },
     "FCT1": {
       "peak_current": "IN:BD:FCT1:I"

@@ -8,6 +8,11 @@ from half_linac.src.apps.dispersion_correction.machine.offline import OfflineMac
 from half_linac.src.apps.dispersion_correction.recommendation import (
     build_correction_recommendation,
 )
+from half_linac.src.apps.dispersion_correction.solver import (
+    automatic_response_block_reason,
+    rank_reduced_response_warning,
+    response_mode_counts,
+)
 from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
 
 
@@ -76,8 +81,33 @@ def test_rank_reduced_response_uses_retained_svd_mode() -> None:
         response.singular_values / np.max(response.singular_values)
         > config.solver.svd_cut
     ) == 1
+    assert response_mode_counts(response, config.solver.svd_cut) == (1, 2, 2, 2)
+    assert automatic_response_block_reason(response, config.solver.svd_cut) is None
+    assert "act only on the controllable dispersion component" in (
+        rank_reduced_response_warning(response, config.solver.svd_cut) or ""
+    )
     assert any("rank-reduced: retained 1/2" in message for message in logs)
     assert any("Measured response matrix:" in message for message in logs)
+
+
+def test_automatic_correction_uses_rank_reduced_response_with_verification() -> None:
+    config, _machine, _workflow, _response = staged_fixture()
+    machine = OfflineMachine(
+        config,
+        initial_dispersion_mm=[86.0, 112.0],
+        response_matrix=[
+            [-9500.0, -19000.0],
+            [-11800.0, -23600.0],
+        ],
+    )
+    initial_knobs = machine.get_knobs(("Q13_Q16_sym", "Q14_Q15_sym"))
+
+    result = AchromatWorkflow(config, machine=machine).run()
+
+    assert result.success
+    assert result.response is not None
+    assert any(step.accepted for step in result.steps)
+    assert machine.get_knobs(tuple(initial_knobs)) != initial_knobs
 
 
 def test_zero_response_still_fails_quality_check() -> None:

@@ -81,6 +81,7 @@ class DispersionSectionConfig:
     target_dispersion_mm: tuple[float, ...] = ()
     model_observables: tuple[ModelObservableConfig, ...] = ()
     model_only: bool = False
+    diagnostic_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -173,8 +174,6 @@ class DispersionMeasurement:
             raise ValueError("Target dispersion values must match measured values")
         if target_mask.shape != values.shape:
             raise ValueError("Target BPM mask must match measured values")
-        if not np.any(target_mask):
-            raise ValueError("At least one BPM must be a correction target")
         if len(self.bpm_names) != values.size:
             raise ValueError("BPM names length must match dispersion values")
         object.__setattr__(self, "bpm_names", tuple(self.bpm_names))

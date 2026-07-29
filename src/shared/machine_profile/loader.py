@@ -1636,9 +1636,24 @@ def _validate_dispersion_correction_workflow(
                     f"quadrupole_control.{backend_name} must be 'current' or 'K1'."
                 )
 
+    workflow_measurement = _expect_mapping(
+        workflow.get("measurement"),
+        "workflows.dispersion_correction.measurement",
+    )
+    default_plane = str(workflow_measurement.get("plane", "x")).strip().lower()
+    if default_plane not in {"x", "y"}:
+        raise MachineProfileError(
+            "workflows.dispersion_correction.measurement.plane must be 'x' or 'y'."
+        )
+
     sections = workflow.get("sections")
     if sections is None:
-        _validate_dispersion_section(profile, workflow, "workflows.dispersion_correction")
+        _validate_dispersion_section(
+            profile,
+            workflow,
+            "workflows.dispersion_correction",
+            default_plane,
+        )
     else:
         raw_sections = _expect_list(
             sections,
@@ -1654,13 +1669,35 @@ def _validate_dispersion_correction_workflow(
             section = _expect_mapping(raw_section, location)
             section_id = _expect_non_empty_string(section.get("id"), f"{location}.id")
             section_ids.append(section_id)
-            _validate_dispersion_section(profile, section, location)
+            section_measurement = section.get("measurement")
+            if section_measurement is None:
+                section_plane = default_plane
+            else:
+                measurement_mapping = _expect_mapping(
+                    section_measurement,
+                    f"{location}.measurement",
+                )
+                section_plane = str(
+                    measurement_mapping.get("plane", default_plane)
+                ).strip().lower()
+            if section_plane not in {"x", "y"}:
+                raise MachineProfileError(
+                    f"{location}.measurement.plane must be 'x' or 'y'."
+                )
+            _validate_dispersion_section(
+                profile,
+                section,
+                location,
+                section_plane,
+            )
+            diagnostic_only = bool(section.get("diagnostic_only", False))
             for endpoint_key in ("model_entrance", "model_exit"):
                 endpoint = _expect_non_empty_string(
                     section.get(endpoint_key),
                     f"{location}.{endpoint_key}",
                 )
-                profile.get_element(endpoint)
+                if not diagnostic_only:
+                    profile.get_element(endpoint)
             observables = _expect_list(
                 section.get("model_observables", []),
                 f"{location}.model_observables",
@@ -1678,7 +1715,8 @@ def _validate_dispersion_correction_workflow(
                     observable.get("element"),
                     f"{observable_location}.element",
                 )
-                profile.get_element(element_id)
+                if not diagnostic_only:
+                    profile.get_element(element_id)
                 component = _expect_non_empty_string(
                     observable.get("component"),
                     f"{observable_location}.component",
@@ -1713,39 +1751,65 @@ def _validate_dispersion_correction_workflow(
     )
     energy_element = energy_knob.get("element")
     if energy_element:
-        element = profile.get_element(
-            _expect_non_empty_string(
+        if isinstance(energy_element, Mapping):
+            unknown_energy_backends = sorted(
+                set(energy_element) - set(supported_backends) - {"default"}
+            )
+            if unknown_energy_backends:
+                raise MachineProfileError(
+                    "workflows.dispersion_correction.energy_knob.element contains "
+                    "unknown backend(s): " + ", ".join(unknown_energy_backends)
+                )
+            energy_elements = {
+                backend_name: str(
+                    energy_element.get(
+                        backend_name,
+                        energy_element.get("default", ""),
+                    )
+                    or ""
+                ).strip()
+                for backend_name in supported_backends
+            }
+        else:
+            element_id = _expect_non_empty_string(
                 energy_element,
                 "workflows.dispersion_correction.energy_knob.element",
             )
-        )
-        set_channel = _expect_non_empty_string(
-            energy_knob.get("set_channel", "phase_set"),
-            "workflows.dispersion_correction.energy_knob.set_channel",
-        )
-        channel_modes = element.channels.get(set_channel)
-        if channel_modes is None:
-            raise MachineProfileError(
-                f"Dispersion energy element {element.id!r} is missing logical channel "
-                f"{set_channel!r}."
-            )
-        measurement_backends = tuple(
-            backend_name
-            for backend_name in supported_backends
-            if backend_name not in model_only_backends
-        )
-        missing_channel_backends = [
-            backend_name
-            for backend_name in measurement_backends
-            if backend_name not in channel_modes
-        ]
-        if missing_channel_backends:
-            raise MachineProfileError(
-                f"Dispersion energy element {element.id!r} channel {set_channel!r} is missing "
-                "backend mapping(s): " + ", ".join(missing_channel_backends)
-            )
+            energy_elements = {
+                backend_name: element_id
+                for backend_name in supported_backends
+            }
+        raw_set_channel = energy_knob.get("set_channel", "phase_set")
+        for backend_name, element_id in energy_elements.items():
+            if not element_id or backend_name in model_only_backends:
+                continue
+            element = profile.get_element(element_id)
+            if isinstance(raw_set_channel, Mapping):
+                set_channel = str(
+                    raw_set_channel.get(
+                        backend_name,
+                        raw_set_channel.get("default", ""),
+                    )
+                    or ""
+                ).strip()
+            else:
+                set_channel = _expect_non_empty_string(
+                    raw_set_channel,
+                    "workflows.dispersion_correction.energy_knob.set_channel",
+                )
+            if not set_channel:
+                raise MachineProfileError(
+                    "workflows.dispersion_correction.energy_knob.set_channel "
+                    f"is missing backend {backend_name!r}."
+                )
+            channel_modes = element.channels.get(set_channel)
+            if channel_modes is None or backend_name not in channel_modes:
+                raise MachineProfileError(
+                    f"Dispersion energy element {element.id!r} channel "
+                    f"{set_channel!r} is missing backend mapping {backend_name!r}."
+                )
 
-    for key in ("measurement", "solver", "safety"):
+    for key in ("solver", "safety"):
         _expect_mapping(
             workflow.get(key),
             f"workflows.dispersion_correction.{key}",
@@ -1756,17 +1820,27 @@ def _validate_dispersion_section(
     profile: MachineProfile,
     section: Mapping[str, Any],
     location: str,
+    plane: str,
 ) -> None:
-    target_bpms = _expect_string_list(
-        section.get("target_bpms"),
+    diagnostic_only = bool(section.get("diagnostic_only", False))
+    target_bpms = _expect_optional_string_list(
+        section.get("target_bpms", []),
         f"{location}.target_bpms",
     )
-    if not target_bpms:
+    if not target_bpms and not diagnostic_only:
         raise MachineProfileError(f"{location}.target_bpms must not be empty.")
     monitor_bpms = _expect_optional_string_list(
         section.get("monitor_bpms"),
         f"{location}.monitor_bpms",
     )
+    if diagnostic_only and not monitor_bpms:
+        raise MachineProfileError(
+            f"{location}.monitor_bpms must not be empty for diagnostic-only sections."
+        )
+    if diagnostic_only and target_bpms:
+        raise MachineProfileError(
+            f"{location}.target_bpms must be empty for diagnostic-only sections."
+        )
     overlap = sorted(set(target_bpms) & set(monitor_bpms))
     if overlap:
         raise MachineProfileError(
@@ -1775,9 +1849,10 @@ def _validate_dispersion_section(
         )
     for bpm_id in (*monitor_bpms, *target_bpms):
         element = profile.get_element(bpm_id)
-        if element.kind != "bpm" or "x" not in element.channels:
+        if element.kind != "bpm" or plane not in element.channels:
             raise MachineProfileError(
-                f"Dispersion BPM {bpm_id!r} must reference a bpm with logical channel 'x'."
+                f"Dispersion BPM {bpm_id!r} must reference a bpm with logical "
+                f"channel {plane!r}."
             )
 
     target = section.get("target_dispersion_mm", [0.0] * len(target_bpms))
@@ -1786,9 +1861,13 @@ def _validate_dispersion_section(
             f"{location}.target_dispersion_mm must match target_bpms length."
         )
 
-    knobs = _expect_list(section.get("knobs"), f"{location}.knobs")
-    if not knobs:
+    knobs = _expect_list(section.get("knobs", []), f"{location}.knobs")
+    if not knobs and not diagnostic_only:
         raise MachineProfileError(f"{location}.knobs must not be empty.")
+    if diagnostic_only and knobs:
+        raise MachineProfileError(
+            f"{location}.knobs must be empty for diagnostic-only sections."
+        )
     for index, raw_knob in enumerate(knobs):
         knob_location = f"{location}.knobs[{index}]"
         knob = _expect_mapping(raw_knob, knob_location)

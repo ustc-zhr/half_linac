@@ -3823,6 +3823,25 @@
       "logical_channels": [
         "charge"
       ]
+    },
+    {
+      "id": "MODULATOR_HV1",
+      "kind": "modulator",
+      "display_name": "Modulator HV1 (Draft)",
+      "order": 237,
+      "tags": [
+        "modulator",
+        "hv",
+        "commissioning_draft"
+      ],
+      "limits": {
+        "low": 0.0,
+        "high": 80.0
+      },
+      "logical_channels": [
+        "voltage_set",
+        "voltage_readback"
+      ]
     }
   ]
 }

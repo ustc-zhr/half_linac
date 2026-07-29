@@ -154,6 +154,134 @@
             "conversion": {"type": "direct"}
           }
         },
+        "QT05": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT06": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT07": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT08": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT09": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT10": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT11": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT12": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT29": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT30": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT31": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT32": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT33": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT34": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT35": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QT36": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
         "QL27": {
           "K1": {
             "logical_channel": "K1",

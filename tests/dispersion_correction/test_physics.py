@@ -17,6 +17,35 @@ def test_effective_dispersion_uses_two_sided_delta() -> None:
     assert measurement.valid.tolist() == [True, True]
 
 
+def test_effective_vertical_dispersion_uses_y_readings() -> None:
+    names = ("BPM01", "BPM02")
+    delta = 2.0e-4
+    expected = np.asarray([15.0, -6.0])
+    plus = BPMReading(
+        names,
+        np.asarray([100.0, 200.0]),
+        expected * delta,
+        np.ones(2, dtype=bool),
+    )
+    minus = BPMReading(
+        names,
+        np.asarray([-100.0, -200.0]),
+        -expected * delta,
+        np.ones(2, dtype=bool),
+    )
+
+    measurement = compute_effective_dispersion(
+        names,
+        plus,
+        minus,
+        delta,
+        plane="y",
+    )
+
+    assert measurement.plane == "y"
+    np.testing.assert_allclose(measurement.values_mm, expected)
+
+
 def test_effective_dispersion_reports_residual_to_nonzero_target() -> None:
     names = ("BPM01", "BPM02")
     delta = 1.0e-4

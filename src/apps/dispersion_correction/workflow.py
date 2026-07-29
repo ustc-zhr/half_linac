@@ -22,7 +22,11 @@ from half_linac.src.apps.dispersion_correction.models import (
 from half_linac.src.apps.dispersion_correction.physics import compute_effective_dispersion, momentum_delta, robust_average
 from half_linac.src.apps.dispersion_correction.preflight import run_live_preflight
 from half_linac.src.apps.dispersion_correction.safety import evaluate_safety
-from half_linac.src.apps.dispersion_correction.solver import response_result, solve_bounded_correction
+from half_linac.src.apps.dispersion_correction.solver import (
+    response_mode_counts,
+    response_result,
+    solve_bounded_correction,
+)
 
 
 LogCallback = Callable[[str], None]
@@ -49,7 +53,7 @@ def create_machine(config: RunConfig) -> MachineInterface:
 
 
 class AchromatWorkflow:
-    """One-click horizontal effective dispersion correction workflow."""
+    """One-click effective dispersion correction workflow."""
 
     def __init__(
         self,
@@ -143,6 +147,7 @@ class AchromatWorkflow:
         return measurement
 
     def build_response_matrix(self, knob_set: SymmetricKnobSet | None = None) -> ResponseMatrixResult:
+        self._require_correction_section()
         report_progress = self._progress_depth == 0
         if report_progress:
             self._require_write_ready()
@@ -229,6 +234,7 @@ class AchromatWorkflow:
         return result
 
     def run(self) -> CorrectionResult:
+        self._require_correction_section()
         self._require_write_ready()
         self._progress_depth += 1
         try:
@@ -242,6 +248,7 @@ class AchromatWorkflow:
     ) -> CorrectionResult:
         """Apply one reviewed correction step, remeasure, and roll back on rejection."""
 
+        self._require_correction_section()
         self._require_write_ready()
         self._progress_depth += 1
         try:
@@ -258,6 +265,7 @@ class AchromatWorkflow:
     ) -> dict[str, object]:
         """Apply reviewed lattice-design K1 targets with rollback on failure."""
 
+        self._require_correction_section()
         self._require_write_ready()
         targets = {str(name): float(value) for name, value in target_values.items()}
         baseline = {
@@ -1083,15 +1091,22 @@ class AchromatWorkflow:
             blockers = (*result.static.blockers, *result.blockers)
             raise RuntimeError("Live preflight failed: " + "; ".join(blockers))
 
+    def _require_correction_section(self) -> None:
+        if self.config.section.diagnostic_only:
+            raise PermissionError(
+                "This dispersion section is measurement-only; quadrupole "
+                "response and correction are disabled"
+            )
+
     def _validate_response_quality(self, result: ResponseMatrixResult) -> None:
         singular_values = np.asarray(result.singular_values, dtype=float)
         if singular_values.size == 0 or not np.all(np.isfinite(singular_values)):
             raise RuntimeError("Response matrix has no finite singular values")
         largest = float(np.max(singular_values))
-        retained_rank = int(
-            np.count_nonzero(singular_values / largest > self.config.solver.svd_cut)
-        ) if largest > 0 else 0
-        required_rank = len(self.knob_names)
+        retained_rank, required_rank, target_count, knob_count = response_mode_counts(
+            result,
+            self.config.solver.svd_cut,
+        )
         if retained_rank == 0:
             raise RuntimeError(
                 "Response matrix quality check failed: "
@@ -1102,7 +1117,8 @@ class AchromatWorkflow:
             ratios = singular_values / largest
             self._log(
                 f"Response matrix is rank-reduced: retained {retained_rank}/"
-                f"{required_rank} SVD modes at svd_cut="
+                f"{required_rank} required SVD modes for {knob_count} knobs and "
+                f"{target_count} target BPMs at svd_cut="
                 f"{self.config.solver.svd_cut:g}; singular-value ratios="
                 + np.array2string(ratios, precision=6, suppress_small=False)
                 + ". The truncated-SVD solver will use only the retained modes."

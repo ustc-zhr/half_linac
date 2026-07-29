@@ -77,16 +77,20 @@ class EpicsMachine(MachineInterface):
         x_values = []
         y_values = []
         valid = []
+        plane = self.config.measurement.plane
         for name in bpm_names:
             item = self._nested_mapping(bpm_map, name, "BPM")
-            x_pv = self._required_pv(item, "x", f"BPM {name}")
+            self._required_pv(item, plane, f"BPM {name}")
+            x_pv = item.get("x")
             y_pv = item.get("y")
-            x_value = self._caget_float(x_pv)
+            raw_x_value = self._caget_float(x_pv) if x_pv else 0.0
             raw_y_value = self._caget_float(y_pv) if y_pv else 0.0
+            x_value = raw_x_value if np.isfinite(raw_x_value) else 0.0
             y_value = raw_y_value if np.isfinite(raw_y_value) else 0.0
             x_values.append(x_value * self._bpm_position_scale_to_mm)
             y_values.append(y_value * self._bpm_position_scale_to_mm)
-            valid.append(np.isfinite(x_value))
+            primary_value = raw_x_value if plane == "x" else raw_y_value
+            valid.append(np.isfinite(primary_value))
 
         diagnostics = self._pv_map.get("diagnostics", {})
         charge = self._optional_caget_float(diagnostics.get("charge")) if isinstance(diagnostics, dict) else None

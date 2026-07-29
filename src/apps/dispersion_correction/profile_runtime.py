@@ -97,9 +97,20 @@ def load_profile_run_config(
     raw_config = {
         "backend": backend,
         "energy_knob": dict(_mapping(selected.get("energy_knob"), "energy_knob")),
-        "target_bpms": list(_string_sequence(selected.get("target_bpms"), "target_bpms")),
+        "target_bpms": list(
+            _optional_string_sequence(
+                selected.get("target_bpms", []),
+                "target_bpms",
+            )
+        ),
         "monitor_bpms": list(selected.get("monitor_bpms", [])),
-        "knobs": [dict(item) for item in _mapping_sequence(selected.get("knobs"), "knobs")],
+        "knobs": [
+            dict(item)
+            for item in _optional_mapping_sequence(
+                selected.get("knobs", []),
+                "knobs",
+            )
+        ],
         "section": section,
         "measurement": dict(_mapping(selected.get("measurement"), "measurement")),
         "solver": dict(_mapping(selected.get("solver"), "solver")),
@@ -108,13 +119,23 @@ def load_profile_run_config(
     return resolved_context, parse_config(raw_config)
 
 
-def selectable_profile_bpms(context: AppContext) -> tuple[str, ...]:
-    """Return profile BPMs that expose an x channel on the active backend."""
+def selectable_profile_bpms(
+    context: AppContext,
+    plane: str = "x",
+) -> tuple[str, ...]:
+    """Return profile BPMs that expose the selected plane on the active backend."""
 
+    logical_channel = str(plane).strip().lower()
+    if logical_channel not in {"x", "y"}:
+        raise ValueError("plane must be 'x' or 'y'")
     return tuple(
         element.id
-        for element in list_elements(context, kind="bpm", logical_channel="x")
-        if _channel_is_resolvable(context, element.id, "x")
+        for element in list_elements(
+            context,
+            kind="bpm",
+            logical_channel=logical_channel,
+        )
+        if _channel_is_resolvable(context, element.id, logical_channel)
     )
 
 
@@ -166,7 +187,9 @@ def apply_profile_selection(
             raise MachineProfileError("Model-only section BPMs and knobs are fixed by the machine profile.")
         return config
 
-    allowed_bpms = set(selectable_profile_bpms(context))
+    allowed_bpms = set(
+        selectable_profile_bpms(context, config.measurement.plane)
+    )
     measurement_bpms = tuple(
         dict.fromkeys((*config.monitor_bpms, *target_bpms))
     )
@@ -196,6 +219,7 @@ def apply_profile_selection(
         knobs,
         _mapping(workflow.get("energy_knob"), "energy_knob"),
         _quadrupole_control(workflow, context.control_backend.name),
+        config.measurement.plane,
     )
     return replace(
         config,
@@ -381,7 +405,10 @@ def _bpm_payload(reading) -> dict[str, Any]:
 
 
 def _build_profile_pv_map(context: AppContext, workflow: Mapping[str, object]) -> dict[str, Any]:
-    target_bpms = _string_sequence(workflow.get("target_bpms"), "target_bpms")
+    target_bpms = _optional_string_sequence(
+        workflow.get("target_bpms", []),
+        "target_bpms",
+    )
     raw_monitor_bpms = workflow.get("monitor_bpms", [])
     if not isinstance(raw_monitor_bpms, list):
         raise MachineProfileError(
@@ -392,13 +419,17 @@ def _build_profile_pv_map(context: AppContext, workflow: Mapping[str, object]) -
         raise MachineProfileError(
             f"workflows.{WORKFLOW_NAME}.monitor_bpms contains an empty name."
         )
-    knobs = _mapping_sequence(workflow.get("knobs"), "knobs")
+    knobs = _optional_mapping_sequence(
+        workflow.get("knobs", []),
+        "knobs",
+    )
     return _build_selection_pv_map(
         context,
         tuple(dict.fromkeys((*monitor_bpms, *target_bpms))),
         knobs,
         _mapping(workflow.get("energy_knob"), "energy_knob"),
         _quadrupole_control(workflow, context.control_backend.name),
+        str(_mapping(workflow.get("measurement"), "measurement").get("plane", "x")),
     )
 
 
@@ -408,12 +439,21 @@ def _build_selection_pv_map(
     knobs,
     energy_knob: Mapping[str, object],
     quadrupole_control: str,
+    measurement_plane: str,
 ) -> dict[str, Any]:
+    plane = str(measurement_plane).strip().lower()
+    if plane not in {"x", "y"}:
+        raise MachineProfileError("measurement.plane must be 'x' or 'y'.")
     bpms: dict[str, dict[str, str]] = {}
     for bpm_name in bpm_names:
-        item = {"x": resolve_channel(context, bpm_name, "x")}
+        item = {plane: resolve_channel(context, bpm_name, plane)}
+        other_plane = "y" if plane == "x" else "x"
         try:
-            item["y"] = resolve_channel(context, bpm_name, "y")
+            item[other_plane] = resolve_channel(
+                context,
+                bpm_name,
+                other_plane,
+            )
         except MachineProfileError:
             pass
         bpms[bpm_name] = item
@@ -437,10 +477,19 @@ def _build_selection_pv_map(
             quadrupoles[device_name] = {"control": "k1", "K1": k1_pv}
 
     energy_mapping: dict[str, str] = {}
-    element_id = str(energy_knob.get("element", "")).strip()
+    element_id = _backend_string(
+        energy_knob.get("element", ""),
+        context.control_backend.name,
+    )
     if element_id:
-        set_channel = str(energy_knob.get("set_channel", "set"))
-        readback_channel = str(energy_knob.get("readback_channel", "readback"))
+        set_channel = _backend_string(
+            energy_knob.get("set_channel", "set"),
+            context.control_backend.name,
+        )
+        readback_channel = _backend_string(
+            energy_knob.get("readback_channel", "readback"),
+            context.control_backend.name,
+        )
         energy_mapping["set"] = resolve_channel(context, element_id, set_channel)
         try:
             energy_mapping["readback"] = resolve_channel(context, element_id, readback_channel)
@@ -503,6 +552,19 @@ def _mapping_sequence(value: object, location: str) -> tuple[Mapping[str, Any], 
     return tuple(items)
 
 
+def _optional_mapping_sequence(
+    value: object,
+    location: str,
+) -> tuple[Mapping[str, Any], ...]:
+    if not isinstance(value, list):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.{location} must be a list."
+        )
+    if not value:
+        return ()
+    return _mapping_sequence(value, location)
+
+
 def _string_sequence(value: object, location: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not value:
         raise MachineProfileError(f"workflows.{WORKFLOW_NAME}.{location} must be a non-empty list.")
@@ -512,12 +574,31 @@ def _string_sequence(value: object, location: str) -> tuple[str, ...]:
     return names
 
 
+def _optional_string_sequence(
+    value: object,
+    location: str,
+) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.{location} must be a list."
+        )
+    if not value:
+        return ()
+    return _string_sequence(value, location)
+
+
 def _backend_number(value: object, backend_name: str, *, default: float) -> float:
     if isinstance(value, Mapping):
         value = value.get(backend_name, value.get("default", default))
     if value is None:
         value = default
     return float(value)
+
+
+def _backend_string(value: object, backend_name: str) -> str:
+    if isinstance(value, Mapping):
+        value = value.get(backend_name, value.get("default", ""))
+    return str(value or "").strip()
 
 
 def _select_workflow_section(
@@ -566,9 +647,18 @@ def _select_workflow_section(
         "model_exit": selected_section.get("model_exit"),
         "target_dispersion_mm": selected_section.get(
             "target_dispersion_mm",
-            [0.0] * len(_string_sequence(selected.get("target_bpms"), "target_bpms")),
+            [0.0]
+            * len(
+                _optional_string_sequence(
+                    selected.get("target_bpms", []),
+                    "target_bpms",
+                )
+            ),
         ),
         "model_observables": selected_section.get("model_observables", []),
         "model_only": bool(selected_section.get("model_only", False)),
+        "diagnostic_only": bool(
+            selected_section.get("diagnostic_only", False)
+        ),
     }
     return selected

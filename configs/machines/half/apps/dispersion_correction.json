@@ -6,7 +6,7 @@
   ],
   "quadrupole_control": {
     "vm": "K1",
-    "real": "current"
+    "real": "K1"
   },
   "default_section": "bl01",
   "sections": [
@@ -15,7 +15,6 @@
       "display_name": "BL01 Dogleg",
       "model_entrance": "BPM02",
       "model_exit": "BPM07",
-      "model_only": true,
       "target_bpms": [
         "BPM06",
         "BPM07"
@@ -73,13 +72,199 @@
           "limit": 0.1
         }
       ]
+    },
+    {
+      "id": "bh01_bh03",
+      "display_name": "BH01–BH03 Horizontal Achromat",
+      "model_entrance": "BPM21",
+      "model_exit": "BPM27",
+      "target_bpms": [
+        "BPM26",
+        "BPM27"
+      ],
+      "monitor_bpms": [
+        "BPM21",
+        "BPM22",
+        "BPM23",
+        "BPM24",
+        "BPM25"
+      ],
+      "target_dispersion_mm": [
+        0.0,
+        0.0
+      ],
+      "model_observables": [
+        {
+          "name": "BPM26 Dx",
+          "element": "BPM26",
+          "component": "dx",
+          "target": 0.0
+        },
+        {
+          "name": "BPM26 Dx'",
+          "element": "BPM26",
+          "component": "dxp",
+          "target": 0.0
+        }
+      ],
+      "knobs": [
+        {
+          "name": "QT05_QT12_sym",
+          "devices": {
+            "QT05": 1.0,
+            "QT12": 1.0
+          },
+          "scan_step": 0.001,
+          "limit": 0.1
+        },
+        {
+          "name": "QT06_QT11_sym",
+          "devices": {
+            "QT06": 1.0,
+            "QT11": 1.0
+          },
+          "scan_step": 0.001,
+          "limit": 0.1
+        },
+        {
+          "name": "QT07_QT10_sym",
+          "devices": {
+            "QT07": 1.0,
+            "QT10": 1.0
+          },
+          "scan_step": 0.001,
+          "limit": 0.1
+        },
+        {
+          "name": "QT08_QT09_sym",
+          "devices": {
+            "QT08": 1.0,
+            "QT09": 1.0
+          },
+          "scan_step": 0.001,
+          "limit": 0.1
+        }
+      ]
+    },
+    {
+      "id": "bv01_bv02",
+      "display_name": "BV01–BV02 Vertical Achromat",
+      "model_entrance": "BPM36",
+      "model_exit": "BPM43",
+      "target_bpms": [
+        "BPM42",
+        "BPM43"
+      ],
+      "monitor_bpms": [
+        "BPM36",
+        "BPM37",
+        "BPM38",
+        "BPM39",
+        "BPM40",
+        "BPM41"
+      ],
+      "target_dispersion_mm": [
+        0.0,
+        0.0
+      ],
+      "model_observables": [
+        {
+          "name": "BPM42 Dy",
+          "element": "BPM42",
+          "component": "dy",
+          "target": 0.0
+        },
+        {
+          "name": "BPM42 Dy'",
+          "element": "BPM42",
+          "component": "dyp",
+          "target": 0.0
+        }
+      ],
+      "knobs": [
+        {
+          "name": "QT30_QT35_sym",
+          "devices": {
+            "QT30": 1.0,
+            "QT35": 1.0
+          },
+          "scan_step": 0.001,
+          "limit": 0.1
+        },
+        {
+          "name": "QT31_QT34_sym",
+          "devices": {
+            "QT31": 1.0,
+            "QT34": 1.0
+          },
+          "scan_step": 0.001,
+          "limit": 0.1
+        },
+        {
+          "name": "QT32_QT33_sym",
+          "devices": {
+            "QT32": 1.0,
+            "QT33": 1.0
+          },
+          "scan_step": 0.001,
+          "limit": 0.1
+        }
+      ],
+      "measurement": {
+        "plane": "y",
+        "samples_per_step": 5,
+        "sample_interval_s": 0.2,
+        "final_samples": 10,
+        "settle_time_s": 1.0
+      }
+    },
+    {
+      "id": "bh04_sep_diagnostics",
+      "display_name": "BH04–SEP Diagnostics",
+      "diagnostic_only": true,
+      "model_entrance": "BPM36",
+      "model_exit": "WSEP1",
+      "target_bpms": [],
+      "monitor_bpms": [
+        "BPM36",
+        "BPM37",
+        "BPM38",
+        "BPM39",
+        "BPM40",
+        "BPM41",
+        "BPM42",
+        "BPM43"
+      ],
+      "target_dispersion_mm": [],
+      "model_observables": [
+        {
+          "name": "WSEP1 Dx",
+          "element": "WSEP1",
+          "component": "dx",
+          "target": 0.0
+        },
+        {
+          "name": "WSEP1 Dx'",
+          "element": "WSEP1",
+          "component": "dxp",
+          "target": 0.0
+        }
+      ],
+      "knobs": []
     }
   ],
   "energy_knob": {
-    "name": "MODEL_DELTA",
-    "actuator": "delta",
-    "actuator_unit": "delta_p_over_p",
-    "delta": 0.0001
+    "name": "MODULATOR_HV1",
+    "actuator": "modulator_voltage",
+    "actuator_unit": "kV",
+    "delta": 0.004,
+    "calibration": {},
+    "readback_tolerance": 0.015,
+    "element": {
+      "real": "MODULATOR_HV1"
+    },
+    "set_channel": "voltage_set",
+    "readback_channel": "voltage_readback"
   },
   "measurement": {
     "plane": "x",
@@ -101,9 +286,12 @@
   "safety": {
     "max_reference_orbit_change_mm": 0.5
   },
-  "real_status": "not_supported",
+  "readback_timeout": {
+    "vm": 2.0,
+    "real": 10.0
+  },
   "write_control": {
-    "vm": "blocked",
-    "real": "blocked"
+    "vm": "allowed",
+    "real": "allowed"
   }
 }

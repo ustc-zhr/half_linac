@@ -83,15 +83,18 @@ def compute_effective_dispersion(
         raise ValueError("Plus and minus BPM readings must use the same BPM order")
     if tuple(bpm_names) != plus.names:
         raise ValueError("bpm_names must match BPM reading order")
-    if plane != "x":
-        raise ValueError("MVP supports horizontal effective dispersion only")
+    normalized_plane = str(plane).strip().lower()
+    if normalized_plane not in {"x", "y"}:
+        raise ValueError("plane must be 'x' or 'y'")
 
-    numerator = plus.x_mm - minus.x_mm
+    positions_plus = plus.x_mm if normalized_plane == "x" else plus.y_mm
+    positions_minus = minus.x_mm if normalized_plane == "x" else minus.y_mm
+    numerator = positions_plus - positions_minus
     values = numerator / (2.0 * float(delta))
     valid = plus.valid & minus.valid & np.isfinite(values)
     return DispersionMeasurement(
         bpm_names=tuple(bpm_names),
-        plane=plane,
+        plane=normalized_plane,
         delta=float(delta),
         values_mm=values,
         valid=valid,

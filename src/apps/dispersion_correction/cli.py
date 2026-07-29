@@ -25,7 +25,7 @@ from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
 
 
 def run_command(argv: list[str] | None = None) -> int:
-    parser = _base_parser("Run one horizontal effective dispersion correction workflow.")
+    parser = _base_parser("Run one effective dispersion correction workflow.")
     parser.add_argument("--format", choices=["markdown", "json"], default="markdown")
     parser.add_argument("--output-dir", help="Optional directory for JSON/CSV/Markdown report files.")
     args = parser.parse_args(argv)
@@ -44,7 +44,7 @@ def run_command(argv: list[str] | None = None) -> int:
 
 
 def measure_command(argv: list[str] | None = None) -> int:
-    parser = _base_parser("Measure current horizontal effective dispersion without correction.")
+    parser = _base_parser("Measure current effective dispersion without correction.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     args = parser.parse_args(argv)
 
