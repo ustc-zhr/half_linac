@@ -144,3 +144,23 @@ def test_automatic_joint_correction_runs_bounded_generations() -> None:
     assert result.success
     assert 1 <= len(result.steps) <= 3
     assert result.normalized_rms_after < result.normalized_rms_before
+
+
+def test_automatic_joint_correction_reports_generation_progress() -> None:
+    config = _joint_config()
+    config = replace(
+        config,
+        section=replace(config.section, diagnostic_only=False),
+        solver=replace(config.solver, max_iter=3),
+    )
+    updates: list[tuple[str, int, int]] = []
+
+    JointResponseAnalyzer(
+        config,
+        progress_callback=lambda stage, current, total: updates.append(
+            (stage, current, total)
+        ),
+    ).run_automatic()
+
+    assert any(stage.startswith("Generation 1/3 ·") for stage, _, _ in updates)
+    assert updates[-1] == ("Automatic joint correction complete", 1, 1)

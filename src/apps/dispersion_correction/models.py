@@ -401,6 +401,9 @@ class JointCorrectionStep:
     normalized_rms_after: float
     accepted: bool
     reason: str
+    device_values_before: dict[str, float] | None = None
+    device_values_trial: dict[str, float] | None = None
+    restored: bool = False
 
 
 @dataclass(frozen=True)

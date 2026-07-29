@@ -1218,6 +1218,59 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
     demo.close()
 
 
+def test_joint_correction_is_recorded_with_two_plane_history() -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from dataclasses import replace
+
+    from PyQt5.QtWidgets import QApplication
+
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.joint_analysis import (
+        JointResponseAnalyzer,
+    )
+    from half_linac.tests.dispersion_correction.test_joint_analysis import (
+        _joint_config,
+    )
+
+    app = QApplication.instance() or QApplication([])
+    config = _joint_config()
+    config = replace(
+        config,
+        section=replace(config.section, diagnostic_only=False),
+        solver=replace(config.solver, max_iter=2),
+    )
+    window = MainWindow(config)
+    result = JointResponseAnalyzer(config).run_automatic()
+    first_step = replace(
+        result.steps[0],
+        device_values_before={"Q1": 0.0, "Q2": 0.0},
+        device_values_trial={"Q1": 0.1, "Q2": -0.1},
+    )
+    result = replace(result, steps=(first_step, *result.steps[1:]))
+
+    window._task_completed("joint-run", result)
+    window._set_running(False, "")
+
+    assert window.iteration_history_run_combo.currentText().startswith(
+        "Joint Automatic 1"
+    )
+    assert window.iteration_history_plane_combo.isVisibleTo(
+        window.iteration_history_dialog
+    )
+    step_index = window.iteration_history_generation_combo.findData("step:0")
+    window.iteration_history_generation_combo.setCurrentIndex(step_index)
+    window.iteration_history_plane_combo.setCurrentIndex(1)
+    app.processEvents()
+    assert window.iteration_history_curve.measurement.plane == "y"
+    assert "normalized RMS" in window.iteration_history_status_label.text()
+    assert window.iteration_history_knob_table.rowCount() == 2
+    assert window.correction_restore_request is not None
+
+    window.close()
+
+
 def test_offline_demo_confirms_automatic_correction_settings(monkeypatch) -> None:
     pytest.importorskip("PyQt5")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

@@ -125,6 +125,41 @@ def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> Non
     assert not any("no independent readback" in warning for warning in preflight.warnings)
 
 
+def test_irfel_joint_validation_preset_reuses_commissioned_channels() -> None:
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="irfel",
+        control_backend="real",
+    )
+    _, config = load_profile_run_config(
+        context,
+        section_id="MIR-joint-validation",
+    )
+
+    joint = config.section.joint_response_analysis
+    pv_map = config.backend.options["pv_map"]
+    assert config.section.display_name == "MIR Joint Validation (ηx/ηy)"
+    assert config.measurement.plane == "xy"
+    assert config.target_bpms == ()
+    assert config.monitor_bpms == ("BPM07", "BPM08", "BPM09", "BPM10")
+    assert tuple((item.bpm, item.plane) for item in joint.targets) == (
+        ("BPM09", "x"),
+        ("BPM10", "x"),
+        ("BPM09", "y"),
+        ("BPM10", "y"),
+    )
+    assert tuple(knob.name for knob in joint.knobs) == (
+        "Q13_Q16_sym",
+        "Q14_Q15_sym",
+    )
+    assert set(pv_map["quadrupoles"]) == {"QM13", "QM14", "QM15", "QM16"}
+    assert set(pv_map["bpms"]) == {"BPM07", "BPM08", "BPM09", "BPM10"}
+    assert all(
+        {"x", "y"} <= set(channels)
+        for channels in pv_map["bpms"].values()
+    )
+
+
 @pytest.mark.parametrize(
     ("backend", "expected_source"),
     (("vm", "live_from_vm"), ("real", "live_from_real")),

@@ -72,6 +72,7 @@ class JointResponseAnalyzer:
         self.progress_callback = progress_callback
         self.measurement_callback = measurement_callback
         self._initial_knob_values: dict[str, float] | None = None
+        self._automatic_generation: tuple[int, int] | None = None
 
     def run(self) -> JointResponseAnalysisResult:
         knob_names = tuple(knob.name for knob in self.analysis.knobs)
@@ -318,6 +319,7 @@ class JointResponseAnalyzer:
             )
             if not isinstance(measured, MultiPlaneDispersionMeasurement):
                 raise RuntimeError("Joint verification lost one measurement plane")
+            trial_snapshot = machine.snapshot()
             rms_after = self._normalized_rms(measured)
             required_improvement = float(
                 self.config.solver.min_step_improvement
@@ -345,6 +347,17 @@ class JointResponseAnalyzer:
                 normalized_rms_after=rms_after,
                 accepted=accepted,
                 reason=reason,
+                device_values_before={
+                    name: float(snapshot.device_values[name])
+                    for name in recommendation.target_device_values
+                    if name in snapshot.device_values
+                },
+                device_values_trial={
+                    name: float(trial_snapshot.device_values[name])
+                    for name in recommendation.target_device_values
+                    if name in trial_snapshot.device_values
+                },
+                restored=not accepted,
             )
             return JointCorrectionResult(
                 success=accepted,
@@ -368,6 +381,10 @@ class JointResponseAnalyzer:
         steps: list[JointCorrectionStep] = []
         for iteration in range(1, self.config.solver.max_iter + 1):
             self._check_cancelled()
+            self._automatic_generation = (
+                iteration,
+                self.config.solver.max_iter,
+            )
             recommendation = self.run()
             if initial is None:
                 initial = recommendation.baseline
@@ -394,6 +411,12 @@ class JointResponseAnalyzer:
                 break
             if step.normalized_rms_after <= 1.0:
                 break
+        self._automatic_generation = None
+        self._progress(
+            "Automatic joint correction complete",
+            1,
+            1,
+        )
         if initial is None or final is None:
             raise RuntimeError("Automatic joint correction produced no measurement")
         success = any(step.accepted for step in steps)
@@ -472,6 +495,11 @@ class JointResponseAnalyzer:
 
     def _progress(self, stage: str, current: int, total: int) -> None:
         if self.progress_callback is not None:
+            if self._automatic_generation is not None and total > 0:
+                generation, generations = self._automatic_generation
+                stage = f"Generation {generation}/{generations} · {stage}"
+                current = (generation - 1) * total + current
+                total *= generations
             self.progress_callback(stage, current, total)
 
     def _log(self, message: str) -> None:

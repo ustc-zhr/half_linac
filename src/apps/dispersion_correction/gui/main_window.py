@@ -273,7 +273,7 @@ class DispersionPlotDataset:
 class CorrectionSessionRun:
     label: str
     task: str
-    result: CorrectionResult
+    result: CorrectionResult | JointCorrectionResult
     requested_generations: int | None = None
 
 
@@ -1958,6 +1958,21 @@ class MainWindow(QMainWindow):
         iteration_history_controls.addWidget(
             self.iteration_history_generation_combo
         )
+        self.iteration_history_plane_label = QLabel("Plane")
+        self.iteration_history_plane_combo = QComboBox()
+        self.iteration_history_plane_combo.addItem("ηx", "x")
+        self.iteration_history_plane_combo.addItem("ηy", "y")
+        self.iteration_history_plane_combo.currentIndexChanged.connect(
+            self._refresh_iteration_history_view
+        )
+        self.iteration_history_plane_label.hide()
+        self.iteration_history_plane_combo.hide()
+        iteration_history_controls.addWidget(
+            self.iteration_history_plane_label
+        )
+        iteration_history_controls.addWidget(
+            self.iteration_history_plane_combo
+        )
         self.iteration_history_overlay_checkbox = QCheckBox(
             "Show accepted generations"
         )
@@ -2139,9 +2154,12 @@ class MainWindow(QMainWindow):
     def _record_correction_run(
         self,
         task: str,
-        result: CorrectionResult,
+        result: CorrectionResult | JointCorrectionResult,
     ) -> None:
-        run_kind = "Automatic" if task == "run" else "Manual"
+        joint = isinstance(result, JointCorrectionResult)
+        run_kind = "Automatic" if task in {"run", "joint-run"} else "Manual"
+        if joint:
+            run_kind = f"Joint {run_kind}"
         sequence = (
             sum(entry.task == task for entry in self.correction_session_runs)
             + 1
@@ -2153,7 +2171,7 @@ class MainWindow(QMainWindow):
                 result=result,
                 requested_generations=(
                     int(self.config.solver.max_iter)
-                    if task == "run"
+                    if task in {"run", "joint-run"}
                     else None
                 ),
             )
@@ -2164,7 +2182,7 @@ class MainWindow(QMainWindow):
 
     def _build_correction_restore_request(
         self,
-        result: CorrectionResult,
+        result: CorrectionResult | JointCorrectionResult,
         *,
         run_label: str,
     ) -> CorrectionRestoreRequest | None:
@@ -2288,6 +2306,12 @@ class MainWindow(QMainWindow):
         _index: int | None = None,
     ) -> None:
         entry = self._selected_correction_run()
+        joint = (
+            entry is not None
+            and isinstance(entry.result, JointCorrectionResult)
+        )
+        self.iteration_history_plane_label.setVisible(joint)
+        self.iteration_history_plane_combo.setVisible(joint)
         self.iteration_history_generation_combo.blockSignals(True)
         self.iteration_history_generation_combo.clear()
         if entry is not None:
@@ -2343,6 +2367,17 @@ class MainWindow(QMainWindow):
             return
 
         result = entry.result
+        joint = isinstance(result, JointCorrectionResult)
+        plane = str(self.iteration_history_plane_combo.currentData() or "x")
+
+        def displayed_measurement(
+            measurement: DispersionMeasurement
+            | MultiPlaneDispersionMeasurement,
+        ) -> DispersionMeasurement:
+            if isinstance(measurement, MultiPlaneDispersionMeasurement):
+                return measurement.for_plane(plane)
+            return measurement
+
         selection = str(
             self.iteration_history_generation_combo.currentData()
             or "final"
@@ -2355,61 +2390,100 @@ class MainWindow(QMainWindow):
                 selected_step_index = None
 
         if selection == "initial":
-            measurement = result.initial
+            measurement = displayed_measurement(result.initial)
             reference = None
             label = "Initial measured"
-            before_knobs = result.initial_knobs
+            before_knobs = (
+                result.steps[0].response.baseline_device_values
+                if joint and result.steps
+                else result.initial_knobs
+                if isinstance(result, CorrectionResult)
+                else {}
+            )
             target_knobs = None
             status = (
-                f"{entry.label} · initial RMS {result.initial.rms_mm:.6g} mm"
+                f"{entry.label} · initial normalized RMS "
+                f"{result.normalized_rms_before:.6g}"
+                if joint
+                else (
+                    f"{entry.label} · initial RMS "
+                    f"{result.initial.rms_mm:.6g} mm"
+                )
             )
         elif (
             selected_step_index is not None
             and 0 <= selected_step_index < len(result.steps)
         ):
             step = result.steps[selected_step_index]
-            measurement = (
-                step.measurement_after
-                or step.measurement_before
-                or result.initial
+            measurement = displayed_measurement(
+                step.measured_after
+                if joint
+                else (
+                    step.measurement_after
+                    or step.measurement_before
+                    or result.initial
+                )
             )
             reference = (
-                None if measurement is result.initial else result.initial
+                displayed_measurement(result.initial)
             )
             label = (
                 f"Generation {step.iteration} measured"
-                if step.measurement_after is not None
+                if joint or step.measurement_after is not None
                 else f"Generation {step.iteration} baseline"
             )
             before_knobs = (
                 step.device_values_before
-                or step.knobs_before
-                or result.initial_knobs
+                or (
+                    {}
+                    if joint
+                    else step.knobs_before or result.initial_knobs
+                )
             )
-            target_knobs = step.device_values_trial or step.knobs_trial
+            target_knobs = (
+                step.device_values_trial
+                if joint
+                else step.device_values_trial or step.knobs_trial
+            )
             if step.accepted:
                 state = "accepted"
             elif step.restored:
                 state = "rejected and restored"
             else:
                 state = "stopped before a valid trial"
-            after = (
-                ""
-                if step.rms_after_mm is None
-                else f" → {step.rms_after_mm:.6g} mm"
-            )
-            status = (
-                f"{entry.label} · generation {step.iteration} {state} · "
-                f"RMS {step.rms_before_mm:.6g} mm{after} · {step.reason}"
-            )
+            if joint:
+                status = (
+                    f"{entry.label} · generation {step.iteration} {state} · "
+                    f"normalized RMS "
+                    f"{step.response.normalized_rms_before:.6g} → "
+                    f"{step.normalized_rms_after:.6g} · {step.reason}"
+                )
+            else:
+                after = (
+                    ""
+                    if step.rms_after_mm is None
+                    else f" → {step.rms_after_mm:.6g} mm"
+                )
+                status = (
+                    f"{entry.label} · generation {step.iteration} {state} · "
+                    f"RMS {step.rms_before_mm:.6g} mm{after} · {step.reason}"
+                )
         elif selection == "early-stop":
-            measurement = result.final
+            measurement = displayed_measurement(result.final)
             reference = (
-                None if result.final is result.initial else result.initial
+                displayed_measurement(result.initial)
             )
             label = "Stopped early · final verified"
-            before_knobs = result.initial_knobs
-            target_knobs = result.final_knobs
+            before_knobs = (
+                result.steps[0].device_values_before
+                if joint and result.steps
+                else result.initial_knobs
+            )
+            target_knobs = (
+                result.steps[-1].device_values_trial
+                if joint and result.steps
+                else result.final_knobs
+            )
             executed = max(
                 (step.iteration for step in result.steps),
                 default=0,
@@ -2425,18 +2499,34 @@ class MainWindow(QMainWindow):
                 f"generations; later generations were not run · {stop_reason}"
             )
         else:
-            measurement = result.final
+            measurement = displayed_measurement(result.final)
             reference = (
-                None if result.final is result.initial else result.initial
+                displayed_measurement(result.initial)
             )
             label = "Final verified"
-            before_knobs = result.initial_knobs
-            target_knobs = result.final_knobs
+            before_knobs = (
+                result.steps[0].device_values_before
+                if joint and result.steps
+                else result.initial_knobs
+            )
+            target_knobs = (
+                result.steps[-1].device_values_trial
+                if joint and result.steps
+                else result.final_knobs
+            )
             state = "accepted" if result.success else "not accepted"
             status = (
-                f"{entry.label} · final result {state} · RMS "
-                f"{result.initial.rms_mm:.6g} → {result.final.rms_mm:.6g} mm · "
-                f"{result.reason}"
+                (
+                    f"{entry.label} · final result {state} · normalized RMS "
+                    f"{result.normalized_rms_before:.6g} → "
+                    f"{result.normalized_rms_after:.6g} · {result.reason}"
+                )
+                if joint
+                else (
+                    f"{entry.label} · final result {state} · RMS "
+                    f"{result.initial.rms_mm:.6g} → "
+                    f"{result.final.rms_mm:.6g} mm · {result.reason}"
+                )
             )
 
         overlays: list[DispersionPlotDataset] = []
@@ -2444,12 +2534,20 @@ class MainWindow(QMainWindow):
             for index, step in enumerate(result.steps):
                 if (
                     step.accepted
-                    and step.measurement_after is not None
+                    and (
+                        joint
+                        or step.measurement_after is not None
+                    )
                     and index != selected_step_index
                 ):
+                    overlay_measurement = (
+                        displayed_measurement(step.measured_after)
+                        if joint
+                        else step.measurement_after
+                    )
                     overlays.append(
                         self._plot_dataset_from_measurement(
-                            step.measurement_after,
+                            overlay_measurement,
                             f"Generation {step.iteration}",
                         )
                     )
@@ -3392,6 +3490,14 @@ class MainWindow(QMainWindow):
                 f"{min(result.matrix.shape)}"
             )
         elif isinstance(result, JointCorrectionResult):
+            self._record_correction_run(task, result)
+            if result.success:
+                self.correction_restore_request = (
+                    self._build_correction_restore_request(
+                        result,
+                        run_label=self.correction_session_runs[-1].label,
+                    )
+                )
             self.latest_plane_measurements = {
                 measurement.plane: measurement
                 for measurement in result.final.measurements
@@ -3419,6 +3525,8 @@ class MainWindow(QMainWindow):
                     else "Joint not accepted"
                 )
             )
+            if result.success:
+                self._refresh_snapshot_after_task = True
         elif isinstance(result, CorrectionResult):
             self._record_correction_run(task, result)
             if result.success:
@@ -5673,7 +5781,10 @@ class MainWindow(QMainWindow):
         self.operation_progress.setValue(percent)
         self.progress_percent_label.setText(f"{percent}%")
         if self._active_task in {"run", "joint-run"}:
-            iteration_match = re.search(r"Iteration\s+(\d+)/(\d+)", stage)
+            iteration_match = re.search(
+                r"(?:Iteration|Generation)\s+(\d+)/(\d+)",
+                stage,
+            )
             if iteration_match is not None:
                 generation = (
                     f"Gen {iteration_match.group(1)}/"
@@ -6078,8 +6189,11 @@ class MainWindow(QMainWindow):
             restore_target = {
                 "measure": "the initial energy setting",
                 "response": "the Q-response scan snapshot",
+                "joint-response": "the joint Q-response scan snapshot",
                 "apply": "the pre-apply machine snapshot",
+                "joint-apply": "the pre-apply joint machine snapshot",
                 "run": "the automatic-correction start snapshot",
+                "joint-run": "the automatic joint-correction snapshot",
                 "design-k1": "the pre-write quadrupole snapshot",
                 "restore-correction": "the pre-restore quadrupole snapshot",
             }.get(self._active_task, "the operation snapshot")

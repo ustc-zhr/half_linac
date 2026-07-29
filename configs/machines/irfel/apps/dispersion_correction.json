@@ -64,6 +64,102 @@
           "target": 0.0
         }
       ]
+    },
+    {
+      "id": "MIR-joint-validation",
+      "display_name": "MIR Joint Validation (ηx/ηy)",
+      "model_entrance": "BPM07",
+      "model_exit": "BPM10",
+      "target_bpms": [],
+      "monitor_bpms": [
+        "BPM07",
+        "BPM08",
+        "BPM09",
+        "BPM10"
+      ],
+      "target_dispersion_mm": [],
+      "model_observables": [
+        {
+          "name": "BPM09 Dx",
+          "element": "BPM09",
+          "component": "dx",
+          "target": 0.0
+        },
+        {
+          "name": "BPM10 Dx",
+          "element": "BPM10",
+          "component": "dx",
+          "target": 0.0
+        },
+        {
+          "name": "BPM09 Dy",
+          "element": "BPM09",
+          "component": "dy",
+          "target": 0.0
+        },
+        {
+          "name": "BPM10 Dy",
+          "element": "BPM10",
+          "component": "dy",
+          "target": 0.0
+        }
+      ],
+      "joint_response_analysis": {
+        "targets": [
+          {
+            "bpm": "BPM09",
+            "plane": "x",
+            "target_mm": 0.0,
+            "tolerance_mm": 1.0
+          },
+          {
+            "bpm": "BPM10",
+            "plane": "x",
+            "target_mm": 0.0,
+            "tolerance_mm": 1.0
+          },
+          {
+            "bpm": "BPM09",
+            "plane": "y",
+            "target_mm": 0.0,
+            "tolerance_mm": 1.0
+          },
+          {
+            "bpm": "BPM10",
+            "plane": "y",
+            "target_mm": 0.0,
+            "tolerance_mm": 1.0
+          }
+        ],
+        "knobs": [
+          {
+            "name": "Q13_Q16_sym",
+            "devices": {
+              "QM13": 1.0,
+              "QM16": 1.0
+            },
+            "scan_step": 1,
+            "limit": 5
+          },
+          {
+            "name": "Q14_Q15_sym",
+            "devices": {
+              "QM14": 1.0,
+              "QM15": 1.0
+            },
+            "scan_step": 1,
+            "limit": 5
+          }
+        ]
+      },
+      "knobs": [],
+      "measurement": {
+        "plane": "xy",
+        "samples_per_step": 5,
+        "sample_interval_s": 0.2,
+        "final_samples": 10,
+        "settle_time_s": 1.0
+      }
     }
   ],
   "bpm_position_scale_to_mm": {
