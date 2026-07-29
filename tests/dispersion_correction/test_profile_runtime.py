@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
+import json
 
 import numpy as np
 import pytest
@@ -15,7 +17,10 @@ from half_linac.src.apps.dispersion_correction.profile_runtime import (
     selectable_profile_bpms,
     selectable_profile_quadrupoles,
 )
-from half_linac.src.apps.dispersion_correction.models import KnobConfig
+from half_linac.src.apps.dispersion_correction.models import (
+    KnobConfig,
+    MultiPlaneDispersionMeasurement,
+)
 from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
@@ -257,7 +262,7 @@ def test_half_bh01_bh03_section_uses_symmetric_k1_knobs() -> None:
         control_backend="vm",
     )
     assert profile_section_choices(context) == (
-        ("bl01", "BL01 Dogleg"),
+        ("bl01", "BL01 Horizontal Dogleg"),
         ("bh01_bh03", "BH01–BH03 Horizontal Achromat"),
         ("bv01_bv02", "BV01–BV02 Vertical Achromat"),
         ("bh04_sep_diagnostics", "BH04–SEP Diagnostics"),
@@ -267,17 +272,16 @@ def test_half_bh01_bh03_section_uses_symmetric_k1_knobs() -> None:
 
     assert config.section.model_entrance == "BPM21"
     assert config.section.model_exit == "BPM27"
-    assert config.target_bpms == ("BPM26", "BPM27")
+    assert config.target_bpms == ("BPM25", "BPM26", "BPM27")
     assert config.monitor_bpms == (
         "BPM21",
         "BPM22",
         "BPM23",
         "BPM24",
-        "BPM25",
     )
     assert tuple(item.element for item in config.section.model_observables) == (
-        "BPM26",
-        "BPM26",
+        "BPM25",
+        "BPM25",
     )
     assert tuple(item.component for item in config.section.model_observables) == (
         "dx",
@@ -331,7 +335,7 @@ def test_half_bh01_bh03_section_uses_symmetric_k1_knobs() -> None:
     assert not preflight.ok
     assert not preflight.checks["response_dimensions_sufficient"]
     assert any(
-        "Underdetermined response: 4 correction knobs and 2 target BPMs"
+        "Underdetermined response: 4 correction knobs and 3 target BPMs"
         in warning
         for warning in preflight.warnings
     )
@@ -452,6 +456,8 @@ def test_half_bh04_sep_section_is_measurement_only() -> None:
     assert not config.section.model_only
     assert config.section.model_entrance == "BPM36"
     assert config.section.model_exit == "WSEP1"
+    assert config.measurement.plane == "xy"
+    assert config.measurement.planes == ("x", "y")
     assert config.target_bpms == ()
     assert config.knobs == ()
     assert config.monitor_bpms == tuple(
@@ -464,6 +470,37 @@ def test_half_bh04_sep_section_is_measurement_only() -> None:
     assert config.backend.options["pv_map"]["quadrupoles"] == {}
     assert set(config.backend.options["pv_map"]["bpms"]) == set(
         config.monitor_bpms
+    )
+    assert all(
+        set(mapping) == {"x", "y"}
+        for mapping in config.backend.options["pv_map"]["bpms"].values()
+    )
+    real_context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="real",
+    )
+    _, real_config = load_profile_run_config(
+        real_context,
+        section_id="bh04_sep_diagnostics",
+    )
+    assert run_preflight(real_config).checks[
+        "measurement_bpm_pvs_configured"
+    ]
+    broken_options = copy.deepcopy(real_config.backend.options)
+    broken_options["pv_map"]["bpms"]["BPM43"].pop("y")
+    broken_config = replace(
+        real_config,
+        backend=replace(
+            real_config.backend,
+            options=broken_options,
+        ),
+    )
+    broken_preflight = run_preflight(broken_config)
+    assert not broken_preflight.checks["measurement_bpm_pvs_configured"]
+    assert any(
+        "x and y PV mapping" in blocker
+        for blocker in broken_preflight.blockers
     )
 
     offline_config = replace(
@@ -490,10 +527,20 @@ def test_half_bh04_sep_section_is_measurement_only() -> None:
     workflow = AchromatWorkflow(offline_config)
     measurement = workflow.measure_dispersion()
 
-    assert measurement.bpm_names == config.monitor_bpms
-    assert not np.any(measurement.target_mask)
-    assert np.isnan(measurement.rms_mm)
-    assert np.isfinite(measurement.measured_rms_mm)
+    assert isinstance(measurement, MultiPlaneDispersionMeasurement)
+    assert measurement.planes == ("x", "y")
+    horizontal = measurement.for_plane("x")
+    vertical = measurement.for_plane("y")
+    assert horizontal.bpm_names == config.monitor_bpms
+    assert vertical.bpm_names == config.monitor_bpms
+    assert horizontal.plus is vertical.plus
+    assert horizontal.minus is vertical.minus
+    assert not np.any(horizontal.target_mask)
+    assert not np.any(vertical.target_mask)
+    assert np.isnan(horizontal.rms_mm)
+    assert np.isnan(vertical.rms_mm)
+    assert np.isfinite(horizontal.measured_rms_mm)
+    assert vertical.measured_rms_mm == pytest.approx(0.0)
     with pytest.raises(PermissionError, match="measurement-only"):
         workflow.build_response_matrix()
     with pytest.raises(PermissionError, match="measurement-only"):
@@ -571,3 +618,57 @@ def test_profile_measurement_archive_includes_config_and_raw_samples(tmp_path, m
     assert '"minus"' in payload
     assert '"config"' in metadata
     assert '"task": "measure"' in metadata
+
+
+def test_profile_multiplane_measurement_archive_keeps_both_planes(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="vm",
+    )
+    _, config = load_profile_run_config(
+        context,
+        section_id="bh04_sep_diagnostics",
+    )
+    offline_config = replace(
+        config,
+        backend=replace(
+            config.backend,
+            type="offline",
+            mode="write_enabled",
+            options={},
+        ),
+        energy_knob=replace(
+            config.energy_knob,
+            actuator="MODEL_DELTA",
+            calibration=None,
+        ),
+        measurement=replace(
+            config.measurement,
+            samples_per_step=1,
+            sample_interval_s=0.0,
+            settle_time_s=0.0,
+        ),
+    )
+    result = AchromatWorkflow(offline_config).measure_dispersion()
+    monkeypatch.setattr(profile_runtime, "APP_DIR", tmp_path)
+
+    paths = profile_runtime.write_profile_operation(
+        context,
+        "measure",
+        result,
+        config=offline_config,
+    )
+
+    payload = json.loads(paths["run_json"].read_text(encoding="utf-8"))
+    assert payload["planes"] == ["x", "y"]
+    assert set(payload["measurements"]) == {"x", "y"}
+    assert payload["measurements"]["x"]["plus"] == (
+        payload["measurements"]["y"]["plus"]
+    )
+    assert payload["measurements"]["x"]["minus"] == (
+        payload["measurements"]["y"]["minus"]
+    )

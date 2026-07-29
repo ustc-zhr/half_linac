@@ -71,11 +71,16 @@ def run_preflight(config: RunConfig) -> PreflightResult:
     bpms = pv_map.get("bpms", {}) if pv_map_ok else {}
     bpms_ok = _configured_bpms(config, bpms)
     checks["measurement_bpm_pvs_configured"] = bpms_ok
-    if config.measurement.plane == "x":
+    if config.measurement.plane in {"x", "xy"}:
         checks["target_bpm_x_pvs_configured"] = bpms_ok
     if config.backend.type == "epics" and not bpms_ok:
+        required = (
+            "x and y"
+            if config.measurement.plane == "xy"
+            else config.measurement.plane
+        )
         blockers.append(
-            f"Every measurement BPM needs a {config.measurement.plane} PV "
+            f"Every measurement BPM needs {required} PV mapping(s) "
             "in pv_map.bpms"
         )
 
@@ -377,11 +382,12 @@ def _configured_bpms(config: RunConfig, bpms: Any) -> bool:
         return True
     if not isinstance(bpms, dict):
         return False
+    required_planes = config.measurement.planes
     for name in config.measurement_bpms:
         item = bpms.get(name)
         if (
             not isinstance(item, dict)
-            or not item.get(config.measurement.plane)
+            or any(not item.get(plane) for plane in required_planes)
         ):
             return False
     return True

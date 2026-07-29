@@ -15,6 +15,7 @@ from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
     CorrectionStep,
     DispersionMeasurement,
+    MultiPlaneDispersionMeasurement,
     ResponseMatrixResult,
     RunConfig,
     SafetyStatus,
@@ -76,7 +77,10 @@ class AchromatWorkflow:
         self._progress_depth = 0
         self.last_live_preflight = None
 
-    def measure_dispersion(self, samples: int | None = None) -> DispersionMeasurement:
+    def measure_dispersion(
+        self,
+        samples: int | None = None,
+    ) -> DispersionMeasurement | MultiPlaneDispersionMeasurement:
         report_progress = self._progress_depth == 0
         if report_progress:
             self._require_write_ready()
@@ -86,7 +90,11 @@ class AchromatWorkflow:
         finally:
             self._progress_depth -= 1
 
-    def _measure_dispersion(self, samples: int | None, report_progress: bool) -> DispersionMeasurement:
+    def _measure_dispersion(
+        self,
+        samples: int | None,
+        report_progress: bool,
+    ) -> DispersionMeasurement | MultiPlaneDispersionMeasurement:
         self._check_cancelled()
         samples = int(samples if samples is not None else self.config.measurement.samples_per_step)
         delta = momentum_delta(
@@ -126,25 +134,38 @@ class AchromatWorkflow:
             )
         )
         measurement_bpms = self.config.measurement_bpms
-        measurement = compute_effective_dispersion(
-            bpm_names=measurement_bpms,
-            plus=plus,
-            minus=minus,
-            delta=delta,
-            plane=self.config.measurement.plane,
-            target_values_mm=tuple(
-                target_by_bpm.get(name, 0.0)
-                for name in measurement_bpms
-            ),
-            target_mask=tuple(
-                name in target_by_bpm
-                for name in measurement_bpms
-            ),
+        measurements = tuple(
+            compute_effective_dispersion(
+                bpm_names=measurement_bpms,
+                plus=plus,
+                minus=minus,
+                delta=delta,
+                plane=plane,
+                target_values_mm=tuple(
+                    target_by_bpm.get(name, 0.0)
+                    for name in measurement_bpms
+                ),
+                target_mask=tuple(
+                    name in target_by_bpm
+                    for name in measurement_bpms
+                ),
+            )
+            for plane in self.config.measurement.planes
         )
-        self._log(f"Measured D_eff RMS: {measurement.rms_mm:.6g} mm")
+        for measurement in measurements:
+            rms = (
+                measurement.measured_rms_mm
+                if self.config.section.diagnostic_only
+                else measurement.rms_mm
+            )
+            self._log(
+                f"Measured eta_{measurement.plane} RMS: {rms:.6g} mm"
+            )
         if report_progress:
             self._progress("Measurement complete", 5, 5)
-        return measurement
+        if len(measurements) == 1:
+            return measurements[0]
+        return MultiPlaneDispersionMeasurement(measurements)
 
     def build_response_matrix(self, knob_set: SymmetricKnobSet | None = None) -> ResponseMatrixResult:
         self._require_correction_section()
@@ -1096,6 +1117,11 @@ class AchromatWorkflow:
             raise PermissionError(
                 "This dispersion section is measurement-only; quadrupole "
                 "response and correction are disabled"
+            )
+        if self.config.measurement.plane == "xy":
+            raise PermissionError(
+                "Joint x/y response and correction are not enabled in this "
+                "measurement-only implementation stage"
             )
 
     def _validate_response_quality(self, result: ResponseMatrixResult) -> None:

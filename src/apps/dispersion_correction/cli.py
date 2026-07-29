@@ -22,6 +22,9 @@ from half_linac.src.apps.dispersion_correction.profile_runtime import load_profi
 from half_linac.src.apps.dispersion_correction.workflow import create_machine
 from half_linac.src.apps.dispersion_correction.reports import result_to_json, result_to_markdown, write_result_files
 from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
+from half_linac.src.apps.dispersion_correction.models import (
+    MultiPlaneDispersionMeasurement,
+)
 
 
 def run_command(argv: list[str] | None = None) -> int:
@@ -52,34 +55,66 @@ def measure_command(argv: list[str] | None = None) -> int:
     measurement = AchromatWorkflow(config).measure_dispersion(
         config.measurement.samples_per_step
     )
+    measurements = (
+        measurement.measurements
+        if isinstance(measurement, MultiPlaneDispersionMeasurement)
+        else (measurement,)
+    )
     if args.json:
         import json
 
+        if isinstance(measurement, MultiPlaneDispersionMeasurement):
+            payload = {
+                "planes": [item.plane for item in measurements],
+                "measurements": {
+                    item.plane: {
+                        "delta": item.delta,
+                        "rms_mm": item.rms_mm,
+                        "measured_rms_mm": item.measured_rms_mm,
+                        "bpm_names": list(item.bpm_names),
+                        "values_mm": item.values_mm.tolist(),
+                        "target_mask": item.target_mask.tolist(),
+                        "valid": item.valid.tolist(),
+                    }
+                    for item in measurements
+                },
+            }
+        else:
+            payload = {
+                "plane": measurement.plane,
+                "delta": measurement.delta,
+                "rms_mm": measurement.rms_mm,
+                "bpm_names": list(measurement.bpm_names),
+                "values_mm": measurement.values_mm.tolist(),
+                "target_mask": measurement.target_mask.tolist(),
+                "valid": measurement.valid.tolist(),
+            }
         print(
             json.dumps(
-                {
-                    "plane": measurement.plane,
-                    "delta": measurement.delta,
-                    "rms_mm": measurement.rms_mm,
-                    "bpm_names": list(measurement.bpm_names),
-                    "values_mm": measurement.values_mm.tolist(),
-                    "target_mask": measurement.target_mask.tolist(),
-                    "valid": measurement.valid.tolist(),
-                },
+                payload,
                 indent=2,
             )
         )
     else:
-        print(f"D_eff RMS: {measurement.rms_mm:.6g} mm")
-        for name, value, valid, is_target in zip(
-            measurement.bpm_names,
-            measurement.values_mm,
-            measurement.valid,
-            measurement.target_mask,
-        ):
-            status = "valid" if valid else "invalid"
-            role = "correction" if is_target else "monitor"
-            print(f"  {name}: {value:.6g} mm ({role}, {status})")
+        if not isinstance(measurement, MultiPlaneDispersionMeasurement):
+            print(f"D_eff RMS: {measurement.rms_mm:.6g} mm")
+        for item in measurements:
+            if isinstance(measurement, MultiPlaneDispersionMeasurement):
+                print(
+                    f"eta_{item.plane} RMS: "
+                    f"{item.measured_rms_mm:.6g} mm"
+                )
+            for name, value, valid, is_target in zip(
+                item.bpm_names,
+                item.values_mm,
+                item.valid,
+                item.target_mask,
+            ):
+                status = "valid" if valid else "invalid"
+                role = "correction" if is_target else "monitor"
+                print(
+                    f"  {name}: {value:.6g} mm ({role}, {status})"
+                )
     return 0
 
 

@@ -11,6 +11,7 @@ from half_linac.src.apps.dispersion_correction.config import parse_config
 from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
     DispersionMeasurement,
+    MultiPlaneDispersionMeasurement,
     ResponseMatrixResult,
     RunConfig,
 )
@@ -126,16 +127,17 @@ def selectable_profile_bpms(
     """Return profile BPMs that expose the selected plane on the active backend."""
 
     logical_channel = str(plane).strip().lower()
-    if logical_channel not in {"x", "y"}:
-        raise ValueError("plane must be 'x' or 'y'")
+    if logical_channel not in {"x", "y", "xy"}:
+        raise ValueError("plane must be 'x', 'y', or 'xy'")
+    required_planes = ("x", "y") if logical_channel == "xy" else (logical_channel,)
     return tuple(
         element.id
-        for element in list_elements(
-            context,
-            kind="bpm",
-            logical_channel=logical_channel,
+        for element in list_elements(context, kind="bpm")
+        if all(
+            plane in element.channels
+            and _channel_is_resolvable(context, element.id, plane)
+            for plane in required_planes
         )
-        if _channel_is_resolvable(context, element.id, logical_channel)
     )
 
 
@@ -299,7 +301,12 @@ def write_profile_result(
 def write_profile_operation(
     context: AppContext,
     task: str,
-    result: CorrectionResult | DispersionMeasurement | ResponseMatrixResult,
+    result: (
+        CorrectionResult
+        | DispersionMeasurement
+        | MultiPlaneDispersionMeasurement
+        | ResponseMatrixResult
+    ),
     *,
     config: RunConfig | None = None,
     live_preflight=None,
@@ -362,10 +369,22 @@ def write_profile_operation(
 
 
 def _operation_payload(
-    result: DispersionMeasurement | ResponseMatrixResult,
+    result: (
+        DispersionMeasurement
+        | MultiPlaneDispersionMeasurement
+        | ResponseMatrixResult
+    ),
 ) -> dict[str, Any]:
     if isinstance(result, DispersionMeasurement):
         return _measurement_payload(result)
+    if isinstance(result, MultiPlaneDispersionMeasurement):
+        return {
+            "planes": list(result.planes),
+            "measurements": {
+                measurement.plane: _measurement_payload(measurement)
+                for measurement in result.measurements
+            },
+        }
     return {
         "matrix": result.matrix.tolist(),
         "bpm_names": list(result.bpm_names),
@@ -442,20 +461,32 @@ def _build_selection_pv_map(
     measurement_plane: str,
 ) -> dict[str, Any]:
     plane = str(measurement_plane).strip().lower()
-    if plane not in {"x", "y"}:
-        raise MachineProfileError("measurement.plane must be 'x' or 'y'.")
+    if plane not in {"x", "y", "xy"}:
+        raise MachineProfileError(
+            "measurement.plane must be 'x', 'y', or 'xy'."
+        )
+    required_planes = ("x", "y") if plane == "xy" else (plane,)
     bpms: dict[str, dict[str, str]] = {}
     for bpm_name in bpm_names:
-        item = {plane: resolve_channel(context, bpm_name, plane)}
-        other_plane = "y" if plane == "x" else "x"
-        try:
-            item[other_plane] = resolve_channel(
+        item = {
+            required_plane: resolve_channel(
                 context,
                 bpm_name,
-                other_plane,
+                required_plane,
             )
-        except MachineProfileError:
-            pass
+            for required_plane in required_planes
+        }
+        for optional_plane in ("x", "y"):
+            if optional_plane in item:
+                continue
+            try:
+                item[optional_plane] = resolve_channel(
+                    context,
+                    bpm_name,
+                    optional_plane,
+                )
+            except MachineProfileError:
+                pass
         bpms[bpm_name] = item
 
     device_names: list[str] = []

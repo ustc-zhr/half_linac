@@ -42,6 +42,10 @@ class MeasurementConfig:
     final_samples: int = 10
     settle_time_s: float = 0.0
 
+    @property
+    def planes(self) -> tuple[str, ...]:
+        return ("x", "y") if self.plane == "xy" else (self.plane,)
+
 
 @dataclass(frozen=True)
 class SolverConfig:
@@ -213,6 +217,49 @@ class DispersionMeasurement:
         if values.size == 0:
             return float("nan")
         return float(np.sqrt(np.mean(values * values)))
+
+
+@dataclass(frozen=True)
+class MultiPlaneDispersionMeasurement:
+    measurements: tuple[DispersionMeasurement, ...]
+
+    def __post_init__(self) -> None:
+        measurements = tuple(self.measurements)
+        planes = tuple(item.plane for item in measurements)
+        if planes != ("x", "y"):
+            raise ValueError(
+                "Multi-plane dispersion requires measurements ordered as x, y"
+            )
+        first = measurements[0]
+        for measurement in measurements[1:]:
+            if measurement.bpm_names != first.bpm_names:
+                raise ValueError(
+                    "Multi-plane measurements must use the same BPM order"
+                )
+            if measurement.delta != first.delta:
+                raise ValueError(
+                    "Multi-plane measurements must use the same energy step"
+                )
+            if measurement.plus is not first.plus or measurement.minus is not first.minus:
+                raise ValueError(
+                    "Multi-plane measurements must share one energy scan"
+                )
+        object.__setattr__(self, "measurements", measurements)
+
+    @property
+    def planes(self) -> tuple[str, ...]:
+        return tuple(item.plane for item in self.measurements)
+
+    @property
+    def primary(self) -> DispersionMeasurement:
+        return self.measurements[0]
+
+    def for_plane(self, plane: str) -> DispersionMeasurement:
+        normalized = str(plane).strip().lower()
+        for measurement in self.measurements:
+            if measurement.plane == normalized:
+                return measurement
+        raise KeyError(f"No dispersion measurement for plane {plane!r}")
 
 
 @dataclass(frozen=True)

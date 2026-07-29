@@ -63,6 +63,7 @@ from half_linac.src.apps.dispersion_correction.models import (
     KnobConfig,
     ModelOpticsCurve,
     ModelResponseResult,
+    MultiPlaneDispersionMeasurement,
     ResponseMatrixResult,
     RunConfig,
 )
@@ -231,6 +232,7 @@ class DispersionPlotDataset:
     valid: np.ndarray
     label: str
     target_mask: np.ndarray
+    plane: str = "x"
 
 
 @dataclass(frozen=True)
@@ -266,6 +268,7 @@ class OverviewControls(QWidget):
         title: QLabel,
         measurement_label: QLabel,
         state_label: QLabel,
+        plane_combo: QComboBox,
         design_checkbox: QCheckBox,
         snapshot_checkbox: QCheckBox,
         refresh_snapshot_button: QPushButton,
@@ -275,6 +278,7 @@ class OverviewControls(QWidget):
         self._title = title
         self._measurement_label = measurement_label
         self._state_label = state_label
+        self._plane_combo = plane_combo
         self._design_checkbox = design_checkbox
         self._snapshot_checkbox = snapshot_checkbox
         self._refresh_snapshot_button = refresh_snapshot_button
@@ -287,6 +291,7 @@ class OverviewControls(QWidget):
         measurement_layout.setContentsMargins(8, 5, 8, 5)
         measurement_layout.setSpacing(7)
         measurement_layout.addWidget(self._measurement_label)
+        measurement_layout.addWidget(self._plane_combo)
         measurement_layout.addWidget(self._state_label, 1)
 
         self.overlays_group = QFrame(self)
@@ -1015,6 +1020,11 @@ class MainWindow(QMainWindow):
         self._refresh_snapshot_after_task = False
         self.live_plot_measurement: DispersionPlotDataset | None = None
         self.reference_plot_measurement: DispersionPlotDataset | None = None
+        self.live_plane_measurements: dict[str, DispersionPlotDataset] = {}
+        self.latest_plane_measurements: dict[
+            str,
+            DispersionMeasurement,
+        ] = {}
         self._last_unmapped_plot_bpms: tuple[str, ...] = ()
         self._automatic_initial_measurement: DispersionMeasurement | None = None
         self._active_task = ""
@@ -1924,7 +1934,7 @@ class MainWindow(QMainWindow):
         )
         self.iteration_history_curve = DispersionCurveWidget(
             self.config.section.model_entrance,
-            self.config.measurement.plane,
+            self.config.measurement.planes[0],
         )
         self.iteration_history_curve.setMinimumHeight(330)
         iteration_history_layout.addWidget(self.iteration_history_curve, 2)
@@ -1958,6 +1968,18 @@ class MainWindow(QMainWindow):
         self.overview_title_label.setObjectName("cardTitle")
         self.measurement_header_label = QLabel("Measurement")
         self.measurement_header_label.setObjectName("overviewGroupLabel")
+        self.display_plane_combo = QComboBox()
+        self.display_plane_combo.setObjectName("displayPlaneCombo")
+        self.display_plane_combo.addItem("Horizontal ηx", "x")
+        self.display_plane_combo.addItem("Vertical ηy", "y")
+        self.display_plane_combo.setToolTip(
+            "Choose which plane from the same two-plane energy scan is "
+            "displayed in the overview."
+        )
+        self.display_plane_combo.currentIndexChanged.connect(
+            self._display_plane_changed
+        )
+        self.display_plane_combo.hide()
         self.plot_state_label = QLabel("No measured data")
         self.plot_state_label.setObjectName("overviewStateLabel")
         self.plot_state_label.setSizePolicy(
@@ -2001,6 +2023,7 @@ class MainWindow(QMainWindow):
             self.overview_title_label,
             self.measurement_header_label,
             self.plot_state_label,
+            self.display_plane_combo,
             self.show_design_model_checkbox,
             self.show_snapshot_model_checkbox,
             self.refresh_snapshot_button,
@@ -2009,7 +2032,7 @@ class MainWindow(QMainWindow):
         overview_layout.addWidget(self.overview_controls)
         self.dispersion_curve = DispersionCurveWidget(
             self.config.section.model_entrance,
-            self.config.measurement.plane,
+            self.config.measurement.planes[0],
         )
         overview_layout.addWidget(self.dispersion_curve, 1)
 
@@ -2513,13 +2536,13 @@ class MainWindow(QMainWindow):
                 self.config.section.model_entrance
             )
             self.dispersion_curve.set_plane(
-                self.config.measurement.plane
+                self.config.measurement.planes[0]
             )
             self.iteration_history_curve.set_model_entrance(
                 self.config.section.model_entrance
             )
             self.iteration_history_curve.set_plane(
-                self.config.measurement.plane
+                self.config.measurement.planes[0]
             )
             self._last_unmapped_plot_bpms = ()
         self._invalidate_staged_results(
@@ -2534,14 +2557,17 @@ class MainWindow(QMainWindow):
                     self.app_context,
                     self.config.measurement.plane,
                 )
-            plane_name = (
-                "horizontal"
-                if self.config.measurement.plane == "x"
-                else "vertical"
-            )
+            plane_name = {
+                "x": "horizontal",
+                "y": "vertical",
+                "xy": "two-plane",
+            }[self.config.measurement.plane]
             self.measure_title.setText(
                 f"Measured {plane_name} effective dispersion"
             )
+            multi_plane = self.config.measurement.plane == "xy"
+            self.display_plane_combo.setVisible(multi_plane)
+            self.display_plane_combo.setCurrentIndex(0)
             section_index = self.section_combo.findData(self.config.section.id)
             if section_index >= 0:
                 self.section_combo.setCurrentIndex(section_index)
@@ -2573,16 +2599,24 @@ class MainWindow(QMainWindow):
                 model_only or self.config.section.diagnostic_only
             )
             diagnostic_only = self.config.section.diagnostic_only
+            measurement_only = (
+                diagnostic_only
+                or self.config.measurement.plane == "xy"
+            )
             self.bpm_select_button.setVisible(not fixed_selection)
             self.knob_select_button.setVisible(not fixed_selection)
-            self.correction_step_card.setVisible(not diagnostic_only)
+            self.correction_step_card.setVisible(not measurement_only)
             self.verification_samples_field_label.setVisible(
-                not diagnostic_only
+                not measurement_only
             )
-            self.final_samples_spin.setVisible(not diagnostic_only)
+            self.final_samples_spin.setVisible(not measurement_only)
             self.workflow_title_label.setText(
-                "Diagnostic Measurement"
-                if diagnostic_only
+                (
+                    "Diagnostic Measurement"
+                    if diagnostic_only
+                    else "Two-Plane Measurement"
+                )
+                if measurement_only
                 else "Correction Workflow"
             )
             self.energy_step_field_label.setVisible(not model_only)
@@ -2659,6 +2693,8 @@ class MainWindow(QMainWindow):
         self.dispersion_curve.set_result(None)
         self.live_plot_measurement = None
         self.reference_plot_measurement = None
+        self.live_plane_measurements = {}
+        self.latest_plane_measurements = {}
         self.dispersion_curve.set_measurement(None)
         self.model_info.clear()
         self.model_info.setVisible(False)
@@ -2678,10 +2714,12 @@ class MainWindow(QMainWindow):
         self.correction_mode = None
         self.latest_measurement = None
         self.latest_measurement_time = None
+        self.latest_plane_measurements = {}
         self.latest_response = None
         self.correction_recommendation = None
         self.live_plot_measurement = None
         self.reference_plot_measurement = None
+        self.live_plane_measurements = {}
         if hasattr(self, "dispersion_curve"):
             self._refresh_plot_measurement()
         if not hasattr(self, "correction_state_label"):
@@ -3148,8 +3186,39 @@ class MainWindow(QMainWindow):
         return True
 
     def _task_completed(self, task: str, result: object) -> None:
-        if isinstance(result, DispersionMeasurement):
+        if isinstance(result, MultiPlaneDispersionMeasurement):
             self.correction_mode = None
+            self.latest_plane_measurements = {
+                measurement.plane: measurement
+                for measurement in result.measurements
+            }
+            self.latest_measurement = result.primary
+            self.latest_measurement_time = datetime.now()
+            self.latest_response = None
+            self.correction_recommendation = None
+            self.correction_state_label.setText(
+                "Two-plane dispersion measured from one energy scan. "
+                "Joint Q-response analysis is not enabled yet."
+            )
+            self.recommendation_summary_label.setText(
+                "No joint recommendation has been calculated."
+            )
+            self.recommendation_prediction_table.setRowCount(0)
+            self.recommendation_table.setRowCount(0)
+            self._show_measurement(result)
+            self._set_live_multiplane_measurement(
+                result,
+                label="Latest measured",
+            )
+            rms_text = " · ".join(
+                f"η{measurement.plane} "
+                f"{measurement.measured_rms_mm:.4g} mm"
+                for measurement in result.measurements
+            )
+            self._refresh_status(rms_text)
+        elif isinstance(result, DispersionMeasurement):
+            self.correction_mode = None
+            self.latest_plane_measurements = {result.plane: result}
             self.latest_measurement = result
             self.latest_measurement_time = datetime.now()
             self.latest_response = None
@@ -3294,7 +3363,12 @@ class MainWindow(QMainWindow):
             self._refresh_snapshot_after_task = True
         if self.app_context is not None and isinstance(
             result,
-            (DispersionMeasurement, ResponseMatrixResult, CorrectionResult),
+            (
+                DispersionMeasurement,
+                MultiPlaneDispersionMeasurement,
+                ResponseMatrixResult,
+                CorrectionResult,
+            ),
         ):
             paths = write_profile_operation(
                 self.app_context,
@@ -3455,48 +3529,90 @@ class MainWindow(QMainWindow):
         self._model_visibility_changed()
         self._task_failed(message)
 
-    def _show_measurement(self, measurement: DispersionMeasurement) -> None:
-        self.measure_table.setHorizontalHeaderLabels(
-            ["BPM", "Role", "Measured mm", "Target mm", "Residual mm", "Valid"]
+    def _show_measurement(
+        self,
+        result: DispersionMeasurement | MultiPlaneDispersionMeasurement,
+    ) -> None:
+        measurements = (
+            result.measurements
+            if isinstance(result, MultiPlaneDispersionMeasurement)
+            else (result,)
         )
-        self.measure_table.setColumnCount(6)
-        self.measure_table.setRowCount(len(measurement.bpm_names))
-        for row, name in enumerate(measurement.bpm_names):
-            is_target = bool(measurement.target_mask[row])
-            self.measure_table.setItem(row, 0, QTableWidgetItem(name))
-            self.measure_table.setItem(
-                row,
-                1,
-                QTableWidgetItem("Correction" if is_target else "Monitor"),
-            )
-            self.measure_table.setItem(
-                row,
-                2,
-                QTableWidgetItem(f"{measurement.values_mm[row]:.6g}"),
-            )
-            self.measure_table.setItem(
-                row,
-                3,
-                QTableWidgetItem(
-                    f"{measurement.target_values_mm[row]:.6g}"
-                    if is_target
-                    else "—"
-                ),
-            )
-            self.measure_table.setItem(
-                row,
-                4,
-                QTableWidgetItem(
-                    f"{measurement.residual_values_mm[row]:.6g}"
-                    if is_target
-                    else "—"
-                ),
-            )
-            self.measure_table.setItem(
-                row,
-                5,
-                QTableWidgetItem("yes" if measurement.valid[row] else "no"),
-            )
+        multi_plane = len(measurements) > 1
+        headers = [
+            "BPM",
+            *(["Plane"] if multi_plane else []),
+            "Role",
+            "Measured mm",
+            "Target mm",
+            "Residual mm",
+            "Valid",
+        ]
+        self.measure_table.setHorizontalHeaderLabels(headers)
+        self.measure_table.setColumnCount(len(headers))
+        row_count = sum(
+            len(measurement.bpm_names)
+            for measurement in measurements
+        )
+        self.measure_table.setRowCount(row_count)
+        row = 0
+        for measurement in measurements:
+            for index, name in enumerate(measurement.bpm_names):
+                is_target = bool(measurement.target_mask[index])
+                column = 0
+                self.measure_table.setItem(row, column, QTableWidgetItem(name))
+                column += 1
+                if multi_plane:
+                    self.measure_table.setItem(
+                        row,
+                        column,
+                        QTableWidgetItem(f"η{measurement.plane}"),
+                    )
+                    column += 1
+                self.measure_table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(
+                        "Correction" if is_target else "Monitor"
+                    ),
+                )
+                column += 1
+                self.measure_table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(
+                        f"{measurement.values_mm[index]:.6g}"
+                    ),
+                )
+                column += 1
+                self.measure_table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(
+                        f"{measurement.target_values_mm[index]:.6g}"
+                        if is_target
+                        else "—"
+                    ),
+                )
+                column += 1
+                self.measure_table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(
+                        f"{measurement.residual_values_mm[index]:.6g}"
+                        if is_target
+                        else "—"
+                    ),
+                )
+                column += 1
+                self.measure_table.setItem(
+                    row,
+                    column,
+                    QTableWidgetItem(
+                        "yes" if measurement.valid[index] else "no"
+                    ),
+                )
+                row += 1
         self.measure_table.resizeColumnsToContents()
 
     @staticmethod
@@ -3511,7 +3627,25 @@ class MainWindow(QMainWindow):
             valid=np.asarray(measurement.valid, dtype=bool),
             label=label,
             target_mask=np.asarray(measurement.target_mask, dtype=bool),
+            plane=measurement.plane,
         )
+
+    def _set_live_multiplane_measurement(
+        self,
+        result: MultiPlaneDispersionMeasurement,
+        *,
+        label: str,
+    ) -> None:
+        self.live_plane_measurements = {
+            measurement.plane: self._plot_dataset_from_measurement(
+                measurement,
+                label,
+            )
+            for measurement in result.measurements
+        }
+        self.reference_plot_measurement = None
+        self.display_plane_combo.show()
+        self._display_plane_changed()
 
     def _set_live_comparison_measurement(
         self,
@@ -3520,6 +3654,7 @@ class MainWindow(QMainWindow):
         label: str,
         reference: DispersionMeasurement | None = None,
     ) -> None:
+        self.live_plane_measurements = {}
         self.live_plot_measurement = self._plot_dataset_from_measurement(
             measurement,
             label,
@@ -3533,6 +3668,20 @@ class MainWindow(QMainWindow):
 
     def _active_plot_measurement(self) -> DispersionPlotDataset | None:
         return self.live_plot_measurement
+
+    def _display_plane_changed(self, _index: int | None = None) -> None:
+        plane = str(
+            self.display_plane_combo.currentData()
+            or self.config.measurement.planes[0]
+        )
+        if plane not in self.config.measurement.planes:
+            plane = self.config.measurement.planes[0]
+        self.dispersion_curve.set_plane(plane)
+        if self.live_plane_measurements:
+            self.live_plot_measurement = self.live_plane_measurements.get(
+                plane
+            )
+        self._refresh_plot_measurement()
 
     def _refresh_plot_measurement(self) -> None:
         measurement = self.live_plot_measurement
@@ -3651,7 +3800,7 @@ class MainWindow(QMainWindow):
             return
         self.model_empty_label.setVisible(False)
         response = self.dispersion_curve.result
-        plane = self.config.measurement.plane
+        plane = measurement.plane
         eta_label = f"η{plane}"
 
         def curve_values(curve: ModelOpticsCurve) -> np.ndarray:
@@ -3987,6 +4136,7 @@ class MainWindow(QMainWindow):
         if (
             self.config.section.model_only
             or self.config.section.diagnostic_only
+            or self.config.measurement.plane == "xy"
         ):
             return
         if self.latest_measurement is None:
@@ -4353,6 +4503,11 @@ class MainWindow(QMainWindow):
         )
 
     def _design_k1_block_reason(self) -> str | None:
+        if self.config.measurement.plane == "xy":
+            return (
+                "Two-plane sections are measurement-only until joint response "
+                "analysis is enabled."
+            )
         if self.config.section.diagnostic_only:
             return (
                 "Diagnostic sections measure and display dispersion but do not "
@@ -4544,6 +4699,14 @@ class MainWindow(QMainWindow):
                 "Use Measure Dispersion in the left panel. This section has no "
                 "correction BPMs or quadrupole knobs.",
             )
+        if self.config.measurement.plane == "xy":
+            return (
+                None,
+                "Measurement Only",
+                "Two-plane measurement",
+                "Use Measure Dispersion in the left panel. Joint Q-response "
+                "analysis and correction are not enabled yet.",
+            )
 
         block_reason = self._operation_block_reason()
         if block_reason is not None:
@@ -4654,10 +4817,17 @@ class MainWindow(QMainWindow):
                     f"Measurement-only diagnostics · "
                     f"{len(self.config.monitor_bpms)} monitor BPMs"
                 )
+            measurements = tuple(
+                self.latest_plane_measurements.values()
+            ) or (measurement,)
+            rms = " · ".join(
+                f"η{item.plane} RMS {item.measured_rms_mm:.4g} mm"
+                for item in measurements
+            )
             valid = int(np.count_nonzero(measurement.valid))
             return (
-                f"Measured RMS {measurement.measured_rms_mm:.4g} mm · "
-                f"{valid}/{len(measurement.names)} monitor BPMs valid"
+                f"{rms} · "
+                f"{valid}/{len(measurement.bpm_names)} monitor BPMs valid"
             )
         recommendation = self.correction_recommendation
         if recommendation is not None:
@@ -4710,23 +4880,26 @@ class MainWindow(QMainWindow):
 
     def _update_workflow_auxiliary_actions(self, running: bool) -> None:
         diagnostic_only = self.config.section.diagnostic_only
+        measurement_only = (
+            diagnostic_only or self.config.measurement.plane == "xy"
+        )
         manual_mode = self.correction_mode == "manual"
         has_response = manual_mode and self.latest_response is not None
         has_history = bool(self.correction_session_runs)
         self.back_to_correction_methods_button.setVisible(
             manual_mode
             and not self.config.section.model_only
-            and not diagnostic_only
+            and not measurement_only
         )
         self.back_to_correction_methods_button.setEnabled(
             not running and manual_mode
         )
         self.response_details_button.setVisible(
-            has_response and not diagnostic_only
+            has_response and not measurement_only
         )
         self.response_details_button.setEnabled(not running and has_response)
         self.history_button.setEnabled(not running and has_history)
-        self.history_button.setVisible(not diagnostic_only)
+        self.history_button.setVisible(not measurement_only)
         self.history_button.setToolTip(
             "Review manual and automatic correction runs by generation."
             if has_history
@@ -4799,14 +4972,17 @@ class MainWindow(QMainWindow):
         self.next_action_button.setEnabled(action is not None)
         model_only = self.config.section.model_only
         diagnostic_only = self.config.section.diagnostic_only
+        measurement_only = (
+            diagnostic_only or self.config.measurement.plane == "xy"
+        )
         manual_mode = self.correction_mode == "manual"
         automatic_mode = self.correction_mode == "automatic"
         self.next_action_button.setVisible(
-            not diagnostic_only and (model_only or not automatic_mode)
+            not measurement_only and (model_only or not automatic_mode)
         )
         self.run_button.setVisible(
             not model_only
-            and not diagnostic_only
+            and not measurement_only
             and not manual_mode
         )
         self.next_action_button.setToolTip(hint)
@@ -4849,14 +5025,24 @@ class MainWindow(QMainWindow):
                     if self.latest_measurement_time is not None
                     else "current session"
                 )
-                displayed_rms = (
-                    self.latest_measurement.measured_rms_mm
-                    if diagnostic_only
-                    else self.latest_measurement.rms_mm
-                )
+                if (
+                    diagnostic_only
+                    and len(self.latest_plane_measurements) > 1
+                ):
+                    rms_text = " · ".join(
+                        f"η{item.plane} "
+                        f"{item.measured_rms_mm:.4g} mm"
+                        for item in self.latest_plane_measurements.values()
+                    )
+                else:
+                    displayed_rms = (
+                        self.latest_measurement.measured_rms_mm
+                        if diagnostic_only
+                        else self.latest_measurement.rms_mm
+                    )
+                    rms_text = f"RMS {displayed_rms:.4g} mm"
                 self.measurement_status_label.setText(
-                    f"RMS {displayed_rms:.4g} mm · "
-                    f"{measured_at}"
+                    f"{rms_text} · {measured_at}"
                 )
         if running:
             tooltip = "Another operation is running."
@@ -4961,6 +5147,7 @@ class MainWindow(QMainWindow):
         correction_enabled = not (
             self.config.section.model_only
             or self.config.section.diagnostic_only
+            or self.config.measurement.plane == "xy"
         )
         self.measure_button.setEnabled(not running and operation_allowed)
         self.response_button.setEnabled(

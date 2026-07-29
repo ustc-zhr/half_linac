@@ -1641,9 +1641,10 @@ def _validate_dispersion_correction_workflow(
         "workflows.dispersion_correction.measurement",
     )
     default_plane = str(workflow_measurement.get("plane", "x")).strip().lower()
-    if default_plane not in {"x", "y"}:
+    if default_plane not in {"x", "y", "xy"}:
         raise MachineProfileError(
-            "workflows.dispersion_correction.measurement.plane must be 'x' or 'y'."
+            "workflows.dispersion_correction.measurement.plane must be "
+            "'x', 'y', or 'xy'."
         )
 
     sections = workflow.get("sections")
@@ -1680,9 +1681,9 @@ def _validate_dispersion_correction_workflow(
                 section_plane = str(
                     measurement_mapping.get("plane", default_plane)
                 ).strip().lower()
-            if section_plane not in {"x", "y"}:
+            if section_plane not in {"x", "y", "xy"}:
                 raise MachineProfileError(
-                    f"{location}.measurement.plane must be 'x' or 'y'."
+                    f"{location}.measurement.plane must be 'x', 'y', or 'xy'."
                 )
             _validate_dispersion_section(
                 profile,
@@ -1823,6 +1824,11 @@ def _validate_dispersion_section(
     plane: str,
 ) -> None:
     diagnostic_only = bool(section.get("diagnostic_only", False))
+    if plane == "xy" and not diagnostic_only:
+        raise MachineProfileError(
+            f"{location}.measurement.plane='xy' currently requires "
+            "diagnostic_only=true."
+        )
     target_bpms = _expect_optional_string_list(
         section.get("target_bpms", []),
         f"{location}.target_bpms",
@@ -1847,12 +1853,16 @@ def _validate_dispersion_section(
             f"{location}.monitor_bpms must not repeat correction target BPMs: "
             + ", ".join(overlap)
         )
+    required_planes = ("x", "y") if plane == "xy" else (plane,)
     for bpm_id in (*monitor_bpms, *target_bpms):
         element = profile.get_element(bpm_id)
-        if element.kind != "bpm" or plane not in element.channels:
+        if element.kind != "bpm" or any(
+            required_plane not in element.channels
+            for required_plane in required_planes
+        ):
             raise MachineProfileError(
                 f"Dispersion BPM {bpm_id!r} must reference a bpm with logical "
-                f"channel {plane!r}."
+                "channel(s) " + ", ".join(required_planes) + "."
             )
 
     target = section.get("target_dispersion_mm", [0.0] * len(target_bpms))

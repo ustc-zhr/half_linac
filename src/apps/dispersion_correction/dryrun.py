@@ -18,7 +18,7 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
     energy_map = pv_map.get("energy_knob", {}) if isinstance(pv_map, dict) else {}
     bpm_map = pv_map.get("bpms", {}) if isinstance(pv_map, dict) else {}
     quadrupole_map = pv_map.get("quadrupoles", {}) if isinstance(pv_map, dict) else {}
-    bpm_plane = config.measurement.plane
+    bpm_planes = config.measurement.planes
 
     warnings = []
     if config.backend.type == "epics" and config.backend.mode != "read_only":
@@ -77,9 +77,15 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
                 "name": name,
                 "role": "monitor",
                 "target_dispersion_mm": None,
-                "read_pv": bpm_map.get(name, {}).get(bpm_plane)
+                "read_pv": bpm_map.get(name, {}).get(bpm_planes[0])
                 if isinstance(bpm_map.get(name), dict)
                 else None,
+                "read_pvs": {
+                    plane: bpm_map.get(name, {}).get(plane)
+                    for plane in bpm_planes
+                }
+                if isinstance(bpm_map.get(name), dict)
+                else {},
             }
             for name in config.monitor_bpms
         ]
@@ -88,9 +94,15 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
                 "name": name,
                 "role": "correction",
                 "target_dispersion_mm": config.section.target_dispersion_mm[index],
-                "read_pv": bpm_map.get(name, {}).get(bpm_plane)
+                "read_pv": bpm_map.get(name, {}).get(bpm_planes[0])
                 if isinstance(bpm_map.get(name), dict)
                 else None,
+                "read_pvs": {
+                    plane: bpm_map.get(name, {}).get(plane)
+                    for plane in bpm_planes
+                }
+                if isinstance(bpm_map.get(name), dict)
+                else {},
             }
             for index, name in enumerate(config.target_bpms)
         ],
@@ -148,6 +160,7 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
             "success_min_improvement": config.solver.success_min_improvement,
         },
         "measurement": {
+            "planes": list(config.measurement.planes),
             "samples_per_step": config.measurement.samples_per_step,
             "sample_interval_s": config.measurement.sample_interval_s,
             "final_samples": config.measurement.final_samples,

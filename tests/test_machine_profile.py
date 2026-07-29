@@ -1114,6 +1114,9 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
         self.assertTrue(str(asset_dir).endswith("src/virtual_machine/half_elegant/elegant"))
         self.assertTrue(str(working_dir).endswith("runtime/model_backend/half/simulation/emit"))
+        lattice_text = source_lattice.read_text(encoding="utf-8")
+        self.assertIn("BPME02: MARK", lattice_text)
+        self.assertEqual(lattice_text.count("BPME02"), 1)
 
     def test_half_runtime_paths_are_resolved_from_machine_json(self):
         runtime = resolve_machine_runtime("half")

@@ -932,9 +932,52 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     assert half_window.workflow_state_label.text() == "Diagnostic section"
     assert not half_window.apply_design_k1_button.isEnabled()
-    assert "do not write quadrupoles" in (
+    assert "measurement-only" in (
         half_window.apply_design_k1_button.toolTip()
     )
+    diagnostic_config = dataclass_replace(
+        half_window.config,
+        backend=dataclass_replace(
+            half_window.config.backend,
+            type="offline",
+            mode="write_enabled",
+            options={},
+        ),
+        energy_knob=dataclass_replace(
+            half_window.config.energy_knob,
+            actuator="MODEL_DELTA",
+            calibration=None,
+        ),
+        measurement=dataclass_replace(
+            half_window.config.measurement,
+            samples_per_step=1,
+            final_samples=1,
+            sample_interval_s=0.0,
+            settle_time_s=0.0,
+        ),
+    )
+    two_plane_measurement = AchromatWorkflow(
+        diagnostic_config
+    ).measure_dispersion()
+    saved_context = half_window.app_context
+    half_window.app_context = None
+    half_window._task_completed("measure", two_plane_measurement)
+    half_window.app_context = saved_context
+    half_window._set_running(False, "")
+    app.processEvents()
+    assert half_window.display_plane_combo.isVisibleTo(half_window)
+    assert half_window.display_plane_combo.currentData() == "x"
+    assert half_window.measure_table.rowCount() == 16
+    assert half_window.measure_table.horizontalHeaderItem(1).text() == (
+        "Plane"
+    )
+    assert half_window.dispersion_curve.plane == "x"
+    half_window.display_plane_combo.setCurrentIndex(1)
+    app.processEvents()
+    assert half_window.dispersion_curve.plane == "y"
+    assert half_window.live_plot_measurement.plane == "y"
+    assert "ηx" in half_window.measurement_status_label.text()
+    assert "ηy" in half_window.measurement_status_label.text()
     half_window.section_combo.setCurrentIndex(
         half_window.section_combo.findData("bl01")
     )

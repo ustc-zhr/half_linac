@@ -70,8 +70,8 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
         final_samples=int(measurement_raw.get("final_samples", 10)),
         settle_time_s=float(measurement_raw.get("settle_time_s", 0.0)),
     )
-    if measurement.plane not in {"x", "y"}:
-        raise ValueError("measurement.plane must be 'x' or 'y'")
+    if measurement.plane not in {"x", "y", "xy"}:
+        raise ValueError("measurement.plane must be 'x', 'y', or 'xy'")
     if measurement.samples_per_step <= 0 or measurement.final_samples <= 0:
         raise ValueError("Measurement sample counts must be positive")
     if measurement.sample_interval_s < 0:
@@ -97,9 +97,9 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
     if not model_observables and section_raw.get("model_entrance"):
         model_observables = tuple(
             ModelObservableConfig(
-                name=f"{bpm} D{measurement.plane}",
+                name=f"{bpm} D{measurement.planes[0]}",
                 element=bpm,
-                component=f"d{measurement.plane}",
+                component=f"d{measurement.planes[0]}",
                 target=target_dispersion_mm[index],
             )
             for index, bpm in enumerate(target_bpms)
@@ -188,6 +188,13 @@ def validate_config(config: RunConfig) -> None:
         raise ValueError("Diagnostic-only sections must not define target_bpms")
     if config.section.diagnostic_only and config.knobs:
         raise ValueError("Diagnostic-only sections must not define correction knobs")
+    if (
+        config.measurement.plane == "xy"
+        and not config.section.diagnostic_only
+    ):
+        raise ValueError(
+            "measurement.plane='xy' currently requires a diagnostic-only section"
+        )
     if len(config.section.target_dispersion_mm) != len(config.target_bpms):
         raise ValueError("section.target_dispersion_mm length must match target_bpms")
     if not all(math.isfinite(value) for value in config.section.target_dispersion_mm):
