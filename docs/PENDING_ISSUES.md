@@ -19,6 +19,37 @@
   - If needed, distinguish clearly between:
     - machine-native presets
     - migrated legacy presets kept only for compatibility
+  - Current offline recommendation for ordinary BBA-1 presets:
+    - Keep `QT04 + XC21 / BPM21->BPM22` as the first conservative X-plane preset.
+    - Add the paired Y-plane preset `QT04 + YC21 / BPM21->BPM22` if vertical BBA-1 is needed.
+    - Transfer-line candidates that do not cross accelerating structures or bends:
+      - `QT04 + XC21/YC21 / BPM21->BPM22`
+      - `QT12 + XC26/YC26 / BPM26->BPM27`
+      - `QT13 + XC26/YC26 / BPM26->BPM27`
+      - `QT14 + XC26/YC26 / BPM26->BPM27`
+      - `QT15 + XC27/YC27 / BPM27->BPM28`
+      - `QT16 + XC27/YC27 / BPM27->BPM28`
+      - `QT18 + XC28/YC28 / BPM28->BPM29`
+      - `QT19 + XC29/YC29 / BPM29->BPM30`
+    - Treat candidates crossing `DACC`, `BC*`, `BH*`, ESA branches, or spectrometer/transport bends as special studies rather than ordinary BBA-1 presets.
+  - Before adding these to `configs/machines/half/apps/bba.json`, confirm scan bounds and whether each preset should write model `K1` or real magnet current.
+
+### 1a. Dispersion-Aware BBA Workflow
+
+- Status: open
+- Priority: medium
+- Background:
+  - Ordinary BBA-1 assumes BPM readings are dominated by betatron orbit.
+  - In dispersive sections, BPM readings include `D * delta`, so random and correlated energy jitter can bias the fitted offset.
+- Problem:
+  - Multi-shot averaging can reduce random jitter, but it cannot remove systematic dispersion bias, slow energy drift, or scan-order-correlated energy changes.
+  - Presets that use dispersive BPMs, such as dogleg/achromat BPMs, should not be mixed into the ordinary BBA-1 preset list.
+- Follow-up:
+  - Add a separate experimental workflow, for example `bba1_dispersion_corrected`, rather than extending ordinary BBA-1 presets.
+  - Record an energy proxy or direct `delta` measurement with every scan point.
+  - Support energy gating and/or `x_corrected = x_measured - D * delta` before fitting.
+  - Prefer interleaved scan ordering to reduce slow drift.
+  - Store both uncorrected and dispersion-corrected fit results in metadata for commissioning review.
 
 ### 2. Energy Spectrum Auto Find Scan Trace
 

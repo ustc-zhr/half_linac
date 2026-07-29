@@ -1,56 +1,16 @@
 {
   "presets": [
     {
-      "id": "vm_irfel_bba1_qm01_hc01",
+      "id": "irfel_bba1_qm04_hc01",
       "family": "bba1",
       "plane": "X",
-      "quad": "QM01",
-      "corr": "HC01",
-      "bpm1": "BPM01",
-      "bpm2": "BPM02",
-      "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -1.0,
-        "quad_end": 1.0,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 1.0,
-        "sample_interval": 0.5
-      }
-    },
-    {
-      "id": "irfel_bba1_qm01_MSVC",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QM01",
-      "corr": "MSVC",
-      "bpm1": "BPM02",
-      "bpm2": "BPM03",
-      "scan": {
-        "corr_from": -2,
-        "corr_end": 2,
-        "corr_steps": 5,
-        "quad_from": -1.0,
-        "quad_end": 1.0,
-        "quad_steps": 5,
-        "samples": 3,
-        "settle_time": 1.0,
-        "sample_interval": 0.2
-      }
-    },
-    {
-      "id": "irfel_bba1_qm03_hc01",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QM03",
+      "quad": "QM04",
       "corr": "HC01",
       "bpm1": "BPM03",
       "bpm2": "BPM07",
       "scan": {
-        "corr_from": -2,
-        "corr_end": 2,
+        "corr_from": -0.001,
+        "corr_end": 0.001,
         "corr_steps": 5,
         "quad_from": -80.0,
         "quad_end": -60.0,
@@ -61,21 +21,21 @@
       }
     },
     {
-      "id": "irfel_bba1_qm11_hc02",
+      "id": "irfel_bba1_qm04_vc01",
       "family": "bba1",
-      "plane": "X",
-      "quad": "QM11",
-      "corr": "HC02",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08",
+      "plane": "Y",
+      "quad": "QM04",
+      "corr": "VC01",
+      "bpm1": "BPM03",
+      "bpm2": "BPM07",
       "scan": {
-        "corr_from": -2,
-        "corr_end": 2,
+        "corr_from": -0.001,
+        "corr_end": 0.001,
         "corr_steps": 5,
         "quad_from": -80.0,
         "quad_end": -60.0,
         "quad_steps": 5,
-        "samples": 5,
+        "samples": 3,
         "settle_time": 1,
         "sample_interval": 0.2
       }
@@ -112,7 +72,7 @@
   ],
   "bba1": {
     "control_backends": ["vm", "real"],
-    "default_preset": "vm_irfel_bba1_qm01_hc01"
+    "default_preset": "irfel_bba1_qm04_hc01"
   },
   "bba2": {
     "control_backends": ["vm", "real"],
