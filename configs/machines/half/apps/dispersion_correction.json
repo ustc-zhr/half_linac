@@ -264,7 +264,7 @@
       "id": "bh04_sep_joint_correction",
       "display_name": "BH04–SEP Joint Correction",
       "model_entrance": "BPM36",
-      "model_exit": "BPM43",
+      "model_exit": "WSEP1",
       "target_bpms": [],
       "monitor_bpms": [
         "BPM36",

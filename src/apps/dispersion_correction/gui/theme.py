@@ -78,6 +78,7 @@ def build_stylesheet(name: str) -> str:
         font-size: 12px;
     }}
     QDialog#bpmSelectionDialog, QDialog#knobSelectionDialog,
+    QDialog#correctionBpmDialog,
     QDialog#energyCalibrationDialog, QDialog#modelDetailsDialog,
     QDialog#workflowDetailsDialog, QDialog#automaticCorrectionDialog {{
         background: {t['panel_bg']};
@@ -116,9 +117,47 @@ def build_stylesheet(name: str) -> str:
         color: {t['text_primary']};
     }}
     QDialog#bpmSelectionDialog QLabel#bpmSelectionPrompt,
+    QDialog#correctionBpmDialog QLabel#correctionBpmPrompt,
     QDialog#knobSelectionDialog QLabel#knobSelectionPrompt {{
         color: {t['text_muted']};
         font-weight: 600;
+    }}
+    QDialog#correctionBpmDialog QCheckBox[role="bpmUseToggle"]::indicator {{
+        width: 17px;
+        height: 17px;
+        background: {t['input_bg']};
+        border: 1px solid {t['button_border']};
+        border-radius: 4px;
+    }}
+    QDialog#correctionBpmDialog QCheckBox[role="bpmUseToggle"]::indicator:hover {{
+        border-color: {t['focus']};
+    }}
+    QDialog#correctionBpmDialog QCheckBox[role="bpmUseToggle"]::indicator:checked {{
+        background: {t['focus']};
+        border-color: {t['focus']};
+    }}
+    QDialog#correctionBpmDialog QScrollBar:vertical {{
+        background: {t['input_bg']};
+        width: 13px;
+        margin: 1px;
+        border: none;
+        border-radius: 6px;
+    }}
+    QDialog#correctionBpmDialog QScrollBar::handle:vertical {{
+        background: {t['button_border']};
+        min-height: 28px;
+        border-radius: 5px;
+    }}
+    QDialog#correctionBpmDialog QScrollBar::handle:vertical:hover {{
+        background: {t['focus']};
+    }}
+    QDialog#correctionBpmDialog QScrollBar::add-line:vertical,
+    QDialog#correctionBpmDialog QScrollBar::sub-line:vertical {{
+        height: 0px;
+    }}
+    QDialog#correctionBpmDialog QScrollBar::add-page:vertical,
+    QDialog#correctionBpmDialog QScrollBar::sub-page:vertical {{
+        background: transparent;
     }}
     QListWidget#bpmSelectionList {{
         background: {t['plot_bg']};

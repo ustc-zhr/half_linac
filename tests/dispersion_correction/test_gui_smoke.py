@@ -25,7 +25,6 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         QFileDialog,
         QFrame,
         QLabel,
-        QListWidgetItem,
         QMessageBox,
         QPushButton,
     )
@@ -171,6 +170,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert "Verification Samples" in config_labels
     assert "Gain" in config_labels
     assert "Max Step (%)" in config_labels
+    assert "Quad Knobs" in config_labels
     assert "Max Generations" not in config_labels
     assert "Q Response Update" not in config_labels
     assert window.max_iter_spin.isHidden()
@@ -783,19 +783,49 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     assert profile_window.last_live_preflight is checked_preflight
     assert profile_window.bpm_select_button.isVisibleTo(profile_window)
+    assert profile_window.bpm_select_button.text() == "Set"
+    assert profile_window.knob_select_button.text() == "Set"
     assert profile_window.bpm_select_button.height() == profile_window.bpm_edit.height() == 34
     assert profile_window.knob_select_button.height() == profile_window.knob_edit.height() == 34
+    assert (
+        profile_window.bpm_select_button.size()
+        == profile_window.knob_select_button.size()
+    )
     assert profile_window.bpm_select_button.geometry().top() == profile_window.bpm_edit.geometry().top()
     assert profile_window.bpm_select_button.geometry().bottom() == profile_window.bpm_edit.geometry().bottom()
-    assert "QListWidget#bpmSelectionList" in profile_window.styleSheet()
-    bpm_item = QListWidgetItem()
-    profile_window._set_bpm_choice_item(bpm_item, "BPM01", True)
-    assert bpm_item.text().startswith("✓")
-    profile_window._toggle_bpm_choice_item(bpm_item)
-    assert not bpm_item.text().startswith("✓")
-    profile_window.bpm_edit.setText("BPM08, BPM09, BPM10")
+    bpm_dialog, bpm_table, _bpm_buttons = (
+        profile_window._build_correction_bpm_dialog()
+    )
+    assert bpm_dialog.objectName() == "correctionBpmDialog"
+    assert bpm_dialog.windowTitle() == "Set Correction BPMs"
+    assert "QDialog#correctionBpmDialog" in bpm_dialog.styleSheet()
+    assert bpm_table.columnCount() == 4
+    bpm_rows = {
+        bpm_table.item(row, 1).text(): row
+        for row in range(bpm_table.rowCount())
+    }
+    bpm_table.cellWidget(bpm_rows["BPM08"], 0).setChecked(True)
+    bpm_table.cellWidget(bpm_rows["BPM09"], 3).setValue(1.25)
+    bpm_table.cellWidget(bpm_rows["BPM10"], 3).setValue(-0.5)
+    profile_window._apply_correction_bpm_table(bpm_table)
+    assert profile_window.config.target_bpms == (
+        "BPM08",
+        "BPM09",
+        "BPM10",
+    )
+    assert profile_window.config.section.target_dispersion_mm == pytest.approx(
+        (0.0, 1.25, -0.5)
+    )
+    assert tuple(
+        observable.target
+        for observable in profile_window.config.section.model_observables
+    ) == pytest.approx((1.25, -0.5))
+    assert "BPM09=1.25" in profile_window.bpm_edit.text()
+    bpm_dialog.close()
     knob_dialog, knob_table, _buttons = profile_window._build_knob_selection_dialog()
-    assert knob_table.horizontalHeaderItem(3).text() == "Scan ± (K1 [1/m²])"
+    assert knob_dialog.windowTitle() == "Set Quad Knobs"
+    assert knob_table.horizontalHeaderItem(3).text() == "Measure Step ± (K1 [1/m²])"
+    assert knob_table.horizontalHeaderItem(4).text() == "Total Δ Limit ± (K1 [1/m²])"
     knob_table.cellWidget(0, 1).setCurrentText("QM11")
     knob_table.cellWidget(0, 2).setCurrentText("QM12")
     knob_table.cellWidget(1, 1).setCurrentText("QM17")
@@ -806,6 +836,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     profile_window._update_knob_summary()
     selected_config = profile_window._config_from_widgets()
     assert selected_config.target_bpms == ("BPM08", "BPM09", "BPM10")
+    assert selected_config.section.target_dispersion_mm == pytest.approx(
+        (0.0, 1.25, -0.5)
+    )
     assert selected_config.knobs[0].name == "QM11_QM12_sym"
     assert selected_config.knobs[0].scan_step == pytest.approx(0.0004)
     assert selected_config.knobs[0].limit == pytest.approx(0.01)
@@ -820,6 +853,74 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         "QM18",
     }
     knob_dialog.close()
+
+    joint_section_index = profile_window.section_combo.findData(
+        "MIR-joint-validation"
+    )
+    profile_window.section_combo.setCurrentIndex(joint_section_index)
+    app.processEvents()
+    assert profile_window.config.measurement.plane == "xy"
+    assert profile_window.bpm_select_button.isVisibleTo(profile_window)
+    assert profile_window.knob_select_button.isVisibleTo(profile_window)
+    joint_knob_dialog, joint_knob_table, _joint_knob_buttons = (
+        profile_window._build_knob_selection_dialog()
+    )
+    assert joint_knob_table.rowCount() == 2
+    joint_knob_table.cellWidget(0, 3).setValue(0.5)
+    joint_knob_table.cellWidget(0, 4).setValue(4.0)
+    profile_window.selected_knobs = profile_window._knobs_from_table(
+        joint_knob_table
+    )
+    profile_window._selection_changed()
+    joint_knob_config = profile_window._config_from_widgets()
+    assert joint_knob_config.knobs == ()
+    assert (
+        joint_knob_config.section.joint_response_analysis.knobs[0].scan_step
+        == pytest.approx(0.5)
+    )
+    assert (
+        joint_knob_config.section.joint_response_analysis.knobs[0].limit
+        == pytest.approx(4.0)
+    )
+    joint_knob_dialog.close()
+    joint_bpm_dialog, joint_bpm_table, _joint_bpm_buttons = (
+        profile_window._build_correction_bpm_dialog()
+    )
+    assert joint_bpm_table.columnCount() == 6
+    assert joint_bpm_table.rowCount() == 4
+    joint_rows = {
+        joint_bpm_table.item(row, 1).text(): row
+        for row in range(joint_bpm_table.rowCount())
+    }
+    joint_bpm_table.cellWidget(joint_rows["BPM08"], 0).setChecked(True)
+    joint_bpm_table.cellWidget(joint_rows["BPM10"], 0).setChecked(False)
+    joint_bpm_table.cellWidget(joint_rows["BPM08"], 2).setValue(2.0)
+    joint_bpm_table.cellWidget(joint_rows["BPM08"], 3).setValue(0.5)
+    joint_bpm_table.cellWidget(joint_rows["BPM08"], 4).setValue(-1.0)
+    profile_window._apply_correction_bpm_table(joint_bpm_table)
+    joint_config = profile_window._config_from_widgets()
+    assert joint_config.target_bpms == ()
+    assert {
+        target.bpm
+        for target in joint_config.section.joint_response_analysis.targets
+    } == {"BPM08", "BPM09"}
+    assert joint_config.section.joint_response_analysis.targets[0].target_mm == (
+        pytest.approx(2.0)
+    )
+    assert (
+        joint_config.section.joint_response_analysis.targets[0].tolerance_mm
+        == pytest.approx(0.5)
+    )
+    assert joint_config.section.joint_response_analysis.targets[1].target_mm == (
+        pytest.approx(-1.0)
+    )
+    assert "BPM08 · ηx/ηy" in profile_window.bpm_edit.text()
+    joint_bpm_dialog.close()
+
+    default_section_index = profile_window.section_combo.findData("MIR-dogleg")
+    profile_window.section_combo.setCurrentIndex(default_section_index)
+    app.processEvents()
+    assert profile_window.config.section.target_dispersion_mm == (0.0, 0.0)
     profile_window.close()
 
     irfel_vm_context = load_app_context(
@@ -860,6 +961,11 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     half_window.show()
     app.processEvents()
     assert half_window.section_combo.currentData() == "bl01"
+    assert half_window.dispersion_curve.correction_bpms == ("BPM06", "BPM07")
+    assert half_window.iteration_history_curve.correction_bpms == (
+        "BPM06",
+        "BPM07",
+    )
     assert half_window.model_source_combo.itemText(0) == "Design lattice"
     assert half_window.model_source_combo.itemText(1) == "Current K1 model"
     assert half_window.model_source_combo.itemData(1) == "live"
@@ -868,8 +974,9 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.model_response_button.text() == "Analyze Model"
     assert not half_window.model_response_button.isHidden()
     assert half_window.model_response_button.isEnabled()
-    assert "scan ±" in half_window.knob_edit.toolTip()
-    assert "limit ±" in half_window.knob_edit.toolTip()
+    assert "measure step ±" in half_window.knob_edit.toolTip()
+    assert "total Δ limit ±" in half_window.knob_edit.toolTip()
+    assert "correction step limit ±" in half_window.knob_edit.toolTip()
     assert half_window.dispersion_curve.result is None
     assert half_window.dispersion_curve.measurement is None
     assert not hasattr(half_window, "import_measurement_button")
@@ -910,7 +1017,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.measure_title.text() == (
         "Measured vertical effective dispersion"
     )
-    assert half_window.bpm_edit.text() == "BPM42, BPM43"
+    assert half_window.bpm_edit.text() == "BPM42=0; BPM43=0"
     diagnostic_index = half_window.section_combo.findData(
         "bh04_sep_diagnostics"
     )

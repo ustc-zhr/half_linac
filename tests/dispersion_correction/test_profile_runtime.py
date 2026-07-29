@@ -527,6 +527,7 @@ def test_half_bh04_sep_joint_correction_is_independent() -> None:
 
     assert not config.section.diagnostic_only
     assert config.measurement.plane == "xy"
+    assert config.section.model_exit == "WSEP1"
     assert config.target_bpms == ()
     assert config.knobs == ()
     analysis = config.section.joint_response_analysis

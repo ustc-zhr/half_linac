@@ -1693,12 +1693,10 @@ def _validate_dispersion_correction_workflow(
             )
             diagnostic_only = bool(section.get("diagnostic_only", False))
             for endpoint_key in ("model_entrance", "model_exit"):
-                endpoint = _expect_non_empty_string(
+                _expect_non_empty_string(
                     section.get(endpoint_key),
                     f"{location}.{endpoint_key}",
                 )
-                if not diagnostic_only:
-                    profile.get_element(endpoint)
             observables = _expect_list(
                 section.get("model_observables", []),
                 f"{location}.model_observables",

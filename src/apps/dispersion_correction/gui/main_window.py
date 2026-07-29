@@ -24,8 +24,6 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
@@ -64,6 +62,7 @@ from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
     DispersionMeasurement,
     JointCorrectionResult,
+    JointDispersionTargetConfig,
     JointResponseAnalysisResult,
     KnobConfig,
     ModelOpticsCurve,
@@ -397,6 +396,7 @@ class DispersionCurveWidget(QWidget):
         self.measurement: DispersionPlotDataset | None = None
         self.reference_measurement: DispersionPlotDataset | None = None
         self.measurement_overlays: tuple[DispersionPlotDataset, ...] = ()
+        self.correction_bpms: tuple[str, ...] = ()
         self.show_design_model = False
         self.show_snapshot_model = False
         self.theme_name = "night_shift"
@@ -414,6 +414,10 @@ class DispersionCurveWidget(QWidget):
         if normalized not in {"x", "y"}:
             raise ValueError("plane must be 'x' or 'y'")
         self.plane = normalized
+        self.update()
+
+    def set_correction_bpms(self, names: tuple[str, ...]) -> None:
+        self.correction_bpms = tuple(dict.fromkeys(str(name) for name in names))
         self.update()
 
     def _model_dispersion(self, curve: ModelOpticsCurve) -> np.ndarray:
@@ -824,7 +828,7 @@ class DispersionCurveWidget(QWidget):
             QPointF(rect.right(), center_y),
         )
         self._draw_lattice_legend(painter, rect, tokens)
-        constraint_elements = set(self.result.observable_elements)
+        correction_bpms = set(self.correction_bpms)
         for index in self._visible_element_indices():
             name = curve.element_names[index]
             element_type = curve.element_types[index].upper()
@@ -877,7 +881,7 @@ class DispersionCurveWidget(QWidget):
                 painter.setBrush(color)
                 painter.drawRect(element_rect)
 
-            if name in constraint_elements:
+            if name in correction_bpms:
                 marker_color = QColor(tokens["focus"])
                 marker_color.setAlpha(150)
                 painter.setPen(QPen(marker_color, 2, Qt.DotLine))
@@ -947,6 +951,20 @@ class DispersionCurveWidget(QWidget):
                 label,
             )
             x += 12.0 + label_width + 12.0
+        visible_names = {curve.element_names[index] for index in indices}
+        if visible_names.intersection(self.correction_bpms):
+            marker_color = QColor(tokens["focus"])
+            marker_color.setAlpha(150)
+            painter.setPen(QPen(marker_color, 2, Qt.DotLine))
+            painter.drawLine(
+                QPointF(x + 4.0, y + 1.0),
+                QPointF(x + 4.0, y + 12.0),
+            )
+            painter.setPen(QColor(tokens["text_muted"]))
+            painter.drawText(
+                QRectF(x + 10.0, y, 100.0, 14.0),
+                "Correction BPM",
+            )
 
     def _visible_element_indices(self) -> list[int]:
         if self.result is None:
@@ -1077,8 +1095,10 @@ class MainWindow(QMainWindow):
         self.config = config or default_offline_config()
         self.configured_energy_calibration = dict(self.config.energy_knob.calibration)
         self.session_energy_calibration_source: str | None = None
-        self.selected_knobs = tuple(self.config.knobs)
-        self.knob_hard_limits = tuple(knob.limit for knob in self.config.knobs)
+        self.selected_knobs = tuple(self.config.runtime_knobs)
+        self.knob_hard_limits = tuple(
+            knob.limit for knob in self.config.runtime_knobs
+        )
         self.available_bpms = (
             selectable_profile_bpms(
                 app_context,
@@ -1090,7 +1110,13 @@ class MainWindow(QMainWindow):
         self.available_quadrupoles = (
             selectable_profile_quadrupoles(app_context)
             if app_context is not None
-            else tuple(dict.fromkeys(device for knob in self.config.knobs for device in knob.devices))
+            else tuple(
+                dict.fromkeys(
+                    device
+                    for knob in self.config.runtime_knobs
+                    for device in knob.devices
+                )
+            )
         )
         self._close_when_finished = False
 
@@ -1299,19 +1325,20 @@ class MainWindow(QMainWindow):
 
         self.bpm_edit = QLineEdit()
         self.bpm_edit.setFixedHeight(34)
-        self.bpm_edit.setReadOnly(self.app_context is not None)
-        self.bpm_edit.editingFinished.connect(self._selection_changed)
+        self.bpm_edit.setReadOnly(True)
         bpm_selector = QWidget()
         bpm_selector.setFixedHeight(34)
         bpm_selector_layout = QHBoxLayout(bpm_selector)
         bpm_selector_layout.setContentsMargins(0, 0, 0, 0)
         bpm_selector_layout.setSpacing(6)
         bpm_selector_layout.addWidget(self.bpm_edit, 1)
-        self.bpm_select_button = QPushButton("Select")
+        self.bpm_select_button = QPushButton("Set")
         self.bpm_select_button.setObjectName("bpmSelectButton")
         self.bpm_select_button.setFixedHeight(34)
-        self.bpm_select_button.setVisible(self.app_context is not None)
-        self.bpm_select_button.clicked.connect(self._select_bpms)
+        self.bpm_select_button.setFixedWidth(78)
+        self.bpm_select_button.clicked.connect(
+            self._configure_correction_bpms
+        )
         bpm_selector_layout.addWidget(self.bpm_select_button, 0, Qt.AlignVCenter)
         self._add_form_row(machine_form, "Correction BPMs", bpm_selector)
 
@@ -1337,13 +1364,14 @@ class MainWindow(QMainWindow):
         knob_selector_layout.setContentsMargins(0, 0, 0, 0)
         knob_selector_layout.setSpacing(6)
         knob_selector_layout.addWidget(self.knob_edit, 1)
-        self.knob_select_button = QPushButton("Select")
+        self.knob_select_button = QPushButton("Set")
         self.knob_select_button.setObjectName("knobSelectButton")
         self.knob_select_button.setFixedHeight(34)
+        self.knob_select_button.setFixedWidth(78)
         self.knob_select_button.setVisible(self.app_context is not None)
         self.knob_select_button.clicked.connect(self._select_knobs)
         knob_selector_layout.addWidget(self.knob_select_button, 0, Qt.AlignVCenter)
-        self._add_form_row(machine_form, "Knobs", knob_selector)
+        self._add_form_row(machine_form, "Quad Knobs", knob_selector)
 
         self.delta_spin = QDoubleSpinBox()
         self.delta_spin.setDecimals(8)
@@ -2688,6 +2716,9 @@ class MainWindow(QMainWindow):
             self.iteration_history_curve.set_plane(
                 self.config.measurement.planes[0]
             )
+            correction_bpms = self._configured_correction_bpms()
+            self.dispersion_curve.set_correction_bpms(correction_bpms)
+            self.iteration_history_curve.set_correction_bpms(correction_bpms)
             self._last_unmapped_plot_bpms = ()
         self._invalidate_staged_results(
             "Configuration loaded. Measure the Q response before calculating a recommendation."
@@ -2695,7 +2726,7 @@ class MainWindow(QMainWindow):
         self.last_live_preflight = None
         self._loading_widgets = True
         try:
-            self.selected_knobs = tuple(self.config.knobs)
+            self.selected_knobs = tuple(self.config.runtime_knobs)
             if self.app_context is not None:
                 self.available_bpms = selectable_profile_bpms(
                     self.app_context,
@@ -2715,21 +2746,10 @@ class MainWindow(QMainWindow):
             section_index = self.section_combo.findData(self.config.section.id)
             if section_index >= 0:
                 self.section_combo.setCurrentIndex(section_index)
-            self.bpm_edit.setText(
-                ", ".join(self.config.target_bpms)
-                if self.config.target_bpms
-                else (
-                    ", ".join(
-                        dict.fromkeys(
-                            target.bpm
-                            for target in self.config.section.joint_response_analysis.targets
-                        )
-                    )
-                    if self._joint_correction_enabled()
-                    else "None — diagnostics only"
-                )
+            self._update_correction_bpm_summary()
+            self.monitor_bpm_edit.setText(
+                ", ".join(self._display_monitor_bpms())
             )
-            self.monitor_bpm_edit.setText(", ".join(self.config.monitor_bpms))
             self.delta_spin.setValue(self.config.energy_knob.delta)
             self.samples_per_step_spin.setValue(self.config.measurement.samples_per_step)
             self.sample_interval_spin.setValue(self.config.measurement.sample_interval_s)
@@ -2748,12 +2768,9 @@ class MainWindow(QMainWindow):
             self._update_knob_summary()
             self._update_energy_step_summary()
             model_only = self.config.section.model_only
-            fixed_selection = (
-                model_only
-                or self.config.section.diagnostic_only
-                or self._joint_correction_enabled()
-            )
             diagnostic_only = self.config.section.diagnostic_only
+            bpm_configuration_available = not model_only and not diagnostic_only
+            knob_selection_fixed = model_only or diagnostic_only
             measurement_only = (
                 diagnostic_only
                 or (
@@ -2761,8 +2778,8 @@ class MainWindow(QMainWindow):
                     and not self._joint_correction_enabled()
                 )
             )
-            self.bpm_select_button.setVisible(not fixed_selection)
-            self.knob_select_button.setVisible(not fixed_selection)
+            self.bpm_select_button.setVisible(bpm_configuration_available)
+            self.knob_select_button.setVisible(not knob_selection_fixed)
             self.correction_step_card.setVisible(not measurement_only)
             self.verification_samples_field_label.setVisible(
                 not measurement_only
@@ -2786,6 +2803,71 @@ class MainWindow(QMainWindow):
         self._update_static_safety_status()
         self._show_workflow_detail(self.online_page)
         self._refresh_status("Config loaded")
+
+    def _update_correction_bpm_summary(self) -> None:
+        if self._joint_correction_enabled():
+            targets = self.config.section.joint_response_analysis.targets
+            self.bpm_edit.setText(
+                "; ".join(
+                    f"{bpm} · ηx/ηy"
+                    for bpm in dict.fromkeys(
+                        target.bpm for target in targets
+                    )
+                )
+            )
+            self.bpm_edit.setToolTip(
+                "\n".join(
+                    f"{target.name}: target {target.target_mm:g} mm, "
+                    f"tolerance {target.tolerance_mm:g} mm"
+                    for target in targets
+                )
+            )
+        else:
+            self.bpm_edit.setText(
+                "; ".join(
+                    f"{bpm}={target:g}"
+                    for bpm, target in zip(
+                        self.config.target_bpms,
+                        self.config.section.target_dispersion_mm,
+                    )
+                )
+            )
+            plane = self.config.measurement.planes[0]
+            self.bpm_edit.setToolTip(
+                "\n".join(
+                    f"{bpm} η{plane}: target {target:g} mm"
+                    for bpm, target in zip(
+                        self.config.target_bpms,
+                        self.config.section.target_dispersion_mm,
+                    )
+                )
+            )
+        if not self.bpm_edit.text():
+            self.bpm_edit.setText("None — diagnostics only")
+        self.bpm_edit.setCursorPosition(0)
+
+    def _configured_correction_bpms(self) -> tuple[str, ...]:
+        if self._joint_correction_enabled():
+            return tuple(
+                dict.fromkeys(
+                    target.bpm
+                    for target in self.config.section.joint_response_analysis.targets
+                )
+            )
+        return self.config.target_bpms
+
+    def _display_monitor_bpms(self) -> tuple[str, ...]:
+        if not self._joint_correction_enabled():
+            return self.config.monitor_bpms
+        correction_bpms = {
+            target.bpm
+            for target in self.config.section.joint_response_analysis.targets
+        }
+        return tuple(
+            bpm
+            for bpm in self.config.monitor_bpms
+            if bpm not in correction_bpms
+        )
 
     def _update_knob_summary(self) -> None:
         summaries = []
@@ -2815,19 +2897,15 @@ class MainWindow(QMainWindow):
         unit = self._knob_control_unit()
         unit_suffix = f" {unit}" if unit else ""
         step_fraction = float(self.max_step_pct_spin.value()) / 100.0
-        display_knobs = (
-            self.config.section.joint_response_analysis.knobs
-            if self._joint_correction_enabled()
-            else self.selected_knobs
-        )
+        display_knobs = self.selected_knobs
         for knob in display_knobs:
             devices = tuple(knob.devices)
             summaries.append("/".join(devices))
             step_limit = knob.limit * step_fraction
             tooltip_lines.append(
-                f"{knob.name}: scan ±{knob.scan_step:g}{unit_suffix}, "
-                f"limit ±{knob.limit:g}{unit_suffix}, "
-                f"step ±{step_limit:g}{unit_suffix}"
+                f"{knob.name}: measure step ±{knob.scan_step:g}{unit_suffix}, "
+                f"total Δ limit ±{knob.limit:g}{unit_suffix}, "
+                f"correction step limit ±{step_limit:g}{unit_suffix}"
             )
         self.knob_edit.setText("; ".join(summaries))
         self.knob_edit.setCursorPosition(0)
@@ -2857,8 +2935,10 @@ class MainWindow(QMainWindow):
             checkbox.blockSignals(True)
             checkbox.setChecked(False)
             checkbox.blockSignals(False)
-        self.selected_knobs = tuple(config.knobs)
-        self.knob_hard_limits = tuple(knob.limit for knob in config.knobs)
+        self.selected_knobs = tuple(config.runtime_knobs)
+        self.knob_hard_limits = tuple(
+            knob.limit for knob in config.runtime_knobs
+        )
         self._invalidate_staged_results(
             "Section changed. Previous measurements and recommendations were discarded."
         )
@@ -2936,7 +3016,7 @@ class MainWindow(QMainWindow):
         try:
             self.config = self._config_from_widgets()
             self.monitor_bpm_edit.setText(
-                ", ".join(self.config.monitor_bpms)
+                ", ".join(self._display_monitor_bpms())
             )
             self.operation_plan = build_operation_plan(self.config)
         except Exception as exc:
@@ -2984,16 +3064,395 @@ class MainWindow(QMainWindow):
         self._update_knob_summary()
         self._selection_changed()
 
+    def _configure_correction_bpms(self) -> None:
+        dialog, table, buttons = self._build_correction_bpm_dialog()
+
+        def accept_configuration() -> None:
+            try:
+                self._apply_correction_bpm_table(table)
+            except Exception as exc:
+                QMessageBox.warning(dialog, "Correction BPMs", str(exc))
+                return
+            dialog.accept()
+
+        buttons.accepted.connect(accept_configuration)
+        buttons.rejected.connect(dialog.reject)
+        dialog.exec_()
+
+    def _build_correction_bpm_dialog(
+        self,
+    ) -> tuple[QDialog, QTableWidget, QDialogButtonBox]:
+        joint = self._joint_correction_enabled()
+        dialog = QDialog(self)
+        dialog.setObjectName("correctionBpmDialog")
+        dialog.setStyleSheet(build_stylesheet(self.theme_name))
+        dialog.setWindowTitle("Set Correction BPMs")
+        dialog.resize(940 if joint else 650, 560)
+        layout = QVBoxLayout(dialog)
+        prompt = QLabel(
+            (
+                "Choose the BPMs used by the joint solver, then set ηx/ηy "
+                "targets and normalization tolerances. Unselected BPMs remain "
+                "measurement-only monitors."
+            )
+            if joint
+            else (
+                "Choose correction BPMs and set their target dispersion. "
+                "Unselected BPMs already in this section remain "
+                "measurement-only monitors."
+            )
+        )
+        prompt.setObjectName("correctionBpmPrompt")
+        prompt.setWordWrap(True)
+        layout.addWidget(prompt)
+
+        candidates = self._correction_bpm_candidates()
+        if joint:
+            target_map = {
+                (target.bpm, target.plane): target
+                for target in self.config.section.joint_response_analysis.targets
+            }
+            selected = {bpm for bpm, _plane in target_map}
+            table = QTableWidget(len(candidates), 6)
+            table.setHorizontalHeaderLabels(
+                [
+                    "Use",
+                    "BPM",
+                    "ηx Target",
+                    "ηx Tol.",
+                    "ηy Target",
+                    "ηy Tol.",
+                ]
+            )
+            for row, bpm in enumerate(candidates):
+                table.setCellWidget(
+                    row,
+                    0,
+                    self._bpm_use_checkbox(bpm in selected),
+                )
+                table.setItem(row, 1, QTableWidgetItem(bpm))
+                x_target = target_map.get((bpm, "x"))
+                y_target = target_map.get((bpm, "y"))
+                table.setCellWidget(
+                    row,
+                    2,
+                    self._dispersion_target_spin(
+                        0.0 if x_target is None else x_target.target_mm
+                    ),
+                )
+                table.setCellWidget(
+                    row,
+                    3,
+                    self._dispersion_tolerance_spin(
+                        1.0 if x_target is None else x_target.tolerance_mm
+                    ),
+                )
+                table.setCellWidget(
+                    row,
+                    4,
+                    self._dispersion_target_spin(
+                        0.0 if y_target is None else y_target.target_mm
+                    ),
+                )
+                table.setCellWidget(
+                    row,
+                    5,
+                    self._dispersion_tolerance_spin(
+                        1.0 if y_target is None else y_target.tolerance_mm
+                    ),
+                )
+        else:
+            plane = self.config.measurement.planes[0]
+            target_by_bpm = dict(
+                zip(
+                    self.config.target_bpms,
+                    self.config.section.target_dispersion_mm,
+                )
+            )
+            table = QTableWidget(len(candidates), 4)
+            table.setHorizontalHeaderLabels(
+                ["Use", "BPM", "Plane", "Target (mm)"]
+            )
+            for row, bpm in enumerate(candidates):
+                table.setCellWidget(
+                    row,
+                    0,
+                    self._bpm_use_checkbox(bpm in target_by_bpm),
+                )
+                table.setItem(row, 1, QTableWidgetItem(bpm))
+                table.setItem(row, 2, QTableWidgetItem(f"η{plane}"))
+                table.setCellWidget(
+                    row,
+                    3,
+                    self._dispersion_target_spin(
+                        target_by_bpm.get(bpm, 0.0)
+                    ),
+                )
+        table.setObjectName("correctionBpmTable")
+        table.verticalHeader().setVisible(False)
+        table.setSelectionMode(QAbstractItemView.NoSelection)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        if joint:
+            for column in range(2, 6):
+                header.setSectionResizeMode(column, QHeaderView.Stretch)
+        else:
+            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(3, QHeaderView.Stretch)
+        for row in range(table.rowCount()):
+            table.setRowHeight(row, 42)
+        layout.addWidget(table, 1)
+
+        note = QLabel(
+            "Changes affect only this GUI session. Switching section restores "
+            "the machine-profile defaults."
+        )
+        note.setObjectName("workspaceIntro")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Save | QDialogButtonBox.Cancel
+        )
+        save_button = buttons.button(QDialogButtonBox.Save)
+        if save_button is not None:
+            save_button.setText("Use for Current Session")
+        layout.addWidget(buttons)
+        return dialog, table, buttons
+
+    def _correction_bpm_candidates(self) -> tuple[str, ...]:
+        if self._joint_correction_enabled():
+            return self.config.measurement_bpms
+        return tuple(
+            dict.fromkeys(
+                (
+                    *self.config.measurement_bpms,
+                    *self.available_bpms,
+                )
+            )
+        )
+
+    def _apply_correction_bpm_table(
+        self,
+        table: QTableWidget,
+    ) -> None:
+        joint = self._joint_correction_enabled()
+        candidates = self._correction_bpm_candidates()
+        selected_bpms = tuple(
+            bpm
+            for row, bpm in enumerate(candidates)
+            if self._table_checkbox_checked(table, row, 0)
+        )
+        if not selected_bpms:
+            raise ValueError("Select at least one correction BPM.")
+
+        previous_measurement_bpms = self.config.measurement_bpms
+        target_map: dict[tuple[str, str], float] = {}
+        if joint:
+            previous = self.config.section.joint_response_analysis
+            targets: list[JointDispersionTargetConfig] = []
+            for row, bpm in enumerate(candidates):
+                if bpm not in selected_bpms:
+                    continue
+                for plane, target_column, tolerance_column in (
+                    ("x", 2, 3),
+                    ("y", 4, 5),
+                ):
+                    target_mm = self._table_spin_value(
+                        table,
+                        row,
+                        target_column,
+                    )
+                    tolerance_mm = self._table_spin_value(
+                        table,
+                        row,
+                        tolerance_column,
+                    )
+                    targets.append(
+                        JointDispersionTargetConfig(
+                            bpm=bpm,
+                            plane=plane,
+                            target_mm=target_mm,
+                            tolerance_mm=tolerance_mm,
+                        )
+                    )
+                    target_map[(bpm, plane)] = target_mm
+            section = replace(
+                self.config.section,
+                joint_response_analysis=replace(
+                    previous,
+                    targets=tuple(targets),
+                ),
+            )
+            target_bpms: tuple[str, ...] = ()
+            monitor_bpms = tuple(
+                dict.fromkeys(
+                    (*previous_measurement_bpms, *selected_bpms)
+                )
+            )
+        else:
+            plane = self.config.measurement.planes[0]
+            value_by_bpm = {
+                bpm: self._table_spin_value(table, row, 3)
+                for row, bpm in enumerate(candidates)
+                if bpm in selected_bpms
+            }
+            values = tuple(
+                value_by_bpm[bpm] for bpm in selected_bpms
+            )
+            target_map.update(
+                {
+                    (bpm, plane): value
+                    for bpm, value in value_by_bpm.items()
+                }
+            )
+            section = replace(
+                self.config.section,
+                target_dispersion_mm=values,
+            )
+            target_bpms = selected_bpms
+            monitor_bpms = tuple(
+                bpm
+                for bpm in dict.fromkeys(
+                    (*previous_measurement_bpms, *selected_bpms)
+                )
+                if bpm not in selected_bpms
+            )
+        observables = tuple(
+            replace(
+                observable,
+                target=target_map.get(
+                    (
+                        observable.element,
+                        observable.component.lower().removeprefix("d"),
+                    ),
+                    observable.target,
+                ),
+            )
+            for observable in section.model_observables
+        )
+        self.config = replace(
+            self.config,
+            target_bpms=target_bpms,
+            monitor_bpms=monitor_bpms,
+            section=replace(section, model_observables=observables),
+        )
+        measurement_bpms_changed = (
+            self.config.measurement_bpms != previous_measurement_bpms
+        )
+        self.correction_restore_request = None
+        self.correction_recommendation = None
+        if measurement_bpms_changed:
+            self.last_live_preflight = None
+            self._invalidate_staged_results(
+                "Correction BPMs changed. Remeasure dispersion before "
+                "continuing."
+            )
+        elif joint:
+            self.latest_joint_response = None
+            self.response_table.setRowCount(0)
+            self.response_info.clear()
+        elif self.latest_measurement is not None:
+            retargeted = self._retarget_measurement(
+                self.latest_measurement,
+                target_map,
+            )
+            self.latest_measurement = retargeted
+            if self.latest_response is not None:
+                self.latest_response = replace(
+                    self.latest_response,
+                    measurement=retargeted,
+                )
+            self._show_measurement(retargeted)
+        self.recommendation_summary_label.setText(
+            "Targets changed. Calculate a new recommendation."
+        )
+        self.recommendation_prediction_table.setRowCount(0)
+        self.recommendation_table.setRowCount(0)
+        self._update_correction_bpm_summary()
+        correction_bpms = self._configured_correction_bpms()
+        self.dispersion_curve.set_correction_bpms(correction_bpms)
+        self.iteration_history_curve.set_correction_bpms(correction_bpms)
+        self.monitor_bpm_edit.setText(
+            ", ".join(self._display_monitor_bpms())
+        )
+        self._sync_nonmeasurement_settings()
+
+    @staticmethod
+    def _bpm_use_checkbox(checked: bool) -> QCheckBox:
+        checkbox = QCheckBox()
+        checkbox.setProperty("role", "bpmUseToggle")
+        checkbox.setChecked(checked)
+        checkbox.setToolTip(
+            "Correction target" if checked else "Measurement-only monitor"
+        )
+        return checkbox
+
+    @staticmethod
+    def _table_checkbox_checked(
+        table: QTableWidget,
+        row: int,
+        column: int,
+    ) -> bool:
+        widget = table.cellWidget(row, column)
+        return bool(
+            isinstance(widget, QCheckBox) and widget.isChecked()
+        )
+
+    @staticmethod
+    def _retarget_measurement(
+        measurement: DispersionMeasurement,
+        targets: dict[tuple[str, str], float],
+    ) -> DispersionMeasurement:
+        target_values = np.asarray(
+            [
+                targets.get((bpm, measurement.plane), 0.0)
+                for bpm in measurement.bpm_names
+            ],
+            dtype=float,
+        )
+        target_mask = np.asarray(
+            [
+                (bpm, measurement.plane) in targets
+                for bpm in measurement.bpm_names
+            ],
+            dtype=bool,
+        )
+        return replace(
+            measurement,
+            target_values_mm=target_values,
+            target_mask=target_mask,
+        )
+
+    @staticmethod
+    def _dispersion_target_spin(value: float) -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setDecimals(6)
+        spin.setRange(-1.0e6, 1.0e6)
+        spin.setSingleStep(0.1)
+        spin.setValue(float(value))
+        return spin
+
+    @staticmethod
+    def _dispersion_tolerance_spin(value: float) -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setDecimals(6)
+        spin.setRange(1.0e-6, 1.0e6)
+        spin.setSingleStep(0.1)
+        spin.setValue(float(value))
+        return spin
+
     def _build_knob_selection_dialog(self):
         dialog = QDialog(self)
         dialog.setObjectName("knobSelectionDialog")
         dialog.setStyleSheet(build_stylesheet(self.theme_name))
-        dialog.setWindowTitle("Configure Dispersion Knobs")
+        dialog.setWindowTitle("Set Quad Knobs")
         dialog.resize(720, 300)
         layout = QVBoxLayout(dialog)
         prompt = QLabel(
             "Choose two distinct quadrupoles for each symmetric knob. "
-            "Session scan and limit values cannot exceed profile limits."
+            "Session measure-step and total-Δ limits cannot exceed profile limits."
         )
         prompt.setObjectName("knobSelectionPrompt")
         prompt.setWordWrap(True)
@@ -3004,7 +3463,13 @@ class MainWindow(QMainWindow):
         table = QTableWidget(len(self.selected_knobs), 5)
         table.setObjectName("knobSelectionTable")
         table.setHorizontalHeaderLabels(
-            ["Knob", "Q1", "Q2", f"Scan ±{suffix}", f"Limit ±{suffix}"]
+            [
+                "Knob",
+                "Q1",
+                "Q2",
+                f"Measure Step ±{suffix}",
+                f"Total Δ Limit ±{suffix}",
+            ]
         )
         table.verticalHeader().setVisible(False)
         table.setSelectionMode(QAbstractItemView.NoSelection)
@@ -3070,7 +3535,7 @@ class MainWindow(QMainWindow):
             limit = self._table_spin_value(table, row, 4)
             if scan_step > limit:
                 raise ValueError(
-                    f"Knob row {row + 1} requires response scan step <= cumulative limit"
+                    f"Knob row {row + 1} requires Measure Step <= Total Δ Limit"
                 )
             selected_devices.extend((first, second))
             selected_knobs.append(
@@ -3100,7 +3565,10 @@ class MainWindow(QMainWindow):
     def _table_spin_value(table: QTableWidget, row: int, column: int) -> float:
         widget = table.cellWidget(row, column)
         if not isinstance(widget, QDoubleSpinBox):
-            raise ValueError(f"Knob row {row + 1} has no numeric value in column {column + 1}")
+            raise ValueError(
+                f"Table row {row + 1} has no numeric value in "
+                f"column {column + 1}"
+            )
         return float(widget.value())
 
     def _quad_combo(self, selected: str) -> QComboBox:
@@ -3124,58 +3592,6 @@ class MainWindow(QMainWindow):
     def _knob_name(first: str, second: str) -> str:
         return f"{first}_{second}_sym" if first and second else "Unconfigured"
 
-    def _select_bpms(self) -> None:
-        if self.app_context is None:
-            return
-        dialog = QDialog(self)
-        dialog.setObjectName("bpmSelectionDialog")
-        dialog.setStyleSheet(build_stylesheet(self.theme_name))
-        dialog.setWindowTitle("Select Dispersion BPMs")
-        dialog.resize(360, 480)
-        layout = QVBoxLayout(dialog)
-        prompt = QLabel("Select BPMs used for D_eff measurement (machine order):")
-        prompt.setObjectName("bpmSelectionPrompt")
-        prompt.setWordWrap(True)
-        layout.addWidget(prompt)
-        choices = QListWidget()
-        choices.setObjectName("bpmSelectionList")
-        selected = {
-            item for item in re.split(r"[\s,]+", self.bpm_edit.text().strip()) if item
-        }
-        for name in self.available_bpms:
-            item = QListWidgetItem()
-            self._set_bpm_choice_item(item, name, name in selected)
-            choices.addItem(item)
-        choices.itemClicked.connect(self._toggle_bpm_choice_item)
-        layout.addWidget(choices, 1)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        if dialog.exec_() != QDialog.Accepted:
-            return
-        selected_bpms = tuple(
-            str(choices.item(index).data(Qt.UserRole + 1))
-            for index in range(choices.count())
-            if bool(choices.item(index).data(Qt.UserRole))
-        )
-        if not selected_bpms:
-            QMessageBox.warning(self, "BPM Selection", "Select at least one BPM.")
-            return
-        self.bpm_edit.setText(", ".join(selected_bpms))
-        self._selection_changed()
-
-    @staticmethod
-    def _set_bpm_choice_item(item: QListWidgetItem, name: str, checked: bool) -> None:
-        item.setData(Qt.UserRole, bool(checked))
-        item.setData(Qt.UserRole + 1, name)
-        item.setText(f"{'✓' if checked else ' '}  {name}")
-        item.setToolTip("Selected" if checked else "Not selected")
-
-    def _toggle_bpm_choice_item(self, item: QListWidgetItem) -> None:
-        name = str(item.data(Qt.UserRole + 1))
-        self._set_bpm_choice_item(item, name, not bool(item.data(Qt.UserRole)))
-
     def _selection_changed(self) -> None:
         if self._loading_widgets:
             return
@@ -3187,6 +3603,7 @@ class MainWindow(QMainWindow):
         try:
             self.config = self._config_from_widgets()
             self.operation_plan = build_operation_plan(self.config)
+            self._update_correction_bpm_summary()
         except Exception as exc:
             self.operation_plan = None
             self._append_log(f"Operation plan validation failed: {exc}")
@@ -3220,21 +3637,16 @@ class MainWindow(QMainWindow):
 
     def _config_from_widgets(self) -> RunConfig:
         diagnostic_only = self.config.section.diagnostic_only
+        joint = self._joint_correction_enabled()
         bpms = (
             ()
-            if diagnostic_only
-            else tuple(
-                item
-                for item in re.split(
-                    r"[\s,]+",
-                    self.bpm_edit.text().strip(),
-                )
-                if item
-            )
+            if diagnostic_only or joint
+            else self.config.target_bpms
         )
-        if not bpms and not diagnostic_only:
+        if not bpms and not diagnostic_only and not joint:
             raise ValueError("At least one BPM is required")
-        knobs = () if diagnostic_only else tuple(self.selected_knobs)
+        session_knobs = () if diagnostic_only else tuple(self.selected_knobs)
+        knobs = () if joint else session_knobs
         target_by_bpm = dict(
             zip(
                 self.config.target_bpms,
@@ -3257,13 +3669,22 @@ class MainWindow(QMainWindow):
             name for name in monitor_bpms if name not in bpms
         )
 
+        section = self.config.section
+        if joint:
+            section = replace(
+                section,
+                joint_response_analysis=replace(
+                    section.joint_response_analysis,
+                    knobs=session_knobs,
+                ),
+            )
         config = replace(
             self.config,
             energy_knob=replace(self.config.energy_knob, delta=float(self.delta_spin.value())),
             target_bpms=bpms,
             monitor_bpms=monitor_bpms,
             section=replace(
-                self.config.section,
+                section,
                 target_dispersion_mm=tuple(
                     target_by_bpm.get(name, 0.0)
                     for name in bpms
@@ -4314,7 +4735,7 @@ class MainWindow(QMainWindow):
                     "performs a full ±energy scan at each setting.\n\n"
                     f"Dispersion scans: {scan_count} "
                     f"(1 baseline + 2 × {len(self.config.knobs)} knobs)\n"
-                    f"Quadrupole scan steps:\n{knob_lines}\n\n"
+                    f"Quad measure steps:\n{knob_lines}\n\n"
                     "Every temporary setting is restored after its response column. "
                     "Continue?"
                 ),

@@ -35,6 +35,8 @@ def test_half_joint_correction_design_model_uses_joint_quadrupoles() -> None:
         "BPM42 Dy",
         "BPM43 Dy",
     )
+    assert "SEP2" in result.design_curve.element_names
+    assert "SEP1" in result.design_curve.element_names
 
 
 class FakeModelBackend:
