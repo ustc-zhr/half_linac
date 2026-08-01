@@ -99,6 +99,7 @@ def resolve_orbit_runtime_paths(target: MachineProfile | AppContext) -> dict[str
         "response_matrix_dir": runtime_dir / "matrices",
         "active_response_path": runtime_dir / "active_response.json",
         "response_progress_path": runtime_dir / "response_progress.json",
+        "correction_progress_path": runtime_dir / "correction_progress.json",
         "corrector_state_path": runtime_dir / "cor_temp.txt",
         "correct_log_path": runtime_dir / "correct.log",
         "findresponse_log_path": runtime_dir / "findresponse.log",

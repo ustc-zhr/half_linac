@@ -315,11 +315,11 @@ class RuntimeContextWidget(QWidget):
     def _apply_backend_style(self) -> None:
         dark = _is_dark_widget(self)
         if self._normalized_backend == "real":
-            foreground = "#d1a052" if dark else "#966519"
-            border = "#a67a35" if dark else "#b4863c"
-        else:
             foreground = "#58c7b7" if dark else "#26796f"
             border = "#3b9185" if dark else "#4f978d"
+        else:
+            foreground = "#d1a052" if dark else "#966519"
+            border = "#a67a35" if dark else "#b4863c"
         self.backend_label.setStyleSheet(
             "QLabel#runtimeBackendLabel {"
             f" color: {foreground}; background: transparent; border: 1px solid {border};"

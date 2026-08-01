@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import logging
+import json
 import numpy as np
 import sys
 from pathlib import Path
@@ -128,6 +129,7 @@ class OrbitCorrector:
         # constant definition
         self.response_matrix_path: Path | None = None
         self.corrector_state_path = Path(self.orbit_runtime["corrector_state_path"])
+        self.progress_path = Path(self.orbit_runtime["correction_progress_path"])
         self.profile_max_value = self.orbit_runtime["corrector_upperlimit"]
         self.max_value_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         self.max_value = self._select_corrector_limit(corrector_limit)
@@ -152,7 +154,7 @@ class OrbitCorrector:
             float(self.runtime_defaults["correction_max_step_pct"]) / 100.0,
             "correction_max_step_fraction",
         )
-        
+
         # all cor and bpm lists
         if self.orbit_workflow is None:
             raise ValueError("Orbit workflow is not available in the current app context.")
@@ -196,6 +198,29 @@ class OrbitCorrector:
             self.cor_y_list_target = []
             self.target_BPMx_values = []
             self.target_BPMy_values = []
+
+    def _write_progress(
+        self,
+        completed: int,
+        total: int,
+        *,
+        current: str = "",
+        status: str = "running",
+    ) -> None:
+        self.progress_path.parent.mkdir(parents=True, exist_ok=True)
+        total = max(int(total), 0)
+        completed = min(max(int(completed), 0), total) if total else 0
+        percent = int(round(completed / total * 100)) if total else 0
+        payload = {
+            "completed": completed,
+            "total": total,
+            "percent": percent,
+            "current": current,
+            "status": status,
+        }
+        tmp_path = self.progress_path.with_suffix(f"{self.progress_path.suffix}.tmp")
+        tmp_path.write_text(json.dumps(payload), encoding="utf-8")
+        tmp_path.replace(self.progress_path)
 
     def _select_corrector_limit(self, override: Optional[float]) -> float:
         value = self.profile_max_value if override is None else float(override)
@@ -455,7 +480,13 @@ class OrbitCorrector:
         else:
             logger.info("one-to-one correction measures local responses live")
         failures: list[str] = []
+        total_bpms = len(self.bpm_list_target)
         for j in range(len(self.bpm_list_target)):
+            self._write_progress(
+                j,
+                total_bpms,
+                current=f"BPM {j + 1}/{total_bpms}: {self.bpm_list_target[j]}",
+            )
             logger.info(f"开始校正: {self.bpm_list_target[j]}")
             
             # 同时获取初始值
@@ -474,6 +505,11 @@ class OrbitCorrector:
                     self.bpm_list_target[j],
                     initial_x_err,
                     initial_y_err,
+                )
+                self._write_progress(
+                    j + 1,
+                    total_bpms,
+                    current=f"BPM {j + 1}/{total_bpms}: {self.bpm_list_target[j]}",
                 )
                 continue
             
@@ -519,6 +555,11 @@ class OrbitCorrector:
                     Ry,
                 )
                 failures.append(f"{self.bpm_list_target[j]} response too small")
+                self._write_progress(
+                    j + 1,
+                    total_bpms,
+                    current=f"BPM {j + 1}/{total_bpms}: response too small",
+                )
                 continue
 
             previous_pair: tuple[float, float] | None = None
@@ -526,6 +567,14 @@ class OrbitCorrector:
             x_err = initial_x_err
             y_err = initial_y_err
             for loop in range(1, self.one_to_one_max_iter + 1):
+                self._write_progress(
+                    j,
+                    total_bpms,
+                    current=(
+                        f"BPM {j + 1}/{total_bpms}: {self.bpm_list_target[j]}, "
+                        f"iteration {loop}/{self.one_to_one_max_iter}"
+                    ),
+                )
                 xbpm_val1, ybpm_val1 = self._get_avg_readings([
                     self.pvBPMx[j],
                     self.pvBPMy[j]
@@ -594,6 +643,11 @@ class OrbitCorrector:
             logger.info(f"correction finished: {self.bpm_list_target[j]}")
             logger.info(f"corrector: ({hcorrVal:.3f}, {vcorrVal:.3f})")
             logger.info(f"BPM: ({xbpm_val1:.3e}, {ybpm_val1:.3e})")
+            self._write_progress(
+                j + 1,
+                total_bpms,
+                current=f"BPM {j + 1}/{total_bpms}: {self.bpm_list_target[j]}",
+            )
 
         final_failures = self._final_orbit_failures()
         failures.extend(final_failures)
@@ -769,6 +823,11 @@ class OrbitCorrector:
         pvname_cory = [self._cor_pv(cor) for cor in self.global_ycor_list]
 
         for iteration in range(0, max_iter):
+            self._write_progress(
+                iteration,
+                max_iter,
+                current=f"Iteration {iteration + 1}/{max_iter}",
+            )
             # 获取当前轨道数据
             xy_vals = self._get_avg_readings2(self.pvnameBPMx + self.pvnameBPMy)
             length_half = len(xy_vals) // 2
@@ -855,6 +914,11 @@ class OrbitCorrector:
             self._write_many_pvs(pvname_corx, new_hcor, "X corrector setpoints")
             self._write_many_pvs(pvname_cory, new_vcor, "Y corrector setpoints")
             self._wait_for_correction_settle()
+            self._write_progress(
+                iteration + 1,
+                max_iter,
+                current=f"Iteration {iteration + 1}/{max_iter}",
+            )
         
         logger.info(f"reach the max iteration: {max_iter}")
         return False
@@ -905,6 +969,8 @@ class OrbitCorrector:
         self._write_many_pvs(self.pvCORy, cory, "Y corrector recover") 
 
 if __name__ == '__main__':
+    corrector = None
+    progress_total = 0
     try:
         logger.info(f"INPUT PARAMETERS: {sys.argv}")
         
@@ -948,15 +1014,31 @@ if __name__ == '__main__':
             corrector.init_COR_pv()
             corrector.save_origin_cor()
 
-            
+            progress_total = (
+                len(target_BPMlist) if method == "one-to-one" else corrector.global_max_iter
+            )
+            corrector._write_progress(0, progress_total, current="Starting")
+
             if method == "one-to-one":
-                if not corrector.correct_one_to_one():
-                    sys.exit(2)
+                succeeded = corrector.correct_one_to_one()
             elif method == "global":
-                if not corrector.correct_global():
-                    sys.exit(2)
+                succeeded = corrector.correct_global()
             else:
                 raise ValueError(f"Unknown correction method: {method}")
+            if not succeeded:
+                corrector._write_progress(
+                    progress_total,
+                    progress_total,
+                    current="Did not converge",
+                    status="failed",
+                )
+                sys.exit(2)
+            corrector._write_progress(
+                progress_total,
+                progress_total,
+                current="Completed",
+                status="completed",
+            )
         
         elif sys.argv[1] == "cor_off":
             target_BPMlist = [item for item in sys.argv[2].split(',') if item] if len(sys.argv) > 2 else []
@@ -969,4 +1051,14 @@ if __name__ == '__main__':
             corrector.cor_recover()
     
     except Exception as e:
+        if corrector is not None and len(sys.argv) > 1 and sys.argv[1] == "start_cor":
+            try:
+                corrector._write_progress(
+                    0,
+                    progress_total,
+                    current=str(e),
+                    status="failed",
+                )
+            except OSError:
+                pass
         logger.error(f"校正错误: {e}", exc_info=True)

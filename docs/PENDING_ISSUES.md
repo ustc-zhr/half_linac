@@ -214,6 +214,40 @@
   - Use VM commissioning data to refine the per-backend SVD cutoff defaults.
   - Validate with IRFEL VM global correction before considering any real-mode use.
 
+### 7a. Cross-App Actuator Range And Step Semantics
+
+- Status: design decision pending
+- Priority: medium
+- Background:
+  - Several write-capable apps expose actuator range, cumulative-change, scan-step,
+    or per-iteration step controls with related but not yet uniform semantics.
+  - Relevant workflows include at least `orbit_correct`, `dispersion_correction`,
+    BBA, `emit_measure`, `energy_spectrum`, and `solenoid_centering`.
+  - `dispersion_correction` currently distinguishes a cumulative knob limit relative
+    to the workflow snapshot from a per-iteration `max_step_fraction`.
+  - `orbit_correct` currently exposes an editable absolute corrector setpoint limit,
+    while the backend-specific machine cap is also stored in app machine config.
+- Design questions:
+  - Define which bounds are machine-owned physical limits and which are
+    operator-adjustable session limits.
+  - Decide whether session limits use physical units, a fraction of the machine
+    limit, or both depending on actuator type.
+  - Define the baseline for cumulative limits: workflow-start setpoint, reviewed
+    snapshot, design value, or another explicit reference.
+  - Define whether per-step limits are fractions of the cumulative session range
+    or independent values in physical units.
+  - Specify behavior when a writable backend has no explicit machine limit,
+    including which actions remain read-only and which writes must be blocked.
+  - Standardize preflight display, saturation reporting, abort/restore behavior,
+    runtime metadata, and naming across the affected apps.
+- Follow-up:
+  - Audit current range and step semantics in each affected app before changing
+    configuration schemas or GUI labels.
+  - Propose one shared conceptual model without forcing all actuator types into an
+    identical storage format where their physics differs.
+  - Keep existing behavior unchanged until the cross-app design is reviewed and
+    an explicit migration and compatibility plan is approved.
+
 ### 8. Model Snapshot And Real-to-VM Mirroring
 
 - Status: partially implemented

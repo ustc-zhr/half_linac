@@ -2,6 +2,8 @@ import logging
 import sys
 import re
 import json
+import math
+from datetime import datetime
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -19,6 +21,9 @@ from PyQt5.QtWidgets import (
     QApplication,
     QCheckBox,
     QDoubleSpinBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
     QMessageBox,
     QComboBox,
     QFrame,
@@ -452,6 +457,7 @@ class OrbitStatusStrip(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._items = {}
+        self._titles = {}
         self.setObjectName("statusStrip")
 
         layout = QHBoxLayout(self)
@@ -486,6 +492,7 @@ class OrbitStatusStrip(QWidget):
         inner.addWidget(value_label)
         self._layout.addWidget(container)
         self._items[key] = (container, value_label)
+        self._titles[key] = title_label
 
     def finish(self):
         self._layout.addStretch(1)
@@ -504,6 +511,11 @@ class OrbitStatusStrip(QWidget):
         value_label.setProperty("tone", tone)
         value_label.setText(text)
         self._refresh_tone(container, value_label)
+
+    def set_title(self, key, text):
+        title_label = self._titles.get(key)
+        if title_label is not None:
+            title_label.setText(text)
 
     @staticmethod
     def _refresh_tone(container, value_label):
@@ -525,6 +537,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
         self.runtime_defaults = self.orbit_runtime["runtime_defaults"]
         self.response_progress_path = Path(self.orbit_runtime["response_progress_path"])
+        self.correction_progress_path = Path(self.orbit_runtime["correction_progress_path"])
         self.current_theme = resolve_initial_theme()
         self.last_notice = "Idle"
         self.process_manager = ManagedProcessGroup(notify=self._notify)
@@ -545,23 +558,23 @@ class myWindow(QMainWindow, Ui_MainWindow):
         # connect button
         self.pushButton.clicked.connect(self.measure_res)
         self.stop_response_button.clicked.connect(self.stop_measure_res)
-        self.pushButton_4.clicked.connect(self.start_cor)
+        self.pushButton_4.clicked.connect(self.toggle_correction)
         self.pushButton_2.clicked.connect(self.cor_off)
-        self.pushButton_3.clicked.connect(self.stop_cor)
         self.pushButton_7.clicked.connect(self.cor_recover)
 
         # other button
-        self.pushButton_5.clicked.connect(self.selectall)
-        self.pushButton_6.clicked.connect(self.cancelall)
+        self.allTargetBPMsCheckBox.clicked.connect(self._toggle_all_target_bpms)
+        self.saveTargetBPMsButton.clicked.connect(self.save_target_bpm_preset)
+        self.loadTargetBPMsButton.clicked.connect(self.load_target_bpm_preset)
         self.load_response_matrix_button.clicked.connect(self.load_response_matrix)
 
         self.comboBox.currentIndexChanged.connect(self._on_correction_method_changed)
         self.localResponseSourceComboBox.currentIndexChanged.connect(
             self._on_local_response_source_changed
         )
-        self.tabWidget.currentChanged.connect(self._refresh_status)
+        self.tabWidget.currentChanged.connect(self._on_main_tab_changed)
         for cb in self.all_checkboxes:
-            cb.stateChanged.connect(self._refresh_status)
+            cb.stateChanged.connect(self._on_target_bpm_state_changed)
         for cb in self.global_xcor_checkboxes + self.global_ycor_checkboxes:
             cb.stateChanged.connect(self._refresh_status)
 
@@ -602,7 +615,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.refresh_response_matrices()
         self._apply_theme()
         self._update_method_parameter_state()
-        self._refresh_status()
+        self._sync_all_target_bpms_checkbox()
+        self._on_main_tab_changed(self.tabWidget.currentIndex())
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} Orbit Correction")
@@ -775,7 +789,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.verticalLayout_4.setContentsMargins(12, 12, 12, 12)
         self.verticalLayout_4.setSpacing(12)
-        self.verticalLayout_4.insertWidget(0, self._make_panel_title("Correction Setup", self.left_panel))
 
         self.right_panel = QFrame(self.centralwidget)
         self.right_panel.setObjectName("sectionCard")
@@ -783,10 +796,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.verticalLayout_5.setContentsMargins(12, 12, 12, 12)
         self.verticalLayout_5.setSpacing(12)
-        self.verticalLayout_5.insertWidget(0, self._make_panel_title("Selection", self.right_panel))
+        self.verticalLayout_5.insertWidget(0, self._make_panel_title("Target BPMs", self.right_panel))
 
-        self.horizontalLayout_9.addWidget(self.left_panel, 2)
-        self.horizontalLayout_9.addWidget(self.right_panel, 3)
+        self.horizontalLayout_9.addWidget(self.left_panel, 1)
 
         self.tabWidget.setDocumentMode(False)
         self.tabWidget.tabBar().setDrawBase(False)
@@ -799,7 +811,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout_3.addLayout(self.gridLayout_2, 0, 0, 1, 1, Qt.AlignTop)
         self.gridLayout_3.setRowStretch(0, 0)
         self.gridLayout_3.setRowStretch(1, 1)
-        self._build_selection_tabs()
+        self._build_target_bpm_panel()
 
     def _build_tab_layouts(self):
         self.gridLayout_4.setHorizontalSpacing(10)
@@ -812,8 +824,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout.setHorizontalSpacing(0)
         self.gridLayout.setVerticalSpacing(10)
 
-        self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
-        self.horizontalLayout.setSpacing(0)
+        self.horizontalLayout.setContentsMargins(14, 14, 14, 14)
+        self.horizontalLayout.setSpacing(14)
         self.horizontalLayout.removeItem(self.gridLayout)
         self.command_pane = QFrame(self.tab)
         self.command_pane.setObjectName("commandPane")
@@ -823,22 +835,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
         command_layout.addWidget(self._build_correction_parameters_card())
         command_layout.addWidget(self._build_correction_actions_card())
         command_layout.addStretch(1)
-        self.horizontalLayout.addWidget(self.command_pane)
+        self.horizontalLayout.addWidget(self.command_pane, 2)
+        self.horizontalLayout.addWidget(self.right_panel, 3)
 
         self.response_pane = QFrame(self.tab_2)
-        self.response_pane.setObjectName("commandPane")
+        self.response_pane.setObjectName("responsePane")
         response_outer = QVBoxLayout(self.tab_2)
         response_outer.setContentsMargins(0, 0, 0, 0)
         response_outer.setSpacing(0)
         response_outer.addWidget(self.response_pane)
-        response_layout = QVBoxLayout(self.response_pane)
+        response_layout = QHBoxLayout(self.response_pane)
         response_layout.setContentsMargins(14, 14, 14, 14)
         response_layout.setSpacing(12)
-        response_layout.addWidget(self._build_matrix_library_card())
-        response_layout.addWidget(self._build_matrix_measure_card())
-        response_layout.addStretch(2)
+        response_layout.addWidget(self._build_matrix_library_card(), 2, Qt.AlignTop)
+        response_layout.addWidget(self._build_matrix_measure_card(), 3, Qt.AlignTop)
 
-    def _build_selection_tabs(self):
+    def _build_target_bpm_panel(self):
         self.verticalLayout_5.removeItem(self.gridLayout_5)
         for widget in (
             self.pushButton_5,
@@ -851,15 +863,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.verticalLayout_5.removeWidget(self.scrollArea)
 
-        self.selection_tabs = QTabWidget(self.right_panel)
-        self.selection_tabs.setDocumentMode(False)
-        self.selection_tabs.tabBar().setDrawBase(False)
-        self.selection_tabs.setElideMode(False)
-        self.selection_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.pushButton_5.hide()
+        self.pushButton_6.hide()
 
-        self.target_bpm_tab = QWidget(self.selection_tabs)
+        self.target_bpm_tab = QWidget(self.right_panel)
         target_layout = QVBoxLayout(self.target_bpm_tab)
-        target_layout.setContentsMargins(8, 8, 8, 8)
+        target_layout.setContentsMargins(0, 0, 0, 0)
         target_layout.setSpacing(10)
 
         toolbar = QFrame(self.target_bpm_tab)
@@ -872,14 +881,19 @@ class myWindow(QMainWindow, Ui_MainWindow):
         action_row = QHBoxLayout()
         action_row.setContentsMargins(0, 0, 0, 0)
         action_row.setSpacing(8)
-        action_row.addWidget(self.pushButton_5)
-        action_row.addWidget(self.pushButton_6)
+        self.allTargetBPMsCheckBox = QCheckBox("All BPMs", toolbar)
+        self.allTargetBPMsCheckBox.setTristate(True)
+        action_row.addWidget(self.allTargetBPMsCheckBox)
+        self.saveTargetBPMsButton = QPushButton("Save", toolbar)
+        self.loadTargetBPMsButton = QPushButton("Load", toolbar)
+        action_row.addWidget(self.saveTargetBPMsButton)
+        action_row.addWidget(self.loadTargetBPMsButton)
         action_row.addStretch(1)
 
-        toolbar_layout.addLayout(action_row, 0, 0)
-        toolbar_layout.addWidget(self.label_45, 0, 1)
-        toolbar_layout.addWidget(self.label_46, 0, 2)
+        toolbar_layout.addLayout(action_row, 0, 0, 1, 3)
         toolbar_layout.addWidget(self.progressBar, 0, 3)
+        toolbar_layout.addWidget(self.label_45, 1, 1)
+        toolbar_layout.addWidget(self.label_46, 1, 2)
         toolbar_layout.setColumnStretch(0, 2)
         toolbar_layout.setColumnStretch(1, 2)
         toolbar_layout.setColumnStretch(2, 2)
@@ -888,22 +902,27 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.target_toolbar = toolbar
         target_layout.addWidget(toolbar)
         target_layout.addWidget(self.scrollArea, 1)
+        self.verticalLayout_5.addWidget(self.target_bpm_tab, 1)
+        self._build_global_corrector_dialog()
 
-        self.global_corrector_tab = QWidget(self.selection_tabs)
-        corrector_layout = QVBoxLayout(self.global_corrector_tab)
-        corrector_layout.setContentsMargins(8, 8, 8, 8)
-        corrector_layout.setSpacing(10)
-        corrector_layout.addWidget(
-            self._build_global_corrector_selector(self.global_corrector_tab),
-            0,
-            Qt.AlignTop,
-        )
-        corrector_layout.addStretch(1)
+    def _build_global_corrector_dialog(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Global Correctors")
+        dialog.setModal(True)
+        dialog.resize(560, 720)
+        dialog.setMinimumSize(460, 520)
 
-        self.selection_tabs.addTab(self.target_bpm_tab, "Target BPMs")
-        self.selection_tabs.addTab(self.global_corrector_tab, "Global Correctors")
-        self.selection_tabs.currentChanged.connect(self._refresh_status)
-        self.verticalLayout_5.addWidget(self.selection_tabs, 1)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+        layout.addWidget(self._build_global_corrector_selector(dialog), 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
+        buttons.button(QDialogButtonBox.Ok).setText("Apply")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        self.global_corrector_dialog = dialog
 
     def _build_correction_parameters_card(self):
         card, layout = self._make_subcard(None, self.command_pane)
@@ -920,11 +939,21 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.localResponseSourceComboBox.addItem("Measure Live", "measure_live")
         self.localResponseSourceComboBox.addItem("Active Matrix", "active_matrix")
         self.activeMatrixLabel, self.activeMatrixValueLabel = self._make_parameter_display(card)
-        self.matrixSetupLabel = QLabel(card)
         self.openResponseMatrixTabButton = QPushButton(card)
+        self.responseMatrixRow = QFrame(card)
+        response_matrix_row_layout = QHBoxLayout(self.responseMatrixRow)
+        response_matrix_row_layout.setContentsMargins(0, 0, 0, 0)
+        response_matrix_row_layout.setSpacing(8)
+        response_matrix_row_layout.addWidget(self.activeMatrixValueLabel, 1)
+        response_matrix_row_layout.addWidget(self.openResponseMatrixTabButton, 0)
         self.globalCorrectorsLabel, self.globalCorrectorsValueLabel = self._make_parameter_display(card)
-        self.correctorSetupLabel = QLabel(card)
         self.editCorrectorsButton = QPushButton(card)
+        self.globalCorrectorsRow = QFrame(card)
+        global_correctors_row_layout = QHBoxLayout(self.globalCorrectorsRow)
+        global_correctors_row_layout.setContentsMargins(0, 0, 0, 0)
+        global_correctors_row_layout.setSpacing(8)
+        global_correctors_row_layout.addWidget(self.globalCorrectorsValueLabel, 1)
+        global_correctors_row_layout.addWidget(self.editCorrectorsButton, 0)
 
         self.commonRuntimeGroup = self._build_parameter_group(
             "Common Runtime",
@@ -947,10 +976,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
             (
                 (self.globalMaxIterLabel, self.globalMaxIterLineEdit, False),
                 (self.svdCutoffPctLabel, self.svdCutoffPctLineEdit, False),
-                (self.activeMatrixLabel, self.activeMatrixValueLabel, False),
-                (self.matrixSetupLabel, self.openResponseMatrixTabButton, False),
-                (self.globalCorrectorsLabel, self.globalCorrectorsValueLabel, False),
-                (self.correctorSetupLabel, self.editCorrectorsButton, False),
+                (self.activeMatrixLabel, self.responseMatrixRow, False),
+                (self.globalCorrectorsLabel, self.globalCorrectorsRow, False),
             ),
             card,
         )
@@ -1027,8 +1054,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         action_row = QHBoxLayout()
         action_row.setContentsMargins(0, 0, 0, 0)
         action_row.setSpacing(8)
-        all_button = QPushButton("All Correctors", container)
-        clear_button = QPushButton("Clear Correctors", container)
+        all_button = QPushButton("All", container)
+        clear_button = QPushButton("Clear", container)
         for button in (all_button, clear_button):
             button.setProperty("compact", True)
             button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
@@ -1094,29 +1121,38 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _build_correction_actions_card(self):
         card, layout = self._make_subcard(None, self.command_pane)
 
-        primary_row = QHBoxLayout()
-        primary_row.setContentsMargins(0, 0, 0, 0)
-        primary_row.setSpacing(10)
-        for button in (self.pushButton_4, self.pushButton_3):
+        for button in (self.pushButton_2, self.pushButton_3, self.pushButton_4, self.pushButton_7):
             self.gridLayout.removeWidget(button)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            primary_row.addWidget(button)
-        layout.addLayout(primary_row)
+        self.pushButton_2.hide()
+        self.pushButton_3.hide()
 
-        utility_row = QHBoxLayout()
-        utility_row.setContentsMargins(0, 0, 0, 0)
-        utility_row.setSpacing(10)
-        for button in (self.pushButton_2, self.pushButton_7):
-            self.gridLayout.removeWidget(button)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            utility_row.addWidget(button)
-        layout.addLayout(utility_row)
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(10)
+        self.pushButton_4.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.pushButton_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        action_row.addWidget(self.pushButton_4, 2)
+        action_row.addWidget(self.pushButton_7, 1)
+        layout.addLayout(action_row)
+
+        self.correction_progress = QProgressBar(card)
+        self.correction_progress.setRange(0, 100)
+        self.correction_progress.setValue(0)
+        self.correction_progress.setTextVisible(True)
+        self.correction_progress.setFormat("Idle")
+        self.correction_progress.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.correction_progress.hide()
+        layout.addWidget(self.correction_progress)
 
         return card
 
     def _build_matrix_library_card(self):
-        card, layout = self._make_subcard("Matrix Library", self.response_pane)
+        card, layout = self._make_subcard("Saved Matrices", self.response_pane)
         self.response_matrix_combo = QComboBox(card)
+        self.response_matrix_combo.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.response_matrix_combo.setMinimumContentsLength(24)
         self.response_matrix_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self.response_matrix_combo)
 
@@ -1133,7 +1169,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         return card
 
     def _build_matrix_measure_card(self):
-        card, layout = self._make_subcard("Matrix Measurement", self.response_pane)
+        card, layout = self._make_subcard("New Measurement", self.response_pane)
+        self.matrixScopeLabel, self.matrixScopeValueLabel = self._make_parameter_display(card)
         self.matrixResponseKickLabel, self.matrixResponseKickLineEdit = self._make_parameter_field(card)
         self.matrixWaitSLabel, self.matrixWaitSLineEdit = self._make_parameter_field(card)
         self.matrixSampleIntervalSLabel, self.matrixSampleIntervalSLineEdit = self._make_parameter_field(card)
@@ -1142,6 +1179,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._build_parameter_group(
                 None,
                 (
+                    (self.matrixScopeLabel, self.matrixScopeValueLabel, False),
                     (self.matrixResponseKickLabel, self.matrixResponseKickLineEdit, False),
                     (self.matrixWaitSLabel, self.matrixWaitSLineEdit, False),
                     (self.matrixSampleIntervalSLabel, self.matrixSampleIntervalSLineEdit, False),
@@ -1161,14 +1199,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.stop_response_button.setProperty("danger", True)
         self.stop_response_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         measure_row.addWidget(self.stop_response_button, 0)
+        measure_row.addStretch(1)
+        layout.addLayout(measure_row)
+
         self.response_matrix_progress = QProgressBar(card)
         self.response_matrix_progress.setRange(0, 100)
         self.response_matrix_progress.setValue(0)
         self.response_matrix_progress.setTextVisible(True)
         self.response_matrix_progress.setFormat("Idle")
         self.response_matrix_progress.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        measure_row.addWidget(self.response_matrix_progress, 1)
-        layout.addLayout(measure_row)
+        layout.addWidget(self.response_matrix_progress)
         return card
 
     def _configure_form_content(self):
@@ -1185,16 +1225,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctionMaxStepLabel.setProperty("role", "field")
         self.responseKickLabel.setProperty("role", "field")
         self.localResponseSourceLabel.setProperty("role", "field")
+        self.matrixScopeLabel.setProperty("role", "field")
         self.matrixResponseKickLabel.setProperty("role", "field")
         self.matrixWaitSLabel.setProperty("role", "field")
         self.matrixSampleIntervalSLabel.setProperty("role", "field")
         self.matrixSamplesLabel.setProperty("role", "field")
         self.activeMatrixLabel.setProperty("role", "field")
         self.activeMatrixValueLabel.setProperty("role", "field")
-        self.matrixSetupLabel.setProperty("role", "field")
         self.globalCorrectorsLabel.setProperty("role", "field")
         self.globalCorrectorsValueLabel.setProperty("role", "field")
-        self.correctorSetupLabel.setProperty("role", "field")
         self.label_45.setProperty("role", "field")
         self.label_46.setProperty("role", "field")
 
@@ -1204,7 +1243,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.correctionSettleSLabel.setText("Settle Time (s)")
         self.correctorAccuracyUmLabel.setText("Accuracy (um)")
         self.sampPerStepLabel.setText("Samples / Step")
-        self.correctorLimitLabel.setText(f"Corrector Limit ({limit_unit})")
+        self.correctorLimitLabel.setText(f"Corrector Limit (+/- {limit_unit})")
+        self.correctorLimitLineEdit.setToolTip(
+            "Absolute corrector setpoint bound. Setpoints are clipped to this limit."
+        )
         self.globalMaxIterLabel.setText("Global Max Iter")
         self.svdCutoffPctLabel.setText("SVD Cutoff (%)")
         self.svdCutoffPctLineEdit.setToolTip(
@@ -1220,14 +1262,21 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "Measure Live applies a local test kick; Active Matrix uses the paired "
             "same-plane response coefficients from the active response matrix."
         )
+        self.matrixScopeLabel.setText("Measurement Scope")
+        self.matrixScopeValueLabel.setText(
+            f"All configured: {len(self.orbit_workflow.bpms)} BPMs, "
+            f"{len(self.orbit_workflow.xcors)} X correctors, "
+            f"{len(self.orbit_workflow.ycors)} Y correctors"
+        )
+        self.matrixScopeValueLabel.setToolTip(
+            "Target BPM and Global Corrector selections apply to orbit correction only."
+        )
         self.matrixResponseKickLabel.setText(f"Kick Step ({limit_unit})")
         self.matrixWaitSLabel.setText("Settle Time (s)")
         self.matrixSampleIntervalSLabel.setText("Sample Interval (s)")
         self.matrixSamplesLabel.setText("Samples/step")
-        self.activeMatrixLabel.setText("Active Response Matrix")
-        self.matrixSetupLabel.setText("Matrix Setup")
+        self.activeMatrixLabel.setText("Response Matrix")
         self.globalCorrectorsLabel.setText("Global Correctors")
-        self.correctorSetupLabel.setText("Corrector Setup")
         self.label_45.setText("BPM X (mm)")
         self.label_46.setText("BPM Y (mm)")
         self._hide_target_bpm_unit_labels()
@@ -1243,28 +1292,27 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.pushButton_5,
             self.pushButton_6,
             self.pushButton_7,
+            self.saveTargetBPMsButton,
+            self.loadTargetBPMsButton,
             self.load_response_matrix_button,
             self.openResponseMatrixTabButton,
             self.editCorrectorsButton,
         ):
             button.setProperty("compact", True)
 
-        self.pushButton.setText("Start Measurement")
+        self.pushButton.setText("Measure Full Matrix")
         self.stop_response_button.setText("Stop Measurement")
-        self.openResponseMatrixTabButton.setText("Open Response Matrix Tab")
+        self.openResponseMatrixTabButton.setText("Open")
         self.openResponseMatrixTabButton.clicked.connect(
             lambda: self.tabWidget.setCurrentWidget(self.tab_2)
         )
-        self.editCorrectorsButton.setText("Edit Correctors")
-        self.editCorrectorsButton.clicked.connect(self._open_global_correctors_tab)
+        self.editCorrectorsButton.setText("Edit")
+        self.editCorrectorsButton.clicked.connect(self._open_global_correctors_dialog)
         self.pushButton_4.setText("Start Correction")
-        self.pushButton_3.setText("Stop Correction")
-        self.pushButton_2.setText("Zero Correctors")
-        self.pushButton_7.setText("Recover Correctors")
-        self.pushButton_5.setText("All BPMs")
-        self.pushButton_6.setText("Clear Selection")
+        self.pushButton_7.setText("Recover")
+        self.saveTargetBPMsButton.setToolTip("Save target BPM selection and X/Y values.")
+        self.loadTargetBPMsButton.setToolTip("Load a target BPM preset for this machine/backend.")
         self.pushButton_4.setProperty("primary", True)
-        self.pushButton_3.setProperty("danger", True)
 
         self.progressBar.setRange(0, len(self.all_checkboxes))
         self.progressBar.setTextVisible(True)
@@ -1300,6 +1348,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _apply_theme(self):
         palette = self._palette()
         self.centralwidget.setStyleSheet(build_orbit_correct_theme(palette))
+        if hasattr(self, "global_corrector_dialog"):
+            self.global_corrector_dialog.setStyleSheet(build_orbit_correct_theme(palette))
         self.status_panel.apply_theme(palette)
         self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
         self._update_theme_toggle_button()
@@ -1322,11 +1372,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.last_notice = message
         self._refresh_status()
 
-    def _open_global_correctors_tab(self):
-        if hasattr(self, "selection_tabs") and hasattr(self, "global_corrector_tab"):
-            if self._selected_correction_method() != "global":
-                return
-            self.selection_tabs.setCurrentWidget(self.global_corrector_tab)
+    def _open_global_correctors_dialog(self):
+        if self._selected_correction_method() != "global":
+            return
+        checkboxes = self.global_xcor_checkboxes + self.global_ycor_checkboxes
+        original = [checkbox.isChecked() for checkbox in checkboxes]
+        if self.global_corrector_dialog.exec_() == QDialog.Accepted:
+            self._refresh_status()
+            return
+        for checkbox, checked in zip(checkboxes, original):
+            checkbox.blockSignals(True)
+            checkbox.setChecked(checked)
+            checkbox.blockSignals(False)
+        self._refresh_status()
+
+    def _on_main_tab_changed(self, _index):
+        self._refresh_status()
 
     def _require_write_allowed(self, operation):
         try:
@@ -1416,26 +1477,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _update_global_corrector_edit_state(self, enabled):
         if hasattr(self, "editCorrectorsButton"):
             self.editCorrectorsButton.setEnabled(enabled)
-        if hasattr(self, "selection_tabs") and hasattr(self, "global_corrector_tab"):
-            self._set_global_correctors_tab_visible(enabled)
-
-    def _set_global_correctors_tab_visible(self, visible):
-        index = self.selection_tabs.indexOf(self.global_corrector_tab)
-        if visible:
-            if index < 0:
-                self.selection_tabs.addTab(self.global_corrector_tab, "Global Correctors")
-            return
-
-        if index >= 0:
-            if self.selection_tabs.currentIndex() == index:
-                self.selection_tabs.setCurrentWidget(self.target_bpm_tab)
-            self.selection_tabs.removeTab(index)
 
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
         response_running = self.process_manager.is_running("response_matrix")
         correction_running = self.process_manager.is_running("orbit_correction")
+        maintenance_running = (
+            self.process_manager.is_running("cor_off")
+            or self.process_manager.is_running("cor_recover")
+        )
         if self._response_scan_was_running and not response_running:
             self.refresh_response_matrices()
         self._response_scan_was_running = response_running
@@ -1443,16 +1494,41 @@ class myWindow(QMainWindow, Ui_MainWindow):
         total = len(self.all_checkboxes)
         selected = self._selected_bpm_count()
         process_text, process_tone = self._current_process_status()
+        response_page = self.tabWidget.currentWidget() is self.tab_2
         self.status_panel.set_item("tab", self.tabWidget.tabText(self.tabWidget.currentIndex()), "subtle")
-        self.status_panel.set_item("method", self.comboBox.currentText(), "subtle")
-        self.status_panel.set_item("targets", f"{selected}/{total}", "success" if selected else "warning")
+        if response_page:
+            corrector_total = len(self.orbit_workflow.xcors) + len(self.orbit_workflow.ycors)
+            self.status_panel.set_title("method", "Measurement")
+            self.status_panel.set_item("method", "Full Matrix", "subtle")
+            self.status_panel.set_title("targets", "Scope")
+            self.status_panel.set_item(
+                "targets",
+                f"{len(self.orbit_workflow.bpms)} BPM / {corrector_total} COR",
+                "success",
+            )
+        else:
+            self.status_panel.set_title("method", "Method")
+            self.status_panel.set_item("method", self.comboBox.currentText(), "subtle")
+            self.status_panel.set_title("targets", "Targets")
+            self.status_panel.set_item(
+                "targets", f"{selected}/{total}", "success" if selected else "warning"
+            )
         self.status_panel.set_item("process", process_text, process_tone)
         self._refresh_response_progress(response_running)
+        self._refresh_correction_progress(correction_running)
+        self.correction_progress.setVisible(correction_running)
         if hasattr(self, "stop_response_button"):
             self.pushButton.setEnabled(not response_running)
             self.stop_response_button.setEnabled(response_running)
-        self.pushButton_3.setEnabled(correction_running)
+        self._set_correction_action_state(correction_running)
+        self.pushButton_4.setEnabled(
+            correction_running or (not response_running and not maintenance_running)
+        )
+        self._update_recover_button_state(
+            enabled=not response_running and not correction_running and not maintenance_running
+        )
         self.progressBar.setValue(selected)
+        self._sync_all_target_bpms_checkbox()
         if hasattr(self, "globalCorrectorsValueLabel"):
             self.globalCorrectorsValueLabel.setText(self._global_corrector_summary())
         if hasattr(self, "global_corrector_progress"):
@@ -1463,6 +1539,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
             )
             self.global_corrector_progress.setMaximum(corrector_total)
             self.global_corrector_progress.setValue(corrector_selected)
+
+    def _update_recover_button_state(self, *, enabled):
+        backup_path = Path(self.orbit_runtime["corrector_state_path"])
+        try:
+            backup_stat = backup_path.stat()
+        except OSError:
+            backup_stat = None
+        backup_available = backup_stat is not None and backup_path.is_file()
+        self.pushButton_7.setEnabled(enabled and backup_available)
+        if backup_available:
+            modified = datetime.fromtimestamp(backup_stat.st_mtime).astimezone()
+            self.pushButton_7.setToolTip(
+                f"Restore correctors from backup saved {modified.isoformat(timespec='seconds')}."
+            )
+        else:
+            self.pushButton_7.setToolTip("No correction backup is available for this machine/backend.")
 
     def _format_response_matrix_record(self, record):
         created_at = str(record.get("created_at", "--"))
@@ -1540,13 +1632,204 @@ class myWindow(QMainWindow, Ui_MainWindow):
         match = re.search(r'\d+', s)
         return int(match.group()) if match else 0
 
+    def _toggle_all_target_bpms(self, _checked):
+        select_all = self._selected_bpm_count() < len(self.all_checkboxes)
+        self._set_all_target_bpms(select_all)
+
+    def _set_all_target_bpms(self, checked):
+        for checkbox in self.all_checkboxes:
+            checkbox.blockSignals(True)
+            checkbox.setChecked(checked)
+            checkbox.blockSignals(False)
+        self._sync_all_target_bpms_checkbox()
+        self._refresh_status()
+
+    def _on_target_bpm_state_changed(self, _state):
+        self._sync_all_target_bpms_checkbox()
+        self._refresh_status()
+
+    def _sync_all_target_bpms_checkbox(self):
+        if not hasattr(self, "allTargetBPMsCheckBox"):
+            return
+        selected = self._selected_bpm_count()
+        if selected == 0:
+            state = Qt.Unchecked
+        elif selected == len(self.all_checkboxes):
+            state = Qt.Checked
+        else:
+            state = Qt.PartiallyChecked
+        self.allTargetBPMsCheckBox.blockSignals(True)
+        self.allTargetBPMsCheckBox.setCheckState(state)
+        self.allTargetBPMsCheckBox.blockSignals(False)
+
     def selectall(self):
-        for cb in self.all_checkboxes:
-            cb.setChecked(True)
+        self._set_all_target_bpms(True)
 
     def cancelall(self):
-        for cb in self.all_checkboxes:
-            cb.setChecked(False)
+        self._set_all_target_bpms(False)
+
+    def _target_bpm_preset_dir(self):
+        return Path(self.orbit_runtime["runtime_dir"]) / "target_presets"
+
+    def save_target_bpm_preset(self):
+        preset_dir = self._target_bpm_preset_dir()
+        try:
+            preset_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            QMessageBox.warning(self, "Orbit Correct", f"Cannot create preset directory: {exc}")
+            return
+
+        created_at = datetime.now().astimezone()
+        default_path = preset_dir / f"target_{created_at.strftime('%Y%m%d_%H%M%S')}.json"
+        selected_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Target BPM Preset",
+            str(default_path),
+            "JSON files (*.json)",
+        )
+        if not selected_path:
+            return
+
+        path = Path(selected_path)
+        if path.suffix.lower() != ".json":
+            path = path.with_suffix(".json")
+        payload = {
+            "version": 1,
+            "kind": "orbit_target_bpm_preset",
+            "machine": self.machine_profile.machine.id,
+            "backend": self.app_context.control_backend.name,
+            "created_at": created_at.isoformat(timespec="seconds"),
+            "target_unit": "mm",
+            "targets": [
+                {
+                    "bpm": bpm,
+                    "enabled": checkbox.isChecked(),
+                    "x_mm": bpmx.value(),
+                    "y_mm": bpmy.value(),
+                }
+                for bpm, checkbox, bpmx, bpmy in zip(
+                    self.orbit_workflow.bpms,
+                    self.all_checkboxes,
+                    self._bpmx_spinboxes,
+                    self._bpmy_spinboxes,
+                )
+            ],
+        }
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            temp_path.replace(path)
+        except OSError as exc:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+            QMessageBox.warning(self, "Orbit Correct", f"Cannot save target BPM preset: {exc}")
+            return
+
+        self._notify(f"Saved target BPM preset: {path.name}")
+        QMessageBox.information(self, "Orbit Correct", f"Saved target BPM preset:\n{path}")
+
+    def load_target_bpm_preset(self):
+        preset_dir = self._target_bpm_preset_dir()
+        selected_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Target BPM Preset",
+            str(preset_dir),
+            "JSON files (*.json)",
+        )
+        if not selected_path:
+            return
+
+        path = Path(selected_path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            targets = self._validate_target_bpm_preset(payload)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            QMessageBox.warning(self, "Orbit Correct", f"Cannot load target BPM preset: {exc}")
+            return
+
+        for checkbox in self.all_checkboxes:
+            checkbox.blockSignals(True)
+        try:
+            for checkbox, bpmx, bpmy, target in zip(
+                self.all_checkboxes,
+                self._bpmx_spinboxes,
+                self._bpmy_spinboxes,
+                targets,
+            ):
+                checkbox.setChecked(target[0])
+                bpmx.setValue(target[1])
+                bpmy.setValue(target[2])
+        finally:
+            for checkbox in self.all_checkboxes:
+                checkbox.blockSignals(False)
+
+        self._refresh_status()
+        self._notify(f"Loaded target BPM preset: {path.name}")
+
+    def _validate_target_bpm_preset(self, payload):
+        if not isinstance(payload, dict):
+            raise ValueError("preset root must be a JSON object")
+        if payload.get("version") != 1 or payload.get("kind") != "orbit_target_bpm_preset":
+            raise ValueError("unsupported target BPM preset format")
+        if payload.get("machine") != self.machine_profile.machine.id:
+            raise ValueError("preset machine does not match the current machine")
+        if payload.get("backend") != self.app_context.control_backend.name:
+            raise ValueError("preset backend does not match the current backend")
+        if payload.get("target_unit") != "mm":
+            raise ValueError("target_unit must be mm")
+
+        raw_targets = payload.get("targets")
+        if not isinstance(raw_targets, list):
+            raise ValueError("targets must be a list")
+        targets_by_bpm = {}
+        for raw_target in raw_targets:
+            if not isinstance(raw_target, dict):
+                raise ValueError("each target must be a JSON object")
+            bpm = raw_target.get("bpm")
+            if not isinstance(bpm, str) or not bpm:
+                raise ValueError("each target must define a BPM name")
+            if bpm in targets_by_bpm:
+                raise ValueError(f"duplicate target BPM: {bpm}")
+            enabled = raw_target.get("enabled")
+            if not isinstance(enabled, bool):
+                raise ValueError(f"{bpm}: enabled must be true or false")
+            try:
+                x_mm = float(raw_target["x_mm"])
+                y_mm = float(raw_target["y_mm"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"{bpm}: x_mm and y_mm must be numbers") from exc
+            if not math.isfinite(x_mm) or not math.isfinite(y_mm):
+                raise ValueError(f"{bpm}: target values must be finite")
+            targets_by_bpm[bpm] = (enabled, x_mm, y_mm)
+
+        expected_bpms = set(self.orbit_workflow.bpms)
+        actual_bpms = set(targets_by_bpm)
+        if actual_bpms != expected_bpms:
+            missing = sorted(expected_bpms - actual_bpms)
+            unknown = sorted(actual_bpms - expected_bpms)
+            details = []
+            if missing:
+                details.append(f"missing: {', '.join(missing)}")
+            if unknown:
+                details.append(f"unknown: {', '.join(unknown)}")
+            raise ValueError("preset BPM set does not match the current profile (" + "; ".join(details) + ")")
+
+        validated = []
+        for bpm, bpmx, bpmy in zip(
+            self.orbit_workflow.bpms,
+            self._bpmx_spinboxes,
+            self._bpmy_spinboxes,
+        ):
+            enabled, x_mm, y_mm = targets_by_bpm[bpm]
+            if not bpmx.minimum() <= x_mm <= bpmx.maximum():
+                raise ValueError(f"{bpm}: x_mm is outside the supported GUI range")
+            if not bpmy.minimum() <= y_mm <= bpmy.maximum():
+                raise ValueError(f"{bpm}: y_mm is outside the supported GUI range")
+            validated.append((enabled, x_mm, y_mm))
+        return validated
 
     def _set_global_correctors_checked(self, checked):
         for checkbox in self.global_xcor_checkboxes + self.global_ycor_checkboxes:
@@ -1653,6 +1936,56 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.response_matrix_progress.setRange(0, 100)
         self.response_matrix_progress.setValue(max(0, min(100, int(percent))))
         self.response_matrix_progress.setFormat(text)
+
+    def _set_correction_action_state(self, running):
+        if getattr(self, "_correction_button_running", None) == running:
+            return
+        self._correction_button_running = running
+        self.pushButton_4.setText("Stop Correction" if running else "Start Correction")
+        self.pushButton_4.setProperty("primary", not running)
+        self.pushButton_4.setProperty("danger", running)
+        self.pushButton_4.style().unpolish(self.pushButton_4)
+        self.pushButton_4.style().polish(self.pushButton_4)
+        self.pushButton_4.update()
+
+    def _set_correction_progress(self, percent, text):
+        if not hasattr(self, "correction_progress"):
+            return
+        self.correction_progress.setRange(0, 100)
+        self.correction_progress.setValue(max(0, min(100, int(percent))))
+        self.correction_progress.setFormat(text)
+
+    def _read_correction_progress(self):
+        try:
+            return json.loads(self.correction_progress_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _refresh_correction_progress(self, correction_running):
+        if not hasattr(self, "correction_progress"):
+            return
+        progress = self._read_correction_progress()
+        if progress is None:
+            if correction_running:
+                self._set_correction_progress(0, "Starting...")
+            return
+
+        percent = int(progress.get("percent", 0))
+        status = str(progress.get("status", "running"))
+        current = str(progress.get("current", "")).strip()
+        if status == "completed":
+            text = "Completed (100%)"
+        elif status == "failed":
+            text = f"Failed - {current}" if current else "Failed"
+        elif status == "stopped":
+            text = "Stopped"
+        elif not correction_running:
+            text = "Interrupted"
+        else:
+            text = current or f"{percent}%"
+        self._set_correction_progress(percent, text)
 
     def _read_response_progress(self):
         try:
@@ -1840,6 +2173,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._notify("Response Matrix Measurement is not running.")
         self._refresh_status()
 
+    def toggle_correction(self):
+        if self.process_manager.is_running("orbit_correction"):
+            self.stop_cor()
+        else:
+            self.start_cor()
+
     def start_cor(self):
         if not self._require_write_allowed("Orbit correction"):
             return
@@ -1880,12 +2219,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
             ",".join(bpmy_target_values),                    #8   target_BPMlist
             *runtime_args,
         ]
-        self.process_manager.start_process(
+        try:
+            self.correction_progress_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        self._set_correction_progress(0, "Starting...")
+        proc = self.process_manager.start_process(
             key="orbit_correction",
             label="Orbit Correction",
             cmd=cmd,
             cwd=str(APP_DIR),
         )
+        if proc is None:
+            self._set_correction_progress(0, "Failed to start")
+        self._refresh_status()
  
     def cor_off(self):
         if not self._require_write_allowed("Corrector reset"):
@@ -1939,7 +2288,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
     # stop_cor
     def stop_cor(self):
         stopped = self.process_manager.stop_process("orbit_correction")
-        if not stopped:
+        if stopped:
+            try:
+                self.correction_progress_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+            self._set_correction_progress(0, "Stopped")
+        else:
             self._notify("Orbit Correction is not running.")
         self._refresh_status()
     
