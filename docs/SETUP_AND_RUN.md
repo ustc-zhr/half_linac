@@ -94,17 +94,11 @@ conda activate half_linac
 python3 --version
 ```
 
-`environment.yml` 声明的新环境名是 `half_linac`。当前控制室工作站上已有的完整
-测试环境名是 `half`；在这台机器上应使用：
+激活环境后可确认 Python、pytest 和 PyQt5 均来自目标环境：
 
 ```bash
-conda env list
-conda activate half
 python3 -c "import sys, pytest, PyQt5; print(sys.executable); print(pytest.__version__)"
 ```
-
-环境名本身不影响程序，关键是 `python3`、pytest 和 PyQt5 来自同一个目标环境。
-如果 `which python3` 仍指向 base 环境，先重新执行 `conda activate half`。
 
 确认 `python3 --version` 显示 Python 3.10 或更高版本，推荐使用 Python 3.11。Python 3.9 或更低版本不支持本仓库中使用的 `dataclass(slots=True)` 和 `type | None` 类型写法，会导致 Jitter Analysis、BBA 等应用在导入阶段报错。
 
@@ -266,19 +260,16 @@ bash scripts/check.sh
 同时激活 Conda 环境并加载仓库路径：
 
 ```bash
-conda activate half
+conda activate half_linac
 source scripts/setup.sh
 python3 -m pytest -q
 python3 scripts/smoke_gui_layouts.py
 ```
 
-在由 `environment.yml` 新建、环境名仍为 `half_linac` 的机器上，把第一行改为
-`conda activate half_linac`。
-
 非交互 shell 或自动化任务可使用：
 
 ```bash
-conda run -n half bash -lc \
+conda run -n half_linac bash -lc \
   'source scripts/setup.sh && python3 -m pytest -q'
 ```
 
