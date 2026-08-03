@@ -198,7 +198,7 @@
   },
   "ca_timeout": 0.5,
   "readback_timeout": 10.0,
-  "real_status": "write_blocked",
+  "real_status": "commissioned",
   "write_control": {
     "vm": "blocked",
     "real": "allowed"

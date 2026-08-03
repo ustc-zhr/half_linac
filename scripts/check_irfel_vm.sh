@@ -86,6 +86,14 @@ real_contexts = {
     "energy_spectrum": load_app_context("energy_spectrum", control_backend="real"),
     "emit_measure": load_app_context("emit_measure", control_backend="real"),
     "bba": load_app_context("bba", control_backend="real"),
+    "dispersion_correction": load_app_context(
+        "dispersion_correction",
+        control_backend="real",
+    ),
+    "solenoid_centering": load_app_context(
+        "solenoid_centering",
+        control_backend="real",
+    ),
     "hv_feedback": load_app_context("hv_feedback", control_backend="real"),
 }
 for workflow_name, context in real_contexts.items():
@@ -124,8 +132,10 @@ expected_statuses = {
     "orbit_correct": REAL_STATUS_COMMISSIONED,
     "beam_monitor": REAL_STATUS_COMMISSIONED,
     "energy_spectrum": REAL_STATUS_COMMISSIONED,
-    "emit_measure": REAL_STATUS_COMMISSIONED,
+    "emit_measure": REAL_STATUS_WRITE_SMOKE_PASSED,
     "bba": REAL_STATUS_WRITE_SMOKE_PASSED,
+    "dispersion_correction": REAL_STATUS_COMMISSIONED,
+    "solenoid_centering": REAL_STATUS_COMMISSIONED,
     "hv_feedback": REAL_STATUS_COMMISSIONED,
 }
 for app_name, expected in expected_statuses.items():
@@ -135,5 +145,8 @@ for app_name, expected in expected_statuses.items():
 print("IRFEL VM acceptance passed.")
 print(f"  apps: {', '.join(contexts)}")
 print(f"  publish plan: {len(plan.bpm_specs)} BPM specs, {len(plan.watch_image_specs)} watch-image specs")
-print("  real write policy: allowed for orbit, beam_monitor, energy_spectrum, emit_measure, bba, hv_feedback")
+print(
+    "  real write policy: allowed for orbit, beam_monitor, energy_spectrum, "
+    "emit_measure, bba, dispersion_correction, solenoid_centering, hv_feedback"
+)
 PY

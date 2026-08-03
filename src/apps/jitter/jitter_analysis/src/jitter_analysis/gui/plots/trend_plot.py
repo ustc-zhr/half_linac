@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 import math
 
-from .visibility import downsample_series_min_max, resolve_initial_visibility, slice_series_tail
+from .visibility import downsample_series_min_max, padded_finite_range, resolve_initial_visibility, slice_series_tail
 from .theme import style_plot_widget
 
 try:
@@ -82,6 +82,7 @@ if QtWidgets is not None:
     DEFAULT_VISIBLE_TREND_SERIES = 1
     DEFAULT_TREND_RECENT_POINTS = 2000
     DEFAULT_TREND_DISPLAY_POINTS = 6000
+    RECENT_WINDOW_X_PADDING_FRACTION = 0.01
 
     class TrendPlot(QtWidgets.QWidget):
         def __init__(self, parent=None) -> None:
@@ -196,6 +197,7 @@ if QtWidgets is not None:
                         x_values,
                         y_values,
                     )
+            self._apply_recent_x_window()
             self._update_info_label()
 
         def set_series_history(
@@ -249,6 +251,7 @@ if QtWidgets is not None:
                 self.plot_widget.removeItem(self._highlight_region)
                 self._highlight_region = None
             self._restore_highlight_region()
+            self._apply_recent_x_window()
             self._update_info_label()
 
         def _rebuild_series_menu(self) -> None:
@@ -344,6 +347,7 @@ if QtWidgets is not None:
 
             style_plot_widget(self.plot_widget)
             self._restore_highlight_region()
+            self._apply_recent_x_window()
             self._update_info_label()
 
         def _apply_title(self) -> None:
@@ -373,6 +377,28 @@ if QtWidgets is not None:
             region.setZValue(-5)
             self.plot_widget.addItem(region)
             self._highlight_region = region
+
+        def _apply_recent_x_window(self) -> None:
+            if self.plot_widget is None:
+                return
+            if str(self.range_combo.currentData() or "recent") != "recent":
+                return
+
+            x_range = padded_finite_range(
+                self._visible_display_x_values(),
+                padding_fraction=RECENT_WINDOW_X_PADDING_FRACTION,
+                minimum_span=1.0,
+            )
+            if x_range is None:
+                return
+            self.plot_widget.setXRange(x_range[0], x_range[1], padding=0.0)
+
+        def _visible_display_x_values(self) -> list[float]:
+            x_values: list[float] = []
+            for pv_id in self._curves:
+                displayed_x_values, _displayed_y_values = self._display_series_data(pv_id)
+                x_values.extend(displayed_x_values)
+            return x_values
 
         def clear_highlight(self) -> None:
             self._highlight_range = None

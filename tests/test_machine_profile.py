@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 
@@ -65,6 +66,9 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
     default_control_backend_choices,
     list_machine_choices,
 )
+from half_linac.src.shared.machine_profile.validation import (
+    _validate_real_commissioning_status,
+)
 
 
 def _write_directory_profile_fixture(
@@ -106,6 +110,18 @@ def _write_directory_profile_fixture(
 
 
 class MachineProfileTests(unittest.TestCase):
+    def test_real_write_blocking_status_rejects_allowed_write_policy(self):
+        profile = deepcopy(load_profile("irfel"))
+        workflow = get_workflow(profile, "dispersion_correction")
+        workflow["real_status"] = "write_blocked"
+        workflow["write_control"]["real"] = "allowed"
+
+        check = _validate_real_commissioning_status(profile, "dispersion_correction")
+
+        self.assertEqual(check.status, "fail")
+        self.assertIn("real_status='write_blocked'", check.detail)
+        self.assertIn("write_control.real resolves to 'allowed'", check.detail)
+
     def test_machine_profile_managed_sources_do_not_import_runtime_config(self):
         managed_paths = [
             REPO_ROOT / "src/apps/launcher/main.py",
@@ -259,7 +275,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow.presets_by_id["ls01_centering"].vcorr, "VC01")
         self.assertTrue(workflow_writes_allowed(context, "solenoid_centering"))
         self.assertFalse(workflow_writes_allowed(context, "solenoid_centering", mode="vm"))
-        self.assertEqual(real_commissioning_status(context), "write_smoke_passed")
+        self.assertEqual(real_commissioning_status(context), "commissioned")
 
     def test_solenoid_centering_rejects_invalid_readback_verification(self):
         preset = {
@@ -1240,7 +1256,10 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(real_commissioning_status(profile, "orbit_display"), REAL_STATUS_READ_ONLY)
         self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_COMMISSIONED)
         self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_WRITE_SMOKE_PASSED)
-        self.assertEqual(real_commissioning_status(profile, "emit_measure"), REAL_STATUS_COMMISSIONED)
+        self.assertEqual(
+            real_commissioning_status(profile, "emit_measure"),
+            REAL_STATUS_WRITE_SMOKE_PASSED,
+        )
         self.assertEqual(real_commissioning_status(profile, "energy_spectrum"), REAL_STATUS_COMMISSIONED)
         self.assertTrue(workflow_writes_allowed(orbit_context, "orbit"))
         self.assertTrue(workflow_writes_allowed(vm_orbit_context, "orbit"))

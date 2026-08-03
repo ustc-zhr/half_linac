@@ -46,18 +46,79 @@
 
 ### 1. 准备环境
 
-建议先阅读 [docs/SETUP_AND_RUN.md](docs/SETUP_AND_RUN.md)。
+建议先阅读 [docs/SETUP_AND_RUN.md](docs/SETUP_AND_RUN.md)。README 只保留常用安装路径；EPICS Base、elegant 和离屏 GUI 测试的细节以该文档为准。
 
-最短路径如下：
+推荐使用 Linux 或 WSL。Windows 原生环境不适合作为主要运行环境。
+
+先克隆仓库并进入项目根目录：
+
+```bash
+git clone https://git.ustc.edu.cn/zhanghaoran/half_linac.git
+cd half_linac
+```
+
+创建并激活 Conda 环境：
 
 ```bash
 conda env create -f environment.yml
 conda activate half_linac
 python3 --version
-bash scripts/runMe
 ```
 
-说明：`scripts/` 下的启动脚本和主要 Python 入口现在都会自行定位仓库，不需要你先在 `.zshrc` / `.bashrc` 里手工追加 `PYTHONPATH`。`source scripts/setup.sh` 只在你想反复手动执行多个 `python3 src/...` 入口时才有帮助。
+确认 `python3 --version` 显示 Python 3.10 或更高版本，推荐 3.11。仓库默认环境文件当前使用 Python 3.11。
+
+激活环境后先做一次基础依赖检查：
+
+```bash
+python3 - <<'PY'
+import sys
+assert sys.version_info >= (3, 10), sys.version
+import PyQt5
+import epics
+import h5py
+import matplotlib
+import numpy
+import pandas
+import pyqtgraph
+import scipy
+import skimage
+print("Basic Python environment OK:", sys.version)
+PY
+```
+
+说明：`scripts/` 下的启动脚本和主要 Python 入口现在都会自行定位仓库，不需要你先在 `.zshrc` / `.bashrc` 里手工追加 `PYTHONPATH`。`source scripts/setup.sh` 只在你想反复手动执行多个 `python3 src/...` 入口时才有帮助：
+
+```bash
+source scripts/setup.sh
+```
+
+只运行 Control Room GUI 并连接目标机器已有 IOC 时，通常到这里就可以继续执行静态检查和启动 GUI。
+
+如果需要在本机运行 VM、model backend、energy spectrum 或任何会导入 `sdds.SDDS` 的流程，还需要额外安装 SDDS Python binding：
+
+```bash
+conda activate half_linac
+conda install soliday::sdds
+python3 - <<'PY'
+import sdds
+print("sdds OK:", getattr(sdds, "__file__", "built-in"))
+PY
+```
+
+如果需要在本机运行 elegant 模型或 virtual machine，还需要系统里能找到 `elegant` 可执行程序：
+
+```bash
+which elegant
+elegant
+```
+
+如果只连接实机 IOC，不需要本机安装 EPICS Base，也不需要构建本仓库的 `softIOC`。如果需要在本机启动仓库 softIOC，则需要先安装 EPICS Base，并保证 `softIoc` 可执行：
+
+```bash
+softIoc
+```
+
+成功时会进入 `epics>` 提示符。退出后再继续配置和构建本仓库 softIOC。EPICS Base 的安装示例见 [docs/SETUP_AND_RUN.md](docs/SETUP_AND_RUN.md#3-epics-base-for-local-vmsoftioc)。
 
 如果 `environment.yml` 不能直接复用，控制室只连接目标机器的实机 IOC 时至少需要：
 
@@ -72,6 +133,18 @@ bash scripts/runMe
 - sdds Python 模块
 - 系统可执行的 `elegant`
 - 已安装并可运行的 EPICS Base / `softIoc`
+
+手动安装依赖的示例命令：
+
+```bash
+conda create -n half_linac python=3.11
+conda activate half_linac
+conda install -c conda-forge pyqt pyqtwebengine pyopengl pyqtgraph numpy scipy matplotlib scikit-image scikit-learn pandas h5py pyyaml requests psutil tqdm pytest bayesian-optimization
+pip install pyepics
+conda install soliday::sdds
+```
+
+其中 `conda install soliday::sdds` 只对 VM/model/energy-spectrum 等 SDDS 相关流程必需。
 
 ### 2. 选择机器并检查本地运行依赖
 
@@ -145,6 +218,114 @@ bash scripts/start_vm.sh
 
 这些文件可能由程序生成或刷新。除非任务明确要求，否则优先修改它们的生成逻辑，而不是手工改生成物。
 
+## 附录：elegant 与 SDDS 安装
+
+当前 VM、model backend、energy spectrum 以及部分 optics/Twiss 更新流程依赖 APS `elegant` 软件。只运行 Control Room GUI 并连接已有实机 IOC 时，可以先不安装 `elegant`；需要本机运行 VM 或模型计算时，必须保证当前 shell 能找到 `elegant`，并且 Python 环境能导入 `sdds`。
+
+官方入口：
+
+- APS Accelerator Operations and Physics Software: <https://www.aps.anl.gov/Accelerator-Operations-Physics/Software>
+- Python `sdds` conda package: <https://anaconda.org/soliday/sdds>
+- 仓库详细说明：[docs/ELEGANT_INSTALL.md](docs/ELEGANT_INSTALL.md)
+
+需要区分三类依赖：
+
+- `elegant`: 外部命令行程序，VM 和模型计算会直接调用
+- SDDS Toolkit: APS 发布的 SDDS 命令行工具和底层库
+- Python `sdds`: 仓库读取 `.mat`、`.twi` 等 elegant 输出文件时使用的 Python 模块
+
+### 1. 优先使用控制室共享环境
+
+如果控制室机器已有环境模块或共享软件栈，优先使用已有安装：
+
+```bash
+module avail elegant
+module load elegant
+which elegant
+elegant
+```
+
+如果没有 `module` 命令，但维护人员已经把 elegant 安装在 `/opt`、`/usr/local` 或共享软件目录下，把对应 `bin` 目录加入 `PATH`：
+
+```bash
+export PATH=/path/to/elegant/bin:$PATH
+which elegant
+```
+
+建议把最终的 `PATH` 设置放到控制室环境加载脚本中，不要写进仓库源码。
+
+### 2. 从 APS 包安装
+
+先确认系统和架构：
+
+```bash
+cat /etc/os-release
+uname -m
+```
+
+然后从 APS 软件页面下载与系统匹配的包，通常至少包括：
+
+- `SDDSToolKit-...<os>...x86_64.rpm`
+- `elegant-...<os>...x86_64.rpm`
+
+RHEL、Fedora 或 openSUSE 可使用 RPM 包管理器安装：
+
+```bash
+sudo dnf install ./SDDSToolKit-*.rpm
+sudo dnf install ./elegant-*.rpm
+```
+
+较老的 RHEL/CentOS 系统可使用：
+
+```bash
+sudo yum install ./SDDSToolKit-*.rpm
+sudo yum install ./elegant-*.rpm
+```
+
+Ubuntu/Debian 可按 APS 页面说明使用 `alien` 转换安装：
+
+```bash
+sudo apt update
+sudo apt install alien
+sudo alien -i SDDSToolKit-*.rpm
+sudo alien -i elegant-*.rpm
+```
+
+如果 control-room 主机有严格的软件安装策略，应由本地维护人员安装到共享软件目录，而不是直接全局安装。
+
+### 3. 安装 Python sdds
+
+在 `half_linac` Conda 环境中安装：
+
+```bash
+conda activate half_linac
+conda install soliday::sdds
+```
+
+`environment.yml` 有意不直接声明 `soliday::sdds`，这样基础控制室环境可以不依赖额外 channel 完成求解。只有 VM、model backend、energy spectrum 等 SDDS 相关流程需要后装它。
+
+验证 Python 模块：
+
+```bash
+python3 - <<'PY'
+import sdds
+print("Python sdds OK:", getattr(sdds, "__file__", "built-in"))
+PY
+```
+
+### 4. 最终验证
+
+启动 VM 或模型相关 GUI 功能前，在同一个 shell 中检查：
+
+```bash
+which elegant
+elegant
+python3 -c "import sdds; print('sdds OK')"
+bash scripts/check.sh
+```
+
+如果 `which elegant` 没有输出，说明 `elegant` 不在 `PATH`。如果 GUI 能打开但 `Update eta`、`Update optics`、发射度 Twiss/recalculate 或 VM 相关流程失败，优先在启动 GUI 的同一个 shell 中重新检查 `which elegant` 和 `python3 -c "import sdds"`。
+
 ## 文档导航
 
 - [AGENTS.md](AGENTS.md): 仓库级 agent 规则与标准命令
@@ -152,6 +333,7 @@ bash scripts/start_vm.sh
 - [configs/machines/README.md](configs/machines/README.md): machine profile 结构和配置职责
 - [docs/ADD_SECOND_MACHINE.md](docs/ADD_SECOND_MACHINE.md): 新机器接入的最小路径
 - [docs/SETUP_AND_RUN.md](docs/SETUP_AND_RUN.md): 安装、环境配置、运行方式
+- [docs/ELEGANT_INSTALL.md](docs/ELEGANT_INSTALL.md): elegant、SDDS Toolkit 和 Python sdds 安装说明
 - [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md): 历史开发记录
 - [docs/DISPERSION_CORRECTION.md](docs/DISPERSION_CORRECTION.md): 色散校正架构、运行边界与 commissioning 清单
 - [docs/CODEX_REVIEW_PRIORITY.md](docs/CODEX_REVIEW_PRIORITY.md): 重新审查和完善仓库时的优先级建议

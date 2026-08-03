@@ -49,11 +49,11 @@ does not change the dispersion algorithm. The old `phase_set`, `phase_readback`,
 and `phase_per_delta` fields remain accepted only as compatibility aliases for
 standalone regression fixtures.
 
-The current workflow contains `real_status: write_blocked` and
-`write_control.real: blocked`, so the IRFEL real profile resolves to
-`read_only`. The current `actuator_per_delta`, sampling interval, and settle time
-are present, but the write policy remains the final independent commissioning
-gate until those values are confirmed onsite.
+The current workflow contains `real_status: commissioned` and
+`write_control.real: allowed`, so the IRFEL real profile resolves to
+`write_enabled`. The configured `actuator_per_delta`, sampling interval, settle
+time, safety limits, and restoration behavior were accepted onsite. Static and
+live preflight checks remain mandatory runtime gates before each operation.
 
 In machine-profile mode the GUI derives selectable BPMs and quadrupoles from
 the machine's native `bpm` and `quad` elements. The workflow file supplies only
@@ -206,7 +206,10 @@ Actual correction remains a separate beam-based workflow: measure dispersion
 with the calibrated energy knob, calculate a small quadrupole step, apply it
 under backend limits, and remeasure.
 
-## Commissioning steps still required
+## Commissioning acceptance
+
+The following acceptance sequence was confirmed complete on 2026-08-01 before
+the real write policy was enabled:
 
 1. Run static preflight and read-only status checks against the real IOC.
 2. Choose the physical energy actuator and measure its actuator-to-`dp/p`

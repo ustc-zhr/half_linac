@@ -33,7 +33,7 @@
   ],
   "default_preset": "emit_qm12_prf04",
   "twiss_quads": ["QM11", "QM12"],
-  "real_status": "commissioned",
+  "real_status": "write_smoke_passed",
   "write_control": {
     "vm": "allowed",
     "real": "allowed"

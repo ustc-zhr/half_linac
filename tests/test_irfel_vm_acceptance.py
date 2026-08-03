@@ -12,6 +12,9 @@ if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
 from half_linac.src.shared.elegant_backend.publisher import build_vm_publish_plan
+from half_linac.src.apps.dispersion_correction.profile_runtime import (
+    load_profile_run_config,
+)
 from half_linac.src.shared.machine_profile import (
     REAL_STATUS_COMMISSIONED,
     REAL_STATUS_READ_ONLY,
@@ -91,10 +94,26 @@ class IRFELVmAcceptanceTests(unittest.TestCase):
                 machine_id="irfel",
                 control_backend="real",
             ),
+            "solenoid_centering": load_app_context(
+                "solenoid_centering",
+                machine_id="irfel",
+                control_backend="real",
+            ),
         }
+        dispersion_context = load_app_context(
+            "dispersion_correction",
+            machine_id="irfel",
+            control_backend="real",
+        )
+        _, dispersion_config = load_profile_run_config(dispersion_context)
 
         for workflow_name, context in real_contexts.items():
             self.assertTrue(workflow_writes_allowed(context, workflow_name))
+
+        self.assertTrue(
+            workflow_writes_allowed(dispersion_context, "dispersion_correction")
+        )
+        self.assertEqual(dispersion_config.backend.mode, "write_enabled")
 
         bba_workflow = get_workflow(profile, "bba")
         self.assertEqual(bba_workflow["bba1"]["control_backends"], ["vm", "real"])
@@ -103,8 +122,19 @@ class IRFELVmAcceptanceTests(unittest.TestCase):
         self.assertEqual(real_commissioning_status(profile, "orbit_correct"), REAL_STATUS_COMMISSIONED)
         self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_COMMISSIONED)
         self.assertEqual(real_commissioning_status(profile, "energy_spectrum"), REAL_STATUS_COMMISSIONED)
-        self.assertEqual(real_commissioning_status(profile, "emit_measure"), REAL_STATUS_COMMISSIONED)
+        self.assertEqual(
+            real_commissioning_status(profile, "emit_measure"),
+            REAL_STATUS_WRITE_SMOKE_PASSED,
+        )
         self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_WRITE_SMOKE_PASSED)
+        self.assertEqual(
+            real_commissioning_status(profile, "solenoid_centering"),
+            REAL_STATUS_COMMISSIONED,
+        )
+        self.assertEqual(
+            real_commissioning_status(profile, "dispersion_correction"),
+            REAL_STATUS_COMMISSIONED,
+        )
 
 
 if __name__ == "__main__":

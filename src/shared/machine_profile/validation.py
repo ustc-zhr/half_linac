@@ -11,7 +11,7 @@ from half_linac.src.shared.elegant_backend.parser import ElegantParser
 from .loader import SUPPORTED_APP_NAMES, resolve_machine_id
 from .model_backend import ElegantModelBackend, build_model_backend
 from .models import AppContext, MachineProfile, MachineProfileError, ModelBackendConfig
-from .resolver import resolve_channel
+from .resolver import get_workflow, resolve_channel
 from .runtime_resolver import resolve_machine_runtime
 from .softioc_contract import iter_softioc_vm_aliases
 from .compatibility import (
@@ -21,11 +21,26 @@ from .compatibility import (
     real_commissioning_status,
     resolve_virtual_machine_usedline_workflow,
 )
+from .commissioning import (
+    REAL_STATUS_NOT_SUPPORTED,
+    REAL_STATUS_READ_ONLY,
+    REAL_STATUS_WRITE_BLOCKED,
+    real_commissioning_workflow_name,
+)
+from .write_control import WRITE_ALLOWED, workflow_write_policy
 
 
 PASS = "pass"
 SKIP = "skip"
 FAIL = "fail"
+
+_REAL_WRITE_BLOCKING_STATUSES = frozenset(
+    {
+        REAL_STATUS_NOT_SUPPORTED,
+        REAL_STATUS_READ_ONLY,
+        REAL_STATUS_WRITE_BLOCKED,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -583,6 +598,22 @@ def _validate_real_commissioning_status(
 ) -> MachineValidationCheck:
     try:
         status = real_commissioning_status(profile, app_name)
+        workflow_name = real_commissioning_workflow_name(app_name)
+        workflow = get_workflow(profile, workflow_name)
+        raw_status = workflow.get("real_status")
+        if (
+            not isinstance(raw_status, Mapping)
+            and "write_control" in workflow
+            and status in _REAL_WRITE_BLOCKING_STATUSES
+            and workflow_write_policy(profile, workflow_name, mode="real")
+            == WRITE_ALLOWED
+        ):
+            return MachineValidationCheck(
+                f"commissioning:{app_name}",
+                FAIL,
+                f"workflows.{workflow_name} has real_status={status!r} but "
+                "write_control.real resolves to 'allowed'.",
+            )
     except MachineProfileError as exc:
         return MachineValidationCheck(f"commissioning:{app_name}", FAIL, str(exc))
 

@@ -191,6 +191,40 @@ def _run_child(app_name: str) -> None:
     window.show()
     qt_app.processEvents()
 
+    initial_log = window.textEdit.toPlainText() if spec.uses_selector else ""
+    if spec.uses_selector:
+        expected_runtime_log = (
+            f"Runtime: machine={spec.machine_id}, backend={spec.control_backend}."
+        )
+        if expected_runtime_log not in initial_log:
+            raise AssertionError(
+                f"{app_name} did not log its initialized runtime context."
+            )
+        expected_guidance = (
+            "Virtual Accelerator should be started before VM applications."
+            if spec.control_backend == "vm"
+            else "Real-machine mode active. Application write permissions follow commissioning policy."
+        )
+        if expected_guidance not in initial_log:
+            raise AssertionError(f"{app_name} displayed the wrong runtime guidance.")
+        unexpected_guidance = (
+            "Real-machine mode active. Application write permissions follow commissioning policy."
+            if spec.control_backend == "vm"
+            else "Virtual Accelerator should be started before VM applications."
+        )
+        if unexpected_guidance in initial_log:
+            raise AssertionError(f"{app_name} displayed guidance for the wrong backend.")
+
+        logs_button_size = window.logs_button.size()
+        window.logs_button.click()
+        qt_app.processEvents()
+        if window.logs_button.size() != logs_button_size:
+            raise AssertionError(f"{app_name} Logs button resized when the log was opened.")
+        window.logs_button.click()
+        qt_app.processEvents()
+        if window.logs_button.size() != logs_button_size:
+            raise AssertionError(f"{app_name} Logs button resized when the log was closed.")
+
     status_items = set(getattr(window.status_panel, "_items", {}))
     if status_items != set(spec.status_keys):
         raise AssertionError(
@@ -207,6 +241,95 @@ def _run_child(app_name: str) -> None:
 
     if app_name == "launcher_irfel_real" and not window.ct_monitor_button.isEnabled():
         raise AssertionError("IRFEL real launcher did not enable CT Monitor.")
+    if app_name == "launcher_irfel_real":
+        if window.feedback_group.title() != "Feedback":
+            raise AssertionError("Launcher feedback group has the wrong title.")
+        for button_name in ("energy_feedback_button", "hv_feedback_button"):
+            button = getattr(window, button_name)
+            if button.parent() is not window.feedback_group:
+                raise AssertionError(
+                    f"{button_name} was not moved into the Feedback group."
+                )
+
+        groups = (
+            window.groupBox_3,
+            window.groupBox_4,
+            window.groupBox_5,
+            window.feedback_group,
+        )
+        expected_positions = {
+            1240: [(0, 0), (0, 1), (0, 2), (0, 3)],
+            1000: [(0, 0), (0, 1), (1, 0), (1, 1)],
+            800: [(0, 0), (1, 0), (2, 0), (3, 0)],
+        }
+        for width, expected in expected_positions.items():
+            window.resize(width, 800)
+            qt_app.processEvents()
+            qt_app.processEvents()
+            actual = []
+            for group in groups:
+                index = window.group_panel_grid.indexOf(group)
+                row, column, _row_span, _column_span = (
+                    window.group_panel_grid.getItemPosition(index)
+                )
+                actual.append((row, column))
+            if actual != expected:
+                raise AssertionError(
+                    f"Launcher group positions at {width}px are {actual}; expected {expected}."
+                )
+
+        window.resize(1240, 800)
+        qt_app.processEvents()
+        qt_app.processEvents()
+        aligned_button_pairs = (
+            (window.orbit_correct, window.energy_feedback_button),
+            (window.solenoid_centering_button, window.hv_feedback_button),
+        )
+        for tuning_button, feedback_button in aligned_button_pairs:
+            tuning_geometry = tuning_button.geometry()
+            feedback_geometry = feedback_button.geometry()
+            if (
+                tuning_geometry.top() != feedback_geometry.top()
+                or tuning_geometry.height() != feedback_geometry.height()
+            ):
+                raise AssertionError(
+                    f"{tuning_button.objectName()} and {feedback_button.objectName()} "
+                    "are not vertically aligned."
+                )
+
+        expected_real_statuses = {
+            "BBA": "write_smoke_passed",
+            "emitmeasure": "write_smoke_passed",
+            "solenoid_centering_button": "commissioned",
+            "dispersion_correction_button": "commissioned",
+        }
+        for button_name, expected_status in expected_real_statuses.items():
+            actual_status = getattr(window, button_name).property("realStatus")
+            if actual_status != expected_status:
+                raise AssertionError(
+                    f"IRFEL real {button_name} status={actual_status!r}; "
+                    f"expected {expected_status!r}."
+                )
+        for palette_name in ("DARK_THEME", "LIGHT_THEME"):
+            palette = getattr(module, palette_name)
+            if palette["metric_smoke_fg"] == palette["metric_active_fg"]:
+                raise AssertionError(
+                    f"{palette_name} uses the same border for write-smoke and commissioned apps."
+                )
+            launcher_theme = module.build_launcher_theme(palette)
+            for status, color in (
+                ("write_smoke_passed", palette["metric_smoke_fg"]),
+                ("commissioned", palette["metric_active_fg"]),
+            ):
+                expected_rule = (
+                    f'QPushButton[realStatus="{status}"] {{\n'
+                    f"    border-color: {color};\n"
+                    "}"
+                )
+                if expected_rule not in launcher_theme:
+                    raise AssertionError(
+                        f"{palette_name} does not style {status} with {color}."
+                    )
     if app_name == "launcher_irfel_vm" and window.ct_monitor_button.isEnabled():
         raise AssertionError("IRFEL VM launcher incorrectly enabled the real-only CT Monitor.")
     if app_name == "launcher_irfel_vm" and not window.dispersion_correction_button.isEnabled():
@@ -527,6 +650,19 @@ def _run_child(app_name: str) -> None:
         window._reset_monitor_display()
         if window._signal_history["time"] or window._hv_command_history["time"]:
             raise AssertionError("HV feedback did not clear trend history for a new session.")
+
+    if app_name == "launcher":
+        window._apply_runtime_selection("irfel", "real")
+        switched_log = window.textEdit.toPlainText()
+        if "Runtime: machine=irfel, backend=real." not in switched_log:
+            raise AssertionError("Launcher did not refresh the log for IRFEL real mode.")
+        if (
+            "Real-machine mode active. Application write permissions follow commissioning policy."
+            not in switched_log
+        ):
+            raise AssertionError("Launcher omitted real-machine guidance after switching runtime.")
+        if "Virtual Accelerator should be started before VM applications." in switched_log:
+            raise AssertionError("Launcher retained VM guidance after switching to real mode.")
 
     window.close()
     qt_app.processEvents()

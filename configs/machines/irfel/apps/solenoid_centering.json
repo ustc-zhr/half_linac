@@ -98,7 +98,7 @@
       }
     }
   ],
-  "real_status": "write_smoke_passed",
+  "real_status": "commissioned",
   "write_control": {
     "vm": "blocked",
     "real": "allowed"

@@ -1,5 +1,9 @@
 # IRFEL Solenoid Centering Temporary Test
 
+Commissioning status: `commissioned` as of 2026-08-01. The temporary bundle
+instructions below are retained for maintenance and recovery; normal operation
+should use the complete `half_linac` installation.
+
 This note records the temporary deployment path for testing the
 `solenoid_centering` app on the IRFEL control-room machine before the full
 `half_linac` package is installed there.

@@ -79,7 +79,7 @@ def test_irfel_vm_profile_opens_as_model_only_without_energy_knob_pvs() -> None:
         AchromatWorkflow(config).measure_dispersion()
 
 
-def test_irfel_real_profile_resolves_write_policy_and_existing_channels() -> None:
+def test_irfel_real_profile_resolves_commissioned_write_policy_and_channels() -> None:
     context = load_app_context(
         "dispersion_correction",
         machine_id="irfel",

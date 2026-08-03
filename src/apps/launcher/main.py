@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QApplication,
     QFrame,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -98,6 +99,7 @@ DARK_THEME = {
     "metric_label_fg": "#8ea0ad",
     "metric_value_fg": "#f3efe3",
     "metric_active_fg": "#45d0bc",
+    "metric_smoke_fg": "#60a5fa",
     "metric_warning_fg": "#e4b86f",
     "metric_idle_fg": "#c8d2da",
     "textedit_bg": "#10171c",
@@ -146,6 +148,7 @@ LIGHT_THEME = {
     "metric_label_fg": "#7c7368",
     "metric_value_fg": "#2d3940",
     "metric_active_fg": "#2d7f6d",
+    "metric_smoke_fg": "#2563eb",
     "metric_warning_fg": "#a97118",
     "metric_idle_fg": "#4e5a62",
     "textedit_bg": "#fffdf9",
@@ -336,7 +339,10 @@ QPushButton[realStatus="write_blocked"] {{
     border-color: {metric_warning_fg};
 }}
 
-QPushButton[realStatus="write_smoke_passed"],
+QPushButton[realStatus="write_smoke_passed"] {{
+    border-color: {metric_smoke_fg};
+}}
+
 QPushButton[realStatus="commissioned"] {{
     border-color: {metric_active_fg};
 }}
@@ -802,7 +808,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if not icon.isNull():
             self.setWindowIcon(icon)
         self.resize(1240, 800)
-        self.setMinimumSize(940, 720)
+        self.setMinimumSize(760, 720)
         self._apply_theme()
         self.textEdit.hide()
         self.textEdit.setMaximumHeight(160)
@@ -863,9 +869,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.logs_button.setObjectName("logToggleButton")
         self.logs_button.setCheckable(True)
         self.logs_button.setProperty("compact", True)
-        self.logs_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        self.logs_button.setMinimumWidth(72)
-        self.logs_button.setFixedHeight(HEADER_ACTION_HEIGHT)
+        self.logs_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.logs_button.setFixedSize(88, HEADER_ACTION_HEIGHT)
         self.logs_button.setToolTip("Show or hide the current launcher activity log.")
         self.logs_button.toggled.connect(self._toggle_activity_log)
 
@@ -897,6 +902,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.groupBox_4.setTitle("Diagnostics")
         self.groupBox_5.setTitle("Beam Tuning")
         self.groupBox_3.setTitle("Core Systems")
+        self.feedback_group = QGroupBox("Feedback", self.frame_2)
+        self.feedback_group.setObjectName("feedback_group")
+        self.feedback_outer_layout = QVBoxLayout(self.feedback_group)
+        self.feedback_layout = QGridLayout()
+        self.feedback_outer_layout.addLayout(self.feedback_layout)
 
     def _configure_group_panel(self):
         self.frame_2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -918,13 +928,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._update_group_panel_layout()
 
     def _configure_group_layouts(self):
-        for group_box in (self.groupBox_3, self.groupBox_4, self.groupBox_5):
+        for group_box in (
+            self.groupBox_3,
+            self.groupBox_4,
+            self.groupBox_5,
+            self.feedback_group,
+        ):
             group_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
             group_box.layout().setContentsMargins(10, 12, 10, 10)
 
-        self.energy_feedback_button = QPushButton(self.groupBox_5)
+        self.energy_feedback_button = QPushButton(self.feedback_group)
         self.energy_feedback_button.setObjectName("energy_feedback_button")
-        self.hv_feedback_button = QPushButton(self.groupBox_5)
+        self.hv_feedback_button = QPushButton(self.feedback_group)
         self.hv_feedback_button.setObjectName("hv_feedback_button")
         self.solenoid_centering_button = QPushButton(self.groupBox_5)
         self.solenoid_centering_button.setObjectName("solenoid_centering_button")
@@ -956,9 +971,13 @@ class myWindow(QMainWindow, Ui_MainWindow):
                     self.BBA,
                     self.emitmeasure,
                     self.dispersion_correction_button,
-                    self.energy_feedback_button,
-                    self.hv_feedback_button,
                 ],
+                1,
+            ),
+            (
+                self.feedback_layout,
+                self.feedback_group,
+                [self.energy_feedback_button, self.hv_feedback_button],
                 1,
             ),
         ]
@@ -1133,13 +1152,23 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._append_log(message)
         self.statusBar().showMessage(message, 5000)
 
+    def _append_runtime_guidance(self):
+        if self.control_backend == "vm":
+            self._append_log(
+                "Virtual Accelerator should be started before VM applications."
+            )
+            return
+        self._append_log(
+            "Real-machine mode active. Application write permissions follow commissioning policy."
+        )
+
     def _reset_activity_log(self):
         self.textEdit.clear()
         self._append_log("Control Room ready.")
         self._append_log(
             f"Runtime: machine={self.machine_profile.machine.id}, backend={self.control_backend}."
         )
-        self._append_log("Start with Virtual Accelerator before running analysis or control apps.")
+        self._append_runtime_guidance()
 
     def _launch_app(self, key):
         spec = APP_DEFINITIONS[key]
@@ -1373,6 +1402,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.groupBox_3,
             self.groupBox_4,
             self.groupBox_5,
+            self.feedback_group,
         ]
 
         while self.group_panel_grid.count():
@@ -1380,33 +1410,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         if self.width() < 860:
             columns = 1
-        elif self.width() < 1020:
+        elif self.width() < 1180:
             columns = 2
         else:
-            columns = 3
+            columns = 4
 
-        if columns == 3:
-            self.group_panel_grid.setColumnStretch(0, 1)
-            self.group_panel_grid.setColumnStretch(1, 1)
-            self.group_panel_grid.setColumnStretch(2, 1)
-            for index, group_box in enumerate(groups):
-                self.group_panel_grid.addWidget(group_box, 0, index, Qt.AlignTop)
-            return
-
-        if columns == 2:
-            self.group_panel_grid.setColumnStretch(0, 1)
-            self.group_panel_grid.setColumnStretch(1, 1)
-            self.group_panel_grid.setColumnStretch(2, 0)
-            self.group_panel_grid.addWidget(self.groupBox_3, 0, 0, Qt.AlignTop)
-            self.group_panel_grid.addWidget(self.groupBox_4, 0, 1, Qt.AlignTop)
-            self.group_panel_grid.addWidget(self.groupBox_5, 1, 0, 1, 2, Qt.AlignTop)
-            return
-
-        self.group_panel_grid.setColumnStretch(0, 1)
-        self.group_panel_grid.setColumnStretch(1, 0)
-        self.group_panel_grid.setColumnStretch(2, 0)
+        for column in range(4):
+            self.group_panel_grid.setColumnStretch(column, int(column < columns))
         for index, group_box in enumerate(groups):
-            self.group_panel_grid.addWidget(group_box, index, 0, Qt.AlignTop)
+            row, column = divmod(index, columns)
+            self.group_panel_grid.addWidget(group_box, row, column, Qt.AlignTop)
 
     def _update_group_button_layouts(self):
         if not self.group_button_specs:

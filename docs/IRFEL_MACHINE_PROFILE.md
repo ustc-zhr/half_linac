@@ -136,7 +136,17 @@ Defines emittance measurement presets:
 - default preset
 - Twiss quadrupoles
 
-IRFEL real mode is currently `write_blocked`; VM mode is allowed.
+IRFEL real mode has passed the write smoke test and remains
+`write_smoke_passed`; it is not yet marked fully commissioned. VM and real
+writes are allowed by the workflow policy.
+
+### `apps/solenoid_centering.json`
+
+Defines the real-only solenoid-centering presets and their scan, limit,
+readback-verification, and restoration settings. The IRFEL workflow is
+`commissioned`, and real writes are allowed subject to static/live preflight and
+the application safety checks. See `IRFEL_SOLENOID_CENTERING_TEST.md` for the
+bring-up and operating procedure retained from commissioning.
 
 ### `apps/energy_spectrum.json`
 
@@ -206,15 +216,16 @@ Defines the IRFEL achromat correction workflow:
 
 The Control Room disables this application in IRFEL VM mode. Real mode resolves
 the BPM and quadrupole PVs plus
-`KLY1_CH3_PHASE.phase_set -> IRFEL:IN-MW:KLY1:SET_PHASE`, but remains
-in application mode `read_only` because `write_control.real` is explicitly
-blocked. There is no independent RF phase readback, and the phase-to-`dp/p`
-calibration and positive real-machine timing values are configured but still
-require onsite confirmation. The GUI derives alternative BPM and quadrupole
+`KLY1_CH3_PHASE.phase_set -> IRFEL:IN-MW:KLY1:SET_PHASE`. Following completed
+onsite acceptance, the workflow is marked `commissioned` and
+`write_control.real` is `allowed`, so the application runs in `write_enabled`
+mode. There is no independent RF phase readback; the configured phase-to-`dp/p`
+calibration and positive real-machine timing values were included in the onsite
+acceptance. The GUI derives alternative BPM and quadrupole
 choices directly from machine-native element types and resolves their real PVs
 through this profile; the defaults above are not a selectable-device whitelist.
 Both the static/live preflights and the machine-profile write policy must pass
-before a write test.
+before a write operation.
 
 ### `apps/bba.json`
 
