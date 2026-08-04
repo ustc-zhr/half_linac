@@ -552,62 +552,86 @@
     "QL01": {
       "current_set": "IN:PS:LE07:QL01:current:ao",
       "current_readback": "IN:PS:LE07:QL01:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL01:K1"
+      "K1": "IN:MG:L002:QUAD:QL01:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL01:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL01:K1:TOTAL"
     },
     "QL02": {
       "current_set": "IN:PS:LE07:QL02:current:ao",
       "current_readback": "IN:PS:LE07:QL02:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL02:K1"
+      "K1": "IN:MG:L002:QUAD:QL02:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL02:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL02:K1:TOTAL"
     },
     "QL03": {
       "current_set": "IN:PS:LE07:QL03:current:ao",
       "current_readback": "IN:PS:LE07:QL03:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL03:K1"
+      "K1": "IN:MG:L002:QUAD:QL03:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL03:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL03:K1:TOTAL"
     },
     "QL04": {
       "current_set": "IN:PS:LE07:QL04:current:ao",
       "current_readback": "IN:PS:LE07:QL04:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL04:K1"
+      "K1": "IN:MG:L002:QUAD:QL04:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL04:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL04:K1:TOTAL"
     },
     "QL05": {
       "current_set": "IN:PS:LE07:QL05:current:ao",
       "current_readback": "IN:PS:LE07:QL05:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL05:K1"
+      "K1": "IN:MG:L002:QUAD:QL05:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL05:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL05:K1:TOTAL"
     },
     "QL06": {
       "current_set": "IN:PS:LE07:QL06:current:ao",
       "current_readback": "IN:PS:LE07:QL06:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL06:K1"
+      "K1": "IN:MG:L002:QUAD:QL06:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL06:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL06:K1:TOTAL"
     },
     "QL07": {
       "current_set": "IN:PS:LE07:QL07:current:ao",
       "current_readback": "IN:PS:LE07:QL07:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL07:K1"
+      "K1": "IN:MG:L002:QUAD:QL07:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL07:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL07:K1:TOTAL"
     },
     "QL08": {
       "current_set": "IN:PS:LE07:QL08:current:ao",
       "current_readback": "IN:PS:LE07:QL08:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL08:K1"
+      "K1": "IN:MG:L002:QUAD:QL08:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL08:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL08:K1:TOTAL"
     },
     "QL09": {
       "current_set": "IN:PS:LE07:QL09:current:ao",
       "current_readback": "IN:PS:LE07:QL09:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL09:K1"
+      "K1": "IN:MG:L002:QUAD:QL09:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL09:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL09:K1:TOTAL"
     },
     "QL10": {
       "current_set": "IN:PS:LE07:QL10:current:ao",
       "current_readback": "IN:PS:LE07:QL10:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL10:K1"
+      "K1": "IN:MG:L002:QUAD:QL10:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL10:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL10:K1:TOTAL"
     },
     "QL11": {
       "current_set": "IN:PS:LE07:QL11:current:ao",
       "current_readback": "IN:PS:LE07:QL11:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL11:K1"
+      "K1": "IN:MG:L002:QUAD:QL11:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL11:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL11:K1:TOTAL"
     },
     "QL12": {
       "current_set": "IN:PS:LE07:QL12:current:ao",
       "current_readback": "IN:PS:LE07:QL12:current:ai",
-      "K1": "IN:MG:L001:QUAD:QL12:K1"
+      "K1": "IN:MG:L002:QUAD:QL12:K1",
+      "K1_adj": "IN:MG:L002:QUAD:QL12:K1:ADJ",
+      "K1_total": "IN:MG:L002:QUAD:QL12:K1:TOTAL"
     },
     "QL13": {
       "current_set": "IN:PS:LE07:QL13:current:ao",
@@ -1047,10 +1071,13 @@
       "exposure_time": "HALF:IN:FLAG:ENY:cam1:AcquireTime"
     },
     "PREINJECTOR_ENERGY": {
-      "setpoint": "IN:PREINJECTOR:ENG"
+      "setpoint": "IN:L01:ENG"
     },
     "LINAC_ENERGY": {
       "setpoint": "IN:LA:ENG"
+    },
+    "TRANSPORT_ENERGY": {
+      "setpoint": "IN:TL:ENG"
     },
     "MODULATOR_HV1": {
       "voltage_set": "HALF:modulator1:HV_set:ao",

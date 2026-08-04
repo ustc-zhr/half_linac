@@ -357,10 +357,21 @@ class MachineProfileTests(unittest.TestCase):
             self.assertEqual(len(snapshot.fields), 12)
             self.assertEqual(snapshot.lattice_overrides["QL12"]["K1"], 12.0)
 
-        self.assertEqual(
-            resolve_channel(context, "QL01", "k1", "real"),
-            "IN:MG:L001:QUAD:QL01:K1",
-        )
+        for index in range(1, 13):
+            element_id = f"QL{index:02d}"
+            pv_prefix = f"IN:MG:L002:QUAD:{element_id}:K1"
+            self.assertEqual(
+                resolve_channel(context, element_id, "k1", "real"),
+                pv_prefix,
+            )
+            self.assertEqual(
+                resolve_channel(context, element_id, "K1_adj", "real"),
+                f"{pv_prefix}:ADJ",
+            )
+            self.assertEqual(
+                resolve_channel(context, element_id, "K1_total", "real"),
+                f"{pv_prefix}:TOTAL",
+            )
 
     def test_half_dispersion_hv_draft_is_real_only(self):
         profile = load_profile("half")
@@ -833,7 +844,7 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(
             resolve_channel(profile, "QL03", "k1", "real"),
-            "IN:MG:L001:QUAD:QL03:K1",
+            "IN:MG:L002:QUAD:QL03:K1",
         )
 
     def test_vm_backend_uses_softioc_alias_naming_for_magnets(self):
@@ -1783,6 +1794,10 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(
             resolve_channel(profile, "LINAC_ENERGY", "setpoint", "real"),
             "IN:LA:ENG",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "TRANSPORT_ENERGY", "setpoint", "real"),
+            "IN:TL:ENG",
         )
         self.assertEqual(workflow["energy_element"], "LINAC_ENERGY")
         self.assertEqual(workflow["energy_set_channel"], "setpoint")

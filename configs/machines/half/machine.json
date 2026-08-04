@@ -2243,6 +2243,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2259,6 +2261,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2275,6 +2279,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2291,6 +2297,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2307,6 +2315,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2323,6 +2333,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2339,6 +2351,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2355,6 +2369,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2371,6 +2387,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2387,6 +2405,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2403,6 +2423,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -2419,6 +2441,8 @@
       "limits": {},
       "logical_channels": [
         "K1",
+        "K1_adj",
+        "K1_total",
         "current_set",
         "current_readback"
       ]
@@ -3768,10 +3792,24 @@
       ]
     },
     {
+      "id": "TRANSPORT_ENERGY",
+      "kind": "energy",
+      "display_name": "Transport Line Coordinated Energy",
+      "order": 232,
+      "tags": [
+        "transport_line",
+        "coordinated_control"
+      ],
+      "limits": {},
+      "logical_channels": [
+        "setpoint"
+      ]
+    },
+    {
       "id": "FCT1",
       "kind": "ct",
       "display_name": "FCT1",
-      "order": 232,
+      "order": 233,
       "tags": [
         "fast"
       ],
@@ -3784,7 +3822,7 @@
       "id": "ICT01",
       "kind": "ct",
       "display_name": "ICT1",
-      "order": 233,
+      "order": 234,
       "tags": [],
       "limits": {},
       "logical_channels": [
@@ -3795,7 +3833,7 @@
       "id": "ICT02",
       "kind": "ct",
       "display_name": "ICT2",
-      "order": 234,
+      "order": 235,
       "tags": [],
       "limits": {},
       "logical_channels": [
@@ -3806,7 +3844,7 @@
       "id": "ICT03",
       "kind": "ct",
       "display_name": "ICT3",
-      "order": 235,
+      "order": 236,
       "tags": [],
       "limits": {},
       "logical_channels": [
@@ -3817,7 +3855,7 @@
       "id": "ICT04",
       "kind": "ct",
       "display_name": "ICT4",
-      "order": 236,
+      "order": 237,
       "tags": [],
       "limits": {},
       "logical_channels": [
@@ -3828,7 +3866,7 @@
       "id": "MODULATOR_HV1",
       "kind": "modulator",
       "display_name": "Modulator HV1 (Draft)",
-      "order": 237,
+      "order": 238,
       "tags": [
         "modulator",
         "hv",

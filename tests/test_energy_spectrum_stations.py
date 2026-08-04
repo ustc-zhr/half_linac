@@ -91,12 +91,17 @@ class EnergySpectrumStationTests(unittest.TestCase):
             "IN:LA:ENG",
         )
         self.assertEqual(
+            resolve_channel(profile, "TRANSPORT_ENERGY", "setpoint", "real"),
+            "IN:TL:ENG",
+        )
+        self.assertEqual(stations["eny"]["energy_element"], "LINAC_ENERGY")
+        self.assertEqual(
             profile.get_element("LINAC_ENERGY").limits,
             {"low": 0.0, "high": 2450.0},
         )
         self.assertEqual(
             resolve_channel(profile, "PREINJECTOR_ENERGY", "setpoint", "real"),
-            "IN:PREINJECTOR:ENG",
+            "IN:L01:ENG",
         )
 
         real_context = load_app_context(
