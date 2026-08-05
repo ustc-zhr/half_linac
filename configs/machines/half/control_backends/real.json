@@ -1013,13 +1013,22 @@
       "current_readback": "IN:PS:LE16:BENY:current:ai"
     },
     "PRF01": {
-      "image": "HALF:IN:FLAG:PRF01:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF01:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF01:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF01:H:SIZE",
+      "sigy": "IN:BD:PRF01:V:SIZE"
     },
     "PRF02": {
-      "image": "HALF:IN:FLAG:PRF02:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF02:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF02:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF02:H:SIZE",
+      "sigy": "IN:BD:PRF02:V:SIZE"
     },
     "PRF03": {
-      "image": "HALF:IN:FLAG:PRF03:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF03:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF03:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF03:H:SIZE",
+      "sigy": "IN:BD:PRF03:V:SIZE"
     },
     "PRF04": {
       "image": "HALF:IN:FLAG:PRF04:image1:ArrayData",
@@ -1028,7 +1037,10 @@
       "sigy": "IN:BD:PRF04:V:SIZE"
     },
     "PRF05": {
-      "image": "HALF:IN:FLAG:PRF05:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF05:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF05:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF05:H:SIZE",
+      "sigy": "IN:BD:PRF05:V:SIZE"
     },
     "PRF06": {
       "image": "HALF:IN:FLAG:PRF06:image1:ArrayData",
@@ -1049,22 +1061,46 @@
       "sigy": "IN:BD:PRF08:V:SIZE"
     },
     "PRF09": {
-      "image": "HALF:IN:FLAG:PRF09:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF09:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF09:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF09:H:SIZE",
+      "sigy": "IN:BD:PRF09:V:SIZE"
     },
     "PRF10": {
-      "image": "HALF:IN:FLAG:PRF10:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF10:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF10:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF10:H:SIZE",
+      "sigy": "IN:BD:PRF10:V:SIZE"
     },
     "PRF11": {
-      "image": "HALF:IN:FLAG:PRF11:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF11:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF11:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF11:H:SIZE",
+      "sigy": "IN:BD:PRF11:V:SIZE"
     },
     "PRF12": {
-      "image": "HALF:IN:FLAG:PRF12:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF12:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF12:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF12:H:SIZE",
+      "sigy": "IN:BD:PRF12:V:SIZE"
     },
     "PRF13": {
-      "image": "HALF:IN:FLAG:PRF13:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF13:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF13:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF13:H:SIZE",
+      "sigy": "IN:BD:PRF13:V:SIZE"
     },
     "PRF14": {
-      "image": "HALF:IN:FLAG:PRF14:image1:ArrayData"
+      "image": "HALF:IN:FLAG:PRF14:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRF14:cam1:AcquireTime",
+      "sigx": "IN:BD:PRF14:H:SIZE",
+      "sigy": "IN:BD:PRF14:V:SIZE"
+    },
+    "PRFD": {
+      "image": "HALF:IN:FLAG:PRFD:image1:ArrayData",
+      "exposure_time": "HALF:IN:FLAG:PRFD:cam1:AcquireTime",
+      "sigx": "IN:BD:PRFD:H:SIZE",
+      "sigy": "IN:BD:PRFD:V:SIZE"
     },
     "ENY": {
       "image": "HALF:IN:FLAG:ENY:image1:ArrayData",

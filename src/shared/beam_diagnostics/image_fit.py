@@ -6,6 +6,8 @@ from typing import Sequence
 import numpy as np
 from scipy.optimize import curve_fit
 
+from .background_store import subtract_background
+
 
 def gaussian(x_value, amplitude, center, sigma, offset):
     return amplitude * np.exp(-((x_value - center) ** 2) / (2 * sigma**2)) + offset
@@ -156,6 +158,29 @@ def fit_beam_image(
         status="valid",
         method=resolved_method,
     )
+
+
+def analyze_beam_image(
+    image,
+    *,
+    extent: Sequence[float],
+    background=None,
+    xlim: Sequence[float] | None = None,
+    ylim: Sequence[float] | None = None,
+    method: str = "Gaussian fit",
+) -> tuple[np.ndarray, BeamImageFitResult]:
+    """Prepare one camera frame and run the shared beam-profile analysis."""
+    image_array = np.asarray(image, dtype=float)
+    if background is not None:
+        image_array = subtract_background(image_array, background)
+    result = fit_beam_image(
+        image_array,
+        extent=extent,
+        xlim=xlim,
+        ylim=ylim,
+        method=method,
+    )
+    return image_array, result
 
 
 def _moment_projection(axis: np.ndarray, projection: np.ndarray) -> GaussianProjectionFit:

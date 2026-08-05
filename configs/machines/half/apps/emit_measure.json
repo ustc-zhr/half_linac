@@ -1,67 +1,25 @@
 {
   "presets": [
     {
-      "id": "emit_ql27_prf06",
-      "quad": "QL27",
-      "flag": "PRF06",
+      "id": "emit_ql10_prf03",
+      "quad": "QL10",
+      "flag": "PRF03",
+      "model_line": "EMIT_QL10_PRF03",
       "scan": {
-        "k1_from": 1.5,
-        "k1_end": 2.5,
+        "k1_from": -4.0,
+        "k1_end": -1.5,
         "k1_steps": 15,
         "samples": 1,
         "settle_time": 8,
         "sample_interval": 0.5
       },
-      "energy_mev": 2200
-    },
-    {
-      "id": "emit_ql27_prf07",
-      "quad": "QL27",
-      "flag": "PRF07",
-      "energy_mev": 2200
-    },
-    {
-      "id": "emit_ql27_prf08",
-      "quad": "QL27",
-      "flag": "PRF08",
-      "energy_mev": 2200
-    },
-    {
-      "id": "emit_qt01_prf06",
-      "quad": "QT01",
-      "flag": "PRF06",
-      "energy_mev": 2200
-    },
-    {
-      "id": "emit_qt01_prf07",
-      "quad": "QT01",
-      "flag": "PRF07",
-      "energy_mev": 2200
-    },
-    {
-      "id": "emit_qt01_prf08",
-      "quad": "QT01",
-      "flag": "PRF08",
-      "energy_mev": 2200
-    },
-    {
-      "id": "emit_qt02_prf06",
-      "quad": "QT02",
-      "flag": "PRF06",
-      "scan": {
-        "k1_from": 1.5,
-        "k1_end": 2.5,
-        "k1_steps": 15,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
-      },
-      "energy_mev": 2200
+      "energy_mev": 114.15
     },
     {
       "id": "emit_qt02_prf07",
       "quad": "QT02",
       "flag": "PRF07",
+      "model_line": "EMIT_QT02_PRF07",
       "scan": {
         "k1_from": 1.5,
         "k1_end": 2.5,
@@ -73,22 +31,19 @@
       "energy_mev": 2200
     },
     {
-      "id": "emit_qt02_prf08",
-      "quad": "QT02",
-      "flag": "PRF08",
+      "id": "emit_qt26_prf12",
+      "quad": "QT26",
+      "flag": "PRF12",
+      "model_line": "EMIT_QT26_PRF12",
+      "scan": {
+        "k1_from": -1.0,
+        "k1_end": 1.0,
+        "k1_steps": 15,
+        "samples": 1,
+        "settle_time": 8,
+        "sample_interval": 0.5
+      },
       "energy_mev": 2200
-    },
-    {
-      "id": "emit_ql15_prf04",
-      "quad": "QL15",
-      "flag": "PRF04",
-      "energy_mev": 220
-    },
-    {
-      "id": "emit_ql16_prf04",
-      "quad": "QL16",
-      "flag": "PRF04",
-      "energy_mev": 220
     }
   ],
   "default_preset": "emit_qt02_prf07",

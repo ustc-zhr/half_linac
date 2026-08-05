@@ -681,10 +681,12 @@
       "angle": "HALF:IN:BEND:BENY:angle"
     },
     "PRF02": {
-      "image": "HALF:IN:FLAG:PRF02:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF02:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF02:cam1:AcquireTime:vm"
     },
     "PRF03": {
-      "image": "HALF:IN:FLAG:PRF03:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF03:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF03:cam1:AcquireTime:vm"
     },
     "PRF04": {
       "image": "HALF:IN:FLAG:PRF04:image1:ArrayData:vm",
@@ -693,7 +695,8 @@
       "sigy": "HALF:IN:FLAG:PRF04:sigy"
     },
     "PRF05": {
-      "image": "HALF:IN:FLAG:PRF05:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF05:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF05:cam1:AcquireTime:vm"
     },
     "PRF06": {
       "image": "HALF:IN:FLAG:PRF06:image1:ArrayData:vm",
@@ -714,22 +717,28 @@
       "sigy": "HALF:IN:FLAG:PRF08:sigy"
     },
     "PRF09": {
-      "image": "HALF:IN:FLAG:PRF09:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF09:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF09:cam1:AcquireTime:vm"
     },
     "PRF10": {
-      "image": "HALF:IN:FLAG:PRF10:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF10:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF10:cam1:AcquireTime:vm"
     },
     "PRF11": {
-      "image": "HALF:IN:FLAG:PRF11:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF11:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF11:cam1:AcquireTime:vm"
     },
     "PRF12": {
-      "image": "HALF:IN:FLAG:PRF12:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF12:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF12:cam1:AcquireTime:vm"
     },
     "PRF13": {
-      "image": "HALF:IN:FLAG:PRF13:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF13:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF13:cam1:AcquireTime:vm"
     },
     "PRF14": {
-      "image": "HALF:IN:FLAG:PRF14:image1:ArrayData:vm"
+      "image": "HALF:IN:FLAG:PRF14:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF14:cam1:AcquireTime:vm"
     },
     "ENY": {
       "image": "HALF:IN:FLAG:ENY:image1:ArrayData:vm",

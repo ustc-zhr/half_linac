@@ -33,6 +33,8 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QHeaderView,
@@ -42,6 +44,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -52,7 +55,15 @@ from PyQt5.QtWidgets import (
 )
 
 from half_linac.src.shared.app_theme import resolve_initial_theme
-from half_linac.src.shared.beam_diagnostics import fit_beam_image
+from half_linac.src.shared.beam_diagnostics import (
+    BEAM_IMAGE_COLORMAPS,
+    DEFAULT_BEAM_IMAGE_COLORMAP,
+    BackgroundStoreError,
+    analyze_beam_image,
+    load_background,
+    resolve_beam_background_paths,
+    save_background,
+)
 from half_linac.src.shared.machine_profile import (
     METADATA_FILENAME,
     MachineProfileError,
@@ -96,7 +107,7 @@ def _image_extent_from_geometry(geometry):
     return (-0.5 * width, 0.5 * width, -0.5 * height, 0.5 * height)
 
 
-def _read_flag_image_fit(image_pv, pixel_shape, extent):
+def _read_flag_image_fit(image_pv, pixel_shape, extent, *, background=None):
     raw_image = epics.caget(image_pv)
     if raw_image is None:
         raise RuntimeError(f"Failed to read flag image PV: {image_pv}.")
@@ -111,9 +122,22 @@ def _read_flag_image_fit(image_pv, pixel_shape, extent):
             f"Flag image length mismatch for {image_pv}: got {flat_image.size}, expected {expected_size}."
         )
 
-    image = np.reshape(flat_image, (pixel_shape[1], pixel_shape[0]))
-    fit_result = fit_beam_image(image, extent=extent)
-    return image, fit_result
+    raw_image = np.reshape(flat_image, (pixel_shape[1], pixel_shape[0]))
+    return analyze_beam_image(raw_image, extent=extent, background=background)
+
+
+def _read_optional_scalar_pv(pv_name):
+    if not pv_name:
+        return None
+    try:
+        return _finite_float_or_none(epics.caget(pv_name, timeout=0.05))
+    except Exception:
+        return None
+
+
+def _read_optional_size_pvs(sigx_pv, sigy_pv):
+    values = (_read_optional_scalar_pv(sigx_pv), _read_optional_scalar_pv(sigy_pv))
+    return tuple(value if value is not None and value > 0 else None for value in values)
 
 
 def _load_beam_image_geometry_config(machine_id):
@@ -524,6 +548,9 @@ QRadioButton, QCheckBox {{
     font-size: 12px;
     font-weight: 600;
     spacing: 8px;
+    background-color: transparent;
+    border: none;
+    padding: 0px;
 }}
 
 QRadioButton::indicator, QCheckBox::indicator {{
@@ -754,6 +781,16 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_fit_result = None
         self.latest_beam_fit_flag = None
         self.latest_beam_fit_k1 = None
+        self.latest_beam_size_pv = (None, None)
+        self.latest_beam_background_status = "Off"
+        self._applying_emit_preset = False
+        self.background_dialog = None
+        self.background_sample_button = None
+        self.background_preview = None
+        self.background_image = None
+        self.background_metadata = {}
+        self.background_image_path = None
+        self.background_flag_id = None
         self._beam_image_auto_refresh_ready = False
         self._model_backend_available, self._model_backend_error = describe_app_model_support(
             self.machine_profile.machine.id,
@@ -787,6 +824,16 @@ class myWindow(QWidget,Ui_Form):
         self.lineEdit_3.textEdited.connect(self._mark_twiss_initial_manual)
         self.lineEdit_6.textEdited.connect(self._mark_twiss_initial_manual)
         self.tabWidget.currentChanged.connect(self._refresh_status)
+        for edit in (
+            self.lineEdit_2,
+            self.lineEdit_24,
+            self.lineEdit_7,
+            self.lineEdit_8,
+            self.lineEdit_9,
+            self.lineEdit_10,
+            self.sample_interval_edit,
+        ):
+            edit.textEdited.connect(self._mark_emit_preset_modified)
         # self.pushButton_6.clicked.connect(self.simply_VM)
         # self.pushButton_7.clicked.connect(self.full_VM)
 
@@ -941,32 +988,19 @@ class myWindow(QWidget,Ui_Form):
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(6)
 
-        title = QLabel("Current PRF Image", card)
-        title.setObjectName("panelTitle")
-        title.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        header.addWidget(title)
+        self.beam_image_title_label = QLabel("Current PRF Image", card)
+        self.beam_image_title_label.setObjectName("panelTitle")
+        self.beam_image_title_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        header.addWidget(self.beam_image_title_label)
         header.addStretch(1)
 
         colormap_label = QLabel("Colormap", card)
         colormap_label.setProperty("role", "field")
         self.beam_image_colormap_combo = QComboBox(card)
-        self.beam_image_colormap_combo.addItems(["viridis", "plasma", "inferno", "magma", "gray", "jet"])
+        self.beam_image_colormap_combo.addItems(BEAM_IMAGE_COLORMAPS)
+        self.beam_image_colormap_combo.setCurrentText(DEFAULT_BEAM_IMAGE_COLORMAP)
         self.beam_image_colormap_combo.setMaximumWidth(105)
         self.beam_image_colormap_combo.currentTextChanged.connect(self._redraw_latest_beam_image)
-
-        vmin_label = QLabel("vmin", card)
-        vmin_label.setProperty("role", "field")
-        self.beam_image_vmin_edit = QLineEdit(card)
-        self.beam_image_vmin_edit.setPlaceholderText("auto")
-        self.beam_image_vmin_edit.setMaximumWidth(68)
-        self.beam_image_vmin_edit.returnPressed.connect(self._redraw_latest_beam_image)
-
-        vmax_label = QLabel("vmax", card)
-        vmax_label.setProperty("role", "field")
-        self.beam_image_vmax_edit = QLineEdit(card)
-        self.beam_image_vmax_edit.setPlaceholderText("auto")
-        self.beam_image_vmax_edit.setMaximumWidth(68)
-        self.beam_image_vmax_edit.returnPressed.connect(self._redraw_latest_beam_image)
 
         self.beam_image_auto_refresh_checkbox = QCheckBox("Auto refresh", card)
         self.beam_image_auto_refresh_checkbox.setChecked(True)
@@ -977,26 +1011,52 @@ class myWindow(QWidget,Ui_Form):
         self.beam_image_fit_curve_checkbox = QCheckBox("Fit curve", card)
         self.beam_image_fit_curve_checkbox.setChecked(True)
         self.beam_image_fit_curve_checkbox.stateChanged.connect(self._redraw_latest_beam_image)
+        self.beam_image_background_checkbox = QCheckBox("Apply", card)
+        self.beam_image_background_checkbox.setChecked(False)
+        self.beam_image_background_checkbox.setToolTip(
+            "Subtract the matching saved background before fitting."
+        )
+        self.beam_image_background_checkbox.toggled.connect(
+            self._set_background_application
+        )
 
-        self.preview_fit_button = QPushButton("Check PRF Fit", card)
+        self.preview_fit_button = QPushButton("Refresh", card)
         self.preview_fit_button.setProperty("compact", True)
         self.preview_fit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.preview_fit_button.clicked.connect(lambda: self.refresh_current_beam_image_fit())
 
+        header.addWidget(self.beam_image_auto_refresh_checkbox)
+        header.addWidget(self.preview_fit_button)
+        layout.addLayout(header)
+
+        display_row = QHBoxLayout()
+        display_row.setContentsMargins(0, 0, 0, 0)
+        display_row.setSpacing(8)
+        self.beam_background_status_label = QLabel("Off", card)
+        self.beam_background_status_label.setProperty("role", "field")
+        self.beam_background_manage_button = QPushButton("Manage…", card)
+        self.beam_background_manage_button.setProperty("compact", True)
+        self.beam_background_manage_button.clicked.connect(self._show_background_dialog)
+        separator = QFrame(card)
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setMaximumHeight(22)
+        background_label = QLabel("BG:", card)
+        background_label.setProperty("role", "field")
         for widget in (
             colormap_label,
             self.beam_image_colormap_combo,
-            vmin_label,
-            self.beam_image_vmin_edit,
-            vmax_label,
-            self.beam_image_vmax_edit,
-            self.beam_image_auto_refresh_checkbox,
             self.beam_image_projection_checkbox,
             self.beam_image_fit_curve_checkbox,
-            self.preview_fit_button,
+            separator,
+            background_label,
+            self.beam_background_status_label,
         ):
-            header.addWidget(widget)
-        layout.addLayout(header)
+            display_row.addWidget(widget)
+        display_row.addStretch(1)
+        display_row.addWidget(self.beam_background_manage_button)
+        display_row.addWidget(self.beam_image_background_checkbox)
+        layout.addLayout(display_row)
 
         self.beam_image_widget = MplWidget(card)
         layout.addWidget(self.beam_image_widget, 1)
@@ -1004,18 +1064,37 @@ class myWindow(QWidget,Ui_Form):
         status_grid = QGridLayout()
         status_grid.setHorizontalSpacing(8)
         status_grid.setVerticalSpacing(4)
-        self.beam_fit_flag_label = QLabel("--", card)
+        self.beam_fit_flag_label = QLabel("Local fit", card)
         self.beam_fit_sigx_label = QLabel("--", card)
         self.beam_fit_sigy_label = QLabel("--", card)
         self.beam_fit_status_label = QLabel("No image", card)
+        published_size_tooltip = (
+            "Optional cross-check values read from the configured sigx/sigy channels. "
+            "They are not used for scan points or emittance calculations."
+        )
+        self.beam_size_pv_source_label = QLabel("Published size", card)
+        self.beam_size_pv_sigx_label = QLabel("--", card)
+        self.beam_size_pv_sigy_label = QLabel("--", card)
+        self.beam_size_pv_status_label = QLabel("Unavailable", card)
         for label in (
             self.beam_fit_flag_label,
             self.beam_fit_sigx_label,
             self.beam_fit_sigy_label,
             self.beam_fit_status_label,
+            self.beam_size_pv_source_label,
+            self.beam_size_pv_sigx_label,
+            self.beam_size_pv_sigy_label,
+            self.beam_size_pv_status_label,
         ):
             label.setWordWrap(True)
-        for col, text in enumerate(("Flag", "sigx", "sigy", "Status")):
+        for label in (
+            self.beam_size_pv_source_label,
+            self.beam_size_pv_sigx_label,
+            self.beam_size_pv_sigy_label,
+            self.beam_size_pv_status_label,
+        ):
+            label.setToolTip(published_size_tooltip)
+        for col, text in enumerate(("Source", "σx (mm)", "σy (mm)", "Status")):
             label = QLabel(text, card)
             label.setProperty("role", "field")
             status_grid.addWidget(label, 0, col)
@@ -1023,7 +1102,14 @@ class myWindow(QWidget,Ui_Form):
         status_grid.addWidget(self.beam_fit_sigx_label, 1, 1)
         status_grid.addWidget(self.beam_fit_sigy_label, 1, 2)
         status_grid.addWidget(self.beam_fit_status_label, 1, 3)
-        status_grid.setColumnStretch(3, 1)
+        status_grid.addWidget(self.beam_size_pv_source_label, 2, 0)
+        status_grid.addWidget(self.beam_size_pv_sigx_label, 2, 1)
+        status_grid.addWidget(self.beam_size_pv_sigy_label, 2, 2)
+        status_grid.addWidget(self.beam_size_pv_status_label, 2, 3)
+        status_grid.setColumnStretch(0, 2)
+        status_grid.setColumnStretch(1, 1)
+        status_grid.setColumnStretch(2, 1)
+        status_grid.setColumnStretch(3, 2)
         layout.addLayout(status_grid)
 
         self.gridLayout_2.addWidget(card, 0, 2, 1, 1)
@@ -1267,28 +1353,39 @@ class myWindow(QWidget,Ui_Form):
         form.setHorizontalSpacing(6)
         form.setVerticalSpacing(5)
 
-        form.addWidget(self.label_10, 0, 0)
-        form.addWidget(self.comboBox, 0, 1)
-        form.addWidget(self.label_45, 0, 2)
-        form.addWidget(self.comboBox_4, 0, 3)
-        form.addWidget(self.label_22, 1, 0)
-        form.addWidget(self.lineEdit_2, 1, 1)
-        form.addWidget(self.label_32, 1, 2)
-        form.addWidget(self.lineEdit_24, 1, 3)
-        form.addWidget(self.label_11, 2, 0)
-        form.addWidget(self.lineEdit_7, 2, 1)
-        form.addWidget(self.label_12, 2, 2)
-        form.addWidget(self.lineEdit_8, 2, 3)
-        form.addWidget(self.label_13, 3, 0)
-        form.addWidget(self.lineEdit_9, 3, 1)
-        form.addWidget(self.label_14, 3, 2)
-        form.addWidget(self.lineEdit_10, 3, 3)
+        preset_label = QLabel("Preset", self.widget_4)
+        preset_label.setProperty("role", "field")
+        self.preset_combo = QComboBox(self.widget_4)
+        self.preset_combo.setToolTip("Load recommended settings; all scan fields remain editable.")
+        self.preset_combo.currentIndexChanged.connect(self._handle_preset_selected)
+        self.preset_modified_label = QLabel("", self.widget_4)
+        self.preset_modified_label.setProperty("role", "field")
+        form.addWidget(preset_label, 0, 0)
+        form.addWidget(self.preset_combo, 0, 1, 1, 2)
+        form.addWidget(self.preset_modified_label, 0, 3, Qt.AlignRight)
+
+        form.addWidget(self.label_10, 1, 0)
+        form.addWidget(self.comboBox, 1, 1)
+        form.addWidget(self.label_45, 1, 2)
+        form.addWidget(self.comboBox_4, 1, 3)
+        form.addWidget(self.label_22, 2, 0)
+        form.addWidget(self.lineEdit_2, 2, 1)
+        form.addWidget(self.label_32, 2, 2)
+        form.addWidget(self.lineEdit_24, 2, 3)
+        form.addWidget(self.label_11, 3, 0)
+        form.addWidget(self.lineEdit_7, 3, 1)
+        form.addWidget(self.label_12, 3, 2)
+        form.addWidget(self.lineEdit_8, 3, 3)
+        form.addWidget(self.label_13, 4, 0)
+        form.addWidget(self.lineEdit_9, 4, 1)
+        form.addWidget(self.label_14, 4, 2)
+        form.addWidget(self.lineEdit_10, 4, 3)
         self.sample_interval_label = QLabel("Sample interval (s)", self.widget_4)
         self.sample_interval_label.setProperty("role", "field")
         self.sample_interval_edit = QLineEdit(self.widget_4)
         self.sample_interval_edit.setText("0.5")
-        form.addWidget(self.sample_interval_label, 4, 0)
-        form.addWidget(self.sample_interval_edit, 4, 1)
+        form.addWidget(self.sample_interval_label, 5, 0)
+        form.addWidget(self.sample_interval_edit, 5, 1)
         form.setColumnStretch(1, 1)
         form.setColumnStretch(3, 1)
         layout.addLayout(form)
@@ -1480,6 +1577,7 @@ class myWindow(QWidget,Ui_Form):
             self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
         self._update_theme_toggle_button()
         self._style_all_plots()
+        self._refresh_emit_background_preview()
 
     def _update_theme_toggle_button(self):
         if self.current_theme == "dark":
@@ -1555,32 +1653,22 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_fit_result = None
         self.latest_beam_fit_flag = None
         self.latest_beam_fit_k1 = None
+        self.latest_beam_size_pv = (None, None)
+        self.latest_beam_background_status = "Off"
+        if hasattr(self, "beam_image_title_label"):
+            flag_name = self.comboBox_4.currentText()
+            suffix = f" · {flag_name}" if flag_name else ""
+            self.beam_image_title_label.setText(f"Current PRF Image{suffix}")
         self._draw_placeholder(self.beam_image_widget, "x (mm)", "y (mm)", note)
         if hasattr(self, "beam_fit_flag_label"):
-            self.beam_fit_flag_label.setText(self.comboBox_4.currentText() or "--")
+            self.beam_fit_flag_label.setText("Local fit")
             self.beam_fit_sigx_label.setText("--")
             self.beam_fit_sigy_label.setText("--")
             self.beam_fit_status_label.setText("No image")
-
-    def _optional_beam_image_limit(self, edit):
-        text = edit.text().strip()
-        if not text:
-            return None
-        try:
-            return float(text)
-        except ValueError:
-            edit.setText("")
-            return None
-
-    def _beam_image_display_limits(self):
-        if not hasattr(self, "beam_image_vmin_edit"):
-            return None, None
-        vmin = self._optional_beam_image_limit(self.beam_image_vmin_edit)
-        vmax = self._optional_beam_image_limit(self.beam_image_vmax_edit)
-        if vmin is not None and vmax is not None and vmax <= vmin:
-            self.beam_image_vmax_edit.setText("")
-            vmax = None
-        return vmin, vmax
+            self.beam_size_pv_sigx_label.setText("--")
+            self.beam_size_pv_sigy_label.setText("--")
+            self.beam_size_pv_status_label.setText("Unavailable")
+            self.beam_background_status_label.setText("Not checked")
 
     def _redraw_latest_beam_image(self, *args):
         del args
@@ -1591,9 +1679,21 @@ class myWindow(QWidget,Ui_Form):
             self.latest_beam_image,
             self.latest_beam_fit_result,
             k1=self.latest_beam_fit_k1,
+            size_pv=self.latest_beam_size_pv,
+            background_status=self.latest_beam_background_status,
         )
 
-    def _display_beam_image_fit(self, flag_name, image, fit_result, *, k1=None, extent=None):
+    def _display_beam_image_fit(
+        self,
+        flag_name,
+        image,
+        fit_result,
+        *,
+        k1=None,
+        extent=None,
+        size_pv=(None, None),
+        background_status="Off",
+    ):
         if not hasattr(self, "beam_image_widget"):
             return
         if extent is None:
@@ -1602,15 +1702,12 @@ class myWindow(QWidget,Ui_Form):
         widget = self.beam_image_widget
         widget.axes.clear()
         self._style_axes(widget, "x (mm)", "y (mm)")
-        vmin, vmax = self._beam_image_display_limits()
         widget.axes.imshow(
             image,
             cmap=self.beam_image_colormap_combo.currentText() if hasattr(self, "beam_image_colormap_combo") else "viridis",
             origin="lower",
             extent=extent,
             aspect="auto",
-            vmin=vmin,
-            vmax=vmax,
         )
 
         height = abs(extent[3] - extent[2])
@@ -1636,23 +1733,40 @@ class myWindow(QWidget,Ui_Form):
             widget.axes.plot(fit_result.x_axis, fit_denx, "--", color=palette["plot_fit"])
             widget.axes.plot(fit_deny, fit_result.y_axis, "--", color=palette["plot_fit"])
 
-        title = flag_name
         if k1 is not None:
-            title = f"{flag_name} / K1 {float(k1):.6g}"
-        widget.axes.set_title(title, color=palette["plot_text"], fontsize=11, fontweight="bold", loc="left")
+            widget.axes.set_title(
+                f"K1 {float(k1):.6g}",
+                color=palette["plot_text"],
+                fontsize=10,
+                loc="left",
+            )
         widget.canvas.draw()
 
         self.latest_beam_image = image
         self.latest_beam_fit_result = fit_result
         self.latest_beam_fit_flag = flag_name
         self.latest_beam_fit_k1 = k1
-        self.beam_fit_flag_label.setText(flag_name)
+        self.latest_beam_size_pv = tuple(size_pv)
+        self.latest_beam_background_status = background_status
+        self.beam_image_title_label.setText(f"Current PRF Image · {flag_name}")
+        self.beam_fit_flag_label.setText("Local fit")
         self.beam_fit_sigx_label.setText(f"{fit_result.sigx_mm:.3f}" if fit_result.sigx_mm is not None else "--")
         self.beam_fit_sigy_label.setText(f"{fit_result.sigy_mm:.3f}" if fit_result.sigy_mm is not None else "--")
         if fit_result.valid:
             self.beam_fit_status_label.setText("valid")
         else:
             self.beam_fit_status_label.setText(fit_result.status)
+        size_sigx, size_sigy = size_pv
+        self.beam_size_pv_sigx_label.setText(
+            f"{size_sigx:.3f}" if size_sigx is not None else "--"
+        )
+        self.beam_size_pv_sigy_label.setText(
+            f"{size_sigy:.3f}" if size_sigy is not None else "--"
+        )
+        self.beam_size_pv_status_label.setText(
+            "Cross-check" if size_sigx is not None or size_sigy is not None else "Unavailable"
+        )
+        self.beam_background_status_label.setText(background_status)
         self._refresh_status()
 
     def _refresh_status(self):
@@ -1995,6 +2109,9 @@ class myWindow(QWidget,Ui_Form):
             "model_line": paras.model_line,
             "beam_size_source": "local_fit",
             "flag_image_pv": paras.flagImagePV,
+            "size_pv_sigx": paras.flagSigxPV,
+            "size_pv_sigy": paras.flagSigyPV,
+            "background_status": paras.background_status,
             "energy_mev": paras.EnergyMeV,
             "k1_from": paras.k1_from,
             "k1_end": paras.k1_end,
@@ -2006,6 +2123,9 @@ class myWindow(QWidget,Ui_Form):
         model_snapshot = getattr(paras, "model_snapshot_metadata", None)
         if isinstance(model_snapshot, Mapping):
             metadata["model_snapshot"] = dict(model_snapshot)
+        background_path = getattr(paras, "background_image_path", None)
+        if background_path is not None:
+            metadata["background_image_path"] = str(background_path)
         return metadata
 
     def _metadata_path_for_results(self, results_path):
@@ -2415,6 +2535,17 @@ class myWindow(QWidget,Ui_Form):
                 return preset
         return None
 
+    def _resolve_optional_channel(self, element_id, logical_channel):
+        try:
+            return resolve_channel(
+                self.machine_profile,
+                element_id,
+                logical_channel,
+                self.machine_type,
+            )
+        except MachineProfileError:
+            return None
+
     def _current_flag_pixel_geometry(self, flag_name=None):
         flag_name = flag_name or self.comboBox_4.currentText()
         return resolve_flag_pixel_geometry(
@@ -2449,6 +2580,11 @@ class myWindow(QWidget,Ui_Form):
         presets_by_quad = self._emit_presets_by_quad()
         quad_items = list(presets_by_quad)
         self._set_combo_items(self.comboBox, quad_items)
+        self.preset_combo.blockSignals(True)
+        self.preset_combo.clear()
+        for preset in self.emit_workflow.presets:
+            self.preset_combo.addItem(f"{preset.flag}  ·  {preset.quad}", preset.id)
+        self.preset_combo.blockSignals(False)
 
         twiss_from_quads = self._twiss_from_choices()
         twiss_to_quads = self._twiss_to_choices()
@@ -2456,9 +2592,7 @@ class myWindow(QWidget,Ui_Form):
         self._set_combo_items(self.comboBox_3, twiss_to_quads)
 
         default_preset = self._find_emit_preset(self.emit_workflow.default_preset)
-        self._set_combo_current_text(self.comboBox, default_preset.quad)
-        self.updateComboBox4(self.comboBox.currentIndex())
-        self._set_combo_current_text(self.comboBox_4, default_preset.flag)
+        self._apply_emit_preset(default_preset)
         default_from = twiss_from_quads[0] if twiss_from_quads else None
         if twiss_from_quads:
             self._set_combo_current_text(self.comboBox_2, default_from)
@@ -2477,8 +2611,59 @@ class myWindow(QWidget,Ui_Form):
                 next((quad for quad in twiss_to_quads if quad != default_from), twiss_to_quads[0]),
             )
             self._set_combo_current_text(self.comboBox_3, default_to)
-        self._sync_emit_preset_defaults()
         self._update_twiss_path_status()
+
+    def _apply_emit_preset(self, preset):
+        if preset is None:
+            return
+        self._applying_emit_preset = True
+        try:
+            self.preset_combo.blockSignals(True)
+            preset_index = self.preset_combo.findData(preset.id)
+            if preset_index >= 0:
+                self.preset_combo.setCurrentIndex(preset_index)
+            self.preset_combo.blockSignals(False)
+
+            self.comboBox.blockSignals(True)
+            self._set_combo_current_text(self.comboBox, preset.quad)
+            self.comboBox.blockSignals(False)
+            self.comboBox_4.blockSignals(True)
+            self._set_combo_items(
+                self.comboBox_4,
+                [item.flag for item in self._emit_presets_by_quad().get(preset.quad, [])],
+            )
+            self._set_combo_current_text(self.comboBox_4, preset.flag)
+            self.comboBox_4.blockSignals(False)
+            self._sync_emit_preset_defaults()
+            self.preset_modified_label.setText("")
+        finally:
+            self._applying_emit_preset = False
+        self._draw_beam_image_placeholder()
+        self._sync_emit_background_for_flag()
+        if self._beam_image_auto_refresh_ready:
+            self._schedule_beam_image_refresh()
+
+    def _handle_preset_selected(self, index):
+        if self._applying_emit_preset or index < 0:
+            return
+        preset_id = self.preset_combo.itemData(index)
+        self._apply_emit_preset(self._find_emit_preset(preset_id))
+
+    def _mark_emit_preset_modified(self, *_args):
+        if not self._applying_emit_preset:
+            self.preset_modified_label.setText("Modified")
+
+    def _select_preset_for_current_pair(self):
+        preset = self._current_emit_preset()
+        if preset is None:
+            return
+        self.preset_combo.blockSignals(True)
+        index = self.preset_combo.findData(preset.id)
+        if index >= 0:
+            self.preset_combo.setCurrentIndex(index)
+        self.preset_combo.blockSignals(False)
+        self._sync_emit_preset_defaults()
+        self.preset_modified_label.setText("")
 
     def _sync_emit_preset_defaults(self):
         preset = self._current_emit_preset()
@@ -2502,13 +2687,18 @@ class myWindow(QWidget,Ui_Form):
 
     def _handle_emit_flag_changed(self, index):
         del index
-        self._sync_emit_preset_defaults()
+        if self._applying_emit_preset:
+            return
+        self._select_preset_for_current_pair()
         self._draw_beam_image_placeholder()
+        self._sync_emit_background_for_flag()
         if self._beam_image_auto_refresh_ready:
             self._schedule_beam_image_refresh()
 
     def updateComboBox4(self, index):
         del index
+        if self._applying_emit_preset:
+            return
         quad_name = self.comboBox.currentText()
         presets = self._emit_presets_by_quad().get(quad_name, [])
         flag_items = [preset.flag for preset in presets]
@@ -2516,8 +2706,9 @@ class myWindow(QWidget,Ui_Form):
         self._set_combo_items(self.comboBox_4, flag_items)
         if current_flag in flag_items:
             self._set_combo_current_text(self.comboBox_4, current_flag)
-        self._sync_emit_preset_defaults()
+        self._select_preset_for_current_pair()
         self._draw_beam_image_placeholder()
+        self._sync_emit_background_for_flag()
         if self._beam_image_auto_refresh_ready:
             self._schedule_beam_image_refresh()
 
@@ -2535,9 +2726,28 @@ class myWindow(QWidget,Ui_Form):
                 )
             para.quadPV = resolve_channel(self.machine_profile, para.quad_name, "k1", self.machine_type)
             para.flagImagePV = resolve_channel(self.machine_profile, para.flag_name, "image", self.machine_type)
+            para.flagSigxPV = self._resolve_optional_channel(para.flag_name, "sigx")
+            para.flagSigyPV = self._resolve_optional_channel(para.flag_name, "sigy")
+            para.flagExposurePV = self._resolve_optional_channel(
+                para.flag_name,
+                "exposure_time",
+            )
             geometry = self._current_flag_pixel_geometry(para.flag_name)
             para.flag_pixel_shape = geometry.shape
             para.flag_image_extent = _image_extent_from_geometry(geometry)
+            para.background_image = None
+            para.background_status = "Off"
+            para.background_image_path = None
+            if self.beam_image_background_checkbox.isChecked():
+                if not self._background_reference_is_usable():
+                    blocked = self.beam_image_background_checkbox.blockSignals(True)
+                    self.beam_image_background_checkbox.setChecked(False)
+                    self.beam_image_background_checkbox.blockSignals(blocked)
+                    self._update_emit_background_status()
+                else:
+                    para.background_image = self.background_image
+                    para.background_status = "Applied"
+                    para.background_image_path = self.background_image_path
             para.model_line = preset.model_line
             para.app_context = self.app_context
 
@@ -2568,6 +2778,7 @@ class myWindow(QWidget,Ui_Form):
                 paras.flagImagePV,
                 paras.flag_pixel_shape,
                 paras.flag_image_extent,
+                background=paras.background_image,
             )
         except RuntimeError as exc:
             self._draw_beam_image_placeholder("PRF image unavailable")
@@ -2580,6 +2791,8 @@ class myWindow(QWidget,Ui_Form):
             image,
             fit_result,
             extent=paras.flag_image_extent,
+            size_pv=_read_optional_size_pvs(paras.flagSigxPV, paras.flagSigyPV),
+            background_status=paras.background_status,
         )
         if not fit_result.valid:
             if show_warning:
@@ -2614,6 +2827,408 @@ class myWindow(QWidget,Ui_Form):
             250,
             lambda: self.refresh_current_beam_image_fit(show_warning=False),
         )
+
+    def _show_background_dialog(self):
+        if self.background_dialog is None:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Background Reference")
+            dialog.setModal(True)
+            dialog.resize(720, 620)
+            layout = QVBoxLayout(dialog)
+            note = QLabel(
+                "Remove the beam before sampling. The reference is shared with Beam Monitor "
+                "and is valid only for the same PRF, image size and exposure.",
+                dialog,
+            )
+            note.setWordWrap(True)
+            layout.addWidget(note)
+
+            self.background_preview = MplWidget(dialog)
+            self.background_preview.setMinimumHeight(300)
+            layout.addWidget(self.background_preview, 1)
+
+            form = QGridLayout()
+            self.background_samples_spin = QSpinBox(dialog)
+            self.background_samples_spin.setRange(1, 100)
+            self.background_samples_spin.setValue(
+                int(self.beam_monitor_config.get("background_sample_count", 5))
+            )
+            self.background_interval_spin = QDoubleSpinBox(dialog)
+            self.background_interval_spin.setRange(0.0, 60.0)
+            self.background_interval_spin.setDecimals(2)
+            self.background_interval_spin.setSuffix(" s")
+            self.background_interval_spin.setValue(
+                float(self.beam_monitor_config.get("background_sample_interval_s", 1.0))
+            )
+            form.addWidget(QLabel("Samples", dialog), 0, 0)
+            form.addWidget(self.background_samples_spin, 0, 1)
+            form.addWidget(QLabel("Interval", dialog), 0, 2)
+            form.addWidget(self.background_interval_spin, 0, 3)
+            form.setColumnStretch(1, 1)
+            form.setColumnStretch(3, 1)
+            layout.addLayout(form)
+
+            self.background_dialog_status_label = QLabel("", dialog)
+            self.background_dialog_status_label.setWordWrap(True)
+            self.background_dialog_status_label.setProperty("role", "field")
+            layout.addWidget(self.background_dialog_status_label)
+
+            buttons = QHBoxLayout()
+            self.background_sample_button = QPushButton("Sample Background", dialog)
+            load_latest_button = QPushButton("Load Latest", dialog)
+            load_file_button = QPushButton("Load File", dialog)
+            save_as_button = QPushButton("Save As", dialog)
+            close_button = QPushButton("Close", dialog)
+            for button in (
+                self.background_sample_button,
+                load_latest_button,
+                load_file_button,
+                save_as_button,
+                close_button,
+            ):
+                button.setProperty("compact", True)
+            self.background_sample_button.clicked.connect(self._sample_background)
+            load_latest_button.clicked.connect(
+                lambda: self._load_latest_emit_background(silent=False)
+            )
+            load_file_button.clicked.connect(self._load_emit_background_file)
+            save_as_button.clicked.connect(self._save_emit_background_as)
+            close_button.clicked.connect(dialog.hide)
+            buttons.addWidget(self.background_sample_button)
+            buttons.addWidget(load_latest_button)
+            buttons.addWidget(load_file_button)
+            buttons.addWidget(save_as_button)
+            buttons.addStretch(1)
+            buttons.addWidget(close_button)
+            layout.addLayout(buttons)
+            self.background_dialog = dialog
+
+        self.background_dialog.setWindowTitle(
+            f"Background Reference — {self.comboBox_4.currentText()}"
+        )
+        self._update_emit_background_status()
+        self._refresh_emit_background_preview()
+        self.background_dialog.show()
+        self.background_dialog.raise_()
+        self.background_dialog.activateWindow()
+
+    def _sync_emit_background_for_flag(self):
+        self._clear_emit_background_reference()
+        self._load_latest_emit_background(silent=True)
+        if self.background_dialog is not None:
+            self.background_dialog.setWindowTitle(
+                f"Background Reference — {self.comboBox_4.currentText()}"
+            )
+
+    def _validate_emit_background_metadata(self, metadata, flag_name):
+        expected = {
+            "machine_id": self.machine_profile.machine.id,
+            "control_backend": self.machine_type,
+            "flag_id": flag_name,
+        }
+        for key, expected_value in expected.items():
+            actual = metadata.get(key)
+            if actual is not None and str(actual) != str(expected_value):
+                raise BackgroundStoreError(
+                    f"Background {key} {actual!r} does not match current {expected_value!r}."
+                )
+
+    def _emit_background_exposure_mismatch(self):
+        if not self.background_metadata or not self.background_flag_id:
+            return False
+        exposure_pv = self._resolve_optional_channel(
+            self.background_flag_id,
+            "exposure_time",
+        )
+        current = _read_optional_scalar_pv(exposure_pv)
+        saved = _finite_float_or_none(self.background_metadata.get("exposure_s"))
+        return (
+            current is not None
+            and saved is not None
+            and not math.isclose(current, saved, rel_tol=1e-6, abs_tol=1e-9)
+        )
+
+    def _background_reference_is_usable(self):
+        return (
+            self.background_image is not None
+            and self.background_flag_id == self.comboBox_4.currentText()
+            and not self._emit_background_exposure_mismatch()
+        )
+
+    def _set_emit_background_reference(self, image, metadata, image_path, *, warn=True):
+        flag_name = self.comboBox_4.currentText()
+        self._validate_emit_background_metadata(metadata, flag_name)
+        self.background_image = np.asarray(image, dtype=float)
+        self.background_metadata = dict(metadata)
+        self.background_image_path = Path(image_path) if image_path is not None else None
+        self.background_flag_id = flag_name
+        if self._emit_background_exposure_mismatch():
+            blocked = self.beam_image_background_checkbox.blockSignals(True)
+            self.beam_image_background_checkbox.setChecked(False)
+            self.beam_image_background_checkbox.blockSignals(blocked)
+            if warn:
+                self._warn(
+                    "Loaded background exposure differs from the current camera exposure; "
+                    "background subtraction remains disabled."
+                )
+        self._update_emit_background_status()
+        self._refresh_emit_background_preview()
+
+    def _clear_emit_background_reference(self):
+        self.background_image = None
+        self.background_metadata = {}
+        self.background_image_path = None
+        self.background_flag_id = None
+        blocked = self.beam_image_background_checkbox.blockSignals(True)
+        self.beam_image_background_checkbox.setChecked(False)
+        self.beam_image_background_checkbox.blockSignals(blocked)
+        self._update_emit_background_status()
+        self._refresh_emit_background_preview()
+
+    def _update_emit_background_status(self):
+        if self.background_image is None:
+            text = "None"
+        else:
+            sample_count = self.background_metadata.get("sample_count")
+            sample_text = f" · {sample_count} frames" if sample_count else ""
+            mismatch = " · exposure mismatch" if self._emit_background_exposure_mismatch() else ""
+            applied = " · applied" if self.beam_image_background_checkbox.isChecked() else " · not applied"
+            text = f"{self.background_flag_id}{sample_text}{mismatch}{applied}"
+        self.beam_background_status_label.setText(text)
+        if self.background_dialog is not None:
+            self.background_dialog_status_label.setText(f"Background: {text}")
+
+    def _refresh_emit_background_preview(self):
+        if self.background_preview is None:
+            return
+        palette = self._palette()
+        axes = self.background_preview.axes
+        axes.clear()
+        self.background_preview.fig.patch.set_facecolor(palette["plot_card_bg"])
+        axes.set_facecolor(palette["plot_bg"])
+        axes.tick_params(colors=palette["plot_text"], which="both", labelsize=8)
+        for spine in axes.spines.values():
+            spine.set_edgecolor(palette["plot_spine"])
+        if self.background_image is None:
+            axes.text(
+                0.5,
+                0.5,
+                "No background loaded",
+                ha="center",
+                va="center",
+                color=palette["muted_fg"],
+                transform=axes.transAxes,
+            )
+            axes.set_xticks([])
+            axes.set_yticks([])
+        else:
+            axes.imshow(
+                self.background_image,
+                cmap=self.beam_image_colormap_combo.currentText(),
+                origin="lower",
+                aspect="auto",
+            )
+            axes.set_title(
+                f"{self.background_flag_id} background",
+                color=palette["plot_text"],
+                fontsize=10,
+                loc="left",
+            )
+            axes.set_xlabel("x pixel", color=palette["plot_text"])
+            axes.set_ylabel("y pixel", color=palette["plot_text"])
+        self.background_preview.canvas.draw_idle()
+
+    def _load_latest_emit_background(self, *, silent=False):
+        flag_name = self.comboBox_4.currentText()
+        if not flag_name:
+            return False
+        geometry = self._current_flag_pixel_geometry(flag_name)
+        paths = resolve_beam_background_paths(self.app_context, flag_name)
+        image_path = paths["background_image_path"]
+        if not image_path.is_file():
+            if not silent:
+                self._warn(f"No saved background is available for {flag_name}.")
+            return False
+        try:
+            image, metadata = load_background(
+                image_path,
+                paths["background_metadata_path"],
+                expected_shape=(geometry.shape[1], geometry.shape[0]),
+            )
+            self._set_emit_background_reference(
+                image,
+                metadata,
+                image_path,
+                warn=not silent,
+            )
+        except (BackgroundStoreError, MachineProfileError, OSError, ValueError) as exc:
+            if not silent:
+                self._warn(f"Could not load background: {exc}")
+            else:
+                print(f"Could not auto-load background for {flag_name}: {exc}")
+            return False
+        return True
+
+    def _choose_emit_background_file(self, *, save):
+        paths = resolve_beam_background_paths(
+            self.app_context,
+            self.comboBox_4.currentText(),
+        )
+        dialog = QFileDialog(self.background_dialog or self)
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        dialog.setNameFilter("NumPy files (*.npy)")
+        if save:
+            paths["runs_dir"].mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+            dialog.setWindowTitle("Save PRF Background")
+            dialog.setAcceptMode(QFileDialog.AcceptSave)
+            dialog.setDefaultSuffix("npy")
+            dialog.setDirectory(str(paths["runs_dir"]))
+            dialog.selectFile(
+                f"{self.comboBox_4.currentText()}_background_{timestamp}.npy"
+            )
+        else:
+            dialog.setWindowTitle("Load PRF Background")
+            dialog.setFileMode(QFileDialog.ExistingFile)
+            initial = paths["background_image_path"]
+            dialog.setDirectory(
+                str(initial.parent if initial.parent.is_dir() else paths["latest_dir"])
+            )
+        if dialog.exec_() != QDialog.Accepted:
+            return None
+        selected = dialog.selectedFiles()
+        return Path(selected[0]) if selected else None
+
+    def _load_emit_background_file(self):
+        image_path = self._choose_emit_background_file(save=False)
+        if image_path is None:
+            return
+        geometry = self._current_flag_pixel_geometry()
+        try:
+            image, metadata = load_background(
+                image_path,
+                image_path.with_suffix(".json"),
+                expected_shape=(geometry.shape[1], geometry.shape[0]),
+            )
+            self._set_emit_background_reference(image, metadata, image_path)
+        except (BackgroundStoreError, MachineProfileError, OSError, ValueError) as exc:
+            self._warn(f"Could not load background: {exc}")
+
+    def _save_emit_background_as(self):
+        if self.background_image is None:
+            self._warn("No background is available to save.")
+            return
+        image_path = self._choose_emit_background_file(save=True)
+        if image_path is None:
+            return
+        metadata = dict(self.background_metadata)
+        metadata.update({
+            "source": "emit_measure_save_as",
+            "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        })
+        try:
+            save_background(
+                self.background_image,
+                image_path,
+                image_path.with_suffix(".json"),
+                metadata,
+            )
+        except (BackgroundStoreError, OSError, ValueError) as exc:
+            self._warn(f"Could not save background: {exc}")
+
+    def _set_background_application(self, checked):
+        if checked and not self._background_reference_is_usable():
+            blocked = self.beam_image_background_checkbox.blockSignals(True)
+            self.beam_image_background_checkbox.setChecked(False)
+            self.beam_image_background_checkbox.blockSignals(blocked)
+            self._warn(
+                "Load or sample a matching background before enabling subtraction."
+            )
+            self._update_emit_background_status()
+            return
+        self._update_emit_background_status()
+        self.refresh_current_beam_image_fit(show_warning=False)
+
+    def _sample_background(self):
+        if self._scan_is_running():
+            self._warn("Stop the emittance scan before sampling a background.")
+            return
+        if QMessageBox.question(
+            self,
+            "Sample PRF Background",
+            "Confirm that the beam is absent. Sample and replace the saved background now?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        ) != QMessageBox.Yes:
+            return
+
+        flag_name = self.comboBox_4.currentText()
+        try:
+            image_pv = resolve_channel(self.machine_profile, flag_name, "image", self.machine_type)
+            exposure_pv = self._resolve_optional_channel(flag_name, "exposure_time")
+            pixel_shape = self._current_flag_pixel_geometry(flag_name).shape
+        except (MachineProfileError, ValueError) as exc:
+            self._warn(str(exc))
+            return
+
+        count = self.background_samples_spin.value()
+        interval_s = self.background_interval_spin.value()
+        expected_shape = (pixel_shape[1], pixel_shape[0])
+        timer_was_active = self.beam_image_timer.isActive()
+        self.beam_image_timer.stop()
+        self.background_sample_button.setEnabled(False)
+        self.background_dialog_status_label.setText(f"Sampling {count} frames from {flag_name}…")
+        QApplication.processEvents()
+        images = []
+        try:
+            for index in range(count):
+                if index > 0 and interval_s > 0:
+                    deadline = time.monotonic() + interval_s
+                    while time.monotonic() < deadline:
+                        QApplication.processEvents()
+                        time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+                raw = epics.caget(image_pv)
+                if raw is None:
+                    raise BackgroundStoreError(f"{image_pv} returned no image data.")
+                image = np.asarray(raw, dtype=float).reshape(expected_shape)
+                if not np.all(np.isfinite(image)):
+                    raise BackgroundStoreError("Sampled background contains non-finite values.")
+                images.append(image)
+
+            background = np.mean(images, axis=0)
+            paths = resolve_beam_background_paths(self.app_context, flag_name)
+            metadata = {
+                "machine_id": self.machine_profile.machine.id,
+                "control_backend": self.machine_type,
+                "flag_id": flag_name,
+                "image_pv": image_pv,
+                "pixel_shape": [int(pixel_shape[0]), int(pixel_shape[1])],
+                "exposure_s": _read_optional_scalar_pv(exposure_pv),
+                "source": "emit_measure_sampled",
+                "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                "sample_count": count,
+                "sample_interval_s": interval_s,
+            }
+            image_path, _ = save_background(
+                background,
+                paths["background_image_path"],
+                paths["background_metadata_path"],
+                metadata,
+            )
+        except (BackgroundStoreError, OSError, TypeError, ValueError) as exc:
+            self._warn(f"Background sampling failed: {exc}")
+            self.background_dialog_status_label.setText(f"Sampling failed: {exc}")
+        else:
+            self._set_emit_background_reference(background, metadata, image_path)
+            self.beam_image_background_checkbox.setChecked(True)
+            self.background_dialog_status_label.setText(
+                f"Saved {count} frames for {flag_name} · {image_path.name}"
+            )
+            self.refresh_current_beam_image_fit(show_warning=False)
+        finally:
+            self.background_sample_button.setEnabled(True)
+            if timer_was_active and self.beam_image_auto_refresh_checkbox.isChecked():
+                self.beam_image_timer.start()
  
     def startScan(self):
         if not self._require_model_backend_available("Emit measurement scan"):
@@ -2910,6 +3525,8 @@ class myWindow(QWidget,Ui_Form):
                 dict["beam_fit"],
                 k1=dict.get("k1"),
                 extent=dict.get("beam_extent"),
+                size_pv=dict.get("size_pv", (None, None)),
+                background_status=dict.get("background_status", "Off"),
             )
 
         if dict["method"] == None:
@@ -3172,8 +3789,12 @@ class scanThread(QThread):
         self.flag_name  = paras.flag_name.upper() 
         self.quadPV     = paras.quadPV    
         self.flagImagePV = paras.flagImagePV
+        self.flagSigxPV = getattr(paras, "flagSigxPV", None)
+        self.flagSigyPV = getattr(paras, "flagSigyPV", None)
         self.flag_pixel_shape = paras.flag_pixel_shape
         self.flag_image_extent = paras.flag_image_extent
+        self.background_image = getattr(paras, "background_image", None)
+        self.background_status = getattr(paras, "background_status", "Off")
         self.k1_from    = paras.k1_from   
         self.k1_end     = paras.k1_end    
         self.k1_steps   = paras.k1_steps  
@@ -3249,6 +3870,11 @@ class scanThread(QThread):
                                 self.flagImagePV,
                                 self.flag_pixel_shape,
                                 self.flag_image_extent,
+                                background=self.background_image,
+                            )
+                            size_pv = _read_optional_size_pvs(
+                                self.flagSigxPV,
+                                self.flagSigyPV,
                             )
                             point = {
                                 "method": None,
@@ -3257,6 +3883,8 @@ class scanThread(QThread):
                                 "beam_image": image,
                                 "beam_fit": fit_result,
                                 "beam_extent": self.flag_image_extent,
+                                "size_pv": size_pv,
+                                "background_status": self.background_status,
                             }
                             if not fit_result.valid:
                                 self.trigger.emit(point)

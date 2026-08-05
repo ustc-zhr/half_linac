@@ -16,7 +16,7 @@ ensure_repo_import_path(__file__)
 
 import matplotlib as mpl
 import numpy as np
-from epics import PV, caget, caput, caput_many
+from epics import PV, caget, caput
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QApplication,
@@ -43,11 +43,12 @@ from gui import Ui_Form
 from mplwidget import MplWidget
 from profile_runtime import resolve_beam_monitor_background_paths
 from half_linac.src.shared.beam_diagnostics import (
+    BEAM_IMAGE_COLORMAPS,
+    DEFAULT_BEAM_IMAGE_COLORMAP,
     BackgroundStoreError,
-    fit_beam_image,
+    analyze_beam_image,
     load_background,
     save_background,
-    subtract_background,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
@@ -166,6 +167,10 @@ QFrame#plotCard, QFrame#controlCard {{
     border-radius: 14px;
 }}
 
+QWidget[role="controlSection"] {{
+    background-color: transparent;
+}}
+
 QLabel#summaryTitle {{
     background-color: transparent;
     color: {summary_title_fg};
@@ -179,6 +184,13 @@ QLabel#panelTitle {{
     border: none;
     color: {summary_title_fg};
     font-size: 15px;
+    font-weight: 700;
+}}
+
+QLabel[role="sectionTitle"] {{
+    background-color: transparent;
+    color: {summary_title_fg};
+    font-size: 13px;
     font-weight: 700;
 }}
 
@@ -459,6 +471,10 @@ class myWindow(QWidget, Ui_Form):
         self._pixel_geometry_flag_id = None
         self._image_pv = None
         self._image_pv_name = None
+        self._size_pvs = (None, None)
+        self._size_pv_names = (None, None)
+        self.size_pv_sigx = None
+        self.size_pv_sigy = None
         self.background_image = None
         self.background_metadata = {}
         self.background_image_path = None
@@ -466,6 +482,7 @@ class myWindow(QWidget, Ui_Form):
         self.subtract_background_enabled = False
         self.background_dialog = None
         self.background_preview = None
+        self.display_settings_dialog = None
 
         self.h = None
         self.colorbar = None
@@ -498,7 +515,7 @@ class myWindow(QWidget, Ui_Form):
         self.verticalLayout_3.setSpacing(12)
         self.verticalLayout_2.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout_2.setSpacing(12)
-        self.verticalLayout_2.setStretch(0, 5)
+        self.verticalLayout_2.setStretch(0, 7)
         self.verticalLayout_2.setStretch(1, 0)
         self.widget_2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
 
@@ -568,6 +585,7 @@ class myWindow(QWidget, Ui_Form):
         title = QLabel("Beam Profile", card)
         title.setObjectName("panelTitle")
         layout.addWidget(title)
+        self.widget.setMinimumHeight(380)
         layout.addWidget(self.widget)
 
         self.verticalLayout_2.insertWidget(0, card, 2)
@@ -577,29 +595,38 @@ class myWindow(QWidget, Ui_Form):
         self.widget_2.setObjectName("workspacePanel")
         self.control_grid = QGridLayout(self.widget_2)
         self.control_grid.setContentsMargins(0, 0, 0, 0)
-        self.control_grid.setHorizontalSpacing(12)
-        self.control_grid.setVerticalSpacing(10)
+        self.control_grid.setSpacing(0)
 
-        self.acquisition_card = self._build_control_card("Acquisition")
-        self.view_card = self._build_control_card("Display Controls")
-        self.profile_card = self._build_control_card("Profile Analysis")
+        self.controls_card = QFrame(self.widget_2)
+        self.controls_card.setObjectName("controlCard")
+        self.controls_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        controls_layout = QGridLayout(self.controls_card)
+        controls_layout.setContentsMargins(12, 10, 12, 10)
+        controls_layout.setHorizontalSpacing(18)
+        controls_layout.setVerticalSpacing(10)
+        self.compact_control_grid = controls_layout
+        self.control_grid.addWidget(self.controls_card, 0, 0)
+
+        self.acquisition_card = self._build_control_section("Acquisition")
+        self.profile_card = self._build_control_section("Analysis")
+        self.view_card = self._build_control_section("Display / Background")
 
         self._populate_acquisition_card()
-        self._populate_view_card()
         self._populate_profile_card()
+        self._populate_view_card()
         self._update_control_workspace_layout()
 
-    def _build_control_card(self, title_text):
-        card = QFrame(self.widget_2)
-        card.setObjectName("controlCard")
+    def _build_control_section(self, title_text):
+        card = QWidget(self.controls_card)
+        card.setProperty("role", "controlSection")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
 
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
 
         title = QLabel(title_text, card)
-        title.setObjectName("panelTitle")
+        title.setProperty("role", "sectionTitle")
         layout.addWidget(title)
 
         return card
@@ -609,7 +636,7 @@ class myWindow(QWidget, Ui_Form):
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(10)
+        grid.setVerticalSpacing(6)
 
         self.label_10.setText("Flag")
         self.label.setText("Exposure (s)")
@@ -631,7 +658,7 @@ class myWindow(QWidget, Ui_Form):
 
         action_row = QHBoxLayout()
         action_row.setContentsMargins(0, 0, 0, 0)
-        action_row.setSpacing(10)
+        action_row.setSpacing(6)
 
         self.pushButton.setText("Run Monitor")
         self.pushButton_2.setText("Pause Monitor")
@@ -654,21 +681,26 @@ class myWindow(QWidget, Ui_Form):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
 
-        self.label_3.setText("vmin")
-        self.label_4.setText("vmax")
         self.label_2.setText("Colormap")
-        for label in (self.label_2, self.label_3, self.label_4):
-            label.setProperty("role", "field")
+        self.comboBox_2.clear()
+        self.comboBox_2.addItems(BEAM_IMAGE_COLORMAPS)
+        self.comboBox_2.setCurrentText(DEFAULT_BEAM_IMAGE_COLORMAP)
+        self.label_2.setProperty("role", "field")
+        for widget in (self.label_3, self.label_4, self.lineEdit_3, self.lineEdit_4):
+            widget.hide()
 
         grid.addWidget(self.label_2, 0, 0)
         grid.addWidget(self.comboBox_2, 0, 1)
-        grid.addWidget(self.label_3, 1, 0)
-        grid.addWidget(self.lineEdit_4, 1, 1)
-        grid.addWidget(self.label_4, 2, 0)
-        grid.addWidget(self.lineEdit_3, 2, 1)
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
 
+        self.display_settings_button = QPushButton("Display…", self.view_card)
+        self.display_settings_button.setProperty("compact", True)
+        self.display_settings_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.display_settings_button.setToolTip(
+            "Set optional fixed image intensity limits; blank fields use automatic scaling."
+        )
+        self._refresh_widget_style(self.display_settings_button)
         self.reset_view_button = QPushButton("Fit to Image", self.view_card)
         self.reset_view_button.setProperty("compact", True)
         self.reset_view_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -676,7 +708,23 @@ class myWindow(QWidget, Ui_Form):
             "Restore the full physical image extent for the selected flag."
         )
         self._refresh_widget_style(self.reset_view_button)
-        layout.addWidget(self.reset_view_button)
+        display_actions = QHBoxLayout()
+        display_actions.setContentsMargins(0, 0, 0, 0)
+        display_actions.setSpacing(6)
+        display_actions.addWidget(self.display_settings_button)
+        display_actions.addWidget(self.reset_view_button)
+        layout.addLayout(display_actions)
+
+        self.background_subtract_checkbox.setParent(self.view_card)
+        self.background_status_label.setParent(self.view_card)
+        self.background_button.setParent(self.view_card)
+        background_row = QHBoxLayout()
+        background_row.setContentsMargins(0, 0, 0, 0)
+        background_row.setSpacing(6)
+        background_row.addWidget(self.background_subtract_checkbox)
+        background_row.addWidget(self.background_status_label, 1)
+        background_row.addWidget(self.background_button)
+        layout.addLayout(background_row)
 
     def _populate_profile_card(self):
         layout = self.profile_card.layout()
@@ -705,7 +753,7 @@ class myWindow(QWidget, Ui_Form):
         )
 
         self.background_subtract_checkbox = QCheckBox(
-            "Subtract background",
+            "Apply",
             self.profile_card,
         )
         self.background_subtract_checkbox.setObjectName("subtractBackgroundCheckBox")
@@ -713,53 +761,133 @@ class myWindow(QWidget, Ui_Form):
             "Subtract the current flag's saved background before display and profile analysis."
         )
 
-        self.background_status_label = QLabel("Background: None", self.profile_card)
+        self.background_status_label = QLabel("BG: None", self.profile_card)
         self.background_status_label.setProperty("role", "field")
-        self.background_status_label.setWordWrap(True)
+        self.background_status_label.setWordWrap(False)
 
-        self.background_button = QPushButton("Background...", self.profile_card)
+        self.background_button = QPushButton("Manage…", self.profile_card)
         self.background_button.setObjectName("backgroundButton")
         self.background_button.setProperty("compact", True)
         self.background_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._refresh_widget_style(self.background_button)
 
         analysis_grid = QGridLayout()
-        analysis_grid.setHorizontalSpacing(12)
-        analysis_grid.setVerticalSpacing(8)
+        analysis_grid.setHorizontalSpacing(8)
+        analysis_grid.setVerticalSpacing(6)
         analysis_grid.addWidget(method_label, 0, 0)
         analysis_grid.addWidget(self.profile_method_combo, 0, 1)
-        analysis_grid.addWidget(self.background_subtract_checkbox, 0, 2)
-        analysis_grid.addWidget(self.background_status_label, 0, 3)
-        analysis_grid.addWidget(self.background_button, 0, 4)
         analysis_grid.setColumnStretch(1, 1)
-        analysis_grid.setColumnStretch(3, 1)
         layout.addLayout(analysis_grid)
 
-        self.label_6.setText("Sigma X (mm)")
-        self.label_7.setText("Sigma Y (mm)")
-        for label in (self.label_6, self.label_7):
-            label.setProperty("role", "field")
-            label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+        self.label_6.hide()
+        self.label_7.hide()
 
         self.lineEdit_5.setReadOnly(True)
         self.lineEdit_6.setReadOnly(True)
-        self.lineEdit_5.setMinimumWidth(120)
-        self.lineEdit_6.setMinimumWidth(120)
+        self.lineEdit_5.setMinimumWidth(72)
+        self.lineEdit_6.setMinimumWidth(72)
         self.lineEdit_5.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.lineEdit_6.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         sigma_grid = QGridLayout()
-        sigma_grid.setHorizontalSpacing(12)
-        sigma_grid.setVerticalSpacing(0)
-        sigma_grid.addWidget(self.label_6, 0, 0)
-        sigma_grid.addWidget(self.lineEdit_5, 0, 1)
-        sigma_grid.addWidget(self.label_7, 0, 2)
-        sigma_grid.addWidget(self.lineEdit_6, 0, 3)
+        sigma_grid.setHorizontalSpacing(6)
+        sigma_grid.setVerticalSpacing(4)
+
+        for column, text in enumerate(("Source", "σx (mm)", "σy (mm)")):
+            header = QLabel(text, self.profile_card)
+            header.setProperty("role", "field")
+            sigma_grid.addWidget(header, 0, column)
+
+        local_fit_title = QLabel("Local fit", self.profile_card)
+        local_fit_title.setProperty("role", "field")
+        published_size_tooltip = (
+            "Optional cross-check values read from the configured sigx/sigy channels. "
+            "Their calculation and background treatment are determined by the data provider."
+        )
+        size_pv_title = QLabel("Published size", self.profile_card)
+        size_pv_title.setProperty("role", "field")
+        size_pv_title.setToolTip(published_size_tooltip)
+
+        self.size_pv_sigx_label = QLineEdit("--", self.profile_card)
+        self.size_pv_sigy_label = QLineEdit("--", self.profile_card)
+        for field in (self.size_pv_sigx_label, self.size_pv_sigy_label):
+            field.setReadOnly(True)
+            field.setMinimumWidth(72)
+            field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            field.setToolTip(published_size_tooltip)
+
+        sigma_grid.addWidget(local_fit_title, 1, 0)
+        sigma_grid.addWidget(self.lineEdit_5, 1, 1)
+        sigma_grid.addWidget(self.lineEdit_6, 1, 2)
+        sigma_grid.addWidget(size_pv_title, 2, 0)
+        sigma_grid.addWidget(self.size_pv_sigx_label, 2, 1)
+        sigma_grid.addWidget(self.size_pv_sigy_label, 2, 2)
         sigma_grid.setColumnStretch(0, 0)
         sigma_grid.setColumnStretch(1, 1)
-        sigma_grid.setColumnStretch(2, 0)
-        sigma_grid.setColumnStretch(3, 1)
+        sigma_grid.setColumnStretch(2, 1)
         layout.addLayout(sigma_grid)
+
+    def _show_display_settings_dialog(self):
+        if self.display_settings_dialog is None:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Image Display")
+            dialog.setMinimumWidth(360)
+            layout = QVBoxLayout(dialog)
+
+            note = QLabel(
+                "Leave either limit blank to use the current image minimum or maximum.",
+                dialog,
+            )
+            note.setWordWrap(True)
+            note.setProperty("role", "field")
+            layout.addWidget(note)
+
+            form = QGridLayout()
+            self.label_3.setParent(dialog)
+            self.label_4.setParent(dialog)
+            self.lineEdit_4.setParent(dialog)
+            self.lineEdit_3.setParent(dialog)
+            self.label_3.setText("vmin")
+            self.label_4.setText("vmax")
+            self.label_3.setProperty("role", "field")
+            self.label_4.setProperty("role", "field")
+            self.lineEdit_4.setPlaceholderText("auto")
+            self.lineEdit_3.setPlaceholderText("auto")
+            for widget in (self.label_3, self.label_4, self.lineEdit_4, self.lineEdit_3):
+                widget.show()
+            form.addWidget(self.label_3, 0, 0)
+            form.addWidget(self.lineEdit_4, 0, 1)
+            form.addWidget(self.label_4, 1, 0)
+            form.addWidget(self.lineEdit_3, 1, 1)
+            form.setColumnStretch(1, 1)
+            layout.addLayout(form)
+
+            actions = QHBoxLayout()
+            reset_button = QPushButton("Reset Auto", dialog)
+            apply_button = QPushButton("Apply", dialog)
+            close_button = QPushButton("Close", dialog)
+            for button in (reset_button, apply_button, close_button):
+                button.setProperty("compact", True)
+            reset_button.clicked.connect(self._reset_intensity_limits)
+            apply_button.clicked.connect(self.plot_beamprofile)
+            close_button.clicked.connect(dialog.hide)
+            self.lineEdit_4.returnPressed.connect(self.plot_beamprofile)
+            self.lineEdit_3.returnPressed.connect(self.plot_beamprofile)
+            actions.addWidget(reset_button)
+            actions.addStretch(1)
+            actions.addWidget(apply_button)
+            actions.addWidget(close_button)
+            layout.addLayout(actions)
+            self.display_settings_dialog = dialog
+
+        self.display_settings_dialog.show()
+        self.display_settings_dialog.raise_()
+        self.display_settings_dialog.activateWindow()
+
+    def _reset_intensity_limits(self):
+        self.lineEdit_4.clear()
+        self.lineEdit_3.clear()
+        self.plot_beamprofile()
 
     def _configure_default_state(self):
         self.pushButton.setEnabled(False)
@@ -771,7 +899,8 @@ class myWindow(QWidget, Ui_Form):
             self.flag_selec.setCurrentIndex(0)
         self.tmppv = self.flag_selec.currentText()
         self._configure_pixel_geometry(self.tmppv)
-        self.lineEdit_4.setText("0")
+        self.lineEdit_4.clear()
+        self.lineEdit_3.clear()
         self.lineEdit_9.setText("1")
         self.lineEdit_5.setText("--")
         self.lineEdit_6.setText("--")
@@ -795,6 +924,7 @@ class myWindow(QWidget, Ui_Form):
         self.pushButton.clicked.connect(self.start1_btn)
         self.pushButton_2.clicked.connect(self.stop1_btn)
         self.reset_view_button.clicked.connect(self.reset_view)
+        self.display_settings_button.clicked.connect(self._show_display_settings_dialog)
         self.background_button.clicked.connect(self._show_background_dialog)
         self.background_subtract_checkbox.toggled.connect(
             self._set_background_subtraction
@@ -882,12 +1012,14 @@ class myWindow(QWidget, Ui_Form):
 
     def _update_background_status(self):
         if self.background_image is None:
-            text = "Background: None"
+            text = "BG: None"
         else:
             sample_count = self.background_metadata.get("sample_count")
-            sample_text = f" • {sample_count} frames" if sample_count else ""
+            sample_text = f" · {sample_count} frame" if sample_count == 1 else (
+                f" · {sample_count} frames" if sample_count else ""
+            )
             mismatch_text = " • exposure mismatch" if self._background_exposure_mismatch() else ""
-            text = f"Background: {self.background_flag_id}{sample_text}{mismatch_text}"
+            text = f"BG: {self.background_flag_id}{sample_text}{mismatch_text}"
         self.background_status_label.setText(text)
         if hasattr(self, "background_dialog_status_label"):
             self.background_dialog_status_label.setText(text)
@@ -901,8 +1033,13 @@ class myWindow(QWidget, Ui_Form):
         self._update_background_status()
         self._refresh_background_preview()
         if self._background_exposure_mismatch():
+            blocked = self.background_subtract_checkbox.blockSignals(True)
+            self.background_subtract_checkbox.setChecked(False)
+            self.background_subtract_checkbox.blockSignals(blocked)
+            self.subtract_background_enabled = False
             self._notify(
-                "Warning: loaded background exposure differs from the current camera exposure."
+                "Loaded background exposure differs from the current camera exposure; "
+                "background subtraction remains disabled."
             )
 
     def _clear_background(self):
@@ -945,12 +1082,16 @@ class myWindow(QWidget, Ui_Form):
         return True
 
     def _set_background_subtraction(self, checked):
-        if checked and self.background_image is None:
+        if checked and (
+            self.background_image is None or self._background_exposure_mismatch()
+        ):
             blocked = self.background_subtract_checkbox.blockSignals(True)
             self.background_subtract_checkbox.setChecked(False)
             self.background_subtract_checkbox.blockSignals(blocked)
             self.subtract_background_enabled = False
-            self._notify("Load or sample a background before enabling subtraction.")
+            self._notify(
+                "Load or sample a matching background before enabling subtraction."
+            )
             return
         self.subtract_background_enabled = bool(checked)
         if self._pv_available:
@@ -959,7 +1100,7 @@ class myWindow(QWidget, Ui_Form):
     def _build_background_dialog(self):
         dialog = QDialog(self)
         dialog.setObjectName("backgroundDialog")
-        dialog.setWindowTitle("Beam Monitor Background")
+        dialog.setWindowTitle("Background Reference")
         dialog.resize(720, 620)
 
         outer = QVBoxLayout(dialog)
@@ -1097,6 +1238,14 @@ class myWindow(QWidget, Ui_Form):
 
     def _sample_background(self):
         if not self.tmppv or not self._configure_active_channels():
+            return
+        if QMessageBox.question(
+            self,
+            "Sample Beam Background",
+            "Confirm that the beam is absent. Sample and replace the saved background now?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        ) != QMessageBox.Yes:
             return
         sample_count = self.background_samples_spin.value()
         interval_s = self.background_interval_spin.value()
@@ -1267,26 +1416,29 @@ class myWindow(QWidget, Ui_Form):
         self._profile_status_tone = tone
 
     def _update_control_workspace_layout(self):
-        if not hasattr(self, "control_grid"):
+        if not hasattr(self, "compact_control_grid"):
             return
 
-        while self.control_grid.count():
-            self.control_grid.takeAt(0)
+        grid = self.compact_control_grid
+        while grid.count():
+            grid.takeAt(0)
 
         width = self.widget_2.width() or self.width()
-        if width < 960:
-            self.control_grid.setColumnStretch(0, 1)
-            self.control_grid.setColumnStretch(1, 0)
-            self.control_grid.addWidget(self.acquisition_card, 0, 0, Qt.AlignTop)
-            self.control_grid.addWidget(self.view_card, 1, 0, Qt.AlignTop)
-            self.control_grid.addWidget(self.profile_card, 2, 0, Qt.AlignTop)
+        if width < 820:
+            grid.setColumnStretch(0, 1)
+            grid.setColumnStretch(1, 0)
+            grid.setColumnStretch(2, 0)
+            grid.addWidget(self.acquisition_card, 0, 0, Qt.AlignTop)
+            grid.addWidget(self.profile_card, 1, 0, Qt.AlignTop)
+            grid.addWidget(self.view_card, 2, 0, Qt.AlignTop)
             return
 
-        self.control_grid.setColumnStretch(0, 1)
-        self.control_grid.setColumnStretch(1, 1)
-        self.control_grid.addWidget(self.acquisition_card, 0, 0, Qt.AlignTop)
-        self.control_grid.addWidget(self.view_card, 0, 1, Qt.AlignTop)
-        self.control_grid.addWidget(self.profile_card, 1, 0, 1, 2, Qt.AlignTop)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        grid.addWidget(self.acquisition_card, 0, 0, Qt.AlignTop)
+        grid.addWidget(self.profile_card, 0, 1, Qt.AlignTop)
+        grid.addWidget(self.view_card, 0, 2, Qt.AlignTop)
 
     @staticmethod
     def _refresh_widget_style(widget):
@@ -1363,6 +1515,13 @@ class myWindow(QWidget, Ui_Form):
             self.lineEdit_5.setText("--")
         if hasattr(self, "lineEdit_6"):
             self.lineEdit_6.setText("--")
+
+    def _clear_size_pv_stats(self):
+        self.size_pv_sigx = None
+        self.size_pv_sigy = None
+        if hasattr(self, "size_pv_sigx_label"):
+            self.size_pv_sigx_label.setText("--")
+            self.size_pv_sigy_label.setText("--")
 
     def _active_image_axes(self):
         if self.h is None:
@@ -1442,15 +1601,14 @@ class myWindow(QWidget, Ui_Form):
         def parse_limit(line_edit, fallback):
             text = line_edit.text().strip()
             if not text:
-                line_edit.setText(f"{fallback:.6g}")
                 return fallback
             try:
                 value = float(text)
             except ValueError:
-                line_edit.setText(f"{fallback:.6g}")
+                line_edit.clear()
                 return fallback
             if not math.isfinite(value):
-                line_edit.setText(f"{fallback:.6g}")
+                line_edit.clear()
                 return fallback
             return value
 
@@ -1465,8 +1623,8 @@ class myWindow(QWidget, Ui_Form):
             vmax = data_max
             if not vmin < vmax:
                 vmax = vmin + 1.0
-            self.lineEdit_4.setText(f"{vmin:.6g}")
-            self.lineEdit_3.setText(f"{vmax:.6g}")
+            self.lineEdit_4.clear()
+            self.lineEdit_3.clear()
         return vmin, vmax
 
     def reset_view(self):
@@ -1491,6 +1649,14 @@ class myWindow(QWidget, Ui_Form):
         if self.pv != self._image_pv_name:
             self._image_pv = PV(self.pv)
             self._image_pv_name = self.pv
+        size_names = (
+            self._resolve_optional_channel(self.tmppv, "sigx"),
+            self._resolve_optional_channel(self.tmppv, "sigy"),
+        )
+        if size_names != self._size_pv_names:
+            self._size_pvs = tuple(PV(name) if name else None for name in size_names)
+            self._size_pv_names = size_names
+            self._clear_size_pv_stats()
         return True
 
     def _read_exposure_time(self):
@@ -1516,13 +1682,26 @@ class myWindow(QWidget, Ui_Form):
         except Exception as exc:
             self._mark_pv_unavailable(exc)
 
-    def init_sigxy_pv(self):
-        sigx_pv = self._resolve_optional_channel(self.tmppv, "sigx")
-        sigy_pv = self._resolve_optional_channel(self.tmppv, "sigy")
-        if sigx_pv is None or sigy_pv is None:
-            self.sigPV = None
-            return
-        self.sigPV = [sigx_pv, sigy_pv]
+    def _read_size_pv(self):
+        values = []
+        for pv in self._size_pvs:
+            if pv is None:
+                values.append(None)
+                continue
+            try:
+                value = float(pv.get(timeout=0.05))
+            except Exception:
+                value = None
+            values.append(
+                value if value is not None and math.isfinite(value) and value > 0 else None
+            )
+        self.size_pv_sigx, self.size_pv_sigy = values
+        self.size_pv_sigx_label.setText(
+            f"{self.size_pv_sigx:.3f}" if self.size_pv_sigx is not None else "--"
+        )
+        self.size_pv_sigy_label.setText(
+            f"{self.size_pv_sigy:.3f}" if self.size_pv_sigy is not None else "--"
+        )
 
     def start1_btn(self):
         freq = self._get_refresh_interval_ms()
@@ -1581,7 +1760,7 @@ class myWindow(QWidget, Ui_Form):
             self._configure_pixel_geometry(self.tmppv)
         if not self._configure_active_channels():
             return
-        self.init_sigxy_pv()
+        self._read_size_pv()
 
         try:
             tmp = self._image_pv.get()
@@ -1627,21 +1806,7 @@ class myWindow(QWidget, Ui_Form):
             self._show_profile_placeholder(title, warning=warning, status_text=status_text)
             return
 
-        data = np.reshape(data_ini, (self.pixel[1], self.pixel[0]))
-        if self.subtract_background_enabled:
-            try:
-                data = subtract_background(data, self.background_image)
-            except BackgroundStoreError as exc:
-                self.subtract_background_enabled = False
-                blocked = self.background_subtract_checkbox.blockSignals(True)
-                self.background_subtract_checkbox.setChecked(False)
-                self.background_subtract_checkbox.blockSignals(blocked)
-                self._show_profile_placeholder(
-                    f"{self.tmppv} / Background Error",
-                    warning=f"Warning: background subtraction failed: {exc}",
-                    status_text="Background error",
-                )
-                return
+        raw_data = np.reshape(data_ini, (self.pixel[1], self.pixel[0]))
         self._profile_warning = None
         self._clear_profile_stats()
 
@@ -1653,6 +1818,37 @@ class myWindow(QWidget, Ui_Form):
         self._clear_image_plot_state()
         self.widget.axes.clear()
         self._style_plot_axes()
+
+        if self.subtract_background_enabled and self._background_exposure_mismatch():
+            self.subtract_background_enabled = False
+            blocked = self.background_subtract_checkbox.blockSignals(True)
+            self.background_subtract_checkbox.setChecked(False)
+            self.background_subtract_checkbox.blockSignals(blocked)
+            self._update_background_status()
+            self._notify(
+                "Camera exposure changed; background subtraction has been disabled."
+            )
+
+        try:
+            data, fit_result = analyze_beam_image(
+                raw_data,
+                extent=self.extent,
+                background=self.background_image if self.subtract_background_enabled else None,
+                xlim=self.xlim,
+                ylim=self.ylim,
+                method=self.profile_method_combo.currentText(),
+            )
+        except BackgroundStoreError as exc:
+            self.subtract_background_enabled = False
+            blocked = self.background_subtract_checkbox.blockSignals(True)
+            self.background_subtract_checkbox.setChecked(False)
+            self.background_subtract_checkbox.blockSignals(blocked)
+            self._show_profile_placeholder(
+                f"{self.tmppv} / Background Error",
+                warning=f"Warning: background subtraction failed: {exc}",
+                status_text="Background error",
+            )
+            return
 
         vmin, vmax = self._resolve_intensity_limits(data)
 
@@ -1688,14 +1884,6 @@ class myWindow(QWidget, Ui_Form):
 
         height = abs(self.ylim[1] - self.ylim[0])
         width = abs(self.xlim[1] - self.xlim[0])
-
-        fit_result = fit_beam_image(
-            data,
-            extent=self.extent,
-            xlim=self.xlim,
-            ylim=self.ylim,
-            method=profile_method,
-        )
 
         if not fit_result.has_signal:
             self._set_profile_status("Low signal", "warning")
@@ -1747,14 +1935,6 @@ class myWindow(QWidget, Ui_Form):
 
         self.widget.canvas.draw()
         self._refresh_status()
-
-        if self.sigx is not None and self.sigy is not None and self.sigPV is not None:
-            if not self._writes_allowed("publish beam monitor fitted sigma"):
-                return
-            try:
-                caput_many(self.sigPV, [self.sigx, self.sigy])
-            except Exception as exc:
-                self._mark_pv_unavailable(exc)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
