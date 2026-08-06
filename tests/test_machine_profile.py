@@ -726,7 +726,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsNotNone(context.bba_workflow)
         self.assertIsNotNone(context.model_backend)
         assert context.bba_workflow is not None
-        self.assertEqual(context.bba_workflow.bba1.default_preset, "bba1_default")
+        self.assertEqual(context.bba_workflow.bba1.default_preset, "bba1_qt04_xc21")
         self.assertEqual(context.bba_workflow.bba2.default_preset, "bba2_default")
         self.assertEqual(context.bba_workflow.bba1.quads, ())
         self.assertEqual(context.bba_workflow.bba1.correctors, ())
@@ -768,6 +768,14 @@ class MachineProfileTests(unittest.TestCase):
         assert context.emit_measure_workflow is not None
         self.assertEqual(context.emit_measure_workflow.default_preset, "emit_qt02_prf07")
         self.assertEqual(context.emit_measure_workflow.twiss_quads, ())
+        adaptive = context.emit_measure_workflow.presets_by_id[
+            "emit_qt02_prf07"
+        ].scan.adaptive
+        self.assertIsNotNone(adaptive)
+        assert adaptive is not None
+        self.assertEqual((adaptive.k1_min, adaptive.k1_max), (0.5, 3.5))
+        self.assertEqual(adaptive.initial_points, 4)
+        self.assertEqual(adaptive.max_unique_points, 16)
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
 
@@ -979,6 +987,7 @@ class MachineProfileTests(unittest.TestCase):
                 "PRF12",
                 "PRF13",
                 "PRF14",
+                "PRFD",
                 "ENY",
             },
         )
@@ -1014,6 +1023,7 @@ class MachineProfileTests(unittest.TestCase):
             "PRF12",
             "PRF13",
             "PRF14",
+            "PRFD",
             "ENY",
         }
         self.assertEqual(flag_ids, expected_image_flags)
@@ -1039,7 +1049,7 @@ class MachineProfileTests(unittest.TestCase):
             )
         }
         self.assertEqual(real_image_flags, expected_image_flags)
-        self.assertEqual(vm_image_flags, expected_image_flags - {"PRF01"})
+        self.assertEqual(vm_image_flags, expected_image_flags - {"PRF01", "PRFD"})
         for index in range(1, 15):
             flag_id = f"PRF{index:02d}"
             self.assertEqual(

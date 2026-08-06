@@ -82,6 +82,13 @@ from half_linac.src.shared.machine_profile import (
     resolve_flag_pixel_geometry,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
+from half_linac.src.apps.emit_measure.adaptive_scan import (
+    AdaptiveObservation,
+    AdaptiveScanConfig,
+    build_adaptive_plan,
+    seed_values,
+    validate_adaptive_scan,
+)
 
 nest_dict    = lambda: defaultdict(nest_dict)
 
@@ -98,6 +105,8 @@ TWISS_TRANSPORT_TOOLTIP = (
 )
 
 HEADER_ACTION_HEIGHT = 32
+LEAST_SQUARES_REQUIRED_RANK = 3
+LEAST_SQUARES_MAX_CONDITION = 1.0e12
 
 
 def _image_extent_from_geometry(geometry):
@@ -188,10 +197,16 @@ def _plane_summary(result):
         ("gamma", "gamma"),
         ("determinant", "determinant"),
         ("discriminant", "discriminant"),
+        ("rank", "rank"),
+        ("condition_number", "condition_number"),
+        ("residual_rms", "residual_rms"),
     ):
         value = _finite_float_or_none(_read_result_field(result, source_key))
         if value is not None:
-            summary[target_key] = value
+            summary[target_key] = int(value) if source_key == "rank" else value
+    solver = _read_result_field(result, "solver")
+    if solver:
+        summary["solver"] = str(solver)
     return summary
 
 
@@ -236,6 +251,35 @@ def _compact_status_text(message, limit=120):
     if len(text) <= limit:
         return text
     return text[: limit - 3].rstrip() + "..."
+
+
+def _least_squares_diagnostic_text(result, *, include_message=False):
+    details = []
+    validation_status = _read_result_field(result, "validation_status")
+    if validation_status:
+        details.append(f"validation {validation_status}")
+    coverage_message = str(_read_result_field(result, "coverage_message", "") or "").strip()
+    if coverage_message:
+        details.append(coverage_message)
+    solver = _read_result_field(result, "solver")
+    if solver:
+        details.append(str(solver))
+    rank = _read_result_field(result, "rank")
+    if rank is not None:
+        details.append(f"rank {int(rank)}/{LEAST_SQUARES_REQUIRED_RANK}")
+    condition = _finite_float_or_none(_read_result_field(result, "condition_number"))
+    if condition is not None:
+        details.append(f"condition {condition:.3e}")
+    elif rank is not None and int(rank) < LEAST_SQUARES_REQUIRED_RANK:
+        details.append("condition infinite")
+    residual_rms = _finite_float_or_none(_read_result_field(result, "residual_rms"))
+    if residual_rms is not None:
+        details.append(f"residual RMS {residual_rms:.3e} mm²")
+    if include_message:
+        message = str(_read_result_field(result, "message", "") or "").strip()
+        if message:
+            details.append(message)
+    return "; ".join(details)
 
 
 def _twiss_from_transfer_matrix(matrix, twiss0, plane="xplane"):
@@ -758,6 +802,17 @@ class myWindow(QWidget,Ui_Form):
         self.clear = None
         self.sample_interval_edit = None
         self.sample_interval_label = None
+        self.adaptive_search_min = None
+        self.adaptive_search_max = None
+        self.adaptive_search_button = None
+        self.scan_strategy_combo = QComboBox(self)
+        self.scan_strategy_combo.addItem("Grid", "grid")
+        self.scan_strategy_combo.addItem("Adaptive", "adaptive")
+        self.scan_strategy_label = QLabel("Mode", self)
+        self.scan_strategy_status_label = QLabel("Grid scan", self)
+        self._last_scan_strategy = "grid"
+        self._grid_steps_text = self.lineEdit_9.text()
+        self._adaptive_initial_points_text = None
         self.use_latest_fit_button = QPushButton("Use Latest Fit", self)
         self.twiss_initial_title = QLabel("Initial Twiss at From", self)
         self.twiss_result_title = QLabel("Computed Twiss at To", self)
@@ -775,6 +830,8 @@ class myWindow(QWidget,Ui_Form):
         self.loaded_scan_results_path = None
         self.pending_scan_metadata = None
         self.latest_emit_fit_summary = None
+        self.latest_scan_completion = None
+        self._scan_result_ready = False
         self.latest_twiss_summary = None
         self.twiss_initial_source = {"kind": "manual"}
         self.latest_beam_image = None
@@ -812,6 +869,9 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_4.clicked.connect(self.start_twissCalc)
         self.pushButton_5.clicked.connect(self.stopScan)
         self.use_latest_fit_button.clicked.connect(self._use_latest_fit_for_twiss)
+        self.scan_strategy_combo.currentIndexChanged.connect(
+            self._handle_scan_strategy_changed
+        )
 
         # other function
         self.comboBox.currentIndexChanged.connect(self.updateComboBox4)
@@ -1129,7 +1189,17 @@ class myWindow(QWidget,Ui_Form):
 
         self.gridLayout_2.setHorizontalSpacing(10)
         self.gridLayout_2.setVerticalSpacing(10)
-        self.gridLayout_2.addWidget(self.widget_4, 0, 0, 2, 1, Qt.AlignTop)
+        self._clear_layout_positions(self.scan_left_column_layout)
+        self.scan_left_column_layout.addWidget(self.widget_4)
+        self.scan_left_column_layout.addWidget(self.scan_points_card)
+        self.gridLayout_2.addWidget(
+            self.scan_left_column,
+            0,
+            0,
+            2,
+            1,
+            Qt.AlignTop,
+        )
         self.gridLayout_2.addWidget(self.beam_image_card, 0, 1, 1, 2)
         self.gridLayout_2.addWidget(self._plot_wrappers[self.widget], 1, 1)
         self.gridLayout_2.addWidget(self._plot_wrappers[self.widget_8], 1, 2)
@@ -1178,10 +1248,26 @@ class myWindow(QWidget,Ui_Form):
 
     def _style_control_cards(self):
         self.widget_4.setObjectName("controlCard")
+        self.scan_points_card = QFrame(self.X_Plane)
+        self.scan_points_card.setObjectName("plotCard")
+        self.scan_left_column = QWidget(self.X_Plane)
+        self.scan_left_column.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Maximum,
+        )
+        self.scan_left_column_layout = QVBoxLayout(self.scan_left_column)
+        self.scan_left_column_layout.setContentsMargins(0, 0, 0, 0)
+        self.scan_left_column_layout.setSpacing(10)
         self.widget_5.setObjectName("resultCard")
         self.widget_13.setObjectName("controlCard")
         self.widget_10.setObjectName("resultCard")
-        for widget in (self.widget_4, self.widget_5, self.widget_10, self.widget_13):
+        for widget in (
+            self.widget_4,
+            self.scan_points_card,
+            self.widget_5,
+            self.widget_10,
+            self.widget_13,
+        ):
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.widget_13.setMaximumWidth(900)
 
@@ -1206,7 +1292,7 @@ class myWindow(QWidget,Ui_Form):
     def _configure_form_content(self):
         self.pushButton.setText("Start Scan")
         self.pushButton_2.setText("Recalculate")
-        self.pushButton_3.setText("Clear View")
+        self.pushButton_3.setText("Clear Results")
         self.pushButton_4.setText("Calculate Twiss")
         self.pushButton_5.setText("Stop Scan")
         self.use_latest_fit_button.setText("Use Latest Fit")
@@ -1321,6 +1407,15 @@ class myWindow(QWidget,Ui_Form):
         self.sample_interval_label.setToolTip(self.sample_interval_edit.toolTip())
         self.lineEdit_10.setToolTip("Number of PRF image samples collected at each K1 value.")
         self.label_14.setToolTip(self.lineEdit_10.toolTip())
+        self.scan_strategy_combo.setToolTip(
+            "Grid uses the existing fixed range. Adaptive uses From/To as a small "
+            "initial probe, then selects additional K1 values inside the editable search bounds."
+        )
+        self.scan_strategy_label.setToolTip(self.scan_strategy_combo.toolTip())
+        search_tooltip = (
+            "Edit the adaptive K1 search range for this scan. The preset supplies the default."
+        )
+        self.adaptive_search_button.setToolTip(search_tooltip)
         self.comboBox_2.setToolTip("Start element for Twiss transport.")
         self.label_4.setToolTip(self.comboBox_2.toolTip())
         self.comboBox_3.setToolTip("End element for Twiss transport.")
@@ -1364,28 +1459,42 @@ class myWindow(QWidget,Ui_Form):
         form.addWidget(self.preset_combo, 0, 1, 1, 2)
         form.addWidget(self.preset_modified_label, 0, 3, Qt.AlignRight)
 
-        form.addWidget(self.label_10, 1, 0)
-        form.addWidget(self.comboBox, 1, 1)
-        form.addWidget(self.label_45, 1, 2)
-        form.addWidget(self.comboBox_4, 1, 3)
-        form.addWidget(self.label_22, 2, 0)
-        form.addWidget(self.lineEdit_2, 2, 1)
-        form.addWidget(self.label_32, 2, 2)
-        form.addWidget(self.lineEdit_24, 2, 3)
-        form.addWidget(self.label_11, 3, 0)
-        form.addWidget(self.lineEdit_7, 3, 1)
-        form.addWidget(self.label_12, 3, 2)
-        form.addWidget(self.lineEdit_8, 3, 3)
-        form.addWidget(self.label_13, 4, 0)
-        form.addWidget(self.lineEdit_9, 4, 1)
-        form.addWidget(self.label_14, 4, 2)
-        form.addWidget(self.lineEdit_10, 4, 3)
+        self.scan_strategy_label.setProperty("role", "field")
+        self.scan_strategy_status_label.setProperty("role", "field")
+        self.adaptive_search_button = QPushButton("Range…", self.widget_4)
+        self.adaptive_search_button.setProperty("compact", True)
+        self.adaptive_search_button.setSizePolicy(
+            QSizePolicy.Maximum,
+            QSizePolicy.Fixed,
+        )
+        self.adaptive_search_button.clicked.connect(self._show_adaptive_search_dialog)
+        form.addWidget(self.scan_strategy_label, 1, 0)
+        form.addWidget(self.scan_strategy_combo, 1, 1)
+        form.addWidget(self.adaptive_search_button, 1, 2)
+        form.addWidget(self.scan_strategy_status_label, 1, 3, Qt.AlignRight)
+
+        form.addWidget(self.label_10, 2, 0)
+        form.addWidget(self.comboBox, 2, 1)
+        form.addWidget(self.label_45, 2, 2)
+        form.addWidget(self.comboBox_4, 2, 3)
+        form.addWidget(self.label_22, 3, 0)
+        form.addWidget(self.lineEdit_2, 3, 1)
+        form.addWidget(self.label_32, 3, 2)
+        form.addWidget(self.lineEdit_24, 3, 3)
+        form.addWidget(self.label_11, 4, 0)
+        form.addWidget(self.lineEdit_7, 4, 1)
+        form.addWidget(self.label_12, 4, 2)
+        form.addWidget(self.lineEdit_8, 4, 3)
+        form.addWidget(self.label_13, 5, 0)
+        form.addWidget(self.lineEdit_9, 5, 1)
+        form.addWidget(self.label_14, 5, 2)
+        form.addWidget(self.lineEdit_10, 5, 3)
         self.sample_interval_label = QLabel("Sample interval (s)", self.widget_4)
         self.sample_interval_label.setProperty("role", "field")
         self.sample_interval_edit = QLineEdit(self.widget_4)
         self.sample_interval_edit.setText("0.5")
-        form.addWidget(self.sample_interval_label, 5, 0)
-        form.addWidget(self.sample_interval_edit, 5, 1)
+        form.addWidget(self.sample_interval_label, 6, 0)
+        form.addWidget(self.sample_interval_edit, 6, 1)
         form.setColumnStretch(1, 1)
         form.setColumnStretch(3, 1)
         layout.addLayout(form)
@@ -1400,21 +1509,32 @@ class myWindow(QWidget,Ui_Form):
 
         layout.addLayout(actions)
 
+        points_layout = QVBoxLayout(self.scan_points_card)
+        points_layout.setContentsMargins(8, 8, 8, 8)
+        points_layout.setSpacing(6)
+
         points_header = QHBoxLayout()
-        points_header.setContentsMargins(0, 4, 0, 0)
+        points_header.setContentsMargins(0, 0, 0, 0)
         points_header.setSpacing(6)
 
-        points_title = QLabel("Scan Points", self.widget_4)
+        points_title = QLabel("Scan Points", self.scan_points_card)
         points_title.setObjectName("panelTitle")
         points_header.addWidget(points_title)
         points_header.addStretch(1)
 
-        self.scan_points_summary_label = QLabel("0 active / 0 total", self.widget_4)
+        self.scan_points_summary_label = QLabel(
+            "0 active / 0 total",
+            self.scan_points_card,
+        )
         self.scan_points_summary_label.setProperty("role", "field")
         points_header.addWidget(self.scan_points_summary_label)
-        layout.addLayout(points_header)
+        points_layout.addLayout(points_header)
 
-        self.scan_points_table = QTableWidget(0, len(SCAN_POINT_COLUMNS), self.widget_4)
+        self.scan_points_table = QTableWidget(
+            0,
+            len(SCAN_POINT_COLUMNS),
+            self.scan_points_card,
+        )
         self.scan_points_table.setHorizontalHeaderLabels(SCAN_POINT_COLUMNS)
         self.scan_points_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.scan_points_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -1427,15 +1547,18 @@ class myWindow(QWidget,Ui_Form):
         for column in range(1, len(SCAN_POINT_COLUMNS)):
             header.setSectionResizeMode(column, QHeaderView.Stretch)
         self.scan_points_table.itemChanged.connect(self._on_scan_point_item_changed)
-        layout.addWidget(self.scan_points_table)
+        points_layout.addWidget(self.scan_points_table)
 
         point_actions = QHBoxLayout()
         point_actions.setContentsMargins(0, 0, 0, 0)
         point_actions.setSpacing(6)
-        self.pushButton_2.setParent(self.widget_4)
-        self.load_points_button = QPushButton("Load Points", self.widget_4)
-        self.exclude_points_button = QPushButton("Exclude Selected", self.widget_4)
-        self.restore_points_button = QPushButton("Use All Points", self.widget_4)
+        self.pushButton_2.setParent(self.scan_points_card)
+        self.load_points_button = QPushButton("Load Points", self.scan_points_card)
+        self.exclude_points_button = QPushButton(
+            "Exclude Selected",
+            self.scan_points_card,
+        )
+        self.restore_points_button = QPushButton("Use All Points", self.scan_points_card)
         for button in (
             self.pushButton_2,
             self.load_points_button,
@@ -1448,7 +1571,7 @@ class myWindow(QWidget,Ui_Form):
         self.load_points_button.clicked.connect(self._load_scan_archive)
         self.exclude_points_button.clicked.connect(self._exclude_selected_scan_points)
         self.restore_points_button.clicked.connect(self._restore_all_scan_points)
-        layout.addLayout(point_actions)
+        points_layout.addLayout(point_actions)
 
     def _rebuild_x_results_panel(self):
         layout = QVBoxLayout(self.widget_5)
@@ -1572,6 +1695,11 @@ class myWindow(QWidget,Ui_Form):
     def _apply_theme(self):
         palette = self._palette()
         self.setStyleSheet(build_emit_measure_theme(palette))
+        if self.adaptive_search_button is not None:
+            self.scan_strategy_combo.ensurePolished()
+            self.adaptive_search_button.setFixedHeight(
+                self.scan_strategy_combo.sizeHint().height()
+            )
         if hasattr(self, "status_panel"):
             self.status_panel.apply_theme(palette)
             self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
@@ -1790,6 +1918,20 @@ class myWindow(QWidget,Ui_Form):
                 scan_text = "Running"
                 scan_tone = "success"
             self.status_panel.set_item("scan", scan_text, scan_tone)
+        elif self.latest_scan_completion:
+            points = self.latest_scan_completion.get("points", 0)
+            action = (
+                "Recalculated"
+                if self.latest_scan_completion.get("mode") == "recalculate"
+                else "Complete"
+            )
+            points_text = f" · {points} points" if points else ""
+            self.status_panel.set_item(
+                "scan",
+                f"{action}{points_text}",
+                "success",
+                "Measurement and transfer-matrix reconstruction completed.",
+            )
         else:
             self.status_panel.set_item("scan", "Idle", "subtle")
 
@@ -1844,22 +1986,38 @@ class myWindow(QWidget,Ui_Form):
         if not summary:
             self.status_panel.set_item("emit", "No result", "subtle")
             return
-        status = summary.get("status", "unresolved")
+        status = summary.get("quality_status", summary.get("status", "unresolved"))
         method = summary.get("method", "fit")
-        if status == "valid":
+        if status in {"valid", "validated"}:
             tone = "success"
         elif status == "error":
             tone = "warning"
         else:
             tone = "warning"
 
-        x_status = summary.get("xplane", {}).get("status", "unknown")
-        y_status = summary.get("yplane", {}).get("status", "unknown")
+        x_summary = summary.get("xplane", {})
+        y_summary = summary.get("yplane", {})
+        x_status = x_summary.get("validation_status", x_summary.get("status", "unknown"))
+        y_status = y_summary.get("validation_status", y_summary.get("status", "unknown"))
         if status == "error":
             text = _compact_status_text(summary.get("message", "error"), limit=90)
         else:
             text = f"{method}: {status} (x {x_status}, y {y_status})"
-        self.status_panel.set_item("emit", text, tone)
+        diagnostic_lines = []
+        for plane_label, plane_key in (("X", "xplane"), ("Y", "yplane")):
+            plane_summary = summary.get(plane_key, {})
+            details = _least_squares_diagnostic_text(
+                plane_summary,
+                include_message=plane_summary.get("status") != "valid",
+            )
+            if details:
+                diagnostic_lines.append(f"{plane_label}: {details}")
+        self.status_panel.set_item(
+            "emit",
+            text,
+            tone,
+            "\n".join(diagnostic_lines) or None,
+        )
 
     @staticmethod
     def _format_twiss_plane_label(plane):
@@ -2119,7 +2277,24 @@ class myWindow(QWidget,Ui_Form):
             "samples": paras.samples,
             "settle_time": paras.settle_time,
             "sample_interval": paras.sample_interval,
+            "scan_strategy": getattr(paras, "scan_strategy", "grid"),
         }
+        adaptive_config = getattr(paras, "adaptive_config", None)
+        if adaptive_config is not None:
+            metadata["adaptive"] = {
+                "k1_min": adaptive_config.k1_min,
+                "k1_max": adaptive_config.k1_max,
+                "initial_points": adaptive_config.initial_points,
+                "target_points_per_plane": adaptive_config.target_points_per_plane,
+                "max_unique_points": adaptive_config.max_unique_points,
+                "waist_size_squared_ratio": adaptive_config.waist_size_squared_ratio,
+                "reuse_tolerance": adaptive_config.reuse_tolerance,
+                "max_retries": adaptive_config.max_retries,
+            }
+            metadata["adaptive_preset_defaults"] = {
+                "k1_min": getattr(paras, "adaptive_preset_k1_min", None),
+                "k1_max": getattr(paras, "adaptive_preset_k1_max", None),
+            }
         model_snapshot = getattr(paras, "model_snapshot_metadata", None)
         if isinstance(model_snapshot, Mapping):
             metadata["model_snapshot"] = dict(model_snapshot)
@@ -2368,12 +2543,34 @@ class myWindow(QWidget,Ui_Form):
         return self.twissCal is not None and self.twissCal.isRunning()
 
     def _on_scan_finished(self):
+        completed_mode = self.scan_mode
+        completed = self._scan_result_ready and completed_mode != "stopping"
+        should_show_analysis = completed and self.tabWidget.currentWidget() is self.X_Plane
+        if completed:
+            active, total = self._scan_points_counts()
+            self.latest_scan_completion = {
+                "mode": completed_mode,
+                "active_points": active,
+                "points": total,
+            }
+            action = "Recalculated" if completed_mode == "recalculate" else "Scan complete"
+            self.scan_strategy_status_label.setText(f"{action} · {total} points")
+            self.scan_strategy_status_label.setToolTip(
+                "Measurement and transfer-matrix reconstruction completed."
+            )
         self.scan = None
         self.scan_mode = None
         self.pending_scan_metadata = None
+        self.scan_strategy_combo.setEnabled(True)
         self._refresh_status()
+        if should_show_analysis:
+            QTimer.singleShot(0, self._show_completed_scan_analysis)
         if self._beam_image_auto_refresh_ready:
             self._schedule_beam_image_refresh()
+
+    def _show_completed_scan_analysis(self):
+        if self.latest_scan_completion and self.tabWidget.currentWidget() is self.X_Plane:
+            self.tabWidget.setCurrentWidget(self.tab_2)
 
     def _on_twiss_finished(self):
         self.twissCal = None
@@ -2503,6 +2700,15 @@ class myWindow(QWidget,Ui_Form):
             raise ValueError(f"{field_name} must be non-negative.")
         return value
 
+    def _parse_finite_float(self, text, field_name):
+        try:
+            value = float(text)
+        except ValueError:
+            raise ValueError(f"{field_name} must be numeric.")
+        if not math.isfinite(value):
+            raise ValueError(f"{field_name} must be finite.")
+        return value
+
     @staticmethod
     def _set_combo_items(combo, items):
         combo.blockSignals(True)
@@ -2534,6 +2740,165 @@ class myWindow(QWidget,Ui_Form):
             if preset.quad == quad_name and preset.flag == flag_name:
                 return preset
         return None
+
+    def _selected_scan_strategy(self):
+        return str(self.scan_strategy_combo.currentData() or "grid")
+
+    @staticmethod
+    def _adaptive_config_from_preset(
+        preset,
+        *,
+        initial_points=None,
+        k1_min=None,
+        k1_max=None,
+    ):
+        raw = None if preset is None else preset.scan.adaptive
+        if raw is None:
+            return None
+        values = raw.as_dict()
+        required = ("k1_min", "k1_max", "initial_points")
+        if any(values.get(name) is None for name in required):
+            return None
+        return AdaptiveScanConfig(
+            k1_min=float(values["k1_min"] if k1_min is None else k1_min),
+            k1_max=float(values["k1_max"] if k1_max is None else k1_max),
+            initial_points=int(
+                values["initial_points"] if initial_points is None else initial_points
+            ),
+            target_points_per_plane=int(values.get("target_points_per_plane", 7)),
+            max_unique_points=int(values.get("max_unique_points", 16)),
+            waist_size_squared_ratio=float(
+                values.get("waist_size_squared_ratio", 2.0)
+            ),
+            reuse_tolerance=float(values.get("reuse_tolerance", 0.01)),
+            max_retries=int(values.get("max_retries", 2)),
+        )
+
+    def _set_adaptive_search_fields_visible(self, visible):
+        self.adaptive_search_button.setVisible(visible)
+
+    def _update_adaptive_search_status(self, *_args):
+        if self._selected_scan_strategy() != "adaptive":
+            return
+        if self.adaptive_search_min is None or self.adaptive_search_max is None:
+            self.scan_strategy_status_label.setText("Set search range")
+            return
+        self.scan_strategy_status_label.setText(
+            f"{self.adaptive_search_min:g} … {self.adaptive_search_max:g}"
+        )
+
+    def _set_adaptive_search_bounds(self, lower, upper, *, mark_modified=False):
+        lower = self._parse_finite_float(str(lower), "Adaptive K1 min")
+        upper = self._parse_finite_float(str(upper), "Adaptive K1 max")
+        if lower >= upper:
+            raise ValueError("Adaptive K1 min must be smaller than K1 max.")
+        self.adaptive_search_min = lower
+        self.adaptive_search_max = upper
+        if mark_modified:
+            self._mark_emit_preset_modified()
+        self._update_adaptive_search_status()
+
+    def _show_adaptive_search_dialog(self):
+        if self._selected_scan_strategy() != "adaptive":
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Adaptive Search Range")
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+
+        form = QGridLayout()
+        lower_edit = QLineEdit(dialog)
+        upper_edit = QLineEdit(dialog)
+        lower_edit.setText(
+            "" if self.adaptive_search_min is None else f"{self.adaptive_search_min:g}"
+        )
+        upper_edit.setText(
+            "" if self.adaptive_search_max is None else f"{self.adaptive_search_max:g}"
+        )
+        form.addWidget(QLabel("K1 min", dialog), 0, 0)
+        form.addWidget(lower_edit, 0, 1)
+        form.addWidget(QLabel("K1 max", dialog), 1, 0)
+        form.addWidget(upper_edit, 1, 1)
+        layout.addLayout(form)
+
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        cancel_button = QPushButton("Cancel", dialog)
+        apply_button = QPushButton("Apply", dialog)
+        actions.addWidget(cancel_button)
+        actions.addWidget(apply_button)
+        layout.addLayout(actions)
+
+        def apply_bounds():
+            try:
+                self._set_adaptive_search_bounds(
+                    lower_edit.text(),
+                    upper_edit.text(),
+                    mark_modified=True,
+                )
+            except ValueError as exc:
+                QMessageBox.warning(dialog, "Adaptive Search Range", str(exc))
+                return
+            dialog.accept()
+
+        cancel_button.clicked.connect(dialog.reject)
+        apply_button.clicked.connect(apply_bounds)
+        lower_edit.returnPressed.connect(apply_bounds)
+        upper_edit.returnPressed.connect(apply_bounds)
+        dialog.exec_()
+
+    def _handle_scan_strategy_changed(self, _index):
+        strategy = self._selected_scan_strategy()
+        preset = self._current_emit_preset()
+        adaptive = self._adaptive_config_from_preset(preset)
+        if strategy == "adaptive" and adaptive is None:
+            self._set_adaptive_search_fields_visible(False)
+            blocked = self.scan_strategy_combo.blockSignals(True)
+            self.scan_strategy_combo.setCurrentIndex(
+                self.scan_strategy_combo.findData("grid")
+            )
+            self.scan_strategy_combo.blockSignals(blocked)
+            self.scan_strategy_status_label.setText("Adaptive unavailable")
+            if not self._applying_emit_preset:
+                self._warn("The selected preset has no adaptive scan configuration.")
+            return
+
+        if self._last_scan_strategy == "grid":
+            self._grid_steps_text = self.lineEdit_9.text()
+        else:
+            self._adaptive_initial_points_text = self.lineEdit_9.text()
+
+        if strategy == "adaptive":
+            self._set_adaptive_search_fields_visible(True)
+            if self.adaptive_search_min is None or self.adaptive_search_max is None:
+                self._set_adaptive_search_bounds(adaptive.k1_min, adaptive.k1_max)
+            initial_text = self._adaptive_initial_points_text or str(adaptive.initial_points)
+            self.lineEdit_9.setText(initial_text)
+            self.label_13.setText("Initial points")
+            self._update_adaptive_search_status()
+        else:
+            self._set_adaptive_search_fields_visible(False)
+            self.lineEdit_9.setText(self._grid_steps_text)
+            self.label_13.setText("Steps")
+            self.scan_strategy_status_label.setText("Grid scan")
+        self._last_scan_strategy = strategy
+
+    def _sync_scan_strategy_for_preset(self, preset):
+        self._grid_steps_text = (
+            str(preset.scan.k1_steps)
+            if preset is not None and preset.scan.k1_steps is not None
+            else self.lineEdit_9.text()
+        )
+        adaptive = self._adaptive_config_from_preset(preset)
+        self._adaptive_initial_points_text = (
+            str(adaptive.initial_points) if adaptive is not None else None
+        )
+        if self._selected_scan_strategy() == "adaptive" and adaptive is not None:
+            self.lineEdit_9.setText(self._adaptive_initial_points_text)
+        elif self._selected_scan_strategy() == "grid":
+            self.lineEdit_9.setText(self._grid_steps_text)
+        self._handle_scan_strategy_changed(self.scan_strategy_combo.currentIndex())
 
     def _resolve_optional_channel(self, element_id, logical_channel):
         try:
@@ -2635,6 +3000,7 @@ class myWindow(QWidget,Ui_Form):
             self._set_combo_current_text(self.comboBox_4, preset.flag)
             self.comboBox_4.blockSignals(False)
             self._sync_emit_preset_defaults()
+            self._sync_scan_strategy_for_preset(preset)
             self.preset_modified_label.setText("")
         finally:
             self._applying_emit_preset = False
@@ -2676,7 +3042,7 @@ class myWindow(QWidget,Ui_Form):
             self.lineEdit_7.setText(str(scan.k1_from))
         if scan.k1_end is not None:
             self.lineEdit_8.setText(str(scan.k1_end))
-        if scan.k1_steps is not None:
+        if scan.k1_steps is not None and self._selected_scan_strategy() == "grid":
             self.lineEdit_9.setText(str(scan.k1_steps))
         if scan.samples is not None:
             self.lineEdit_10.setText(str(scan.samples))
@@ -2684,6 +3050,9 @@ class myWindow(QWidget,Ui_Form):
             self.lineEdit_24.setText(str(scan.settle_time))
         if scan.sample_interval is not None and self.sample_interval_edit is not None:
             self.sample_interval_edit.setText(str(scan.sample_interval))
+        adaptive = self._adaptive_config_from_preset(preset)
+        if adaptive is not None:
+            self._set_adaptive_search_bounds(adaptive.k1_min, adaptive.k1_max)
 
     def _handle_emit_flag_changed(self, index):
         del index
@@ -2713,7 +3082,7 @@ class myWindow(QWidget,Ui_Form):
             self._schedule_beam_image_refresh()
 
 
-    def get_setting(self):
+    def get_setting(self, *, show_warning=True):
         try:
             para = structData()
             # get scan parameters
@@ -2753,7 +3122,46 @@ class myWindow(QWidget,Ui_Form):
 
             para.k1_from  = float(self.lineEdit_7.text())
             para.k1_end   = float(self.lineEdit_8.text())
-            para.k1_steps = self._parse_positive_int(self.lineEdit_9.text(), "K1 steps")
+            para.scan_strategy = self._selected_scan_strategy()
+            steps_name = (
+                "Initial points"
+                if para.scan_strategy == "adaptive"
+                else "K1 steps"
+            )
+            para.k1_steps = self._parse_positive_int(self.lineEdit_9.text(), steps_name)
+            para.adaptive_config = None
+            if para.scan_strategy == "adaptive":
+                search_min = self.adaptive_search_min
+                search_max = self.adaptive_search_max
+                if search_min is None or search_max is None:
+                    raise ValueError("Set the adaptive K1 search range before scanning.")
+                para.adaptive_config = self._adaptive_config_from_preset(
+                    preset,
+                    initial_points=para.k1_steps,
+                    k1_min=search_min,
+                    k1_max=search_max,
+                )
+                if para.adaptive_config is None:
+                    raise ValueError(
+                        f"Preset {preset.id} has no usable adaptive scan configuration."
+                    )
+                preset_adaptive = self._adaptive_config_from_preset(preset)
+                para.adaptive_preset_k1_min = preset_adaptive.k1_min
+                para.adaptive_preset_k1_max = preset_adaptive.k1_max
+                if not (
+                    para.adaptive_config.k1_min
+                    <= para.k1_from
+                    <= para.adaptive_config.k1_max
+                    and para.adaptive_config.k1_min
+                    <= para.k1_end
+                    <= para.adaptive_config.k1_max
+                ):
+                    raise ValueError(
+                        "Adaptive initial From/To must stay inside the current search bounds "
+                        f"[{para.adaptive_config.k1_min:g}, "
+                        f"{para.adaptive_config.k1_max:g}]."
+                    )
+                seed_values(para.k1_from, para.k1_end, para.adaptive_config)
             para.samples  = self._parse_positive_int(self.lineEdit_10.text(), "Samples per step")
             para.EnergyMeV = float(self.lineEdit_2.text())
             para.settle_time = self._parse_non_negative_float(self.lineEdit_24.text(), "Settle time")
@@ -2765,12 +3173,13 @@ class myWindow(QWidget,Ui_Form):
                 raise ValueError("Energy must be positive.")
             return para
         except (MachineProfileError, ValueError) as exc:
-            self._warn(str(exc))
+            if show_warning:
+                self._warn(str(exc))
             return None
 
     def refresh_current_beam_image_fit(self, paras=None, *, show_warning=True):
         if paras is None:
-            paras = self.get_setting()
+            paras = self.get_setting(show_warning=show_warning)
             if paras is None:
                 return False
         try:
@@ -3256,6 +3665,8 @@ class myWindow(QWidget,Ui_Form):
         except MachineProfileError as exc:
             self._warn(str(exc))
             return
+        self.latest_scan_completion = None
+        self._scan_result_ready = False
         self.display({"clear": True, "preserve_beam_image": True})
         self.paras.recal = False
         self.paras.clear = False 
@@ -3264,6 +3675,13 @@ class myWindow(QWidget,Ui_Form):
         self.paras.scan_archive_dir = self._scan_archive_dir()
         self.pending_scan_metadata = dict(self.paras.scan_metadata)
         self.scan_mode = "scan"
+        self.scan_strategy_combo.setEnabled(False)
+        self.scan_strategy_status_label.setText(
+            "Starting adaptive scan"
+            if self.paras.scan_strategy == "adaptive"
+            else "Grid scan running"
+        )
+        self.scan_strategy_status_label.setToolTip("")
         self.scan = scanThread(self.paras)
         self.scan.trigger.connect(self.display)
         self.scan.finished.connect(self._on_scan_finished)
@@ -3273,6 +3691,8 @@ class myWindow(QWidget,Ui_Form):
     def stopScan(self):
         if self._scan_is_running():
             self.scan_mode = "stopping"
+            self.latest_scan_completion = None
+            self._scan_result_ready = False
             self._refresh_status()
             self.scan.stop()
             if not self.scan.wait(3000):
@@ -3348,6 +3768,8 @@ class myWindow(QWidget,Ui_Form):
         self.paras.clear = False 
         self.paras.recal_points = recal_points if recal_points else None
         self.paras.scan_latest_dir = self._scan_latest_dir()
+        self.latest_scan_completion = None
+        self._scan_result_ready = False
         self.scan_mode = "recalculate"
         self.scan = scanThread(self.paras)
         self.scan.trigger.connect(self.display)
@@ -3461,6 +3883,10 @@ class myWindow(QWidget,Ui_Form):
 
     def display(self,dict):
         if "error" in dict:
+            self.latest_scan_completion = None
+            self._scan_result_ready = False
+            self.scan_strategy_status_label.setText("Scan error")
+            self.scan_strategy_status_label.setToolTip(str(dict["error"]))
             self.latest_emit_fit_summary = {
                 "method": "scan",
                 "status": "error",
@@ -3512,11 +3938,23 @@ class myWindow(QWidget,Ui_Form):
             self.loaded_scan_metadata = None
             self.loaded_scan_results_path = None
             self.latest_emit_fit_summary = None
+            self.latest_scan_completion = None
+            self._scan_result_ready = False
             self.latest_twiss_summary = None
             self.twiss_initial_source = {"kind": "manual"}
+            if self._selected_scan_strategy() == "grid":
+                self.scan_strategy_status_label.setText("Grid scan")
+                self.scan_strategy_status_label.setToolTip("")
             self._refresh_status()
             
             return
+
+        if "adaptive_status" in dict:
+            adaptive_status = str(dict["adaptive_status"])
+            self.scan_strategy_status_label.setText(
+                _compact_status_text(adaptive_status, limit=46)
+            )
+            self.scan_strategy_status_label.setToolTip(adaptive_status)
 
         if "beam_image" in dict and "beam_fit" in dict:
             self._display_beam_image_fit(
@@ -3559,6 +3997,7 @@ class myWindow(QWidget,Ui_Form):
             self.latest_emit_fit_summary = dict.get("fit_summary")
             self._display_least_square_plane("xplane", dict["xplane"])
             self._display_least_square_plane("yplane", dict["yplane"])
+            self._scan_result_ready = True
 
         else:
             print(f"Error, unexpected result method: {dict.get('method')}")
@@ -3600,9 +4039,20 @@ class myWindow(QWidget,Ui_Form):
                 capsize=3,
             )
             if result.get("fit_yy") is not None:
+                fit_x_raw = np.asarray(xx, dtype=float)
+                fit_y_raw = np.asarray(result["fit_yy"], dtype=float)
+                fit_coefficients = np.polyfit(fit_x_raw, fit_y_raw, 2)
+                fit_x_internal = np.linspace(
+                    float(np.min(fit_x_raw)),
+                    float(np.max(fit_x_raw)),
+                    200,
+                )
+                fit_x = plot_sign * fit_x_internal
+                fit_y = np.polyval(fit_coefficients, fit_x_internal)
+                fit_order = np.argsort(fit_x)
                 widget.axes.plot(
-                    plot_sign * xx,
-                    result["fit_yy"],
+                    fit_x[fit_order],
+                    fit_y[fit_order],
                     "--",
                     color=palette["plot_fit"],
                     label="fitting curve",
@@ -3632,7 +4082,11 @@ class myWindow(QWidget,Ui_Form):
             )
             return
 
-        fields[0].setText("unresolved")
+        fields[0].setText(
+            "Non-physical fit"
+            if result.get("status") == "non_physical"
+            else "Fit failed"
+        )
         for field in fields[1:]:
             field.setText("--")
         text_field.setText(_compact_status_text(result.get("message", result.get("status"))))
@@ -3643,12 +4097,24 @@ class myWindow(QWidget,Ui_Form):
         else:
             fields = (self.lineEdit_41, self.lineEdit_42, self.lineEdit_43, self.lineEdit_44, self.lineEdit_45)
 
+        diagnostic_text = _least_squares_diagnostic_text(
+            result,
+            include_message=result.get("status") != "valid",
+        )
+        for field in fields:
+            field.setToolTip(diagnostic_text)
+
         if result.get("status") == "valid":
             for field, key in zip(fields, ("ex", "exn", "beta", "alpha", "gamma")):
                 field.setText(str(result.get(key)))
             return
 
-        fields[0].setText("unresolved")
+        failure_labels = {
+            "non_physical": "Non-physical fit",
+            "rank_deficient": "Rank-deficient fit",
+            "ill_conditioned": "Ill-conditioned fit",
+        }
+        fields[0].setText(failure_labels.get(result.get("status"), "Fit failed"))
         for field in fields[1:-1]:
             field.setText("--")
         fields[-1].setText(_compact_status_text(result.get("message", result.get("status"))))
@@ -3802,6 +4268,8 @@ class scanThread(QThread):
         self.EnergyMeV  = paras.EnergyMeV
         self.settle_time = paras.settle_time
         self.sample_interval = paras.sample_interval
+        self.scan_strategy = getattr(paras, "scan_strategy", "grid")
+        self.adaptive_config = getattr(paras, "adaptive_config", None)
         self.model_line = paras.model_line
         self.app_context = paras.app_context
         self.model_snapshot_metadata = getattr(paras, "model_snapshot_metadata", None)
@@ -3820,6 +4288,8 @@ class scanThread(QThread):
         self.scan_results_path = self.scan_latest_dir / SCAN_RESULTS_FILENAME
         self.scan_results_meta_path = self.scan_latest_dir / METADATA_FILENAME
         self.scan_metadata_paths = []
+        self.adaptive_plane_validation = None
+        self.final_plane_validation = None
         self.is_running = True
 
     def _sleep_or_stop(self, seconds):
@@ -3832,6 +4302,222 @@ class scanThread(QThread):
         if value is not None:
             epics.caput(self.quadPV, value)
 
+    @staticmethod
+    def _sample_error(values):
+        values = np.asarray(values, dtype=float)
+        if values.size < 2:
+            return None
+        return float(np.std(values, ddof=1) / np.sqrt(values.size))
+
+    def _emit_adaptive_status(self, text, **extra):
+        payload = {"method": None, "adaptive_status": text}
+        payload.update(extra)
+        self.trigger.emit(payload)
+
+    def _acquire_k1(self, k1, *, adaptive=False):
+        epics.caput(self.quadPV, k1)
+        if not self._sleep_or_stop(self.settle_time):
+            return None
+
+        sigx_values = []
+        sigy_values = []
+        for sample_index in range(self.samples):
+            if not self.is_running:
+                return None
+            if sample_index > 0 and not self._sleep_or_stop(self.sample_interval):
+                return None
+
+            retry = 0
+            while self.is_running:
+                try:
+                    image, fit_result = _read_flag_image_fit(
+                        self.flagImagePV,
+                        self.flag_pixel_shape,
+                        self.flag_image_extent,
+                        background=self.background_image,
+                    )
+                except RuntimeError as exc:
+                    if not adaptive or retry >= self.adaptive_config.max_retries:
+                        if adaptive:
+                            self._emit_adaptive_status(
+                                f"Rejected K1 {k1:g}: image unavailable",
+                                k1=k1,
+                            )
+                            return None
+                        raise
+                    retry += 1
+                    self._emit_adaptive_status(
+                        f"Retrying K1 {k1:g} ({retry}/{self.adaptive_config.max_retries})",
+                        k1=k1,
+                        retry_reason=str(exc),
+                    )
+                    if self.sample_interval > 0 and not self._sleep_or_stop(
+                        self.sample_interval
+                    ):
+                        return None
+                    continue
+                size_pv = _read_optional_size_pvs(
+                    self.flagSigxPV,
+                    self.flagSigyPV,
+                )
+                point = {
+                    "method": None,
+                    "k1": k1,
+                    "flag": self.flag_name,
+                    "beam_image": image,
+                    "beam_fit": fit_result,
+                    "beam_extent": self.flag_image_extent,
+                    "size_pv": size_pv,
+                    "background_status": self.background_status,
+                }
+                if fit_result.valid:
+                    break
+                self.trigger.emit(point)
+                detail = f": {fit_result.message}" if fit_result.message else ""
+                if not adaptive or retry >= self.adaptive_config.max_retries:
+                    if adaptive:
+                        self._emit_adaptive_status(
+                            f"Rejected K1 {k1:g}: invalid image fit",
+                            k1=k1,
+                        )
+                        return None
+                    raise RuntimeError(
+                        f"Flag image fit failed for {self.flag_name} "
+                        f"({fit_result.status}){detail}."
+                    )
+                retry += 1
+                self._emit_adaptive_status(
+                    f"Retrying K1 {k1:g} ({retry}/{self.adaptive_config.max_retries})",
+                    k1=k1,
+                )
+                if self.sample_interval > 0 and not self._sleep_or_stop(self.sample_interval):
+                    return None
+
+            if not self.is_running:
+                return None
+            sigx = float(fit_result.sigx_mm)
+            sigy = float(fit_result.sigy_mm)
+            print("Quad K1=", k1, "sigmax=", sigx, "sigmay=", sigy)
+            point["sigx"] = sigx
+            point["sigy"] = sigy
+            point["adaptive_stage"] = "measurement" if adaptive else None
+            self.k1l.append(k1)
+            self.sigxl.append(sigx)
+            self.sigyl.append(sigy)
+            sigx_values.append(sigx)
+            sigy_values.append(sigy)
+            self.trigger.emit(point)
+
+        if not sigx_values:
+            return None
+        return AdaptiveObservation(
+            k1=float(k1),
+            sigx=float(np.mean(sigx_values)),
+            sigy=float(np.mean(sigy_values)),
+            sigx_err=self._sample_error(sigx_values),
+            sigy_err=self._sample_error(sigy_values),
+        )
+
+    def _run_grid_scan(self):
+        for k1 in np.linspace(self.k1_from, self.k1_end, self.k1_steps):
+            if not self.is_running:
+                return
+            if self._acquire_k1(float(k1), adaptive=False) is None:
+                return
+
+    def _run_adaptive_scan(self):
+        if self.adaptive_config is None:
+            raise RuntimeError("Adaptive scan configuration is missing.")
+        observations = []
+        initial_values = seed_values(
+            self.k1_from,
+            self.k1_end,
+            self.adaptive_config,
+        )
+        for index, k1 in enumerate(initial_values, 1):
+            if not self.is_running:
+                return
+            self._emit_adaptive_status(
+                f"Seed {index}/{len(initial_values)} · K1 {k1:g}",
+                adaptive_stage="seed",
+            )
+            observation = self._acquire_k1(k1, adaptive=True)
+            if observation is not None:
+                observations.append(observation)
+
+        if not self.is_running:
+            return
+        if len(observations) < 3:
+            raise RuntimeError(
+                "Adaptive seed scan produced fewer than 3 valid measurement points."
+            )
+        plan = build_adaptive_plan(observations, self.adaptive_config)
+        self._emit_adaptive_status(
+            "Adapted ranges · "
+            f"X [{plan.x.k1_from:.3g}, {plan.x.k1_to:.3g}] · "
+            f"Y [{plan.y.k1_from:.3g}, {plan.y.k1_to:.3g}]",
+            adaptive_stage="adapt_range",
+            adaptive_plan={
+                "x": [plan.x.k1_from, plan.x.k1_to],
+                "y": [plan.y.k1_from, plan.y.k1_to],
+            },
+        )
+        for index, k1 in enumerate(plan.new_values, 1):
+            if not self.is_running:
+                return
+            self._emit_adaptive_status(
+                f"Refine {index}/{len(plan.new_values)} · K1 {k1:g}",
+                adaptive_stage="refine",
+            )
+            observation = self._acquire_k1(k1, adaptive=True)
+            if observation is not None:
+                observations.append(observation)
+        if len({round(point.k1, 12) for point in observations}) < 3:
+            raise RuntimeError("Adaptive scan has fewer than 3 valid unique K1 values.")
+
+        validation = validate_adaptive_scan(observations, self.adaptive_config)
+        supplement_values = validation.new_values
+        if supplement_values:
+            self._emit_adaptive_status(
+                "Validation supplement · "
+                f"X {validation.x.status} · Y {validation.y.status}",
+                adaptive_stage="validation_supplement",
+                plane_validation=validation.as_dict(),
+            )
+            for index, k1 in enumerate(supplement_values, 1):
+                if not self.is_running:
+                    return
+                self._emit_adaptive_status(
+                    f"Validate {index}/{len(supplement_values)} · K1 {k1:g}",
+                    adaptive_stage="validation_supplement",
+                )
+                observation = self._acquire_k1(k1, adaptive=True)
+                if observation is not None:
+                    observations.append(observation)
+            validation = validate_adaptive_scan(observations, self.adaptive_config)
+
+        validation_payload = validation.as_dict()
+        validation_payload["supplement_attempted"] = list(supplement_values)
+        self.adaptive_plane_validation = validation_payload
+        self._emit_adaptive_status(
+            "Adaptive validation · "
+            f"X {validation.x.status} · Y {validation.y.status}",
+            adaptive_stage="validate",
+            plane_validation=validation_payload,
+        )
+        if isinstance(self.scan_metadata, dict):
+            self.scan_metadata["adaptive_result"] = {
+                "x_range": [plan.x.k1_from, plan.x.k1_to],
+                "y_range": [plan.y.k1_from, plan.y.k1_to],
+                "x_waist_k1": plan.x.waist_k1,
+                "y_waist_k1": plan.y.waist_k1,
+                "x_method": plan.x.method,
+                "y_method": plan.y.method,
+                "validation_reserved_points": plan.validation_reserved_points,
+                "valid_unique_k1": len(observations),
+            }
+            self.scan_metadata["plane_validation"] = validation_payload
+
     def run(self):
         tmp = {"method": None}
         iniK1 = None
@@ -3842,8 +4528,6 @@ class scanThread(QThread):
                     "emit_measure",
                     "Emit measurement scan",
                 )
-                k1_list = np.linspace(self.k1_from,self.k1_end,self.k1_steps)
-
                 self.k1l =[]
                 self.sigxl = []
                 self.sigyl = []
@@ -3851,62 +4535,13 @@ class scanThread(QThread):
                 iniK1 = epics.caget(self.quadPV)
                 if iniK1 is None:
                     raise RuntimeError(f"Failed to read initial quad value from {self.quadPV}.")
-                for k1 in k1_list:
-                    if not self.is_running:
-                        print("Stop scan, quad is back to initial values, K1=",iniK1)
-                        return
-                    epics.caput(self.quadPV,k1)
-                    if not self._sleep_or_stop(self.settle_time):
-                        print("Stop scan, quad is back to initial values, K1=",iniK1)
-                        return
-                    for j in range(self.samples):
-                        if self.is_running == True:
-                            print("Quad K1=",k1)
-                            if j > 0 and not self._sleep_or_stop(self.sample_interval):
-                                print("Stop scan, quad is back to initial values, K1=",iniK1)
-                                return
-                            
-                            image, fit_result = _read_flag_image_fit(
-                                self.flagImagePV,
-                                self.flag_pixel_shape,
-                                self.flag_image_extent,
-                                background=self.background_image,
-                            )
-                            size_pv = _read_optional_size_pvs(
-                                self.flagSigxPV,
-                                self.flagSigyPV,
-                            )
-                            point = {
-                                "method": None,
-                                "k1": k1,
-                                "flag": self.flag_name,
-                                "beam_image": image,
-                                "beam_fit": fit_result,
-                                "beam_extent": self.flag_image_extent,
-                                "size_pv": size_pv,
-                                "background_status": self.background_status,
-                            }
-                            if not fit_result.valid:
-                                self.trigger.emit(point)
-                                detail = f": {fit_result.message}" if fit_result.message else ""
-                                raise RuntimeError(
-                                    f"Flag image fit failed for {self.flag_name} ({fit_result.status}){detail}."
-                                )
-                            tmp2 = float(fit_result.sigx_mm)
-                            tmp3 = float(fit_result.sigy_mm)
-                            print("sigmax=",tmp2,"sigamy=",tmp3)
-
-                            point["sigx"] = tmp2
-                            point["sigy"] = tmp3
-
-                            self.k1l.append(k1)
-                            self.sigxl.append(tmp2)
-                            self.sigyl.append(tmp3)
-
-                            self.trigger.emit(point)
-                        else:
-                            print("Stop scan, quad is back to initial values, K1=",iniK1)
-                            return
+                if self.scan_strategy == "adaptive":
+                    self._run_adaptive_scan()
+                else:
+                    self._run_grid_scan()
+                if not self.is_running:
+                    print("Stop scan, quad is back to initial values, K1=", iniK1)
+                    return
                            
                 print("Scan finished, quad is back to initial values, K1=",iniK1)
 
@@ -3992,6 +4627,10 @@ class scanThread(QThread):
             tmpyy = self._plane_result_payload(tmpy)
             tmp["yplane"] = tmpyy
             least_squares_summary = _method_fit_summary("leastSquares", tmpxx, tmpyy)
+            self._attach_adaptive_plane_validation(
+                least_squares_summary,
+                {"xplane": tmpxx, "yplane": tmpyy},
+            )
             fit_summary["leastSquares"] = least_squares_summary
             tmp["fit_summary"] = least_squares_summary
             tmp["all_fit_summary"] = fit_summary
@@ -4054,11 +4693,64 @@ class scanThread(QThread):
             except (OSError, json.JSONDecodeError):
                 metadata = {}
             metadata["fit_summary"] = fit_summary
+            if self.final_plane_validation is not None:
+                metadata["plane_validation"] = self.final_plane_validation
             metadata["fit_summary_updated_at"] = datetime.now().isoformat(timespec="seconds")
             metadata_path.write_text(
                 json.dumps(metadata, indent=2, sort_keys=True),
                 encoding="utf-8",
             )
+
+    def _attach_adaptive_plane_validation(self, fit_summary, plane_payloads):
+        validation = self.adaptive_plane_validation
+        if self.scan_strategy != "adaptive" or not isinstance(validation, Mapping):
+            return
+
+        final = {"status": "unresolved"}
+        validated_count = 0
+        for plane_key, coverage_key in (("xplane", "x"), ("yplane", "y")):
+            coverage = validation.get(coverage_key, {})
+            reconstruction = fit_summary.get(plane_key, {})
+            coverage_status = str(coverage.get("status", "unresolved"))
+            reconstruction_status = str(reconstruction.get("status", "unresolved"))
+            if coverage_status == "validated" and reconstruction_status == "valid":
+                final_status = "validated"
+                validated_count += 1
+            elif reconstruction_status != "valid":
+                final_status = reconstruction_status
+            else:
+                final_status = coverage_status
+
+            plane_validation = dict(coverage)
+            plane_validation.update(
+                {
+                    "status": final_status,
+                    "coverage_status": coverage_status,
+                    "reconstruction_status": reconstruction_status,
+                }
+            )
+            final[coverage_key] = plane_validation
+            reconstruction["validation_status"] = final_status
+            reconstruction["coverage_status"] = coverage_status
+            reconstruction["coverage_message"] = str(coverage.get("message", "") or "")
+            reconstruction["coverage_warnings"] = list(coverage.get("warnings", ()))
+            raw_payload = plane_payloads[plane_key]
+            raw_payload["validation_status"] = final_status
+            raw_payload["coverage_status"] = coverage_status
+            raw_payload["coverage_message"] = reconstruction["coverage_message"]
+            raw_payload["coverage_warnings"] = reconstruction["coverage_warnings"]
+
+        if validated_count == 2:
+            quality_status = "validated"
+        elif validated_count == 1:
+            quality_status = "partial"
+        else:
+            quality_status = "unresolved"
+        final["status"] = quality_status
+        final["supplement_attempted"] = list(validation.get("supplement_attempted", ()))
+        fit_summary["quality_status"] = quality_status
+        fit_summary["plane_validation"] = final
+        self.final_plane_validation = final
 
     def _plane_result_payload(self, result):
         payload = {
@@ -4070,9 +4762,16 @@ class scanThread(QThread):
             "alpha": result.alpha,
             "gamma": result.gamma,
         }
-        determinant = getattr(result, "determinant", None)
-        if determinant is not None:
-            payload["determinant"] = determinant
+        for key in (
+            "determinant",
+            "rank",
+            "condition_number",
+            "residual_rms",
+            "solver",
+        ):
+            value = getattr(result, key, None)
+            if value is not None:
+                payload[key] = value
         return payload
 
     def _parabolic_plane_result(self, k1l, sigxl, m11, m12, plane):
@@ -4123,18 +4822,50 @@ class scanThread(QThread):
 
     def _solveMat(self,A0,k1l,sigxx):
         determinant = None
+        rank = None
+        condition_number = None
+        residual_rms = None
+        solver = "numpy.linalg.lstsq"
         try:
-            A = np.asmatrix( np.reshape(A0,(len(k1l),3)) )
-            b = np.asmatrix(sigxx).transpose()
+            A = np.asarray(A0, dtype=float).reshape(len(k1l), 3)
+            b = np.asarray(sigxx, dtype=float).reshape(-1)
+            if A.shape[0] != b.size:
+                raise ValueError(
+                    f"design matrix rows ({A.shape[0]}) do not match measurements ({b.size})"
+                )
+            if not np.all(np.isfinite(A)) or not np.all(np.isfinite(b)):
+                raise ValueError("least-squares input contains non-finite values")
 
-            AA = A.transpose()*A
-            bb = A.transpose()*b
+            xx, _reported_residuals, rank_value, singular_values = np.linalg.lstsq(
+                A,
+                b,
+                rcond=None,
+            )
+            rank = int(rank_value)
+            fitted = A @ xx
+            residual_rms = (
+                float(np.sqrt(np.mean((fitted - b) ** 2)))
+                if b.size
+                else None
+            )
+            if singular_values.size and singular_values[-1] > 0:
+                condition_number = float(singular_values[0] / singular_values[-1])
 
-            xx = np.linalg.solve(AA,bb)
+            if rank < LEAST_SQUARES_REQUIRED_RANK:
+                raise ValueError(
+                    f"rank-deficient fit: rank={rank}/{LEAST_SQUARES_REQUIRED_RANK}; "
+                    "scan points do not provide enough independent optics settings"
+                )
+            if condition_number is None or condition_number > LEAST_SQUARES_MAX_CONDITION:
+                condition_text = "infinite" if condition_number is None else f"{condition_number:.3e}"
+                raise ValueError(
+                    f"ill-conditioned fit: condition={condition_text} exceeds "
+                    f"{LEAST_SQUARES_MAX_CONDITION:.1e}"
+                )
 
-            sig11 = xx[0,0]
-            sig12 = xx[1,0]
-            sig22 = xx[2,0]
+            sig11 = float(xx[0])
+            sig12 = float(xx[1])
+            sig22 = float(xx[2])
 
             determinant = float(sig11 * sig22 - sig12**2)
             if not math.isfinite(determinant) or determinant <= 0:
@@ -4166,9 +4897,21 @@ class scanThread(QThread):
             tmp.beta  = None 
             tmp.alpha = None 
             tmp.gamma = None 
-            tmp.status = "non_physical" if "non-physical" in str(exc) else "failed"
+            if "non-physical" in str(exc):
+                tmp.status = "non_physical"
+            elif "rank-deficient" in str(exc):
+                tmp.status = "rank_deficient"
+            elif "ill-conditioned" in str(exc):
+                tmp.status = "ill_conditioned"
+            else:
+                tmp.status = "failed"
             tmp.message = str(exc)
             tmp.determinant = determinant
+
+        tmp.rank = rank
+        tmp.condition_number = condition_number
+        tmp.residual_rms = residual_rms
+        tmp.solver = solver
 
         return tmp
 

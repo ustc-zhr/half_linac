@@ -16,6 +16,7 @@ from .models import (
     BBAWorkflowConfig,
     ControlBackendConfig,
     EmitAnalysisConfig,
+    EmitAdaptiveScanConfig,
     EmitMeasureWorkflowConfig,
     EmitPreset,
     EmitScanConfig,
@@ -3016,6 +3017,7 @@ def _parse_bba_analysis_config(raw_analysis: Mapping[str, Any]) -> BBAAnalysisCo
 
 
 def _parse_emit_scan_config(raw_scan: Mapping[str, Any]) -> EmitScanConfig:
+    adaptive_raw = raw_scan.get("adaptive")
     return EmitScanConfig(
         k1_from=_optional_float(raw_scan, "k1_from"),
         k1_end=_optional_float(raw_scan, "k1_end"),
@@ -3023,6 +3025,31 @@ def _parse_emit_scan_config(raw_scan: Mapping[str, Any]) -> EmitScanConfig:
         samples=_optional_int(raw_scan, "samples"),
         settle_time=_optional_float(raw_scan, "settle_time"),
         sample_interval=_optional_float(raw_scan, "sample_interval"),
+        adaptive=(
+            None
+            if adaptive_raw is None
+            else _parse_emit_adaptive_scan_config(
+                _expect_mapping(adaptive_raw, "emit scan adaptive")
+            )
+        ),
+    )
+
+
+def _parse_emit_adaptive_scan_config(
+    raw_adaptive: Mapping[str, Any],
+) -> EmitAdaptiveScanConfig:
+    return EmitAdaptiveScanConfig(
+        k1_min=_optional_float(raw_adaptive, "k1_min"),
+        k1_max=_optional_float(raw_adaptive, "k1_max"),
+        initial_points=_optional_int(raw_adaptive, "initial_points"),
+        target_points_per_plane=_optional_int(raw_adaptive, "target_points_per_plane"),
+        max_unique_points=_optional_int(raw_adaptive, "max_unique_points"),
+        waist_size_squared_ratio=_optional_float(
+            raw_adaptive,
+            "waist_size_squared_ratio",
+        ),
+        reuse_tolerance=_optional_float(raw_adaptive, "reuse_tolerance"),
+        max_retries=_optional_int(raw_adaptive, "max_retries"),
     )
 
 

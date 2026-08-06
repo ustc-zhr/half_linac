@@ -685,6 +685,116 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertEqual(summary["xplane"]["emittance"], 0.1)
         self.assertIn("determinant", summary["yplane"]["message"])
 
+    def test_emit_measure_transfer_matrix_fit_uses_stable_lstsq_diagnostics(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        design = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [1.0, 2.0, 1.0],
+                [1.0, 4.0, 4.0],
+                [1.0, 6.0, 9.0],
+            ]
+        )
+        beam_matrix = np.array([4.0, 1.0, 2.0])
+        result = scanThread._solveMat(
+            SimpleNamespace(EnergyMeV=2200.0),
+            design.reshape(-1),
+            np.arange(design.shape[0]),
+            design @ beam_matrix,
+        )
+
+        self.assertEqual(result.status, "valid")
+        self.assertEqual(result.solver, "numpy.linalg.lstsq")
+        self.assertEqual(result.rank, 3)
+        self.assertGreater(result.condition_number, 1.0)
+        self.assertLess(result.residual_rms, 1.0e-12)
+        self.assertAlmostEqual(result.determinant, 7.0)
+
+    def test_emit_measure_transfer_matrix_fit_rejects_rank_deficient_scan(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        design = np.tile([1.0, 2.0, 1.0], (4, 1))
+        result = scanThread._solveMat(
+            SimpleNamespace(EnergyMeV=2200.0),
+            design.reshape(-1),
+            np.arange(design.shape[0]),
+            np.full(design.shape[0], 8.0),
+        )
+
+        self.assertEqual(result.status, "rank_deficient")
+        self.assertLess(result.rank, 3)
+        self.assertIn("scan points", result.message)
+
+    def test_emit_measure_transfer_matrix_fit_rejects_ill_conditioned_scan(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        design = np.diag([1.0, 1.0e-7, 1.0e-13])
+        result = scanThread._solveMat(
+            SimpleNamespace(EnergyMeV=2200.0),
+            design.reshape(-1),
+            np.arange(design.shape[0]),
+            design @ np.array([1.0, 0.0, 1.0]),
+        )
+
+        self.assertEqual(result.status, "ill_conditioned")
+        self.assertEqual(result.rank, 3)
+        self.assertGreater(result.condition_number, 1.0e12)
+        self.assertIn("condition", result.message)
+
+    def test_emit_measure_adaptive_validation_combines_coverage_and_reconstruction(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import (
+            _method_fit_summary,
+            scanThread,
+        )
+
+        x_payload = {"status": "valid", "ex": 0.1}
+        y_payload = {
+            "status": "non_physical",
+            "message": "non-physical beam matrix determinant=-1",
+        }
+        summary = _method_fit_summary("leastSquares", x_payload, y_payload)
+        worker = SimpleNamespace(
+            scan_strategy="adaptive",
+            adaptive_plane_validation={
+                "x": {"status": "validated", "message": "waist bracketed", "warnings": []},
+                "y": {"status": "validated", "message": "waist bracketed", "warnings": []},
+                "supplement_attempted": [],
+            },
+            final_plane_validation=None,
+        )
+
+        scanThread._attach_adaptive_plane_validation(
+            worker,
+            summary,
+            {"xplane": x_payload, "yplane": y_payload},
+        )
+
+        self.assertEqual(summary["quality_status"], "partial")
+        self.assertEqual(summary["xplane"]["validation_status"], "validated")
+        self.assertEqual(summary["yplane"]["validation_status"], "non_physical")
+        self.assertEqual(worker.final_plane_validation["status"], "partial")
+
     def test_esa_auto_tuner_demo_uses_machine_profile_instead_of_half_bend_pv(self):
         source = (REPO_ROOT / "src/apps/energy_spectrum/esa_auto_tuner.py").read_text(encoding="utf-8")
         self.assertNotIn("HALF:IN:ESA:PRF01:CurrentSet", source)

@@ -249,6 +249,18 @@ class BBAWorkflowConfig:
 
 
 @dataclass(frozen=True)
+class EmitAdaptiveScanConfig(_OptionalFieldMapping):
+    k1_min: float | None = None
+    k1_max: float | None = None
+    initial_points: int | None = None
+    target_points_per_plane: int | None = None
+    max_unique_points: int | None = None
+    waist_size_squared_ratio: float | None = None
+    reuse_tolerance: float | None = None
+    max_retries: int | None = None
+
+
+@dataclass(frozen=True)
 class EmitScanConfig(_OptionalFieldMapping):
     k1_from: float | None = None
     k1_end: float | None = None
@@ -256,6 +268,7 @@ class EmitScanConfig(_OptionalFieldMapping):
     samples: int | None = None
     settle_time: float | None = None
     sample_interval: float | None = None
+    adaptive: EmitAdaptiveScanConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -646,6 +659,63 @@ def _validate_emit_measure_workflow(
         _validate_element_ref(preset.get("flag"), elements_by_id, f"{location}.flag", expected_kind="flag")
         if "model_line" in preset:
             _expect_non_empty_string(preset.get("model_line"), f"{location}.model_line")
+        scan = _expect_mapping(preset.get("scan", {}), f"{location}.scan")
+        adaptive = scan.get("adaptive")
+        if adaptive is not None:
+            adaptive_location = f"{location}.scan.adaptive"
+            adaptive = _expect_mapping(adaptive, adaptive_location)
+            required_adaptive = (
+                "k1_min",
+                "k1_max",
+                "initial_points",
+                "target_points_per_plane",
+                "max_unique_points",
+            )
+            missing = [name for name in required_adaptive if name not in adaptive]
+            if missing:
+                raise MachineProfileError(
+                    f"{adaptive_location} is missing required field(s): {', '.join(missing)}."
+                )
+            k1_min = adaptive["k1_min"]
+            k1_max = adaptive["k1_max"]
+            if not isinstance(k1_min, (int, float)) or not isinstance(k1_max, (int, float)):
+                raise MachineProfileError(f"{adaptive_location} K1 bounds must be numeric.")
+            if k1_min >= k1_max:
+                raise MachineProfileError(f"{adaptive_location}.k1_min must be below k1_max.")
+            initial_points = adaptive["initial_points"]
+            target_points = adaptive["target_points_per_plane"]
+            max_points = adaptive["max_unique_points"]
+            if not isinstance(initial_points, int) or initial_points < 3:
+                raise MachineProfileError(f"{adaptive_location}.initial_points must be >= 3.")
+            if not isinstance(target_points, int) or target_points < 3:
+                raise MachineProfileError(
+                    f"{adaptive_location}.target_points_per_plane must be >= 3."
+                )
+            if not isinstance(max_points, int) or max_points < initial_points:
+                raise MachineProfileError(
+                    f"{adaptive_location}.max_unique_points must be >= initial_points."
+                )
+            ratio = adaptive.get("waist_size_squared_ratio", 2.0)
+            tolerance = adaptive.get("reuse_tolerance", 0.01)
+            retries = adaptive.get("max_retries", 2)
+            if not isinstance(ratio, (int, float)) or ratio <= 1:
+                raise MachineProfileError(
+                    f"{adaptive_location}.waist_size_squared_ratio must be > 1."
+                )
+            if not isinstance(tolerance, (int, float)) or tolerance < 0:
+                raise MachineProfileError(
+                    f"{adaptive_location}.reuse_tolerance must be non-negative."
+                )
+            if not isinstance(retries, int) or retries < 0:
+                raise MachineProfileError(
+                    f"{adaptive_location}.max_retries must be a non-negative integer."
+                )
+            for endpoint in ("k1_from", "k1_end"):
+                value = scan.get(endpoint)
+                if value is not None and not k1_min <= value <= k1_max:
+                    raise MachineProfileError(
+                        f"{location}.scan.{endpoint} must be inside adaptive K1 bounds."
+                    )
         energy = preset.get("energy_mev")
         if not isinstance(energy, (int, float)) or energy <= 0:
             raise MachineProfileError(f"{location}.energy_mev must be a positive number.")

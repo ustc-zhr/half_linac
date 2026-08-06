@@ -11,7 +11,17 @@
         "k1_steps": 15,
         "samples": 1,
         "settle_time": 8,
-        "sample_interval": 0.5
+        "sample_interval": 0.5,
+        "adaptive": {
+          "k1_min": -6.0,
+          "k1_max": 0.0,
+          "initial_points": 4,
+          "target_points_per_plane": 7,
+          "max_unique_points": 16,
+          "waist_size_squared_ratio": 2.0,
+          "reuse_tolerance": 0.01,
+          "max_retries": 2
+        }
       },
       "energy_mev": 114.15
     },
@@ -26,7 +36,17 @@
         "k1_steps": 15,
         "samples": 1,
         "settle_time": 8,
-        "sample_interval": 8
+        "sample_interval": 8,
+        "adaptive": {
+          "k1_min": 0.5,
+          "k1_max": 3.5,
+          "initial_points": 4,
+          "target_points_per_plane": 7,
+          "max_unique_points": 16,
+          "waist_size_squared_ratio": 2.0,
+          "reuse_tolerance": 0.01,
+          "max_retries": 2
+        }
       },
       "energy_mev": 2200
     },
@@ -41,7 +61,17 @@
         "k1_steps": 15,
         "samples": 1,
         "settle_time": 8,
-        "sample_interval": 0.5
+        "sample_interval": 0.5,
+        "adaptive": {
+          "k1_min": -2.0,
+          "k1_max": 2.0,
+          "initial_points": 4,
+          "target_points_per_plane": 7,
+          "max_unique_points": 16,
+          "waist_size_squared_ratio": 2.0,
+          "reuse_tolerance": 0.01,
+          "max_retries": 2
+        }
       },
       "energy_mev": 2200
     }
