@@ -193,9 +193,21 @@
       "current_set": "IN:PS:LE07:SM01:current:ao",
       "current_readback": "IN:PS:LE07:SM01:current:ai"
     },
-    "SL01": {
-      "current_set": "IN:PS:LE07:SL01:current:ao",
-      "current_readback": "IN:PS:LE07:SL01:current:ai"
+    "SL01-1": {
+      "current_set": "IN:PS:LE07:SL01-1:current:ao",
+      "current_readback": "IN:PS:LE07:SL01-1:current:ai"
+    },
+    "SL01-2": {
+      "current_set": "IN:PS:LE07:SL01-2:current:ao",
+      "current_readback": "IN:PS:LE07:SL01-2:current:ai"
+    },
+    "SS01": {
+      "current_set": "IN:PS:LE07:SS01:current:ao",
+      "current_readback": "IN:PS:LE07:SS01:current:ai"
+    },
+    "SS02": {
+      "current_set": "IN:PS:LE07:SS02:current:ao",
+      "current_readback": "IN:PS:LE07:SS02:current:ai"
     },
     "XC00": {
       "current_set": "IN:PS:LE07:XC00:current:ao",
@@ -548,6 +560,22 @@
     "YC43": {
       "current_set": "IN:PS:LE16:YC43:current:ao",
       "current_readback": "IN:PS:LE16:YC43:current:ai"
+    },
+    "BL01-A-CP": {
+      "current_set": "IN:PS:L001:BL01-A-CP:current:ao",
+      "current_readback": "IN:PS:L001:BL01-A-CP:current:ai"
+    },
+    "XCA23": {
+      "current_set": "IN:PS:LE16:XCA23:current:ao",
+      "current_readback": "IN:PS:LE16:XCA23:current:ai"
+    },
+    "YCA23": {
+      "current_set": "IN:PS:LE16:YCA23:current:ao",
+      "current_readback": "IN:PS:LE16:YCA23:current:ai"
+    },
+    "BENY-CP": {
+      "current_set": "IN:PS:LE16:BENY-CP:current:ao",
+      "current_readback": "IN:PS:LE16:BENY-CP:current:ai"
     },
     "QL01": {
       "current_set": "IN:PS:LE07:QL01:current:ao",

@@ -23,6 +23,11 @@ SUPPORTED_OBJECT_CAPTURE_MODES = {
     "waveform",
 }
 
+SUPPORTED_OBJECT_KINDS = {
+    "scalar",
+    "waveform",
+}
+
 REQUIRED_MACHINE_KEYS = {"name", "facility", "description"}
 REQUIRED_DEFAULT_GROUPS = {"acquisition", "scan", "storage", "safety"}
 REQUIRED_ACQUISITION_DEFAULT_KEYS = {"shot_interval_sec", "sample_count", "timeout_sec", "mode"}
@@ -140,6 +145,9 @@ def validate_config_dict(data: dict[str, Any]) -> dict[str, Any]:
         _require_nonnegative_int(obj["precision"], f"objects[{index}].precision")
         analysis = _require_mapping(obj, f"objects[{index}].analysis", key="analysis")
         _require_keys(analysis, REQUIRED_ANALYSIS_KEYS, f"objects[{index}].analysis")
+        kind = _normalize_token(obj.get("kind", "scalar"))
+        if kind not in SUPPORTED_OBJECT_KINDS:
+            raise ValueError(f"Unsupported kind for object {obj['id']}: {obj.get('kind')}")
         reducer = _normalize_token(obj.get("value_reducer", "none"))
         if reducer not in SUPPORTED_OBJECT_VALUE_REDUCERS:
             raise ValueError(
@@ -149,6 +157,18 @@ def validate_config_dict(data: dict[str, Any]) -> dict[str, Any]:
         if capture_mode not in SUPPORTED_OBJECT_CAPTURE_MODES:
             raise ValueError(
                 f"Unsupported capture_mode for object {obj['id']}: {obj.get('capture_mode')}"
+            )
+        if kind == "scalar" and reducer != "none":
+            raise ValueError(
+                f"Scalar object {obj['id']} must use value_reducer 'none', got {obj.get('value_reducer')!r}"
+            )
+        if capture_mode == "waveform" and kind != "waveform":
+            raise ValueError(
+                f"Raw waveform capture for object {obj['id']} requires kind 'waveform'."
+            )
+        if kind == "waveform" and capture_mode == "scalar" and reducer != "mean":
+            raise ValueError(
+                f"Waveform object {obj['id']} captured as scalar must use value_reducer 'mean'."
             )
         if capture_mode == "waveform":
             if reducer != "none":

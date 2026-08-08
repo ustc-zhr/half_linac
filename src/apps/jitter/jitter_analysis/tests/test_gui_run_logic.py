@@ -182,6 +182,19 @@ def test_loaded_run_parameter_updates_for_timed_acquisition():
     assert updates == {"shot_interval_sec": 0.25, "sample_count": 12}
 
 
+def test_loaded_run_parameter_updates_supports_monitor_stop_modes():
+    updates = loaded_run_parameter_updates(
+        {"shot_interval_sec": 0.25, "stop_mode": "duration", "duration_sec": 30.0},
+        RunMode.TIMED_ACQUISITION,
+    )
+
+    assert updates == {
+        "shot_interval_sec": 0.25,
+        "stop_mode": "duration",
+        "duration_sec": 30.0,
+    }
+
+
 def test_loaded_run_parameter_updates_for_single_knob_scan():
     updates = loaded_run_parameter_updates(
         {

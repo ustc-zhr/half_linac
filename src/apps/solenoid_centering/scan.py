@@ -1424,9 +1424,12 @@ def _rms(values: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(values))))
 
 
-def _element_numeric_limit(element: ElementConfig) -> tuple[float, float] | None:
-    raw_low = element.limits.get("low")
-    raw_high = element.limits.get("high")
+def _element_numeric_limit(
+    element: ElementConfig, channel: str = "current_set"
+) -> tuple[float, float] | None:
+    limits = element.limits_for(channel)
+    raw_low = limits.get("low")
+    raw_high = limits.get("high")
     if raw_low is None or raw_high is None:
         return None
     low = float(raw_low)

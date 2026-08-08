@@ -244,8 +244,12 @@ class MachineProfileTests(unittest.TestCase):
         assert context.solenoid_centering_workflow is not None
         workflow = load_solenoid_centering_workflow(context.profile)
         self.assertEqual(workflow.default_preset, "ls_centering")
-        self.assertEqual(workflow.presets_by_id["ls_centering"].solenoid, "SL01")
+        self.assertEqual(workflow.presets_by_id["ls_centering"].solenoid, "SL01-1")
         self.assertEqual(workflow.presets_by_id["ls_centering"].hcorr, "SL01-DX")
+        self.assertEqual(
+            workflow.presets_by_id["sl01_2_centering"].solenoid,
+            "SL01-2",
+        )
         self.assertFalse(workflow_writes_allowed(context, "solenoid_centering"))
 
     def test_load_irfel_solenoid_centering_app_context(self):
@@ -854,6 +858,44 @@ class MachineProfileTests(unittest.TestCase):
             resolve_channel(profile, "QL03", "k1", "real"),
             "IN:MG:L002:QUAD:QL03:K1",
         )
+
+    def test_half_added_magnet_power_supplies_match_reference_sheet(self):
+        profile = load_profile("half")
+        expected_set_pvs = {
+            "SS01": "IN:PS:LE07:SS01:current:ao",
+            "SS02": "IN:PS:LE07:SS02:current:ao",
+            "SL01-1": "IN:PS:LE07:SL01-1:current:ao",
+            "SL01-2": "IN:PS:LE07:SL01-2:current:ao",
+            "BL01-A-CP": "IN:PS:L001:BL01-A-CP:current:ao",
+            "XCA23": "IN:PS:LE16:XCA23:current:ao",
+            "YCA23": "IN:PS:LE16:YCA23:current:ao",
+            "BENY-CP": "IN:PS:LE16:BENY-CP:current:ao",
+        }
+        for element_id, set_pv in expected_set_pvs.items():
+            with self.subTest(element_id=element_id):
+                element = profile.get_element(element_id)
+                self.assertEqual(
+                    resolve_channel(profile, element_id, "current_set", "real"),
+                    set_pv,
+                )
+                self.assertEqual(
+                    resolve_channel(profile, element_id, "current_readback", "real"),
+                    set_pv[:-2] + "ai",
+                )
+                expected_high = 12 if element_id.startswith("SS") else 100
+                if element.kind == "corr":
+                    expected_high = 10
+                self.assertEqual(
+                    element.limits_for("current_set"),
+                    {
+                        "low": -expected_high if element.kind == "corr" else 0,
+                        "high": expected_high,
+                        "unit": "A",
+                    },
+                )
+
+        with self.assertRaisesRegex(MachineProfileError, "Unknown element id: SL01"):
+            profile.get_element("SL01")
 
     def test_vm_backend_uses_softioc_alias_naming_for_magnets(self):
         profile = load_profile("half")

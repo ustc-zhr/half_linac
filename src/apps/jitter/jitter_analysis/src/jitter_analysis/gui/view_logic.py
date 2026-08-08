@@ -111,35 +111,32 @@ def mode_ready_state(
     random_ranges_valid: bool,
 ) -> tuple[bool, str]:
     if run_status == RunStatus.RUNNING:
-        return False, "Run in progress. Stop the current run to change PVs or mode."
+        return False, "Stop the current run before changing the setup."
 
     if not config_loaded:
-        return False, "Next: load a PV library."
-
-    if selected_object_count <= 0 and selected_knob_count <= 0:
-        return False, "Next: choose read PVs and control PVs with 'Choose PVs...'."
+        return False, "Load a PV library."
 
     if mode == "timed_acquisition":
         if selected_object_count <= 0:
-            return False, "Next: choose at least one read PV for Monitor."
-        return True, "Ready: click Start to run Monitor."
+            return False, "Select at least one read PV."
+        return True, "Ready to start Monitor."
 
     if mode == "single_knob_scan":
         if selected_knob_count <= 0:
-            return False, "Next: choose at least one control PV to enable Single Knob."
+            return False, "Select at least one control PV."
         if not active_knob_available:
-            return False, "Next: choose the active control PV for Single Knob."
+            return False, "Select an active control PV."
         if selected_object_count <= 0:
-            return False, "Next: choose at least one read PV to sample during Single Knob."
-        return True, "Ready: click Start to run Single Knob."
+            return False, "Select at least one read PV."
+        return True, "Ready to start Single Knob."
 
     if selected_knob_count <= 0:
-        return False, "Next: choose control PVs to enable Random Multi-Knob."
+        return False, "Select at least one control PV."
     if selected_object_count <= 0:
-        return False, "Next: choose at least one read PV to sample during Random Multi-Knob."
+        return False, "Select at least one read PV."
     if not random_ranges_valid:
-        return False, "Next: open 'Configure Ranges...' and enable at least one valid control PV range."
-    return True, "Ready: click Start to run Random Multi-Knob."
+        return False, "Configure at least one valid control PV range."
+    return True, "Ready to start Random Multi-Knob."
 
 
 def single_knob_axis_name(axis_source: str, knob_name: str = "") -> str:

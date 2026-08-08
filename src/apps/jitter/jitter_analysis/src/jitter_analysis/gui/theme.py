@@ -437,6 +437,14 @@ QFileDialog QToolButton {{
     border-radius: 8px;
     qproperty-iconSize: 18px 18px;
 }}
+QToolButton[groupActionControl="true"] {{
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    padding: 0px;
+    border-radius: 8px;
+}}
 QPushButton[role="subtle"], QToolButton[role="subtle"] {{
     background: {spec.subtle_bg};
     color: {spec.subtle_text};
@@ -638,11 +646,6 @@ QLabel#appSubtitle {{
     color: {hero_text};
     background: transparent;
     font-size: 12px;
-}}
-QFrame#workspaceFrame {{
-    background: {spec.panel_bg};
-    border: 1px solid {spec.section_border};
-    border-radius: 14px;
 }}
 QLabel[role="statusPill"] {{
     background: {spec.button_bg};

@@ -30,6 +30,7 @@ if QtCore is not None:
         batch_ready = QtCore.pyqtSignal(int, object)
         connection_status = QtCore.pyqtSignal(int, int)
         progress = QtCore.pyqtSignal(int, int)
+        time_progress = QtCore.pyqtSignal(float, float)
         finished = QtCore.pyqtSignal(str)
         failed = QtCore.pyqtSignal(str)
 
@@ -55,12 +56,22 @@ if QtCore is not None:
 
 
     class TimedAcquisitionWorker(QtCore.QObject):
-        def __init__(self, sampler, objects, shot_interval_sec: float, sample_count: int) -> None:
+        def __init__(
+            self,
+            sampler,
+            objects,
+            shot_interval_sec: float,
+            sample_count: int | None,
+            stop_mode: str = "samples",
+            duration_sec: float | None = None,
+        ) -> None:
             super().__init__()
             self.sampler = sampler
             self.objects = list(objects)
             self.shot_interval_sec = shot_interval_sec
-            self.sample_count = sample_count
+            self.sample_count = int(sample_count or 0)
+            self.stop_mode = str(stop_mode or "samples").strip().lower()
+            self.duration_sec = float(duration_sec or 0.0)
             self.connection_status_interval_sec = 1.0
             self.signals = TimedAcquisitionSignals()
             self._stop_event = threading.Event()
@@ -68,23 +79,55 @@ if QtCore is not None:
         @QtCore.pyqtSlot()
         def run(self) -> None:
             try:
-                self.signals.started.emit(self.sample_count)
+                if self.stop_mode == "samples":
+                    self.signals.started.emit(self.sample_count)
+                else:
+                    self.signals.started.emit(0)
                 next_deadline = time.monotonic()
                 next_connection_status_deadline = next_deadline
-                for sample_index in range(self.sample_count):
+                started_at = next_deadline
+                duration_deadline = (
+                    started_at + self.duration_sec
+                    if self.stop_mode == "duration" else None
+                )
+                sample_index = 0
+                while True:
                     if self._stop_event.is_set():
                         self.signals.finished.emit("stopped")
+                        return
+                    now = time.monotonic()
+                    if self.stop_mode == "samples" and sample_index >= self.sample_count:
+                        self.signals.finished.emit("completed")
+                        return
+                    if self.stop_mode == "duration" and sample_index > 0 and now >= duration_deadline:
+                        self.signals.time_progress.emit(self.duration_sec, self.duration_sec)
+                        self.signals.finished.emit("completed")
                         return
 
                     batch = self.sampler.sample_batch(self.objects, batch_index=sample_index)
                     self.signals.batch_ready.emit(sample_index, batch)
-                    self.signals.progress.emit(sample_index + 1, self.sample_count)
+                    completed = sample_index + 1
+                    self.signals.progress.emit(completed, self.sample_count)
+                    if self.stop_mode == "duration":
+                        self.signals.time_progress.emit(
+                            min(time.monotonic() - started_at, self.duration_sec),
+                            self.duration_sec,
+                        )
+                    elif self.stop_mode == "continuous":
+                        self.signals.time_progress.emit(time.monotonic() - started_at, 0.0)
                     if time.monotonic() >= next_connection_status_deadline:
                         self._emit_connection_status()
                         next_connection_status_deadline = time.monotonic() + self.connection_status_interval_sec
 
+                    sample_index += 1
+                    if self.stop_mode == "samples" and sample_index >= self.sample_count:
+                        self.signals.finished.emit("completed")
+                        return
                     next_deadline += self.shot_interval_sec
-                    if _wait_until_deadline(self._stop_event, next_deadline):
+                    wait_deadline = next_deadline
+                    if duration_deadline is not None:
+                        wait_deadline = min(wait_deadline, duration_deadline)
+                    if _wait_until_deadline(self._stop_event, wait_deadline):
                         self.signals.finished.emit("stopped")
                         return
 

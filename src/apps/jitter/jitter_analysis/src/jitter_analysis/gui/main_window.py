@@ -18,6 +18,7 @@ if __package__ in {None, ""}:
         sys.path.insert(0, str(SRC_ROOT))
 
     from jitter_analysis.config.loader import load_config
+    from jitter_analysis.config.editor import config_data_from_text, prepare_edited_config, save_config_file
     from jitter_analysis.analysis.correlation import compute_correlation_matrix
     from jitter_analysis.analysis.jitter import compute_jitter_stats
     from jitter_analysis.analysis.sensitivity import compute_single_knob_sensitivity
@@ -35,6 +36,7 @@ if __package__ in {None, ""}:
     )
     from jitter_analysis.epics.client import PyEpicsClient, require_pyepics
     from jitter_analysis.gui.dialogs.pv_selector_dialog import PVSelectorDialog
+    from jitter_analysis.gui.dialogs.pv_library_editor_dialog import PVLibraryEditorDialog
     from jitter_analysis.gui.dialogs.random_knob_config_dialog import RandomKnobConfigDialog
     from jitter_analysis.gui.dialogs.run_browser_dialog import RunBrowserDialog
     from jitter_analysis.gui.dialogs.setup_browser_dialog import SetupBrowserDialog
@@ -108,6 +110,7 @@ if __package__ in {None, ""}:
     from jitter_analysis.services.task_service import TaskService
 else:
     from ..config.loader import load_config
+    from ..config.editor import config_data_from_text, prepare_edited_config, save_config_file
     from ..analysis.correlation import compute_correlation_matrix
     from ..analysis.jitter import compute_jitter_stats
     from ..analysis.sensitivity import compute_single_knob_sensitivity
@@ -125,6 +128,7 @@ else:
     )
     from ..epics.client import PyEpicsClient, require_pyepics
     from .dialogs.pv_selector_dialog import PVSelectorDialog
+    from .dialogs.pv_library_editor_dialog import PVLibraryEditorDialog
     from .dialogs.random_knob_config_dialog import RandomKnobConfigDialog
     from .dialogs.run_browser_dialog import RunBrowserDialog
     from .dialogs.setup_browser_dialog import SetupBrowserDialog
@@ -333,16 +337,9 @@ class MainWindow(_MainWindowBase):
         self.log_view.setMaximumBlockCount(1000)
         self.log_toggle_button = self._build_log_toggle_button()
 
-        workspace_frame = QtWidgets.QFrame()
-        workspace_frame.setObjectName("workspaceFrame")
-        workspace_layout = QtWidgets.QVBoxLayout(workspace_frame)
-        workspace_layout.setContentsMargins(10, 10, 10, 10)
-        workspace_layout.setSpacing(8)
-        workspace_layout.addWidget(self.main_tabs, 1)
-        workspace_layout.addWidget(self._build_log_section())
-
         root_layout.addWidget(self._build_app_header())
-        root_layout.addWidget(workspace_frame, 1)
+        root_layout.addWidget(self.main_tabs, 1)
+        root_layout.addWidget(self._build_log_section())
         self.setCentralWidget(central)
         self._sync_theme_actions()
         self.append_log("Application scaffold initialized")
@@ -416,18 +413,9 @@ class MainWindow(_MainWindowBase):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
 
-        title_column = QtWidgets.QVBoxLayout()
-        title_column.setContentsMargins(0, 0, 0, 0)
-        title_column.setSpacing(2)
-
         app_title = QtWidgets.QLabel("Jitter Analysis")
         app_title.setObjectName("appTitle")
-        app_subtitle = QtWidgets.QLabel("Status: Development / Internal Use  |  PV jitter workspace")
-        app_subtitle.setObjectName("appSubtitle")
-
-        title_column.addWidget(app_title)
-        title_column.addWidget(app_subtitle)
-        layout.addLayout(title_column, 1)
+        layout.addWidget(app_title, 1, QtCore.Qt.AlignVCenter)
 
         layout.addWidget(self.log_toggle_button, 0, QtCore.Qt.AlignVCenter)
         layout.addWidget(self._build_theme_toggle_button(), 0, QtCore.Qt.AlignVCenter)
@@ -500,6 +488,7 @@ class MainWindow(_MainWindowBase):
     def _apply_panel_button_roles(self) -> None:
         for button in (
             self.config_panel.load_button,
+            self.config_panel.edit_library_button,
             self.config_panel.load_setup_button,
             self.config_panel.save_setup_button,
             self.config_panel.save_dir_browse_button,
@@ -514,10 +503,6 @@ class MainWindow(_MainWindowBase):
         box = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(box)
         layout.setContentsMargins(0, 0, 0, 0)
-        hint = QtWidgets.QLabel("Select a task type.")
-        hint.setWordWrap(True)
-        hint.setProperty("role", "pageHint")
-        layout.addWidget(hint)
 
         row = QtWidgets.QHBoxLayout()
         self.mode_buttons = {}
@@ -536,21 +521,12 @@ class MainWindow(_MainWindowBase):
             button.setMinimumHeight(34)
             button.setCursor(QtCore.Qt.PointingHandCursor)
             button.setProperty("themeRole", "modeToggle")
+            button.setToolTip(self._mode_help_text(mode))
             row.addWidget(button)
             self.mode_buttons[mode] = button
             self.mode_button_group.addButton(button)
         layout.addLayout(row)
-        layout.addWidget(self._build_mode_compare_strip())
         return box
-
-    def _build_mode_compare_strip(self):
-        label = QtWidgets.QLabel(
-            "Monitor = read PVs only   |   Single Knob = one control PV   |   "
-            "Random Multi-Knob = many control PVs together"
-        )
-        label.setWordWrap(True)
-        label.setProperty("role", "pageHint")
-        return label
 
     def _create_section_group(self, title: str) -> QtWidgets.QGroupBox:
         box = QtWidgets.QGroupBox(title)
@@ -737,12 +713,12 @@ class MainWindow(_MainWindowBase):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(4)
 
-        self.mode_status_title_label = QtWidgets.QLabel("Task Guidance")
+        self.mode_status_title_label = QtWidgets.QLabel("Setup status")
         self.mode_status_title_label.setProperty("role", "title")
-        self.mode_status_message_label = QtWidgets.QLabel("Load a PV library to begin.")
+        self.mode_status_message_label = QtWidgets.QLabel("Load a PV library.")
         self.mode_status_message_label.setWordWrap(True)
         self.mode_status_message_label.setProperty("role", "message")
-        self.mode_status_context_label = QtWidgets.QLabel("New runs will be saved under runs.")
+        self.mode_status_context_label = QtWidgets.QLabel()
         self.mode_status_context_label.setWordWrap(True)
         self.mode_status_context_label.setProperty("role", "context")
 
@@ -905,6 +881,7 @@ class MainWindow(_MainWindowBase):
         self.main_tabs.currentChanged.connect(self._on_main_tab_changed)
 
         self.config_panel.load_button.clicked.connect(self.load_config_file)
+        self.config_panel.edit_library_button.clicked.connect(self.open_pv_library_editor)
         self.config_panel.load_setup_button.clicked.connect(self.open_setup_browser)
         self.config_panel.save_setup_button.clicked.connect(self.save_setup_file)
         self.config_panel.save_dir_browse_button.clicked.connect(self.browse_save_dir)
@@ -997,6 +974,74 @@ class MainWindow(_MainWindowBase):
         if path:
             return self._load_config_path(path)
         return False
+
+    def open_pv_library_editor(self) -> bool:
+        if self.state.run_status == RunStatus.RUNNING:
+            QtWidgets.QMessageBox.warning(
+                self, "Edit PV Library", "Stop the current run before editing the PV library."
+            )
+            return False
+        if self._viewing_saved_run:
+            QtWidgets.QMessageBox.information(
+                self, "Edit PV Library", "Leave the saved run view before editing a PV library."
+            )
+            return False
+        if self.loaded_config is None:
+            QtWidgets.QMessageBox.information(self, "Edit PV Library", "Load a PV library first.")
+            return False
+        try:
+            source_data = config_data_from_text(self.loaded_config.source_text)
+            objects = list(source_data.get("objects", []))
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(self, "Edit PV Library", f"Could not read the loaded configuration: {exc}")
+            return False
+
+        groups = list(source_data.get("groups", []))
+        dialog = PVLibraryEditorDialog(
+            objects=objects,
+            groups=groups,
+            save_callback=lambda edited_objects, edited_groups: self._save_pv_library_objects(
+                edited_objects, edited_groups
+            ),
+            save_as_callback=lambda edited_objects, edited_groups: self._save_pv_library_objects(
+                edited_objects, edited_groups, save_as=True
+            ),
+            parent=self,
+        )
+        dialog.exec_()
+        return True
+
+    def _save_pv_library_objects(self, objects, groups, *, save_as: bool = False) -> bool:
+        if self.loaded_config is None or self.state.run_status == RunStatus.RUNNING:
+            return False
+        current_path = Path(self.loaded_config.source_path or "")
+        if save_as:
+            path, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self,
+                "Save PV Library As",
+                str(current_path),
+                "JSON Files (*.json);;All Files (*)",
+            )
+            if not path:
+                return False
+            target_path = Path(path)
+        else:
+            target_path = current_path
+        if not str(target_path):
+            QtWidgets.QMessageBox.warning(self, "Save PV Library", "The loaded PV library has no file path.")
+            return False
+
+        try:
+            data = prepare_edited_config(self.loaded_config.source_text, objects, groups)
+            save_config_file(target_path, data)
+            if not self._load_config_path(target_path):
+                return False
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(self, "Save PV Library", str(exc))
+            self.append_log(f"Failed to save PV library: {exc}")
+            return False
+        self.append_log(f"Saved PV library to {target_path}.")
+        return True
 
     def browse_save_dir(self) -> bool:
         if self.state.run_status == RunStatus.RUNNING:
@@ -1506,10 +1551,7 @@ class MainWindow(_MainWindowBase):
     def _apply_loaded_run_parameters(self) -> None:
         updates = loaded_run_parameter_updates(self.current_run_details, self.current_run_mode)
         if self.current_run_mode == RunMode.TIMED_ACQUISITION:
-            if "shot_interval_sec" in updates:
-                self.scan_panel.interval_spin.setValue(updates["shot_interval_sec"])
-            if "sample_count" in updates:
-                self.scan_panel.count_spin.setValue(updates["sample_count"])
+            self.scan_panel.apply_monitor_configuration(updates)
             return
 
         if self.current_run_mode == RunMode.KNOB_SCAN:
@@ -1888,6 +1930,9 @@ class MainWindow(_MainWindowBase):
         self.run_stop_button.setText("Stop")
         self.run_stop_button.setToolTip(self.action_stop.text())
 
+        self.config_panel.edit_library_button.setEnabled(
+            loaded and not running and not self._viewing_saved_run
+        )
         self.object_panel.select_button.setEnabled(loaded and not running)
         self.action_connect_epics.setEnabled(loaded and has_selection and not running)
         self.action_start.setEnabled(ready)
@@ -1924,36 +1969,36 @@ class MainWindow(_MainWindowBase):
     def _update_mode_status_banner(self, mode: str, ready: bool, next_step: str) -> None:
         if self.state.run_status == RunStatus.RUNNING:
             tone = "info"
-            title = f"{self._mode_display_name(mode)} in progress"
-            message = "The current run is active. Use Stop before changing PV selection, mode, or setup."
+            title = f"{self._mode_display_name(mode)} running"
+            message = "Stop the run before changing its setup."
         elif self._viewing_saved_run and self.current_run_metadata is not None:
             tone = "info"
-            title = "Saved run loaded"
+            title = "Saved run"
             message = (
-                f"Offline analysis is showing run {self.current_run_metadata.run_id} "
-                f"in {self._mode_display_name(self._mode_key_from_run_mode(self.current_run_mode))} mode."
+                f"{self.current_run_metadata.run_id} | "
+                f"{self._mode_display_name(self._mode_key_from_run_mode(self.current_run_mode))}"
             )
         elif ready:
             tone = "success"
-            title = f"{self._mode_display_name(mode)} is ready"
+            title = "Ready"
             message = next_step
         elif self.loaded_config is None:
             tone = "subtle"
-            title = "Load the PV library first"
+            title = "PV library required"
             message = next_step
         else:
             tone = "warning"
-            title = "Next step"
+            title = "Setup incomplete"
             message = next_step
 
         self.mode_status_title_label.setText(title)
         self.mode_status_message_label.setText(message)
         if self._viewing_saved_run and self.current_run_metadata is not None:
-            context = f"Offline run source: {self.current_run_metadata.run_id}"
+            context = f"Source: {self.current_run_metadata.run_id}"
         else:
-            save_dir = self.config_panel.save_dir_edit.text().strip() or "runs"
-            context = f"New runs will be saved under: {save_dir}"
+            context = ""
         self.mode_status_context_label.setText(context)
+        self.mode_status_context_label.setVisible(bool(context))
         self.mode_status_title_label.parentWidget().setProperty("tone", tone)
         self.mode_status_title_label.parentWidget().style().unpolish(self.mode_status_title_label.parentWidget())
         self.mode_status_title_label.parentWidget().style().polish(self.mode_status_title_label.parentWidget())
@@ -2531,6 +2576,9 @@ class MainWindow(_MainWindowBase):
         self.action_stop.setEnabled(running)
         self.run_stop_button.setEnabled(running)
         self.config_panel.load_button.setEnabled(not running)
+        self.config_panel.edit_library_button.setEnabled(
+            self.loaded_config is not None and not running and not self._viewing_saved_run
+        )
         self.config_panel.load_setup_button.setEnabled(not running)
         self.config_panel.save_setup_button.setEnabled(not running)
         self.config_panel.save_dir_edit.setEnabled(not running)
@@ -2657,9 +2705,17 @@ class MainWindow(_MainWindowBase):
         waveform_objects = [obj for obj in selected_objects if self._is_waveform_object(obj)]
 
         shot_interval_sec = float(self.scan_panel.interval_spin.value())
-        sample_count = int(self.scan_panel.count_spin.value())
-        if shot_interval_sec <= 0 or sample_count <= 0:
-            QtWidgets.QMessageBox.warning(self, "Monitor", "Interval and sample count must be positive.")
+        stop_mode = self.scan_panel.monitor_stop_mode()
+        sample_count = int(self.scan_panel.count_spin.value()) if stop_mode == "samples" else 0
+        duration_sec = float(self.scan_panel.duration_spin.value()) if stop_mode == "duration" else 0.0
+        if shot_interval_sec <= 0:
+            QtWidgets.QMessageBox.warning(self, "Monitor", "Sample interval must be positive.")
+            return
+        if stop_mode == "samples" and sample_count <= 0:
+            QtWidgets.QMessageBox.warning(self, "Monitor", "Total samples must be positive.")
+            return
+        if stop_mode == "duration" and duration_sec <= 0:
+            QtWidgets.QMessageBox.warning(self, "Monitor", "Total duration must be positive.")
             return
 
         self._leave_saved_run_context()
@@ -2682,7 +2738,9 @@ class MainWindow(_MainWindowBase):
         self._pending_waveform_analysis_signature = None
         self.current_run_details = {
             "shot_interval_sec": shot_interval_sec,
-            "sample_count": sample_count,
+            "stop_mode": stop_mode,
+            "sample_count": sample_count if stop_mode == "samples" else None,
+            "duration_sec": duration_sec if stop_mode == "duration" else None,
             "target_object_ids": [obj.id for obj in selected_objects],
             "scalar_object_ids": [obj.id for obj in scalar_objects],
             "waveform_object_ids": [obj.id for obj in waveform_objects],
@@ -2702,7 +2760,9 @@ class MainWindow(_MainWindowBase):
             {
                 "mode": RunMode.TIMED_ACQUISITION.value,
                 "shot_interval_sec": shot_interval_sec,
+                "stop_mode": stop_mode,
                 "sample_count": sample_count,
+                "duration_sec": duration_sec,
                 "targets": [obj.id for obj in selected_objects],
             }
         )
@@ -2713,6 +2773,8 @@ class MainWindow(_MainWindowBase):
             selected_objects,
             shot_interval_sec,
             sample_count,
+            stop_mode,
+            duration_sec,
         )
         self.acquisition_worker.moveToThread(self.acquisition_thread)
         self.acquisition_thread.started.connect(self.acquisition_worker.run)
@@ -2720,6 +2782,7 @@ class MainWindow(_MainWindowBase):
         self.acquisition_worker.signals.batch_ready.connect(self._on_acquisition_batch)
         self.acquisition_worker.signals.connection_status.connect(self._on_acquisition_connection_status)
         self.acquisition_worker.signals.progress.connect(self._on_acquisition_progress)
+        self.acquisition_worker.signals.time_progress.connect(self._on_acquisition_time_progress)
         self.acquisition_worker.signals.finished.connect(self._on_acquisition_finished)
         self.acquisition_worker.signals.finished.connect(self.acquisition_thread.quit)
         self.acquisition_worker.signals.failed.connect(self._on_acquisition_failed)
@@ -3006,12 +3069,26 @@ class MainWindow(_MainWindowBase):
     def _on_acquisition_started(self, sample_count: int) -> None:
         self._set_running_state(True)
         self.status_panel.set_mode("Monitor", tone="info")
-        self.status_panel.set_sample(f"0/{sample_count}", tone=self._progress_tone(0, sample_count))
+        stop_mode = str(self.current_run_details.get("stop_mode", "samples"))
+        if stop_mode == "samples":
+            sample_text = f"0/{sample_count}"
+            sample_tone = self._progress_tone(0, sample_count)
+        elif stop_mode == "duration":
+            sample_text = "0 samples"
+            sample_tone = "subtle"
+        else:
+            sample_text = "0 samples"
+            sample_tone = "subtle"
+        self.status_panel.set_sample(sample_text, tone=sample_tone)
         self.status_panel.set_step("-", tone="subtle")
         self.status_panel.set_time("--", tone="subtle")
-        self.append_log(
-            f"Started Monitor run {self.current_run_metadata.run_id} with {sample_count} samples."
-        )
+        if stop_mode == "samples":
+            description = f"{sample_count} samples"
+        elif stop_mode == "duration":
+            description = f"{self.current_run_details.get('duration_sec', 0.0):.6g} seconds"
+        else:
+            description = "continuous sampling"
+        self.append_log(f"Started Monitor run {self.current_run_metadata.run_id} with {description}.")
 
     def _on_acquisition_batch(self, sample_index: int, batch) -> None:
         scalar_samples = list(getattr(batch, "scalar_samples", batch if isinstance(batch, list) else []))
@@ -3059,7 +3136,28 @@ class MainWindow(_MainWindowBase):
         self._set_connection_summary(connected, total)
 
     def _on_acquisition_progress(self, completed: int, total: int) -> None:
-        self.status_panel.set_sample(f"{completed}/{total}", tone=self._progress_tone(completed, total))
+        if total > 0:
+            self.status_panel.set_sample(f"{completed}/{total}", tone=self._progress_tone(completed, total))
+        else:
+            self.status_panel.set_sample(f"{completed} samples", tone="info")
+
+    def _on_acquisition_time_progress(self, elapsed_sec: float, total_sec: float) -> None:
+        if total_sec > 0:
+            self.status_panel.set_time(
+                f"{self._format_elapsed_duration(elapsed_sec)} / {self._format_elapsed_duration(total_sec)}",
+                tone="subtle",
+            )
+        else:
+            self.status_panel.set_time(self._format_elapsed_duration(elapsed_sec), tone="subtle")
+
+    @staticmethod
+    def _format_elapsed_duration(seconds: float) -> str:
+        total_seconds = max(0, int(seconds))
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours:
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
 
     def _on_acquisition_finished(self, outcome: str) -> None:
         status = RunStatus.COMPLETED if outcome == "completed" else RunStatus.STOPPED

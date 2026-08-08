@@ -6,8 +6,30 @@
   "presets": [
     {
       "id": "ls_centering",
-      "display_name": "LS Centering",
-      "solenoid": "SL01",
+      "display_name": "SL01-1 Centering",
+      "solenoid": "SL01-1",
+      "hcorr": "SL01-DX",
+      "vcorr": "SL01-DY",
+      "bpm": "BPM03",
+      "solenoid_scan": {
+        "relative_from": -0.05,
+        "relative_to": 0.05,
+        "steps": 5
+      },
+      "corrector_scan": {
+        "relative_from": -0.0002,
+        "relative_to": 0.0002,
+        "steps": 5
+      },
+      "samples_per_point": 3,
+      "settle_time_s": 2.0,
+      "sample_interval_s": 0.2,
+      "max_iters": 2
+    },
+    {
+      "id": "sl01_2_centering",
+      "display_name": "SL01-2 Centering",
+      "solenoid": "SL01-2",
       "hcorr": "SL01-DX",
       "vcorr": "SL01-DY",
       "bpm": "BPM03",

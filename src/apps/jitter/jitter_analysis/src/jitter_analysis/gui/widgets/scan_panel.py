@@ -57,11 +57,30 @@ if QtWidgets is not None:
             self.count_spin = QtWidgets.QSpinBox()
             self.count_spin.setRange(1, 1000000)
             self.count_spin.setValue(200)
-            hint = QtWidgets.QLabel("Use Monitor when you only want to sample read PVs at a fixed interval.")
-            hint.setWordWrap(True)
-            form.addRow("", hint)
+            self.stop_condition_combo = QtWidgets.QComboBox()
+            self.stop_condition_combo.addItem("Total Samples", "samples")
+            self.stop_condition_combo.addItem("Total Duration", "duration")
+            self.stop_condition_combo.addItem("Continuous", "continuous")
+            self.duration_spin = QtWidgets.QDoubleSpinBox()
+            self.duration_spin.setRange(0.1, 365 * 24 * 3600.0)
+            self.duration_spin.setValue(60.0)
+            self.duration_spin.setDecimals(1)
+            self.duration_spin.setSuffix(" s")
+            self.monitor_estimate_label = QtWidgets.QLabel()
+            self.monitor_estimate_label.setProperty("role", "pageHint")
+            self.monitor_estimate_label.setWordWrap(True)
             form.addRow("Sample Interval [s]", self.interval_spin)
+            form.addRow("Stop Condition", self.stop_condition_combo)
             form.addRow("Total Samples", self.count_spin)
+            form.addRow("Total Duration", self.duration_spin)
+            form.addRow("", self.monitor_estimate_label)
+            self.count_label = form.labelForField(self.count_spin)
+            self.duration_label = form.labelForField(self.duration_spin)
+            self.stop_condition_combo.currentIndexChanged.connect(self._update_monitor_controls)
+            self.interval_spin.valueChanged.connect(self._update_monitor_estimate)
+            self.count_spin.valueChanged.connect(self._update_monitor_estimate)
+            self.duration_spin.valueChanged.connect(self._update_monitor_estimate)
+            self._update_monitor_controls()
             return widget
 
         def _build_single_knob_page(self):
@@ -436,7 +455,9 @@ if QtWidgets is not None:
         def monitor_configuration(self) -> dict[str, object]:
             return {
                 "shot_interval_sec": float(self.interval_spin.value()),
+                "stop_mode": str(self.stop_condition_combo.currentData() or "samples"),
                 "sample_count": int(self.count_spin.value()),
+                "duration_sec": float(self.duration_spin.value()),
             }
 
         def single_knob_configuration(self) -> dict[str, object]:
@@ -504,8 +525,57 @@ if QtWidgets is not None:
         def apply_monitor_configuration(self, config: dict[str, object]) -> None:
             if "shot_interval_sec" in config:
                 self.interval_spin.setValue(float(config["shot_interval_sec"]))
+            stop_mode = str(config.get("stop_mode", "samples")).strip().lower()
+            index = self.stop_condition_combo.findData(stop_mode)
+            if index >= 0:
+                self.stop_condition_combo.setCurrentIndex(index)
             if "sample_count" in config:
                 self.count_spin.setValue(int(config["sample_count"]))
+            if "duration_sec" in config:
+                self.duration_spin.setValue(float(config["duration_sec"]))
+            self._update_monitor_controls()
+
+        def monitor_stop_mode(self) -> str:
+            return str(self.stop_condition_combo.currentData() or "samples")
+
+        def _update_monitor_controls(self) -> None:
+            mode = self.monitor_stop_mode()
+            samples_visible = mode == "samples"
+            duration_visible = mode == "duration"
+            self.count_label.setVisible(samples_visible)
+            self.count_spin.setVisible(samples_visible)
+            self.duration_label.setVisible(duration_visible)
+            self.duration_spin.setVisible(duration_visible)
+            self.monitor_estimate_label.setVisible(mode != "continuous")
+            self._update_monitor_estimate()
+
+        def _update_monitor_estimate(self) -> None:
+            mode = self.monitor_stop_mode()
+            interval = float(self.interval_spin.value())
+            if mode == "samples":
+                duration = max(0.0, (int(self.count_spin.value()) - 1) * interval)
+                self.monitor_estimate_label.setText(
+                    f"Estimated duration: {self._format_duration(duration)}"
+                )
+            elif mode == "duration":
+                duration = float(self.duration_spin.value())
+                estimate = int(duration / interval) + 1 if interval > 0 else 0
+                self.monitor_estimate_label.setText(
+                    f"Estimated samples: {estimate:,}  |  Duration: {self._format_duration(duration)}"
+                )
+            else:
+                self.monitor_estimate_label.setText("Runs until you click Stop.")
+
+        @staticmethod
+        def _format_duration(seconds: float) -> str:
+            total_seconds = max(0, int(round(seconds)))
+            hours, remainder = divmod(total_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            if hours:
+                return f"{hours} h {minutes:02d} min"
+            if minutes:
+                return f"{minutes} min {seconds:02d} s"
+            return f"{seconds} s"
 
         def apply_single_knob_configuration(self, config: dict[str, object]) -> None:
             definition = config.get("scan_value_definition")

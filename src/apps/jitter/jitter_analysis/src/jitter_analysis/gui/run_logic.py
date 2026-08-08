@@ -137,8 +137,12 @@ def loaded_run_parameter_updates(details: dict[str, object], mode: RunMode | Non
         updates: dict[str, object] = {}
         if "shot_interval_sec" in details:
             updates["shot_interval_sec"] = float(details["shot_interval_sec"])
-        if "sample_count" in details:
+        if "stop_mode" in details:
+            updates["stop_mode"] = str(details.get("stop_mode", "samples")).strip().lower() or "samples"
+        if details.get("sample_count") is not None:
             updates["sample_count"] = int(details["sample_count"])
+        if details.get("duration_sec") is not None:
+            updates["duration_sec"] = float(details["duration_sec"])
         return updates
 
     if mode == RunMode.KNOB_SCAN:

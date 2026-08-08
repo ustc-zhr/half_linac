@@ -22,36 +22,33 @@ if QtWidgets is not None:
             controls.addWidget(self.clear_button)
             layout.addLayout(controls)
 
-            self.loaded_summary_label = QtWidgets.QLabel("No PV library loaded. Load a PV library to begin.")
+            self._selected_objects = []
+            self._selected_knobs = []
+            self.loaded_summary_label = QtWidgets.QLabel("Library: Not loaded")
             self.loaded_summary_label.setWordWrap(True)
             layout.addWidget(self.loaded_summary_label)
 
-            self.selection_summary_label = QtWidgets.QLabel("No PVs selected yet.")
+            self.selection_summary_label = QtWidgets.QLabel("Selected: None")
             self.selection_summary_label.setWordWrap(True)
             layout.addWidget(self.selection_summary_label)
 
-            self.selection_detail_label = QtWidgets.QLabel(
-                "Choose read PVs and control PVs after the library is loaded."
-            )
+            self.selection_detail_label = QtWidgets.QLabel()
             self.selection_detail_label.setWordWrap(True)
+            self.selection_detail_label.setVisible(False)
             layout.addWidget(self.selection_detail_label)
             layout.addStretch(1)
 
         def set_library_empty(self) -> None:
-            self.loaded_summary_label.setText("No PV library loaded. Load a PV library to begin.")
-            self.selection_summary_label.setText("No PVs selected yet.")
-            self.selection_detail_label.setText(
-                "Choose read PVs and control PVs after the library is loaded."
-            )
+            self.loaded_summary_label.setText("Library: Not loaded")
+            self.selection_summary_label.setText("Selected: None")
+            self.selection_detail_label.clear()
+            self.selection_detail_label.setVisible(False)
 
         def set_library_objects(self, objects, group_labels: dict[str, str]) -> None:
             group_count = len({obj.group for obj in objects})
-            group_names = sorted({group_labels.get(obj.group, obj.group) for obj in objects})
-            preview = ", ".join(group_names[:4]) if group_names else "none"
-            if len(group_names) > 4:
-                preview += ", ..."
+            group_word = "group" if group_count == 1 else "groups"
             self.loaded_summary_label.setText(
-                f"PV library: {len(objects)} read PVs across {group_count} groups. {preview}"
+                f"Library: {len(objects)} read PVs | {group_count} {group_word}"
             )
 
         def set_selected_objects(self, objects) -> None:
@@ -63,28 +60,32 @@ if QtWidgets is not None:
             self._update_selection_summary()
 
         def _update_selection_summary(self) -> None:
-            knobs = getattr(self, "_selected_knobs", [])
-            objects = getattr(self, "_selected_objects", [])
+            knobs = self._selected_knobs
+            objects = self._selected_objects
             if not knobs and not objects:
-                self.selection_summary_label.setText("No PVs selected yet.")
-                self.selection_detail_label.setText(
-                    "Choose read PVs and control PVs with 'Choose PVs...'."
-                )
+                self.selection_summary_label.setText("Selected: None")
+                self.selection_detail_label.clear()
+                self.selection_detail_label.setVisible(False)
                 return
 
             self.selection_summary_label.setText(
-                f"Control PVs: {len(knobs)} selected  |  Read PVs: {len(objects)} selected"
+                f"Selected: {len(objects)} read | {len(knobs)} control"
             )
 
-            knob_names = ", ".join(knob.name for knob in knobs[:3]) if knobs else "none"
-            object_names = ", ".join(obj.name for obj in objects[:4]) if objects else "none"
+            details = []
+            object_names = ", ".join(obj.name for obj in objects[:4])
             if len(knobs) > 3:
-                knob_names += ", ..."
+                knob_names = ", ".join(knob.name for knob in knobs[:3]) + ", ..."
+            else:
+                knob_names = ", ".join(knob.name for knob in knobs)
             if len(objects) > 4:
                 object_names += ", ..."
-            self.selection_detail_label.setText(
-                f"Controls: {knob_names}\nReads: {object_names}"
-            )
+            if objects:
+                details.append(f"Read: {object_names}")
+            if knobs:
+                details.append(f"Control: {knob_names}")
+            self.selection_detail_label.setText("\n".join(details))
+            self.selection_detail_label.setVisible(True)
 
 else:
 

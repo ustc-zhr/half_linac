@@ -27,661 +27,396 @@
       "kind": "bpm",
       "display_name": "BPM01",
       "order": 1,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM02",
       "kind": "bpm",
       "display_name": "BPM02",
       "order": 2,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM03",
       "kind": "bpm",
       "display_name": "BPM03",
       "order": 3,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM04",
       "kind": "bpm",
       "display_name": "BPM04",
       "order": 4,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM05",
       "kind": "bpm",
       "display_name": "BPM05",
       "order": 5,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM06",
       "kind": "bpm",
       "display_name": "BPM06",
       "order": 6,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM07",
       "kind": "bpm",
       "display_name": "BPM07",
       "order": 7,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM08",
       "kind": "bpm",
       "display_name": "BPM08",
       "order": 8,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM09",
       "kind": "bpm",
       "display_name": "BPM09",
       "order": 9,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM10",
       "kind": "bpm",
       "display_name": "BPM10",
       "order": 10,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM11",
       "kind": "bpm",
       "display_name": "BPM11",
       "order": 11,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM12",
       "kind": "bpm",
       "display_name": "BPM12",
       "order": 12,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM13",
       "kind": "bpm",
       "display_name": "BPM13",
       "order": 13,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM14",
       "kind": "bpm",
       "display_name": "BPM14",
       "order": 14,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM15",
       "kind": "bpm",
       "display_name": "BPM15",
       "order": 15,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM16",
       "kind": "bpm",
       "display_name": "BPM16",
       "order": 16,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM17",
       "kind": "bpm",
       "display_name": "BPM17",
       "order": 17,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM18",
       "kind": "bpm",
       "display_name": "BPM18",
       "order": 18,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM19",
       "kind": "bpm",
       "display_name": "BPM19",
       "order": 19,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM20",
       "kind": "bpm",
       "display_name": "BPM20",
       "order": 20,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM21",
       "kind": "bpm",
       "display_name": "BPM21",
       "order": 21,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM22",
       "kind": "bpm",
       "display_name": "BPM22",
       "order": 22,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM23",
       "kind": "bpm",
       "display_name": "BPM23",
       "order": 23,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM24",
       "kind": "bpm",
       "display_name": "BPM24",
       "order": 24,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM25",
       "kind": "bpm",
       "display_name": "BPM25",
       "order": 25,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM26",
       "kind": "bpm",
       "display_name": "BPM26",
       "order": 26,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM27",
       "kind": "bpm",
       "display_name": "BPM27",
       "order": 27,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM28",
       "kind": "bpm",
       "display_name": "BPM28",
       "order": 28,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM29",
       "kind": "bpm",
       "display_name": "BPM29",
       "order": 29,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM30",
       "kind": "bpm",
       "display_name": "BPM30",
       "order": 30,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM31",
       "kind": "bpm",
       "display_name": "BPM31",
       "order": 31,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM32",
       "kind": "bpm",
       "display_name": "BPM32",
       "order": 32,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM33",
       "kind": "bpm",
       "display_name": "BPM33",
       "order": 33,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM34",
       "kind": "bpm",
       "display_name": "BPM34",
       "order": 34,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM35",
       "kind": "bpm",
       "display_name": "BPM35",
       "order": 35,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM36",
       "kind": "bpm",
       "display_name": "BPM36",
       "order": 36,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM37",
       "kind": "bpm",
       "display_name": "BPM37",
       "order": 37,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM38",
       "kind": "bpm",
       "display_name": "BPM38",
       "order": 38,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM39",
       "kind": "bpm",
       "display_name": "BPM39",
       "order": 39,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM40",
       "kind": "bpm",
       "display_name": "BPM40",
       "order": 40,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM41",
       "kind": "bpm",
       "display_name": "BPM41",
       "order": 41,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM42",
       "kind": "bpm",
       "display_name": "BPM42",
       "order": 42,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "BPM43",
       "kind": "bpm",
       "display_name": "BPM43",
       "order": 43,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
+      "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": [
-        "x",
-        "y"
-      ]
+      "logical_channels": ["x", "y"]
     },
     {
       "id": "SM01-DX",
       "kind": "corr",
       "display_name": "SM01-DX",
       "order": 44,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -689,16 +424,9 @@
       "kind": "corr",
       "display_name": "SM01-DY",
       "order": 45,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -706,16 +434,9 @@
       "kind": "corr",
       "display_name": "SL01-DX",
       "order": 46,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -723,16 +444,9 @@
       "kind": "corr",
       "display_name": "SL01-DY",
       "order": 47,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -740,16 +454,9 @@
       "kind": "corr",
       "display_name": "XC00",
       "order": 48,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -757,16 +464,9 @@
       "kind": "corr",
       "display_name": "XC01",
       "order": 49,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -774,16 +474,9 @@
       "kind": "corr",
       "display_name": "XC02",
       "order": 50,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -791,16 +484,9 @@
       "kind": "corr",
       "display_name": "XC03",
       "order": 51,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -808,16 +494,9 @@
       "kind": "corr",
       "display_name": "XC04",
       "order": 52,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -825,16 +504,9 @@
       "kind": "corr",
       "display_name": "XC05",
       "order": 53,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -842,16 +514,9 @@
       "kind": "corr",
       "display_name": "XC06",
       "order": 54,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -859,16 +524,9 @@
       "kind": "corr",
       "display_name": "XC07",
       "order": 55,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -876,16 +534,9 @@
       "kind": "corr",
       "display_name": "XC08",
       "order": 56,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -893,16 +544,9 @@
       "kind": "corr",
       "display_name": "XC09",
       "order": 57,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -910,16 +554,9 @@
       "kind": "corr",
       "display_name": "XC10",
       "order": 58,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -927,16 +564,9 @@
       "kind": "corr",
       "display_name": "XC11",
       "order": 59,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -944,16 +574,9 @@
       "kind": "corr",
       "display_name": "XC12",
       "order": 60,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -961,16 +584,9 @@
       "kind": "corr",
       "display_name": "XC13",
       "order": 61,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -978,16 +594,9 @@
       "kind": "corr",
       "display_name": "XC14",
       "order": 62,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -995,16 +604,9 @@
       "kind": "corr",
       "display_name": "XC15",
       "order": 63,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1012,16 +614,9 @@
       "kind": "corr",
       "display_name": "XC16",
       "order": 64,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1029,16 +624,9 @@
       "kind": "corr",
       "display_name": "XC17",
       "order": 65,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1046,16 +634,9 @@
       "kind": "corr",
       "display_name": "XC18",
       "order": 66,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1063,16 +644,9 @@
       "kind": "corr",
       "display_name": "XC19",
       "order": 67,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1080,16 +654,9 @@
       "kind": "corr",
       "display_name": "XC20",
       "order": 68,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1097,16 +664,9 @@
       "kind": "corr",
       "display_name": "XC21",
       "order": 69,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1114,16 +674,9 @@
       "kind": "corr",
       "display_name": "XC22",
       "order": 70,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1131,16 +684,9 @@
       "kind": "corr",
       "display_name": "XC23",
       "order": 71,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1148,16 +694,9 @@
       "kind": "corr",
       "display_name": "XC24",
       "order": 72,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1165,16 +704,9 @@
       "kind": "corr",
       "display_name": "XC25",
       "order": 73,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1182,16 +714,9 @@
       "kind": "corr",
       "display_name": "XC26",
       "order": 74,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1199,16 +724,9 @@
       "kind": "corr",
       "display_name": "XC27",
       "order": 75,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1216,16 +734,9 @@
       "kind": "corr",
       "display_name": "XC28",
       "order": 76,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1233,16 +744,9 @@
       "kind": "corr",
       "display_name": "XC29",
       "order": 77,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1250,16 +754,9 @@
       "kind": "corr",
       "display_name": "XC30",
       "order": 78,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1267,16 +764,9 @@
       "kind": "corr",
       "display_name": "XC31",
       "order": 79,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1284,16 +774,9 @@
       "kind": "corr",
       "display_name": "XC32",
       "order": 80,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1301,16 +784,9 @@
       "kind": "corr",
       "display_name": "XC33",
       "order": 81,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1318,16 +794,9 @@
       "kind": "corr",
       "display_name": "XC34",
       "order": 82,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1335,16 +804,9 @@
       "kind": "corr",
       "display_name": "XC35",
       "order": 83,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1352,16 +814,9 @@
       "kind": "corr",
       "display_name": "XC36",
       "order": 84,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1369,16 +824,9 @@
       "kind": "corr",
       "display_name": "XC37",
       "order": 85,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1386,16 +834,9 @@
       "kind": "corr",
       "display_name": "XC38",
       "order": 86,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1403,16 +844,9 @@
       "kind": "corr",
       "display_name": "XC39",
       "order": 87,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1420,16 +854,9 @@
       "kind": "corr",
       "display_name": "XC40",
       "order": 88,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1437,16 +864,9 @@
       "kind": "corr",
       "display_name": "XC41",
       "order": 89,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1454,16 +874,9 @@
       "kind": "corr",
       "display_name": "XC42",
       "order": 90,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1471,16 +884,9 @@
       "kind": "corr",
       "display_name": "XC43",
       "order": 91,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1488,16 +894,9 @@
       "kind": "corr",
       "display_name": "YC00",
       "order": 92,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1505,16 +904,9 @@
       "kind": "corr",
       "display_name": "YC01",
       "order": 93,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1522,16 +914,9 @@
       "kind": "corr",
       "display_name": "YC02",
       "order": 94,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -5, "high": 5, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1539,16 +924,9 @@
       "kind": "corr",
       "display_name": "YC03",
       "order": 95,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1556,16 +934,9 @@
       "kind": "corr",
       "display_name": "YC04",
       "order": 96,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1573,16 +944,9 @@
       "kind": "corr",
       "display_name": "YC05",
       "order": 97,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1590,16 +954,9 @@
       "kind": "corr",
       "display_name": "YC06",
       "order": 98,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1607,16 +964,9 @@
       "kind": "corr",
       "display_name": "YC07",
       "order": 99,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1624,16 +974,9 @@
       "kind": "corr",
       "display_name": "YC08",
       "order": 100,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1641,16 +984,9 @@
       "kind": "corr",
       "display_name": "YC09",
       "order": 101,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1658,16 +994,9 @@
       "kind": "corr",
       "display_name": "YC10",
       "order": 102,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1675,16 +1004,9 @@
       "kind": "corr",
       "display_name": "YC11",
       "order": 103,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1692,16 +1014,9 @@
       "kind": "corr",
       "display_name": "YC12",
       "order": 104,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1709,16 +1024,9 @@
       "kind": "corr",
       "display_name": "YC13",
       "order": 105,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1726,16 +1034,9 @@
       "kind": "corr",
       "display_name": "YC14",
       "order": 106,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1743,16 +1044,9 @@
       "kind": "corr",
       "display_name": "YC15",
       "order": 107,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1760,16 +1054,9 @@
       "kind": "corr",
       "display_name": "YC16",
       "order": 108,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1777,16 +1064,9 @@
       "kind": "corr",
       "display_name": "YC17",
       "order": 109,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1794,16 +1074,9 @@
       "kind": "corr",
       "display_name": "YC18",
       "order": 110,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1811,16 +1084,9 @@
       "kind": "corr",
       "display_name": "YC19",
       "order": 111,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1828,16 +1094,9 @@
       "kind": "corr",
       "display_name": "YC20",
       "order": 112,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1845,16 +1104,9 @@
       "kind": "corr",
       "display_name": "YC21",
       "order": 113,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1862,16 +1114,9 @@
       "kind": "corr",
       "display_name": "YC22",
       "order": 114,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1879,16 +1124,9 @@
       "kind": "corr",
       "display_name": "YC23",
       "order": 115,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1896,16 +1134,9 @@
       "kind": "corr",
       "display_name": "YC24",
       "order": 116,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1913,16 +1144,9 @@
       "kind": "corr",
       "display_name": "YC25",
       "order": 117,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1930,16 +1154,9 @@
       "kind": "corr",
       "display_name": "YC26",
       "order": 118,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1947,16 +1164,9 @@
       "kind": "corr",
       "display_name": "YC27",
       "order": 119,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1964,16 +1174,9 @@
       "kind": "corr",
       "display_name": "YC28",
       "order": 120,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1981,16 +1184,9 @@
       "kind": "corr",
       "display_name": "YC29",
       "order": 121,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -1998,16 +1194,9 @@
       "kind": "corr",
       "display_name": "YC30",
       "order": 122,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2015,16 +1204,9 @@
       "kind": "corr",
       "display_name": "YC31",
       "order": 123,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2032,16 +1214,9 @@
       "kind": "corr",
       "display_name": "YC32",
       "order": 124,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2049,16 +1224,9 @@
       "kind": "corr",
       "display_name": "YC33",
       "order": 125,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2066,16 +1234,9 @@
       "kind": "corr",
       "display_name": "YC34",
       "order": 126,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2083,16 +1244,9 @@
       "kind": "corr",
       "display_name": "YC35",
       "order": 127,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2100,16 +1254,9 @@
       "kind": "corr",
       "display_name": "YC36",
       "order": 128,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2117,16 +1264,9 @@
       "kind": "corr",
       "display_name": "YC37",
       "order": 129,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2134,16 +1274,9 @@
       "kind": "corr",
       "display_name": "YC38",
       "order": 130,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2151,16 +1284,9 @@
       "kind": "corr",
       "display_name": "YC39",
       "order": 131,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2168,16 +1294,9 @@
       "kind": "corr",
       "display_name": "YC40",
       "order": 132,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2185,16 +1304,9 @@
       "kind": "corr",
       "display_name": "YC41",
       "order": 133,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2202,16 +1314,9 @@
       "kind": "corr",
       "display_name": "YC42",
       "order": 134,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
@@ -2219,1711 +1324,1019 @@
       "kind": "corr",
       "display_name": "YC43",
       "order": 135,
-      "tags": [
-        "orbit",
-        "bba"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "kick",
-        "current_set",
-        "current_readback"
-      ],
+      "tags": ["orbit", "bba"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
+    },
+    {
+      "id": "BL01-A-CP",
+      "kind": "corr",
+      "display_name": "BL01-A-CP",
+      "order": 136,
+      "tags": ["compensation"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"],
+      "plane": "x"
+    },
+    {
+      "id": "XCA23",
+      "kind": "corr",
+      "display_name": "XCA23",
+      "order": 137,
+      "tags": ["orbit", "dump"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"],
+      "plane": "x"
+    },
+    {
+      "id": "YCA23",
+      "kind": "corr",
+      "display_name": "YCA23",
+      "order": 138,
+      "tags": ["orbit", "dump"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"],
+      "plane": "y"
+    },
+    {
+      "id": "BENY-CP",
+      "kind": "corr",
+      "display_name": "BENY-CP",
+      "order": 139,
+      "tags": ["compensation"],
+      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"],
+      "plane": "x"
     },
     {
       "id": "QL01",
       "kind": "quad",
       "display_name": "QL01",
-      "order": 136,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 140,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL02",
       "kind": "quad",
       "display_name": "QL02",
-      "order": 137,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 141,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL03",
       "kind": "quad",
       "display_name": "QL03",
-      "order": 138,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 142,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL04",
       "kind": "quad",
       "display_name": "QL04",
-      "order": 139,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 143,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL05",
       "kind": "quad",
       "display_name": "QL05",
-      "order": 140,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 144,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL06",
       "kind": "quad",
       "display_name": "QL06",
-      "order": 141,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 145,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL07",
       "kind": "quad",
       "display_name": "QL07",
-      "order": 142,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 146,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL08",
       "kind": "quad",
       "display_name": "QL08",
-      "order": 143,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 147,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL09",
       "kind": "quad",
       "display_name": "QL09",
-      "order": 144,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 148,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL10",
       "kind": "quad",
       "display_name": "QL10",
-      "order": 145,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 149,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL11",
       "kind": "quad",
       "display_name": "QL11",
-      "order": 146,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 150,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL12",
       "kind": "quad",
       "display_name": "QL12",
-      "order": 147,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "K1_total",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 151,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL13",
       "kind": "quad",
       "display_name": "QL13",
-      "order": 148,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 152,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL14",
       "kind": "quad",
       "display_name": "QL14",
-      "order": 149,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 153,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL15",
       "kind": "quad",
       "display_name": "QL15",
-      "order": 150,
-      "tags": [
-        "bba",
-        "emit",
-        "esa_start"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 154,
+      "tags": ["bba", "emit", "esa_start"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL16",
       "kind": "quad",
       "display_name": "QL16",
-      "order": 151,
-      "tags": [
-        "bba",
-        "emit",
-        "esa_start"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 155,
+      "tags": ["bba", "emit", "esa_start"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL17",
       "kind": "quad",
       "display_name": "QL17",
-      "order": 152,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 156,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL18",
       "kind": "quad",
       "display_name": "QL18",
-      "order": 153,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 157,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL19",
       "kind": "quad",
       "display_name": "QL19",
-      "order": 154,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 158,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL20",
       "kind": "quad",
       "display_name": "QL20",
-      "order": 155,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 159,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL21",
       "kind": "quad",
       "display_name": "QL21",
-      "order": 156,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 160,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL22",
       "kind": "quad",
       "display_name": "QL22",
-      "order": 157,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 161,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL23",
       "kind": "quad",
       "display_name": "QL23",
-      "order": 158,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 162,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL24",
       "kind": "quad",
       "display_name": "QL24",
-      "order": 159,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 163,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL25",
       "kind": "quad",
       "display_name": "QL25",
-      "order": 160,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 164,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL26",
       "kind": "quad",
       "display_name": "QL26",
-      "order": 161,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 165,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QL27",
       "kind": "quad",
       "display_name": "QL27",
-      "order": 162,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 166,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QT01",
       "kind": "quad",
       "display_name": "QT01",
-      "order": 163,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 167,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT02",
       "kind": "quad",
       "display_name": "QT02",
-      "order": 164,
-      "tags": [
-        "bba",
-        "emit",
-        "esa_start"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 168,
+      "tags": ["bba", "emit", "esa_start"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT03",
       "kind": "quad",
       "display_name": "QT03",
-      "order": 165,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 169,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT04",
       "kind": "quad",
       "display_name": "QT04",
-      "order": 166,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 170,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT05",
       "kind": "quad",
       "display_name": "QT05",
-      "order": 167,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 171,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT06",
       "kind": "quad",
       "display_name": "QT06",
-      "order": 168,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 172,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT07",
       "kind": "quad",
       "display_name": "QT07",
-      "order": 169,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 173,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT08",
       "kind": "quad",
       "display_name": "QT08",
-      "order": 170,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 174,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT09",
       "kind": "quad",
       "display_name": "QT09",
-      "order": 171,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 175,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT10",
       "kind": "quad",
       "display_name": "QT10",
-      "order": 172,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 176,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT11",
       "kind": "quad",
       "display_name": "QT11",
-      "order": 173,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 177,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT12",
       "kind": "quad",
       "display_name": "QT12",
-      "order": 174,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 178,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT13",
       "kind": "quad",
       "display_name": "QT13",
-      "order": 175,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 179,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT14",
       "kind": "quad",
       "display_name": "QT14",
-      "order": 176,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 180,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT15",
       "kind": "quad",
       "display_name": "QT15",
-      "order": 177,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 181,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT16",
       "kind": "quad",
       "display_name": "QT16",
-      "order": 178,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 182,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT17",
       "kind": "quad",
       "display_name": "QT17",
-      "order": 179,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 183,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT18",
       "kind": "quad",
       "display_name": "QT18",
-      "order": 180,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 184,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT19",
       "kind": "quad",
       "display_name": "QT19",
-      "order": 181,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 185,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT20",
       "kind": "quad",
       "display_name": "QT20",
-      "order": 182,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 186,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT21",
       "kind": "quad",
       "display_name": "QT21",
-      "order": 183,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 187,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT22",
       "kind": "quad",
       "display_name": "QT22",
-      "order": 184,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 188,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT23",
       "kind": "quad",
       "display_name": "QT23",
-      "order": 185,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 189,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT24",
       "kind": "quad",
       "display_name": "QT24",
-      "order": 186,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 190,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT25",
       "kind": "quad",
       "display_name": "QT25",
-      "order": 187,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 191,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT26",
       "kind": "quad",
       "display_name": "QT26",
-      "order": 188,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 192,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT27",
       "kind": "quad",
       "display_name": "QT27",
-      "order": 189,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 193,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT28",
       "kind": "quad",
       "display_name": "QT28",
-      "order": 190,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 194,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT29",
       "kind": "quad",
       "display_name": "QT29",
-      "order": 191,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 195,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT30",
       "kind": "quad",
       "display_name": "QT30",
-      "order": 192,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 196,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT31",
       "kind": "quad",
       "display_name": "QT31",
-      "order": 193,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 197,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT32",
       "kind": "quad",
       "display_name": "QT32",
-      "order": 194,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 198,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT33",
       "kind": "quad",
       "display_name": "QT33",
-      "order": 195,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 199,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT34",
       "kind": "quad",
       "display_name": "QT34",
-      "order": 196,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 200,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT35",
       "kind": "quad",
       "display_name": "QT35",
-      "order": 197,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 201,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QT36",
       "kind": "quad",
       "display_name": "QT36",
-      "order": 198,
-      "tags": [
-        "bba",
-        "emit"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 202,
+      "tags": ["bba", "emit"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QE01",
       "kind": "quad",
       "display_name": "QE01",
-      "order": 199,
-      "tags": [
-        "energy_spectrum"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 203,
+      "tags": ["energy_spectrum"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QE02",
       "kind": "quad",
       "display_name": "QE02",
-      "order": 200,
-      "tags": [
-        "energy_spectrum"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 204,
+      "tags": ["energy_spectrum"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QE03",
       "kind": "quad",
       "display_name": "QE03",
-      "order": 201,
-      "tags": [
-        "energy_spectrum"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "K1_adj",
-        "current_set",
-        "current_readback",
-        "K1_total"
-      ]
+      "order": 205,
+      "tags": ["energy_spectrum"],
+      "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
+      "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
     {
       "id": "QDU01",
       "kind": "quad",
       "display_name": "QDU01",
-      "order": 202,
-      "tags": [
-        "dump"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 206,
+      "tags": ["dump"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "QDU02",
       "kind": "quad",
       "display_name": "QDU02",
-      "order": 203,
-      "tags": [
-        "dump"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "K1",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 207,
+      "tags": ["dump"],
+      "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
+      "logical_channels": ["K1", "current_set", "current_readback"]
     },
     {
       "id": "BL01A",
       "kind": "bend",
       "display_name": "BL01A",
-      "order": 204,
+      "order": 208,
       "tags": [],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "limits": {"current_set": {"low": -100, "high": 100, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "BL01B",
       "kind": "bend",
       "display_name": "BL01B",
-      "order": 205,
+      "order": 209,
       "tags": [],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "limits": {"current_set": {"low": -100, "high": 100, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "BH01",
       "kind": "bend",
       "display_name": "BH01",
-      "order": 206,
+      "order": 210,
       "tags": [],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "limits": {"current_set": {"low": 0, "high": 500, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "BH02",
       "kind": "bend",
       "display_name": "BH02",
-      "order": 207,
+      "order": 211,
       "tags": [],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "limits": {"current_set": {"low": 0, "high": 500, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "BH03",
       "kind": "bend",
       "display_name": "BH03",
-      "order": 208,
+      "order": 212,
       "tags": [],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "limits": {"current_set": {"low": 0, "high": 500, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "BH04",
       "kind": "bend",
       "display_name": "BH04",
-      "order": 209,
+      "order": 213,
       "tags": [],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "limits": {"current_set": {"low": 0, "high": 500, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "BV01",
       "kind": "bend",
       "display_name": "BV01",
-      "order": 210,
+      "order": 214,
       "tags": [],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "limits": {"current_set": {"low": 0, "high": 500, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "BV02",
       "kind": "bend",
       "display_name": "BV02",
-      "order": 211,
+      "order": 215,
       "tags": [],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "limits": {"current_set": {"low": 0, "high": 500, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "BENY",
       "kind": "bend",
       "display_name": "BENY",
-      "order": 212,
-      "tags": [
-        "energy_spectrum"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "angle",
-        "current_set",
-        "current_readback"
-      ]
+      "order": 216,
+      "tags": ["energy_spectrum"],
+      "limits": {"current_set": {"low": 0, "high": 500, "unit": "A"}},
+      "logical_channels": ["angle", "current_set", "current_readback"]
     },
     {
       "id": "PRF01",
       "kind": "flag",
       "display_name": "PRF01",
-      "order": 213,
+      "order": 217,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF02",
       "kind": "flag",
       "display_name": "PRF02",
-      "order": 214,
-      "tags": [
-        "energy_spectrum"
-      ],
+      "order": 218,
+      "tags": ["energy_spectrum"],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF03",
       "kind": "flag",
       "display_name": "PRF03",
-      "order": 215,
+      "order": 219,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF04",
       "kind": "flag",
       "display_name": "PRF04",
-      "order": 216,
-      "tags": [
-        "emit"
-      ],
+      "order": 220,
+      "tags": ["emit"],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF05",
       "kind": "flag",
       "display_name": "PRF05",
-      "order": 217,
+      "order": 221,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF06",
       "kind": "flag",
       "display_name": "PRF06",
-      "order": 218,
-      "tags": [
-        "emit"
-      ],
+      "order": 222,
+      "tags": ["emit"],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF07",
       "kind": "flag",
       "display_name": "PRF07",
-      "order": 219,
-      "tags": [
-        "emit"
-      ],
+      "order": 223,
+      "tags": ["emit"],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF08",
       "kind": "flag",
       "display_name": "PRF08",
-      "order": 220,
-      "tags": [
-        "emit"
-      ],
+      "order": 224,
+      "tags": ["emit"],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF09",
       "kind": "flag",
       "display_name": "PRF09",
-      "order": 221,
+      "order": 225,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF10",
       "kind": "flag",
       "display_name": "PRF10",
-      "order": 222,
+      "order": 226,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF11",
       "kind": "flag",
       "display_name": "PRF11",
-      "order": 223,
+      "order": 227,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF12",
       "kind": "flag",
       "display_name": "PRF12",
-      "order": 224,
+      "order": 228,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF13",
       "kind": "flag",
       "display_name": "PRF13",
-      "order": 225,
+      "order": 229,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRF14",
       "kind": "flag",
       "display_name": "PRF14",
-      "order": 226,
+      "order": 230,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "PRFD",
       "kind": "flag",
       "display_name": "PRFD",
-      "order": 227,
+      "order": 231,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time",
-        "sigx",
-        "sigy"
-      ]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
       "id": "ENY",
       "kind": "flag",
       "display_name": "ENY",
-      "order": 228,
-      "tags": [
-        "energy_spectrum"
-      ],
+      "order": 232,
+      "tags": ["energy_spectrum"],
       "limits": {},
-      "logical_channels": [
-        "image",
-        "exposure_time"
-      ]
+      "logical_channels": ["image", "exposure_time"]
+    },
+    {
+      "id": "SS01",
+      "kind": "solenoid",
+      "display_name": "SS01",
+      "order": 233,
+      "tags": ["solenoid", "focus"],
+      "limits": {"current_set": {"low": 0, "high": 12, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"]
+    },
+    {
+      "id": "SS02",
+      "kind": "solenoid",
+      "display_name": "SS02",
+      "order": 234,
+      "tags": ["solenoid", "focus"],
+      "limits": {"current_set": {"low": 0, "high": 12, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"]
     },
     {
       "id": "SM01",
       "kind": "solenoid",
       "display_name": "SM01",
-      "order": 229,
-      "tags": [
-        "solenoid",
-        "focus"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "current_set",
-        "current_readback"
-      ]
+      "order": 235,
+      "tags": ["solenoid", "focus"],
+      "limits": {"current_set": {"low": 0, "high": 100, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"]
     },
     {
-      "id": "SL01",
+      "id": "SL01-1",
       "kind": "solenoid",
-      "display_name": "SL01",
-      "order": 230,
-      "tags": [
-        "solenoid",
-        "focus"
-      ],
-      "limits": {},
-      "logical_channels": [
-        "current_set",
-        "current_readback"
-      ]
+      "display_name": "SL01-1",
+      "order": 236,
+      "tags": ["solenoid", "focus"],
+      "limits": {"current_set": {"low": 0, "high": 100, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"]
+    },
+    {
+      "id": "SL01-2",
+      "kind": "solenoid",
+      "display_name": "SL01-2",
+      "order": 237,
+      "tags": ["solenoid", "focus"],
+      "limits": {"current_set": {"low": 0, "high": 100, "unit": "A"}},
+      "logical_channels": ["current_set", "current_readback"]
     },
     {
       "id": "PREINJECTOR_ENERGY",
       "kind": "energy",
       "display_name": "Preinjector Coordinated Energy",
-      "order": 231,
-      "tags": [
-        "preinjector",
-        "energy_spectrum",
-        "coordinated_control"
-      ],
+      "order": 238,
+      "tags": ["preinjector", "energy_spectrum", "coordinated_control"],
       "limits": {},
-      "logical_channels": [
-        "setpoint"
-      ]
+      "logical_channels": ["setpoint"]
     },
     {
       "id": "LINAC_ENERGY",
       "kind": "energy",
       "display_name": "Linac Coordinated Energy",
-      "order": 232,
-      "tags": [
-        "linac",
-        "energy_spectrum",
-        "coordinated_control"
-      ],
+      "order": 239,
+      "tags": ["linac", "energy_spectrum", "coordinated_control"],
       "limits": {
         "low": 0.0,
         "high": 2450.0
       },
-      "logical_channels": [
-        "setpoint"
-      ]
+      "logical_channels": ["setpoint"]
     },
     {
       "id": "TRANSPORT_ENERGY",
       "kind": "energy",
       "display_name": "Transport Line Coordinated Energy",
-      "order": 233,
-      "tags": [
-        "transport_line",
-        "coordinated_control"
-      ],
+      "order": 240,
+      "tags": ["transport_line", "coordinated_control"],
       "limits": {},
-      "logical_channels": [
-        "setpoint"
-      ]
+      "logical_channels": ["setpoint"]
     },
     {
       "id": "FCT1",
       "kind": "ct",
       "display_name": "FCT1",
-      "order": 234,
-      "tags": [
-        "fast"
-      ],
+      "order": 241,
+      "tags": ["fast"],
       "limits": {},
-      "logical_channels": [
-        "peak_current"
-      ]
+      "logical_channels": ["peak_current"]
     },
     {
       "id": "ICT01",
       "kind": "ct",
       "display_name": "ICT1",
-      "order": 235,
+      "order": 242,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "charge"
-      ]
+      "logical_channels": ["charge"]
     },
     {
       "id": "ICT02",
       "kind": "ct",
       "display_name": "ICT2",
-      "order": 236,
+      "order": 243,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "charge"
-      ]
+      "logical_channels": ["charge"]
     },
     {
       "id": "ICT03",
       "kind": "ct",
       "display_name": "ICT3",
-      "order": 237,
+      "order": 244,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "charge"
-      ]
+      "logical_channels": ["charge"]
     },
     {
       "id": "ICT04",
       "kind": "ct",
       "display_name": "ICT4",
-      "order": 238,
+      "order": 245,
       "tags": [],
       "limits": {},
-      "logical_channels": [
-        "charge"
-      ]
+      "logical_channels": ["charge"]
     },
     {
       "id": "MODULATOR_HV1",
       "kind": "modulator",
       "display_name": "Modulator HV1 (Draft)",
-      "order": 239,
-      "tags": [
-        "modulator",
-        "hv",
-        "commissioning_draft"
-      ],
+      "order": 246,
+      "tags": ["modulator", "hv", "commissioning_draft"],
       "limits": {
         "low": 0.0,
         "high": 80.0
       },
-      "logical_channels": [
-        "voltage_set",
-        "voltage_readback"
-      ]
+      "logical_channels": ["voltage_set", "voltage_readback"]
     }
   ]
 }

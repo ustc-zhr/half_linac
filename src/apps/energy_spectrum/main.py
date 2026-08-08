@@ -1169,7 +1169,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         element_id = str(self.energy_config.get("energy_element", "")).strip()
         if not element_id:
             return None
-        limits = self.machine_profile.get_element(element_id).limits
+        channel = str(self.energy_config.get("energy_set_channel", "setpoint")).strip()
+        limits = self.machine_profile.get_element(element_id).limits_for(channel)
         if "low" not in limits or "high" not in limits:
             return None
         low = float(limits["low"])

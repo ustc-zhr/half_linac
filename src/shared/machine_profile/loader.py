@@ -849,6 +849,38 @@ def _load_directory_profile_raw(
             f"{location}.logical_channels",
         )
 
+        limits = dict(_expect_mapping(element.get("limits", {}), f"{location}.limits"))
+        if limits and not ({"low", "high"} & set(limits)):
+            unknown_channels = sorted(set(limits) - set(logical_channels))
+            if unknown_channels:
+                raise MachineProfileError(
+                    f"{location}.limits contains channels not declared in logical_channels: "
+                    f"{', '.join(unknown_channels)}."
+                )
+            for channel_name, raw_channel_limits in limits.items():
+                channel_limits = _expect_mapping(
+                    raw_channel_limits,
+                    f"{location}.limits.{channel_name}",
+                )
+                if set(channel_limits) != {"low", "high", "unit"}:
+                    raise MachineProfileError(
+                        f"{location}.limits.{channel_name} must define exactly "
+                        "low, high, and unit."
+                    )
+                low = _expect_finite_number(
+                    channel_limits.get("low"), f"{location}.limits.{channel_name}.low"
+                )
+                high = _expect_finite_number(
+                    channel_limits.get("high"), f"{location}.limits.{channel_name}.high"
+                )
+                if low >= high:
+                    raise MachineProfileError(
+                        f"{location}.limits.{channel_name}.low must be less than high."
+                    )
+                _expect_non_empty_string(
+                    channel_limits.get("unit"), f"{location}.limits.{channel_name}.unit"
+                )
+
         channels: dict[str, dict[str, str]] = {}
         for logical_channel in logical_channels:
             channel_modes: dict[str, str] = {}
@@ -883,7 +915,7 @@ def _load_directory_profile_raw(
                 if "roles" in element
                 else None,
                 "tags": _expect_optional_string_list(element.get("tags", []), f"{location}.tags"),
-                "limits": dict(_expect_mapping(element.get("limits", {}), f"{location}.limits")),
+                "limits": limits,
                 "channels": channels,
             }
         )
@@ -1363,7 +1395,7 @@ def _validate_energy_spectrum_workflow(
                 )
 
         if actuator_element is not None:
-            limits = actuator_element.limits
+            limits = actuator_element.limits_for(actuator_channel)
             if "low" in limits and "high" in limits:
                 try:
                     actuator_low = float(limits["low"])
@@ -3141,3 +3173,15 @@ def _expect_int(value: Any, location: str) -> int:
     if not isinstance(value, int):
         raise MachineProfileError(f"{location} must be an integer.")
     return value
+
+
+def _expect_finite_number(value: Any, location: str) -> float:
+    if isinstance(value, bool):
+        raise MachineProfileError(f"{location} must be a finite number.")
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError) as exc:
+        raise MachineProfileError(f"{location} must be a finite number.") from exc
+    if not math.isfinite(numeric):
+        raise MachineProfileError(f"{location} must be a finite number.")
+    return numeric

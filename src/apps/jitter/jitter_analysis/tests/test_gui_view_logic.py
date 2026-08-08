@@ -95,7 +95,7 @@ def test_mode_ready_state_handles_global_blockers():
         selected_knob_count=0,
         active_knob_available=False,
         random_ranges_valid=False,
-    ) == (False, "Run in progress. Stop the current run to change PVs or mode.")
+    ) == (False, "Stop the current run before changing the setup.")
     assert mode_ready_state(
         "timed_acquisition",
         run_status=RunStatus.IDLE,
@@ -104,7 +104,7 @@ def test_mode_ready_state_handles_global_blockers():
         selected_knob_count=0,
         active_knob_available=False,
         random_ranges_valid=False,
-    ) == (False, "Next: load a PV library.")
+    ) == (False, "Load a PV library.")
     assert mode_ready_state(
         "timed_acquisition",
         run_status=RunStatus.IDLE,
@@ -113,7 +113,7 @@ def test_mode_ready_state_handles_global_blockers():
         selected_knob_count=0,
         active_knob_available=False,
         random_ranges_valid=False,
-    ) == (False, "Next: choose read PVs and control PVs with 'Choose PVs...'.")
+    ) == (False, "Select at least one read PV.")
 
 
 def test_mode_ready_state_for_monitor_and_single_knob_modes():
@@ -125,7 +125,7 @@ def test_mode_ready_state_for_monitor_and_single_knob_modes():
         selected_knob_count=0,
         active_knob_available=False,
         random_ranges_valid=False,
-    ) == (True, "Ready: click Start to run Monitor.")
+    ) == (True, "Ready to start Monitor.")
     assert mode_ready_state(
         "single_knob_scan",
         run_status=RunStatus.IDLE,
@@ -134,7 +134,7 @@ def test_mode_ready_state_for_monitor_and_single_knob_modes():
         selected_knob_count=1,
         active_knob_available=False,
         random_ranges_valid=False,
-    ) == (False, "Next: choose the active control PV for Single Knob.")
+    ) == (False, "Select an active control PV.")
     assert mode_ready_state(
         "single_knob_scan",
         run_status=RunStatus.IDLE,
@@ -143,7 +143,7 @@ def test_mode_ready_state_for_monitor_and_single_knob_modes():
         selected_knob_count=1,
         active_knob_available=True,
         random_ranges_valid=False,
-    ) == (True, "Ready: click Start to run Single Knob.")
+    ) == (True, "Ready to start Single Knob.")
 
 
 def test_mode_ready_state_for_random_multi_knob_mode():
@@ -155,7 +155,7 @@ def test_mode_ready_state_for_random_multi_knob_mode():
         selected_knob_count=0,
         active_knob_available=False,
         random_ranges_valid=False,
-    ) == (False, "Next: choose control PVs to enable Random Multi-Knob.")
+    ) == (False, "Select at least one control PV.")
     assert mode_ready_state(
         "multi_knob_random",
         run_status=RunStatus.IDLE,
@@ -164,7 +164,7 @@ def test_mode_ready_state_for_random_multi_knob_mode():
         selected_knob_count=1,
         active_knob_available=True,
         random_ranges_valid=False,
-    ) == (False, "Next: choose at least one read PV to sample during Random Multi-Knob.")
+    ) == (False, "Select at least one read PV.")
     assert mode_ready_state(
         "multi_knob_random",
         run_status=RunStatus.IDLE,
@@ -173,7 +173,7 @@ def test_mode_ready_state_for_random_multi_knob_mode():
         selected_knob_count=1,
         active_knob_available=True,
         random_ranges_valid=False,
-    ) == (False, "Next: open 'Configure Ranges...' and enable at least one valid control PV range.")
+    ) == (False, "Configure at least one valid control PV range.")
     assert mode_ready_state(
         "multi_knob_random",
         run_status=RunStatus.IDLE,
@@ -182,7 +182,7 @@ def test_mode_ready_state_for_random_multi_knob_mode():
         selected_knob_count=1,
         active_knob_available=True,
         random_ranges_valid=True,
-    ) == (True, "Ready: click Start to run Random Multi-Knob.")
+    ) == (True, "Ready to start Random Multi-Knob.")
 
 
 def test_single_knob_axis_helpers():

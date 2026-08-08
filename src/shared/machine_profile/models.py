@@ -28,6 +28,15 @@ class ElementConfig:
     limits: Mapping[str, Any]
     channels: Mapping[str, Mapping[str, str]]
 
+    def limits_for(self, channel: str) -> Mapping[str, Any]:
+        """Return limits for one logical channel, with legacy element-level fallback."""
+        channel_limits = self.limits.get(channel)
+        if isinstance(channel_limits, Mapping):
+            return channel_limits
+        if "low" in self.limits or "high" in self.limits:
+            return self.limits
+        return {}
+
 
 @dataclass(frozen=True)
 class MachineVmRuntimeConfig:
