@@ -1,5 +1,4 @@
 {
-  "model_backend": "simulation",
   "control_backends": ["vm", "real"],
   "model_only_control_backends": ["vm"],
   "quadrupole_control": {"vm": "K1", "real": "K1"},

@@ -1,22 +1,22 @@
 {
   "flag_element": "PRFESA",
   "flag_image_channel": "image",
-  "flag_exposure_channel": "exposure_time",
   "vm_watch_element": "PRFESA",
+  "flag_exposure_channel": "exposure_time",
   "flag_pixel_shape": {
     "vm": [360, 270],
     "real": [1440, 1080]
   },
   "flag_pixel_width_mm": {"vm": 0.02, "real": 0.02},
+  "x_reference_mm": {"vm": 0, "real": 0},
   "bend_element": "BM03",
+  "twiss_target_element": "PRFESA",
   "energy_element": "ESA_ENERGY",
   "energy_set_channel": "setpoint",
   "energy_reference_channel": "setpoint",
   "auto_tune_actuator": {"element": "ESA_ENERGY", "channel": "setpoint", "unit": "MeV"},
   "auto_tune_control_backends": ["real"],
   "auto_tune_objective": "brightness_then_profile_lock",
-  "model_backend": "simulation",
-  "twiss_target_element": "PRFESA",
   "auto_tune_scan": {"low": 0, "high": 65, "coarse_steps": 16, "fine_steps": 31, "settle_time_s": 1, "unit": "MeV", "mode": "absolute", "restore_initial_on_failure": true},
   "auto_tune_center_lock": {
     "frame_samples": 3,
@@ -35,7 +35,6 @@
     "QM12": {"alpha_x": -2.26, "beta_x_m": 10, "emittance_x_nm": 102.81183}
   },
   "energy0_default_mev": 36,
-  "x_reference_mm": {"vm": 0, "real": 0},
   "real_status": "commissioned",
   "write_control": {"vm": "allowed", "real": "allowed"}
 }

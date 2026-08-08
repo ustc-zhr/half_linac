@@ -146,21 +146,10 @@ def load_app_context(
         name=resolve_control_backend(control_backend, profile.machine.default_mode)
     )
     _validate_basic_app_support(profile, app_name, selected_control_backend.name)
-    requested_model_backend = model_backend
-    if requested_model_backend is None and app_name == "energy_spectrum":
-        workflow = profile.workflows.get("energy_spectrum")
-        if isinstance(workflow, Mapping):
-            configured_backend = workflow.get("model_backend")
-            if configured_backend is not None:
-                requested_model_backend = _expect_non_empty_string(
-                    configured_backend,
-                    "workflows.energy_spectrum.model_backend",
-                )
-
     selected_model_backend = _resolve_model_backend(
         app_name,
         machine_root(profile_id),
-        requested_model_backend,
+        model_backend,
     )
 
     orbit_workflow = None

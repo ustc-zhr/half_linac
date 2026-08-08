@@ -2,22 +2,21 @@
   "flag_element": "PRF01",
   "flag_image_channel": "esa_image",
   "vm_watch_element": "PRFESA",
-  "twiss_target_element": "PRFESA",
   "flag_exposure_channel": "exposure_time",
   "flag_pixel_shape": {
     "vm": [720, 270],
     "real": [1440, 1080]
   },
   "flag_pixel_width_mm": {"vm": 0.02, "real": 0.02},
+  "x_reference_mm": {"vm": 0, "real": 0},
   "bend_element": "BEND01",
-  "model_backend": "simulation",
+  "twiss_target_element": "PRFESA",
   "energy_set_pv": {"real": "TEMPLATE:REAL:ESA:ENERGY_SET"},
   "auto_tune_scan": {"low": 0, "high": 200, "coarse_steps": 40, "fine_steps": 15, "settle_time_s": 0.5, "unit": "A", "mode": "absolute", "restore_initial_on_failure": true},
   "esa_quads": ["QE01", "QE02", "QE03"],
   "start_element_tag": "esa_start",
   "default_start_element": "Q01",
   "energy0_default_mev": 100,
-  "x_reference_mm": {"vm": 0, "real": 0},
   "energy_from_bend_current": {"magnet_length_m": 2.7271, "deflect_angle_rad": 0.4363323129985824, "field_t_per_a": 0.000599792458},
   "write_control": {"vm": "allowed", "real": "blocked"}
 }
