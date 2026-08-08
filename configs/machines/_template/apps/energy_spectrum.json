@@ -12,7 +12,7 @@
   "bend_element": "BEND01",
   "model_backend": "simulation",
   "energy_set_pv": {"real": "TEMPLATE:REAL:ESA:ENERGY_SET"},
-  "bend_scan": {"min": 0, "max": 200, "coarse_steps": 40, "fine_steps": 15, "settle_time_s": 0.5, "restore_initial_on_failure": true},
+  "auto_tune_scan": {"low": 0, "high": 200, "coarse_steps": 40, "fine_steps": 15, "settle_time_s": 0.5, "unit": "A", "mode": "absolute", "restore_initial_on_failure": true},
   "esa_quads": ["QE01", "QE02", "QE03"],
   "start_element_tag": "esa_start",
   "default_start_element": "Q01",

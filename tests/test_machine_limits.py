@@ -13,6 +13,7 @@ if str(PARENT) not in sys.path:
 from half_linac.src.apps.orbit_correct.profile_runtime import effective_corrector_limit
 from half_linac.src.apps.bba.profile_runtime import resolve_limited_scan_values
 from half_linac.src.apps.emit_measure.profile_runtime import effective_k1_scan_limit
+from half_linac.src.apps.energy_spectrum.profile_runtime import effective_auto_tune_limit
 from half_linac.src.shared.machine_profile import (
     LimitRange,
     MachineProfileError,
@@ -166,6 +167,41 @@ class EmitScanEffectiveLimitTest(unittest.TestCase):
                 context, "QT02", 1.5, 2.5, "absolute", "1/m^2", 2
             ),
             LimitRange(1.5, 2.5, "1/m^2"),
+        )
+
+
+class EnergySpectrumEffectiveLimitTest(unittest.TestCase):
+    def test_energy_scan_intersects_setpoint_limit(self):
+        context = load_app_context(
+            "energy_spectrum", machine_id="irfel", control_backend="real"
+        )
+        self.assertEqual(
+            effective_auto_tune_limit(
+                context, "ESA_ENERGY", "setpoint", 10, 70, "absolute", "MeV", 36
+            ),
+            LimitRange(10, 65, "MeV"),
+        )
+
+    def test_relative_energy_scan_converts_before_intersection(self):
+        context = load_app_context(
+            "energy_spectrum", machine_id="irfel", control_backend="real"
+        )
+        self.assertEqual(
+            effective_auto_tune_limit(
+                context, "ESA_ENERGY", "setpoint", -5, 40, "relative", "MeV", 30
+            ),
+            LimitRange(25, 65, "MeV"),
+        )
+
+    def test_energy_scan_does_not_reuse_bend_current_limit(self):
+        context = load_app_context(
+            "energy_spectrum", machine_id="half", control_backend="real"
+        )
+        self.assertEqual(
+            effective_auto_tune_limit(
+                context, "LINAC_ENERGY", "setpoint", 2000, 2400, "absolute", "MeV", 2200
+            ),
+            LimitRange(2000, 2400, "MeV"),
         )
 
 

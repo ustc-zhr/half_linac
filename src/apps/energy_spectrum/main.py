@@ -62,6 +62,7 @@ from half_linac.src.apps.energy_spectrum.esa_auto_tuner import (
     reference_x_pixel,
 )
 from half_linac.src.apps.energy_spectrum.profile_runtime import (
+    effective_auto_tune_limit,
     resolve_energy_spectrum_runtime_paths,
 )
 from half_linac.src.apps.energy_spectrum.spectrum_profile import (
@@ -796,6 +797,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.bend_readback_pv = self._resolve_bend_readback_pv()
         self.auto_tune_pv, self.auto_tune_unit = self._load_auto_tune_actuator()
+        self.auto_tune_mode = self._load_auto_tune_scan_mode()
 
         self.current_theme = resolve_initial_theme()
         self._auto_tune_text = "Idle"
@@ -990,6 +992,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.bend_readback_pv = self._resolve_bend_readback_pv()
         self.auto_tune_pv, self.auto_tune_unit = self._load_auto_tune_actuator()
+        self.auto_tune_mode = self._load_auto_tune_scan_mode()
         self.init_ESAflag()
         self._sync_exposure_control_state()
         self._apply_station_controls()
@@ -1030,18 +1033,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             math.floor(energy_high * self._energy_slider_scale),
         )
         self.target_energy_spin.setRange(energy_low, energy_high)
+        scan_low, scan_high = self._auto_tune_widget_range(energy_low, energy_high)
         for spin in (self.auto_tune_min_spin, self.auto_tune_max_spin):
-            spin.setRange(energy_low, energy_high)
+            spin.setRange(scan_low, scan_high)
             spin.setSuffix(f" {self.auto_tune_unit}")
 
-        scan_config = dict(
-            self.energy_config.get(
-                "auto_tune_scan",
-                self.energy_config.get("bend_scan", {}),
-            )
+        scan_config = self._auto_tune_scan_config()
+        self.auto_tune_min_spin.setValue(
+            float(scan_config.get("low", scan_config.get("min", scan_low)))
         )
-        self.auto_tune_min_spin.setValue(float(scan_config.get("min", energy_low)))
-        self.auto_tune_max_spin.setValue(float(scan_config.get("max", energy_high)))
+        self.auto_tune_max_spin.setValue(
+            float(scan_config.get("high", scan_config.get("max", scan_high)))
+        )
         self.auto_tune_coarse_steps_spin.setValue(int(scan_config.get("coarse_steps", 40)))
         self.auto_tune_fine_steps_spin.setValue(int(scan_config.get("fine_steps", 81)))
         self.auto_tune_settle_spin.setValue(float(scan_config.get("settle_time_s", 0.5)))
@@ -1264,6 +1267,32 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 return self.bend_pv, "A"
             raise
         return actuator_pv, unit
+
+    def _auto_tune_scan_config(self):
+        return dict(
+            self.energy_config.get(
+                "auto_tune_scan",
+                self.energy_config.get("bend_scan", {}),
+            )
+        )
+
+    def _load_auto_tune_scan_mode(self):
+        mode = str(self._auto_tune_scan_config().get("mode", "absolute")).strip().lower()
+        if mode not in {"absolute", "relative"}:
+            raise MachineProfileError(f"Unsupported energy-spectrum scan mode: {mode!r}.")
+        return mode
+
+    def _auto_tune_widget_range(self, actuator_low, actuator_high):
+        if self.auto_tune_mode == "absolute":
+            return actuator_low, actuator_high
+        span = float(actuator_high) - float(actuator_low)
+        return -span, span
+
+    def _auto_tune_actuator_identity(self):
+        actuator = self.energy_config.get("auto_tune_actuator")
+        if isinstance(actuator, dict):
+            return str(actuator["element"]), str(actuator["channel"])
+        return str(self.energy_config["bend_element"]), "current_set"
 
     def _load_x_reference_mm(self):
         raw_value = self.energy_config.get("x_reference_mm", 0.0)
@@ -1595,25 +1624,25 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.label_sliderenergy.hide()
         self.gridLayout_6.addWidget(self.target_energy_spin, 0, 2)
 
-        scan_config = dict(
-            self.energy_config.get(
-                "auto_tune_scan",
-                self.energy_config.get("bend_scan", {}),
-            )
-        )
+        scan_config = self._auto_tune_scan_config()
+        scan_low, scan_high = self._auto_tune_widget_range(energy_low, energy_high)
         self.auto_tune_min_spin = QDoubleSpinBox(self.groupBox_8)
         self.auto_tune_max_spin = QDoubleSpinBox(self.groupBox_8)
         for spin in (self.auto_tune_min_spin, self.auto_tune_max_spin):
             spin.setDecimals(2)
             spin.setSingleStep(0.1)
-            spin.setRange(energy_low, energy_high)
+            spin.setRange(scan_low, scan_high)
             spin.setSuffix(f" {self.auto_tune_unit}")
             spin.setKeyboardTracking(False)
             spin.setProperty("dense", True)
         self.auto_tune_min_spin.setObjectName("autoTuneMinimumSpinBox")
         self.auto_tune_max_spin.setObjectName("autoTuneMaximumSpinBox")
-        self.auto_tune_min_spin.setValue(float(scan_config.get("min", energy_low)))
-        self.auto_tune_max_spin.setValue(float(scan_config.get("max", energy_high)))
+        self.auto_tune_min_spin.setValue(
+            float(scan_config.get("low", scan_config.get("min", scan_low)))
+        )
+        self.auto_tune_max_spin.setValue(
+            float(scan_config.get("high", scan_config.get("max", scan_high)))
+        )
 
         self.auto_tune_coarse_steps_spin = QSpinBox(self.groupBox_8)
         self.auto_tune_fine_steps_spin = QSpinBox(self.groupBox_8)
@@ -1926,8 +1955,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._update_auto_tune_settings_summary()
 
     def _update_auto_tune_settings_summary(self):
+        mode_label = "Relative offsets" if self.auto_tune_mode == "relative" else "Absolute setpoints"
         self.auto_tune_settings_summary.setText(
-            f"Range {self.auto_tune_min_spin.value():g}–"
+            f"{mode_label} · {self.auto_tune_min_spin.value():g}–"
             f"{self.auto_tune_max_spin.value():g} {self.auto_tune_unit} · "
             f"{self.auto_tune_coarse_steps_spin.value()}/"
             f"{self.auto_tune_fine_steps_spin.value()} pts · "
@@ -1981,17 +2011,29 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         minimum = self.auto_tune_min_spin.value()
         maximum = self.auto_tune_max_spin.value()
         if minimum >= maximum:
-            raise ValueError("Auto Find minimum energy must be less than maximum energy.")
-        if self.energy_set_limits is not None:
-            low, high = self.energy_set_limits
-            if minimum < low or maximum > high:
-                raise ValueError(
-                    f"Auto Find range must stay within [{low:g}, {high:g}] MeV."
-                )
-        configured = self.energy_config.get(
-            "auto_tune_scan",
-            self.energy_config.get("bend_scan", {}),
+            raise ValueError("Auto Find minimum must be less than maximum.")
+        configured = self._auto_tune_scan_config()
+        configured_unit = str(configured.get("unit", self.auto_tune_unit)).strip()
+        if configured_unit.casefold() != self.auto_tune_unit.casefold():
+            raise ValueError(
+                f"Auto Find scan unit {configured_unit!r} does not match actuator "
+                f"unit {self.auto_tune_unit!r}."
+            )
+        current = caget(self.auto_tune_pv)
+        if current is None:
+            raise ValueError("Auto Find could not read the current actuator setpoint.")
+        element_id, logical_channel = self._auto_tune_actuator_identity()
+        selected = effective_auto_tune_limit(
+            self.app_context,
+            element_id,
+            logical_channel,
+            minimum,
+            maximum,
+            self.auto_tune_mode,
+            configured_unit,
+            float(current),
         )
+        assert selected.low is not None and selected.high is not None
         objective = str(self.auto_tune_objective_combo.currentData())
         target_x_pixel = reference_x_pixel(
             self.x_reference_mm,
@@ -1999,8 +2041,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.flag_pixel_width_mm,
         )
         return {
-            "min": minimum,
-            "max": maximum,
+            "min": selected.low,
+            "max": selected.high,
+            "mode": self.auto_tune_mode,
+            "unit": configured_unit,
             "coarse_steps": self.auto_tune_coarse_steps_spin.value(),
             "fine_steps": self.auto_tune_fine_steps_spin.value(),
             "settle_time_s": self.auto_tune_settle_spin.value(),

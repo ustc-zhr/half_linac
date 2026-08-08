@@ -55,8 +55,10 @@ class EnergySpectrumStationTests(unittest.TestCase):
             stations["eny"]["auto_tune_actuator"],
             {"element": "LINAC_ENERGY", "channel": "setpoint", "unit": "MeV"},
         )
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["min"], 0)
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["max"], 2450)
+        self.assertEqual(stations["eny"]["auto_tune_scan"]["low"], 0)
+        self.assertEqual(stations["eny"]["auto_tune_scan"]["high"], 2450)
+        self.assertEqual(stations["eny"]["auto_tune_scan"]["unit"], "MeV")
+        self.assertEqual(stations["eny"]["auto_tune_scan"]["mode"], "absolute")
         self.assertEqual(stations["eny"]["auto_tune_scan"]["coarse_steps"], 16)
         self.assertEqual(stations["eny"]["auto_tune_scan"]["fine_steps"], 31)
         self.assertEqual(stations["eny"]["auto_tune_scan"]["settle_time_s"], 1.0)

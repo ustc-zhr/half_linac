@@ -33,6 +33,7 @@ from .models import (
 )
 from .pixel_geometry import resolve_flag_pixel_geometry
 from .energy_spectrum import resolve_energy_spectrum_stations
+from .limits import LimitRange, effective_limit
 
 
 SUPPORTED_APP_NAMES = {
@@ -1335,6 +1336,8 @@ def _validate_energy_spectrum_workflow(
             )
 
     actuator_element = None
+    actuator_channel = "current_set"
+    actuator_unit = "A"
     auto_tune_actuator = workflow.get("auto_tune_actuator")
     if auto_tune_actuator is not None:
         actuator = _expect_mapping(
@@ -1356,25 +1359,30 @@ def _validate_energy_spectrum_workflow(
                 f"Element {actuator_element.id} is missing logical channel "
                 f"{actuator_channel!r} required by auto_tune_actuator."
             )
-        _expect_non_empty_string(
+        actuator_unit = _expect_non_empty_string(
             actuator.get("unit"),
             "workflows.energy_spectrum.auto_tune_actuator.unit",
         )
 
-    auto_tune_scan = workflow.get("auto_tune_scan")
+    auto_tune_scan = workflow.get("auto_tune_scan", workflow.get("bend_scan"))
     if auto_tune_scan is not None:
         scan = _expect_mapping(
             auto_tune_scan,
             "workflows.energy_spectrum.auto_tune_scan",
         )
         numeric_values = {}
-        for key in ("min", "max", "settle_time_s"):
-            if key not in scan:
+        for key in ("low", "high", "settle_time_s"):
+            legacy_key = {"low": "min", "high": "max"}.get(key)
+            raw_key = key if key in scan else legacy_key
+            if key == "settle_time_s" and raw_key not in scan:
+                numeric_values[key] = 0.5
+                continue
+            if raw_key is None or raw_key not in scan:
                 raise MachineProfileError(
                     f"workflows.energy_spectrum.auto_tune_scan.{key} is required."
                 )
             try:
-                numeric_values[key] = float(scan[key])
+                numeric_values[key] = float(scan[raw_key])
             except (TypeError, ValueError) as exc:
                 raise MachineProfileError(
                     f"workflows.energy_spectrum.auto_tune_scan.{key} must be numeric."
@@ -1383,9 +1391,9 @@ def _validate_energy_spectrum_workflow(
                 raise MachineProfileError(
                     f"workflows.energy_spectrum.auto_tune_scan.{key} must be finite."
                 )
-        if numeric_values["min"] >= numeric_values["max"]:
+        if numeric_values["low"] >= numeric_values["high"]:
             raise MachineProfileError(
-                "workflows.energy_spectrum.auto_tune_scan.min must be less than max."
+                "workflows.energy_spectrum.auto_tune_scan.low must be less than high."
             )
         if numeric_values["settle_time_s"] < 0:
             raise MachineProfileError(
@@ -1401,31 +1409,43 @@ def _validate_energy_spectrum_workflow(
                     f"workflows.energy_spectrum.auto_tune_scan.{key} must be at least 2."
                 )
 
+        scan_mode = str(scan.get("mode", "absolute")).strip().lower()
+        if scan_mode not in {"absolute", "relative"}:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_scan.mode must be "
+                "'absolute' or 'relative'."
+            )
+        scan_unit = str(scan.get("unit", actuator_unit)).strip()
+        if not scan_unit:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_scan.unit must be non-empty."
+            )
+        if scan_unit.casefold() != actuator_unit.casefold():
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_scan.unit must match the "
+                f"actuator unit {actuator_unit!r}."
+            )
+
+        if actuator_element is None:
+            actuator_element = profile.get_element(str(workflow["bend_element"]))
         if actuator_element is not None:
             limits = actuator_element.limits_for(actuator_channel)
-            if "low" in limits and "high" in limits:
-                try:
-                    actuator_low = float(limits["low"])
-                    actuator_high = float(limits["high"])
-                except (TypeError, ValueError) as exc:
-                    raise MachineProfileError(
-                        f"Element {actuator_element.id} low/high limits must be numeric."
-                    ) from exc
-                if (
-                    not math.isfinite(actuator_low)
-                    or not math.isfinite(actuator_high)
-                    or actuator_low >= actuator_high
-                ):
-                    raise MachineProfileError(
-                        f"Element {actuator_element.id} must define finite low/high limits."
+            if limits:
+                machine_limit = LimitRange.from_mapping(limits)
+                if scan_mode == "absolute":
+                    effective_limit(
+                        LimitRange(
+                            numeric_values["low"], numeric_values["high"], scan_unit
+                        ),
+                        machine_limit,
                     )
-                if (
-                    numeric_values["min"] < actuator_low
-                    or numeric_values["max"] > actuator_high
+                elif (
+                    machine_limit.unit is not None
+                    and machine_limit.unit.casefold() != scan_unit.casefold()
                 ):
                     raise MachineProfileError(
-                        "workflows.energy_spectrum.auto_tune_scan range must stay within "
-                        f"{actuator_element.id} limits [{actuator_low:g}, {actuator_high:g}]."
+                        f"Cannot use {scan_unit!r} scan limits with "
+                        f"{machine_limit.unit!r} actuator limits."
                     )
 
     auto_tune_hybrid = workflow.get("auto_tune_hybrid")

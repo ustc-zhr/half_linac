@@ -1957,8 +1957,10 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["energy_control_backends"], ["real"])
         self.assertEqual(workflow["auto_tune_control_backends"], ["real"])
         self.assertEqual(workflow["auto_tune_actuator"]["element"], "LINAC_ENERGY")
-        self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
-        self.assertEqual(workflow["auto_tune_scan"]["max"], 2450)
+        self.assertEqual(workflow["auto_tune_scan"]["low"], 0)
+        self.assertEqual(workflow["auto_tune_scan"]["high"], 2450)
+        self.assertEqual(workflow["auto_tune_scan"]["unit"], "MeV")
+        self.assertEqual(workflow["auto_tune_scan"]["mode"], "absolute")
         self.assertEqual(workflow["vm_watch_element"], "ENY")
 
     def test_irfel_energy_spectrum_uses_coordinated_real_energy_control(self):
@@ -1981,8 +1983,10 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(workflow["auto_tune_actuator"]["element"], "ESA_ENERGY")
         self.assertEqual(workflow["auto_tune_actuator"]["unit"], "MeV")
-        self.assertEqual(workflow["auto_tune_scan"]["min"], 0)
-        self.assertEqual(workflow["auto_tune_scan"]["max"], 65)
+        self.assertEqual(workflow["auto_tune_scan"]["low"], 0)
+        self.assertEqual(workflow["auto_tune_scan"]["high"], 65)
+        self.assertEqual(workflow["auto_tune_scan"]["unit"], "MeV")
+        self.assertEqual(workflow["auto_tune_scan"]["mode"], "absolute")
         self.assertEqual(workflow["auto_tune_scan"]["coarse_steps"], 16)
         self.assertEqual(workflow["auto_tune_scan"]["fine_steps"], 31)
         self.assertEqual(workflow["auto_tune_center_lock"]["frame_samples"], 3)
@@ -2005,16 +2009,15 @@ class MachineProfileTests(unittest.TestCase):
             },
         )
 
-    def test_energy_spectrum_auto_tune_scan_cannot_exceed_actuator_limits(self):
+    def test_energy_spectrum_auto_tune_scan_may_exceed_actuator_limits(self):
         profile = load_profile("irfel")
         workflow = dict(get_workflow(profile, "energy_spectrum"))
         workflow["auto_tune_scan"] = {
             **workflow["auto_tune_scan"],
-            "max": 66,
+            "high": 66,
         }
 
-        with self.assertRaisesRegex(MachineProfileError, "ESA_ENERGY limits"):
-            _validate_energy_spectrum_workflow(profile, workflow)
+        _validate_energy_spectrum_workflow(profile, workflow)
 
     def test_energy_spectrum_rejects_unknown_auto_tune_objective(self):
         profile = load_profile("irfel")

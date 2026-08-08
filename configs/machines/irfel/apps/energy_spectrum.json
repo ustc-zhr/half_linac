@@ -17,7 +17,7 @@
   "auto_tune_objective": "brightness_then_profile_lock",
   "model_backend": "simulation",
   "twiss_target_element": "PRFESA",
-  "auto_tune_scan": {"min": 0, "max": 65, "coarse_steps": 16, "fine_steps": 31, "settle_time_s": 1, "restore_initial_on_failure": true},
+  "auto_tune_scan": {"low": 0, "high": 65, "coarse_steps": 16, "fine_steps": 31, "settle_time_s": 1, "unit": "MeV", "mode": "absolute", "restore_initial_on_failure": true},
   "auto_tune_center_lock": {
     "frame_samples": 3,
     "min_valid_frames": 2,
