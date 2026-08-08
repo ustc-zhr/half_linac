@@ -31,7 +31,10 @@ from .models import (
     normalize_mode,
     normalize_plane,
 )
-from .energy_spectrum import resolve_energy_spectrum_stations
+from .energy_spectrum import (
+    resolve_energy_spectrum_auto_tune,
+    resolve_energy_spectrum_stations,
+)
 from .limits import LimitRange, effective_limit
 
 
@@ -1078,10 +1081,26 @@ def _validate_energy_spectrum_workflow(
             _validate_energy_spectrum_workflow(profile, effective_station)
         return
 
+    auto_tune = resolve_energy_spectrum_auto_tune(workflow)
+    workflow = dict(workflow)
+    workflow.setdefault("auto_tune_objective", auto_tune["objective"])
+    if "center_lock" in auto_tune:
+        workflow.setdefault("auto_tune_center_lock", auto_tune["center_lock"])
+    if "scan" in auto_tune:
+        workflow.setdefault("auto_tune_scan", auto_tune["scan"])
+    if "actuator" in auto_tune:
+        workflow.setdefault("auto_tune_actuator", auto_tune["actuator"])
+    elif workflow.get("energy_element"):
+        scan = auto_tune.get("scan", {})
+        workflow["auto_tune_actuator"] = {
+            "element": workflow["energy_element"],
+            "channel": workflow.get("energy_set_channel", "setpoint"),
+            "unit": scan.get("unit", "a.u.") if isinstance(scan, Mapping) else "a.u.",
+        }
+
     required_keys = (
         "flag_element",
         "flag_image_channel",
-        "vm_watch_element",
         "bend_element",
         "esa_quads",
     )
@@ -1098,10 +1117,6 @@ def _validate_energy_spectrum_workflow(
     flag_image_channel = _expect_non_empty_string(
         workflow.get("flag_image_channel"),
         "workflows.energy_spectrum.flag_image_channel",
-    )
-    _expect_non_empty_string(
-        workflow.get("vm_watch_element"),
-        "workflows.energy_spectrum.vm_watch_element",
     )
     if flag_image_channel not in flag_element.channels:
         raise MachineProfileError(
@@ -1207,7 +1222,7 @@ def _validate_energy_spectrum_workflow(
         else:
             _expect_non_empty_string(raw_pv, f"workflows.energy_spectrum.{pv_key}")
 
-    for backend_key in ("energy_control_backends", "auto_tune_control_backends"):
+    for backend_key in ("energy_control_backends",):
         configured_backends = workflow.get(backend_key)
         if configured_backends is None:
             continue
@@ -1228,6 +1243,24 @@ def _validate_energy_spectrum_workflow(
             _expect_non_empty_string(
                 line_name,
                 f"workflows.energy_spectrum.{line_key}",
+            )
+
+    model_lines = workflow.get("model_lines")
+    if model_lines is not None:
+        lines = _expect_mapping(
+            model_lines,
+            "workflows.energy_spectrum.model_lines",
+        )
+        unknown_lines = sorted(set(lines) - {"dispersion", "twiss"})
+        if unknown_lines:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.model_lines contains unknown key(s): "
+                + ", ".join(unknown_lines)
+            )
+        for calculation in ("dispersion", "twiss"):
+            _expect_non_empty_string(
+                lines.get(calculation),
+                f"workflows.energy_spectrum.model_lines.{calculation}",
             )
 
     model_snapshot_source = workflow.get("model_snapshot_source")
@@ -1577,18 +1610,6 @@ def _validate_energy_spectrum_workflow(
                 raise MachineProfileError(
                     f"workflows.energy_spectrum.auto_tune_center_lock.{key} must be positive."
                 )
-    auto_tune_backends = workflow.get("auto_tune_control_backends")
-    if auto_tune_backends is not None:
-        enabled_backends = _expect_optional_string_list(
-            auto_tune_backends,
-            "workflows.energy_spectrum.auto_tune_control_backends",
-        )
-        unknown_backends = sorted(set(enabled_backends) - set(profile.control_backends))
-        if unknown_backends:
-            raise MachineProfileError(
-                "workflows.energy_spectrum.auto_tune_control_backends contains unknown "
-                "backend(s): " + ", ".join(unknown_backends)
-            )
 
 
 def _validate_dispersion_correction_workflow(

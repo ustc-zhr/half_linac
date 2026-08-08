@@ -959,6 +959,7 @@ if __name__=='__main__':
         get_workflow,
         load_profile,
         resolve_default_energy_spectrum_station,
+        resolve_energy_spectrum_auto_tune,
         resolve_channel,
         resolve_bend_write_channel,
         resolve_element_image_geometry,
@@ -968,6 +969,7 @@ if __name__=='__main__':
     workflow = resolve_default_energy_spectrum_station(
         get_workflow(profile, "energy_spectrum")
     )
+    auto_tune = resolve_energy_spectrum_auto_tune(workflow)
     preferred_backend = "real" if "real" in profile.control_backends else profile.machine.default_mode
     flag_element = str(workflow["flag_element"])
     flag_channel = str(workflow["flag_image_channel"])
@@ -980,19 +982,26 @@ if __name__=='__main__':
         x_reference_mm = float(x_reference_config.get(preferred_backend, 0.0))
     else:
         x_reference_mm = float(x_reference_config)
-    objective = str(workflow.get("auto_tune_objective", "find_beam"))
+    objective = str(auto_tune["objective"])
     target_x_pixel = reference_x_pixel(
         x_reference_mm,
         int(flag_pixel_machine[0]),
         pixel_width_mm,
     )
-    enabled_backends = workflow.get("auto_tune_control_backends")
-    if enabled_backends is not None and preferred_backend not in enabled_backends:
+    enabled_backends = workflow.get("energy_control_backends")
+    if enabled_backends is None:
+        enabled_backends = ["real"]
+    if preferred_backend not in enabled_backends:
         raise RuntimeError(
             f"ESA auto tune is not enabled for control backend {preferred_backend!r}."
         )
 
-    actuator = workflow.get("auto_tune_actuator")
+    actuator = auto_tune.get("actuator")
+    if not isinstance(actuator, dict) and workflow.get("energy_element"):
+        actuator = {
+            "element": workflow["energy_element"],
+            "channel": workflow.get("energy_set_channel", "setpoint"),
+        }
     if isinstance(actuator, dict):
         bend_pv = resolve_channel(
             profile,
@@ -1000,12 +1009,12 @@ if __name__=='__main__':
             str(actuator["channel"]),
             preferred_backend,
         )
-        actuator_unit = str(actuator.get("unit", "a.u."))
-        scan = workflow.get("auto_tune_scan")
+        scan = auto_tune.get("scan")
         if not isinstance(scan, dict):
             raise RuntimeError(
                 "Coordinated ESA auto tune requires workflows.energy_spectrum.auto_tune_scan."
             )
+        actuator_unit = str(actuator.get("unit", scan.get("unit", "a.u.")))
     else:
         bend_pv = resolve_bend_write_channel(
             profile,
@@ -1015,7 +1024,7 @@ if __name__=='__main__':
         actuator_unit = "A"
         scan = workflow.get("bend_scan", {})
     hybrid = workflow.get("auto_tune_hybrid", {})
-    center_lock = workflow.get("auto_tune_center_lock", {})
+    center_lock = auto_tune.get("center_lock", {})
     sampling = (
         center_lock if objective == "brightness_then_profile_lock" else hybrid
     )

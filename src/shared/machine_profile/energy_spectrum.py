@@ -57,3 +57,41 @@ def resolve_default_energy_spectrum_station(
 ) -> dict[str, Any]:
     default_station, stations = resolve_energy_spectrum_stations(workflow)
     return stations[default_station]
+
+
+def resolve_energy_spectrum_auto_tune(
+    workflow: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Resolve nested auto-tune settings with legacy flat-key compatibility."""
+    defaults = workflow.get("auto_tune_defaults", {})
+    if not isinstance(defaults, Mapping):
+        raise MachineProfileError(
+            "workflows.energy_spectrum.auto_tune_defaults must be a mapping."
+        )
+    station = workflow.get("auto_tune", {})
+    if not isinstance(station, Mapping):
+        raise MachineProfileError(
+            "workflows.energy_spectrum.auto_tune must be a mapping."
+        )
+
+    resolved: dict[str, Any] = {}
+    resolved["objective"] = station.get(
+        "objective",
+        defaults.get("objective", workflow.get("auto_tune_objective", "find_beam")),
+    )
+    center_lock = station.get(
+        "center_lock",
+        defaults.get("center_lock", workflow.get("auto_tune_center_lock")),
+    )
+    if center_lock is not None:
+        resolved["center_lock"] = center_lock
+    actuator = station.get("actuator", workflow.get("auto_tune_actuator"))
+    if actuator is not None:
+        resolved["actuator"] = actuator
+    scan = station.get(
+        "scan",
+        workflow.get("auto_tune_scan", workflow.get("bend_scan")),
+    )
+    if scan is not None:
+        resolved["scan"] = scan
+    return resolved

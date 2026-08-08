@@ -89,6 +89,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_bend_write_channel,
     resolve_channel,
     resolve_element_image_geometry,
+    resolve_energy_spectrum_auto_tune,
     save_model_snapshot,
     workflow_writes_allowed,
 )
@@ -1111,8 +1112,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "energy_mat_file",
             "energy_twi_file",
             "energy_log",
-            "energy_dispersion_line_name",
-            "energy_twiss_line_name",
         )
         for key in required_keys:
             value = config.get(key)
@@ -1242,15 +1241,19 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return energy, source, source_pv
 
     def _auto_tune_configured_for_backend(self):
-        configured_backends = self.energy_config.get("auto_tune_control_backends")
-        if configured_backends is None:
-            return True
-        return self.control_backend in configured_backends
+        return self._energy_control_configured_for_backend()
 
     def _load_auto_tune_actuator(self):
-        actuator = self.energy_config.get("auto_tune_actuator")
+        actuator = resolve_energy_spectrum_auto_tune(self.energy_config).get("actuator")
         if not isinstance(actuator, dict):
-            return self.bend_pv, "A"
+            energy_element = str(self.energy_config.get("energy_element", "")).strip()
+            if not energy_element:
+                return self.bend_pv, "A"
+            actuator = {
+                "element": energy_element,
+                "channel": self.energy_config.get("energy_set_channel", "setpoint"),
+                "unit": self._auto_tune_scan_config().get("unit", "a.u."),
+            }
 
         element_id = str(actuator.get("element", "")).strip()
         channel = str(actuator.get("channel", "")).strip()
@@ -1268,12 +1271,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return actuator_pv, unit
 
     def _auto_tune_scan_config(self):
-        return dict(
-            self.energy_config.get(
-                "auto_tune_scan",
-                self.energy_config.get("bend_scan", {}),
-            )
-        )
+        return dict(resolve_energy_spectrum_auto_tune(self.energy_config).get("scan", {}))
 
     def _load_auto_tune_scan_mode(self):
         mode = str(self._auto_tune_scan_config().get("mode", "absolute")).strip().lower()
@@ -1288,9 +1286,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return -span, span
 
     def _auto_tune_actuator_identity(self):
-        actuator = self.energy_config.get("auto_tune_actuator")
+        actuator = resolve_energy_spectrum_auto_tune(self.energy_config).get("actuator")
         if isinstance(actuator, dict):
             return str(actuator["element"]), str(actuator["channel"])
+        energy_element = str(self.energy_config.get("energy_element", "")).strip()
+        if energy_element:
+            return energy_element, str(
+                self.energy_config.get("energy_set_channel", "setpoint")
+            )
         return str(self.energy_config["bend_element"]), "current_set"
 
     def _load_x_reference_mm(self):
@@ -1327,6 +1330,23 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             raise MachineProfileError(self._model_error or "energy_spectrum model backend is unavailable.")
         working_dir = self.energy_model_config.get("energy_working_dir") or self.energy_model_config["working_dir"]
         return Path(working_dir)
+
+    def _energy_model_line(self, calculation):
+        model_lines = self.energy_config.get("model_lines")
+        if isinstance(model_lines, dict):
+            line_name = str(model_lines.get(calculation, "")).strip()
+            if line_name:
+                return line_name
+        legacy_key = f"energy_{calculation}_line_name"
+        line_name = self.energy_config.get(
+            legacy_key,
+            self.energy_model_config.get(legacy_key),
+        )
+        if not isinstance(line_name, str) or not line_name.strip():
+            raise MachineProfileError(
+                f"Energy spectrum model line {calculation!r} is not configured."
+            )
+        return line_name.strip()
 
     def _model_available(self):
         return self.energy_model_config is not None
@@ -1432,7 +1452,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _twiss_target_element(self):
         """Return the model element where ESA optics/readout values are reported."""
-        for key in ("twiss_target_element", "vm_watch_element", "flag_element"):
+        for key in ("twiss_target_element", "flag_element"):
             value = str(self.energy_config.get(key, "")).strip()
             if value:
                 return value
@@ -1665,9 +1685,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "Peak brightness + fitted center",
             "brightness_then_profile_lock",
         )
-        configured_objective = str(
-            self.energy_config.get("auto_tune_objective", "find_beam")
-        ).strip()
+        auto_tune_config = resolve_energy_spectrum_auto_tune(self.energy_config)
+        configured_objective = str(auto_tune_config["objective"]).strip()
         objective_index = self.auto_tune_objective_combo.findData(configured_objective)
         if objective_index < 0:
             raise MachineProfileError(
@@ -1686,7 +1705,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_settle_spin.setProperty("dense", True)
         self.auto_tune_settle_spin.setValue(float(scan_config.get("settle_time_s", 0.5)))
 
-        center_lock_config = dict(self.energy_config.get("auto_tune_center_lock", {}))
+        center_lock_config = dict(auto_tune_config.get("center_lock", {}))
         self.auto_tune_frame_interval_spin = QDoubleSpinBox(self.groupBox_8)
         self.auto_tune_frame_interval_spin.setObjectName("autoTuneFrameIntervalSpinBox")
         self.auto_tune_frame_interval_spin.setDecimals(2)
@@ -3541,10 +3560,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             #
             lattice_file = self._energy_model_path("source_lattice")
             esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
-            line_name = self.energy_config.get(
-                "energy_dispersion_line_name",
-                self.energy_model_config["energy_dispersion_line_name"],
-            )
+            line_name = self._energy_model_line("dispersion")
             working_dir = self._energy_model_working_dir()
 
             esajson_path = self._energy_model_path("energy_json_path")
@@ -3662,10 +3678,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         #
         lattice_file = self._energy_model_path("source_lattice")
         esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
-        line_name = self.energy_config.get(
-            "energy_twiss_line_name",
-            self.energy_model_config["energy_twiss_line_name"],
-        )
+        line_name = self._energy_model_line("twiss")
         working_dir = self._energy_model_working_dir()
 
         esajson_path = self._energy_model_path("energy_json_path")

@@ -47,42 +47,47 @@ class EnergySpectrumStationTests(unittest.TestCase):
         self.assertNotIn("flag_element", workflow)
         self.assertNotIn("bend_element", workflow)
         self.assertEqual(stations["eny"]["flag_element"], "ENY")
+        self.assertEqual(stations["eny"]["flag_exposure_channel"], "exposure_time")
         self.assertEqual(stations["eny"]["bend_element"], "BENY")
+        self.assertEqual(
+            stations["eny"]["model_lines"],
+            {"dispersion": "ESAlocal", "twiss": "ALL_ESA"},
+        )
         self.assertEqual(stations["eny"]["energy_element"], "LINAC_ENERGY")
         self.assertEqual(stations["eny"]["energy_control_backends"], ["real"])
-        self.assertEqual(stations["eny"]["auto_tune_control_backends"], ["real"])
-        self.assertEqual(
-            stations["eny"]["auto_tune_actuator"],
-            {"element": "LINAC_ENERGY", "channel": "setpoint", "unit": "MeV"},
-        )
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["low"], 0)
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["high"], 2450)
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["unit"], "MeV")
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["mode"], "absolute")
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["coarse_steps"], 16)
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["fine_steps"], 31)
-        self.assertEqual(stations["eny"]["auto_tune_scan"]["settle_time_s"], 1.0)
+        self.assertNotIn("auto_tune_control_backends", stations["eny"])
+        self.assertNotIn("auto_tune_actuator", stations["eny"])
+        self.assertEqual(stations["eny"]["x_reference_mm"], 0)
+        eny_scan = stations["eny"]["auto_tune"]["scan"]
+        self.assertEqual(eny_scan["low"], 0)
+        self.assertEqual(eny_scan["high"], 2450)
+        self.assertEqual(eny_scan["unit"], "MeV")
+        self.assertEqual(eny_scan["mode"], "absolute")
+        self.assertEqual(eny_scan["coarse_steps"], 16)
+        self.assertEqual(eny_scan["fine_steps"], 31)
+        self.assertEqual(eny_scan["settle_time_s"], 1.0)
         self.assertEqual(stations["prf02"]["flag_element"], "PRF02")
+        self.assertEqual(stations["prf02"]["flag_exposure_channel"], "exposure_time")
         self.assertEqual(stations["prf02"]["bend_element"], "BL01A")
-        self.assertEqual(stations["prf02"]["twiss_target_element"], "PRF02")
+        self.assertNotIn("twiss_target_element", stations["prf02"])
         self.assertEqual(stations["prf02"]["esa_quads"], ["QL01", "QL02"])
         self.assertEqual(stations["prf02"]["energy_element"], "PREINJECTOR_ENERGY")
         self.assertEqual(stations["prf02"]["energy_set_channel"], "setpoint")
         self.assertEqual(stations["prf02"]["energy_reference_channel"], "setpoint")
         self.assertNotIn("energy_set_pv", stations["prf02"])
         self.assertNotIn("energy_reference_pv", stations["prf02"])
-        self.assertEqual(
-            stations["prf02"]["auto_tune_actuator"],
-            {
-                "element": "PREINJECTOR_ENERGY",
-                "channel": "setpoint",
-                "unit": "MeV",
-            },
-        )
+        self.assertNotIn("auto_tune_actuator", stations["prf02"])
+        self.assertEqual(stations["prf02"]["x_reference_mm"], 0)
         self.assertEqual(stations["prf02"]["energy_control_backends"], ["real"])
-        self.assertEqual(stations["prf02"]["auto_tune_control_backends"], [])
+        self.assertNotIn("auto_tune_control_backends", stations["prf02"])
+        self.assertEqual(stations["prf02"]["auto_tune"]["scan"]["low"], 0)
+        self.assertEqual(stations["prf02"]["auto_tune"]["scan"]["high"], 130)
+        self.assertEqual(
+            stations["prf02"]["model_lines"],
+            {"dispersion": "PRF02local", "twiss": "ALL_MAIN"},
+        )
         self.assertEqual(stations["prf02"]["energy0_default_mev"], 114.16)
-        self.assertEqual(stations["prf02"]["model_snapshot_source"], "design")
+        self.assertNotIn("model_snapshot_source", stations["prf02"])
         self.assertAlmostEqual(stations["prf02"]["design_eta_m"], -0.3280857973174453)
         self.assertEqual(
             resolve_channel(profile, "PRF02", "image", "real"),

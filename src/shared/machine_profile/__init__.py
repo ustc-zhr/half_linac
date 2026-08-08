@@ -39,6 +39,7 @@ from .limits import LimitRange, effective_limit
 from .energy_spectrum import (
     LEGACY_ENERGY_SPECTRUM_STATION_ID,
     resolve_default_energy_spectrum_station,
+    resolve_energy_spectrum_auto_tune,
     resolve_energy_spectrum_stations,
 )
 from .model_backend import (
@@ -231,6 +232,7 @@ __all__ = [
     "resolve_element_image_geometry",
     "resolve_flag_pixel_geometry",
     "resolve_default_energy_spectrum_station",
+    "resolve_energy_spectrum_auto_tune",
     "resolve_energy_spectrum_stations",
     "resolve_app_runtime_paths",
     "save_model_snapshot",

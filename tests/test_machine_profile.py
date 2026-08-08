@@ -1553,7 +1553,6 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(energy_workflow["flag_element"], "PRFESA")
         self.assertEqual(energy_workflow["flag_image_channel"], "image")
-        self.assertEqual(energy_workflow["vm_watch_element"], "PRFESA")
         self.assertEqual(energy_workflow["esa_quads"], ["QM19", "QM20"])
         self.assertEqual(energy_workflow["energy0_default_mev"], 36)
         self.assertEqual(emit_workflow["default_preset"], "emit_qm12_prf04")
@@ -1953,13 +1952,13 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["energy_set_channel"], "setpoint")
         self.assertEqual(workflow["energy_reference_channel"], "setpoint")
         self.assertEqual(workflow["energy_control_backends"], ["real"])
-        self.assertEqual(workflow["auto_tune_control_backends"], ["real"])
-        self.assertEqual(workflow["auto_tune_actuator"]["element"], "LINAC_ENERGY")
-        self.assertEqual(workflow["auto_tune_scan"]["low"], 0)
-        self.assertEqual(workflow["auto_tune_scan"]["high"], 2450)
-        self.assertEqual(workflow["auto_tune_scan"]["unit"], "MeV")
-        self.assertEqual(workflow["auto_tune_scan"]["mode"], "absolute")
-        self.assertEqual(workflow["vm_watch_element"], "ENY")
+        self.assertNotIn("auto_tune_control_backends", workflow)
+        self.assertNotIn("auto_tune_actuator", workflow)
+        scan = workflow["auto_tune"]["scan"]
+        self.assertEqual(scan["low"], 0)
+        self.assertEqual(scan["high"], 2450)
+        self.assertEqual(scan["unit"], "MeV")
+        self.assertEqual(scan["mode"], "absolute")
 
     def test_irfel_energy_spectrum_uses_coordinated_real_energy_control(self):
         profile = load_profile("irfel")
@@ -1975,28 +1974,28 @@ class MachineProfileTests(unittest.TestCase):
             resolve_channel(profile, "ESA_ENERGY", "setpoint", "real"),
             "IRFEL:AP:ENG:A3:ao",
         )
-        self.assertEqual(workflow["auto_tune_control_backends"], ["real"])
+        self.assertNotIn("auto_tune_control_backends", workflow)
+        defaults = workflow["auto_tune_defaults"]
+        scan = workflow["auto_tune"]["scan"]
+        self.assertEqual(defaults["objective"], "brightness_then_profile_lock")
+        self.assertNotIn("auto_tune_actuator", workflow)
+        self.assertEqual(scan["low"], 0)
+        self.assertEqual(scan["high"], 65)
+        self.assertEqual(scan["unit"], "MeV")
+        self.assertEqual(scan["mode"], "absolute")
+        self.assertEqual(scan["coarse_steps"], 16)
+        self.assertEqual(scan["fine_steps"], 31)
+        center_lock = defaults["center_lock"]
+        self.assertEqual(center_lock["frame_samples"], 3)
         self.assertEqual(
-            workflow["auto_tune_objective"], "brightness_then_profile_lock"
-        )
-        self.assertEqual(workflow["auto_tune_actuator"]["element"], "ESA_ENERGY")
-        self.assertEqual(workflow["auto_tune_actuator"]["unit"], "MeV")
-        self.assertEqual(workflow["auto_tune_scan"]["low"], 0)
-        self.assertEqual(workflow["auto_tune_scan"]["high"], 65)
-        self.assertEqual(workflow["auto_tune_scan"]["unit"], "MeV")
-        self.assertEqual(workflow["auto_tune_scan"]["mode"], "absolute")
-        self.assertEqual(workflow["auto_tune_scan"]["coarse_steps"], 16)
-        self.assertEqual(workflow["auto_tune_scan"]["fine_steps"], 31)
-        self.assertEqual(workflow["auto_tune_center_lock"]["frame_samples"], 3)
-        self.assertEqual(
-            workflow["auto_tune_center_lock"]["verification_frame_samples"], 5
+            center_lock["verification_frame_samples"], 5
         )
         self.assertEqual(
-            workflow["auto_tune_center_lock"]["verification_min_valid_frames"], 3
+            center_lock["verification_min_valid_frames"], 3
         )
-        self.assertEqual(workflow["auto_tune_center_lock"]["center_step"], 0.05)
-        self.assertEqual(workflow["auto_tune_center_lock"]["max_total_offset"], 1.0)
-        self.assertEqual(workflow["auto_tune_center_lock"]["center_tolerance_mm"], 0.2)
+        self.assertEqual(center_lock["center_step"], 0.05)
+        self.assertEqual(center_lock["max_total_offset"], 1.0)
+        self.assertEqual(center_lock["center_tolerance_mm"], 0.2)
         self.assertEqual(workflow["default_start_element"], "QM12")
         self.assertEqual(
             workflow["optics_input_presets"]["QM12"],
@@ -2010,9 +2009,8 @@ class MachineProfileTests(unittest.TestCase):
     def test_energy_spectrum_auto_tune_scan_may_exceed_actuator_limits(self):
         profile = load_profile("irfel")
         workflow = dict(get_workflow(profile, "energy_spectrum"))
-        workflow["auto_tune_scan"] = {
-            **workflow["auto_tune_scan"],
-            "high": 66,
+        workflow["auto_tune"] = {
+            "scan": {**workflow["auto_tune"]["scan"], "high": 66},
         }
 
         _validate_energy_spectrum_workflow(profile, workflow)
@@ -2020,7 +2018,10 @@ class MachineProfileTests(unittest.TestCase):
     def test_energy_spectrum_rejects_unknown_auto_tune_objective(self):
         profile = load_profile("irfel")
         workflow = dict(get_workflow(profile, "energy_spectrum"))
-        workflow["auto_tune_objective"] = "unknown"
+        workflow["auto_tune_defaults"] = {
+            **workflow["auto_tune_defaults"],
+            "objective": "unknown",
+        }
 
         with self.assertRaisesRegex(MachineProfileError, "auto_tune_objective"):
             _validate_energy_spectrum_workflow(profile, workflow)
@@ -2573,7 +2574,7 @@ class MachineProfileTests(unittest.TestCase):
                 with self.assertRaisesRegex(MachineProfileError, "default_segment_id must belong"):
                     load_profile("vmnewworkflowbad")
 
-    def test_energy_spectrum_workflow_requires_vm_watch_element(self):
+    def test_energy_spectrum_uses_flag_element_as_vm_watch_source(self):
         machine_json = {
             "schema_version": "1",
             "machine": {
@@ -2699,8 +2700,10 @@ class MachineProfileTests(unittest.TestCase):
             )
 
             with patch("half_linac.src.shared.machine_profile.loader.repo_root", return_value=temp_root):
-                with self.assertRaisesRegex(MachineProfileError, "vm_watch_element"):
-                    load_app_context("energy_spectrum", machine_id="missingwatch")
+                context = load_app_context("energy_spectrum", machine_id="missingwatch")
+            workflow = get_workflow(context.profile, "energy_spectrum")
+            self.assertEqual(workflow["flag_element"], "PRF01")
+            self.assertNotIn("vm_watch_element", workflow)
 
     def test_softioc_substitutions_include_vm_aliases_for_profile_only_elements(self):
         substitutions = (
@@ -4010,7 +4013,6 @@ class MachineProfileTests(unittest.TestCase):
         energy_spectrum_json = {
             "flag_element": "PRF01",
             "flag_image_channel": "image",
-            "vm_watch_element": "PRF01",
             "flag_exposure_channel": "exposure_time",
             "flag_pixel_shape": {"real": [1440, 1080]},
             "flag_pixel_width_mm": {"real": 0.02},

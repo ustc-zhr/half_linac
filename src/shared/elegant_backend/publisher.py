@@ -418,13 +418,9 @@ def _build_energy_spectrum_watch_spec(profile: MachineProfile) -> VmWatchImagePu
         workflow.get("flag_image_channel"),
         "workflows.energy_spectrum.flag_image_channel",
     )
-    source_watch_id = _require_non_empty_string(
-        workflow.get("vm_watch_element"),
-        "workflows.energy_spectrum.vm_watch_element",
-    )
     pixel_geometry = resolve_element_image_geometry(profile, flag_element, "vm")
     return VmWatchImagePublishSpec(
-        source_watch_id=source_watch_id,
+        source_watch_id=flag_element,
         target_element_id=flag_element,
         logical_channel=logical_channel,
         pv_name=resolve_channel(profile, flag_element, logical_channel, "vm"),

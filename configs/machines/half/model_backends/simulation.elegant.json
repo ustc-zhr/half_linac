@@ -22,8 +22,6 @@
     "energy_mat_file": "runtime/model_backend/half/simulation/energy/esa.mat",
     "energy_twi_file": "runtime/model_backend/half/simulation/energy/esa.twi",
     "energy_log": "esa.log",
-    "energy_dispersion_line_name": "ESAlocal",
-    "energy_twiss_line_name": "ALL_ESA",
     "snapshot_mapping": {
       "fields": {
         "QL01": {

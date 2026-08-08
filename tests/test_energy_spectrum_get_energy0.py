@@ -45,16 +45,15 @@ class Energy0ConversionTests(unittest.TestCase):
         self.assertAlmostEqual(conversion["deflect_angle_rad"], 0.4363323129985824)
         self.assertAlmostEqual(conversion["field_t_per_a"], 0.000599792458)
 
-    def test_energy_spectrum_workflows_expose_x_reference_mm_by_backend(self):
+    def test_energy_spectrum_workflows_expose_numeric_x_reference_mm(self):
         for machine_id in ("half", "irfel"):
             profile = load_profile(machine_id)
-            workflow = get_workflow(profile, "energy_spectrum")
+            workflow = resolve_default_energy_spectrum_station(
+                get_workflow(profile, "energy_spectrum")
+            )
             x_reference = workflow["x_reference_mm"]
 
-            self.assertIn("vm", x_reference)
-            self.assertIn("real", x_reference)
-            self.assertIsInstance(float(x_reference["vm"]), float)
-            self.assertIsInstance(float(x_reference["real"]), float)
+            self.assertIsInstance(float(x_reference), float)
 
     def test_reference_energy_prefers_coordinated_energy_pv(self):
         energy, source = select_reference_energy_mev(

@@ -22,8 +22,6 @@
     "energy_mat_file": "runtime/model_backend/template_machine/simulation/energy/esa.mat",
     "energy_twi_file": "runtime/model_backend/template_machine/simulation/energy/esa.twi",
     "energy_log": "esa.log",
-    "energy_dispersion_line_name": "ESAlocal",
-    "energy_twiss_line_name": "ESA",
     "snapshot_mapping": {
       "fields": {
         "QE01": {
