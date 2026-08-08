@@ -2069,6 +2069,7 @@
       "order": 217,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2078,6 +2079,7 @@
       "order": 218,
       "tags": ["energy_spectrum"],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2087,6 +2089,7 @@
       "order": 219,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2096,6 +2099,7 @@
       "order": 220,
       "tags": ["emit"],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2105,6 +2109,7 @@
       "order": 221,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2114,6 +2119,7 @@
       "order": 222,
       "tags": ["emit"],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2123,6 +2129,7 @@
       "order": 223,
       "tags": ["emit"],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2132,6 +2139,7 @@
       "order": 224,
       "tags": ["emit"],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2141,6 +2149,7 @@
       "order": 225,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2150,6 +2159,7 @@
       "order": 226,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2159,6 +2169,7 @@
       "order": 227,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2168,6 +2179,7 @@
       "order": 228,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2177,6 +2189,7 @@
       "order": 229,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2186,6 +2199,7 @@
       "order": 230,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2195,6 +2209,7 @@
       "order": 231,
       "tags": [],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2204,6 +2219,7 @@
       "order": 232,
       "tags": ["energy_spectrum"],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [720, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": ["image", "exposure_time"]
     },
     {

@@ -59,7 +59,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     require_workflow_write_allowed,
     resolve_channel,
-    resolve_flag_pixel_geometry,
+    resolve_element_image_geometry,
     workflow_writes_allowed,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
@@ -1564,11 +1564,10 @@ class myWindow(QWidget, Ui_Form):
         return self.control_backend
 
     def _configure_pixel_geometry(self, flag_id):
-        geometry = resolve_flag_pixel_geometry(
-            self.beam_monitor_config,
-            "workflows.beam_monitor",
-            self.control_backend,
+        geometry = resolve_element_image_geometry(
+            self.app_context,
             flag_id,
+            self.control_backend,
         )
         self._pixel_geometry_flag_id = flag_id
         self.pixel = geometry.shape

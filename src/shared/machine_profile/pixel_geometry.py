@@ -3,13 +3,37 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-from .models import MachineProfileError
+from .models import AppContext, MachineProfile, MachineProfileError
 
 
 @dataclass(frozen=True)
 class FlagPixelGeometry:
     shape: tuple[int, int]
     pixel_width_mm: float
+
+
+def resolve_element_image_geometry(
+    target: MachineProfile | AppContext,
+    flag_id: str,
+    backend_name: str,
+) -> FlagPixelGeometry:
+    """Resolve one FLAG's explicit image geometry for a control backend."""
+    profile = target.profile if isinstance(target, AppContext) else target
+    element = profile.get_element(flag_id)
+    if element.kind != "flag":
+        raise MachineProfileError(f"Element {flag_id!r} is not a flag.")
+    geometry = _expect_mapping(
+        element.image_geometry,
+        f"elements.{flag_id}.image_geometry",
+    )
+    backend_geometry = _expect_mapping(
+        geometry.get(backend_name),
+        f"elements.{flag_id}.image_geometry.{backend_name}",
+    )
+    return _parse_geometry(
+        backend_geometry,
+        f"elements.{flag_id}.image_geometry.{backend_name}",
+    )
 
 
 def resolve_flag_pixel_geometry(
@@ -125,4 +149,8 @@ def _expect_mapping(value: object, location: str) -> Mapping[str, object]:
     return value
 
 
-__all__ = ["FlagPixelGeometry", "resolve_flag_pixel_geometry"]
+__all__ = [
+    "FlagPixelGeometry",
+    "resolve_element_image_geometry",
+    "resolve_flag_pixel_geometry",
+]

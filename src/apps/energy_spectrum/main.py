@@ -88,6 +88,7 @@ from half_linac.src.shared.machine_profile import (
     require_workflow_write_allowed,
     resolve_bend_write_channel,
     resolve_channel,
+    resolve_element_image_geometry,
     save_model_snapshot,
     workflow_writes_allowed,
 )
@@ -863,8 +864,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "flag_image_channel",
             "bend_element",
             "esa_quads",
-            "flag_pixel_shape",
-            "flag_pixel_width_mm",
         )
         for key in required_keys:
             if key not in workflow:
@@ -3210,24 +3209,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         image_channel = self.energy_config["flag_image_channel"]
         self.flag_pv = resolve_channel(self.app_context, flag_element, image_channel)
 
-        pixel_shape = self._resolve_mode_mapping(
-            self.energy_config["flag_pixel_shape"],
+        geometry = resolve_element_image_geometry(
+            self.app_context,
+            flag_element,
             self.control_backend,
-            "workflows.energy_spectrum.flag_pixel_shape",
         )
-        if not isinstance(pixel_shape, list) or len(pixel_shape) != 2:
-            raise MachineProfileError(
-                "workflows.energy_spectrum.flag_pixel_shape must provide [nx, ny] per backend."
-            )
-        self.flag_pixel = (int(pixel_shape[0]), int(pixel_shape[1]))
-        flag_pixel_width = float(
-            self._resolve_mode_mapping(
-                self.energy_config["flag_pixel_width_mm"],
-                self.control_backend,
-                "workflows.energy_spectrum.flag_pixel_width_mm",
-            )
-        )
-        self.flag_pixel_width_mm = flag_pixel_width
+        self.flag_pixel = geometry.shape
+        self.flag_pixel_width_mm = geometry.pixel_width_mm
 
         self.flag_expotime_pv = None
         if self.control_backend == "real":
@@ -3259,8 +3247,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.flag_pv_obj = NullPV(self.flag_pv)
             self._mark_pv_unavailable(exc)
 
-        self.width  = self.flag_pixel[0]*flag_pixel_width # mm
-        self.height = self.flag_pixel[1]*flag_pixel_width # mm
+        self.width = self.flag_pixel[0] * self.flag_pixel_width_mm  # mm
+        self.height = self.flag_pixel[1] * self.flag_pixel_width_mm  # mm
         self.xlim = (-0.5*self.width , 0.5*self.width  )
         self.ylim = (-0.5*self.height, 0.5*self.height ) 
         self.extent = self.xlim +self.ylim

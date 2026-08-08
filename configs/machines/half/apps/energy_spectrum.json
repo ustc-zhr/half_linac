@@ -1,6 +1,5 @@
 {
   "flag_image_channel": "image",
-  "flag_pixel_width_mm": {"vm": 0.02, "real": 0.02},
   "x_reference_mm": {"vm": 0, "real": 0},
   "energy_set_channel": "setpoint",
   "energy_reference_channel": "setpoint",
@@ -22,10 +21,6 @@
       "flag_element": "ENY",
       "vm_watch_element": "ENY",
       "flag_exposure_channel": "exposure_time",
-      "flag_pixel_shape": {
-        "vm": [720, 270],
-        "real": [1440, 1080]
-      },
       "bend_element": "BENY",
       "twiss_target_element": "ENY",
       "energy_element": "LINAC_ENERGY",
@@ -44,10 +39,6 @@
       "flag_element": "PRF02",
       "vm_watch_element": "PRF02",
       "flag_exposure_channel": null,
-      "flag_pixel_shape": {
-        "vm": [360, 270],
-        "real": [1440, 1080]
-      },
       "bend_element": "BL01A",
       "twiss_target_element": "PRF02",
       "energy_element": "PREINJECTOR_ENERGY",

@@ -26,6 +26,7 @@ from .compatibility import (
     resolve_channel,
     resolve_bend_write_channel,
     resolve_corrector_write_channel,
+    resolve_element_image_geometry,
     resolve_flag_pixel_geometry,
 )
 from .loader import (
@@ -227,6 +228,7 @@ __all__ = [
     "resolve_channel",
     "resolve_bend_write_channel",
     "resolve_corrector_write_channel",
+    "resolve_element_image_geometry",
     "resolve_flag_pixel_geometry",
     "resolve_default_energy_spectrum_station",
     "resolve_energy_spectrum_stations",

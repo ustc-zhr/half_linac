@@ -148,6 +148,7 @@
         "energy_spectrum"
       ],
       "limits": {},
+      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
       "logical_channels": [
         "image",
         "esa_image",

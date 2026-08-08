@@ -45,6 +45,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_bend_write_channel,
     resolve_channel,
     resolve_default_energy_spectrum_station,
+    resolve_element_image_geometry,
     resolve_flag_pixel_geometry,
     resolve_machine_runtime,
     resolve_virtual_machine_segment_choices,
@@ -629,7 +630,7 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(paths["model_snapshot_path"], paths["latest_dir"] / "model_snapshot.json")
 
-    def test_half_beam_monitor_workflow_keeps_backend_image_geometry(self):
+    def test_half_flags_keep_backend_image_geometry(self):
         profile = load_profile("half")
         workflow = get_workflow(profile, "beam_monitor")
         self.assertEqual(workflow["default_flag"], "PRF06")
@@ -637,14 +638,25 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["background_sample_count"], 5)
         self.assertEqual(workflow["background_sample_interval_s"], 1.0)
         self.assertEqual(
-            resolve_flag_pixel_geometry(
-                workflow,
-                "workflows.beam_monitor",
-                "vm",
-                "PRF06",
-            ).shape,
+            resolve_element_image_geometry(profile, "PRF06", "vm").shape,
             (360, 270),
         )
+        self.assertEqual(
+            resolve_element_image_geometry(profile, "ENY", "vm").shape,
+            (720, 270),
+        )
+
+    def test_all_directory_flags_define_geometry_for_each_image_backend(self):
+        for machine_id in ("_template", "half", "irfel"):
+            profile = load_profile(machine_id)
+            for element in profile.elements:
+                for backend_name in element.channels.get("image", {}):
+                    geometry = resolve_element_image_geometry(
+                        profile, element.id, backend_name
+                    )
+                    self.assertGreater(geometry.shape[0], 0)
+                    self.assertGreater(geometry.shape[1], 0)
+                    self.assertGreater(geometry.pixel_width_mm, 0)
 
     def test_beam_monitor_rejects_unknown_profile_method(self):
         profile = load_profile("irfel")
@@ -1516,25 +1528,11 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(irfel_real_orbit_runtime["runtime_defaults"], irfel_vm_orbit_runtime["runtime_defaults"])
         self.assertEqual(beam_workflow["default_flag"], "PRFESA")
         self.assertEqual(
-            beam_workflow["flag_pixel_geometry"]["default"]["vm"]["shape"],
-            [360, 270],
-        )
-        self.assertEqual(
-            resolve_flag_pixel_geometry(
-                beam_workflow,
-                "workflows.beam_monitor",
-                "vm",
-                "PRF03",
-            ).shape,
+            resolve_element_image_geometry(profile, "PRF03", "vm").shape,
             (360, 270),
         )
         self.assertEqual(
-            resolve_flag_pixel_geometry(
-                beam_workflow,
-                "workflows.beam_monitor",
-                "real",
-                "PRF04",
-            ).pixel_width_mm,
+            resolve_element_image_geometry(profile, "PRF04", "real").pixel_width_mm,
             0.02,
         )
         self.assertEqual(
@@ -2058,6 +2056,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 3,
                     "tags": [],
@@ -2138,6 +2137,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 3,
                     "tags": [],
@@ -2263,6 +2263,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 2,
                     "tags": [],
@@ -2325,6 +2326,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 2,
                     "tags": [],
@@ -2391,6 +2393,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 3,
                     "tags": [],
@@ -2449,6 +2452,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 2,
                     "tags": [],
@@ -2523,6 +2527,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 2,
                     "tags": [],
@@ -2581,6 +2586,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 1,
                     "tags": ["energy_spectrum"],
@@ -2801,6 +2807,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 5,
                     "tags": ["emit_measure"],
@@ -2942,6 +2949,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 4,
                     "tags": ["emit_measure"],
@@ -3033,6 +3041,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 4,
                     "tags": ["emit"],
@@ -3177,6 +3186,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 8,
                     "tags": ["emit"],
@@ -3499,6 +3509,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 5,
                     "tags": [],
@@ -3614,6 +3625,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 5,
                     "tags": [],
@@ -3727,6 +3739,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 5,
                     "tags": [],
@@ -3836,6 +3849,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 5,
                     "tags": ["emit"],
@@ -3928,6 +3942,7 @@ class MachineProfileTests(unittest.TestCase):
                 {
                     "id": "PRF01",
                     "kind": "flag",
+                    "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
                     "display_name": "PRF01",
                     "order": 1,
                     "tags": ["emit", "energy_spectrum"],

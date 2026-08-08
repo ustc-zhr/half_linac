@@ -80,7 +80,7 @@ from half_linac.src.shared.machine_profile import (
     require_workflow_write_allowed,
     resolve_app_runtime_paths,
     resolve_channel,
-    resolve_flag_pixel_geometry,
+    resolve_element_image_geometry,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from half_linac.src.apps.emit_measure.adaptive_scan import (
@@ -151,13 +151,13 @@ def _read_optional_size_pvs(sigx_pv, sigy_pv):
     return tuple(value if value is not None and value > 0 else None for value in values)
 
 
-def _load_beam_image_geometry_config(machine_id):
+def _load_beam_monitor_config(machine_id):
     profile = load_profile(machine_id)
     try:
         return get_workflow(profile, "beam_monitor")
     except MachineProfileError as exc:
         raise MachineProfileError(
-            "emit_measure local image fitting requires beam_monitor flag_pixel_geometry "
+            "emit_measure local image fitting requires beam_monitor configuration "
             f"for machine {machine_id!r}."
         ) from exc
 
@@ -784,7 +784,7 @@ class myWindow(QWidget,Ui_Form):
         self.emit_workflow = self.app_context.emit_measure_workflow
         if self.emit_workflow is None:
             raise ValueError("Emit measure workflow is not available in the current app context.")
-        self.beam_monitor_config = _load_beam_image_geometry_config(self.machine_profile.machine.id)
+        self.beam_monitor_config = _load_beam_monitor_config(self.machine_profile.machine.id)
 
         self.current_theme = resolve_initial_theme()
         self.machine_type = self.app_context.control_backend.name
@@ -2926,11 +2926,10 @@ class myWindow(QWidget,Ui_Form):
 
     def _current_flag_pixel_geometry(self, flag_name=None):
         flag_name = flag_name or self.comboBox_4.currentText()
-        return resolve_flag_pixel_geometry(
-            self.beam_monitor_config,
-            "workflows.beam_monitor",
-            self.machine_type,
+        return resolve_element_image_geometry(
+            self.app_context,
             flag_name,
+            self.machine_type,
         )
 
     def _current_flag_image_extent(self, flag_name=None):

@@ -3,11 +3,6 @@
   "flag_image_channel": "image",
   "vm_watch_element": "PRFESA",
   "flag_exposure_channel": "exposure_time",
-  "flag_pixel_shape": {
-    "vm": [360, 270],
-    "real": [1440, 1080]
-  },
-  "flag_pixel_width_mm": {"vm": 0.02, "real": 0.02},
   "x_reference_mm": {"vm": 0, "real": 0},
   "bend_element": "BM03",
   "twiss_target_element": "PRFESA",

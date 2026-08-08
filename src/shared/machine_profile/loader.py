@@ -31,7 +31,6 @@ from .models import (
     normalize_mode,
     normalize_plane,
 )
-from .pixel_geometry import resolve_flag_pixel_geometry
 from .energy_spectrum import resolve_energy_spectrum_stations
 from .limits import LimitRange, effective_limit
 
@@ -845,6 +844,22 @@ def _load_directory_profile_raw(
             element.get("logical_channels"),
             f"{location}.logical_channels",
         )
+        image_geometry = dict(
+            _expect_mapping(
+                element.get("image_geometry", {}),
+                f"{location}.image_geometry",
+            )
+        )
+        if "image" in logical_channels:
+            for backend_name, backend_mapping in backend_channels.items():
+                element_channels = backend_mapping.get(element_id)
+                if not isinstance(element_channels, Mapping) or "image" not in element_channels:
+                    continue
+                if backend_name not in image_geometry:
+                    raise MachineProfileError(
+                        f"{location}.image_geometry is missing backend "
+                        f"{backend_name!r} for its image channel."
+                    )
 
         limits = dict(_expect_mapping(element.get("limits", {}), f"{location}.limits"))
         if limits and not ({"low", "high"} & set(limits)):
@@ -914,6 +929,7 @@ def _load_directory_profile_raw(
                 "tags": _expect_optional_string_list(element.get("tags", []), f"{location}.tags"),
                 "limits": limits,
                 "channels": channels,
+                "image_geometry": image_geometry,
             }
         )
 
@@ -1068,8 +1084,6 @@ def _validate_energy_spectrum_workflow(
         "vm_watch_element",
         "bend_element",
         "esa_quads",
-        "flag_pixel_shape",
-        "flag_pixel_width_mm",
     )
     missing = [key for key in required_keys if key not in workflow]
     if missing:
@@ -1152,25 +1166,6 @@ def _validate_energy_spectrum_workflow(
         if element.kind != "quad":
             raise MachineProfileError(
                 "workflows.energy_spectrum.default_start_element must reference a quad element."
-            )
-
-    pixel_shape = _expect_mapping(
-        workflow.get("flag_pixel_shape"),
-        "workflows.energy_spectrum.flag_pixel_shape",
-    )
-    pixel_width = _expect_mapping(
-        workflow.get("flag_pixel_width_mm"),
-        "workflows.energy_spectrum.flag_pixel_width_mm",
-    )
-    for backend_name in profile.control_backends:
-        shape = pixel_shape.get(backend_name)
-        if not isinstance(shape, list) or len(shape) != 2:
-            raise MachineProfileError(
-                f"workflows.energy_spectrum.flag_pixel_shape.{backend_name} must be [nx, ny]."
-            )
-        if backend_name not in pixel_width:
-            raise MachineProfileError(
-                f"workflows.energy_spectrum.flag_pixel_width_mm is missing backend {backend_name!r}."
             )
 
     conversion = workflow.get("energy_from_bend_current")
@@ -2324,64 +2319,6 @@ def _validate_beam_monitor_workflow(
         raise MachineProfileError(
             "workflows.beam_monitor.background_sample_interval_s must be finite and non-negative."
         )
-
-    has_structured_geometry = "flag_pixel_geometry" in workflow
-    has_legacy_geometry = (
-        "flag_pixel_shape" in workflow and "flag_pixel_width_mm" in workflow
-    )
-    if not has_structured_geometry and not has_legacy_geometry:
-        raise MachineProfileError(
-            "workflows.beam_monitor requires flag_pixel_geometry, or legacy "
-            "flag_pixel_shape plus flag_pixel_width_mm."
-        )
-
-    flag_ids = {
-        element.id
-        for element in profile.elements
-        if element.kind == "flag" and "image" in element.channels
-    }
-    geometry = workflow.get("flag_pixel_geometry")
-    if isinstance(geometry, Mapping):
-        by_flag = geometry.get("by_flag", {})
-        if by_flag is not None:
-            by_flag = _expect_mapping(
-                by_flag,
-                "workflows.beam_monitor.flag_pixel_geometry.by_flag",
-            )
-            unknown_flags = sorted(set(by_flag) - flag_ids)
-            if unknown_flags:
-                raise MachineProfileError(
-                    "workflows.beam_monitor.flag_pixel_geometry.by_flag contains "
-                    "unknown flag id(s): "
-                    + ", ".join(unknown_flags)
-                )
-            backend_names = set(profile.control_backends)
-            for flag_id, raw_flag_geometry in by_flag.items():
-                flag_geometry = _expect_mapping(
-                    raw_flag_geometry,
-                    f"workflows.beam_monitor.flag_pixel_geometry.by_flag.{flag_id}",
-                )
-                unknown_backends = sorted(set(flag_geometry) - backend_names)
-                if unknown_backends:
-                    raise MachineProfileError(
-                        "workflows.beam_monitor.flag_pixel_geometry.by_flag."
-                        f"{flag_id} contains unknown backend(s): "
-                        + ", ".join(unknown_backends)
-                    )
-
-    for backend_name in profile.control_backends:
-        resolve_flag_pixel_geometry(
-            workflow,
-            "workflows.beam_monitor",
-            backend_name,
-        )
-        for flag_id in flag_ids:
-            resolve_flag_pixel_geometry(
-                workflow,
-                "workflows.beam_monitor",
-                backend_name,
-                flag_id,
-            )
 
 
 def _validate_ct_monitor_workflow(

@@ -12,7 +12,7 @@ from half_linac.src.shared.machine_profile.models import MachineProfile, Machine
 from half_linac.src.shared.machine_profile.energy_spectrum import (
     resolve_default_energy_spectrum_station,
 )
-from half_linac.src.shared.machine_profile.pixel_geometry import resolve_flag_pixel_geometry
+from half_linac.src.shared.machine_profile.pixel_geometry import resolve_element_image_geometry
 from half_linac.src.shared.machine_profile.resolver import (
     get_workflow,
     list_elements,
@@ -365,8 +365,6 @@ class VmPublisher:
 
 
 def _build_beam_monitor_watch_specs(profile: MachineProfile) -> list[VmWatchImagePublishSpec]:
-    workflow = get_workflow(profile, "beam_monitor")
-
     specs: list[VmWatchImagePublishSpec] = []
     for element in list_elements(
         profile,
@@ -374,11 +372,10 @@ def _build_beam_monitor_watch_specs(profile: MachineProfile) -> list[VmWatchImag
         logical_channel="image",
         control_backend="vm",
     ):
-        pixel_geometry = resolve_flag_pixel_geometry(
-            workflow,
-            "workflows.beam_monitor",
-            "vm",
+        pixel_geometry = resolve_element_image_geometry(
+            profile,
             element.id,
+            "vm",
         )
         specs.append(
             VmWatchImagePublishSpec(
@@ -425,51 +422,15 @@ def _build_energy_spectrum_watch_spec(profile: MachineProfile) -> VmWatchImagePu
         workflow.get("vm_watch_element"),
         "workflows.energy_spectrum.vm_watch_element",
     )
+    pixel_geometry = resolve_element_image_geometry(profile, flag_element, "vm")
     return VmWatchImagePublishSpec(
         source_watch_id=source_watch_id,
         target_element_id=flag_element,
         logical_channel=logical_channel,
         pv_name=resolve_channel(profile, flag_element, logical_channel, "vm"),
-        pixel_shape=_require_backend_pixel_shape(workflow, "workflows.energy_spectrum", "vm"),
-        pixel_width_mm=_require_backend_pixel_width(workflow, "workflows.energy_spectrum", "vm"),
+        pixel_shape=pixel_geometry.shape,
+        pixel_width_mm=pixel_geometry.pixel_width_mm,
     )
-
-
-def _require_backend_pixel_shape(
-    workflow: Mapping[str, object],
-    workflow_path: str,
-    backend_name: str,
-) -> tuple[int, int]:
-    shape_by_backend = workflow.get("flag_pixel_shape")
-    if not isinstance(shape_by_backend, Mapping):
-        raise MachineProfileError(f"{workflow_path}.flag_pixel_shape must be a mapping.")
-    shape = shape_by_backend.get(backend_name)
-    if not isinstance(shape, list) or len(shape) != 2:
-        raise MachineProfileError(
-            f"{workflow_path}.flag_pixel_shape.{backend_name} must be [nx, ny]."
-        )
-    return (int(shape[0]), int(shape[1]))
-
-
-def _require_backend_pixel_width(
-    workflow: Mapping[str, object],
-    workflow_path: str,
-    backend_name: str,
-) -> float:
-    width_by_backend = workflow.get("flag_pixel_width_mm")
-    if not isinstance(width_by_backend, Mapping):
-        raise MachineProfileError(f"{workflow_path}.flag_pixel_width_mm must be a mapping.")
-    width = width_by_backend.get(backend_name)
-    if width is None:
-        raise MachineProfileError(
-            f"{workflow_path}.flag_pixel_width_mm is missing backend {backend_name!r}."
-        )
-    try:
-        return float(width)
-    except (TypeError, ValueError) as exc:
-        raise MachineProfileError(
-            f"{workflow_path}.flag_pixel_width_mm.{backend_name} must be numeric."
-        ) from exc
 
 
 def _require_non_empty_string(value: object, path: str) -> str:

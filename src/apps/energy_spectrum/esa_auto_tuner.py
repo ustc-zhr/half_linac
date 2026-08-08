@@ -961,6 +961,7 @@ if __name__=='__main__':
         resolve_default_energy_spectrum_station,
         resolve_channel,
         resolve_bend_write_channel,
+        resolve_element_image_geometry,
     )
 
     profile = load_profile()
@@ -970,20 +971,10 @@ if __name__=='__main__':
     preferred_backend = "real" if "real" in profile.control_backends else profile.machine.default_mode
     flag_element = str(workflow["flag_element"])
     flag_channel = str(workflow["flag_image_channel"])
-    pixel_shape_by_backend = workflow.get("flag_pixel_shape", {})
-    if not isinstance(pixel_shape_by_backend, dict):
-        raise ValueError("workflows.energy_spectrum.flag_pixel_shape must provide per-backend values.")
-    flag_pixel_machine = pixel_shape_by_backend.get(preferred_backend)
-    if not isinstance(flag_pixel_machine, list) or len(flag_pixel_machine) != 2:
-        raise ValueError(
-            "workflows.energy_spectrum.flag_pixel_shape must provide [nx, ny] for the selected backend."
-        )
+    geometry = resolve_element_image_geometry(profile, flag_element, preferred_backend)
+    flag_pixel_machine = geometry.shape
     flag_pv = resolve_channel(profile, flag_element, flag_channel, preferred_backend)
-    pixel_width_config = workflow.get("flag_pixel_width_mm", {})
-    if isinstance(pixel_width_config, dict):
-        pixel_width_mm = float(pixel_width_config[preferred_backend])
-    else:
-        pixel_width_mm = float(pixel_width_config)
+    pixel_width_mm = geometry.pixel_width_mm
     x_reference_config = workflow.get("x_reference_mm", 0.0)
     if isinstance(x_reference_config, dict):
         x_reference_mm = float(x_reference_config.get(preferred_backend, 0.0))

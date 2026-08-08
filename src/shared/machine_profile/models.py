@@ -27,6 +27,7 @@ class ElementConfig:
     tags: tuple[str, ...]
     limits: Mapping[str, Any]
     channels: Mapping[str, Mapping[str, str]]
+    image_geometry: Mapping[str, Any] = field(default_factory=dict)
 
     def limits_for(self, channel: str) -> Mapping[str, Any]:
         """Return limits for one logical channel, with legacy element-level fallback."""
@@ -430,6 +431,12 @@ def _parse_element(raw_element: Any, index: int) -> ElementConfig:
     if not isinstance(limits_raw, Mapping):
         raise MachineProfileError(f"{location}.limits must be a mapping.")
 
+    image_geometry = _parse_image_geometry(
+        element_raw.get("image_geometry", {}),
+        channels.get("image", {}),
+        location,
+    )
+
     order = element_raw.get("order")
     if not isinstance(order, int):
         raise MachineProfileError(f"{location}.order must be an integer.")
@@ -447,7 +454,50 @@ def _parse_element(raw_element: Any, index: int) -> ElementConfig:
         tags=tags,
         limits=dict(limits_raw),
         channels=channels,
+        image_geometry=image_geometry,
     )
+
+
+def _parse_image_geometry(
+    raw_geometry: Any,
+    image_channels: Mapping[str, str],
+    location: str,
+) -> Mapping[str, Any]:
+    geometry = _expect_mapping(raw_geometry, f"{location}.image_geometry")
+    if not image_channels:
+        return {}
+
+    if not geometry:
+        return {}
+
+    parsed: dict[str, dict[str, Any]] = {}
+    for backend_name in image_channels:
+        backend_geometry = _expect_mapping(
+            geometry.get(backend_name),
+            f"{location}.image_geometry.{backend_name}",
+        )
+        shape = backend_geometry.get("shape")
+        if not isinstance(shape, list) or len(shape) != 2:
+            raise MachineProfileError(
+                f"{location}.image_geometry.{backend_name}.shape must be [nx, ny]."
+            )
+        try:
+            parsed_shape = [int(shape[0]), int(shape[1])]
+            pixel_width_mm = float(backend_geometry["pixel_width_mm"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                f"{location}.image_geometry.{backend_name} requires numeric "
+                "shape and pixel_width_mm."
+            ) from exc
+        if any(value <= 0 for value in parsed_shape) or pixel_width_mm <= 0:
+            raise MachineProfileError(
+                f"{location}.image_geometry.{backend_name} values must be positive."
+            )
+        parsed[backend_name] = {
+            "shape": parsed_shape,
+            "pixel_width_mm": pixel_width_mm,
+        }
+    return parsed
 
 
 def _parse_element_plane(

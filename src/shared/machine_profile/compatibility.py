@@ -22,7 +22,11 @@ from .commissioning import (
     real_commissioning_status_label,
     real_commissioning_status_tone,
 )
-from .pixel_geometry import FlagPixelGeometry, resolve_flag_pixel_geometry
+from .pixel_geometry import (
+    FlagPixelGeometry,
+    resolve_element_image_geometry,
+    resolve_flag_pixel_geometry,
+)
 from .resolver import (
     get_bba_preset,
     get_emit_preset,
@@ -61,6 +65,7 @@ __all__ = [
     "resolve_channel",
     "resolve_bend_write_channel",
     "resolve_corrector_write_channel",
+    "resolve_element_image_geometry",
     "resolve_flag_pixel_geometry",
     "require_workflow_write_allowed",
     "workflow_write_policy",

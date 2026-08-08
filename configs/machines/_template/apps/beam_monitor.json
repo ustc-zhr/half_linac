@@ -2,10 +2,5 @@
   "default_flag": "PRF01",
   "profile_method": "Gaussian fit",
   "background_sample_count": 5,
-  "background_sample_interval_s": 1,
-  "flag_pixel_shape": {
-    "vm": [360, 270],
-    "real": [1440, 1080]
-  },
-  "flag_pixel_width_mm": {"vm": 0.02, "real": 0.02}
+  "background_sample_interval_s": 1
 }
