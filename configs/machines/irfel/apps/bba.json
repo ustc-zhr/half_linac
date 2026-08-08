@@ -9,15 +9,12 @@
       "bpm1": "BPM03",
       "bpm2": "BPM07",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -80.0,
-        "quad_end": -60.0,
-        "quad_steps": 5,
-        "samples": 3,
-        "settle_time": 1,
-        "sample_interval": 0.2
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -10, "high": 10, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 3, "settle_time_s": 1, "sample_interval_s": 0.2}
       }
     },
     {
@@ -29,15 +26,12 @@
       "bpm1": "BPM03",
       "bpm2": "BPM07",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -80.0,
-        "quad_end": -60.0,
-        "quad_steps": 5,
-        "samples": 3,
-        "settle_time": 1,
-        "sample_interval": 0.2
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -10, "high": 10, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 3, "settle_time_s": 1, "sample_interval_s": 0.2}
       }
     },
     {
@@ -49,25 +43,14 @@
       "bpm1": "BPM03",
       "bpm2": "BPM07",
       "scan": {
-        "quad_from": -80.0,
-        "quad_end": -60.0,
-        "quad_steps": 5,
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "samples": 1,
-        "settle_time": 3.0,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -10, "high": 10, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 3, "sample_interval_s": 0.5}
       },
-      "analysis": {
-        "energy_mev": 36.0,
-        "bpm1_samples": 1,
-        "by_formula": "current",
-        "bx_formula": "current",
-        "leff_by": 1.0,
-        "leff_bx": 1.0,
-        "quad_leff": 0.05
-      }
+      "analysis": {"energy_mev": 36, "bpm1_samples": 1, "by_formula": "current", "bx_formula": "current", "leff_by": 1, "leff_bx": 1, "quad_leff": 0.05}
     }
   ],
   "bba1": {
@@ -79,8 +62,5 @@
     "default_preset": "irfel_bba2_qm04_hc02"
   },
   "real_status": "write_smoke_passed",
-  "write_control": {
-    "vm": "allowed",
-    "real": "allowed"
-  }
+  "write_control": {"vm": "allowed", "real": "allowed"}
 }

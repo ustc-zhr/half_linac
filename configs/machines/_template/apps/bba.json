@@ -9,15 +9,12 @@
       "bpm1": "BPM01",
       "bpm2": "BPM02",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": 0.0,
-        "quad_end": 1.0,
-        "quad_steps": 5,
-        "samples": 3,
-        "settle_time": 0.5,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": 0, "high": 1, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 3, "settle_time_s": 0.5, "sample_interval_s": 0.5}
       }
     },
     {
@@ -28,9 +25,14 @@
       "corr": "XC01",
       "bpm1": "BPM01",
       "bpm2": "BPM02",
-      "analysis": {
-        "energy_mev": 100.0,
-        "quad_leff": 0.15
+      "analysis": {"energy_mev": 100, "quad_leff": 0.15},
+      "scan": {
+        "corrector": {
+          "vm": {"unit": "rad", "mode": "absolute"},
+          "real": {"unit": "A", "mode": "absolute"}
+        },
+        "quadrupole": {"unit": "1/m^2", "mode": "relative"},
+        "sampling": {}
       }
     }
   ]

@@ -1,7 +1,5 @@
 {
-  "control_backends": [
-    "real"
-  ],
+  "control_backends": ["real"],
   "default_preset": "ls_centering",
   "presets": [
     {
@@ -11,18 +9,10 @@
       "hcorr": "SL01-DX",
       "vcorr": "SL01-DY",
       "bpm": "BPM03",
-      "solenoid_scan": {
-        "relative_from": -0.05,
-        "relative_to": 0.05,
-        "steps": 5
-      },
-      "corrector_scan": {
-        "relative_from": -0.0002,
-        "relative_to": 0.0002,
-        "steps": 5
-      },
+      "solenoid_scan": {"relative_from": -0.05, "relative_to": 0.05, "steps": 5},
+      "corrector_scan": {"relative_from": -0.0002, "relative_to": 0.0002, "steps": 5},
       "samples_per_point": 3,
-      "settle_time_s": 2.0,
+      "settle_time_s": 2,
       "sample_interval_s": 0.2,
       "max_iters": 2
     },
@@ -33,18 +23,10 @@
       "hcorr": "SL01-DX",
       "vcorr": "SL01-DY",
       "bpm": "BPM03",
-      "solenoid_scan": {
-        "relative_from": -0.05,
-        "relative_to": 0.05,
-        "steps": 5
-      },
-      "corrector_scan": {
-        "relative_from": -0.0002,
-        "relative_to": 0.0002,
-        "steps": 5
-      },
+      "solenoid_scan": {"relative_from": -0.05, "relative_to": 0.05, "steps": 5},
+      "corrector_scan": {"relative_from": -0.0002, "relative_to": 0.0002, "steps": 5},
       "samples_per_point": 3,
-      "settle_time_s": 2.0,
+      "settle_time_s": 2,
       "sample_interval_s": 0.2,
       "max_iters": 2
     },
@@ -55,24 +37,13 @@
       "hcorr": "SM01-DX",
       "vcorr": "SM01-DY",
       "bpm": "BPM03",
-      "solenoid_scan": {
-        "relative_from": -0.05,
-        "relative_to": 0.05,
-        "steps": 5
-      },
-      "corrector_scan": {
-        "relative_from": -0.0002,
-        "relative_to": 0.0002,
-        "steps": 5
-      },
+      "solenoid_scan": {"relative_from": -0.05, "relative_to": 0.05, "steps": 5},
+      "corrector_scan": {"relative_from": -0.0002, "relative_to": 0.0002, "steps": 5},
       "samples_per_point": 3,
-      "settle_time_s": 2.0,
+      "settle_time_s": 2,
       "sample_interval_s": 0.2,
       "max_iters": 2
     }
   ],
-  "write_control": {
-    "vm": "blocked",
-    "real": "blocked"
-  }
+  "write_control": {"vm": "blocked", "real": "blocked"}
 }

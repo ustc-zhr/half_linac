@@ -218,6 +218,10 @@ class BBAScanConfig(_OptionalFieldMapping):
     samples: int | None = None
     settle_time: float | None = None
     sample_interval: float | None = None
+    corr_unit: str | None = None
+    quad_unit: str | None = None
+    corr_mode: str | None = None
+    quad_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -277,6 +281,8 @@ class EmitScanConfig(_OptionalFieldMapping):
     samples: int | None = None
     settle_time: float | None = None
     sample_interval: float | None = None
+    unit: str | None = None
+    mode: str | None = None
     adaptive: EmitAdaptiveScanConfig | None = None
 
 
@@ -669,13 +675,41 @@ def _validate_emit_measure_workflow(
         if "model_line" in preset:
             _expect_non_empty_string(preset.get("model_line"), f"{location}.model_line")
         scan = _expect_mapping(preset.get("scan", {}), f"{location}.scan")
+        if "quadrupole" in scan or "sampling" in scan:
+            quadrupole = _expect_mapping(
+                scan.get("quadrupole"), f"{location}.scan.quadrupole"
+            )
+            sampling = _expect_mapping(
+                scan.get("sampling"), f"{location}.scan.sampling"
+            )
+            scan_range = {
+                "k1_from": quadrupole.get("low"),
+                "k1_end": quadrupole.get("high"),
+            }
+            for field_name in ("low", "high", "steps", "unit", "mode"):
+                if field_name not in quadrupole:
+                    raise MachineProfileError(
+                        f"{location}.scan.quadrupole is missing {field_name}."
+                    )
+            for field_name in (
+                "samples_per_point", "settle_time_s", "sample_interval_s"
+            ):
+                if field_name not in sampling:
+                    raise MachineProfileError(
+                        f"{location}.scan.sampling is missing {field_name}."
+                    )
+        else:
+            scan_range = scan
         adaptive = scan.get("adaptive")
         if adaptive is not None:
             adaptive_location = f"{location}.scan.adaptive"
             adaptive = _expect_mapping(adaptive, adaptive_location)
+            structured_adaptive = "low" in adaptive or "high" in adaptive
+            low_key = "low" if structured_adaptive else "k1_min"
+            high_key = "high" if structured_adaptive else "k1_max"
             required_adaptive = (
-                "k1_min",
-                "k1_max",
+                low_key,
+                high_key,
                 "initial_points",
                 "target_points_per_plane",
                 "max_unique_points",
@@ -685,8 +719,8 @@ def _validate_emit_measure_workflow(
                 raise MachineProfileError(
                     f"{adaptive_location} is missing required field(s): {', '.join(missing)}."
                 )
-            k1_min = adaptive["k1_min"]
-            k1_max = adaptive["k1_max"]
+            k1_min = adaptive[low_key]
+            k1_max = adaptive[high_key]
             if not isinstance(k1_min, (int, float)) or not isinstance(k1_max, (int, float)):
                 raise MachineProfileError(f"{adaptive_location} K1 bounds must be numeric.")
             if k1_min >= k1_max:
@@ -720,12 +754,13 @@ def _validate_emit_measure_workflow(
                     f"{adaptive_location}.max_retries must be a non-negative integer."
                 )
             for endpoint in ("k1_from", "k1_end"):
-                value = scan.get(endpoint)
+                value = scan_range.get(endpoint)
                 if value is not None and not k1_min <= value <= k1_max:
                     raise MachineProfileError(
                         f"{location}.scan.{endpoint} must be inside adaptive K1 bounds."
                     )
-        energy = preset.get("energy_mev")
+        analysis = _expect_mapping(preset.get("analysis", {}), f"{location}.analysis")
+        energy = analysis.get("energy_mev", preset.get("energy_mev"))
         if not isinstance(energy, (int, float)) or energy <= 0:
             raise MachineProfileError(f"{location}.energy_mev must be a positive number.")
 

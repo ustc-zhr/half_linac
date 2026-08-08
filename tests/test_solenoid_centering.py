@@ -651,6 +651,20 @@ class SolenoidCenteringTests(unittest.TestCase):
                 scanner.run()
         self.assertEqual(io.writes, [])
 
+    def test_preflight_rejects_current_value_outside_physical_limit(self):
+        context, preset, values = _ready_fixture()
+        hcorr_pv = resolve_corrector_write_channel(context, preset.hcorr)
+        values[hcorr_pv] = 11.0
+        scanner = scan.SolenoidCenteringScanner(context, preset, io=MockIO(values))
+
+        with self.assertRaisesRegex(
+            MachineProfileError,
+            rf"Current value for {preset.hcorr}\.current_set is outside",
+        ):
+            scanner.preflight()
+
+        self.assertEqual(scanner.io.writes, [])
+
     def test_preflight_rejects_readback_deviation(self):
         context, preset, values = _ready_fixture()
         values[_solenoid_readback_pv(context, preset)] = 1.2

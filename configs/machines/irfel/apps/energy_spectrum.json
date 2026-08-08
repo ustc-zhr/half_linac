@@ -7,31 +7,17 @@
     "vm": [360, 270],
     "real": [1440, 1080]
   },
-  "flag_pixel_width_mm": {
-    "vm": 0.02,
-    "real": 0.02
-  },
+  "flag_pixel_width_mm": {"vm": 0.02, "real": 0.02},
   "bend_element": "BM03",
   "energy_element": "ESA_ENERGY",
   "energy_set_channel": "setpoint",
   "energy_reference_channel": "setpoint",
-  "auto_tune_actuator": {
-    "element": "ESA_ENERGY",
-    "channel": "setpoint",
-    "unit": "MeV"
-  },
+  "auto_tune_actuator": {"element": "ESA_ENERGY", "channel": "setpoint", "unit": "MeV"},
   "auto_tune_control_backends": ["real"],
   "auto_tune_objective": "brightness_then_profile_lock",
   "model_backend": "simulation",
   "twiss_target_element": "PRFESA",
-  "auto_tune_scan": {
-    "min": 0,
-    "max": 65,
-    "coarse_steps": 16,
-    "fine_steps": 31,
-    "settle_time_s": 1,
-    "restore_initial_on_failure": true
-  },
+  "auto_tune_scan": {"min": 0, "max": 65, "coarse_steps": 16, "fine_steps": 31, "settle_time_s": 1, "restore_initial_on_failure": true},
   "auto_tune_center_lock": {
     "frame_samples": 3,
     "min_valid_frames": 2,
@@ -39,27 +25,17 @@
     "verification_min_valid_frames": 3,
     "frame_interval_s": 0.2,
     "center_step": 0.05,
-    "max_total_offset": 1.0,
+    "max_total_offset": 1,
     "center_tolerance_mm": 0.2
   },
   "esa_quads": ["QM19", "QM20"],
   "start_elements": ["QM12", "QM19"],
   "default_start_element": "QM12",
   "optics_input_presets": {
-    "QM12": {
-      "alpha_x": -2.26,
-      "beta_x_m": 10.0,
-      "emittance_x_nm": 102.81183
-    }
+    "QM12": {"alpha_x": -2.26, "beta_x_m": 10, "emittance_x_nm": 102.81183}
   },
   "energy0_default_mev": 36,
-  "x_reference_mm": {
-    "vm": 0.0,
-    "real": 0.0
-  },
+  "x_reference_mm": {"vm": 0, "real": 0},
   "real_status": "commissioned",
-  "write_control": {
-    "vm": "allowed",
-    "real": "allowed"
-  }
+  "write_control": {"vm": "allowed", "real": "allowed"}
 }

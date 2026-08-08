@@ -6,24 +6,20 @@
       "flag": "PRF03",
       "model_line": "EMIT_QL10_PRF03",
       "scan": {
-        "k1_from": -4.0,
-        "k1_end": -1.5,
-        "k1_steps": 15,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5,
+        "quadrupole": {"low": -4, "high": -1.5, "steps": 15, "unit": "1/m^2", "mode": "absolute"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5},
         "adaptive": {
-          "k1_min": -6.0,
-          "k1_max": 0.0,
+          "low": -6,
+          "high": 0,
           "initial_points": 4,
           "target_points_per_plane": 7,
           "max_unique_points": 16,
-          "waist_size_squared_ratio": 2.0,
+          "waist_size_squared_ratio": 2,
           "reuse_tolerance": 0.01,
           "max_retries": 2
         }
       },
-      "energy_mev": 114.15
+      "analysis": {"energy_mev": 114.15}
     },
     {
       "id": "emit_qt02_prf07",
@@ -31,24 +27,20 @@
       "flag": "PRF07",
       "model_line": "EMIT_QT02_PRF07",
       "scan": {
-        "k1_from": 1.5,
-        "k1_end": 2.5,
-        "k1_steps": 15,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 8,
+        "quadrupole": {"low": 1.5, "high": 2.5, "steps": 15, "unit": "1/m^2", "mode": "absolute"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 8},
         "adaptive": {
-          "k1_min": 0.5,
-          "k1_max": 3.5,
+          "low": 0.5,
+          "high": 3.5,
           "initial_points": 4,
           "target_points_per_plane": 7,
           "max_unique_points": 16,
-          "waist_size_squared_ratio": 2.0,
+          "waist_size_squared_ratio": 2,
           "reuse_tolerance": 0.01,
           "max_retries": 2
         }
       },
-      "energy_mev": 2200
+      "analysis": {"energy_mev": 2200}
     },
     {
       "id": "emit_qt26_prf12",
@@ -56,29 +48,22 @@
       "flag": "PRF12",
       "model_line": "EMIT_QT26_PRF12",
       "scan": {
-        "k1_from": -1.0,
-        "k1_end": 1.0,
-        "k1_steps": 15,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5,
+        "quadrupole": {"low": -1, "high": 1, "steps": 15, "unit": "1/m^2", "mode": "absolute"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5},
         "adaptive": {
-          "k1_min": -2.0,
-          "k1_max": 2.0,
+          "low": -2,
+          "high": 2,
           "initial_points": 4,
           "target_points_per_plane": 7,
           "max_unique_points": 16,
-          "waist_size_squared_ratio": 2.0,
+          "waist_size_squared_ratio": 2,
           "reuse_tolerance": 0.01,
           "max_retries": 2
         }
       },
-      "energy_mev": 2200
+      "analysis": {"energy_mev": 2200}
     }
   ],
   "default_preset": "emit_qt02_prf07",
-  "write_control": {
-    "vm": "allowed",
-    "real": "blocked"
-  }
+  "write_control": {"vm": "allowed", "real": "blocked"}
 }

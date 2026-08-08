@@ -5,16 +5,10 @@
       "quad": "Q01",
       "flag": "PRF01",
       "scan": {
-        "k1_from": 0.0,
-        "k1_end": 1.0,
-        "k1_steps": 5,
-        "samples": 3,
-        "settle_time": 0.5,
-        "sample_interval": 0.5
+        "quadrupole": {"low": 0, "high": 1, "steps": 5, "unit": "1/m^2", "mode": "absolute"},
+        "sampling": {"samples_per_point": 3, "settle_time_s": 0.5, "sample_interval_s": 0.5}
       },
-      "analysis": {
-        "energy_mev": 100.0
-      }
+      "analysis": {"energy_mev": 100}
     }
   ]
 }

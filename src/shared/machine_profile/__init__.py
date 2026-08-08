@@ -34,6 +34,7 @@ from .loader import (
     VirtualMachineUsedlineWorkflow,
     load_solenoid_centering_workflow,
 )
+from .limits import LimitRange, effective_limit
 from .energy_spectrum import (
     LEGACY_ENERGY_SPECTRUM_STATION_ID,
     resolve_default_energy_spectrum_station,
@@ -150,6 +151,7 @@ __all__ = [
     "MachineChoice",
     "MACHINE_ID_ENV",
     "LATEST_DIRNAME",
+    "LimitRange",
     "LEGACY_ENERGY_SPECTRUM_STATION_ID",
     "LEGACY_CONTROL_BACKEND_ENV",
     "LEGACY_MACHINE_ID_ENV",
@@ -198,6 +200,7 @@ __all__ = [
     "describe_app_support",
     "describe_app_model_support",
     "get_bba_preset",
+    "effective_limit",
     "get_emit_preset",
     "get_workflow",
     "list_elements",

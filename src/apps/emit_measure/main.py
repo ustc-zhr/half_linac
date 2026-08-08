@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 from datetime import datetime
 from collections.abc import Mapping
+from dataclasses import replace
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -89,6 +90,7 @@ from half_linac.src.apps.emit_measure.adaptive_scan import (
     seed_values,
     validate_adaptive_scan,
 )
+from half_linac.src.apps.emit_measure.profile_runtime import effective_k1_scan_limit
 
 nest_dict    = lambda: defaultdict(nest_dict)
 
@@ -1495,6 +1497,15 @@ class myWindow(QWidget,Ui_Form):
         self.sample_interval_edit.setText("0.5")
         form.addWidget(self.sample_interval_label, 6, 0)
         form.addWidget(self.sample_interval_edit, 6, 1)
+        self.k1_range_mode_label = QLabel("", self.widget_4)
+        self.k1_range_mode_label.setToolTip(
+            "Adaptive low/high inherit the same K1 unit and range mode. "
+            "Relative ranges use the K1 value read at scan start."
+        )
+        k1_range_mode_title = QLabel("Range mode", self.widget_4)
+        k1_range_mode_title.setProperty("role", "field")
+        form.addWidget(k1_range_mode_title, 7, 0)
+        form.addWidget(self.k1_range_mode_label, 7, 1, 1, 3)
         form.setColumnStretch(1, 1)
         form.setColumnStretch(3, 1)
         layout.addLayout(form)
@@ -2274,6 +2285,8 @@ class myWindow(QWidget,Ui_Form):
             "k1_from": paras.k1_from,
             "k1_end": paras.k1_end,
             "k1_steps": paras.k1_steps,
+            "k1_mode": paras.k1_mode,
+            "k1_unit": paras.k1_unit,
             "samples": paras.samples,
             "settle_time": paras.settle_time,
             "sample_interval": paras.sample_interval,
@@ -3038,6 +3051,15 @@ class myWindow(QWidget,Ui_Form):
         if preset.energy_mev is not None:
             self.lineEdit_2.setText(str(preset.energy_mev))
         scan = preset.scan
+        mode_text = (
+            "Relative to initial setpoint"
+            if scan.mode == "relative"
+            else "Absolute setpoints"
+        )
+        unit_suffix = f" ({scan.unit})" if scan.unit else ""
+        self.k1_range_mode_label.setText(
+            f"K1: {mode_text}{unit_suffix} · Adaptive inherits this setting"
+        )
         if scan.k1_from is not None:
             self.lineEdit_7.setText(str(scan.k1_from))
         if scan.k1_end is not None:
@@ -3122,6 +3144,8 @@ class myWindow(QWidget,Ui_Form):
 
             para.k1_from  = float(self.lineEdit_7.text())
             para.k1_end   = float(self.lineEdit_8.text())
+            para.k1_mode = preset.scan.mode or "absolute"
+            para.k1_unit = preset.scan.unit or "1/m^2"
             para.scan_strategy = self._selected_scan_strategy()
             steps_name = (
                 "Initial points"
@@ -4264,6 +4288,8 @@ class scanThread(QThread):
         self.k1_from    = paras.k1_from   
         self.k1_end     = paras.k1_end    
         self.k1_steps   = paras.k1_steps  
+        self.k1_mode = getattr(paras, "k1_mode", "absolute")
+        self.k1_unit = getattr(paras, "k1_unit", "1/m^2")
         self.samples    = paras.samples   
         self.EnergyMeV  = paras.EnergyMeV
         self.settle_time = paras.settle_time
@@ -4291,6 +4317,7 @@ class scanThread(QThread):
         self.adaptive_plane_validation = None
         self.final_plane_validation = None
         self.is_running = True
+        self.effective_k1_limit = None
 
     def _sleep_or_stop(self, seconds):
         end_time = time.time() + seconds
@@ -4315,6 +4342,11 @@ class scanThread(QThread):
         self.trigger.emit(payload)
 
     def _acquire_k1(self, k1, *, adaptive=False):
+        if self.effective_k1_limit is not None and not self.effective_k1_limit.contains(k1):
+            raise MachineProfileError(
+                f"Planned K1 {float(k1):g} is outside effective limit "
+                f"{self.effective_k1_limit.describe()} for {self.quad_name}.K1."
+            )
         epics.caput(self.quadPV, k1)
         if not self._sleep_or_stop(self.settle_time):
             return None
@@ -4535,7 +4567,35 @@ class scanThread(QThread):
                 iniK1 = epics.caget(self.quadPV)
                 if iniK1 is None:
                     raise RuntimeError(f"Failed to read initial quad value from {self.quadPV}.")
+                scan_limit = effective_k1_scan_limit(
+                    self.app_context,
+                    self.quad_name,
+                    self.k1_from,
+                    self.k1_end,
+                    self.k1_mode,
+                    self.k1_unit,
+                    iniK1,
+                )
+                assert scan_limit.low is not None and scan_limit.high is not None
+                self.k1_from, self.k1_end = scan_limit.low, scan_limit.high
+                self.effective_k1_limit = scan_limit
                 if self.scan_strategy == "adaptive":
+                    adaptive_limit = effective_k1_scan_limit(
+                        self.app_context,
+                        self.quad_name,
+                        self.adaptive_config.k1_min,
+                        self.adaptive_config.k1_max,
+                        self.k1_mode,
+                        self.k1_unit,
+                        iniK1,
+                    )
+                    assert adaptive_limit.low is not None and adaptive_limit.high is not None
+                    self.adaptive_config = replace(
+                        self.adaptive_config,
+                        k1_min=adaptive_limit.low,
+                        k1_max=adaptive_limit.high,
+                    )
+                    self.effective_k1_limit = adaptive_limit
                     self._run_adaptive_scan()
                 else:
                     self._run_grid_scan()

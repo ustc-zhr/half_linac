@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from half_linac.src.shared.machine_profile import (
     AppContext,
+    LimitRange,
     MachineProfile,
+    MachineProfileError,
+    effective_limit,
     new_app_run_dir,
     resolve_app_runtime_paths,
 )
@@ -20,6 +25,62 @@ BBA2_METADATA_FILE = "bba2_metadata.json"
 BBA2_QUAD_SCAN_FILE = "bba2_k1Lqm2.txt"
 BBA2_BPM1_FILE = "bba2_m1.txt"
 BBA2_CORRECTOR_SCAN_FILE = "bba2_thetam2.txt"
+
+
+def resolve_scan_values(low: float, high: float, steps: int, mode: str, center: float) -> np.ndarray:
+    values = np.linspace(low, high, steps)
+    normalized_mode = str(mode or "absolute").strip().lower()
+    if normalized_mode == "relative":
+        try:
+            center_value = float(center)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Relative scan requires a finite current setpoint.") from exc
+        if not np.isfinite(center_value):
+            raise ValueError("Relative scan requires a finite current setpoint.")
+        values = values + center_value
+    elif normalized_mode != "absolute":
+        raise ValueError(f"Unsupported scan mode: {mode!r}.")
+    if not np.all(np.isfinite(values)):
+        raise ValueError("Scan values must be finite.")
+    return values
+
+
+def resolve_limited_scan_values(
+    target: MachineProfile | AppContext,
+    element_id: str,
+    logical_channel: str,
+    low: float,
+    high: float,
+    steps: int,
+    mode: str,
+    unit: str,
+    center: float,
+) -> np.ndarray:
+    """Resolve an application scan range and intersect it with channel limits."""
+    profile = target.profile if isinstance(target, AppContext) else target
+    element = profile.get_element(element_id)
+    try:
+        application_limit = LimitRange(low, high, unit)
+        if str(mode or "absolute").strip().lower() == "relative":
+            application_limit = application_limit.relative_to_absolute(center)
+        elif str(mode or "absolute").strip().lower() != "absolute":
+            raise MachineProfileError(f"Unsupported scan mode: {mode!r}.")
+
+        raw_machine_limit = element.limits_for(logical_channel)
+        machine_limit = LimitRange.from_mapping(raw_machine_limit) if raw_machine_limit else None
+        if machine_limit is not None and not machine_limit.contains(center):
+            raise MachineProfileError(
+                f"Current value {float(center):g} is outside physical limit "
+                f"{machine_limit.describe()}."
+            )
+        selected = effective_limit(application_limit, machine_limit)
+    except (TypeError, ValueError, MachineProfileError) as exc:
+        raise MachineProfileError(
+            f"Invalid BBA scan range for {element_id}.{logical_channel}: {exc}"
+        ) from exc
+
+    assert selected.low is not None and selected.high is not None
+    return np.linspace(selected.low, selected.high, steps)
 
 
 def resolve_bba_runtime_paths(target: MachineProfile | AppContext) -> dict[str, Path]:

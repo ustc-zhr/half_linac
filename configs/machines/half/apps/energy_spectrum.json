@@ -2,15 +2,10 @@
   "default_station": "eny",
   "model_backend": "simulation",
   "flag_image_channel": "image",
-  "flag_pixel_width_mm": {
-    "vm": 0.02,
-    "real": 0.02
-  },
+  "flag_pixel_width_mm": {"vm": 0.02, "real": 0.02},
   "energy_set_channel": "setpoint",
   "energy_reference_channel": "setpoint",
-  "energy_control_backends": [
-    "real"
-  ],
+  "energy_control_backends": ["real"],
   "auto_tune_objective": "brightness_then_profile_lock",
   "auto_tune_center_lock": {
     "frame_samples": 3,
@@ -19,13 +14,10 @@
     "verification_min_valid_frames": 3,
     "frame_interval_s": 0.2,
     "center_step": 0.05,
-    "max_total_offset": 1.0,
+    "max_total_offset": 1,
     "center_tolerance_mm": 0.2
   },
-  "x_reference_mm": {
-    "vm": 0.0,
-    "real": 0.0
-  },
+  "x_reference_mm": {"vm": 0, "real": 0},
   "stations": {
     "eny": {
       "label": "ENY",
@@ -33,44 +25,17 @@
       "vm_watch_element": "ENY",
       "flag_exposure_channel": "exposure_time",
       "flag_pixel_shape": {
-        "vm": [
-          720,
-          270
-        ],
-        "real": [
-          1440,
-          1080
-        ]
+        "vm": [720, 270],
+        "real": [1440, 1080]
       },
       "bend_element": "BENY",
       "twiss_target_element": "ENY",
       "energy_element": "LINAC_ENERGY",
-      "auto_tune_actuator": {
-        "element": "LINAC_ENERGY",
-        "channel": "setpoint",
-        "unit": "MeV"
-      },
-      "auto_tune_control_backends": [
-        "real"
-      ],
-      "auto_tune_scan": {
-        "min": 0,
-        "max": 2450,
-        "coarse_steps": 16,
-        "fine_steps": 31,
-        "settle_time_s": 1.0,
-        "restore_initial_on_failure": true
-      },
-      "energy_from_bend_current": {
-        "magnet_length_m": 2.7271,
-        "deflect_angle_rad": 0.4363323129985824,
-        "field_t_per_a": 0.000599792458
-      },
-      "esa_quads": [
-        "QE01",
-        "QE02",
-        "QE03"
-      ],
+      "auto_tune_actuator": {"element": "LINAC_ENERGY", "channel": "setpoint", "unit": "MeV"},
+      "auto_tune_control_backends": ["real"],
+      "auto_tune_scan": {"min": 0, "max": 2450, "coarse_steps": 16, "fine_steps": 31, "settle_time_s": 1, "restore_initial_on_failure": true},
+      "energy_from_bend_current": {"magnet_length_m": 2.7271, "deflect_angle_rad": 0.4363323129985824, "field_t_per_a": 0.000599792458},
+      "esa_quads": ["QE01", "QE02", "QE03"],
       "start_element_tag": "esa_start",
       "default_start_element": "QT02",
       "energy0_default_mev": 2200,
@@ -82,33 +47,17 @@
       "vm_watch_element": "PRF02",
       "flag_exposure_channel": null,
       "flag_pixel_shape": {
-        "vm": [
-          360,
-          270
-        ],
-        "real": [
-          1440,
-          1080
-        ]
+        "vm": [360, 270],
+        "real": [1440, 1080]
       },
       "bend_element": "BL01A",
       "twiss_target_element": "PRF02",
       "energy_element": "PREINJECTOR_ENERGY",
-      "auto_tune_actuator": {
-        "element": "PREINJECTOR_ENERGY",
-        "channel": "setpoint",
-        "unit": "MeV"
-      },
+      "auto_tune_actuator": {"element": "PREINJECTOR_ENERGY", "channel": "setpoint", "unit": "MeV"},
       "auto_tune_control_backends": [],
-      "esa_quads": [
-        "QL01",
-        "QL02"
-      ],
+      "esa_quads": ["QL01", "QL02"],
       "start_element_tag": null,
-      "start_elements": [
-        "QL01",
-        "QL02"
-      ],
+      "start_elements": ["QL01", "QL02"],
       "default_start_element": "QL01",
       "energy0_default_mev": 114.16,
       "energy_dispersion_line_name": "PRF02local",
@@ -117,8 +66,5 @@
       "design_eta_m": -0.3280857973174453
     }
   },
-  "write_control": {
-    "vm": "allowed",
-    "real": "allowed"
-  }
+  "write_control": {"vm": "allowed", "real": "allowed"}
 }

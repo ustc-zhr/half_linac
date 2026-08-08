@@ -29,6 +29,7 @@ from half_linac.src.shared.machine_profile import (
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     CORRECT_LOG_PATH,
     display_unit,
+    effective_corrector_limit,
     load_orbit_runtime_settings,
     resolve_active_response_matrix,
 )
@@ -160,6 +161,15 @@ class OrbitCorrector:
             raise ValueError("Orbit workflow is not available in the current app context.")
         self.cor_x_list_all = list(self.orbit_workflow.xcors)
         self.cor_y_list_all = list(self.orbit_workflow.ycors)
+        self.corrector_limits = {
+            element_id: effective_corrector_limit(
+                self.app_context,
+                element_id,
+                self.max_value,
+                self.orbit_runtime["corrector_upperlimit_unit"],
+            )
+            for element_id in self.cor_x_list_all + self.cor_y_list_all
+        }
         self.bpm_list_all = list(self.orbit_workflow.bpms)
         self.N_BPM = len(self.bpm_list_all)
         self.N_COR = len(self.cor_x_list_all)
@@ -463,8 +473,16 @@ class OrbitCorrector:
     def _bounded_correction_step(self, error: float, response: float) -> float:
         return float(self._bounded_correction_delta(error / response))
 
-    def _clip_corrector(self, value: float) -> float:
-        return float(np.clip(value, -self.max_value, self.max_value))
+    def _clip_corrector(self, element_id: str, value: float) -> float:
+        return self.corrector_limits[element_id].clip(value)
+
+    def _require_current_within_limit(self, element_id: str, value: float) -> None:
+        limit = self.corrector_limits[element_id]
+        if not limit.contains(value):
+            raise ValueError(
+                f"Current value for {element_id} is outside its effective limit: "
+                f"{value:g} {self.max_value_unit}, expected {limit.describe()}."
+            )
 
     def correct_one_to_one(self) -> bool:
         """one-to-one method"""
@@ -496,6 +514,10 @@ class OrbitCorrector:
                 self.pvCORx[j],
                 self.pvCORy[j]
             ], bpm_count=2)
+            xcor_id = self.cor_x_list_target[j]
+            ycor_id = self.cor_y_list_target[j]
+            self._require_current_within_limit(xcor_id, hcorrVal)
+            self._require_current_within_limit(ycor_id, vcorrVal)
 
             initial_x_err = abs(self.target_BPMx_values[j] - xbpm_val0)
             initial_y_err = abs(self.target_BPMy_values[j] - ybpm_val0)
@@ -520,6 +542,14 @@ class OrbitCorrector:
                 )
             else:
                 # 微调并测量响应。X/Y corrector 分开 kick，避免交叉影响响应系数。
+                if not self.corrector_limits[xcor_id].contains(hcorrVal + self.d_value):
+                    raise ValueError(
+                        f"Response kick would exceed the effective limit for {xcor_id}."
+                    )
+                if not self.corrector_limits[ycor_id].contains(vcorrVal + self.d_value):
+                    raise ValueError(
+                        f"Response kick would exceed the effective limit for {ycor_id}."
+                    )
                 try:
                     self._write_pv(self.pvCORx[j], hcorrVal + self.d_value, "X corrector response kick")
                     self._wait_for_correction_settle()
@@ -599,8 +629,12 @@ class OrbitCorrector:
                     vcorrVal,
                 )
 
-                next_hcorr = self._clip_corrector(hcorrVal + self._bounded_correction_step(x_delta, Rx))
-                next_vcorr = self._clip_corrector(vcorrVal + self._bounded_correction_step(y_delta, Ry))
+                next_hcorr = self._clip_corrector(
+                    xcor_id, hcorrVal + self._bounded_correction_step(x_delta, Rx)
+                )
+                next_vcorr = self._clip_corrector(
+                    ycor_id, vcorrVal + self._bounded_correction_step(y_delta, Ry)
+                )
 
                 if previous_pair is not None and (
                     abs(next_hcorr - previous_pair[0]) < CORRECTOR_EPS
@@ -889,26 +923,30 @@ class OrbitCorrector:
             # 应用校正
             hcor_vals = self._read_many_pvs(pvname_corx, "X corrector setpoints")
             vcor_vals = self._read_many_pvs(pvname_cory, "Y corrector setpoints")
-            new_hcor = np.clip(
-                hcor_vals + delt_corrh,
-                -1*self.max_value, 1*self.max_value
-            )
-            new_vcor = np.clip(
-                vcor_vals + delt_corrv,
-                -1*self.max_value, 1*self.max_value
-            )
-            saturated_x = int(np.count_nonzero(np.isclose(np.abs(new_hcor), self.max_value)))
-            saturated_y = int(np.count_nonzero(np.isclose(np.abs(new_vcor), self.max_value)))
+            for element_id, value in zip(self.global_xcor_list, hcor_vals):
+                self._require_current_within_limit(element_id, value)
+            for element_id, value in zip(self.global_ycor_list, vcor_vals):
+                self._require_current_within_limit(element_id, value)
+            requested_hcor = hcor_vals + delt_corrh
+            requested_vcor = vcor_vals + delt_corrv
+            new_hcor = np.array([
+                self._clip_corrector(element_id, value)
+                for element_id, value in zip(self.global_xcor_list, requested_hcor)
+            ])
+            new_vcor = np.array([
+                self._clip_corrector(element_id, value)
+                for element_id, value in zip(self.global_ycor_list, requested_vcor)
+            ])
+            saturated_x = int(np.count_nonzero(~np.isclose(new_hcor, requested_hcor)))
+            saturated_y = int(np.count_nonzero(~np.isclose(new_vcor, requested_vcor)))
             if saturated_x or saturated_y:
                 logger.warning(
-                    "iteration %s: corrector limit reached: X %s/%s, Y %s/%s at +/-%.3e %s",
+                    "iteration %s: per-element effective corrector limit reached: X %s/%s, Y %s/%s",
                     iteration,
                     saturated_x,
                     len(new_hcor),
                     saturated_y,
                     len(new_vcor),
-                    self.max_value,
-                    self.max_value_unit,
                 )
             
             self._write_many_pvs(pvname_corx, new_hcor, "X corrector setpoints")

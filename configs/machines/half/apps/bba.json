@@ -9,15 +9,12 @@
       "bpm1": "BPM21",
       "bpm2": "BPM22",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -29,15 +26,12 @@
       "bpm1": "BPM21",
       "bpm2": "BPM22",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -49,15 +43,12 @@
       "bpm1": "BPM26",
       "bpm2": "BPM27",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -69,15 +60,12 @@
       "bpm1": "BPM26",
       "bpm2": "BPM27",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -89,15 +77,12 @@
       "bpm1": "BPM26",
       "bpm2": "BPM27",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -109,15 +94,12 @@
       "bpm1": "BPM26",
       "bpm2": "BPM27",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -129,15 +111,12 @@
       "bpm1": "BPM26",
       "bpm2": "BPM27",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -149,15 +128,12 @@
       "bpm1": "BPM26",
       "bpm2": "BPM27",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -169,15 +145,12 @@
       "bpm1": "BPM27",
       "bpm2": "BPM28",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -189,15 +162,12 @@
       "bpm1": "BPM27",
       "bpm2": "BPM28",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -209,15 +179,12 @@
       "bpm1": "BPM27",
       "bpm2": "BPM28",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -229,15 +196,12 @@
       "bpm1": "BPM27",
       "bpm2": "BPM28",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -249,15 +213,12 @@
       "bpm1": "BPM28",
       "bpm2": "BPM29",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -269,15 +230,12 @@
       "bpm1": "BPM28",
       "bpm2": "BPM29",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -289,15 +247,12 @@
       "bpm1": "BPM29",
       "bpm2": "BPM30",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
@@ -309,19 +264,16 @@
       "bpm1": "BPM29",
       "bpm2": "BPM30",
       "scan": {
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       }
     },
     {
-      "id": "bba2_default",
+      "id": "bba2_qt04_xc22",
       "family": "bba2",
       "plane": "X",
       "quad": "QT04",
@@ -329,15 +281,12 @@
       "bpm1": "BPM21",
       "bpm2": "BPM22",
       "scan": {
-        "quad_from": -5,
-        "quad_end": 5,
-        "quad_steps": 5,
-        "corr_from": -0.001,
-        "corr_end": 0.001,
-        "corr_steps": 5,
-        "samples": 1,
-        "settle_time": 8,
-        "sample_interval": 0.5
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
       },
       "analysis": {
         "energy_mev": 2200,
@@ -350,14 +299,7 @@
       }
     }
   ],
-  "bba1": {
-    "default_preset": "bba1_qt04_xc21"
-  },
-    "bba2": {
-    "default_preset": "bba2_default"
-  },
-  "write_control": {
-    "vm": "allowed",
-    "real": "blocked"
-  }
+  "bba1": {"default_preset": "bba1_qt04_xc21"},
+  "bba2": {"default_preset": "bba2_qt04_xc22"},
+  "write_control": {"vm": "allowed", "real": "blocked"}
 }

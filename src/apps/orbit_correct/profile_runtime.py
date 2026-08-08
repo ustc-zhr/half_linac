@@ -9,8 +9,10 @@ import numpy as np
 
 from half_linac.src.shared.machine_profile import (
     AppContext,
+    LimitRange,
     MachineProfile,
     MachineProfileError,
+    effective_limit,
     get_workflow,
 )
 
@@ -87,6 +89,39 @@ def display_unit(unit: str) -> str:
     if normalized.lower() == "a":
         return "A"
     return normalized
+
+
+def effective_corrector_limit(
+    target: MachineProfile | AppContext,
+    element_id: str,
+    application_bound: float,
+    application_unit: str,
+) -> LimitRange:
+    """Return application policy intersected with this corrector's channel limit."""
+    profile = target.profile if isinstance(target, AppContext) else target
+    backend = _backend_name(target)
+    logical_channel = "kick" if backend == "vm" else "current_set"
+    element_limits = profile.get_element(element_id).limits
+    raw_channel_limit = element_limits.get(logical_channel)
+    if isinstance(raw_channel_limit, Mapping):
+        raw_machine_limit = raw_channel_limit
+    elif logical_channel == "current_set" and (
+        "low" in element_limits or "high" in element_limits
+    ):
+        # Legacy element-level limits represented real corrector current bounds.
+        raw_machine_limit = element_limits
+    else:
+        raw_machine_limit = {}
+    machine_limit = (
+        LimitRange.from_mapping(raw_machine_limit) if raw_machine_limit else None
+    )
+    application_limit = LimitRange.symmetric(application_bound, application_unit)
+    try:
+        return effective_limit(application_limit, machine_limit)
+    except MachineProfileError as exc:
+        raise MachineProfileError(
+            f"Invalid effective limit for {element_id}.{logical_channel}: {exc}"
+        ) from exc
 
 
 def resolve_orbit_runtime_paths(target: MachineProfile | AppContext) -> dict[str, Path]:

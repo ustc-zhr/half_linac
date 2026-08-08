@@ -1,15 +1,7 @@
 {
   "predefined_usedlines": [
-    {
-      "id": "ALL_MAIN",
-      "label": "Main Line",
-      "role": "main"
-    },
-    {
-      "id": "ALL_ESA",
-      "label": "ESA Line",
-      "role": "energy_spectrum"
-    }
+    {"id": "ALL_MAIN", "label": "Main Line", "role": "main"},
+    {"id": "ALL_ESA", "label": "ESA Line", "role": "energy_spectrum"}
   ],
   "default_usedline": "ALL_MAIN",
   "local_segments": [

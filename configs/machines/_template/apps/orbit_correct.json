@@ -1,23 +1,8 @@
 {
-  "response_wait_s_by_backend": {
-    "vm": 8,
-    "real": 8
-  },
-  "response_sample_interval_s_by_backend": {
-    "vm": 0.5,
-    "real": 0.5
-  },
-  "correction_settle_s_by_backend": {
-    "vm": 8.0,
-    "real": 8.0
-  },
-  "svd_relative_cutoff_by_backend": {
-    "vm": 0.01,
-    "real": 0.01
-  },
-  "bpm_position_scale_to_mm": {
-    "vm": 1000.0,
-    "real": 1.0
-  },
+  "response_wait_s_by_backend": {"vm": 8, "real": 8},
+  "response_sample_interval_s_by_backend": {"vm": 0.5, "real": 0.5},
+  "correction_settle_s_by_backend": {"vm": 8, "real": 8},
+  "svd_relative_cutoff_by_backend": {"vm": 0.01, "real": 0.01},
+  "bpm_position_scale_to_mm": {"vm": 1000, "real": 1},
   "corrector_upperlimit_rad": 0.001
 }

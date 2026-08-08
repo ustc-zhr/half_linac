@@ -169,7 +169,7 @@ def load_app_context(
     if app_name == "orbit_correct":
         orbit_workflow = load_orbit_workflow(profile)
     elif app_name == "bba":
-        bba_workflow = load_bba_workflow(profile)
+        bba_workflow = load_bba_workflow(profile, selected_control_backend.name)
     elif app_name == "emit_measure":
         emit_measure_workflow = load_emit_measure_workflow(profile)
     elif app_name == "solenoid_centering":
@@ -208,15 +208,22 @@ def load_orbit_workflow(profile: MachineProfile) -> OrbitWorkflowConfig:
     )
 
 
-def load_bba_workflow(profile: MachineProfile) -> BBAWorkflowConfig:
+def load_bba_workflow(
+    profile: MachineProfile,
+    control_backend: str | None = None,
+) -> BBAWorkflowConfig:
     workflow = _expect_mapping(profile.workflows.get("bba"), "workflows.bba")
+    backend = normalize_mode(
+        control_backend or profile.machine.default_mode,
+        "BBA control backend",
+    )
     presets_raw = _expect_list(workflow.get("presets"), "workflows.bba.presets")
 
     presets: list[BBAPreset] = []
     presets_by_id: dict[str, BBAPreset] = {}
     for index, raw_preset in enumerate(presets_raw):
         location = f"workflows.bba.presets[{index}]"
-        preset = _parse_bba_preset(raw_preset, location)
+        preset = _parse_bba_preset(raw_preset, location, backend)
         presets.append(preset)
         presets_by_id[preset.id] = preset
 
@@ -2809,7 +2816,11 @@ def _load_json_file(path: Path, location: str) -> Mapping[str, Any]:
     return raw
 
 
-def _parse_bba_preset(raw_preset: Any, location: str) -> BBAPreset:
+def _parse_bba_preset(
+    raw_preset: Any,
+    location: str,
+    control_backend: str,
+) -> BBAPreset:
     preset = _expect_mapping(raw_preset, location)
     return BBAPreset(
         id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
@@ -2820,7 +2831,11 @@ def _parse_bba_preset(raw_preset: Any, location: str) -> BBAPreset:
         bpm1=_expect_non_empty_string(preset.get("bpm1"), f"{location}.bpm1"),
         bpm2=_expect_non_empty_string(preset.get("bpm2"), f"{location}.bpm2"),
         mode=normalize_mode(preset.get("mode"), f"{location}.mode") if "mode" in preset else None,
-        scan=_parse_bba_scan_config(_expect_mapping(preset.get("scan", {}), f"{location}.scan")),
+        scan=_parse_bba_scan_config(
+            _expect_mapping(preset.get("scan", {}), f"{location}.scan"),
+            control_backend,
+            f"{location}.scan",
+        ),
         analysis=_parse_bba_analysis_config(
             _expect_mapping(preset.get("analysis", {}), f"{location}.analysis"),
         ),
@@ -3022,7 +3037,59 @@ def _parse_solenoid_centering_scan_range(
     )
 
 
-def _parse_bba_scan_config(raw_scan: Mapping[str, Any]) -> BBAScanConfig:
+def _parse_bba_scan_config(
+    raw_scan: Mapping[str, Any],
+    control_backend: str,
+    location: str,
+) -> BBAScanConfig:
+    structured_keys = {"corrector", "quadrupole", "sampling"}
+    if structured_keys & set(raw_scan):
+        legacy_keys = {
+            "corr_from", "corr_end", "corr_steps",
+            "quad_from", "quad_end", "quad_steps",
+            "samples", "settle_time", "sample_interval",
+        }
+        mixed = sorted(legacy_keys & set(raw_scan))
+        if mixed:
+            raise MachineProfileError(
+                f"{location} must not mix structured and legacy scan fields: "
+                + ", ".join(mixed)
+            )
+        corrector = _select_bba_scan_range(
+            raw_scan.get("corrector"),
+            control_backend,
+            f"{location}.corrector",
+        )
+        quadrupole = _select_bba_scan_range(
+            raw_scan.get("quadrupole"),
+            control_backend,
+            f"{location}.quadrupole",
+        )
+        sampling = _expect_mapping(raw_scan.get("sampling"), f"{location}.sampling")
+        return BBAScanConfig(
+            corr_from=corrector["low"],
+            corr_end=corrector["high"],
+            corr_steps=corrector["steps"],
+            quad_from=quadrupole["low"],
+            quad_end=quadrupole["high"],
+            quad_steps=quadrupole["steps"],
+            samples=_required_positive_int(
+                sampling.get("samples_per_point"),
+                f"{location}.sampling.samples_per_point",
+            ),
+            settle_time=_required_nonnegative_float(
+                sampling.get("settle_time_s"),
+                f"{location}.sampling.settle_time_s",
+            ),
+            sample_interval=_required_nonnegative_float(
+                sampling.get("sample_interval_s"),
+                f"{location}.sampling.sample_interval_s",
+            ),
+            corr_unit=corrector["unit"],
+            quad_unit=quadrupole["unit"],
+            corr_mode=corrector["mode"],
+            quad_mode=quadrupole["mode"],
+        )
     return BBAScanConfig(
         corr_from=_optional_float(raw_scan, "corr_from"),
         corr_end=_optional_float(raw_scan, "corr_end"),
@@ -3034,6 +3101,64 @@ def _parse_bba_scan_config(raw_scan: Mapping[str, Any]) -> BBAScanConfig:
         settle_time=_optional_float(raw_scan, "settle_time"),
         sample_interval=_optional_float(raw_scan, "sample_interval"),
     )
+
+
+def _select_bba_scan_range(
+    raw_range: Any,
+    control_backend: str,
+    location: str,
+) -> dict[str, Any]:
+    configured = _expect_mapping(raw_range, location)
+    if {"low", "high", "steps", "unit"} <= set(configured):
+        selected = configured
+        selected_location = location
+    else:
+        selected = _expect_mapping(
+            configured.get(control_backend),
+            f"{location}.{control_backend}",
+        )
+        selected_location = f"{location}.{control_backend}"
+
+    low = _required_finite_float(selected.get("low"), f"{selected_location}.low")
+    high = _required_finite_float(selected.get("high"), f"{selected_location}.high")
+    if low >= high:
+        raise MachineProfileError(
+            f"{selected_location}.low must be less than {selected_location}.high."
+        )
+    steps = _required_positive_int(selected.get("steps"), f"{selected_location}.steps")
+    unit = _expect_non_empty_string(selected.get("unit"), f"{selected_location}.unit")
+    mode = _expect_non_empty_string(
+        selected.get("mode", "absolute"),
+        f"{selected_location}.mode",
+    ).lower()
+    if mode not in {"absolute", "relative"}:
+        raise MachineProfileError(
+            f"{selected_location}.mode must be 'absolute' or 'relative'."
+        )
+    return {"low": low, "high": high, "steps": steps, "unit": unit, "mode": mode}
+
+
+def _required_finite_float(value: Any, location: str) -> float:
+    try:
+        selected = float(value)
+    except (TypeError, ValueError) as exc:
+        raise MachineProfileError(f"{location} must be numeric.") from exc
+    if not math.isfinite(selected):
+        raise MachineProfileError(f"{location} must be finite.")
+    return selected
+
+
+def _required_nonnegative_float(value: Any, location: str) -> float:
+    selected = _required_finite_float(value, location)
+    if selected < 0:
+        raise MachineProfileError(f"{location} must be non-negative.")
+    return selected
+
+
+def _required_positive_int(value: Any, location: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise MachineProfileError(f"{location} must be a positive integer.")
+    return value
 
 
 def _parse_bba_analysis_config(raw_analysis: Mapping[str, Any]) -> BBAAnalysisConfig:
@@ -3049,14 +3174,45 @@ def _parse_bba_analysis_config(raw_analysis: Mapping[str, Any]) -> BBAAnalysisCo
 
 
 def _parse_emit_scan_config(raw_scan: Mapping[str, Any]) -> EmitScanConfig:
-    adaptive_raw = raw_scan.get("adaptive")
+    structured = "quadrupole" in raw_scan or "sampling" in raw_scan
+    if structured:
+        legacy_keys = {
+            "k1_from", "k1_end", "k1_steps", "unit", "mode",
+            "samples", "settle_time", "sample_interval",
+        }
+        mixed = sorted(legacy_keys & set(raw_scan))
+        if mixed:
+            raise MachineProfileError(
+                "emit scan must not mix structured and legacy fields: " + ", ".join(mixed)
+            )
+        quadrupole = _expect_mapping(raw_scan.get("quadrupole"), "emit scan quadrupole")
+        sampling = _expect_mapping(raw_scan.get("sampling"), "emit scan sampling")
+        adaptive_raw = raw_scan.get("adaptive")
+        mode = (_optional_string(quadrupole, "mode") or "absolute").lower()
+        source = {
+            "k1_from": quadrupole.get("low"),
+            "k1_end": quadrupole.get("high"),
+            "k1_steps": quadrupole.get("steps"),
+            "unit": quadrupole.get("unit"),
+            "samples": sampling.get("samples_per_point"),
+            "settle_time": sampling.get("settle_time_s"),
+            "sample_interval": sampling.get("sample_interval_s"),
+        }
+    else:
+        adaptive_raw = raw_scan.get("adaptive")
+        mode = (_optional_string(raw_scan, "mode") or "absolute").lower()
+        source = raw_scan
+    if mode not in {"absolute", "relative"}:
+        raise MachineProfileError("emit scan mode must be 'absolute' or 'relative'.")
     return EmitScanConfig(
-        k1_from=_optional_float(raw_scan, "k1_from"),
-        k1_end=_optional_float(raw_scan, "k1_end"),
-        k1_steps=_optional_int(raw_scan, "k1_steps"),
-        samples=_optional_int(raw_scan, "samples"),
-        settle_time=_optional_float(raw_scan, "settle_time"),
-        sample_interval=_optional_float(raw_scan, "sample_interval"),
+        k1_from=_optional_float(source, "k1_from"),
+        k1_end=_optional_float(source, "k1_end"),
+        k1_steps=_optional_int(source, "k1_steps"),
+        samples=_optional_int(source, "samples"),
+        settle_time=_optional_float(source, "settle_time"),
+        sample_interval=_optional_float(source, "sample_interval"),
+        unit=_optional_string(source, "unit") or "1/m^2",
+        mode=mode,
         adaptive=(
             None
             if adaptive_raw is None
@@ -3070,9 +3226,14 @@ def _parse_emit_scan_config(raw_scan: Mapping[str, Any]) -> EmitScanConfig:
 def _parse_emit_adaptive_scan_config(
     raw_adaptive: Mapping[str, Any],
 ) -> EmitAdaptiveScanConfig:
+    structured = "low" in raw_adaptive or "high" in raw_adaptive
+    if structured and ({"k1_min", "k1_max"} & set(raw_adaptive)):
+        raise MachineProfileError(
+            "emit scan adaptive must not mix low/high with k1_min/k1_max."
+        )
     return EmitAdaptiveScanConfig(
-        k1_min=_optional_float(raw_adaptive, "k1_min"),
-        k1_max=_optional_float(raw_adaptive, "k1_max"),
+        k1_min=_optional_float(raw_adaptive, "low" if structured else "k1_min"),
+        k1_max=_optional_float(raw_adaptive, "high" if structured else "k1_max"),
         initial_points=_optional_int(raw_adaptive, "initial_points"),
         target_points_per_plane=_optional_int(raw_adaptive, "target_points_per_plane"),
         max_unique_points=_optional_int(raw_adaptive, "max_unique_points"),

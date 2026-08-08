@@ -2,33 +2,18 @@
   "default_flag": "PRF06",
   "profile_method": "Gaussian fit",
   "background_sample_count": 5,
-  "background_sample_interval_s": 1.0,
+  "background_sample_interval_s": 1,
   "flag_pixel_geometry": {
     "default": {
-      "vm": {
-        "shape": [360, 270],
-        "pixel_width_mm": 0.02
-      },
-      "real": {
-        "shape": [1440, 1080],
-        "pixel_width_mm": 0.02
-      }
+      "vm": {"shape": [360, 270], "pixel_width_mm": 0.02},
+      "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}
     },
     "by_flag": {
       "ENY": {
-        "vm": {
-          "shape": [720, 270],
-          "pixel_width_mm": 0.02
-        },
-        "real": {
-          "shape": [1440, 1080],
-          "pixel_width_mm": 0.02
-        }
+        "vm": {"shape": [720, 270], "pixel_width_mm": 0.02},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}
       }
     }
   },
-  "write_control": {
-    "vm": "allowed",
-    "real": "blocked"
-  }
+  "write_control": {"vm": "allowed", "real": "blocked"}
 }

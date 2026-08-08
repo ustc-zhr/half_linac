@@ -23,9 +23,11 @@ ensure_repo_import_path(__file__)
 from half_linac.src.shared.machine_profile import (
     AppContext,
     ElementConfig,
+    LimitRange,
     MachineProfileError,
     SolenoidCenteringPreset,
     SolenoidCenteringScanRange,
+    effective_limit,
     load_app_context,
     require_workflow_write_allowed,
     resolve_channel,
@@ -348,7 +350,19 @@ def _bounded_candidate_info(
     requested = tuple(float(value) for value in relative_scan_points(center, scan_range))
     if limits is None:
         return requested, False, False
-    low, high = limits
+    machine_limit = LimitRange(low=limits[0], high=limits[1])
+    relative_limit = LimitRange(
+        low=min(scan_range.relative_from, scan_range.relative_to),
+        high=max(scan_range.relative_from, scan_range.relative_to),
+    )
+    application_absolute = relative_limit.relative_to_absolute(center)
+    try:
+        selected_limit = effective_limit(application_absolute, machine_limit)
+    except MachineProfileError:
+        return (), True, True
+    assert selected_limit.low is not None
+    assert selected_limit.high is not None
+    low, high = selected_limit.low, selected_limit.high
     tolerance = max(1.0, abs(low), abs(high)) * 1e-12
     feasible = tuple(value for value in requested if low - tolerance <= value <= high + tolerance)
     clipped_low = any(value < low - tolerance for value in requested)
@@ -929,6 +943,11 @@ class SolenoidCenteringScanner:
             raise MachineProfileError(
                 f"Cannot verify physical limits for solenoid PV {self.solenoid_pv}."
             )
+        self._require_current_within_limit(solenoid_element, original_solenoid)
+        hcorr_element = self.app_context.profile.get_element(self.preset.hcorr)
+        vcorr_element = self.app_context.profile.get_element(self.preset.vcorr)
+        self._require_current_within_limit(hcorr_element, original_hcorr)
+        self._require_current_within_limit(vcorr_element, original_vcorr)
         range_checks.append(
             self._build_range_check(
                 "solenoid",
@@ -941,7 +960,7 @@ class SolenoidCenteringScanner:
         range_checks.append(
             self._build_corrector_range_check(
                 "HCOR",
-                self.app_context.profile.get_element(self.preset.hcorr),
+                hcorr_element,
                 original_hcorr,
                 self.hcorr_pv,
             )
@@ -949,7 +968,7 @@ class SolenoidCenteringScanner:
         range_checks.append(
             self._build_corrector_range_check(
                 "VCOR",
-                self.app_context.profile.get_element(self.preset.vcorr),
+                vcorr_element,
                 original_vcorr,
                 self.vcorr_pv,
             )
@@ -1031,6 +1050,17 @@ class SolenoidCenteringScanner:
                 f"Planned value for {check.element_id} ({check.pv_name}) is outside configured "
                 f"limits {limit}: planned "
                 f"[{check.planned_low:g}, {check.planned_high:g}]."
+            )
+
+    @staticmethod
+    def _require_current_within_limit(element: ElementConfig, value: float) -> None:
+        limit = _element_limit_range(element)
+        if limit is None:
+            return
+        if not limit.contains(value):
+            raise MachineProfileError(
+                f"Current value for {element.id}.current_set is outside its physical limit: "
+                f"{value:g}, expected {limit.describe()}."
             )
 
     def _build_range_check(
@@ -1427,16 +1457,22 @@ def _rms(values: np.ndarray) -> float:
 def _element_numeric_limit(
     element: ElementConfig, channel: str = "current_set"
 ) -> tuple[float, float] | None:
+    limit = _element_limit_range(element, channel)
+    if limit is None or limit.low is None or limit.high is None:
+        return None
+    return limit.low, limit.high
+
+
+def _element_limit_range(
+    element: ElementConfig, channel: str = "current_set"
+) -> LimitRange | None:
     limits = element.limits_for(channel)
-    raw_low = limits.get("low")
-    raw_high = limits.get("high")
-    if raw_low is None or raw_high is None:
+    if limits.get("low") is None or limits.get("high") is None:
         return None
-    low = float(raw_low)
-    high = float(raw_high)
-    if not np.isfinite(low) or not np.isfinite(high) or low > high:
+    try:
+        return LimitRange.from_mapping(limits)
+    except MachineProfileError:
         return None
-    return low, high
 
 
 def _select_preset(context: AppContext, preset_id: str | None) -> SolenoidCenteringPreset:

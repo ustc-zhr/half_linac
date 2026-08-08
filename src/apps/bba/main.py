@@ -62,6 +62,7 @@ from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.apps.bba.profile_runtime import (
     new_bba_scan_archive_dir,
     resolve_bba_runtime_paths,
+    resolve_limited_scan_values,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 
@@ -486,6 +487,10 @@ class ScanParameters:
     quad_from: float = 0.0
     quad_end: float = 0.0
     quad_steps: int = 0
+    corr_mode: str = "absolute"
+    quad_mode: str = "absolute"
+    corr_unit: str = ""
+    quad_unit: str = ""
     samples: int = 0
     settle_time: float = 0.0
     sample_interval: float = 0.0
@@ -770,6 +775,38 @@ class myWindow(QWidget, Ui_Form):
         label.setProperty("role", "field")
         return label
 
+    @staticmethod
+    def _scan_mode_summary(corr_mode, corr_unit, quad_mode, quad_unit):
+        def describe(mode, unit):
+            mode_text = (
+                "Relative to initial setpoint"
+                if mode == "relative"
+                else "Absolute setpoints"
+            )
+            return f"{mode_text} ({unit})" if unit else mode_text
+
+        return f"COR: {describe(corr_mode, corr_unit)}  ·  Quad: {describe(quad_mode, quad_unit)}"
+
+    def _refresh_scan_mode_labels(self):
+        if hasattr(self, "bba1_scan_mode_label") and hasattr(self, "_bba1_corr_mode"):
+            self.bba1_scan_mode_label.setText(
+                self._scan_mode_summary(
+                    self._bba1_corr_mode,
+                    self._bba1_corr_unit,
+                    self._bba1_quad_mode,
+                    self._bba1_quad_unit,
+                )
+            )
+        if hasattr(self, "bba2_scan_mode_label") and hasattr(self, "_bba2_corr_mode"):
+            self.bba2_scan_mode_label.setText(
+                self._scan_mode_summary(
+                    self._bba2_corr_mode,
+                    self._bba2_corr_unit,
+                    self._bba2_quad_mode,
+                    self._bba2_quad_unit,
+                )
+            )
+
     def _rebuild_bba1_setup_panel(self):
         layout = QVBoxLayout(self.frame)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -834,6 +871,13 @@ class myWindow(QWidget, Ui_Form):
                 widget.setParent(self.frame)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 form.addWidget(widget, row, col * 2 + 1)
+
+        form.addWidget(self._make_field_label("Range mode", self.frame), 6, 0)
+        self.bba1_scan_mode_label = QLabel(self.frame)
+        self.bba1_scan_mode_label.setToolTip(
+            "Relative ranges are offsets from the setpoint read at scan start."
+        )
+        form.addWidget(self.bba1_scan_mode_label, 6, 1, 1, 9)
 
         for column in (1, 3, 5, 7, 9):
             form.setColumnStretch(column, 1)
@@ -1003,6 +1047,13 @@ class myWindow(QWidget, Ui_Form):
                 widget.setParent(self.frame_3)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 form.addWidget(widget, row, col * 2 + 1)
+
+        form.addWidget(self._make_field_label("Range mode", self.frame_3), 6, 0)
+        self.bba2_scan_mode_label = QLabel(self.frame_3)
+        self.bba2_scan_mode_label.setToolTip(
+            "Relative ranges are offsets from the setpoint read at scan start."
+        )
+        form.addWidget(self.bba2_scan_mode_label, 6, 1, 1, 7)
 
         for column in (1, 3, 5, 7):
             form.setColumnStretch(column, 1)
@@ -1394,6 +1445,11 @@ class myWindow(QWidget, Ui_Form):
                 return
 
     def _apply_bba1_preset(self, preset):
+        self._bba1_corr_mode = preset.scan.corr_mode or "absolute"
+        self._bba1_quad_mode = preset.scan.quad_mode or "absolute"
+        self._bba1_corr_unit = preset.scan.corr_unit or ""
+        self._bba1_quad_unit = preset.scan.quad_unit or ""
+        self._refresh_scan_mode_labels()
         self._set_combo_current_plane(self.comboBox_5, preset.plane)
         self._refresh_corrector_combo(
             self.comboBox,
@@ -1545,6 +1601,11 @@ class myWindow(QWidget, Ui_Form):
         self._apply_bba1_preset(bba1_default)
 
         bba2_default = self._find_bba_preset(bba2.default_preset)
+        self._bba2_corr_mode = bba2_default.scan.corr_mode or "absolute"
+        self._bba2_quad_mode = bba2_default.scan.quad_mode or "absolute"
+        self._bba2_corr_unit = bba2_default.scan.corr_unit or ""
+        self._bba2_quad_unit = bba2_default.scan.quad_unit or ""
+        self._refresh_scan_mode_labels()
         self.bba2_quad_leff = bba2_default.analysis.quad_leff or K1LQ_FACTOR
         self._set_line_edit_value(self.bba2_quad_leff_edit, self.bba2_quad_leff)
         self._set_combo_current_plane(self.comboBox_10, bba2_default.plane)
@@ -2214,6 +2275,10 @@ class myWindow(QWidget, Ui_Form):
             params.samples = int(self.lineEdit_8.text())
             params.settle_time = float(self.lineEdit_7.text())
             params.sample_interval = float(self.bba1_sample_interval_edit.text())
+            params.corr_mode = self._bba1_corr_mode
+            params.quad_mode = self._bba1_quad_mode
+            params.corr_unit = self._bba1_corr_unit
+            params.quad_unit = self._bba1_quad_unit
 
             self._validate_positive_int(params.corr_steps, "Corrector steps")
             self._validate_positive_int(params.quad_steps, "Quad steps")
@@ -2262,6 +2327,10 @@ class myWindow(QWidget, Ui_Form):
             params.leff_bx = float(self.lineEdit_26.text())
             params.quad_leff = float(self.bba2_quad_leff_edit.text())
             params.app_context = self.app_context
+            params.corr_mode = self._bba2_corr_mode
+            params.quad_mode = self._bba2_quad_mode
+            params.corr_unit = self._bba2_corr_unit
+            params.quad_unit = self._bba2_quad_unit
 
             self._validate_positive_int(params.quad_steps, "Quad steps")
             self._validate_positive_int(params.corr_steps, "Corrector steps")
@@ -2799,9 +2868,13 @@ class BBAScanThread(BBABaseThread):
                 "corr_from": self.params.corr_from,
                 "corr_end": self.params.corr_end,
                 "corr_steps": self.params.corr_steps,
+                "corr_mode": self.params.corr_mode,
+                "corr_unit": self.params.corr_unit,
                 "quad_from": self.params.quad_from,
                 "quad_end": self.params.quad_end,
                 "quad_steps": self.params.quad_steps,
+                "quad_mode": self.params.quad_mode,
+                "quad_unit": self.params.quad_unit,
                 "samples": self.params.samples,
                 "settle_time": self.params.settle_time,
                 "sample_interval": self.params.sample_interval,
@@ -2819,11 +2892,30 @@ class BBAScanThread(BBABaseThread):
         bpm2 = epics.PV(self.params.bpm2PV)
         sign = 1 if self.params.plane == "X" else -1
 
-        k1_values = np.linspace(self.params.quad_from, self.params.quad_end, self.params.quad_steps)
-        kick_values = np.linspace(self.params.corr_from, self.params.corr_end, self.params.corr_steps)
-
         initial_quad = self._safe_get(quad, self.params.quadPV)
         initial_kick = self._safe_get(cor, self.params.corrPV)
+        k1_values = resolve_limited_scan_values(
+            self.params.app_context,
+            self.params.quad,
+            "K1",
+            self.params.quad_from,
+            self.params.quad_end,
+            self.params.quad_steps,
+            self.params.quad_mode,
+            self.params.quad_unit,
+            initial_quad,
+        )
+        kick_values = resolve_limited_scan_values(
+            self.params.app_context,
+            self.params.corr,
+            "kick" if self.params.control_backend == "vm" else "current_set",
+            self.params.corr_from,
+            self.params.corr_end,
+            self.params.corr_steps,
+            self.params.corr_mode,
+            self.params.corr_unit,
+            initial_kick,
+        )
         print("ini values of the quad and corrector=", initial_quad, initial_kick)
 
         m1_results = []
@@ -2947,8 +3039,6 @@ class BBAScanThreadBBA2(BBABaseThread):
             self._try_build_model_backend()
 
             sign = -1 if self.params.plane == "X" else 1
-            kick_values = np.linspace(self.params.corr_from, self.params.corr_end, self.params.corr_steps)
-            angle_values = self._calculate_kick_angles(kick_values)
             baseline_bpm1_values = None
 
             if not self.params.recal:
@@ -3008,7 +3098,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 if not self._sleep_or_stop(1):
                     return
             else:
-                corrector_scan = self._perform_corrector_scan(cor, bpm2, kick_values, angle_values)
+                corrector_scan = self._perform_corrector_scan(cor, bpm2)
                 if corrector_scan is None:
                     return
                 theta, corr_m2 = corrector_scan
@@ -3084,9 +3174,13 @@ class BBAScanThreadBBA2(BBABaseThread):
                 "quad_from": self.params.quad_from,
                 "quad_end": self.params.quad_end,
                 "quad_steps": self.params.quad_steps,
+                "quad_mode": self.params.quad_mode,
+                "quad_unit": self.params.quad_unit,
                 "corr_from": self.params.corr_from,
                 "corr_end": self.params.corr_end,
                 "corr_steps": self.params.corr_steps,
+                "corr_mode": self.params.corr_mode,
+                "corr_unit": self.params.corr_unit,
                 "samples": self.params.samples,
                 "settle_time": self.params.settle_time,
                 "sample_interval": self.params.sample_interval,
@@ -3130,8 +3224,18 @@ class BBAScanThreadBBA2(BBABaseThread):
         return metadata
 
     def _perform_quad_scan(self, quad, bpm2, sign):
-        k1_values = np.linspace(self.params.quad_from, self.params.quad_end, self.params.quad_steps)
         initial_quad = self._safe_get(quad, self.params.quadPV)
+        k1_values = resolve_limited_scan_values(
+            self.params.app_context,
+            self.params.quad,
+            "K1",
+            self.params.quad_from,
+            self.params.quad_end,
+            self.params.quad_steps,
+            self.params.quad_mode,
+            self.params.quad_unit,
+            initial_quad,
+        )
         try:
             self.initial_quad_k1 = float(initial_quad)
         except (TypeError, ValueError):
@@ -3212,8 +3316,20 @@ class BBAScanThreadBBA2(BBABaseThread):
         )
         return np.asarray(samples, dtype=float)
 
-    def _perform_corrector_scan(self, cor, bpm2, kick_values, angle_values):
+    def _perform_corrector_scan(self, cor, bpm2):
         initial_kick = self._safe_get(cor, self.params.corrPV)
+        kick_values = resolve_limited_scan_values(
+            self.params.app_context,
+            self.params.corr,
+            "kick" if self.params.control_backend == "vm" else "current_set",
+            self.params.corr_from,
+            self.params.corr_end,
+            self.params.corr_steps,
+            self.params.corr_mode,
+            self.params.corr_unit,
+            initial_kick,
+        )
+        angle_values = self._calculate_kick_angles(kick_values)
         print("ini values of the corrector=", initial_kick)
 
         theta_samples = []

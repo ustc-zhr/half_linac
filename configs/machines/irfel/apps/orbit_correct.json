@@ -1,82 +1,31 @@
 {
-  "bpms": [
-    "BPM03",
-    "BPM07",
-    "BPM08",
-    "BPM09",
-    "BPM10"
-  ],
-  "default_target_bpms": [
-    "BPM03",
-    "BPM07",
-    "BPM08",
-    "BPM09",
-    "BPM10"
-  ],
-  "bpm_position_scale_to_mm": {
-    "vm": 1000.0,
-    "real": 1.0
-  },
-  "xcors": [
-    "HC01",
-    "HC02",
-    "HC05",
-    "HC06",
-    "HC07"
-  ],
-  "ycors": [
-    "VC01",
-    "VC02",
-    "VC05",
-    "VC06",
-    "VC07"
-  ],
-  "response_wait_s_by_backend": {
-    "vm": 3.0,
-    "real": 1.0
-  },
-  "response_sample_interval_s_by_backend": {
-    "vm": 0.5,
-    "real": 0.5
-  },
-  "correction_settle_s_by_backend": {
-    "vm": 2.0,
-    "real": 1.0
-  },
-  "svd_relative_cutoff_by_backend": {
-    "vm": 0.01,
-    "real": 0.01
-  },
+  "bpms": ["BPM03", "BPM07", "BPM08", "BPM09", "BPM10"],
+  "default_target_bpms": ["BPM03", "BPM07", "BPM08", "BPM09", "BPM10"],
+  "bpm_position_scale_to_mm": {"vm": 1000, "real": 1},
+  "xcors": ["HC01", "HC02", "HC05", "HC06", "HC07"],
+  "ycors": ["VC01", "VC02", "VC05", "VC06", "VC07"],
+  "response_wait_s_by_backend": {"vm": 3, "real": 1},
+  "response_sample_interval_s_by_backend": {"vm": 0.5, "real": 0.5},
+  "correction_settle_s_by_backend": {"vm": 2, "real": 1},
+  "svd_relative_cutoff_by_backend": {"vm": 0.01, "real": 0.01},
   "corrector_upperlimit_by_backend": {
-    "vm": {
-      "value": 0.001,
-      "unit": "rad"
-    },
-    "real": {
-      "value": 10.0,
-      "unit": "A"
-    }
+    "vm": {"value": 0.001, "unit": "rad"},
+    "real": {"value": 10, "unit": "A"}
   },
   "runtime_defaults": {
     "method": "global",
     "local_response_source": "measure_live",
-    "sampling_interval_s": 2.0,
-    "accuracy_um": 10.0,
+    "sampling_interval_s": 2,
+    "accuracy_um": 10,
     "samples_per_step": 1,
     "global_max_iter": 20,
     "one_to_one_max_iter": 20,
     "correction_gain": 0.3,
-    "correction_max_step_pct": 5.0,
+    "correction_max_step_pct": 5,
     "local_response_kick_fraction": 0.02,
     "matrix_response_kick_fraction": 0.02,
     "matrix_samples_per_step": 2
   },
-  "real_status": {
-    "orbit_correct": "commissioned",
-    "orbit_display": "read_only"
-  },
-  "write_control": {
-    "vm": "allowed",
-    "real": "allowed"
-  }
+  "real_status": {"orbit_correct": "commissioned", "orbit_display": "read_only"},
+  "write_control": {"vm": "allowed", "real": "allowed"}
 }

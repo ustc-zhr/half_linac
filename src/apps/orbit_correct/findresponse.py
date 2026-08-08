@@ -29,6 +29,7 @@ from half_linac.src.shared.machine_profile import (
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     FINDRESPONSE_LOG_PATH,
     display_unit,
+    effective_corrector_limit,
     load_orbit_runtime_settings,
     write_response_matrix_snapshot,
 )
@@ -80,6 +81,15 @@ class ResponseMatrixCalculator:
         self.bpm_ids = list(self.orbit_workflow.bpms)
         self.xcor_ids = list(self.orbit_workflow.xcors)
         self.ycor_ids = list(self.orbit_workflow.ycors)
+        self.corrector_limits = {
+            element_id: effective_corrector_limit(
+                self.app_context,
+                element_id,
+                self.profile_max_value,
+                self.orbit_runtime["corrector_upperlimit_unit"],
+            )
+            for element_id in self.xcor_ids + self.ycor_ids
+        }
 
         self.N_BPM = len(self.bpm_ids)
         self.N_COR = len(self.xcor_ids)
@@ -225,7 +235,9 @@ class ResponseMatrixCalculator:
         logger.debug(f"Initialized {len(self.pvCORx)} COR X PVs")
         logger.debug(f"Initialized {len(self.pvCORy)} COR Y PVs")
 
-    def _measure_response(self, cor_pv: str, is_x_corrector: bool) -> np.ndarray:
+    def _measure_response(
+        self, element_id: str, cor_pv: str, is_x_corrector: bool
+    ) -> np.ndarray:
         """
         Measure response for a single corrector.
         
@@ -240,6 +252,18 @@ class ResponseMatrixCalculator:
         try:
             # Store original value
             original_value = self._read_scalar_pv(cor_pv)
+            limit = self.corrector_limits[element_id]
+            if not limit.contains(original_value):
+                raise ValueError(
+                    f"Current value for {element_id} is outside its effective limit: "
+                    f"{original_value:g} {self.max_value_unit}, expected {limit.describe()}."
+                )
+            if not limit.contains(original_value + self.d_value):
+                raise ValueError(
+                    f"Response kick would exceed the effective limit for {element_id}: "
+                    f"{original_value + self.d_value:g} {self.max_value_unit}, "
+                    f"expected {limit.describe()}."
+                )
                 
             # Pre-allocate measurement arrays
             bpm_x_plus = np.zeros((self.n_averages, self.N_BPM))
@@ -310,7 +334,7 @@ class ResponseMatrixCalculator:
                     total_steps,
                     current=f"X {i + 1}/{len(self.pvCORx)}",
                 )
-                response = self._measure_response(cor_pv, True)
+                response = self._measure_response(self.xcor_ids[i], cor_pv, True)
                 self.response_matrix[:, i] = response
                 completed_steps += 1
                 self._write_progress(
@@ -334,7 +358,7 @@ class ResponseMatrixCalculator:
                     total_steps,
                     current=f"Y {i + 1}/{len(self.pvCORy)}",
                 )
-                response = self._measure_response(cor_pv, False)
+                response = self._measure_response(self.ycor_ids[i], cor_pv, False)
                 self.response_matrix[:, i + self.N_COR] = response
                 completed_steps += 1
                 self._write_progress(

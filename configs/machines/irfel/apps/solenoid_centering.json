@@ -1,7 +1,5 @@
 {
-  "control_backends": [
-    "real"
-  ],
+  "control_backends": ["real"],
   "default_preset": "ms01_centering",
   "presets": [
     {
@@ -11,29 +9,14 @@
       "hcorr": "HIC01",
       "vcorr": "VIC01",
       "bpm": "BPM01",
-      "solenoid_scan": {
-        "relative_from": -5,
-        "relative_to": 5,
-        "steps": 5
-      },
-      "corrector_scan": {
-        "relative_from": -2,
-        "relative_to": 2,
-        "steps": 5
-      },
+      "solenoid_scan": {"relative_from": -5, "relative_to": 5, "steps": 5},
+      "corrector_scan": {"relative_from": -2, "relative_to": 2, "steps": 5},
       "samples_per_point": 2,
       "settle_time_s": 1,
       "sample_interval_s": 0.2,
       "max_iters": 1,
-      "readback_verification": {
-        "solenoid_readback_tolerance": 0.01,
-        "corrector_readback_tolerance": 0.01,
-        "readback_timeout_s": 5.0,
-        "poll_interval_s": 0.1
-      },
-      "quality_gate": {
-        "minimum_relative_score_improvement": 0.05
-      }
+      "readback_verification": {"solenoid_readback_tolerance": 0.01, "corrector_readback_tolerance": 0.01, "readback_timeout_s": 5, "poll_interval_s": 0.1},
+      "quality_gate": {"minimum_relative_score_improvement": 0.05}
     },
     {
       "id": "ms01_centering",
@@ -42,29 +25,14 @@
       "hcorr": "MSHC",
       "vcorr": "MSVC",
       "bpm": "BPM01",
-      "solenoid_scan": {
-        "relative_from": -5,
-        "relative_to": 5,
-        "steps": 5
-      },
-      "corrector_scan": {
-        "relative_from": -2,
-        "relative_to": 2,
-        "steps": 5
-      },
+      "solenoid_scan": {"relative_from": -5, "relative_to": 5, "steps": 5},
+      "corrector_scan": {"relative_from": -2, "relative_to": 2, "steps": 5},
       "samples_per_point": 2,
       "settle_time_s": 1,
       "sample_interval_s": 0.2,
       "max_iters": 1,
-      "readback_verification": {
-        "solenoid_readback_tolerance": 0.01,
-        "corrector_readback_tolerance": 0.01,
-        "readback_timeout_s": 5.0,
-        "poll_interval_s": 0.1
-      },
-      "quality_gate": {
-        "minimum_relative_score_improvement": 0.05
-      }
+      "readback_verification": {"solenoid_readback_tolerance": 0.01, "corrector_readback_tolerance": 0.01, "readback_timeout_s": 5, "poll_interval_s": 0.1},
+      "quality_gate": {"minimum_relative_score_improvement": 0.05}
     },
     {
       "id": "ls01_centering",
@@ -73,34 +41,16 @@
       "hcorr": "HC01",
       "vcorr": "VC01",
       "bpm": "BPM03",
-      "solenoid_scan": {
-        "relative_from": -0.05,
-        "relative_to": 0.05,
-        "steps": 3
-      },
-      "corrector_scan": {
-        "relative_from": -0.05,
-        "relative_to": 0.05,
-        "steps": 3
-      },
+      "solenoid_scan": {"relative_from": -0.05, "relative_to": 0.05, "steps": 3},
+      "corrector_scan": {"relative_from": -0.05, "relative_to": 0.05, "steps": 3},
       "samples_per_point": 2,
       "settle_time_s": 1,
       "sample_interval_s": 0.2,
       "max_iters": 1,
-      "readback_verification": {
-        "solenoid_readback_tolerance": 0.01,
-        "corrector_readback_tolerance": 0.01,
-        "readback_timeout_s": 5.0,
-        "poll_interval_s": 0.1
-      },
-      "quality_gate": {
-        "minimum_relative_score_improvement": 0.05
-      }
+      "readback_verification": {"solenoid_readback_tolerance": 0.01, "corrector_readback_tolerance": 0.01, "readback_timeout_s": 5, "poll_interval_s": 0.1},
+      "quality_gate": {"minimum_relative_score_improvement": 0.05}
     }
   ],
   "real_status": "commissioned",
-  "write_control": {
-    "vm": "blocked",
-    "real": "allowed"
-  }
+  "write_control": {"vm": "blocked", "real": "allowed"}
 }

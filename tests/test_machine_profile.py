@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -55,6 +56,7 @@ from half_linac.src.shared.machine_profile import (
 from half_linac.src.apps.energy_spectrum.profile_runtime import (
     resolve_energy_spectrum_runtime_paths,
 )
+from half_linac.src.apps.bba.profile_runtime import resolve_scan_values
 from half_linac.src.shared.machine_profile.loader import (
     _parse_solenoid_centering_preset,
     _validate_beam_monitor_workflow,
@@ -731,7 +733,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsNotNone(context.model_backend)
         assert context.bba_workflow is not None
         self.assertEqual(context.bba_workflow.bba1.default_preset, "bba1_qt04_xc21")
-        self.assertEqual(context.bba_workflow.bba2.default_preset, "bba2_default")
+        self.assertEqual(context.bba_workflow.bba2.default_preset, "bba2_qt04_xc22")
         self.assertEqual(context.bba_workflow.bba1.quads, ())
         self.assertEqual(context.bba_workflow.bba1.correctors, ())
         self.assertEqual(context.bba_workflow.bba2.quads, ())
@@ -780,8 +782,33 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual((adaptive.k1_min, adaptive.k1_max), (0.5, 3.5))
         self.assertEqual(adaptive.initial_points, 4)
         self.assertEqual(adaptive.max_unique_points, 16)
+        scan = context.emit_measure_workflow.presets_by_id["emit_qt02_prf07"].scan
+        self.assertEqual(scan.unit, "1/m^2")
+        self.assertEqual(scan.mode, "absolute")
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
+
+    def test_emit_loader_keeps_legacy_flat_scan_compatibility(self):
+        profile = load_profile("half")
+        workflow = deepcopy(profile.workflows["emit_measure"])
+        workflow["presets"][0]["scan"] = {
+            "k1_from": -2,
+            "k1_end": 2,
+            "k1_steps": 7,
+            "unit": "1/m^2",
+            "mode": "relative",
+            "samples": 2,
+            "settle_time": 0.5,
+            "sample_interval": 0.25,
+        }
+        loaded = load_emit_measure_workflow(
+            replace(profile, workflows={**profile.workflows, "emit_measure": workflow})
+        )
+
+        scan = loaded.presets[0].scan
+        self.assertEqual((scan.k1_from, scan.k1_end, scan.k1_steps), (-2, 2, 7))
+        self.assertEqual((scan.samples, scan.settle_time, scan.sample_interval), (2, 0.5, 0.25))
+        self.assertEqual((scan.unit, scan.mode), ("1/m^2", "relative"))
 
     def test_resolve_expected_half_channels(self):
         profile = load_profile("half")
@@ -968,7 +995,7 @@ class MachineProfileTests(unittest.TestCase):
 
     def test_context_preset_helpers_support_explicit_bba_preset(self):
         bba_context = load_app_context("bba")
-        preset = get_bba_preset(bba_context, "bba2_default")
+        preset = get_bba_preset(bba_context, "bba2_qt04_xc22")
         self.assertEqual(preset.family, "bba2")
         self.assertIsNone(preset.mode)
         self.assertEqual(preset.energy_mev, 2200)
@@ -978,6 +1005,79 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(preset.analysis["bpm1_samples"], 1)
         self.assertEqual(preset.analysis.leff_by, 0.058287)
         self.assertEqual(preset.analysis.quad_leff, 0.15)
+
+    def test_bba_structured_scan_selects_backend_specific_range_and_unit(self):
+        vm_preset = get_bba_preset(
+            load_app_context("bba", machine_id="irfel", control_backend="vm"),
+            "irfel_bba1_qm04_hc01",
+        )
+        real_preset = get_bba_preset(
+            load_app_context("bba", machine_id="irfel", control_backend="real"),
+            "irfel_bba1_qm04_hc01",
+        )
+
+        self.assertEqual(vm_preset.scan.corr_unit, "rad")
+        self.assertEqual(real_preset.scan.corr_unit, "A")
+        self.assertEqual(vm_preset.scan.quad_unit, "1/m^2")
+        self.assertEqual(real_preset.scan.quad_unit, "1/m^2")
+        self.assertEqual(vm_preset.scan.corr_mode, "absolute")
+        self.assertEqual(real_preset.scan.corr_mode, "relative")
+        self.assertEqual(vm_preset.scan.quad_mode, "relative")
+        self.assertEqual(real_preset.scan.quad_mode, "relative")
+        self.assertEqual(vm_preset.scan.corr_from, -0.001)
+        self.assertEqual(vm_preset.scan.corr_end, 0.001)
+        self.assertEqual(real_preset.scan.corr_from, -1)
+        self.assertEqual(real_preset.scan.corr_end, 1)
+        self.assertEqual(vm_preset.scan.quad_from, real_preset.scan.quad_from)
+        self.assertEqual(vm_preset.scan.quad_from, -10)
+        self.assertEqual(vm_preset.scan.quad_end, 10)
+        self.assertEqual(vm_preset.scan.sample_interval, 0.2)
+
+    def test_bba_scan_values_support_absolute_and_relative_modes(self):
+        np.testing.assert_allclose(resolve_scan_values(-1, 1, 3, "absolute", 10), [-1, 0, 1])
+        np.testing.assert_allclose(resolve_scan_values(-1, 1, 3, "relative", 10), [9, 10, 11])
+
+    def test_bba_scan_values_reject_unknown_mode(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported scan mode"):
+            resolve_scan_values(-1, 1, 3, "offset", 10)
+
+    def test_bba_loader_accepts_relative_scan_mode(self):
+        profile = load_profile("half")
+        workflow = deepcopy(profile.workflows["bba"])
+        workflow["presets"][0]["scan"]["corrector"]["vm"]["mode"] = "relative"
+        loaded = load_bba_workflow(
+            replace(profile, workflows={**profile.workflows, "bba": workflow}),
+            "vm",
+        )
+
+        self.assertEqual(loaded.presets[0].scan.corr_mode, "relative")
+
+    def test_bba_loader_keeps_legacy_flat_scan_compatibility(self):
+        profile = load_profile("half")
+        workflow = deepcopy(profile.workflows["bba"])
+        preset = workflow["presets"][0]
+        preset["scan"] = {
+            "corr_from": -0.1,
+            "corr_end": 0.1,
+            "corr_steps": 3,
+            "quad_from": -1,
+            "quad_end": 1,
+            "quad_steps": 5,
+            "samples": 2,
+            "settle_time": 0.5,
+            "sample_interval": 0.25,
+        }
+        loaded = load_bba_workflow(
+            replace(profile, workflows={**profile.workflows, "bba": workflow}),
+            "vm",
+        )
+
+        scan = loaded.presets[0].scan
+        self.assertEqual(scan.corr_from, -0.1)
+        self.assertEqual(scan.quad_steps, 5)
+        self.assertEqual(scan.samples, 2)
+        self.assertEqual(scan.sample_interval, 0.25)
+        self.assertIsNone(scan.corr_unit)
 
     def test_context_preset_helpers_support_default_emit_preset(self):
         emit_context = load_app_context("emit_measure")
