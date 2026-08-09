@@ -48,10 +48,10 @@ from model import (
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     RuntimeContextWidget,
-    get_workflow,
     list_elements,
     load_app_context,
     resolve_channel,
+    resolve_ct_monitor_workflow,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 
@@ -210,7 +210,7 @@ class CTMonitorWindow(QMainWindow):
         self.app_context = load_app_context("ct_monitor")
         self.profile = self.app_context.profile
         self.backend = self.app_context.control_backend.name
-        self.workflow = get_workflow(self.profile, "ct_monitor")
+        self.workflow = resolve_ct_monitor_workflow(self.profile)
         self.current_theme = resolve_initial_theme()
 
         self.refresh_interval_ms = int(self.workflow["refresh_interval_ms"])

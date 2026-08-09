@@ -789,7 +789,11 @@ def _validate_basic_app_support(
         workflow = profile.workflows.get("ct_monitor")
         if not isinstance(workflow, Mapping):
             raise MachineProfileError("ct_monitor requires apps/ct_monitor.json.")
-        _validate_ct_monitor_workflow(profile, workflow, control_backend)
+        _validate_ct_monitor_workflow(
+            profile,
+            _normalize_ct_monitor_workflow(workflow),
+            control_backend,
+        )
         return
 
 
@@ -2381,6 +2385,115 @@ def _validate_beam_monitor_workflow(
         raise MachineProfileError(
             "workflows.beam_monitor.background_sample_interval_s must be finite and non-negative."
         )
+
+
+def resolve_ct_monitor_workflow(profile: MachineProfile) -> Mapping[str, Any]:
+    workflow = _expect_mapping(
+        profile.workflows.get("ct_monitor"),
+        "workflows.ct_monitor",
+    )
+    return _normalize_ct_monitor_workflow(workflow)
+
+
+def _normalize_ct_monitor_workflow(workflow: Mapping[str, Any]) -> dict[str, Any]:
+    structured_keys = {
+        "measurement",
+        "default_pair",
+        "acquisition",
+        "rolling",
+        "trend",
+        "display",
+    }
+    if not structured_keys & set(workflow):
+        return dict(workflow)
+
+    legacy_keys = {
+        "default_upstream",
+        "default_downstream",
+        "measurement_channel",
+        "measurement_label",
+        "measurement_unit",
+        "scale_to_display_unit",
+        "refresh_interval_ms",
+        "event_queue_size",
+        "pair_tolerance_s",
+        "stale_timeout_s",
+        "minimum_upstream_value",
+        "rolling_window",
+        "rolling_window_options",
+        "rolling_window_input_range",
+        "trend_window_s",
+        "trend_window_options_s",
+        "trend_window_input_range_s",
+        "history_size",
+        "max_plot_points",
+        "trend_gap_s",
+        "efficiency_axis_default_max_percent",
+    }
+    mixed = sorted(legacy_keys & set(workflow))
+    if mixed:
+        raise MachineProfileError(
+            "workflows.ct_monitor must not mix structured and legacy fields: "
+            + ", ".join(mixed)
+        )
+
+    measurement = _expect_mapping(
+        workflow.get("measurement"),
+        "workflows.ct_monitor.measurement",
+    )
+    default_pair = _expect_mapping(
+        workflow.get("default_pair"),
+        "workflows.ct_monitor.default_pair",
+    )
+    acquisition = _expect_mapping(
+        workflow.get("acquisition"),
+        "workflows.ct_monitor.acquisition",
+    )
+    rolling = _expect_mapping(
+        workflow.get("rolling"),
+        "workflows.ct_monitor.rolling",
+    )
+    trend = _expect_mapping(
+        workflow.get("trend"),
+        "workflows.ct_monitor.trend",
+    )
+    display = _expect_mapping(
+        workflow.get("display"),
+        "workflows.ct_monitor.display",
+    )
+    measurement_channel = measurement.get("channel")
+    measurement_label = measurement.get("label", measurement_channel)
+
+    normalized = {
+        "control_backends": workflow.get("control_backends"),
+        "default_upstream": default_pair.get("upstream"),
+        "default_downstream": default_pair.get("downstream"),
+        "measurement_channel": measurement_channel,
+        "measurement_label": measurement_label,
+        "measurement_unit": measurement.get("unit"),
+        "scale_to_display_unit": measurement.get("scale_to_display_unit"),
+        "minimum_upstream_value": measurement.get("minimum_upstream_value"),
+        "refresh_interval_ms": acquisition.get("refresh_interval_ms"),
+        "event_queue_size": acquisition.get("event_queue_size"),
+        "pair_tolerance_s": acquisition.get("pair_tolerance_s"),
+        "stale_timeout_s": acquisition.get("stale_timeout_s"),
+        "rolling_window": rolling.get("default_window"),
+        "rolling_window_options": rolling.get("options"),
+        "rolling_window_input_range": rolling.get("input_range"),
+        "trend_window_s": trend.get("default_window_s"),
+        "trend_window_options_s": trend.get("options_s"),
+        "trend_window_input_range_s": trend.get("input_range_s"),
+        "history_size": trend.get("history_size"),
+        "max_plot_points": trend.get("max_plot_points"),
+        "trend_gap_s": trend.get("gap_s"),
+        "efficiency_axis_default_max_percent": display.get(
+            "efficiency_axis_max_percent"
+        ),
+    }
+    for key in ("real_status", "write_control"):
+        if key in workflow:
+            normalized[key] = workflow[key]
+    return normalized
 
 
 def _validate_ct_monitor_workflow(

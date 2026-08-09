@@ -1,25 +1,31 @@
 {
   "control_backends": ["real"],
-  "default_upstream": "ICT02",
-  "default_downstream": "ICT03",
-  "measurement_channel": "current",
-  "measurement_label": "current",
-  "measurement_unit": "A",
-  "scale_to_display_unit": {"real": 1},
-  "refresh_interval_ms": 200,
-  "event_queue_size": 512,
-  "pair_tolerance_s": 0.2,
-  "stale_timeout_s": {"real": 3},
-  "minimum_upstream_value": 0.001,
-  "rolling_window": 20,
-  "rolling_window_options": [10, 20, 50, 100],
-  "rolling_window_input_range": [5, 1000],
-  "trend_window_s": 120,
-  "trend_window_options_s": [30, 60, 120, 300],
-  "trend_window_input_range_s": [10, 1800],
-  "history_size": 50000,
-  "max_plot_points": 2000,
-  "trend_gap_s": {"real": 3},
-  "efficiency_axis_default_max_percent": 110,
+  "measurement": {
+    "channel": "current",
+    "unit": "A",
+    "scale_to_display_unit": {"real": 1},
+    "minimum_upstream_value": 0.001
+  },
+  "default_pair": {"upstream": "ICT02", "downstream": "ICT03"},
+  "acquisition": {
+    "refresh_interval_ms": 200,
+    "event_queue_size": 512,
+    "pair_tolerance_s": 0.2,
+    "stale_timeout_s": {"real": 3}
+  },
+  "rolling": {
+    "default_window": 20,
+    "options": [10, 20, 50, 100],
+    "input_range": [5, 1000]
+  },
+  "trend": {
+    "default_window_s": 120,
+    "options_s": [30, 60, 120, 300],
+    "input_range_s": [10, 1800],
+    "gap_s": {"real": 3},
+    "history_size": 50000,
+    "max_plot_points": 2000
+  },
+  "display": {"efficiency_axis_max_percent": 110},
   "real_status": "read_only"
 }

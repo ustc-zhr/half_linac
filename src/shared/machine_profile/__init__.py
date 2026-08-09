@@ -34,6 +34,7 @@ from .loader import (
     VirtualMachinePredefinedUsedline,
     VirtualMachineUsedlineWorkflow,
     load_solenoid_centering_workflow,
+    resolve_ct_monitor_workflow,
 )
 from .limits import LimitRange, effective_limit
 from .energy_spectrum import (
@@ -227,6 +228,7 @@ __all__ = [
     "request_runtime_restart",
     "prepare_elegant_model_workdir",
     "resolve_channel",
+    "resolve_ct_monitor_workflow",
     "resolve_bend_write_channel",
     "resolve_corrector_write_channel",
     "resolve_element_image_geometry",

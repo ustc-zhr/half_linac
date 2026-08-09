@@ -40,7 +40,9 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     load_profile,
     resolve_channel,
+    resolve_ct_monitor_workflow,
 )
+from half_linac.src.shared.machine_profile.loader import _normalize_ct_monitor_workflow
 from half_linac.src.virtual_machine.lattice_parser import lattice_parser
 
 
@@ -270,7 +272,9 @@ class CTMonitorProfileTests(unittest.TestCase):
             resolve_channel(vm, "FCT1", "peak_current")
         vm_cts = list_elements(vm, kind="ct", logical_channel="charge", control_backend="vm")
         self.assertEqual([element.id for element in vm_cts], ["ICT01", "ICT02", "ICT03", "ICT04"])
-        workflow = get_workflow(vm.profile, "ct_monitor")
+        raw_workflow = get_workflow(vm.profile, "ct_monitor")
+        self.assertNotIn("label", raw_workflow["measurement"])
+        workflow = resolve_ct_monitor_workflow(vm.profile)
         self.assertEqual(workflow["default_upstream"], "ICT01")
         self.assertEqual(workflow["default_downstream"], "ICT02")
         self.assertEqual(workflow["measurement_channel"], "charge")
@@ -310,7 +314,7 @@ class CTMonitorProfileTests(unittest.TestCase):
             resolve_channel(real, "ICT04", "current"),
             "IRFEL:BD:CT:CT4:I",
         )
-        workflow = get_workflow(real.profile, "ct_monitor")
+        workflow = resolve_ct_monitor_workflow(real.profile)
         self.assertEqual(workflow["control_backends"], ["real"])
         self.assertEqual(workflow["default_upstream"], "ICT02")
         self.assertEqual(workflow["default_downstream"], "ICT03")
@@ -321,6 +325,36 @@ class CTMonitorProfileTests(unittest.TestCase):
 
         with self.assertRaisesRegex(MachineProfileError, "does not support backend 'vm'"):
             load_app_context("ct_monitor", machine_id="irfel", control_backend="vm")
+
+    def test_legacy_flat_workflow_remains_supported(self):
+        legacy = {
+            "control_backends": ["real"],
+            "measurement_channel": "current",
+            "measurement_label": "beam current",
+            "measurement_unit": "A",
+        }
+
+        self.assertEqual(_normalize_ct_monitor_workflow(legacy), legacy)
+
+    def test_structured_workflow_derives_measurement_label(self):
+        normalized = _normalize_ct_monitor_workflow(
+            {
+                "control_backends": ["real"],
+                "measurement": {
+                    "channel": "current",
+                    "unit": "A",
+                    "scale_to_display_unit": {"real": 1},
+                    "minimum_upstream_value": 0.001,
+                },
+                "default_pair": {"upstream": "ICT02", "downstream": "ICT03"},
+                "acquisition": {},
+                "rolling": {},
+                "trend": {},
+                "display": {},
+            }
+        )
+
+        self.assertEqual(normalized["measurement_label"], "current")
 
     def test_vm_publish_plan_contains_four_charge_specs(self):
         plan = build_vm_publish_plan(load_profile("half"))
