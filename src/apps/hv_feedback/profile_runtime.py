@@ -10,12 +10,12 @@ from typing import Any, Mapping
 from half_linac.src.shared.machine_profile import (
     AppContext,
     MachineProfileError,
-    get_workflow,
     make_runtime_run_id,
     new_app_run_dir,
     require_workflow_write_allowed,
     resolve_app_runtime_paths,
     resolve_channel,
+    resolve_hv_feedback_workflow,
 )
 
 
@@ -41,7 +41,7 @@ def required_signal_keys(config: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def assert_hv_feedback_runtime(context: AppContext) -> None:
-    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    workflow = resolve_hv_feedback_workflow(context.profile)
     supported = tuple(str(value).strip().lower() for value in workflow["control_backends"])
     if context.profile.machine.id != "irfel" or context.control_backend.name != "real":
         raise MachineProfileError(
@@ -67,7 +67,7 @@ def _resolve_signal(context: AppContext, signal: Mapping[str, Any]) -> dict[str,
 def load_profile_config(context: AppContext) -> dict[str, Any]:
     """Resolve all configured units without connecting to any EPICS PV."""
     assert_hv_feedback_runtime(context)
-    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    workflow = resolve_hv_feedback_workflow(context.profile)
     units: dict[str, dict[str, Any]] = {}
     unit_order: list[str] = []
     write_targets: dict[str, str] = {}
@@ -119,7 +119,7 @@ def get_unit_config(profile_config: Mapping[str, Any], unit_id: str) -> dict[str
 
 
 def _workflow_unit(context: AppContext, unit_id: str) -> Mapping[str, Any]:
-    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    workflow = resolve_hv_feedback_workflow(context.profile)
     for unit in workflow["feedback_units"]:
         if str(unit["id"]) == unit_id:
             return unit

@@ -23,16 +23,14 @@
         }
       ],
       "default_feedback_channel": "acc1",
-      "control": {
-        "sample_period_s": 1,
+      "sampling": {"sample_period_s": 1, "average_window_s": 10},
+      "feedback": {
         "update_period_s": 10,
-        "average_window_s": 10,
-        "reference_samples": 30,
-        "reference_sample_interval_s": 1,
         "gain_kv_per_relerr": 2,
         "max_step_kv": 0.02,
         "total_limit_kv": 0.2
       },
+      "feedback_sampling": {"samples": 30, "sample_interval_s": 1},
       "reference": {
         "hv_kv": 38.993999,
         "channels": {
@@ -41,15 +39,11 @@
         }
       },
       "safety": {
-        "hv_min_kv": 38.5,
-        "hv_max_kv": 39.5,
+        "hv_range_kv": {"low": 38.5, "high": 39.5},
         "hv_readback_tolerance_kv": 0.02,
         "phase_limit_deg": {"acc1": 1, "buncher": 1},
         "amplitude_ratio_limit_rel": 0.02,
-        "feedback_amplitude_min_rel": 0.95,
-        "feedback_amplitude_max_rel": 1.05,
-        "require_valid_pv": true,
-        "hold_on_fault": true
+        "feedback_amplitude_range_rel": {"low": 0.95, "high": 1.05}
       },
       "logging": {"file_prefix": "irfel_kly1_hv_feedback", "flush_every_n_rows": 1}
     }

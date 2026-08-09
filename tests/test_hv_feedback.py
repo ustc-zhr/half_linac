@@ -48,6 +48,7 @@ from half_linac.src.shared.machine_profile import (
     get_workflow,
     load_app_context,
     real_commissioning_status,
+    resolve_hv_feedback_workflow,
     workflow_writes_allowed,
 )
 from half_linac.src.shared.machine_profile.loader import _validate_hv_feedback_workflow
@@ -102,6 +103,23 @@ class HVFeedbackProfileTests(unittest.TestCase):
         )
 
     def test_profile_resolves_commissioned_multi_unit_topology(self):
+        raw_unit = get_workflow(self.real_context.profile, "hv_feedback")["feedback_units"][0]
+        self.assertNotIn("control", raw_unit)
+        self.assertIn("feedback_sampling", raw_unit)
+        self.assertNotIn("reference_sampling", raw_unit)
+        self.assertNotIn("require_valid_pv", raw_unit["safety"])
+        self.assertNotIn("hold_on_fault", raw_unit["safety"])
+        resolved_unit = resolve_hv_feedback_workflow(self.real_context.profile)[
+            "feedback_units"
+        ][0]
+        self.assertEqual(resolved_unit["control"]["reference_samples"], 30)
+        self.assertEqual(resolved_unit["safety"]["hv_min_kv"], 38.5)
+        self.assertEqual(
+            resolved_unit["safety"]["feedback_amplitude_max_rel"],
+            1.05,
+        )
+        self.assertIs(resolved_unit["safety"]["require_valid_pv"], True)
+        self.assertIs(resolved_unit["safety"]["hold_on_fault"], True)
         profile_config = load_profile_config(self.real_context)
         self.assertEqual(profile_config["unit_order"], ["kly1"])
         config = get_unit_config(profile_config, "kly1")
@@ -132,6 +150,13 @@ class HVFeedbackProfileTests(unittest.TestCase):
         duplicate_unit = copy.deepcopy(workflow["feedback_units"][0])
         workflow["feedback_units"].append(duplicate_unit)
         with self.assertRaisesRegex(MachineProfileError, "duplicates"):
+            _validate_hv_feedback_workflow(self.real_context.profile, workflow)
+
+    def test_legacy_safety_flags_cannot_disable_mandatory_interlocks(self):
+        workflow = copy.deepcopy(resolve_hv_feedback_workflow(self.real_context.profile))
+        workflow["feedback_units"][0]["safety"]["hold_on_fault"] = False
+
+        with self.assertRaisesRegex(MachineProfileError, "hold_on_fault must be true"):
             _validate_hv_feedback_workflow(self.real_context.profile, workflow)
 
         workflow = copy.deepcopy(get_workflow(self.real_context.profile, "hv_feedback"))

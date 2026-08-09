@@ -782,7 +782,7 @@ def _validate_basic_app_support(
             raise MachineProfileError(
                 "hv_feedback requires apps/hv_feedback.json."
             )
-        _validate_hv_feedback_workflow(profile, workflow)
+        _validate_hv_feedback_workflow(profile, resolve_hv_feedback_workflow(profile))
         return
 
     if app_name == "ct_monitor":
@@ -2047,6 +2047,100 @@ def _validate_dispersion_section(
                 )
 
 
+def resolve_hv_feedback_workflow(profile: MachineProfile) -> Mapping[str, Any]:
+    workflow = _expect_mapping(
+        profile.workflows.get("hv_feedback"),
+        "workflows.hv_feedback",
+    )
+    normalized = dict(workflow)
+    raw_units = _expect_list(
+        workflow.get("feedback_units"),
+        "workflows.hv_feedback.feedback_units",
+    )
+    normalized["feedback_units"] = [
+        _normalize_hv_feedback_unit(
+            raw_unit,
+            f"workflows.hv_feedback.feedback_units[{index}]",
+        )
+        for index, raw_unit in enumerate(raw_units)
+    ]
+    return normalized
+
+
+def _normalize_hv_feedback_unit(raw_unit: Any, location: str) -> dict[str, Any]:
+    unit = dict(_expect_mapping(raw_unit, location))
+    structured_control_keys = {"sampling", "feedback", "feedback_sampling", "reference_sampling"}
+    has_structured_control = bool(structured_control_keys & set(unit))
+    if has_structured_control and "control" in unit:
+        raise MachineProfileError(
+            f"{location} must not define both control and structured control sections."
+        )
+    if has_structured_control:
+        sampling = _expect_mapping(unit.get("sampling"), f"{location}.sampling")
+        feedback = _expect_mapping(unit.get("feedback"), f"{location}.feedback")
+        if "feedback_sampling" in unit and "reference_sampling" in unit:
+            raise MachineProfileError(
+                f"{location} must not define both feedback_sampling and reference_sampling."
+            )
+        sampling_key = "feedback_sampling" if "feedback_sampling" in unit else "reference_sampling"
+        reference_sampling = _expect_mapping(
+            unit.get(sampling_key),
+            f"{location}.{sampling_key}",
+        )
+        unit["control"] = {
+            "sample_period_s": sampling.get("sample_period_s"),
+            "average_window_s": sampling.get("average_window_s"),
+            "update_period_s": feedback.get("update_period_s"),
+            "gain_kv_per_relerr": feedback.get("gain_kv_per_relerr"),
+            "max_step_kv": feedback.get("max_step_kv"),
+            "total_limit_kv": feedback.get("total_limit_kv"),
+            "reference_samples": reference_sampling.get("samples"),
+            "reference_sample_interval_s": reference_sampling.get("sample_interval_s"),
+        }
+        for key in structured_control_keys:
+            unit.pop(key, None)
+
+    safety = dict(_expect_mapping(unit.get("safety"), f"{location}.safety"))
+    hv_range = safety.get("hv_range_kv")
+    legacy_hv_range = {"hv_min_kv", "hv_max_kv"} & set(safety)
+    if hv_range is not None and legacy_hv_range:
+        raise MachineProfileError(
+            f"{location}.safety must not mix hv_range_kv with hv_min_kv/hv_max_kv."
+        )
+    if hv_range is not None:
+        selected = _expect_mapping(hv_range, f"{location}.safety.hv_range_kv")
+        safety["hv_min_kv"] = selected.get("low")
+        safety["hv_max_kv"] = selected.get("high")
+        safety.pop("hv_range_kv", None)
+
+    amplitude_range = safety.get("feedback_amplitude_range_rel")
+    legacy_amplitude_range = {
+        "feedback_amplitude_min_rel",
+        "feedback_amplitude_max_rel",
+    } & set(safety)
+    if amplitude_range is not None and legacy_amplitude_range:
+        raise MachineProfileError(
+            f"{location}.safety must not mix feedback_amplitude_range_rel with "
+            "feedback_amplitude_min_rel/feedback_amplitude_max_rel."
+        )
+    if amplitude_range is not None:
+        selected = _expect_mapping(
+            amplitude_range,
+            f"{location}.safety.feedback_amplitude_range_rel",
+        )
+        safety["feedback_amplitude_min_rel"] = selected.get("low")
+        safety["feedback_amplitude_max_rel"] = selected.get("high")
+        safety.pop("feedback_amplitude_range_rel", None)
+
+    # These are mandatory safety invariants, not machine-tunable options.
+    for key in ("require_valid_pv", "hold_on_fault"):
+        if key in safety and safety[key] is not True:
+            raise MachineProfileError(f"{location}.safety.{key} must be true.")
+        safety[key] = True
+    unit["safety"] = safety
+    return unit
+
+
 def _validate_hv_feedback_workflow(
     profile: MachineProfile,
     workflow: Mapping[str, Any],
@@ -2092,7 +2186,7 @@ def _validate_hv_feedback_workflow(
     write_targets: dict[str, str] = {}
     for index, raw_unit in enumerate(units):
         location = f"workflows.hv_feedback.feedback_units[{index}]"
-        unit = _expect_mapping(raw_unit, location)
+        unit = _normalize_hv_feedback_unit(raw_unit, location)
         unit_id = _expect_non_empty_string(unit.get("id"), f"{location}.id")
         if unit_id in unit_ids:
             raise MachineProfileError(f"{location}.id duplicates {unit_id!r}.")
