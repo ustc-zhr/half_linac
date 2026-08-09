@@ -1,6 +1,13 @@
 {
   "control_backends": ["real"],
-  "default_preset": "ms01_centering",
+  "sampling": {"samples_per_point": 2, "settle_time_s": 1, "sample_interval_s": 0.2},
+  "max_iters": 1,
+  "readback_verification": {
+    "solenoid_readback_tolerance": 0.01,
+    "corrector_readback_tolerance": 0.01,
+    "readback_timeout_s": 5
+  },
+  "quality_gate": {"minimum_relative_score_improvement": 0.05},
   "presets": [
     {
       "id": "ss02_centering",
@@ -9,14 +16,10 @@
       "hcorr": "HIC01",
       "vcorr": "VIC01",
       "bpm": "BPM01",
-      "solenoid_scan": {"relative_from": -5, "relative_to": 5, "steps": 5},
-      "corrector_scan": {"relative_from": -2, "relative_to": 2, "steps": 5},
-      "samples_per_point": 2,
-      "settle_time_s": 1,
-      "sample_interval_s": 0.2,
-      "max_iters": 1,
-      "readback_verification": {"solenoid_readback_tolerance": 0.01, "corrector_readback_tolerance": 0.01, "readback_timeout_s": 5, "poll_interval_s": 0.1},
-      "quality_gate": {"minimum_relative_score_improvement": 0.05}
+      "scan": {
+        "solenoid": {"low": -5, "high": 5, "steps": 5, "unit": "A", "mode": "relative"},
+        "corrector": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"}
+      }
     },
     {
       "id": "ms01_centering",
@@ -25,14 +28,10 @@
       "hcorr": "MSHC",
       "vcorr": "MSVC",
       "bpm": "BPM01",
-      "solenoid_scan": {"relative_from": -5, "relative_to": 5, "steps": 5},
-      "corrector_scan": {"relative_from": -2, "relative_to": 2, "steps": 5},
-      "samples_per_point": 2,
-      "settle_time_s": 1,
-      "sample_interval_s": 0.2,
-      "max_iters": 1,
-      "readback_verification": {"solenoid_readback_tolerance": 0.01, "corrector_readback_tolerance": 0.01, "readback_timeout_s": 5, "poll_interval_s": 0.1},
-      "quality_gate": {"minimum_relative_score_improvement": 0.05}
+      "scan": {
+        "solenoid": {"low": -5, "high": 5, "steps": 5, "unit": "A", "mode": "relative"},
+        "corrector": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"}
+      }
     },
     {
       "id": "ls01_centering",
@@ -41,16 +40,13 @@
       "hcorr": "HC01",
       "vcorr": "VC01",
       "bpm": "BPM03",
-      "solenoid_scan": {"relative_from": -0.05, "relative_to": 0.05, "steps": 3},
-      "corrector_scan": {"relative_from": -0.05, "relative_to": 0.05, "steps": 3},
-      "samples_per_point": 2,
-      "settle_time_s": 1,
-      "sample_interval_s": 0.2,
-      "max_iters": 1,
-      "readback_verification": {"solenoid_readback_tolerance": 0.01, "corrector_readback_tolerance": 0.01, "readback_timeout_s": 5, "poll_interval_s": 0.1},
-      "quality_gate": {"minimum_relative_score_improvement": 0.05}
+      "scan": {
+        "solenoid": {"low": -0.05, "high": 0.05, "steps": 3, "unit": "A", "mode": "relative"},
+        "corrector": {"low": -0.05, "high": 0.05, "steps": 3, "unit": "A", "mode": "relative"}
+      }
     }
   ],
+  "default_preset": "ms01_centering",
   "real_status": "commissioned",
   "write_control": {"vm": "blocked", "real": "allowed"}
 }

@@ -246,12 +246,25 @@ class MachineProfileTests(unittest.TestCase):
         self.assertIsNotNone(context.solenoid_centering_workflow)
         assert context.solenoid_centering_workflow is not None
         workflow = load_solenoid_centering_workflow(context.profile)
-        self.assertEqual(workflow.default_preset, "ls_centering")
-        self.assertEqual(workflow.presets_by_id["ls_centering"].solenoid, "SL01-1")
-        self.assertEqual(workflow.presets_by_id["ls_centering"].hcorr, "SL01-DX")
+        self.assertEqual(workflow.default_preset, "sl01_1_centering")
+        preset = workflow.presets_by_id["sl01_1_centering"]
+        self.assertEqual(preset.solenoid, "SL01-1")
+        self.assertEqual(preset.hcorr, "SL01-DX")
+        self.assertEqual(preset.samples_per_point, 3)
+        self.assertEqual(preset.settle_time_s, 2.0)
+        self.assertEqual(preset.sample_interval_s, 0.2)
+        self.assertEqual(preset.max_rounds, 2)
+        self.assertEqual(preset.solenoid_scan.relative_from, -0.05)
+        self.assertEqual(preset.corrector_scan.relative_to, 0.0002)
+        self.assertIsNotNone(preset.motion_verification)
+        self.assertEqual(preset.minimum_relative_score_improvement, 0.05)
         self.assertEqual(
             workflow.presets_by_id["sl01_2_centering"].solenoid,
             "SL01-2",
+        )
+        self.assertEqual(
+            workflow.presets_by_id["sm01_centering"].display_name,
+            "SM01 Centering",
         )
         self.assertFalse(workflow_writes_allowed(context, "solenoid_centering"))
 
@@ -276,6 +289,9 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(workflow.presets_by_id["ms01_centering"].solenoid_scan.steps, 5)
         self.assertEqual(workflow.presets_by_id["ms01_centering"].corrector_scan.steps, 5)
+        self.assertEqual(workflow.presets_by_id["ms01_centering"].samples_per_point, 2)
+        self.assertEqual(workflow.presets_by_id["ms01_centering"].max_rounds, 1)
+        self.assertIsNotNone(workflow.presets_by_id["ms01_centering"].motion_verification)
         self.assertEqual(workflow.presets_by_id["ss02_centering"].solenoid, "SS02")
         self.assertEqual(workflow.presets_by_id["ss02_centering"].hcorr, "HIC01")
         self.assertEqual(workflow.presets_by_id["ss02_centering"].vcorr, "VIC01")
@@ -307,6 +323,53 @@ class MachineProfileTests(unittest.TestCase):
 
         with self.assertRaisesRegex(MachineProfileError, "tolerances must be positive"):
             _parse_solenoid_centering_preset(preset, "preset")
+
+    def test_solenoid_centering_structured_scan_validates_unit_and_mode(self):
+        preset = {
+            "id": "test",
+            "display_name": "Test",
+            "solenoid": "MS01",
+            "hcorr": "MSHC",
+            "vcorr": "MSVC",
+            "bpm": "BPM01",
+            "scan": {
+                "solenoid": {"low": -1, "high": 1, "steps": 3, "unit": "A", "mode": "absolute"},
+                "corrector": {"low": -1, "high": 1, "steps": 3, "unit": "A", "mode": "relative"},
+            },
+            "samples_per_point": 1,
+            "settle_time_s": 0,
+            "sample_interval_s": 0,
+            "max_iters": 1,
+        }
+
+        with self.assertRaisesRegex(MachineProfileError, "mode must be 'relative'"):
+            _parse_solenoid_centering_preset(preset, "preset")
+
+        preset["scan"]["solenoid"]["mode"] = "relative"
+        preset["scan"]["corrector"]["unit"] = "mrad"
+        with self.assertRaisesRegex(MachineProfileError, "unit must be 'A'"):
+            _parse_solenoid_centering_preset(preset, "preset")
+
+    def test_solenoid_centering_legacy_scan_format_remains_supported(self):
+        preset = {
+            "id": "legacy",
+            "display_name": "Legacy",
+            "solenoid": "MS01",
+            "hcorr": "MSHC",
+            "vcorr": "MSVC",
+            "bpm": "BPM01",
+            "solenoid_scan": {"relative_from": -1, "relative_to": 1, "steps": 3},
+            "corrector_scan": {"relative_from": -2, "relative_to": 2, "steps": 5},
+            "samples_per_point": 1,
+            "settle_time_s": 0,
+            "sample_interval_s": 0,
+            "max_rounds": 1,
+        }
+
+        parsed = _parse_solenoid_centering_preset(preset, "preset")
+        self.assertEqual(parsed.solenoid_scan.relative_from, -1.0)
+        self.assertEqual(parsed.corrector_scan.relative_to, 2.0)
+        self.assertEqual(parsed.max_rounds, 1)
 
     def test_describe_app_model_support_reports_model_app_readiness(self):
         for machine_id in ("half", "irfel"):

@@ -284,7 +284,10 @@ def load_solenoid_centering_workflow(profile: MachineProfile) -> SolenoidCenteri
     presets_by_id: dict[str, SolenoidCenteringPreset] = {}
     for index, raw_preset in enumerate(presets_raw):
         location = f"workflows.solenoid_centering.presets[{index}]"
-        preset = _parse_solenoid_centering_preset(raw_preset, location)
+        preset = _parse_solenoid_centering_preset(
+            _merge_solenoid_centering_defaults(workflow, raw_preset, location),
+            location,
+        )
         if preset.solenoid is not None:
             element = profile.get_element(preset.solenoid)
             if element.kind != "solenoid":
@@ -2967,6 +2970,42 @@ def _parse_solenoid_centering_preset(
             f"{location}.quality_gate.minimum_relative_score_improvement must be in [0, 1)."
         )
 
+    structured_scan_raw = preset.get("scan")
+    legacy_scan_keys = ("solenoid_scan", "corrector_scan")
+    if structured_scan_raw is not None and any(preset.get(key) is not None for key in legacy_scan_keys):
+        raise MachineProfileError(
+            f"{location} must not define both scan and legacy solenoid_scan/corrector_scan."
+        )
+    if structured_scan_raw is not None:
+        structured_scan = _expect_mapping(structured_scan_raw, f"{location}.scan")
+        solenoid_scan_raw = _expect_mapping(
+            structured_scan.get("solenoid"),
+            f"{location}.scan.solenoid",
+        )
+        corrector_scan_raw = _expect_mapping(
+            structured_scan.get("corrector"),
+            f"{location}.scan.corrector",
+        )
+        solenoid_scan = _parse_solenoid_centering_scan_range(
+            solenoid_scan_raw,
+            f"{location}.scan.solenoid",
+            structured=True,
+        )
+        corrector_scan = _parse_solenoid_centering_scan_range(
+            corrector_scan_raw,
+            f"{location}.scan.corrector",
+            structured=True,
+        )
+    else:
+        solenoid_scan = _parse_solenoid_centering_scan_range(
+            _expect_mapping(preset.get("solenoid_scan"), f"{location}.solenoid_scan"),
+            f"{location}.solenoid_scan",
+        )
+        corrector_scan = _parse_solenoid_centering_scan_range(
+            _expect_mapping(preset.get("corrector_scan"), f"{location}.corrector_scan"),
+            f"{location}.corrector_scan",
+        )
+
     return SolenoidCenteringPreset(
         id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
         display_name=_expect_non_empty_string(
@@ -2986,12 +3025,8 @@ def _parse_solenoid_centering_preset(
         hcorr=_expect_non_empty_string(preset.get("hcorr"), f"{location}.hcorr"),
         vcorr=_expect_non_empty_string(preset.get("vcorr"), f"{location}.vcorr"),
         bpm=_expect_non_empty_string(preset.get("bpm"), f"{location}.bpm"),
-        solenoid_scan=_parse_solenoid_centering_scan_range(
-            _expect_mapping(preset.get("solenoid_scan"), f"{location}.solenoid_scan"),
-        ),
-        corrector_scan=_parse_solenoid_centering_scan_range(
-            _expect_mapping(preset.get("corrector_scan"), f"{location}.corrector_scan"),
-        ),
+        solenoid_scan=solenoid_scan,
+        corrector_scan=corrector_scan,
         samples_per_point=int(preset.get("samples_per_point")),
         settle_time_s=float(preset.get("settle_time_s")),
         sample_interval_s=float(preset.get("sample_interval_s")),
@@ -3032,13 +3067,64 @@ def _parse_solenoid_centering_motion_verification(
     )
 
 
+def _merge_solenoid_centering_defaults(
+    workflow: Mapping[str, Any],
+    raw_preset: Any,
+    location: str,
+) -> dict[str, Any]:
+    preset = dict(_expect_mapping(raw_preset, location))
+    sampling = _expect_mapping(
+        workflow.get("sampling", {}),
+        "workflows.solenoid_centering.sampling",
+    )
+    for field in ("samples_per_point", "settle_time_s", "sample_interval_s"):
+        if field not in preset and field in sampling:
+            preset[field] = sampling[field]
+    if "max_iters" not in preset and "max_rounds" not in preset and "max_iters" in workflow:
+        preset["max_iters"] = workflow["max_iters"]
+    for field in ("readback_verification", "quality_gate"):
+        common = _expect_mapping(
+            workflow.get(field, {}),
+            f"workflows.solenoid_centering.{field}",
+        )
+        if common:
+            local = _expect_mapping(preset.get(field, {}), f"{location}.{field}")
+            preset[field] = {**common, **local}
+    return preset
+
+
 def _parse_solenoid_centering_scan_range(
     raw_scan: Mapping[str, Any],
+    location: str,
+    *,
+    structured: bool = False,
 ) -> SolenoidCenteringScanRange:
+    if structured:
+        mode = _expect_non_empty_string(raw_scan.get("mode"), f"{location}.mode")
+        unit = _expect_non_empty_string(raw_scan.get("unit"), f"{location}.unit")
+        if mode != "relative":
+            raise MachineProfileError(f"{location}.mode must be 'relative'.")
+        if unit != "A":
+            raise MachineProfileError(f"{location}.unit must be 'A'.")
+        low_raw = raw_scan.get("low")
+        high_raw = raw_scan.get("high")
+    else:
+        low_raw = raw_scan.get("relative_from")
+        high_raw = raw_scan.get("relative_to")
+    try:
+        low = float(low_raw)
+        high = float(high_raw)
+        steps = int(raw_scan.get("steps"))
+    except (TypeError, ValueError) as exc:
+        raise MachineProfileError(f"{location} must define numeric scan bounds and steps.") from exc
+    if not math.isfinite(low) or not math.isfinite(high) or low >= high:
+        raise MachineProfileError(f"{location} scan bounds must be finite and low < high.")
+    if steps < 2:
+        raise MachineProfileError(f"{location}.steps must be at least 2.")
     return SolenoidCenteringScanRange(
-        relative_from=float(raw_scan.get("relative_from")),
-        relative_to=float(raw_scan.get("relative_to")),
-        steps=int(raw_scan.get("steps")),
+        relative_from=low,
+        relative_to=high,
+        steps=steps,
     )
 
 

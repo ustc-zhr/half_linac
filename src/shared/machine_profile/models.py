@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, fields
 from typing import Any, Mapping
 
@@ -841,6 +842,10 @@ def _validate_solenoid_centering_workflow(
     if not presets:
         raise MachineProfileError("workflows.solenoid_centering.presets must not be empty.")
     _validate_unique_ids(presets, "workflows.solenoid_centering.presets")
+    sampling = _expect_mapping(
+        workflow.get("sampling", {}),
+        "workflows.solenoid_centering.sampling",
+    )
     for index, raw_preset in enumerate(presets):
         location = f"workflows.solenoid_centering.presets[{index}]"
         preset = _expect_mapping(raw_preset, location)
@@ -870,19 +875,52 @@ def _validate_solenoid_centering_workflow(
         _validate_element_ref(preset.get("hcorr"), elements_by_id, f"{location}.hcorr", expected_kind="corr")
         _validate_element_ref(preset.get("vcorr"), elements_by_id, f"{location}.vcorr", expected_kind="corr")
         _validate_element_ref(preset.get("bpm"), elements_by_id, f"{location}.bpm", expected_kind="bpm")
-        _validate_scan_range(preset.get("solenoid_scan"), f"{location}.solenoid_scan")
-        _validate_scan_range(preset.get("corrector_scan"), f"{location}.corrector_scan")
-        _validate_positive_int(preset.get("samples_per_point"), f"{location}.samples_per_point")
-        _validate_nonnegative_float(preset.get("settle_time_s"), f"{location}.settle_time_s")
-        _validate_nonnegative_float(preset.get("sample_interval_s"), f"{location}.sample_interval_s")
+        structured_scan_raw = preset.get("scan")
+        if structured_scan_raw is not None:
+            if preset.get("solenoid_scan") is not None or preset.get("corrector_scan") is not None:
+                raise MachineProfileError(
+                    f"{location} must not define both scan and legacy "
+                    "solenoid_scan/corrector_scan."
+                )
+            structured_scan = _expect_mapping(structured_scan_raw, f"{location}.scan")
+            _validate_structured_solenoid_scan_range(
+                structured_scan.get("solenoid"),
+                f"{location}.scan.solenoid",
+            )
+            _validate_structured_solenoid_scan_range(
+                structured_scan.get("corrector"),
+                f"{location}.scan.corrector",
+            )
+        else:
+            _validate_scan_range(preset.get("solenoid_scan"), f"{location}.solenoid_scan")
+            _validate_scan_range(preset.get("corrector_scan"), f"{location}.corrector_scan")
+        _validate_positive_int(
+            preset.get("samples_per_point", sampling.get("samples_per_point")),
+            f"{location}.samples_per_point",
+        )
+        _validate_nonnegative_float(
+            preset.get("settle_time_s", sampling.get("settle_time_s")),
+            f"{location}.settle_time_s",
+        )
+        _validate_nonnegative_float(
+            preset.get("sample_interval_s", sampling.get("sample_interval_s")),
+            f"{location}.sample_interval_s",
+        )
         max_iters = preset.get("max_iters")
         legacy_max_rounds = preset.get("max_rounds")
         if max_iters is not None and legacy_max_rounds is not None:
             raise MachineProfileError(
                 f"{location} must not define both max_iters and max_rounds."
             )
+        selected_max_iters = (
+            max_iters
+            if max_iters is not None
+            else legacy_max_rounds
+            if legacy_max_rounds is not None
+            else workflow.get("max_iters")
+        )
         _validate_positive_int(
-            max_iters if max_iters is not None else legacy_max_rounds,
+            selected_max_iters,
             f"{location}.max_iters",
         )
 
@@ -901,6 +939,20 @@ def _validate_scan_range(raw_scan: Any, location: str) -> None:
     if relative_from == relative_to:
         raise MachineProfileError(f"{location}.relative_from and relative_to must differ.")
     _validate_positive_int(scan.get("steps"), f"{location}.steps")
+
+
+def _validate_structured_solenoid_scan_range(raw_scan: Any, location: str) -> None:
+    scan = _expect_mapping(raw_scan, location)
+    low = _expect_float(scan.get("low"), f"{location}.low")
+    high = _expect_float(scan.get("high"), f"{location}.high")
+    if not math.isfinite(low) or not math.isfinite(high) or low >= high:
+        raise MachineProfileError(f"{location} scan bounds must be finite and low < high.")
+    if scan.get("unit") != "A":
+        raise MachineProfileError(f"{location}.unit must be 'A'.")
+    if scan.get("mode") != "relative":
+        raise MachineProfileError(f"{location}.mode must be 'relative'.")
+    if _validate_positive_int(scan.get("steps"), f"{location}.steps") < 2:
+        raise MachineProfileError(f"{location}.steps must be at least 2.")
 
 
 def _validate_positive_int(value: Any, location: str) -> int:
