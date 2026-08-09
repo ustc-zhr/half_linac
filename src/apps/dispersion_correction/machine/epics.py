@@ -322,6 +322,8 @@ class EpicsMachine(MachineInterface):
     def _write_quadrupole_targets(self, targets: Mapping[str, float]) -> None:
         if not targets:
             return
+        for name, target in targets.items():
+            self._validate_quadrupole_target(name, float(target))
         previous = {name: self._read_quadrupole(name) for name in targets}
         attempted: list[str] = []
         try:
@@ -353,6 +355,24 @@ class EpicsMachine(MachineInterface):
             if rollback_errors:
                 message += "; rollback failed: " + "; ".join(rollback_errors)
             raise RuntimeError(message) from exc
+
+    def _validate_quadrupole_target(self, name: str, target: float) -> None:
+        item = self._nested_mapping(self._mapping("quadrupoles"), name, "Quadrupole")
+        raw_limit = item.get("limit")
+        if raw_limit is None:
+            return
+        if not isinstance(raw_limit, Mapping):
+            raise ValueError(f"Quadrupole {name} limit must be a mapping")
+        low = raw_limit.get("low")
+        high = raw_limit.get("high")
+        if low is not None and target < float(low):
+            raise ValueError(
+                f"Quadrupole {name} target {target:g} is below machine limit {float(low):g}"
+            )
+        if high is not None and target > float(high):
+            raise ValueError(
+                f"Quadrupole {name} target {target:g} exceeds machine limit {float(high):g}"
+            )
 
     def _read_quadrupole(self, name: str) -> float:
         item = self._nested_mapping(self._mapping("quadrupoles"), name, "Quadrupole")

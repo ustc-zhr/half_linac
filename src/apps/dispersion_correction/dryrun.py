@@ -118,7 +118,8 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
                     for device, scale in knob.devices.items()
                 ],
                 "scan_step": knob.scan_step,
-                "unit": _knob_unit(knob.devices, quadrupole_map),
+                "mode": knob.scan_mode,
+                "unit": knob.unit or _knob_unit(knob.devices, quadrupole_map),
                 "scan_targets": [
                     {"direction": "+", "delta": knob.scan_step},
                     {"direction": "-", "delta": -knob.scan_step},

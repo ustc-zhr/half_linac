@@ -1994,6 +1994,44 @@ def _validate_dispersion_section(
         devices = _expect_mapping(knob.get("devices"), f"{knob_location}.devices")
         if not devices:
             raise MachineProfileError(f"{knob_location}.devices must not be empty.")
+        raw_scan = knob.get("scan")
+        if raw_scan is None:
+            scan_step = knob.get("scan_step")
+            max_offset = knob.get("limit")
+        else:
+            scan = _expect_mapping(raw_scan, f"{knob_location}.scan")
+            scan_step = scan.get("step")
+            max_offset = scan.get("max_offset")
+            mode = _expect_non_empty_string(
+                scan.get("mode", "relative"),
+                f"{knob_location}.scan.mode",
+            ).lower()
+            if mode != "relative":
+                raise MachineProfileError(
+                    f"{knob_location}.scan.mode must be 'relative'."
+                )
+            if "unit" in scan:
+                _expect_non_empty_string(
+                    scan.get("unit"),
+                    f"{knob_location}.scan.unit",
+                )
+        try:
+            numeric_step = float(scan_step)
+            numeric_max_offset = float(max_offset)
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                f"{knob_location}.scan step and max_offset must be numeric."
+            ) from exc
+        if (
+            not math.isfinite(numeric_step)
+            or not math.isfinite(numeric_max_offset)
+            or numeric_step <= 0
+            or numeric_max_offset <= 0
+            or numeric_step > numeric_max_offset
+        ):
+            raise MachineProfileError(
+                f"{knob_location}.scan requires 0 < step <= max_offset."
+            )
         for device_id in devices:
             element = profile.get_element(str(device_id))
             if element.kind != "quad":

@@ -279,7 +279,7 @@ def test_half_real_uses_k1_for_correction_and_model_snapshot() -> None:
     assert config.backend.mode == "write_enabled"
     assert config.backend.options["pv_map"]["quadrupoles"]["QL01"] == {
         "control": "k1",
-        "K1": "IN:MG:L001:QUAD:QL01:K1",
+        "K1": "IN:MG:L002:QUAD:QL01:K1",
     }
     k1_pv = resolve_channel(context, "QL01", "K1")
     snapshot = build_model_snapshot(
@@ -390,6 +390,10 @@ def test_half_bv01_bv02_section_uses_vertical_bpms_and_real_hv_draft() -> None:
     )
 
     assert vm_config.measurement.plane == "y"
+    assert vm_config.measurement.samples_per_step == 5
+    assert vm_config.measurement.sample_interval_s == pytest.approx(0.2)
+    assert vm_config.measurement.final_samples == 10
+    assert vm_config.measurement.settle_time_s == pytest.approx(1.0)
     assert vm_config.section.model_entrance == "BPM36"
     assert vm_config.section.model_exit == "BPM43"
     assert vm_config.target_bpms == ("BPM42", "BPM43")
@@ -410,6 +414,10 @@ def test_half_bv01_bv02_section_uses_vertical_bpms_and_real_hv_draft() -> None:
         "QT31_QT34_sym",
         "QT32_QT33_sym",
     )
+    assert all(knob.scan_mode == "relative" for knob in vm_config.knobs)
+    assert all(knob.unit == "1/m^2" for knob in vm_config.knobs)
+    assert all(knob.scan_step == pytest.approx(1) for knob in vm_config.knobs)
+    assert all(knob.limit == pytest.approx(5) for knob in vm_config.knobs)
     assert "y" in vm_config.backend.options["pv_map"]["bpms"]["BPM42"]
     assert vm_config.backend.options["pv_map"]["energy_knob"] == {}
     assert "Energy knob PV is not configured" in run_preflight(

@@ -1,30 +1,7 @@
 {
   "control_backends": ["real"],
   "quadrupole_control": {"real": "current"},
-  "target_bpms": ["BPM01", "BPM02"],
-  "monitor_bpms": [],
   "bpm_position_scale_to_mm": {"real": 1},
-  "energy_knob": {
-    "name": "ENERGY_PHASE",
-    "actuator": "phase",
-    "actuator_unit": "deg",
-    "delta": 0.0001,
-    "calibration": {}
-  },
-  "knobs": [
-    {
-      "name": "Q01_QE01_sym",
-      "devices": {"Q01": 1, "QE01": 1},
-      "scan_step": 0.0005,
-      "limit": 0.01
-    },
-    {
-      "name": "QE02_QE03_sym",
-      "devices": {"QE02": 1, "QE03": 1},
-      "scan_step": 0.0005,
-      "limit": 0.01
-    }
-  ],
   "measurement": {"plane": "x", "samples_per_step": 5, "sample_interval_s": 0, "final_samples": 10, "settle_time_s": 0},
   "solver": {
     "svd_cut": 0.001,
@@ -37,6 +14,28 @@
     "success_min_improvement": 2
   },
   "safety": {"max_reference_orbit_change_mm": 1},
+  "energy_knob": {
+    "name": "ENERGY_PHASE",
+    "actuator": "phase",
+    "actuator_unit": "deg",
+    "delta": 0.0001
+  },
+  "sections": [
+    {
+      "id": "default",
+      "display_name": "Default",
+      "model_entrance": "BPM01",
+      "model_exit": "BPM02",
+      "target_bpms": ["BPM01", "BPM02"],
+      "monitor_bpms": [],
+      "knobs": [
+        {"name": "Q01_QE01_sym", "devices": {"Q01": 1, "QE01": 1}, "scan": {"step": 0.0005, "max_offset": 0.01, "mode": "relative", "unit": "A"}},
+        {"name": "QE02_QE03_sym", "devices": {"QE02": 1, "QE03": 1}, "scan": {"step": 0.0005, "max_offset": 0.01, "mode": "relative", "unit": "A"}}
+      ]
+    }
+  ],
+  "default_section": "default",
+  "readback_timeout": {"real": 2},
   "real_status": "not_supported",
   "write_control": {"vm": "blocked", "real": "blocked"}
 }

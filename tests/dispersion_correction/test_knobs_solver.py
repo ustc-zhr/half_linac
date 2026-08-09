@@ -1,5 +1,6 @@
 import numpy as np
 
+from half_linac.src.apps.dispersion_correction.config import parse_config
 from half_linac.src.apps.dispersion_correction.knobs import SymmetricKnobSet
 from half_linac.src.apps.dispersion_correction.models import KnobConfig
 from half_linac.src.apps.dispersion_correction.solver import solve_bounded_correction
@@ -21,6 +22,40 @@ def test_symmetric_knob_device_mapping_and_limits() -> None:
     assert not knobs.within_total_limits({"Q1_sym": 0.031, "Q2_sym": 0.0})
     np.testing.assert_allclose(knobs.limits(), [0.03, 0.03])
     np.testing.assert_allclose(knobs.step_limits(0.25), [0.0075, 0.0075])
+
+
+def test_nested_knob_scan_is_preferred_and_legacy_fields_remain_supported() -> None:
+    base = {
+        "backend": {},
+        "energy_knob": {"name": "ENERGY_DELTA", "delta": 0.0001},
+        "target_bpms": ["BPM01"],
+        "measurement": {},
+        "solver": {},
+        "safety": {},
+    }
+    nested = parse_config({
+        **base,
+        "knobs": [{
+            "name": "Q1",
+            "devices": {"Q1": 1},
+            "scan": {"step": 0.002, "max_offset": 0.03, "mode": "relative", "unit": "1/m^2"},
+        }],
+    }).knobs[0]
+    legacy = parse_config({
+        **base,
+        "knobs": [{
+            "name": "Q1",
+            "devices": {"Q1": 1},
+            "scan_step": 0.002,
+            "limit": 0.03,
+        }],
+    }).knobs[0]
+
+    assert nested.scan_step == legacy.scan_step == 0.002
+    assert nested.limit == legacy.limit == 0.03
+    assert nested.scan_mode == legacy.scan_mode == "relative"
+    assert nested.unit == "1/m^2"
+    assert legacy.unit == ""
 
 
 def test_svd_solver_full_rank_solution() -> None:

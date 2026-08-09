@@ -572,15 +572,21 @@ def _build_selection_pv_map(
 
     quadrupoles: dict[str, dict[str, str]] = {}
     for device_name in dict.fromkeys(device_names):
+        element = context.profile.get_element(device_name)
         if quadrupole_control == "current":
-            quadrupoles[device_name] = {
+            item: dict[str, Any] = {
                 "control": "current",
                 "current_set": resolve_channel(context, device_name, "current_set"),
                 "current_readback": resolve_channel(context, device_name, "current_readback"),
             }
+            raw_limit = element.limits_for("current_set")
         else:
             k1_pv = resolve_channel(context, device_name, "K1")
-            quadrupoles[device_name] = {"control": "k1", "K1": k1_pv}
+            item = {"control": "k1", "K1": k1_pv}
+            raw_limit = element.limits_for("K1")
+        if raw_limit:
+            item["limit"] = dict(raw_limit)
+        quadrupoles[device_name] = item
 
     energy_mapping: dict[str, str] = {}
     element_id = _backend_string(
@@ -738,12 +744,17 @@ def _select_workflow_section(
         "target_bpms",
         "monitor_bpms",
         "knobs",
-        "measurement",
         "solver",
         "safety",
     ):
         if key in selected_section:
             selected[key] = selected_section[key]
+    if "measurement" in selected_section:
+        measurement = dict(_mapping(selected.get("measurement"), "measurement"))
+        measurement.update(
+            _mapping(selected_section["measurement"], "section.measurement")
+        )
+        selected["measurement"] = measurement
     selected["_section"] = {
         "id": str(selected_section.get("id", "")).strip(),
         "display_name": str(

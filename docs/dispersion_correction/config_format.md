@@ -26,8 +26,9 @@ The schema is the same for JSON and YAML:
 - `quadrupole_control`: backend-to-control mapping. Use the canonical labels
   `K1` and `current`; parsing is case-insensitive, while the GUI displays
   `K1 [1/m²]` or `A`.
-- `knobs`: high-level symmetric correction knobs, response scan steps, and
-  cumulative limits relative to the workflow snapshot.
+- `knobs`: high-level symmetric correction knobs. The nested `scan` object
+  contains the response `step`, cumulative relative `max_offset`, explicit
+  `mode`, and control `unit`.
 - `measurement`: horizontal-plane samples per step, final samples, and settle
   time after each machine setting change.
 - `solver`: SVD, response-matrix update policy, and trial-step settings.
@@ -82,9 +83,21 @@ The control variable itself is fixed by the active backend, for example:
 }
 ```
 
-The scalar `scan_step` and `limit` values remain session defaults and hard
-ceilings in the selected control variable's unit. IRFEL VM is model-only, so
-its values are not used for a machine response scan.
+The preferred scan shape is:
+
+```json
+"scan": {
+  "step": 1,
+  "max_offset": 5,
+  "mode": "relative",
+  "unit": "1/m^2"
+}
+```
+
+`step` is the symmetric response-measurement perturbation. `max_offset` is the
+cumulative knob displacement allowed relative to the workflow snapshot. The
+parser still accepts legacy `scan_step` and `limit` fields. IRFEL VM is
+model-only, so its values are not used for a machine response scan.
 
 For IRFEL electron beams in this MVP, the configured `energy_knob.delta` is
 treated as `dp/p`; for the intended tens-of-MeV-plus operation range this is
@@ -98,7 +111,8 @@ also used as the practical `dE/E` value.
   solve.
 
 The correction step uses normalized bounded least squares. For each knob,
-`step_limit = knob.limit * solver.max_step_fraction`. The solver normalizes the
+`step_limit = knob.max_offset * solver.max_step_fraction`. The runtime model
+retains the legacy internal attribute name `limit`; the solver normalizes the
 knob variables by these step limits, applies the remaining cumulative bounds,
 and targets `-solver.gain * D_eff`. `solver.regularization` penalizes normalized
 knob usage, which selects a balanced solution when there are more knobs than

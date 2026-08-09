@@ -32,6 +32,8 @@ class KnobConfig:
     devices: dict[str, float]
     scan_step: float
     limit: float
+    scan_mode: str = "relative"
+    unit: str = ""
 
 
 @dataclass(frozen=True)

@@ -289,16 +289,30 @@ def _parse_knob(raw: Any, index: int) -> KnobConfig:
     devices = _mapping(item.get("devices", {}), f"knobs[{index}].devices")
     if not devices:
         raise ValueError(f"knobs[{index}].devices must not be empty")
+    raw_scan = item.get("scan")
+    if raw_scan is None:
+        scan = {
+            "step": item.get("scan_step", 0.0),
+            "max_offset": item.get("limit", 0.0),
+            "mode": "relative",
+            "unit": "",
+        }
+    else:
+        scan = _mapping(raw_scan, f"knobs[{index}].scan")
     knob = KnobConfig(
         name=str(item.get("name", f"knob_{index + 1}")),
         devices=as_float_mapping(devices),
-        scan_step=float(item.get("scan_step", 0.0)),
-        limit=float(item.get("limit", 0.0)),
+        scan_step=float(scan.get("step", 0.0)),
+        limit=float(scan.get("max_offset", 0.0)),
+        scan_mode=str(scan.get("mode", "relative")).strip().lower(),
+        unit=str(scan.get("unit", "")).strip(),
     )
     if knob.scan_step <= 0 or knob.limit <= 0:
-        raise ValueError(f"{knob.name}: scan_step and limit must be positive")
+        raise ValueError(f"{knob.name}: scan.step and scan.max_offset must be positive")
     if knob.scan_step > knob.limit:
-        raise ValueError(f"{knob.name}: scan_step must not exceed limit")
+        raise ValueError(f"{knob.name}: scan.step must not exceed scan.max_offset")
+    if knob.scan_mode != "relative":
+        raise ValueError(f"{knob.name}: scan.mode must be 'relative'")
     return knob
 
 

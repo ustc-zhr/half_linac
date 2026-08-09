@@ -2,7 +2,29 @@
   "control_backends": ["vm", "real"],
   "model_only_control_backends": ["vm"],
   "quadrupole_control": {"vm": "K1", "real": "K1"},
-  "default_section": "MIR-dogleg",
+  "bpm_position_scale_to_mm": {"real": 1},
+  "measurement": {"plane": "x", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1},
+  "solver": {
+    "svd_cut": 0.001,
+    "regularization": 0.001,
+    "gain": 0.5,
+    "max_step_fraction": 0.6,
+    "max_iter": 5,
+    "response_update": "once",
+    "min_step_improvement": 0.05,
+    "success_min_improvement": 2
+  },
+  "safety": {"max_reference_orbit_change_mm": 3},
+  "energy_knob": {
+    "name": "MODULATOR_HV1",
+    "actuator": "modulator_voltage",
+    "actuator_unit": "kV",
+    "delta": 0.004,
+    "readback_tolerance": 0.015,
+    "element": "MODULATOR_HV1",
+    "set_channel": "voltage_set",
+    "readback_channel": "voltage_readback"
+  },
   "sections": [
     {
       "id": "MIR-dogleg",
@@ -11,24 +33,13 @@
       "model_exit": "BPM10",
       "target_bpms": ["BPM09", "BPM10"],
       "monitor_bpms": ["BPM07", "BPM08"],
-      "target_dispersion_mm": [0, 0],
-      "knobs": [
-        {
-          "name": "Q13_Q16_sym",
-          "devices": {"QM13": 1, "QM16": 1},
-          "scan_step": 1,
-          "limit": 5
-        },
-        {
-          "name": "Q14_Q15_sym",
-          "devices": {"QM14": 1, "QM15": 1},
-          "scan_step": 1,
-          "limit": 5
-        }
-      ],
       "model_observables": [
         {"name": "BPM09 Dx", "element": "BPM09", "component": "dx", "target": 0},
         {"name": "BPM10 Dx", "element": "BPM10", "component": "dx", "target": 0}
+      ],
+      "knobs": [
+        {"name": "Q13_Q16_sym", "devices": {"QM13": 1, "QM16": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+        {"name": "Q14_Q15_sym", "devices": {"QM14": 1, "QM15": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}}
       ]
     },
     {
@@ -36,9 +47,7 @@
       "display_name": "MIR Joint Validation (ηx/ηy)",
       "model_entrance": "BPM07",
       "model_exit": "BPM10",
-      "target_bpms": [],
       "monitor_bpms": ["BPM07", "BPM08", "BPM09", "BPM10"],
-      "target_dispersion_mm": [],
       "model_observables": [
         {"name": "BPM09 Dx", "element": "BPM09", "component": "dx", "target": 0},
         {"name": "BPM10 Dx", "element": "BPM10", "component": "dx", "target": 0},
@@ -53,50 +62,15 @@
           {"bpm": "BPM10", "plane": "y", "target_mm": 0, "tolerance_mm": 1}
         ],
         "knobs": [
-          {
-            "name": "Q13_Q16_sym",
-            "devices": {"QM13": 1, "QM16": 1},
-            "scan_step": 1,
-            "limit": 5
-          },
-          {
-            "name": "Q14_Q15_sym",
-            "devices": {"QM14": 1, "QM15": 1},
-            "scan_step": 1,
-            "limit": 5
-          }
+          {"name": "Q13_Q16_sym", "devices": {"QM13": 1, "QM16": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+          {"name": "Q14_Q15_sym", "devices": {"QM14": 1, "QM15": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}}
         ]
       },
-      "knobs": [],
-      "measurement": {"plane": "xy", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1}
+      "measurement": {"plane": "xy"}
     }
   ],
-  "bpm_position_scale_to_mm": {"real": 1},
-  "energy_knob": {
-    "name": "MODULATOR_HV1",
-    "actuator": "modulator_voltage",
-    "actuator_unit": "kV",
-    "delta": 0.004,
-    "calibration": {},
-    "readback_tolerance": 0.015,
-    "element": "MODULATOR_HV1",
-    "set_channel": "voltage_set",
-    "readback_channel": "voltage_readback"
-  },
-  "measurement": {"plane": "x", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1},
-  "solver": {
-    "svd_cut": 0.001,
-    "regularization": 0.001,
-    "gain": 0.5,
-    "max_step_fraction": 0.6,
-    "max_iter": 5,
-    "response_update": "once",
-    "min_step_improvement": 0.05,
-    "success_min_improvement": 2
-  },
-  "safety": {"max_reference_orbit_change_mm": 3},
-  "ca_timeout": 0.5,
-  "readback_timeout": 10,
+  "default_section": "MIR-dogleg",
+  "readback_timeout": {"vm": 10, "real": 10},
   "real_status": "commissioned",
   "write_control": {"vm": "blocked", "real": "allowed"}
 }

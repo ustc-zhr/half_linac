@@ -1,7 +1,28 @@
 {
   "control_backends": ["vm", "real"],
   "quadrupole_control": {"vm": "K1", "real": "K1"},
-  "default_section": "bl01",
+  "measurement": {"plane": "x", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1},
+  "solver": {
+    "svd_cut": 0.001,
+    "regularization": 0.001,
+    "gain": 0.5,
+    "max_step_fraction": 0.25,
+    "max_iter": 5,
+    "response_update": "once",
+    "min_step_improvement": 0.05,
+    "success_min_improvement": 2
+  },
+  "safety": {"max_reference_orbit_change_mm": 0.5},
+  "energy_knob": {
+    "name": "MODULATOR_HV1",
+    "actuator": "modulator_voltage",
+    "actuator_unit": "kV",
+    "delta": 0.004,
+    "readback_tolerance": 0.015,
+    "element": {"real": "MODULATOR_HV1"},
+    "set_channel": "voltage_set",
+    "readback_channel": "voltage_readback"
+  },
   "sections": [
     {
       "id": "bl01",
@@ -10,30 +31,14 @@
       "model_exit": "BPM07",
       "target_bpms": ["BPM06", "BPM07"],
       "monitor_bpms": ["BPM02", "BPM03", "BPM04", "BPM05"],
-      "target_dispersion_mm": [0, 0],
       "model_observables": [
         {"name": "BPM06 Dx", "element": "BPM06", "component": "dx", "target": 0},
         {"name": "BPM06 Dx'", "element": "BPM06", "component": "dxp", "target": 0}
       ],
       "knobs": [
-        {
-          "name": "QL01_QL06_sym",
-          "devices": {"QL01": 1, "QL06": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        },
-        {
-          "name": "QL02_QL05_sym",
-          "devices": {"QL02": 1, "QL05": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        },
-        {
-          "name": "QL03_QL04_sym",
-          "devices": {"QL03": 1, "QL04": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        }
+        {"name": "QL01_QL06_sym", "devices": {"QL01": 1, "QL06": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+        {"name": "QL02_QL05_sym", "devices": {"QL02": 1, "QL05": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+        {"name": "QL03_QL04_sym", "devices": {"QL03": 1, "QL04": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}}
       ]
     },
     {
@@ -43,36 +48,15 @@
       "model_exit": "BPM27",
       "target_bpms": ["BPM25", "BPM26", "BPM27"],
       "monitor_bpms": ["BPM21", "BPM22", "BPM23", "BPM24"],
-      "target_dispersion_mm": [0, 0, 0],
       "model_observables": [
         {"name": "BPM25 Dx", "element": "BPM25", "component": "dx", "target": 0},
         {"name": "BPM25 Dx'", "element": "BPM25", "component": "dxp", "target": 0}
       ],
       "knobs": [
-        {
-          "name": "QT05_QT12_sym",
-          "devices": {"QT05": 1, "QT12": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        },
-        {
-          "name": "QT06_QT11_sym",
-          "devices": {"QT06": 1, "QT11": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        },
-        {
-          "name": "QT07_QT10_sym",
-          "devices": {"QT07": 1, "QT10": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        },
-        {
-          "name": "QT08_QT09_sym",
-          "devices": {"QT08": 1, "QT09": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        }
+        {"name": "QT05_QT12_sym", "devices": {"QT05": 1, "QT12": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+        {"name": "QT06_QT11_sym", "devices": {"QT06": 1, "QT11": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+        {"name": "QT07_QT10_sym", "devices": {"QT07": 1, "QT10": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+        {"name": "QT08_QT09_sym", "devices": {"QT08": 1, "QT09": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}}
       ]
     },
     {
@@ -82,32 +66,16 @@
       "model_exit": "BPM43",
       "target_bpms": ["BPM42", "BPM43"],
       "monitor_bpms": ["BPM36", "BPM37", "BPM38", "BPM39", "BPM40", "BPM41"],
-      "target_dispersion_mm": [0, 0],
       "model_observables": [
         {"name": "BPM42 Dy", "element": "BPM42", "component": "dy", "target": 0},
         {"name": "BPM42 Dy'", "element": "BPM42", "component": "dyp", "target": 0}
       ],
       "knobs": [
-        {
-          "name": "QT30_QT35_sym",
-          "devices": {"QT30": 1, "QT35": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        },
-        {
-          "name": "QT31_QT34_sym",
-          "devices": {"QT31": 1, "QT34": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        },
-        {
-          "name": "QT32_QT33_sym",
-          "devices": {"QT32": 1, "QT33": 1},
-          "scan_step": 0.001,
-          "limit": 0.1
-        }
+        {"name": "QT30_QT35_sym", "devices": {"QT30": 1, "QT35": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+        {"name": "QT31_QT34_sym", "devices": {"QT31": 1, "QT34": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+        {"name": "QT32_QT33_sym", "devices": {"QT32": 1, "QT33": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}}
       ],
-      "measurement": {"plane": "y", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1}
+      "measurement": {"plane": "y"}
     },
     {
       "id": "bh04_sep_diagnostics",
@@ -115,24 +83,19 @@
       "diagnostic_only": true,
       "model_entrance": "BPM36",
       "model_exit": "WSEP1",
-      "target_bpms": [],
       "monitor_bpms": ["BPM36", "BPM37", "BPM38", "BPM39", "BPM40", "BPM41", "BPM42", "BPM43"],
-      "target_dispersion_mm": [],
       "model_observables": [
         {"name": "WSEP1 Dx", "element": "WSEP1", "component": "dx", "target": 0},
         {"name": "WSEP1 Dx'", "element": "WSEP1", "component": "dxp", "target": 0}
       ],
-      "knobs": [],
-      "measurement": {"plane": "xy", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1}
+      "measurement": {"plane": "xy"}
     },
     {
       "id": "bh04_sep_joint_correction",
       "display_name": "BH04–SEP Joint Correction",
       "model_entrance": "BPM36",
       "model_exit": "WSEP1",
-      "target_bpms": [],
       "monitor_bpms": ["BPM36", "BPM37", "BPM38", "BPM39", "BPM40", "BPM41", "BPM42", "BPM43"],
-      "target_dispersion_mm": [],
       "model_observables": [
         {"name": "BPM42 Dx", "element": "BPM42", "component": "dx", "target": -497.2145918210241},
         {"name": "BPM43 Dx", "element": "BPM43", "component": "dx", "target": -192.7016225246745},
@@ -147,53 +110,15 @@
           {"bpm": "BPM43", "plane": "y", "target_mm": 0, "tolerance_mm": 1}
         ],
         "knobs": [
-          {
-            "name": "QT30_QT35_sym",
-            "devices": {"QT30": 1, "QT35": 1},
-            "scan_step": 0.001,
-            "limit": 0.1
-          },
-          {
-            "name": "QT31_QT34_sym",
-            "devices": {"QT31": 1, "QT34": 1},
-            "scan_step": 0.001,
-            "limit": 0.1
-          },
-          {
-            "name": "QT32_QT33_sym",
-            "devices": {"QT32": 1, "QT33": 1},
-            "scan_step": 0.001,
-            "limit": 0.1
-          }
+          {"name": "QT30_QT35_sym", "devices": {"QT30": 1, "QT35": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+          {"name": "QT31_QT34_sym", "devices": {"QT31": 1, "QT34": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},
+          {"name": "QT32_QT33_sym", "devices": {"QT32": 1, "QT33": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}}
         ]
       },
-      "knobs": [],
-      "measurement": {"plane": "xy", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1}
+      "measurement": {"plane": "xy"}
     }
   ],
-  "energy_knob": {
-    "name": "MODULATOR_HV1",
-    "actuator": "modulator_voltage",
-    "actuator_unit": "kV",
-    "delta": 0.004,
-    "calibration": {},
-    "readback_tolerance": 0.015,
-    "element": {"real": "MODULATOR_HV1"},
-    "set_channel": "voltage_set",
-    "readback_channel": "voltage_readback"
-  },
-  "measurement": {"plane": "x", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1},
-  "solver": {
-    "svd_cut": 0.001,
-    "regularization": 0.001,
-    "gain": 0.5,
-    "max_step_fraction": 0.25,
-    "max_iter": 5,
-    "response_update": "once",
-    "min_step_improvement": 0.05,
-    "success_min_improvement": 2
-  },
-  "safety": {"max_reference_orbit_change_mm": 0.5},
+  "default_section": "bl01",
   "readback_timeout": {"vm": 2, "real": 10},
   "write_control": {"vm": "allowed", "real": "allowed"}
 }

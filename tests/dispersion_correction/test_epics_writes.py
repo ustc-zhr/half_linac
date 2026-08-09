@@ -246,6 +246,25 @@ def test_current_deltas_are_relative_to_snapshot_and_restore_exactly() -> None:
     }
 
 
+def test_machine_channel_limit_blocks_quadrupole_target_before_write() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    options["pv_map"]["quadrupoles"]["QM13"]["limit"] = {
+        "low": 0,
+        "high": 1.3,
+        "unit": "A",
+    }
+    config = replace(config, backend=replace(config.backend, options=options))
+    epics = FakeEpics(initial_values())
+    machine = EpicsMachine(config, epics_client=epics)
+    machine.snapshot()
+
+    with pytest.raises(ValueError, match="QM13.*machine limit"):
+        machine.apply_device_deltas({"QM13": 0.001})
+
+    assert epics.caput_calls == []
+
+
 def test_control_can_switch_to_k1_with_k1_tolerance() -> None:
     config = write_config()
     options = deepcopy(config.backend.options)

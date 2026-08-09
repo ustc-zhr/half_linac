@@ -110,6 +110,9 @@ Do not duplicate broad selectable element lists in app configs when they can be
 derived from element `kind`, `plane`, or minimal tags.
 Prefer element ids plus logical channels over direct PV strings. Keep direct PVs in
 app configs only for external controls that are not yet represented as machine elements.
+See [`docs/APP_WORKFLOW_CONFIG_PRINCIPLES.md`](../../docs/APP_WORKFLOW_CONFIG_PRINCIPLES.md)
+for the shared layout, scan, limit, derivation, and compatibility conventions used by
+these workflow files.
 
 `model_backends/*.json` describes simulation or analysis model inputs used by
 model-driven apps. App workflow files may select one of these backends by name.
