@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,6 +26,7 @@ from half_linac.src.apps.hv_feedback.controller import (
 from half_linac.src.apps.hv_feedback.data_buffer import DataBuffer, Sample
 from half_linac.src.apps.hv_feedback.epics_client import BaseClient, PVValue
 from half_linac.src.apps.hv_feedback.profile_runtime import (
+    apply_machine_hv_limit,
     amplitude_key,
     assert_hv_feedback_runtime,
     get_unit_config,
@@ -144,6 +146,66 @@ class HVFeedbackProfileTests(unittest.TestCase):
             REAL_STATUS_COMMISSIONED,
         )
         self.assertTrue(workflow_writes_allowed(self.real_context, "hv_feedback"))
+
+    def test_machine_voltage_limit_intersects_application_safety_range(self):
+        base_config = unit_config(self.real_context)
+        self.assertEqual(base_config["_machine_hv_limit"], {
+            "low": 0.0,
+            "high": 80.0,
+            "unit": "kV",
+        })
+        self.assertEqual(base_config["safety"]["hv_min_kv"], 38.5)
+        self.assertEqual(base_config["safety"]["hv_max_kv"], 39.5)
+
+        element = self.real_context.profile.get_element("MODULATOR_HV1")
+        limited_element = replace(
+            element,
+            limits={"voltage_set": {"low": 38.79, "high": 39.2, "unit": "kV"}},
+        )
+        elements = tuple(
+            limited_element if item.id == limited_element.id else item
+            for item in self.real_context.profile.elements
+        )
+        profile = replace(
+            self.real_context.profile,
+            elements=elements,
+            _elements_by_id={item.id: item for item in elements},
+        )
+        context = replace(self.real_context, profile=profile)
+        selected = unit_config(context)
+        self.assertEqual(selected["safety"]["hv_min_kv"], 38.79)
+        self.assertEqual(selected["safety"]["hv_max_kv"], 39.2)
+
+    def test_invalid_machine_voltage_limit_blocks_configuration(self):
+        element = self.real_context.profile.get_element("MODULATOR_HV1")
+        limited_element = replace(
+            element,
+            limits={"voltage_set": {"low": 50, "high": 60, "unit": "kV"}},
+        )
+        elements = tuple(
+            limited_element if item.id == limited_element.id else item
+            for item in self.real_context.profile.elements
+        )
+        profile = replace(
+            self.real_context.profile,
+            elements=elements,
+            _elements_by_id={item.id: item for item in elements},
+        )
+        context = replace(self.real_context, profile=profile)
+        with self.assertRaisesRegex(ValueError, "effective HV safety range"):
+            load_profile_config(context)
+
+    def test_runtime_parameters_cannot_widen_machine_voltage_limit(self):
+        config = unit_config(self.real_context)
+        config["_machine_hv_limit"] = {"low": 38.8, "high": 39.2, "unit": "kV"}
+        config["safety"]["hv_min_kv"] = 0
+        config["safety"]["hv_max_kv"] = 80
+
+        selected = apply_machine_hv_limit(config)
+        self.assertEqual(selected["safety"]["hv_min_kv"], 38.8)
+        self.assertEqual(selected["safety"]["hv_max_kv"], 39.2)
+        with self.assertRaisesRegex(ValueError, "machine voltage_set limit"):
+            validate_session_config(config)
 
     def test_profile_rejects_duplicate_unit_channel_and_write_target(self):
         workflow = copy.deepcopy(get_workflow(self.real_context.profile, "hv_feedback"))

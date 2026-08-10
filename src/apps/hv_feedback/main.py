@@ -54,6 +54,7 @@ from half_linac.src.apps.hv_feedback.data_buffer import DataBuffer, Sample
 from half_linac.src.apps.hv_feedback.epics_client import BaseClient
 from half_linac.src.apps.hv_feedback.logger import CSVLogger
 from half_linac.src.apps.hv_feedback.profile_runtime import (
+    apply_machine_hv_limit,
     amplitude_key,
     get_unit_config,
     load_profile_config,
@@ -1300,6 +1301,7 @@ class HVFeedbackWindow(QMainWindow):
             for key, spin in fields.items():
                 value = int(spin.value()) if isinstance(spin, QSpinBox) else float(spin.value())
                 self._set_nested_value(config[section], key, value)
+        config = apply_machine_hv_limit(config)
         validate_session_config(config)
         return config
 

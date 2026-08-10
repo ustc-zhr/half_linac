@@ -9,13 +9,16 @@ from typing import Any, Mapping
 
 from half_linac.src.shared.machine_profile import (
     AppContext,
+    LimitRange,
     MachineProfileError,
+    effective_limit,
     make_runtime_run_id,
     new_app_run_dir,
     require_workflow_write_allowed,
     resolve_app_runtime_paths,
     resolve_channel,
     resolve_hv_feedback_workflow,
+    resolve_write_target,
 )
 
 
@@ -64,6 +67,30 @@ def _resolve_signal(context: AppContext, signal: Mapping[str, Any]) -> dict[str,
     }
 
 
+def _resolve_write_signal(
+    context: AppContext,
+    signal: Mapping[str, Any],
+) -> tuple[dict[str, str], LimitRange]:
+    element_id = str(signal["element"])
+    logical_channel = str(signal["channel"])
+    unit = str(signal.get("unit", "")).strip() or None
+    target = resolve_write_target(
+        context,
+        element_id,
+        logical_channel=logical_channel,
+        unit=unit,
+    )
+    return (
+        {
+            "name": target.pv_name,
+            "unit": target.unit or "",
+            "element": target.element_id,
+            "channel": target.logical_channel,
+        },
+        target.machine_limit,
+    )
+
+
 def load_profile_config(context: AppContext) -> dict[str, Any]:
     """Resolve all configured units without connecting to any EPICS PV."""
     assert_hv_feedback_runtime(context)
@@ -74,8 +101,12 @@ def load_profile_config(context: AppContext) -> dict[str, Any]:
     for raw_unit in workflow["feedback_units"]:
         unit_id = str(raw_unit["id"])
         unit_order.append(unit_id)
+        hv_setpoint, machine_hv_limit = _resolve_write_signal(
+            context,
+            raw_unit["hv"]["setpoint"],
+        )
         pvs = {
-            "hv_setpoint": _resolve_signal(context, raw_unit["hv"]["setpoint"]),
+            "hv_setpoint": hv_setpoint,
             "hv_readback": _resolve_signal(context, raw_unit["hv"]["readback"]),
         }
         channels: list[dict[str, str]] = []
@@ -105,7 +136,17 @@ def load_profile_config(context: AppContext) -> dict[str, Any]:
             "reference": copy.deepcopy(dict(raw_unit["reference"])),
             "safety": copy.deepcopy(dict(raw_unit["safety"])),
             "logging": copy.deepcopy(dict(raw_unit["logging"])),
+            "_machine_hv_limit": {
+                key: value
+                for key, value in {
+                    "low": machine_hv_limit.low,
+                    "high": machine_hv_limit.high,
+                    "unit": machine_hv_limit.unit,
+                }.items()
+                if value is not None
+            },
         }
+        config = apply_machine_hv_limit(config)
         validate_session_config(config)
         units[unit_id] = config
     return {"unit_order": unit_order, "units": units}
@@ -140,11 +181,12 @@ def require_confirmed_feedback_write(
         )
     unit = _workflow_unit(context, feedback_unit_id)
     hv_signal = unit["hv"]["setpoint"]
-    expected_pv = resolve_channel(
+    expected_pv = resolve_write_target(
         context,
         str(hv_signal["element"]),
-        str(hv_signal["channel"]),
-    )
+        logical_channel=str(hv_signal["channel"]),
+        unit=str(hv_signal.get("unit", "")).strip() or None,
+    ).pv_name
     if str(target_pv) != expected_pv:
         raise MachineProfileError(
             f"HV write target changed for unit {feedback_unit_id!r}: "
@@ -237,6 +279,7 @@ def save_runtime_snapshot(
     context: AppContext,
     config: Mapping[str, Any],
 ) -> Path:
+    config = apply_machine_hv_limit(config)
     validate_session_config(config)
     unit_id = str(config["feedback_unit_id"])
     snapshots_dir = resolve_hv_feedback_runtime_paths(context, unit_id)["snapshots_dir"]
@@ -296,6 +339,7 @@ def load_runtime_snapshot(
                 + ", ".join(sorted(unknown))
             )
         merged[section].update(copy.deepcopy(values))
+    merged = apply_machine_hv_limit(merged)
     validate_session_config(merged)
     return merged
 
@@ -373,6 +417,32 @@ def _migrate_schema_1_snapshot(
     }
 
 
+def apply_machine_hv_limit(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a session config with its HV safety range intersected by machine limits."""
+    selected = copy.deepcopy(dict(config))
+    safety = selected.get("safety")
+    if not isinstance(safety, dict):
+        raise ValueError("HV feedback safety configuration must be a mapping.")
+    application_limit = LimitRange(
+        safety.get("hv_min_kv"),
+        safety.get("hv_max_kv"),
+        "kV",
+    )
+    raw_machine_limit = selected.get("_machine_hv_limit")
+    machine_limit = (
+        LimitRange.from_mapping(raw_machine_limit)
+        if isinstance(raw_machine_limit, Mapping) and raw_machine_limit
+        else LimitRange()
+    )
+    try:
+        selected_limit = effective_limit(application_limit, machine_limit)
+    except MachineProfileError as exc:
+        raise ValueError(f"Invalid effective HV safety range: {exc}") from exc
+    safety["hv_min_kv"] = selected_limit.low
+    safety["hv_max_kv"] = selected_limit.high
+    return selected
+
+
 def validate_session_config(config: Mapping[str, Any]) -> None:
     channel_ids = [str(channel["id"]) for channel in config["rf_channels"]]
     if not channel_ids or len(set(channel_ids)) != len(channel_ids):
@@ -432,6 +502,13 @@ def validate_session_config(config: Mapping[str, Any]) -> None:
     )
     if safety_values["hv_min_kv"] >= safety_values["hv_max_kv"]:
         raise ValueError("Minimum HV must be less than maximum HV.")
+    effective_config = apply_machine_hv_limit(config)
+    effective_safety = effective_config["safety"]
+    if (
+        float(effective_safety["hv_min_kv"]) != safety_values["hv_min_kv"]
+        or float(effective_safety["hv_max_kv"]) != safety_values["hv_max_kv"]
+    ):
+        raise ValueError("HV safety range must stay inside the machine voltage_set limit.")
     if any(value <= 0 for key, value in safety_values.items() if key not in {"hv_min_kv", "hv_max_kv"}):
         raise ValueError("All safety tolerances must be positive.")
     if not (

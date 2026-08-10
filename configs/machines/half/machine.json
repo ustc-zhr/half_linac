@@ -2349,8 +2349,7 @@
       "order": 246,
       "tags": ["modulator", "hv", "commissioning_draft"],
       "limits": {
-        "low": 0.0,
-        "high": 80.0
+        "voltage_set": {"low": 0, "high": 80, "unit": "kV"}
       },
       "logical_channels": ["voltage_set", "voltage_readback"]
     }
