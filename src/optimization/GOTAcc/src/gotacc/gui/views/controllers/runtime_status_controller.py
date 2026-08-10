@@ -140,11 +140,12 @@ class RuntimeStatusController:
             and bool(self.window.state.latest_best_x)
         )
 
+        primary_actions_in_sidebar = bool(getattr(self.window, "_run_primary_actions_in_sidebar", False))
         action_states = (
-            (self.window.run_ui.pushButton_start, start_visible, start_visible),
-            (self.window.run_ui.pushButton_pause, pause_visible, pause_visible),
-            (self.window.run_ui.pushButton_resume, resume_visible, resume_visible),
-            (self.window.run_ui.pushButton_stop, stop_visible, stop_visible),
+            (self.window.run_ui.pushButton_start, start_visible and not primary_actions_in_sidebar, start_visible),
+            (self.window.run_ui.pushButton_pause, pause_visible and not primary_actions_in_sidebar, pause_visible),
+            (self.window.run_ui.pushButton_resume, resume_visible and not primary_actions_in_sidebar, resume_visible),
+            (self.window.run_ui.pushButton_stop, stop_visible and not primary_actions_in_sidebar, stop_visible),
             (self.window.run_ui.pushButton_abortRestore, abort_visible, abort_visible),
             (
                 self.window.run_ui.pushButton_restoreInitial,
@@ -160,6 +161,15 @@ class RuntimeStatusController:
         for button, visible, enabled in action_states:
             button.setVisible(visible)
             button.setEnabled(enabled)
+        advanced_visible = any(
+            button.isVisible()
+            for button in (
+                self.window.run_ui.pushButton_abortRestore,
+                self.window.run_ui.pushButton_restoreInitial,
+                self.window.run_ui.pushButton_setBest,
+            )
+        )
+        self.window.run_ui.groupBox_actions.setVisible(advanced_visible)
 
     def _sync_plot_tab_visibility(self, task: dict[str, Any]) -> None:
         has_constraints = bool(self._enabled_rows(task.get("constraints", [])))

@@ -32,7 +32,8 @@ class ResultsController:
     def init_results_page(self) -> None:
         tree = self.window.ui.treeWidget_runList
         tree.setColumnCount(2)
-        tree.setHeaderLabels(["Run / Artifact", "Path / Value"])
+        tree.setHeaderLabels(["Artifact", "Value"])
+        tree.setColumnWidth(0, 190)
         tree.header().setStretchLastSection(True)
         self._ensure_pareto_solution_controls()
         self.populate_results_tree()
@@ -154,6 +155,7 @@ class ResultsController:
             ax.set_ylabel("Hypervolume")
             ax.grid(True, alpha=0.3)
             ax.legend()
+            canvas.apply_theme_to_axes(ax)
             canvas.draw_idle()
             return
         if not state.objective_history:
@@ -171,6 +173,7 @@ class ResultsController:
         ax.set_ylabel("Objective")
         ax.grid(True, alpha=0.3)
         ax.legend()
+        canvas.apply_theme_to_axes(ax)
         canvas.draw_idle()
 
     def draw_pareto_plot(self, canvas, *, title: str) -> None:
@@ -194,6 +197,7 @@ class ResultsController:
         ax.set_xlabel("f0")
         ax.set_ylabel("f1")
         ax.grid(True, alpha=0.3)
+        canvas.apply_theme_to_axes(ax)
         canvas.draw_idle()
 
     def draw_variable_trajectories(self) -> None:
@@ -228,6 +232,7 @@ class ResultsController:
             ax.grid(True, alpha=0.3)
             if X.shape[1] <= 30:
                 ax.legend(fontsize=7, ncol=max(1, min(4, (X.shape[1] + 7) // 8)))
+            canvas.apply_theme_to_axes(ax)
             canvas.figure.subplots_adjust(left=0.12, right=0.98, top=0.88, bottom=0.16)
             canvas.draw_idle()
 

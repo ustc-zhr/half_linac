@@ -1,0 +1,31 @@
+{
+  "control_backends": ["real", "vm"],
+  "measurement": {
+    "channel": "charge",
+    "unit": "nC",
+    "scale_to_display_unit": {"real": 1, "vm": 1000000000},
+    "minimum_upstream_value": 0.01
+  },
+  "default_pair": {"upstream": "ICT01", "downstream": "ICT02"},
+  "acquisition": {
+    "refresh_interval_ms": 200,
+    "event_queue_size": 512,
+    "pair_tolerance_s": 0.2,
+    "stale_timeout_s": {"real": 3, "vm": null}
+  },
+  "rolling": {
+    "default_window": 20,
+    "options": [10, 20, 50, 100],
+    "input_range": [5, 1000]
+  },
+  "trend": {
+    "default_window_s": 120,
+    "options_s": [30, 60, 120, 300],
+    "input_range_s": [10, 5000],
+    "gap_s": {"real": 3, "vm": null},
+    "history_size": 50000,
+    "max_plot_points": 2000
+  },
+  "display": {"efficiency_axis_max_percent": 110},
+  "real_status": "read_only"
+}

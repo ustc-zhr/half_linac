@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'gui.ui'
+# Form implementation generated from reading ui file 'src/apps/launcher/gui.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.10
 #
@@ -16,7 +16,7 @@ class Ui_MainWindow(object):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(988, 777)
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("../../../../../../HALF_logo.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap("src/apps/launcher/../../../../../../HALF_logo.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainWindow.setWindowIcon(icon)
         MainWindow.setStyleSheet("/* 全局背景与文字 */\n"
 "QMainWindow, QWidget#centralwidget {\n"
@@ -70,16 +70,10 @@ class Ui_MainWindow(object):
 "    border: 1px solid rgba(166, 227, 161, 0.2); /* 20% 透明度的绿色边框 */\n"
 "}\n"
 "\n"
-"/*  危险/自动控制按钮：橙色文字 (Energy Feedback) */\n"
+"/*  控制功能按钮 */\n"
 "QPushButton#BBA,QPushButton#emitmeasure,QPushButton#orbit_correct{\n"
 "    color: #94e2d5;\n"
 "    border: 1px solid rgba(148, 226, 213, 0.2); /* 20% 透明度的青色边框 */\n"
-"}\n"
-"\n"
-"\n"
-"/*  危险/自动控制按钮：橙色文字 (Energy Feedback) */\n"
-"QPushButton#energy_feedback {\n"
-"    color: #fab387;\n"
 "}\n"
 "\n"
 "\n"
@@ -209,26 +203,6 @@ class Ui_MainWindow(object):
         self.gridLayout_4.addWidget(self.emitmeasure, 0, 1, 1, 1)
         self.verticalLayout_7.addLayout(self.gridLayout_4)
         self.verticalLayout_5.addWidget(self.groupBox_5)
-        self.groupBox = QtWidgets.QGroupBox(self.frame_2)
-        self.groupBox.setObjectName("groupBox")
-        self.verticalLayout_8 = QtWidgets.QVBoxLayout(self.groupBox)
-        self.verticalLayout_8.setObjectName("verticalLayout_8")
-        self.gridLayout = QtWidgets.QGridLayout()
-        self.gridLayout.setObjectName("gridLayout")
-        self.energy_feedback = QtWidgets.QPushButton(self.groupBox)
-        self.energy_feedback.setMinimumSize(QtCore.QSize(0, 40))
-        self.energy_feedback.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.energy_feedback.setStyleSheet("")
-        self.energy_feedback.setObjectName("energy_feedback")
-        self.gridLayout.addWidget(self.energy_feedback, 0, 0, 1, 1)
-        self.pushButton_5 = QtWidgets.QPushButton(self.groupBox)
-        self.pushButton_5.setMinimumSize(QtCore.QSize(0, 40))
-        self.pushButton_5.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.pushButton_5.setText("")
-        self.pushButton_5.setObjectName("pushButton_5")
-        self.gridLayout.addWidget(self.pushButton_5, 0, 1, 1, 1)
-        self.verticalLayout_8.addLayout(self.gridLayout)
-        self.verticalLayout_5.addWidget(self.groupBox)
         self.groupBox_3 = QtWidgets.QGroupBox(self.frame_2)
         self.groupBox_3.setObjectName("groupBox_3")
         self.verticalLayout_4 = QtWidgets.QVBoxLayout(self.groupBox_3)
@@ -284,8 +258,6 @@ class Ui_MainWindow(object):
         self.BBA.setText(_translate("MainWindow", "BBA"))
         self.orbit_correct.setText(_translate("MainWindow", "Orbit Correct"))
         self.emitmeasure.setText(_translate("MainWindow", "Emit Measure"))
-        self.groupBox.setTitle(_translate("MainWindow", "Feedback"))
-        self.energy_feedback.setText(_translate("MainWindow", "Energy Feedback"))
         self.groupBox_3.setTitle(_translate("MainWindow", "Other"))
         self.vmbtn.setText(_translate("MainWindow", "Virtual Accelerator"))
         self.online_opt.setText(_translate("MainWindow", "Optimization"))

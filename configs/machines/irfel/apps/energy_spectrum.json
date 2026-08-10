@@ -1,0 +1,32 @@
+{
+  "flag_element": "PRFESA",
+  "flag_image_channel": "image",
+  "flag_exposure_channel": "exposure_time",
+  "x_reference_mm": 0,
+  "bend_element": "BM03",
+  "energy_element": "ESA_ENERGY",
+  "energy_set_channel": "setpoint",
+  "energy_reference_channel": "setpoint",
+  "auto_tune_defaults": {
+    "objective": "brightness_then_profile_lock",
+    "center_lock": {
+      "frame_samples": 3, "min_valid_frames": 2,
+      "verification_frame_samples": 5, "verification_min_valid_frames": 3,
+      "frame_interval_s": 0.2, "center_step": 0.05,
+      "max_total_offset": 1, "center_tolerance_mm": 0.2
+    }
+  },
+  "auto_tune": {
+    "scan": {"low": 0, "high": 65, "coarse_steps": 16, "fine_steps": 31, "settle_time_s": 1, "unit": "MeV", "mode": "absolute", "restore_initial_on_failure": true}
+  },
+  "esa_quads": ["QM19", "QM20"],
+  "start_elements": ["QM12", "QM19"],
+  "default_start_element": "QM12",
+  "model_lines": {"dispersion": "ESAlocal", "twiss": "ALL_ESA"},
+  "optics_input_presets": {
+    "QM12": {"alpha_x": -2.26, "beta_x_m": 10, "emittance_x_nm": 102.81183}
+  },
+  "energy0_default_mev": 36,
+  "real_status": "commissioned",
+  "write_control": {"vm": "allowed", "real": "allowed"}
+}

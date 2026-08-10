@@ -7,18 +7,18 @@ from __future__ import annotations
 --------------
 1. YAML 文件
    例如：
-       configs/half.yaml
-       configs/irfel.yaml
+       config/task_configs/yaml/irfel_bo.yaml
+       /path/to/task.yaml
 
 2. Python 文件
    例如：
-       /path/to/para_half.py
+       config/task_configs/python/para_half.py
        /path/to/para_irfel.py
 
 3. Python 模块路径
    例如：
-       gotacc.configs.para_half
-       gotacc.configs.para_irfel
+       my_package.tasks.para_half
+       my_package.tasks.para_irfel
 
 支持的配置入口
 --------------

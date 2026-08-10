@@ -1,31 +1,43 @@
 import importlib
-import sys
-from pathlib import Path
+
+import pytest
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = PROJECT_ROOT / "src"
-
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-
-MODULES = [
+CORE_MODULES = [
     "gotacc",
+    "gotacc.configs.loader",
+    "gotacc.configs.schema",
+    "gotacc.configs.validators",
+    "gotacc.interfaces.base",
+    "gotacc.interfaces.factory",
+    "gotacc.interfaces.epics",
+    "gotacc.runners.task_runner",
+    "gotacc.runners.optimize",
     "gotacc.runners.run_cli",
+    "gotacc.gui.services.task_service",
+]
+
+TORCH_BACKED_MODULES = [
     "gotacc.algorithms.single_objective.bo",
     "gotacc.algorithms.single_objective.turbo",
-    "gotacc.algorithms.single_objective.rcds",
+    "gotacc.algorithms.single_objective.consbo",
+    "gotacc.algorithms.single_objective.mggpo_so",
+    "gotacc.algorithms.single_objective.consmggpo_so",
     "gotacc.algorithms.multi_objective.mobo",
+    "gotacc.algorithms.multi_objective.consmobo",
     "gotacc.algorithms.multi_objective.mggpo",
-    "gotacc.algorithms.multi_objective.mopso",
-    "gotacc.algorithms.multi_objective.nsga2",
+    "gotacc.algorithms.multi_objective.consmggpo",
 ]
 
 
-def test_import_core_modules():
-    for module_name in MODULES:
-        importlib.import_module(module_name)
+@pytest.mark.parametrize("module_name", CORE_MODULES)
+def test_import_core_modules(module_name):
+    importlib.import_module(module_name)
 
 
-test_import_core_modules()
+@pytest.mark.parametrize("module_name", TORCH_BACKED_MODULES)
+def test_import_torch_backed_modules(module_name):
+    pytest.importorskip("torch")
+    pytest.importorskip("botorch")
+    pytest.importorskip("gpytorch")
+    importlib.import_module(module_name)

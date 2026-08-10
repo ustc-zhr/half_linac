@@ -5,7 +5,9 @@ SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/common.sh"
 
-IOC_DIR="$HALF_LINAC_ROOT/src/softIOC/halflinac"
+IOC_DIR="$(
+  python3 -c 'from half_linac.src.shared.machine_profile import resolve_machine_runtime; print(resolve_machine_runtime().softioc.root)'
+)"
 RELEASE_FILE="$IOC_DIR/configure/RELEASE"
 
 read_release_var() {
@@ -43,3 +45,9 @@ echo "Rebuilding softIOC in $IOC_DIR"
 echo "Using EPICS_BASE=$EPICS_BASE"
 
 make -C "$IOC_DIR" rebuild
+
+ST_CMD="$IOC_DIR/iocBoot/ioctarget/st.cmd"
+if [[ -f "$ST_CMD" ]]; then
+  chmod +x "$ST_CMD"
+  echo "Ensured IOC startup script is executable: $ST_CMD"
+fi

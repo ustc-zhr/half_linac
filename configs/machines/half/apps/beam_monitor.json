@@ -1,0 +1,7 @@
+{
+  "default_flag": "PRF06",
+  "profile_method": "Gaussian fit",
+  "background_sample_count": 5,
+  "background_sample_interval_s": 1,
+  "write_control": {"vm": "allowed", "real": "allowed"}
+}

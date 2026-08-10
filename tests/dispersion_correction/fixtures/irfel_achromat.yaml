@@ -1,0 +1,97 @@
+# IRFEL bend-section effective achromat configuration draft.
+#
+# Safety status:
+# - This file is intended for read-only / commissioning preparation first.
+# - Hardware-approved quadrupole limits and BPM orbit thresholds must be
+#   reviewed before automatic real-machine writes.
+# - The energy knob below is a phase PV. Its calibration to delta = dp/p must
+#   be measured before using the correction workflow quantitatively.
+
+backend:
+  type: epics
+  mode: read_only
+  options:
+    site: irfel
+    ca_timeout: 0.5
+    energy_knob_readback_tolerance: 0.1
+    quadrupole_readback_tolerance: 0.1
+    pv_map:
+      bpms:
+        BPM9:
+          x: IRFEL-BI:BPM09:BPM_PX2
+        BPM10:
+          x: IRFEL-BI:BPM10:BPM_PX2
+      quadrupoles:
+        QM13:
+          control: current
+          K1: IRFEL:PS:QM13:K1:ao
+          current_set: IRFEL:PS:QM13:current:ao
+          current_readback: IRFEL:PS:QM13:current:ai
+        QM14:
+          control: current
+          K1: IRFEL:PS:QM14:K1:ao
+          current_set: IRFEL:PS:QM14:current:ao
+          current_readback: IRFEL:PS:QM14:current:ai
+        QM15:
+          control: current
+          K1: IRFEL:PS:QM15:K1:ao
+          current_set: IRFEL:PS:QM15:current:ao
+          current_readback: IRFEL:PS:QM15:current:ai
+        QM16:
+          control: current
+          K1: IRFEL:PS:QM16:K1:ao
+          current_set: IRFEL:PS:QM16:current:ao
+          current_readback: IRFEL:PS:QM16:current:ai
+      energy_knob:
+        phase_set: IRFEL:IN-MW:KLY1:SET_PHASE
+
+energy_knob:
+  name: KLY1_CH3_PHASE
+  actuator: phase
+  actuator_unit: deg
+  # For the IRFEL electron beam energy range, this tool treats dp/p and dE/E
+  # as equivalent. Add measured phase_per_delta before quantitative correction.
+  delta: 1.0e-4
+  calibration: {}
+
+target_bpms:
+  - BPM9
+  - BPM10
+
+knobs:
+  # Symmetric pairing draft: QM13/QM16 and QM14/QM15.
+  # Values are high-level current deltas in A, written through current_set and
+  # verified through current_readback. Confirm scan_step/limit onsite.
+  - name: Q13_Q16_sym
+    devices:
+      QM13: 1.0
+      QM16: 1.0
+    scan_step: 0.0005
+    limit: 0.006
+  - name: Q14_Q15_sym
+    devices:
+      QM14: 1.0
+      QM15: 1.0
+    scan_step: 0.0005
+    limit: 0.006
+
+measurement:
+  plane: x
+  samples_per_step: 5
+  sample_interval_s: 0.1
+  final_samples: 10
+  settle_time_s: 1.0
+
+solver:
+  svd_cut: 1.0e-3
+  regularization: 1.0e-3
+  gain: 0.3
+  max_step_fraction: 0.25
+  max_iter: 1
+  response_update: once
+  min_step_improvement: 0.05
+  success_min_improvement: 2.0
+
+safety:
+  # TODO: replace with operations-approved values.
+  max_reference_orbit_change_mm: 5

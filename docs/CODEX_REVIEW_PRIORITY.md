@@ -18,13 +18,13 @@
 
 优先文件：
 
-- [`runtime_config.py`](../runtime_config.py)
 - [`scripts/common.sh`](../scripts/common.sh)
+- `configs/machines/`
 - `src/softIOC/halflinac/iocBoot/ioctarget/envPaths`
 
 为什么先看：
 
-- 当前 `runtime_config.py` 承担全局运行时配置入口
+- 当前 machine profile 承担全局运行时配置入口
 - 路径依赖同时分散在 Python、shell、IOC boot 文件里
 - 这类问题会污染几乎所有运行和审查结果
 

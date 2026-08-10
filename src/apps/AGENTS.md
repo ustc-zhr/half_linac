@@ -15,7 +15,7 @@
 - Cross-app helpers should live in `src/shared/` instead of `src/apps/` when they are not owned by one specific app.
 
 ## Runtime Notes
-- Most apps assume the repository parent is on `PYTHONPATH`; use the scripts under `/scripts` to launch them.
+- Main app entrypoints now self-bootstrap the repo import path; `scripts/` wrappers are still the preferred launch path.
 - Some apps have both VM and real-machine modes. Default to VM-safe assumptions unless the task explicitly targets live operation.
 - Text logs, cached data, copied files, and backup UI files under app directories are usually artifacts, not source of truth.
 

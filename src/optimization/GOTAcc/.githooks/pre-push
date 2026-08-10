@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${GOTACC_SKIP_PRE_PUSH_SYNC:-0}" = "1" ]; then
+  exit 0
+fi
+
+# Keep normal pushes quiet. Run the Codex release-file sync only when explicitly
+# requested, for example:
+#   GOTACC_RUN_PRE_PUSH_SYNC=1 git push
+if [ "${GOTACC_RUN_PRE_PUSH_SYNC:-0}" != "1" ]; then
+  if ! git diff --quiet -- CHANGELOG.md README.md pyproject.toml src/gotacc/version.py; then
+    echo "pre-push: release-facing files have uncommitted changes." >&2
+    echo "pre-push: commit them or bypass once with GOTACC_SKIP_PRE_PUSH_SYNC=1." >&2
+    git status --short -- CHANGELOG.md README.md pyproject.toml src/gotacc/version.py >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+SKILL_DIR="$ROOT/.agents/skills/gotacc-pre-push-doc-sync"
+
+if ! command -v codex >/dev/null 2>&1; then
+  echo "pre-push: codex CLI not found; cannot run release file sync." >&2
+  echo "pre-push: install Codex CLI or bypass once with GOTACC_SKIP_PRE_PUSH_SYNC=1." >&2
+  exit 1
+fi
+
+if [ ! -d "$SKILL_DIR" ]; then
+  echo "pre-push: skill directory missing at $SKILL_DIR." >&2
+  exit 1
+fi
+
+PROMPT="Use \$gotacc-pre-push-doc-sync at $SKILL_DIR to inspect current repo changes and update CHANGELOG.md, README.md, src/gotacc/version.py, and pyproject.toml only when release-facing or packaging metadata changes require it before pushing. If no sync is needed, leave those files untouched and say so."
+
+codex exec --sandbox workspace-write -C "$ROOT" "$PROMPT"
+
+if ! git diff --quiet -- CHANGELOG.md README.md pyproject.toml src/gotacc/version.py; then
+  echo "pre-push: release-facing files changed during sync." >&2
+  echo "pre-push: review and commit them, then push again." >&2
+  git status --short -- CHANGELOG.md README.md pyproject.toml src/gotacc/version.py >&2
+  exit 1
+fi

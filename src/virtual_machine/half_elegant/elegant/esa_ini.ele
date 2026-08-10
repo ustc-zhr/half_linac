@@ -7,7 +7,6 @@
   p_central                = 223.4028,         !E=114.16MeV
   always_change_p0         = 1,
   tracking_updates         = 1
-
 &end
 
 &run_control

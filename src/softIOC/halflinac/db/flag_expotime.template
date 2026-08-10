@@ -1,0 +1,4 @@
+record(ao, "$(EXPOTIMERECORD)") {
+    alias("$(EXPOTIMEALIAS)")
+    field(DESC, "exposure_time")
+}

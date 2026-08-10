@@ -70,16 +70,10 @@ QPushButton#orbitdisplay, QPushButton#jitter_plot,QPushButton#energy_spectrum, Q
 	border: 1px solid rgba(166, 227, 161, 0.2); /* 20% 透明度的绿色边框 */
 }
 
-/*  危险/自动控制按钮：橙色文字 (Energy Feedback) */
+/*  控制功能按钮 */
 QPushButton#BBA,QPushButton#emitmeasure,QPushButton#orbit_correct{
     color: #94e2d5;
 	border: 1px solid rgba(148, 226, 213, 0.2); /* 20% 透明度的青色边框 */
-}
-
-
-/*  危险/自动控制按钮：橙色文字 (Energy Feedback) */
-QPushButton#energy_feedback {
-    color: #fab387;
 }
 
 
@@ -358,60 +352,6 @@ p, li { white-space: pre-wrap; }
                    </property>
                    <property name="text">
                     <string>Emit Measure</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </item>
-              </layout>
-             </widget>
-            </item>
-            <item>
-             <widget class="QGroupBox" name="groupBox">
-              <property name="title">
-               <string>Feedback</string>
-              </property>
-              <layout class="QVBoxLayout" name="verticalLayout_8">
-               <item>
-                <layout class="QGridLayout" name="gridLayout">
-                 <item row="0" column="0">
-                  <widget class="QPushButton" name="energy_feedback">
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>40</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>400</width>
-                     <height>16777215</height>
-                    </size>
-                   </property>
-                   <property name="styleSheet">
-                    <string notr="true"/>
-                   </property>
-                   <property name="text">
-                    <string>Energy Feedback</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="1">
-                  <widget class="QPushButton" name="pushButton_5">
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>40</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>400</width>
-                     <height>16777215</height>
-                    </size>
-                   </property>
-                   <property name="text">
-                    <string/>
                    </property>
                   </widget>
                  </item>

@@ -199,6 +199,12 @@ class lattice_parser:
         
         lattice = {}
         for line in lines:
+            stripped_line = line.strip()
+            if re.match(r'^USE\s*,', stripped_line, re.IGNORECASE) or re.match(
+                r'^RETURN$', stripped_line, re.IGNORECASE
+            ):
+                continue
+
             # there are four types line,
             # 1. L1_q1: quad, L=0.2
             # 2. line: line=(L1_q1)
@@ -408,4 +414,3 @@ if __name__=='__main__':
     lte = lattice_parser("./half_elegant/elegant/lattice_ini.lte","ALL")
     
     lte.lattice, lte.trackline_names_list = lte.get_lattice_tracklinenameslist()
-

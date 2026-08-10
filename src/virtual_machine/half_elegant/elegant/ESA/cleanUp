@@ -1,0 +1,4 @@
+#!/bin/bash
+
+#rm -f *.out *.twi *.sig *.param *.fin *.mag *.cen *.bpmcen *.log
+rm -f *.twi *.sig *.param *.fin *.mag *.cen *.log

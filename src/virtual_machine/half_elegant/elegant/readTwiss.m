@@ -1,7 +1,7 @@
  clear all;close all;clc
 
 
-mag_file = 'one_ini.mag';
+mag_file = 'one.mag';
 %% twiss
 data1 = importdata('twissx.DAT');
 data2 = importdata('twissy.DAT');
@@ -28,7 +28,7 @@ set(gcf,'unit','centimeters','position',[10 2 28 20]);
 % add lattice distribution
 % latticeplot('one2.mag',-2,1)
 % legend('\beta_x','\beta_y','','box','off')
-% return
+return
 %% cen
 databeamzie = importdata('Cen.DAT');
 figure
@@ -36,7 +36,7 @@ plot(databeamzie.data(:,1),1e3*databeamzie.data(:,2),databeamzie.data(:,1),1e3*d
 legend('<x>','<y>','box','off')
 
 % add lattice distribution
-latticeplot('one.mag',-0.5,0.1)
+latticeplot(mag_file,-0.5,0.1)
 legend('<x>','<y>','','box','off')
 set(gcf,'unit','centimeters','position',[10 2 58 12]);
 %狭缝前后

@@ -83,7 +83,7 @@
              </rect>
             </property>
             <property name="text">
-             <string>How many samples per step:</string>
+             <string>Samples/step</string>
             </property>
            </widget>
            <widget class="QLabel" name="label_11">

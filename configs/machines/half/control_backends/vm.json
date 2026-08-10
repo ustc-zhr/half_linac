@@ -1,0 +1,772 @@
+{
+  "backend": "vm",
+  "channels": {
+    "BPM01": {
+      "x": "HALF:IN:BPM:BPM01:X:ao",
+      "y": "HALF:IN:BPM:BPM01:Y:ao"
+    },
+    "BPM02": {
+      "x": "HALF:IN:BPM:BPM02:X:ao",
+      "y": "HALF:IN:BPM:BPM02:Y:ao"
+    },
+    "BPM03": {
+      "x": "HALF:IN:BPM:BPM03:X:ao",
+      "y": "HALF:IN:BPM:BPM03:Y:ao"
+    },
+    "BPM04": {
+      "x": "HALF:IN:BPM:BPM04:X:ao",
+      "y": "HALF:IN:BPM:BPM04:Y:ao"
+    },
+    "BPM05": {
+      "x": "HALF:IN:BPM:BPM05:X:ao",
+      "y": "HALF:IN:BPM:BPM05:Y:ao"
+    },
+    "BPM06": {
+      "x": "HALF:IN:BPM:BPM06:X:ao",
+      "y": "HALF:IN:BPM:BPM06:Y:ao"
+    },
+    "BPM07": {
+      "x": "HALF:IN:BPM:BPM07:X:ao",
+      "y": "HALF:IN:BPM:BPM07:Y:ao"
+    },
+    "BPM08": {
+      "x": "HALF:IN:BPM:BPM08:X:ao",
+      "y": "HALF:IN:BPM:BPM08:Y:ao"
+    },
+    "BPM09": {
+      "x": "HALF:IN:BPM:BPM09:X:ao",
+      "y": "HALF:IN:BPM:BPM09:Y:ao"
+    },
+    "BPM10": {
+      "x": "HALF:IN:BPM:BPM10:X:ao",
+      "y": "HALF:IN:BPM:BPM10:Y:ao"
+    },
+    "BPM11": {
+      "x": "HALF:IN:BPM:BPM11:X:ao",
+      "y": "HALF:IN:BPM:BPM11:Y:ao"
+    },
+    "BPM12": {
+      "x": "HALF:IN:BPM:BPM12:X:ao",
+      "y": "HALF:IN:BPM:BPM12:Y:ao"
+    },
+    "BPM13": {
+      "x": "HALF:IN:BPM:BPM13:X:ao",
+      "y": "HALF:IN:BPM:BPM13:Y:ao"
+    },
+    "BPM14": {
+      "x": "HALF:IN:BPM:BPM14:X:ao",
+      "y": "HALF:IN:BPM:BPM14:Y:ao"
+    },
+    "BPM15": {
+      "x": "HALF:IN:BPM:BPM15:X:ao",
+      "y": "HALF:IN:BPM:BPM15:Y:ao"
+    },
+    "BPM16": {
+      "x": "HALF:IN:BPM:BPM16:X:ao",
+      "y": "HALF:IN:BPM:BPM16:Y:ao"
+    },
+    "BPM17": {
+      "x": "HALF:IN:BPM:BPM17:X:ao",
+      "y": "HALF:IN:BPM:BPM17:Y:ao"
+    },
+    "BPM18": {
+      "x": "HALF:IN:BPM:BPM18:X:ao",
+      "y": "HALF:IN:BPM:BPM18:Y:ao"
+    },
+    "BPM19": {
+      "x": "HALF:IN:BPM:BPM19:X:ao",
+      "y": "HALF:IN:BPM:BPM19:Y:ao"
+    },
+    "BPM20": {
+      "x": "HALF:IN:BPM:BPM20:X:ao",
+      "y": "HALF:IN:BPM:BPM20:Y:ao"
+    },
+    "BPM21": {
+      "x": "HALF:IN:BPM:BPM21:X:ao",
+      "y": "HALF:IN:BPM:BPM21:Y:ao"
+    },
+    "BPM22": {
+      "x": "HALF:IN:BPM:BPM22:X:ao",
+      "y": "HALF:IN:BPM:BPM22:Y:ao"
+    },
+    "BPM23": {
+      "x": "HALF:IN:BPM:BPM23:X:ao",
+      "y": "HALF:IN:BPM:BPM23:Y:ao"
+    },
+    "BPM24": {
+      "x": "HALF:IN:BPM:BPM24:X:ao",
+      "y": "HALF:IN:BPM:BPM24:Y:ao"
+    },
+    "BPM25": {
+      "x": "HALF:IN:BPM:BPM25:X:ao",
+      "y": "HALF:IN:BPM:BPM25:Y:ao"
+    },
+    "BPM26": {
+      "x": "HALF:IN:BPM:BPM26:X:ao",
+      "y": "HALF:IN:BPM:BPM26:Y:ao"
+    },
+    "BPM27": {
+      "x": "HALF:IN:BPM:BPM27:X:ao",
+      "y": "HALF:IN:BPM:BPM27:Y:ao"
+    },
+    "BPM28": {
+      "x": "HALF:IN:BPM:BPM28:X:ao",
+      "y": "HALF:IN:BPM:BPM28:Y:ao"
+    },
+    "BPM29": {
+      "x": "HALF:IN:BPM:BPM29:X:ao",
+      "y": "HALF:IN:BPM:BPM29:Y:ao"
+    },
+    "BPM30": {
+      "x": "HALF:IN:BPM:BPM30:X:ao",
+      "y": "HALF:IN:BPM:BPM30:Y:ao"
+    },
+    "BPM31": {
+      "x": "HALF:IN:BPM:BPM31:X:ao",
+      "y": "HALF:IN:BPM:BPM31:Y:ao"
+    },
+    "BPM32": {
+      "x": "HALF:IN:BPM:BPM32:X:ao",
+      "y": "HALF:IN:BPM:BPM32:Y:ao"
+    },
+    "BPM33": {
+      "x": "HALF:IN:BPM:BPM33:X:ao",
+      "y": "HALF:IN:BPM:BPM33:Y:ao"
+    },
+    "BPM34": {
+      "x": "HALF:IN:BPM:BPM34:X:ao",
+      "y": "HALF:IN:BPM:BPM34:Y:ao"
+    },
+    "BPM35": {
+      "x": "HALF:IN:BPM:BPM35:X:ao",
+      "y": "HALF:IN:BPM:BPM35:Y:ao"
+    },
+    "BPM36": {
+      "x": "HALF:IN:BPM:BPM36:X:ao",
+      "y": "HALF:IN:BPM:BPM36:Y:ao"
+    },
+    "BPM37": {
+      "x": "HALF:IN:BPM:BPM37:X:ao",
+      "y": "HALF:IN:BPM:BPM37:Y:ao"
+    },
+    "BPM38": {
+      "x": "HALF:IN:BPM:BPM38:X:ao",
+      "y": "HALF:IN:BPM:BPM38:Y:ao"
+    },
+    "BPM39": {
+      "x": "HALF:IN:BPM:BPM39:X:ao",
+      "y": "HALF:IN:BPM:BPM39:Y:ao"
+    },
+    "BPM40": {
+      "x": "HALF:IN:BPM:BPM40:X:ao",
+      "y": "HALF:IN:BPM:BPM40:Y:ao"
+    },
+    "BPM41": {
+      "x": "HALF:IN:BPM:BPM41:X:ao",
+      "y": "HALF:IN:BPM:BPM41:Y:ao"
+    },
+    "BPM42": {
+      "x": "HALF:IN:BPM:BPM42:X:ao",
+      "y": "HALF:IN:BPM:BPM42:Y:ao"
+    },
+    "BPM43": {
+      "x": "HALF:IN:BPM:BPM43:X:ao",
+      "y": "HALF:IN:BPM:BPM43:Y:ao"
+    },
+    "SM01-DX": {
+      "kick": "HALF:IN:COR:SM01-DX:ao"
+    },
+    "SM01-DY": {
+      "kick": "HALF:IN:COR:SM01-DY:ao"
+    },
+    "SL01-DX": {
+      "kick": "HALF:IN:COR:SL01-DX:ao"
+    },
+    "SL01-DY": {
+      "kick": "HALF:IN:COR:SL01-DY:ao"
+    },
+    "XC00": {
+      "kick": "HALF:IN:COR:XC00:ao"
+    },
+    "XC01": {
+      "kick": "HALF:IN:COR:XC01:ao"
+    },
+    "XC02": {
+      "kick": "HALF:IN:COR:XC02:ao"
+    },
+    "XC03": {
+      "kick": "HALF:IN:COR:XC03:ao"
+    },
+    "XC04": {
+      "kick": "HALF:IN:COR:XC04:ao"
+    },
+    "XC05": {
+      "kick": "HALF:IN:COR:XC05:ao"
+    },
+    "XC06": {
+      "kick": "HALF:IN:COR:XC06:ao"
+    },
+    "XC07": {
+      "kick": "HALF:IN:COR:XC07:ao"
+    },
+    "XC08": {
+      "kick": "HALF:IN:COR:XC08:ao"
+    },
+    "XC09": {
+      "kick": "HALF:IN:COR:XC09:ao"
+    },
+    "XC10": {
+      "kick": "HALF:IN:COR:XC10:ao"
+    },
+    "XC11": {
+      "kick": "HALF:IN:COR:XC11:ao"
+    },
+    "XC12": {
+      "kick": "HALF:IN:COR:XC12:ao"
+    },
+    "XC13": {
+      "kick": "HALF:IN:COR:XC13:ao"
+    },
+    "XC14": {
+      "kick": "HALF:IN:COR:XC14:ao"
+    },
+    "XC15": {
+      "kick": "HALF:IN:COR:XC15:ao"
+    },
+    "XC16": {
+      "kick": "HALF:IN:COR:XC16:ao"
+    },
+    "XC17": {
+      "kick": "HALF:IN:COR:XC17:ao"
+    },
+    "XC18": {
+      "kick": "HALF:IN:COR:XC18:ao"
+    },
+    "XC19": {
+      "kick": "HALF:IN:COR:XC19:ao"
+    },
+    "XC20": {
+      "kick": "HALF:IN:COR:XC20:ao"
+    },
+    "XC21": {
+      "kick": "HALF:IN:COR:XC21:ao"
+    },
+    "XC22": {
+      "kick": "HALF:IN:COR:XC22:ao"
+    },
+    "XC23": {
+      "kick": "HALF:IN:COR:XC23:ao"
+    },
+    "XC24": {
+      "kick": "HALF:IN:COR:XC24:ao"
+    },
+    "XC25": {
+      "kick": "HALF:IN:COR:XC25:ao"
+    },
+    "XC26": {
+      "kick": "HALF:IN:COR:XC26:ao"
+    },
+    "XC27": {
+      "kick": "HALF:IN:COR:XC27:ao"
+    },
+    "XC28": {
+      "kick": "HALF:IN:COR:XC28:ao"
+    },
+    "XC29": {
+      "kick": "HALF:IN:COR:XC29:ao"
+    },
+    "XC30": {
+      "kick": "HALF:IN:COR:XC30:ao"
+    },
+    "XC31": {
+      "kick": "HALF:IN:COR:XC31:ao"
+    },
+    "XC32": {
+      "kick": "HALF:IN:COR:XC32:ao"
+    },
+    "XC33": {
+      "kick": "HALF:IN:COR:XC33:ao"
+    },
+    "XC34": {
+      "kick": "HALF:IN:COR:XC34:ao"
+    },
+    "XC35": {
+      "kick": "HALF:IN:COR:XC35:ao"
+    },
+    "XC36": {
+      "kick": "HALF:IN:COR:XC36:ao"
+    },
+    "XC37": {
+      "kick": "HALF:IN:COR:XC37:ao"
+    },
+    "XC38": {
+      "kick": "HALF:IN:COR:XC38:ao"
+    },
+    "XC39": {
+      "kick": "HALF:IN:COR:XC39:ao"
+    },
+    "XC40": {
+      "kick": "HALF:IN:COR:XC40:ao"
+    },
+    "XC41": {
+      "kick": "HALF:IN:COR:XC41:ao"
+    },
+    "XC42": {
+      "kick": "HALF:IN:COR:XC42:ao"
+    },
+    "XC43": {
+      "kick": "HALF:IN:COR:XC43:ao"
+    },
+    "YC00": {
+      "kick": "HALF:IN:COR:YC00:ao"
+    },
+    "YC01": {
+      "kick": "HALF:IN:COR:YC01:ao"
+    },
+    "YC02": {
+      "kick": "HALF:IN:COR:YC02:ao"
+    },
+    "YC03": {
+      "kick": "HALF:IN:COR:YC03:ao"
+    },
+    "YC04": {
+      "kick": "HALF:IN:COR:YC04:ao"
+    },
+    "YC05": {
+      "kick": "HALF:IN:COR:YC05:ao"
+    },
+    "YC06": {
+      "kick": "HALF:IN:COR:YC06:ao"
+    },
+    "YC07": {
+      "kick": "HALF:IN:COR:YC07:ao"
+    },
+    "YC08": {
+      "kick": "HALF:IN:COR:YC08:ao"
+    },
+    "YC09": {
+      "kick": "HALF:IN:COR:YC09:ao"
+    },
+    "YC10": {
+      "kick": "HALF:IN:COR:YC10:ao"
+    },
+    "YC11": {
+      "kick": "HALF:IN:COR:YC11:ao"
+    },
+    "YC12": {
+      "kick": "HALF:IN:COR:YC12:ao"
+    },
+    "YC13": {
+      "kick": "HALF:IN:COR:YC13:ao"
+    },
+    "YC14": {
+      "kick": "HALF:IN:COR:YC14:ao"
+    },
+    "YC15": {
+      "kick": "HALF:IN:COR:YC15:ao"
+    },
+    "YC16": {
+      "kick": "HALF:IN:COR:YC16:ao"
+    },
+    "YC17": {
+      "kick": "HALF:IN:COR:YC17:ao"
+    },
+    "YC18": {
+      "kick": "HALF:IN:COR:YC18:ao"
+    },
+    "YC19": {
+      "kick": "HALF:IN:COR:YC19:ao"
+    },
+    "YC20": {
+      "kick": "HALF:IN:COR:YC20:ao"
+    },
+    "YC21": {
+      "kick": "HALF:IN:COR:YC21:ao"
+    },
+    "YC22": {
+      "kick": "HALF:IN:COR:YC22:ao"
+    },
+    "YC23": {
+      "kick": "HALF:IN:COR:YC23:ao"
+    },
+    "YC24": {
+      "kick": "HALF:IN:COR:YC24:ao"
+    },
+    "YC25": {
+      "kick": "HALF:IN:COR:YC25:ao"
+    },
+    "YC26": {
+      "kick": "HALF:IN:COR:YC26:ao"
+    },
+    "YC27": {
+      "kick": "HALF:IN:COR:YC27:ao"
+    },
+    "YC28": {
+      "kick": "HALF:IN:COR:YC28:ao"
+    },
+    "YC29": {
+      "kick": "HALF:IN:COR:YC29:ao"
+    },
+    "YC30": {
+      "kick": "HALF:IN:COR:YC30:ao"
+    },
+    "YC31": {
+      "kick": "HALF:IN:COR:YC31:ao"
+    },
+    "YC32": {
+      "kick": "HALF:IN:COR:YC32:ao"
+    },
+    "YC33": {
+      "kick": "HALF:IN:COR:YC33:ao"
+    },
+    "YC34": {
+      "kick": "HALF:IN:COR:YC34:ao"
+    },
+    "YC35": {
+      "kick": "HALF:IN:COR:YC35:ao"
+    },
+    "YC36": {
+      "kick": "HALF:IN:COR:YC36:ao"
+    },
+    "YC37": {
+      "kick": "HALF:IN:COR:YC37:ao"
+    },
+    "YC38": {
+      "kick": "HALF:IN:COR:YC38:ao"
+    },
+    "YC39": {
+      "kick": "HALF:IN:COR:YC39:ao"
+    },
+    "YC40": {
+      "kick": "HALF:IN:COR:YC40:ao"
+    },
+    "YC41": {
+      "kick": "HALF:IN:COR:YC41:ao"
+    },
+    "YC42": {
+      "kick": "HALF:IN:COR:YC42:ao"
+    },
+    "YC43": {
+      "kick": "HALF:IN:COR:YC43:ao"
+    },
+    "XCA23": {
+      "kick": "HALF:IN:COR:XCA23:ao"
+    },
+    "YCA23": {
+      "kick": "HALF:IN:COR:YCA23:ao"
+    },
+    "QL01": {
+      "K1": "HALF:IN:AP:QUAD:QL01:K1:ao"
+    },
+    "QL02": {
+      "K1": "HALF:IN:AP:QUAD:QL02:K1:ao"
+    },
+    "QL03": {
+      "K1": "HALF:IN:AP:QUAD:QL03:K1:ao"
+    },
+    "QL04": {
+      "K1": "HALF:IN:AP:QUAD:QL04:K1:ao"
+    },
+    "QL05": {
+      "K1": "HALF:IN:AP:QUAD:QL05:K1:ao"
+    },
+    "QL06": {
+      "K1": "HALF:IN:AP:QUAD:QL06:K1:ao"
+    },
+    "QL07": {
+      "K1": "HALF:IN:AP:QUAD:QL07:K1:ao"
+    },
+    "QL08": {
+      "K1": "HALF:IN:AP:QUAD:QL08:K1:ao"
+    },
+    "QL09": {
+      "K1": "HALF:IN:AP:QUAD:QL09:K1:ao"
+    },
+    "QL10": {
+      "K1": "HALF:IN:AP:QUAD:QL10:K1:ao"
+    },
+    "QL11": {
+      "K1": "HALF:IN:AP:QUAD:QL11:K1:ao"
+    },
+    "QL12": {
+      "K1": "HALF:IN:AP:QUAD:QL12:K1:ao"
+    },
+    "QL13": {
+      "K1": "HALF:IN:AP:QUAD:QL13:K1:ao"
+    },
+    "QL14": {
+      "K1": "HALF:IN:AP:QUAD:QL14:K1:ao"
+    },
+    "QL15": {
+      "K1": "HALF:IN:AP:QUAD:QL15:K1:ao"
+    },
+    "QL16": {
+      "K1": "HALF:IN:AP:QUAD:QL16:K1:ao"
+    },
+    "QL17": {
+      "K1": "HALF:IN:AP:QUAD:QL17:K1:ao"
+    },
+    "QL18": {
+      "K1": "HALF:IN:AP:QUAD:QL18:K1:ao"
+    },
+    "QL19": {
+      "K1": "HALF:IN:AP:QUAD:QL19:K1:ao"
+    },
+    "QL20": {
+      "K1": "HALF:IN:AP:QUAD:QL20:K1:ao"
+    },
+    "QL21": {
+      "K1": "HALF:IN:AP:QUAD:QL21:K1:ao"
+    },
+    "QL22": {
+      "K1": "HALF:IN:AP:QUAD:QL22:K1:ao"
+    },
+    "QL23": {
+      "K1": "HALF:IN:AP:QUAD:QL23:K1:ao"
+    },
+    "QL24": {
+      "K1": "HALF:IN:AP:QUAD:QL24:K1:ao"
+    },
+    "QL25": {
+      "K1": "HALF:IN:AP:QUAD:QL25:K1:ao"
+    },
+    "QL26": {
+      "K1": "HALF:IN:AP:QUAD:QL26:K1:ao"
+    },
+    "QL27": {
+      "K1": "HALF:IN:AP:QUAD:QL27:K1:ao"
+    },
+    "QT01": {
+      "K1": "HALF:IN:AP:QUAD:QT01:K1:ao"
+    },
+    "QT02": {
+      "K1": "HALF:IN:AP:QUAD:QT02:K1:ao"
+    },
+    "QT03": {
+      "K1": "HALF:IN:AP:QUAD:QT03:K1:ao"
+    },
+    "QT04": {
+      "K1": "HALF:IN:AP:QUAD:QT04:K1:ao"
+    },
+    "QT05": {
+      "K1": "HALF:IN:AP:QUAD:QT05:K1:ao"
+    },
+    "QT06": {
+      "K1": "HALF:IN:AP:QUAD:QT06:K1:ao"
+    },
+    "QT07": {
+      "K1": "HALF:IN:AP:QUAD:QT07:K1:ao"
+    },
+    "QT08": {
+      "K1": "HALF:IN:AP:QUAD:QT08:K1:ao"
+    },
+    "QT09": {
+      "K1": "HALF:IN:AP:QUAD:QT09:K1:ao"
+    },
+    "QT10": {
+      "K1": "HALF:IN:AP:QUAD:QT10:K1:ao"
+    },
+    "QT11": {
+      "K1": "HALF:IN:AP:QUAD:QT11:K1:ao"
+    },
+    "QT12": {
+      "K1": "HALF:IN:AP:QUAD:QT12:K1:ao"
+    },
+    "QT13": {
+      "K1": "HALF:IN:AP:QUAD:QT13:K1:ao"
+    },
+    "QT14": {
+      "K1": "HALF:IN:AP:QUAD:QT14:K1:ao"
+    },
+    "QT15": {
+      "K1": "HALF:IN:AP:QUAD:QT15:K1:ao"
+    },
+    "QT16": {
+      "K1": "HALF:IN:AP:QUAD:QT16:K1:ao"
+    },
+    "QT17": {
+      "K1": "HALF:IN:AP:QUAD:QT17:K1:ao"
+    },
+    "QT18": {
+      "K1": "HALF:IN:AP:QUAD:QT18:K1:ao"
+    },
+    "QT19": {
+      "K1": "HALF:IN:AP:QUAD:QT19:K1:ao"
+    },
+    "QT20": {
+      "K1": "HALF:IN:AP:QUAD:QT20:K1:ao"
+    },
+    "QT21": {
+      "K1": "HALF:IN:AP:QUAD:QT21:K1:ao"
+    },
+    "QT22": {
+      "K1": "HALF:IN:AP:QUAD:QT22:K1:ao"
+    },
+    "QT23": {
+      "K1": "HALF:IN:AP:QUAD:QT23:K1:ao"
+    },
+    "QT24": {
+      "K1": "HALF:IN:AP:QUAD:QT24:K1:ao"
+    },
+    "QT25": {
+      "K1": "HALF:IN:AP:QUAD:QT25:K1:ao"
+    },
+    "QT26": {
+      "K1": "HALF:IN:AP:QUAD:QT26:K1:ao"
+    },
+    "QT27": {
+      "K1": "HALF:IN:AP:QUAD:QT27:K1:ao"
+    },
+    "QT28": {
+      "K1": "HALF:IN:AP:QUAD:QT28:K1:ao"
+    },
+    "QT29": {
+      "K1": "HALF:IN:AP:QUAD:QT29:K1:ao"
+    },
+    "QT30": {
+      "K1": "HALF:IN:AP:QUAD:QT30:K1:ao"
+    },
+    "QT31": {
+      "K1": "HALF:IN:AP:QUAD:QT31:K1:ao"
+    },
+    "QT32": {
+      "K1": "HALF:IN:AP:QUAD:QT32:K1:ao"
+    },
+    "QT33": {
+      "K1": "HALF:IN:AP:QUAD:QT33:K1:ao"
+    },
+    "QT34": {
+      "K1": "HALF:IN:AP:QUAD:QT34:K1:ao"
+    },
+    "QT35": {
+      "K1": "HALF:IN:AP:QUAD:QT35:K1:ao"
+    },
+    "QT36": {
+      "K1": "HALF:IN:AP:QUAD:QT36:K1:ao"
+    },
+    "QE01": {
+      "K1": "HALF:IN:QUAD:QE01:K1"
+    },
+    "QE02": {
+      "K1": "HALF:IN:QUAD:QE02:K1"
+    },
+    "QE03": {
+      "K1": "HALF:IN:QUAD:QE03:K1"
+    },
+    "QDU01": {
+      "K1": "HALF:IN:AP:QUAD:QDU01:K1:ao"
+    },
+    "QDU02": {
+      "K1": "HALF:IN:AP:QUAD:QDU02:K1:ao"
+    },
+    "BL01A": {
+      "angle": "HALF:IN:BEND:BL01A:angle"
+    },
+    "BL01B": {
+      "angle": "HALF:IN:BEND:BL01B:angle"
+    },
+    "BH01": {
+      "angle": "HALF:IN:BEND:BH01:angle"
+    },
+    "BH02": {
+      "angle": "HALF:IN:BEND:BH02:angle"
+    },
+    "BH03": {
+      "angle": "HALF:IN:BEND:BH03:angle"
+    },
+    "BH04": {
+      "angle": "HALF:IN:BEND:BH04:angle"
+    },
+    "BV01": {
+      "angle": "HALF:IN:BEND:BV01:angle"
+    },
+    "BV02": {
+      "angle": "HALF:IN:BEND:BV02:angle"
+    },
+    "BENY": {
+      "angle": "HALF:IN:BEND:BENY:angle"
+    },
+    "PRF02": {
+      "image": "HALF:IN:FLAG:PRF02:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF02:cam1:AcquireTime:vm"
+    },
+    "PRF03": {
+      "image": "HALF:IN:FLAG:PRF03:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF03:cam1:AcquireTime:vm"
+    },
+    "PRF04": {
+      "image": "HALF:IN:FLAG:PRF04:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF04:cam1:AcquireTime:vm",
+      "sigx": "HALF:IN:FLAG:PRF04:sigx",
+      "sigy": "HALF:IN:FLAG:PRF04:sigy"
+    },
+    "PRF05": {
+      "image": "HALF:IN:FLAG:PRF05:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF05:cam1:AcquireTime:vm"
+    },
+    "PRF06": {
+      "image": "HALF:IN:FLAG:PRF06:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF06:cam1:AcquireTime:vm",
+      "sigx": "HALF:IN:FLAG:PRF06:sigx",
+      "sigy": "HALF:IN:FLAG:PRF06:sigy"
+    },
+    "PRF07": {
+      "image": "HALF:IN:FLAG:PRF07:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF07:cam1:AcquireTime:vm",
+      "sigx": "HALF:IN:FLAG:PRF07:sigx",
+      "sigy": "HALF:IN:FLAG:PRF07:sigy"
+    },
+    "PRF08": {
+      "image": "HALF:IN:FLAG:PRF08:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF08:cam1:AcquireTime:vm",
+      "sigx": "HALF:IN:FLAG:PRF08:sigx",
+      "sigy": "HALF:IN:FLAG:PRF08:sigy"
+    },
+    "PRF09": {
+      "image": "HALF:IN:FLAG:PRF09:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF09:cam1:AcquireTime:vm"
+    },
+    "PRF10": {
+      "image": "HALF:IN:FLAG:PRF10:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF10:cam1:AcquireTime:vm"
+    },
+    "PRF11": {
+      "image": "HALF:IN:FLAG:PRF11:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF11:cam1:AcquireTime:vm"
+    },
+    "PRF12": {
+      "image": "HALF:IN:FLAG:PRF12:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF12:cam1:AcquireTime:vm"
+    },
+    "PRF13": {
+      "image": "HALF:IN:FLAG:PRF13:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF13:cam1:AcquireTime:vm"
+    },
+    "PRF14": {
+      "image": "HALF:IN:FLAG:PRF14:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRF14:cam1:AcquireTime:vm"
+    },
+    "PRFD": {
+      "image": "HALF:IN:FLAG:PRFD:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRFD:cam1:AcquireTime:vm",
+      "sigx": "HALF:IN:FLAG:PRFD:sigx",
+      "sigy": "HALF:IN:FLAG:PRFD:sigy"
+    },
+    "ENY": {
+      "image": "HALF:IN:FLAG:ENY:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:ENY:cam1:AcquireTime:vm"
+    },
+    "ICT01": {
+      "charge": "HALF:IN:BD:ICT1:C:vm"
+    },
+    "ICT02": {
+      "charge": "HALF:IN:BD:ICT2:C:vm"
+    },
+    "ICT03": {
+      "charge": "HALF:IN:BD:ICT3:C:vm"
+    },
+    "ICT04": {
+      "charge": "HALF:IN:BD:ICT4:C:vm"
+    }
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "backend": "vm",
+  "channels": {
+    "BPM01": {
+      "x": "IRFEL:VM:BPM:BPM01:X",
+      "y": "IRFEL:VM:BPM:BPM01:Y",
+      "s": "IRFEL:VM:BPM:BPM01:S"
+    },
+    "BPM02": {
+      "x": "IRFEL:VM:BPM:BPM02:X",
+      "y": "IRFEL:VM:BPM:BPM02:Y",
+      "s": "IRFEL:VM:BPM:BPM02:S"
+    },
+    "BPM03": {
+      "x": "IRFEL:VM:BPM:BPM03:X",
+      "y": "IRFEL:VM:BPM:BPM03:Y",
+      "s": "IRFEL:VM:BPM:BPM03:S"
+    },
+    "BPM04": {
+      "x": "IRFEL:VM:BPM:BPM04:X",
+      "y": "IRFEL:VM:BPM:BPM04:Y",
+      "s": "IRFEL:VM:BPM:BPM04:S"
+    },
+    "BPM05": {
+      "x": "IRFEL:VM:BPM:BPM05:X",
+      "y": "IRFEL:VM:BPM:BPM05:Y",
+      "s": "IRFEL:VM:BPM:BPM05:S"
+    },
+    "BPM06": {
+      "x": "IRFEL:VM:BPM:BPM06:X",
+      "y": "IRFEL:VM:BPM:BPM06:Y",
+      "s": "IRFEL:VM:BPM:BPM06:S"
+    },
+    "BPM07": {
+      "x": "IRFEL:VM:BPM:BPM07:X",
+      "y": "IRFEL:VM:BPM:BPM07:Y",
+      "s": "IRFEL:VM:BPM:BPM07:S"
+    },
+    "BPM08": {
+      "x": "IRFEL:VM:BPM:BPM08:X",
+      "y": "IRFEL:VM:BPM:BPM08:Y",
+      "s": "IRFEL:VM:BPM:BPM08:S"
+    },
+    "BPM09": {
+      "x": "IRFEL:VM:BPM:BPM09:X",
+      "y": "IRFEL:VM:BPM:BPM09:Y",
+      "s": "IRFEL:VM:BPM:BPM09:S"
+    },
+    "BPM10": {
+      "x": "IRFEL:VM:BPM:BPM10:X",
+      "y": "IRFEL:VM:BPM:BPM10:Y",
+      "s": "IRFEL:VM:BPM:BPM10:S"
+    },
+    "HC01": {
+      "kick": "IRFEL:VM:PS:HC01:current:ao"
+    },
+    "HC02": {
+      "kick": "IRFEL:VM:PS:HC02:current:ao"
+    },
+    "HC03": {
+      "kick": "IRFEL:VM:PS:HC03:current:ao"
+    },
+    "HC04": {
+      "kick": "IRFEL:VM:PS:HC04:current:ao"
+    },
+    "HC05": {
+      "kick": "IRFEL:VM:PS:HC05:current:ao"
+    },
+    "HC06": {
+      "kick": "IRFEL:VM:PS:HC06:current:ao"
+    },
+    "HC07": {
+      "kick": "IRFEL:VM:PS:HC07:current:ao"
+    },
+    "HIC01": {
+      "kick": "IRFEL:VM:PS:HIC01:current:ao"
+    },
+    "HIC02": {
+      "kick": "IRFEL:VM:PS:HIC02:current:ao"
+    },
+    "MSHC": {
+      "kick": "IRFEL:VM:PS:MSHC:current:ao"
+    },
+    "VC01": {
+      "kick": "IRFEL:VM:PS:VC01:current:ao"
+    },
+    "VC02": {
+      "kick": "IRFEL:VM:PS:VC02:current:ao"
+    },
+    "VC03": {
+      "kick": "IRFEL:VM:PS:VC03:current:ao"
+    },
+    "VC04": {
+      "kick": "IRFEL:VM:PS:VC04:current:ao"
+    },
+    "VC05": {
+      "kick": "IRFEL:VM:PS:VC05:current:ao"
+    },
+    "VC06": {
+      "kick": "IRFEL:VM:PS:VC06:current:ao"
+    },
+    "VC07": {
+      "kick": "IRFEL:VM:PS:VC07:current:ao"
+    },
+    "VIC01": {
+      "kick": "IRFEL:VM:PS:VIC01:current:ao"
+    },
+    "VIC02": {
+      "kick": "IRFEL:VM:PS:VIC02:current:ao"
+    },
+    "MSVC": {
+      "kick": "IRFEL:VM:PS:MSVC:current:ao"
+    },
+    "QM01": {
+      "K1": "IRFEL:VM:AP:QUAD:QM01:K1:ao"
+    },
+    "QM02": {
+      "K1": "IRFEL:VM:AP:QUAD:QM02:K1:ao"
+    },
+    "QM03": {
+      "K1": "IRFEL:VM:AP:QUAD:QM03:K1:ao"
+    },
+    "QM04": {
+      "K1": "IRFEL:VM:AP:QUAD:QM04:K1:ao"
+    },
+    "QM05": {
+      "K1": "IRFEL:VM:AP:QUAD:QM05:K1:ao"
+    },
+    "QM06": {
+      "K1": "IRFEL:VM:AP:QUAD:QM06:K1:ao"
+    },
+    "QM07": {
+      "K1": "IRFEL:VM:AP:QUAD:QM07:K1:ao"
+    },
+    "QM08": {
+      "K1": "IRFEL:VM:AP:QUAD:QM08:K1:ao"
+    },
+    "QM09": {
+      "K1": "IRFEL:VM:AP:QUAD:QM09:K1:ao"
+    },
+    "QM10": {
+      "K1": "IRFEL:VM:AP:QUAD:QM10:K1:ao"
+    },
+    "QM11": {
+      "K1": "IRFEL:VM:AP:QUAD:QM11:K1:ao"
+    },
+    "QM12": {
+      "K1": "IRFEL:VM:AP:QUAD:QM12:K1:ao"
+    },
+    "QM13": {
+      "K1": "IRFEL:VM:AP:QUAD:QM13:K1:ao"
+    },
+    "QM14": {
+      "K1": "IRFEL:VM:AP:QUAD:QM14:K1:ao"
+    },
+    "QM15": {
+      "K1": "IRFEL:VM:AP:QUAD:QM15:K1:ao"
+    },
+    "QM16": {
+      "K1": "IRFEL:VM:AP:QUAD:QM16:K1:ao"
+    },
+    "QM17": {
+      "K1": "IRFEL:VM:AP:QUAD:QM17:K1:ao"
+    },
+    "QM18": {
+      "K1": "IRFEL:VM:AP:QUAD:QM18:K1:ao"
+    },
+    "QM19": {
+      "K1": "IRFEL:VM:AP:QUAD:QM19:K1:ao"
+    },
+    "QM20": {
+      "K1": "IRFEL:VM:AP:QUAD:QM20:K1:ao"
+    },
+    "BM01": {
+      "angle": "IRFEL:VM:LN:BEND:BM01:CURRENT:ao"
+    },
+    "BM02": {
+      "angle": "IRFEL:VM:LN:BEND:BM02:CURRENT:ao"
+    },
+    "BM03": {
+      "angle": "IRFEL:VM:LN:BEND:BM03:CURRENT:ao"
+    },
+    "MS01": {
+      "current_set": "IRFEL:VM:PS:MS01:current:ao",
+      "current_readback": "IRFEL:VM:PS:MS01:current:ai"
+    },
+    "LS01": {
+      "current_set": "IRFEL:VM:PS:LS01:current:ao",
+      "current_readback": "IRFEL:VM:PS:LS01:current:ai"
+    },
+    "SS01": {
+      "current_set": "IRFEL:VM:PS:SS01:current:ao",
+      "current_readback": "IRFEL:VM:PS:SS01:current:ai"
+    },
+    "SS02": {
+      "current_set": "IRFEL:VM:PS:SS02:current:ao",
+      "current_readback": "IRFEL:VM:PS:SS02:current:ai"
+    },
+    "MODULATOR_HV1": {
+      "voltage_set": "IRFEL:VM:MODULATOR_HV1:voltage:ao",
+      "voltage_readback": "IRFEL:VM:MODULATOR_HV1:voltage:ai"
+    },
+    "MODULATOR_HV2": {
+      "voltage_set": "IRFEL:VM:MODULATOR_HV2:voltage:ao",
+      "voltage_readback": "IRFEL:VM:MODULATOR_HV2:voltage:ai"
+    },
+    "PRF01": {
+      "image": "IRFEL:VM:FLAG:PRF01:image1:ArrayData"
+    },
+    "PRF02": {
+      "image": "IRFEL:VM:FLAG:PRF02:image1:ArrayData"
+    },
+    "PRF03": {
+      "image": "IRFEL:VM:FLAG:PRF03:image1:ArrayData",
+      "exposure_time": "IRFEL:VM:FLAG:PRF03:cam1:AcquireTime",
+      "sigx": "IRFEL:VM:FLAG:PRF03:sigx",
+      "sigy": "IRFEL:VM:FLAG:PRF03:sigy"
+    },
+    "PRF04": {
+      "image": "IRFEL:VM:FLAG:PRF04:image1:ArrayData",
+      "exposure_time": "IRFEL:VM:FLAG:PRF04:cam1:AcquireTime",
+      "sigx": "IRFEL:VM:FLAG:PRF04:sigx",
+      "sigy": "IRFEL:VM:FLAG:PRF04:sigy"
+    },
+    "PRFESA": {
+      "image": "IRFEL:VM:FLAG:PRFESA:image1:ArrayData",
+      "exposure_time": "IRFEL:VM:FLAG:PRFESA:cam1:AcquireTime"
+    }
+  }
+}

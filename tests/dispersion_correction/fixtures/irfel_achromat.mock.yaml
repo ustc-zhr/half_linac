@@ -1,0 +1,104 @@
+# Offline IRFEL achromat mock configuration.
+#
+# This uses the real IRFEL device/BPM naming from configs/irfel_achromat.json,
+# but runs entirely on the deterministic OfflineMachine model. Use it when the
+# IRFEL Channel Access network is unavailable.
+
+backend:
+  type: offline
+  mode: read_only
+  options:
+    site: irfel_mock
+    gui_progress_delay_s: 0.15
+    pv_map:
+      bpms:
+        BPM9:
+          x: IRFEL-BI:BPM09:BPM_PX2
+        BPM10:
+          x: IRFEL-BI:BPM10:BPM_PX2
+      quadrupoles:
+        QM13:
+          control: current
+          K1: IRFEL:PS:QM13:K1:ao
+          current_set: IRFEL:PS:QM13:current:ao
+          current_readback: IRFEL:PS:QM13:current:ai
+        QM14:
+          control: current
+          K1: IRFEL:PS:QM14:K1:ao
+          current_set: IRFEL:PS:QM14:current:ao
+          current_readback: IRFEL:PS:QM14:current:ai
+        QM15:
+          control: current
+          K1: IRFEL:PS:QM15:K1:ao
+          current_set: IRFEL:PS:QM15:current:ao
+          current_readback: IRFEL:PS:QM15:current:ai
+        QM16:
+          control: current
+          K1: IRFEL:PS:QM16:K1:ao
+          current_set: IRFEL:PS:QM16:current:ao
+          current_readback: IRFEL:PS:QM16:current:ai
+      energy_knob:
+        phase_set: IRFEL:IN-MW:KLY1:SET_PHASE
+    model:
+      seed: 20260708
+      noise_mm: 0.0
+      reference_orbit_mm: [0.15, -0.10]
+      initial_dispersion_mm: [86.0, 112.0]
+      # Rows are BPM9, BPM10. Columns are Q13_Q16_sym, Q14_Q15_sym.
+      # Units are mm of D_eff change per high-level knob unit.
+      response_matrix:
+        - [-9500.0, -3600.0]
+        - [-11800.0, 4200.0]
+      quadrupole_readbacks:
+        QM13: 0.820
+        QM14: -0.615
+        QM15: -0.608
+        QM16: 0.817
+
+energy_knob:
+  name: KLY1_CH3_PHASE
+  actuator: phase
+  actuator_unit: deg
+  delta: 1.0e-4
+  calibration:
+    kind: linear
+    # Mock calibration: 0.25 deg RF phase produces dp/p = 1e-4.
+    phase_per_delta: 2500.0
+
+target_bpms:
+  - BPM9
+  - BPM10
+
+knobs:
+  - name: Q13_Q16_sym
+    devices:
+      QM13: 1.0
+      QM16: 1.0
+    scan_step: 0.0005
+    limit: 0.012
+  - name: Q14_Q15_sym
+    devices:
+      QM14: 1.0
+      QM15: 1.0
+    scan_step: 0.0005
+    limit: 0.012
+
+measurement:
+  plane: x
+  samples_per_step: 5
+  sample_interval_s: 0.0
+  final_samples: 10
+  settle_time_s: 0.0
+
+solver:
+  svd_cut: 1.0e-3
+  regularization: 1.0e-3
+  gain: 0.5
+  max_step_fraction: 0.25
+  max_iter: 5
+  response_update: once
+  min_step_improvement: 0.05
+  success_min_improvement: 2.0
+
+safety:
+  max_reference_orbit_change_mm: 0.5

@@ -15,7 +15,9 @@ class ThemeSpec:
     palette: dict[str, str]
 
 
-DEFAULT_THEME_KEY = "ocean_blueprint"
+DEFAULT_THEME_KEY = "control_room_dark"
+DARK_THEME_KEY = "control_room_dark"
+LIGHT_THEME_KEY = "control_room_light"
 
 
 def _repo_root() -> Path:
@@ -35,6 +37,7 @@ QWidget {
     color: $text_main;
     selection-background-color: $accent;
     selection-color: $selection_text;
+    font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif;
     font-size: 13px;
 }
 
@@ -43,10 +46,174 @@ QMainWindow, QDialog, QMenuBar, QMenu, QStatusBar, QDockWidget {
 }
 
 QFrame#frame_leftNav {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 $nav_start, stop:1 $nav_end);
+    background: $panel_bg;
     border: 1px solid $nav_border;
-    border-radius: 20px;
+    border-radius: 12px;
+}
+
+QFrame#summaryPanel {
+    background: $summary_panel_bg;
+    border: 1px solid $summary_panel_border;
+    border-radius: 14px;
+}
+
+QWidget#statusStrip,
+QFrame#statusStrip {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+QFrame#statusItem {
+    background: transparent;
+    border: none;
+    border-left: 4px solid $status_item_idle_bar;
+    border-radius: 0px;
+}
+
+QFrame#statusItem[tone="info"] {
+    border-left-color: $status_tone_info_bar;
+}
+
+QFrame#statusItem[tone="success"] {
+    border-left-color: $status_tone_success_bar;
+}
+
+QFrame#statusItem[tone="warning"] {
+    border-left-color: $status_tone_warning_bar;
+}
+
+QFrame#statusItem[tone="danger"] {
+    border-left-color: $status_tone_danger_bar;
+}
+
+QFrame#statusSeparator {
+    background: $status_separator;
+    min-width: 1px;
+    max-width: 1px;
+    border: none;
+}
+
+QLabel[role="title"] {
+    color: $status_title_fg;
+    background: transparent;
+    border: none;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+}
+
+QLabel[role="value"][tone="subtle"] {
+    color: $status_tone_subtle_fg;
+    background: transparent;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QLabel[role="value"][tone="info"] {
+    color: $status_tone_info_fg;
+    background: transparent;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QLabel[role="value"][tone="success"] {
+    color: $status_tone_success_fg;
+    background: transparent;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QLabel[role="value"][tone="warning"] {
+    color: $status_tone_warning_fg;
+    background: transparent;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QLabel[role="value"][tone="danger"] {
+    color: $status_tone_danger_fg;
+    background: transparent;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QLabel#summaryTitle {
+    background: transparent;
+    color: $hero_title;
+    font-size: 23px;
+    font-weight: 700;
+}
+
+QLabel#summarySubtitle {
+    background: transparent;
+    color: $hero_text;
+    font-size: 12px;
+}
+
+QLabel[role="field"] {
+    color: $card_title;
+    background: transparent;
+    border: none;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel[role="statusPill"] {
+    background: $button_bg;
+    border: 1px solid $button_border;
+    border-radius: 10px;
+    color: $button_text;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QToolButton#themeToggleButton,
+QToolButton#logToggleButton {
+    background: $button_bg;
+    border: 1px solid $button_border;
+    border-radius: 11px;
+    color: $button_text;
+    padding: 0;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QToolButton#themeToggleButton {
+    min-width: 32px;
+    max-width: 32px;
+    min-height: 32px;
+    max-height: 32px;
+}
+
+QToolButton#logToggleButton {
+    min-width: 44px;
+    max-width: 44px;
+    min-height: 32px;
+    max-height: 32px;
+}
+
+QToolButton#themeToggleButton:hover,
+QToolButton#logToggleButton:hover {
+    background: $button_hover_bg;
+    border-color: $button_hover_border;
+}
+
+QToolButton#themeToggleButton:pressed,
+QToolButton#logToggleButton:pressed {
+    background: $button_pressed_bg;
+}
+
+QToolButton#logToggleButton[active="true"] {
+    background: $button_hover_bg;
+    border-color: $accent;
+    color: $accent;
 }
 
 QLabel#label_appTag {
@@ -59,7 +226,7 @@ QLabel#label_appTag {
 QLabel#label_appTitle {
     background: transparent;
     color: $nav_title;
-    font-size: 26px;
+    font-size: 20px;
     font-weight: 700;
 }
 
@@ -73,24 +240,24 @@ QListWidget#listWidget_navPages {
     border: none;
     color: $nav_item_text;
     outline: 0;
-    padding: 4px 0;
+    padding: 0;
 }
 
 QListWidget#listWidget_navPages::item {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 16px;
+    background: $button_bg;
+    border: 1px solid $button_border;
+    border-radius: 11px;
     color: $nav_item_text;
-    padding: 16px 18px;
+    padding: 8px 12px;
     margin: 3px 0;
-    font-size: 21px;
-    font-weight: 900;
-    min-height: 60px;
+    font-size: 12px;
+    font-weight: 700;
+    min-height: 28px;
 }
 
 QListWidget#listWidget_navPages::item:hover {
-    background: $nav_item_hover;
-    border-color: rgba(255, 255, 255, 0.22);
+    background: $button_hover_bg;
+    border-color: $button_border;
 }
 
 QListWidget#listWidget_navPages::item:selected {
@@ -103,22 +270,30 @@ QListWidget#listWidget_navPages::item:selected {
 QGroupBox {
     background: $panel_bg;
     border: 1px solid $panel_border;
-    border-radius: 16px;
-    margin-top: 16px;
+    border-radius: 14px;
+    margin-top: 0px;
+    padding-top: 30px;
+    font-size: 14px;
     font-weight: 700;
 }
 
 QGroupBox::title {
-    subcontrol-origin: margin;
-    left: 12px;
-    padding: 0 6px;
+    subcontrol-origin: padding;
+    subcontrol-position: top left;
+    left: 16px;
+    top: 7px;
+    padding: 0px;
+    background: transparent;
     color: $panel_title;
+    border: none;
+    font-size: 15px;
+    font-weight: 800;
 }
 
 QGroupBox#groupBox_primaryNav {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 16px;
+    background: $panel_bg;
+    border: 1px solid $panel_border;
+    border-radius: 12px;
 }
 
 QGroupBox#groupBox_primaryNav::title {
@@ -129,7 +304,12 @@ QGroupBox#groupBox_primaryNav::title {
 QFrame#frame_dashboardHero,
 QFrame#frame_builderHero,
 QFrame#frame_machineHero,
-QFrame#frame_runHero,
+QFrame#frame_runHero {
+    background: $panel_bg;
+    border: 1px solid $panel_border;
+    border-radius: 14px;
+}
+
 QFrame#frame_cardCurrentTask,
 QFrame#frame_cardMode,
 QFrame#frame_cardAlgorithm,
@@ -139,16 +319,21 @@ QFrame#frame_elapsed,
 QFrame#frame_best,
 QFrame#frame_feasibility,
 QFrame#frame_phase {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-        stop:0 $hero_start, stop:1 $hero_end);
-    border: 1px solid $hero_border;
-    border-radius: 18px;
+    background: $status_strip_bg;
+    border: 1px solid $status_strip_border;
+    border-radius: 12px;
 }
 
 QFrame#frame_variablesToolbar {
     background: $panel_bg;
     border: 1px solid $panel_border;
     border-radius: 12px;
+}
+
+QFrame#frame_pvPresetLibrary {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
 }
 
 QLabel#label_dashboardHeroTitle,
@@ -197,7 +382,23 @@ QLabel#label_feasibilityValue,
 QLabel#label_phaseValue {
     background: transparent;
     color: $card_value;
-    font-size: 20px;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+QFrame#statusItem QLabel[role="title"] {
+    color: $status_title_fg;
+    background: transparent;
+    border: none;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+QFrame#statusItem QLabel[role="value"] {
+    color: $status_tone_subtle_fg;
+    background: transparent;
+    border: none;
+    font-size: 14px;
     font-weight: 700;
 }
 
@@ -211,11 +412,6 @@ QLabel#label_machineWorkflowHint,
 QLabel#label_mappingHint,
 QLabel#label_writePolicyHint,
 QLabel#label_objectivePolicyHint,
-QLabel#label_templateHint,
-QLabel#label_templateSubHint,
-QLabel#label_templateLibraryHint,
-QLabel#label_templateDetailsHint,
-QLabel#label_templateActionsHint,
 QLabel#label_actionsHint {
     background: $hint_bg;
     border: 1px solid $hint_border;
@@ -224,22 +420,15 @@ QLabel#label_actionsHint {
     padding: 10px;
 }
 
-QLabel#label_selectedTemplateSummary {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-        stop:0 $summary_start, stop:1 $summary_end);
-    border: 1px solid $summary_border;
-    border-radius: 12px;
-    color: $summary_text;
-    font-weight: 700;
-    padding: 10px 12px;
-}
-
 QPushButton {
     background: $button_bg;
     border: 1px solid $button_border;
     border-radius: 12px;
     color: $button_text;
-    padding: 8px 14px;
+    padding: 6px 12px;
+    min-height: 32px;
+    font-size: 12px;
+    font-weight: 700;
 }
 
 QPushButton:hover {
@@ -251,38 +440,68 @@ QPushButton:pressed {
     background: $button_pressed_bg;
 }
 
+QPushButton[compact="true"] {
+    padding: 3px 10px;
+    min-height: 22px;
+    max-height: 26px;
+    font-size: 11px;
+}
+
+QPushButton[inlineAction="true"] {
+    padding: 1px 9px;
+    min-height: 20px;
+    max-height: 24px;
+    font-size: 11px;
+}
+
+QPushButton[primary="true"] {
+    background: $accent;
+    border-color: $accent;
+    color: $window_bg;
+}
+
+QPushButton[primary="true"]:hover {
+    background: $accent;
+    border-color: $accent;
+}
+
+QPushButton[danger="true"] {
+    color: $danger_button_bg;
+    border-color: $danger_button_bg;
+}
+
 QPushButton#pushButton_startRun,
-QPushButton#pushButton_start,
-QPushButton#pushButton_applyTemplate {
-    background: $primary_button_bg;
-    border-color: $primary_button_bg;
-    color: $primary_button_text;
+QPushButton#pushButton_start {
+    background: $accent;
+    border-color: $accent;
+    color: $window_bg;
 }
 
 QPushButton#pushButton_startRun:hover,
-QPushButton#pushButton_start:hover,
-QPushButton#pushButton_applyTemplate:hover {
+QPushButton#pushButton_start:hover {
     background: $primary_button_hover;
     border-color: $primary_button_hover;
 }
 
-QPushButton#pushButton_applyTemplate {
-    font-size: 14px;
-    font-weight: 700;
-    padding: 10px 16px;
-}
-
 QPushButton#pushButton_stopRun,
 QPushButton#pushButton_stop {
-    background: $danger_button_bg;
+    background: $button_bg;
     border-color: $danger_button_bg;
-    color: $primary_button_text;
+    color: $danger_button_bg;
 }
 
 QPushButton#pushButton_stopRun:hover,
 QPushButton#pushButton_stop:hover {
     background: $danger_button_hover;
     border-color: $danger_button_hover;
+}
+
+QPushButton#pushButton_startRun[compact="true"],
+QPushButton#pushButton_stopRun[compact="true"] {
+    padding: 3px 10px;
+    min-height: 22px;
+    max-height: 26px;
+    font-size: 11px;
 }
 
 QLineEdit,
@@ -303,12 +522,22 @@ QLineEdit,
 QSpinBox,
 QDoubleSpinBox,
 QComboBox {
-    padding: 6px 8px;
-    min-height: 20px;
+    color: $button_text;
+    padding: 5px 10px;
+    min-height: 16px;
+}
+
+QComboBox::drop-down,
+QDoubleSpinBox::drop-down {
+    border: none;
+    width: 20px;
 }
 
 QPlainTextEdit {
-    padding: 8px;
+    color: $button_text;
+    padding: 12px;
+    font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+    font-size: 12px;
 }
 
 QTableWidget,
@@ -316,6 +545,23 @@ QTreeWidget,
 QListWidget {
     alternate-background-color: $table_alt_bg;
     gridline-color: $table_grid;
+    color: $button_text;
+    selection-background-color: $selection_row_bg;
+    selection-color: $selection_row_text;
+}
+
+QTableWidget::item:selected,
+QTreeWidget::item:selected,
+QListWidget::item:selected {
+    background: $selection_row_bg;
+    color: $selection_row_text;
+}
+
+QTableWidget::item:selected:active,
+QTreeWidget::item:selected:active,
+QListWidget::item:selected:active {
+    background: $selection_row_active_bg;
+    color: $selection_row_text;
 }
 
 QHeaderView::section {
@@ -328,37 +574,96 @@ QHeaderView::section {
     padding: 6px 8px;
 }
 
+QCheckBox {
+    background: transparent;
+    border: none;
+    spacing: 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid $panel_border;
+    border-radius: 4px;
+    background: $input_bg;
+}
+
+QCheckBox::indicator:checked {
+    background: $accent;
+    border: 1px solid $accent;
+}
+
 QTabWidget::pane {
+    border-left: 1px solid $panel_border;
+    border-right: 1px solid $panel_border;
+    border-bottom: 1px solid $panel_border;
+    border-radius: 14px;
+    background: $panel_bg;
     top: -1px;
 }
 
 QTabBar::tab {
-    background: $tab_bg;
-    border: 1px solid $tab_border;
+    background: $button_bg;
+    border: 1px solid $button_border;
     border-bottom: none;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
-    color: $tab_text;
-    padding: 8px 12px;
-    margin-right: 4px;
+    color: $button_text;
+    padding: 8px 14px;
+    margin-right: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 88px;
+}
+
+QTabWidget#tabWidget_configure QTabBar::tab {
+    min-width: 118px;
+}
+
+QTabWidget#tabWidget_bottomOutput QTabBar::tab,
+QTabWidget#tabWidget_resultsViews QTabBar::tab,
+QTabWidget#tabWidget_machine QTabBar::tab,
+QTabWidget#tabWidget_machineAdvanced QTabBar::tab {
+    min-width: 132px;
+}
+
+QTabWidget#tabWidget_tables QTabBar::tab {
+    min-width: 154px;
 }
 
 QTabBar::tab:selected {
-    background: $tab_selected_bg;
-    color: $tab_selected_text;
+    background: $panel_bg;
+    color: $hero_title;
+    border-bottom-color: $panel_bg;
+}
+
+QTabBar::tab:hover:!selected {
+    background: $button_hover_bg;
 }
 
 QProgressBar {
     background: $progress_bg;
     border: 1px solid $progress_border;
     border-radius: 10px;
+    color: $hero_title;
     text-align: center;
-    min-height: 14px;
+    min-height: 20px;
 }
 
 QProgressBar::chunk {
     background: $accent;
     border-radius: 8px;
+}
+
+QStatusBar,
+QDockWidget,
+QWidget#dockWidgetContents_runtimeStatus,
+QTabWidget#tabWidget_bottomOutput::pane {
+    background: $hint_bg;
+    color: $hint_text;
+    border: 1px solid $hint_border;
 }
 
 QMenuBar::item:selected,
@@ -370,6 +675,162 @@ QMenu::item:selected {
 
 
 THEMES: dict[str, ThemeSpec] = {
+    "control_room_dark": ThemeSpec(
+        key="control_room_dark",
+        label="Control Room Dark",
+        palette={
+            "app_bg": "#0f1519",
+            "window_bg": "#0f1519",
+            "text_main": "#e6edf2",
+            "selection_text": "#0f1519",
+            "accent": "#45d0bc",
+            "nav_start": "#0f1519",
+            "nav_end": "#172027",
+            "nav_border": "#22303a",
+            "nav_tag": "#7dd7c5",
+            "nav_title": "#f3efe3",
+            "nav_subtitle": "#99a9b5",
+            "nav_workflow_bg": "rgba(69, 208, 188, 0.12)",
+            "nav_workflow_border": "rgba(69, 208, 188, 0.35)",
+            "nav_workflow_title": "#7dd7c5",
+            "nav_workflow_text": "#d7e2ea",
+            "nav_item_text": "#d7e2ea",
+            "nav_item_hover": "rgba(255, 255, 255, 0.08)",
+            "nav_item_selected_bg": "#45d0bc",
+            "nav_item_selected_text": "#0f1519",
+            "panel_bg": "#172027",
+            "panel_border": "#24333d",
+            "panel_title": "#7dd7c5",
+            "hero_start": "#1b262d",
+            "hero_end": "#152028",
+            "hero_border": "#2b3a45",
+            "hero_title": "#f3efe3",
+            "hero_text": "#99a9b5",
+            "card_title": "#8ea0ad",
+            "card_value": "#f3efe3",
+            "hint_bg": "#131c22",
+            "hint_border": "#2a3943",
+            "hint_text": "#c9d5dc",
+            "summary_panel_bg": "#1b262d",
+            "summary_panel_border": "#2b3a45",
+            "status_strip_bg": "#131c22",
+            "status_strip_border": "#2a3943",
+            "status_separator": "#31424d",
+            "status_item_idle_bar": "#4f6270",
+            "status_title_fg": "#8ea0ad",
+            "summary_start": "#1b262d",
+            "summary_end": "#152028",
+            "summary_border": "#2b3a45",
+            "summary_text": "#f3efe3",
+            "button_bg": "#22313a",
+            "button_border": "#48606e",
+            "button_text": "#edf3f7",
+            "button_hover_bg": "#2b3f4b",
+            "button_hover_border": "#48606e",
+            "button_pressed_bg": "#19262e",
+            "primary_button_bg": "#45d0bc",
+            "primary_button_hover": "#45d0bc",
+            "primary_button_text": "#ffffff",
+            "danger_button_bg": "#e4b86f",
+            "danger_button_hover": "#e4b86f",
+            "input_bg": "#10171c",
+            "input_border": "#24343f",
+            "table_alt_bg": "#131c22",
+            "table_grid": "#2a3943",
+            "selection_row_bg": "#24564f",
+            "selection_row_active_bg": "#2f6f65",
+            "selection_row_text": "#ffffff",
+            "header_bg": "#131c22",
+            "header_border": "#2a3943",
+            "header_text": "#8ea0ad",
+            "tab_bg": "#22313a",
+            "tab_border": "#48606e",
+            "tab_text": "#edf3f7",
+            "tab_selected_bg": "#172027",
+            "tab_selected_text": "#f3efe3",
+            "progress_bg": "#10171c",
+            "progress_border": "#24343f",
+            "menu_hover_bg": "#2b3f4b",
+        },
+    ),
+    "control_room_light": ThemeSpec(
+        key="control_room_light",
+        label="Control Room Light",
+        palette={
+            "app_bg": "#f2ede5",
+            "window_bg": "#f2ede5",
+            "text_main": "#2c3942",
+            "selection_text": "#ffffff",
+            "accent": "#2d7f6d",
+            "nav_start": "#f2ede5",
+            "nav_end": "#faf7f1",
+            "nav_border": "#d7cec1",
+            "nav_tag": "#2d7f6d",
+            "nav_title": "#2d3940",
+            "nav_subtitle": "#746c62",
+            "nav_workflow_bg": "rgba(45, 127, 109, 0.10)",
+            "nav_workflow_border": "rgba(45, 127, 109, 0.30)",
+            "nav_workflow_title": "#2d7f6d",
+            "nav_workflow_text": "#314049",
+            "nav_item_text": "#314049",
+            "nav_item_hover": "rgba(45, 127, 109, 0.08)",
+            "nav_item_selected_bg": "#dcede3",
+            "nav_item_selected_text": "#28483e",
+            "panel_bg": "#fffdf9",
+            "panel_border": "#d7cec1",
+            "panel_title": "#2d7f6d",
+            "hero_start": "#fcf9f3",
+            "hero_end": "#f1eadf",
+            "hero_border": "#ddd4c8",
+            "hero_title": "#2d3940",
+            "hero_text": "#746c62",
+            "card_title": "#7c7368",
+            "card_value": "#2d3940",
+            "hint_bg": "#f7f1e8",
+            "hint_border": "#ddd2c4",
+            "hint_text": "#625b52",
+            "summary_panel_bg": "#fcf9f3",
+            "summary_panel_border": "#ddd4c8",
+            "status_strip_bg": "#f7f1e8",
+            "status_strip_border": "#ddd2c4",
+            "status_separator": "#ddd4c7",
+            "status_item_idle_bar": "#c8bfb3",
+            "status_title_fg": "#7c7368",
+            "summary_start": "#fcf9f3",
+            "summary_end": "#f1eadf",
+            "summary_border": "#ddd4c8",
+            "summary_text": "#2d3940",
+            "button_bg": "#f8f3eb",
+            "button_border": "#d9d0c3",
+            "button_text": "#2c3942",
+            "button_hover_bg": "#efe6d9",
+            "button_hover_border": "#d9d0c3",
+            "button_pressed_bg": "#e3d8c8",
+            "primary_button_bg": "#2d7f6d",
+            "primary_button_hover": "#2d7f6d",
+            "primary_button_text": "#ffffff",
+            "danger_button_bg": "#a97118",
+            "danger_button_hover": "#a97118",
+            "input_bg": "#fffdf9",
+            "input_border": "#d9d0c3",
+            "table_alt_bg": "#f7f1e8",
+            "table_grid": "#ddd4c7",
+            "selection_row_bg": "#b9dff7",
+            "selection_row_active_bg": "#8ec8f0",
+            "selection_row_text": "#12314a",
+            "header_bg": "#f7f1e8",
+            "header_border": "#ddd2c4",
+            "header_text": "#7c7368",
+            "tab_bg": "#f8f3eb",
+            "tab_border": "#d9d0c3",
+            "tab_text": "#2c3942",
+            "tab_selected_bg": "#fffdf9",
+            "tab_selected_text": "#2d3940",
+            "progress_bg": "#fffdf9",
+            "progress_border": "#d9d0c3",
+            "menu_hover_bg": "#efe6d9",
+        },
+    ),
     "warm_studio": ThemeSpec(
         key="warm_studio",
         label="Warm Studio",
@@ -593,7 +1054,28 @@ def theme_label(theme_key: str | None) -> str:
 
 def stylesheet_for(theme_key: str | None) -> str:
     key = normalize_theme_key(theme_key)
-    return THEME_TEMPLATE.substitute(THEMES[key].palette)
+    palette = dict(THEMES[key].palette)
+    dark = palette.get("window_bg") == "#0f1519"
+    palette.setdefault("summary_panel_bg", palette.get("summary_start", palette["panel_bg"]))
+    palette.setdefault("summary_panel_border", palette.get("summary_border", palette["panel_border"]))
+    palette.setdefault("status_strip_bg", palette.get("hint_bg", palette["panel_bg"]))
+    palette.setdefault("status_strip_border", palette.get("hint_border", palette["panel_border"]))
+    palette.setdefault("status_separator", palette.get("table_grid", palette["panel_border"]))
+    palette.setdefault("status_item_idle_bar", palette.get("card_title", palette["panel_border"]))
+    palette.setdefault("status_title_fg", palette.get("card_title", palette["panel_title"]))
+    palette.setdefault("status_tone_info_bar", "#60a5fa")
+    palette.setdefault("status_tone_success_bar", palette["accent"])
+    palette.setdefault("status_tone_warning_bar", palette["danger_button_bg"])
+    palette.setdefault("status_tone_danger_bar", "#ef8a7e" if dark else "#f87171")
+    palette.setdefault("status_tone_info_fg", "#8bc5ff" if dark else "#1d4ed8")
+    palette.setdefault("status_tone_success_fg", palette["accent"] if dark else "#166534")
+    palette.setdefault("status_tone_warning_fg", palette["danger_button_bg"])
+    palette.setdefault("status_tone_danger_fg", "#ef8a7e" if dark else "#b91c1c")
+    palette.setdefault("status_tone_subtle_fg", palette.get("card_value", palette["text_main"]))
+    palette.setdefault("selection_row_bg", "#24564f" if dark else "#b9dff7")
+    palette.setdefault("selection_row_active_bg", "#2f6f65" if dark else "#8ec8f0")
+    palette.setdefault("selection_row_text", "#ffffff" if dark else "#12314a")
+    return THEME_TEMPLATE.substitute(palette)
 
 
 def load_saved_theme_key() -> str:
@@ -626,3 +1108,8 @@ def apply_theme(app: QApplication, theme_key: str | None = None) -> str:
     app.setStyleSheet(stylesheet_for(key))
     app.setProperty("gotacc_theme_key", key)
     return key
+
+
+def theme_palette(theme_key: str | None = None) -> dict[str, str]:
+    key = normalize_theme_key(theme_key or load_saved_theme_key())
+    return dict(THEMES[key].palette)

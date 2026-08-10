@@ -1,0 +1,66 @@
+{
+  "presets": [
+    {
+      "id": "irfel_bba1_qm04_hc01",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QM04",
+      "corr": "HC01",
+      "bpm1": "BPM03",
+      "bpm2": "BPM07",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -10, "high": 10, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 3, "settle_time_s": 1, "sample_interval_s": 0.2}
+      }
+    },
+    {
+      "id": "irfel_bba1_qm04_vc01",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QM04",
+      "corr": "VC01",
+      "bpm1": "BPM03",
+      "bpm2": "BPM07",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -10, "high": 10, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 3, "settle_time_s": 1, "sample_interval_s": 0.2}
+      }
+    },
+    {
+      "id": "irfel_bba2_qm04_hc02",
+      "family": "bba2",
+      "plane": "X",
+      "quad": "QM04",
+      "corr": "HC02",
+      "bpm1": "BPM03",
+      "bpm2": "BPM07",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -10, "high": 10, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 3, "sample_interval_s": 0.5}
+      },
+      "analysis": {"energy_mev": 36, "bpm1_samples": 1, "by_formula": "current", "bx_formula": "current", "leff_by": 1, "leff_bx": 1, "quad_leff": 0.05}
+    }
+  ],
+  "bba1": {
+    "control_backends": ["vm", "real"],
+    "default_preset": "irfel_bba1_qm04_hc01"
+  },
+  "bba2": {
+    "control_backends": ["vm", "real"],
+    "default_preset": "irfel_bba2_qm04_hc02"
+  },
+  "real_status": "write_smoke_passed",
+  "write_control": {"vm": "allowed", "real": "allowed"}
+}

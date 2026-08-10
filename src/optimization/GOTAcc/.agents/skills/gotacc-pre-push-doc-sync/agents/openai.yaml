@@ -1,0 +1,4 @@
+interface:
+  display_name: "GOTAcc Pre-Push Sync"
+  short_description: "Sync release docs before push"
+  default_prompt: "Use $gotacc-pre-push-doc-sync to inspect current repo changes and update CHANGELOG.md, README.md, src/gotacc/version.py, and pyproject.toml only when release-facing or packaging metadata changes require it before pushing."

@@ -1,0 +1,19 @@
+{
+  "predefined_usedlines": [
+    {"id": "ALL_MAIN", "label": "Main Line", "role": "main"},
+    {"id": "ALL_ESA", "label": "ESA Line", "role": "energy_spectrum"}
+  ],
+  "local_segments": [
+    {
+      "id": "main_segment",
+      "label": "Main Segment",
+      "parent_usedline": "ALL_MAIN",
+      "start_ids": ["Q01", "QE01"],
+      "end_ids": ["PRF01"],
+      "default_start_id": "Q01",
+      "default_end_id": "PRF01"
+    }
+  ],
+  "default_usedline": "ALL_MAIN",
+  "default_segment_id": "main_segment"
+}

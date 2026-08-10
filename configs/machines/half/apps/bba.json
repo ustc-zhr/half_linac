@@ -1,0 +1,305 @@
+{
+  "presets": [
+    {
+      "id": "bba1_qt04_xc21",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT04",
+      "corr": "XC21",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt04_yc21",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT04",
+      "corr": "YC21",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt12_xc26",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT12",
+      "corr": "XC26",
+      "bpm1": "BPM26",
+      "bpm2": "BPM27",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt12_yc26",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT12",
+      "corr": "YC26",
+      "bpm1": "BPM26",
+      "bpm2": "BPM27",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt13_xc26",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT13",
+      "corr": "XC26",
+      "bpm1": "BPM26",
+      "bpm2": "BPM27",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt13_yc26",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT13",
+      "corr": "YC26",
+      "bpm1": "BPM26",
+      "bpm2": "BPM27",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt14_xc26",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT14",
+      "corr": "XC26",
+      "bpm1": "BPM26",
+      "bpm2": "BPM27",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt14_yc26",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT14",
+      "corr": "YC26",
+      "bpm1": "BPM26",
+      "bpm2": "BPM27",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt15_xc27",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT15",
+      "corr": "XC27",
+      "bpm1": "BPM27",
+      "bpm2": "BPM28",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt15_yc27",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT15",
+      "corr": "YC27",
+      "bpm1": "BPM27",
+      "bpm2": "BPM28",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt16_xc27",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT16",
+      "corr": "XC27",
+      "bpm1": "BPM27",
+      "bpm2": "BPM28",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt16_yc27",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT16",
+      "corr": "YC27",
+      "bpm1": "BPM27",
+      "bpm2": "BPM28",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt18_xc28",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT18",
+      "corr": "XC28",
+      "bpm1": "BPM28",
+      "bpm2": "BPM29",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt18_yc28",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT18",
+      "corr": "YC28",
+      "bpm1": "BPM28",
+      "bpm2": "BPM29",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt19_xc29",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT19",
+      "corr": "XC29",
+      "bpm1": "BPM29",
+      "bpm2": "BPM30",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba1_qt19_yc29",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT19",
+      "corr": "YC29",
+      "bpm1": "BPM29",
+      "bpm2": "BPM30",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "bba2_qt04_xc22",
+      "family": "bba2",
+      "plane": "X",
+      "quad": "QT04",
+      "corr": "XC22",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+      },
+      "analysis": {
+        "energy_mev": 2200,
+        "bpm1_samples": 1,
+        "by_formula": "-0.4813*current-0.7747",
+        "bx_formula": "-0.4968*current-0.3153",
+        "leff_by": 0.058287,
+        "leff_bx": 0.052513,
+        "quad_leff": 0.15
+      }
+    }
+  ],
+  "bba1": {"default_preset": "bba1_qt04_xc21"},
+  "bba2": {"default_preset": "bba2_qt04_xc22"},
+  "write_control": {"vm": "allowed", "real": "allowed"}
+}

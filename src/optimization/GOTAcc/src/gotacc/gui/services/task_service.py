@@ -1047,6 +1047,7 @@ class TaskService:
     @staticmethod
     def export_task_config(task: Dict[str, Any], filepath: str | Path) -> None:
         task_cfg = TaskService.build_task_config(task)
+        TaskService.ensure_runtime_directories(task_cfg)
         path = Path(filepath)
         path.parent.mkdir(parents=True, exist_ok=True)
         serialized = TaskService._dump_serialized_payload(task_cfg.to_dict())
@@ -1346,7 +1347,6 @@ class TaskService:
 
         workdir = Path(task.get("workdir", Path.cwd()))
         save_dir = workdir / "save"
-        save_dir.mkdir(parents=True, exist_ok=True)
 
         runtime = RuntimeConfig(
             save_history=True,
@@ -1379,6 +1379,17 @@ class TaskService:
             runtime=runtime,
         )
         return cfg
+
+    @staticmethod
+    def ensure_runtime_directories(task_cfg) -> None:
+        """Create directories needed by a real run or explicit export."""
+        for path_text in (task_cfg.runtime.history_path, task_cfg.runtime.plot_path):
+            if path_text:
+                Path(path_text).parent.mkdir(parents=True, exist_ok=True)
+
+        log_path = task_cfg.backend.kwargs.get("log_path")
+        if log_path:
+            Path(log_path).parent.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def make_backend_build_ready_config(task_cfg):

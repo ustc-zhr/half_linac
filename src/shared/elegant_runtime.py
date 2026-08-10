@@ -1,20 +1,25 @@
-from pathlib import Path
+from __future__ import annotations
+
 import subprocess
-
-import half_linac.runtime_config as st
-
-
-VM_ELEGANT_DIR = Path(st.rootpath) / "src/virtual_machine/half_elegant/elegant"
+from pathlib import Path
 
 
-def run_elegant_input(ele_name, log_name):
-    log_path = VM_ELEGANT_DIR / log_name
+def run_elegant_input(
+    ele_name: str,
+    log_name: str,
+    *,
+    workdir: str | Path,
+) -> Path:
+    workdir_path = Path(workdir)
+    log_path = Path(log_name)
+    if not log_path.is_absolute():
+        log_path = workdir_path / log_path
 
     try:
         with log_path.open("w", encoding="utf-8") as log_file:
             subprocess.run(
                 ["elegant", ele_name],
-                cwd=str(VM_ELEGANT_DIR),
+                cwd=str(workdir_path),
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 check=True,

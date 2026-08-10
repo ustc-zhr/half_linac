@@ -1,0 +1,33 @@
+# Python caches and build outputs
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local environments
+.venv/
+venv/
+env/
+.conda/
+
+# IDE and local agent state
+.vscode/
+.idea/
+.codex
+
+# Runtime data. Do not commit generated run outputs or local run notes.
+runs/*
+saved_setups/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

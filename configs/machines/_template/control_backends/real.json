@@ -1,0 +1,44 @@
+{
+  "backend": "real",
+  "channels": {
+    "BPM01": {
+      "x": "TEMPLATE:REAL:BPM01:X",
+      "y": "TEMPLATE:REAL:BPM01:Y"
+    },
+    "BPM02": {
+      "x": "TEMPLATE:REAL:BPM02:X",
+      "y": "TEMPLATE:REAL:BPM02:Y"
+    },
+    "XC01": {
+      "current_set": "TEMPLATE:REAL:XC01:SET",
+      "current_readback": "TEMPLATE:REAL:XC01:RB"
+    },
+    "YC01": {
+      "current_set": "TEMPLATE:REAL:YC01:SET",
+      "current_readback": "TEMPLATE:REAL:YC01:RB"
+    },
+    "Q01": {
+      "K1": "TEMPLATE:REAL:Q01:K1"
+    },
+    "QE01": {
+      "K1": "TEMPLATE:REAL:QE01:K1"
+    },
+    "QE02": {
+      "K1": "TEMPLATE:REAL:QE02:K1"
+    },
+    "QE03": {
+      "K1": "TEMPLATE:REAL:QE03:K1"
+    },
+    "BEND01": {
+      "current_set": "TEMPLATE:REAL:BEND01:CURRENT_SET",
+      "current_readback": "TEMPLATE:REAL:BEND01:CURRENT_RB"
+    },
+    "PRF01": {
+      "image": "TEMPLATE:REAL:PRF01:IMAGE",
+      "esa_image": "TEMPLATE:REAL:PRF01:ESA_IMAGE",
+      "exposure_time": "TEMPLATE:REAL:PRF01:EXPTIME",
+      "sigx": "TEMPLATE:REAL:PRF01:SIGX",
+      "sigy": "TEMPLATE:REAL:PRF01:SIGY"
+    }
+  }
+}

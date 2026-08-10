@@ -30,6 +30,20 @@ bo_state.json
 bo_record.json
 jitterfile_*.txt
 
+# Local control-system source material; keep the tracked provenance README only.
+configs/machines/half/references/control_system/
+configs/machines/half/references/epics_examples/
+src/apps/orbit_correct/runtime/
+src/apps/bba/runtime/
+src/apps/energy_spectrum/runtime/
+src/apps/dispersion_correction/runtime/
+src/apps/solenoid_centering/runtime/
+src/apps/emit_measure/scanResults.txt
+src/apps/emit_measure/scanResults.meta.json
+src/apps/emit_measure/runtime/
+src/apps/hv_feedback/runtime/
+runtime/model_backend/
+
 # Runtime artifacts
 *.log
 *.mat
@@ -42,6 +56,19 @@ src/virtual_machine/half_elegant/elegant/one.ele
 src/virtual_machine/half_elegant/halflinac.json
 src/virtual_machine/half_elegant/esa.json
 src/virtual_machine/half_elegant/.*.lock
+src/virtual_machine/*_elegant/*.json
+src/virtual_machine/*_elegant/.*.lock
+src/virtual_machine/*_elegant/elegant/lattice.lte
+src/virtual_machine/*_elegant/elegant/one.ele
+src/virtual_machine/*_elegant/elegant/esa.lte
+src/virtual_machine/*_elegant/elegant/esa.ele
+src/virtual_machine/*_elegant/elegant/emit.lte
+src/virtual_machine/*_elegant/elegant/emit.ele
+src/virtual_machine/*_elegant/elegant/*.bpmcen
+src/virtual_machine/*_elegant/elegant/*.cen
+src/virtual_machine/*_elegant/elegant/*.mag
+src/virtual_machine/*_elegant/elegant/*.out
+src/virtual_machine/*_elegant/elegant/*.twi
 
 # softIOC build outputs
 src/softIOC/halflinac/bin/
@@ -55,6 +82,17 @@ src/softIOC/halflinac/iocBoot/ioctarget/envPaths
 src/softIOC/halflinac/iocBoot/ioctarget/cdCommands
 src/softIOC/halflinac/iocBoot/ioctarget/relPaths.sh
 src/softIOC/halflinac/iocBoot/ioctarget/dllPath.bat
+src/softIOC/*/bin/
+src/softIOC/*/lib/
+src/softIOC/irfel/db/irfel.substitutions
+src/softIOC/*/dbd/target.dbd
+src/softIOC/*/include/xxxRecord.h
+src/softIOC/*/**/O.Common/
+src/softIOC/*/**/O.linux-x86_64/
+src/softIOC/*/iocBoot/ioctarget/envPaths
+src/softIOC/*/iocBoot/ioctarget/cdCommands
+src/softIOC/*/iocBoot/ioctarget/relPaths.sh
+src/softIOC/*/iocBoot/ioctarget/dllPath.bat
 
 # Local environment exports
 scripts/export_env.sh

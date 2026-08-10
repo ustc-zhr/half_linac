@@ -124,7 +124,7 @@ class RunController:
 
         try:
             from gotacc.interfaces.factory import build_backend
-            from gotacc.runners.optimize import close_backend_if_possible
+            from gotacc.runners.task_runner import close_backend_if_possible
 
             task_cfg = TaskService.build_task_config(task)
             backend_task_cfg = TaskService.make_backend_build_ready_config(task_cfg)
@@ -177,7 +177,7 @@ class RunController:
 
         try:
             from gotacc.interfaces.factory import build_backend
-            from gotacc.runners.optimize import close_backend_if_possible
+            from gotacc.runners.task_runner import close_backend_if_possible
 
             task_cfg = TaskService.build_task_config(task)
             backend_task_cfg = TaskService.make_backend_build_ready_config(task_cfg)
@@ -247,7 +247,7 @@ class RunController:
 
         try:
             from gotacc.interfaces.factory import build_backend
-            from gotacc.runners.optimize import close_backend_if_possible
+            from gotacc.runners.task_runner import close_backend_if_possible
 
             task_cfg = TaskService.build_task_config(task)
             backend_task_cfg = TaskService.make_backend_build_ready_config(task_cfg)

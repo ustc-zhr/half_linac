@@ -84,8 +84,10 @@ class EngineWorker(QObject):
     # ------------------------------------------------------------------
     @pyqtSlot()
     def run(self) -> None:
+        backend = None
+        task_cfg = None
         try:
-            from gotacc.runners.optimize import (
+            from gotacc.runners.task_runner import (
                 build_optimizer,
                 close_backend_if_possible,
                 plot_convergence_if_possible,
@@ -108,8 +110,9 @@ class EngineWorker(QObject):
                 f"Preparing real GOTAcc run for task '{self._task_name}' ({self._mode}, {self._algorithm})."
             )
             task_cfg = TaskService.build_task_config(self.task)
+            TaskService.ensure_runtime_directories(task_cfg)
             validate_optimizer_backend_match(task_cfg)
-            
+
             backend_task_cfg = TaskService.make_backend_build_ready_config(task_cfg)
             backend = build_backend(backend_task_cfg)
             x0 = np.asarray(backend.init_knob_value(), dtype=float).reshape(-1)
@@ -246,11 +249,24 @@ class EngineWorker(QObject):
             }
             self.sig_finished.emit(payload)
         except Exception as exc:  # pragma: no cover - runtime protection
-            self.sig_error.emit(str(exc))
+            error_message = str(exc)
+            if (
+                task_cfg is not None
+                and backend is not None
+                and getattr(task_cfg.runtime, "restore_initial_on_error", False)
+            ):
+                try:
+                    restore_initial_if_possible(backend, verbose=False)
+                    self.sig_warning.emit("Run failed; initial machine state was restored.")
+                except Exception as restore_exc:
+                    restore_message = f"Restore initial failed after run error: {restore_exc}"
+                    self.sig_warning.emit(restore_message)
+                    error_message = f"{error_message}\n{restore_message}"
+            self.sig_error.emit(error_message)
         finally:
             try:
-                if 'backend' in locals():
-                    from gotacc.runners.optimize import close_backend_if_possible
+                if backend is not None:
+                    from gotacc.runners.task_runner import close_backend_if_possible
                     close_backend_if_possible(backend)
             except Exception:
                 pass

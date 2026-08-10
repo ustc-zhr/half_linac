@@ -7,7 +7,6 @@ from .run_results_presenter import RunResultsPresenter
 from .run_session_presenter import RunSessionPresenter
 from .runtime_status_controller import RuntimeStatusController
 from .task_builder_controller import TaskBuilderController
-from .templates_controller import TemplatesController
 
 __all__ = [
     "MachineController",
@@ -19,5 +18,4 @@ __all__ = [
     "RunSessionPresenter",
     "RuntimeStatusController",
     "TaskBuilderController",
-    "TemplatesController",
 ]

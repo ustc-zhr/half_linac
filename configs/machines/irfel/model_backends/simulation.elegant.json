@@ -1,0 +1,118 @@
+{
+  "backend": "simulation",
+  "engine": "elegant",
+  "config": {
+    "asset_dir": "src/virtual_machine/irfel_elegant/elegant",
+    "working_dir": "runtime/model_backend/irfel/simulation/emit",
+    "emit_working_dir": "runtime/model_backend/irfel/simulation/emit",
+    "source_json": "src/virtual_machine/irfel_elegant/irfel.json",
+    "source_lattice": "src/virtual_machine/irfel_elegant/elegant/lattice_ini.lte",
+    "emit_ini_ele": "src/virtual_machine/irfel_elegant/elegant/emit_ini.ele",
+    "emit_lte": "runtime/model_backend/irfel/simulation/emit/emit.lte",
+    "emit_ele": "runtime/model_backend/irfel/simulation/emit/emit.ele",
+    "emit_json": "runtime/model_backend/irfel/simulation/emit/emit.json",
+    "emit_mat": "runtime/model_backend/irfel/simulation/emit/emit.mat",
+    "emit_log": "emit.log",
+    "line_name": "ALL_MAIN",
+    "energy_ini_ele_file": "src/virtual_machine/irfel_elegant/elegant/esa_ini.ele",
+    "energy_working_dir": "runtime/model_backend/irfel/simulation/energy",
+    "energy_json_path": "runtime/model_backend/irfel/simulation/energy/esa.json",
+    "energy_lte_file": "runtime/model_backend/irfel/simulation/energy/esa.lte",
+    "energy_ele_file": "runtime/model_backend/irfel/simulation/energy/esa.ele",
+    "energy_mat_file": "runtime/model_backend/irfel/simulation/energy/esa.mat",
+    "energy_twi_file": "runtime/model_backend/irfel/simulation/energy/esa.twi",
+    "energy_log": "esa.log",
+    "snapshot_mapping": {
+      "fields": {
+        "QM19": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM20": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM04": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM11": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM12": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM13": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM14": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM15": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM16": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM17": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        },
+        "QM18": {
+          "K1": {
+            "logical_channel": "K1",
+            "source_unit": "1/m^2",
+            "model_unit": "1/m^2",
+            "conversion": {"type": "direct"}
+          }
+        }
+      }
+    }
+  }
+}

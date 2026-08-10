@@ -1,0 +1,30 @@
+{
+  "presets": [
+    {
+      "id": "emit_qm12_prf04",
+      "quad": "QM12",
+      "flag": "PRF04",
+      "model_line": "ALL_DUMP",
+      "scan": {
+        "quadrupole": {"low": 25, "high": 35, "steps": 11, "unit": "1/m^2", "mode": "absolute"},
+        "sampling": {"samples_per_point": 1, "settle_time_s": 1, "sample_interval_s": 0.5}
+      },
+      "analysis": {"energy_mev": 36}
+    },
+    {
+      "id": "emit_qm11_prf04",
+      "quad": "QM11",
+      "flag": "PRF04",
+      "model_line": "ALL_DUMP",
+      "scan": {
+        "quadrupole": {"low": -9, "high": -7, "steps": 9, "unit": "1/m^2", "mode": "absolute"},
+        "sampling": {"samples_per_point": 3, "settle_time_s": 1, "sample_interval_s": 0.5}
+      },
+      "analysis": {"energy_mev": 36}
+    }
+  ],
+  "default_preset": "emit_qm12_prf04",
+  "twiss_quads": ["QM11", "QM12"],
+  "real_status": "write_smoke_passed",
+  "write_control": {"vm": "allowed", "real": "allowed"}
+}

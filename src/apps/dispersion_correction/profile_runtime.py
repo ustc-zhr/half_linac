@@ -1,0 +1,814 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import asdict, replace
+from datetime import datetime
+import json
+from pathlib import Path
+from typing import Any
+
+from half_linac.src.apps.dispersion_correction.config import parse_config
+from half_linac.src.apps.dispersion_correction.models import (
+    CorrectionResult,
+    DispersionMeasurement,
+    JointCorrectionResult,
+    JointResponseAnalysisResult,
+    MultiPlaneDispersionMeasurement,
+    ResponseMatrixResult,
+    RunConfig,
+)
+from half_linac.src.apps.dispersion_correction.reports import result_to_dict, write_result_files
+from half_linac.src.shared.machine_profile import (
+    AppContext,
+    MachineProfileError,
+    get_workflow,
+    list_elements,
+    load_app_context,
+    resolve_channel,
+    resolve_write_target,
+    new_app_run_dir,
+    resolve_app_runtime_paths,
+    workflow_writes_allowed,
+)
+
+
+WORKFLOW_NAME = "dispersion_correction"
+APP_DIR = Path(__file__).resolve().parent
+
+
+def load_profile_run_config(
+    context: AppContext | None = None,
+    *,
+    section_id: str | None = None,
+) -> tuple[AppContext, RunConfig]:
+    """Build the app's existing RunConfig from the selected machine profile."""
+
+    resolved_context = context or load_app_context(WORKFLOW_NAME)
+    workflow = get_workflow(resolved_context.profile, WORKFLOW_NAME)
+    backend_name = resolved_context.control_backend.name
+    supported_backends = _string_sequence(
+        workflow.get("control_backends"),
+        "control_backends",
+    )
+    if backend_name not in supported_backends:
+        raise MachineProfileError(
+            f"Dispersion correction does not support control backend {backend_name!r}; "
+            f"configured backends: {', '.join(supported_backends)}."
+        )
+
+    selected = _select_workflow_section(workflow, section_id)
+    section = dict(selected.pop("_section"))
+    raw_model_only_backends = workflow.get("model_only_control_backends")
+    model_only_backends = (
+        ()
+        if raw_model_only_backends is None
+        else _string_sequence(
+            raw_model_only_backends,
+            "model_only_control_backends",
+        )
+    )
+    model_only = bool(
+        section.get("model_only", False) or backend_name in model_only_backends
+    )
+    section["model_only"] = model_only
+    options = {
+        "site": resolved_context.profile.machine.id,
+        "profile_backend": backend_name,
+        "ca_timeout": float(selected.get("ca_timeout", 0.5)),
+        "readback_timeout": _backend_number(
+            selected.get("readback_timeout"),
+            backend_name,
+            default=2.0,
+        ),
+        "bpm_position_scale_to_mm": _backend_number(
+            selected.get("bpm_position_scale_to_mm"),
+            backend_name,
+            default=1.0,
+        ),
+        "model_only": model_only,
+        "pv_map": {} if model_only else _build_profile_pv_map(resolved_context, selected),
+    }
+    backend = {
+        "type": "offline" if model_only else "epics",
+        "mode": (
+            "write_enabled"
+            if not model_only and workflow_writes_allowed(resolved_context, WORKFLOW_NAME)
+            else "read_only"
+        ),
+        "options": options,
+    }
+
+    raw_config = {
+        "backend": backend,
+        "energy_knob": dict(_mapping(selected.get("energy_knob"), "energy_knob")),
+        "target_bpms": list(
+            _optional_string_sequence(
+                selected.get("target_bpms", []),
+                "target_bpms",
+            )
+        ),
+        "monitor_bpms": list(selected.get("monitor_bpms", [])),
+        "knobs": [
+            dict(item)
+            for item in _optional_mapping_sequence(
+                selected.get("knobs", []),
+                "knobs",
+            )
+        ],
+        "section": section,
+        "measurement": dict(_mapping(selected.get("measurement"), "measurement")),
+        "solver": dict(_mapping(selected.get("solver"), "solver")),
+        "safety": dict(_mapping(selected.get("safety"), "safety")),
+    }
+    return resolved_context, parse_config(raw_config)
+
+
+def selectable_profile_bpms(
+    context: AppContext,
+    plane: str = "x",
+) -> tuple[str, ...]:
+    """Return profile BPMs that expose the selected plane on the active backend."""
+
+    logical_channel = str(plane).strip().lower()
+    if logical_channel not in {"x", "y", "xy"}:
+        raise ValueError("plane must be 'x', 'y', or 'xy'")
+    required_planes = ("x", "y") if logical_channel == "xy" else (logical_channel,)
+    return tuple(
+        element.id
+        for element in list_elements(context, kind="bpm")
+        if all(
+            plane in element.channels
+            and _channel_is_resolvable(context, element.id, plane)
+            for plane in required_planes
+        )
+    )
+
+
+def selectable_profile_quadrupoles(context: AppContext) -> tuple[str, ...]:
+    """Return quadrupoles with a same-unit setpoint/readback path."""
+
+    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    control = _quadrupole_control(workflow, context.control_backend.name)
+    selected = []
+    for element in list_elements(context, kind="quad"):
+        if control == "current":
+            if _channel_is_resolvable(context, element.id, "current_set") and _channel_is_resolvable(
+                context,
+                element.id,
+                "current_readback",
+            ):
+                selected.append(element.id)
+            continue
+        if _channel_is_resolvable(context, element.id, "K1"):
+            selected.append(element.id)
+    return tuple(selected)
+
+
+def profile_section_choices(context: AppContext) -> tuple[tuple[str, str], ...]:
+    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    sections = workflow.get("sections")
+    if not isinstance(sections, list):
+        return (("default", "Default"),)
+    choices = []
+    for index, raw in enumerate(sections):
+        section = _mapping(raw, f"sections[{index}]")
+        section_id = str(section.get("id", "")).strip()
+        display_name = str(section.get("display_name", section_id)).strip()
+        choices.append((section_id, display_name))
+    return tuple(choices)
+
+
+def apply_profile_selection(
+    context: AppContext,
+    config: RunConfig,
+    *,
+    target_bpms: tuple[str, ...],
+    knobs,
+) -> RunConfig:
+    """Resolve PV mappings for one GUI selection without changing the profile."""
+
+    if config.section.model_only:
+        if tuple(target_bpms) != config.target_bpms or tuple(knobs) != config.knobs:
+            raise MachineProfileError("Model-only section BPMs and knobs are fixed by the machine profile.")
+        return config
+
+    allowed_bpms = set(
+        selectable_profile_bpms(context, config.measurement.plane)
+    )
+    measurement_bpms = tuple(
+        dict.fromkeys((*config.monitor_bpms, *target_bpms))
+    )
+    allowed_quads = set(selectable_profile_quadrupoles(context))
+    unknown_bpms = [name for name in measurement_bpms if name not in allowed_bpms]
+    analysis_knobs = config.section.joint_response_analysis.knobs
+    all_runtime_knobs = tuple(knobs) + tuple(analysis_knobs)
+    unknown_quads = [
+        device
+        for knob in all_runtime_knobs
+        for device in knob.devices
+        if device not in allowed_quads
+    ]
+    if unknown_bpms:
+        raise MachineProfileError(
+            "Selected BPMs are unavailable on the active backend: " + ", ".join(unknown_bpms)
+        )
+    if unknown_quads:
+        raise MachineProfileError(
+            "Selected quadrupoles are unavailable on the active backend: "
+            + ", ".join(dict.fromkeys(unknown_quads))
+        )
+
+    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    options = dict(config.backend.options)
+    options["pv_map"] = _build_selection_pv_map(
+        context,
+        measurement_bpms,
+        all_runtime_knobs,
+        _mapping(workflow.get("energy_knob"), "energy_knob"),
+        _quadrupole_control(workflow, context.control_backend.name),
+        config.measurement.plane,
+    )
+    return replace(
+        config,
+        backend=replace(config.backend, options=options),
+        target_bpms=tuple(target_bpms),
+        knobs=tuple(knobs),
+    )
+
+
+def default_offline_config() -> RunConfig:
+    """Small dependency-free fallback used by direct imports and GUI smoke tests."""
+
+    return parse_config(
+        {
+            "backend": {
+                "type": "offline",
+                "mode": "read_only",
+                "options": {"gui_progress_delay_s": 0.0},
+            },
+            "energy_knob": {"name": "ENERGY_DELTA", "delta": 1.0e-4},
+            "target_bpms": ["BPM01", "BPM02", "BPM03", "BPM04"],
+            "knobs": [
+                {
+                    "name": "Q1_sym",
+                    "devices": {"Q1L": 1.0, "Q1R": 1.0},
+                    "scan_step": 0.002,
+                    "limit": 0.03,
+                },
+                {
+                    "name": "Q2_sym",
+                    "devices": {"Q2L": 1.0, "Q2R": 1.0},
+                    "scan_step": 0.002,
+                    "limit": 0.03,
+                },
+            ],
+            "measurement": {
+                "plane": "x",
+                "samples_per_step": 5,
+                "sample_interval_s": 0.0,
+                "final_samples": 10,
+                "settle_time_s": 0.0,
+            },
+            "solver": {
+                "svd_cut": 0.001,
+                "regularization": 0.001,
+                "gain": 0.5,
+                "max_step_fraction": 0.25,
+                "max_iter": 5,
+                "response_update": "once",
+                "min_step_improvement": 0.05,
+                "success_min_improvement": 2.0,
+            },
+            "safety": {"max_reference_orbit_change_mm": 1.0},
+        }
+    )
+
+
+def energy_calibration_draft_directory(
+    context: AppContext | None,
+) -> Path:
+    """Return the runtime-only directory for energy calibration drafts."""
+
+    if context is None:
+        return APP_DIR / "runtime" / "standalone" / "offline" / "calibrations"
+    return resolve_app_runtime_paths(APP_DIR, context)["runtime_dir"] / "calibrations"
+
+
+def write_profile_result(
+    context: AppContext,
+    result: CorrectionResult,
+) -> dict[str, Path]:
+    """Write latest and timestamped reports under the standard app runtime tree."""
+
+    return write_profile_operation(context, "run", result)
+
+
+def write_profile_operation(
+    context: AppContext,
+    task: str,
+    result: (
+        CorrectionResult
+        | DispersionMeasurement
+        | MultiPlaneDispersionMeasurement
+        | ResponseMatrixResult
+        | JointResponseAnalysisResult
+        | JointCorrectionResult
+    ),
+    *,
+    config: RunConfig | None = None,
+    live_preflight=None,
+) -> dict[str, Path]:
+    """Archive every operator operation with config and preflight context."""
+
+    if task not in {
+        "measure",
+        "response",
+        "joint-response",
+        "joint-apply",
+        "joint-run",
+        "apply",
+        "run",
+    }:
+        raise ValueError(f"Unsupported dispersion-correction task: {task}")
+
+    runtime_paths = resolve_app_runtime_paths(APP_DIR, context)
+    latest_dir = runtime_paths["latest_dir"]
+    run_dir = new_app_run_dir(APP_DIR, context, kind=f"dispersion_{task}")
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    if isinstance(result, CorrectionResult):
+        payload = result_to_dict(result)
+        latest_reports = write_result_files(result, latest_dir)
+        run_reports = write_result_files(result, run_dir)
+    else:
+        payload = _operation_payload(result)
+        filename = f"dispersion_{task}_result.json"
+        payload_text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        latest_result = latest_dir / filename
+        run_result = run_dir / filename
+        latest_result.write_text(payload_text, encoding="utf-8")
+        run_result.write_text(payload_text, encoding="utf-8")
+        latest_reports = {"json": latest_result}
+        run_reports = {"json": run_result}
+
+    metadata = {
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "machine_id": context.profile.machine.id,
+        "control_backend": context.control_backend.name,
+        "app": WORKFLOW_NAME,
+        "task": task,
+        "success": (
+            result.success
+            if isinstance(result, (CorrectionResult, JointCorrectionResult))
+            else True
+        ),
+        "reason": (
+            result.reason
+            if isinstance(result, (CorrectionResult, JointCorrectionResult))
+            else "Completed"
+        ),
+        "config": asdict(config) if config is not None else None,
+        "live_preflight": (
+            live_preflight.as_dict()
+            if live_preflight is not None and hasattr(live_preflight, "as_dict")
+            else None
+        ),
+        "run_dir": str(run_dir),
+    }
+    metadata_text = json.dumps(metadata, indent=2, sort_keys=True)
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    latest_metadata = latest_dir / "metadata.json"
+    run_metadata = run_dir / "metadata.json"
+    latest_metadata.write_text(metadata_text, encoding="utf-8")
+    run_metadata.write_text(metadata_text, encoding="utf-8")
+    return {
+        **{f"latest_{kind}": path for kind, path in latest_reports.items()},
+        **{f"run_{kind}": path for kind, path in run_reports.items()},
+        "latest_metadata": latest_metadata,
+        "run_metadata": run_metadata,
+    }
+
+
+def _operation_payload(
+    result: (
+        DispersionMeasurement
+        | MultiPlaneDispersionMeasurement
+        | ResponseMatrixResult
+        | JointResponseAnalysisResult
+    ),
+) -> dict[str, Any]:
+    if isinstance(result, DispersionMeasurement):
+        return _measurement_payload(result)
+    if isinstance(result, MultiPlaneDispersionMeasurement):
+        return {
+            "planes": list(result.planes),
+            "measurements": {
+                measurement.plane: _measurement_payload(measurement)
+                for measurement in result.measurements
+            },
+        }
+    if isinstance(result, JointResponseAnalysisResult):
+        return {
+            "matrix": result.matrix.tolist(),
+            "target_names": list(result.target_names),
+            "target_bpms": list(result.target_bpms),
+            "target_planes": list(result.target_planes),
+            "target_values_mm": result.target_values_mm.tolist(),
+            "tolerances_mm": result.tolerances_mm.tolist(),
+            "baseline_values_mm": result.baseline_values_mm.tolist(),
+            "valid": result.valid.tolist(),
+            "knob_names": list(result.knob_names),
+            "delta_knobs": dict(result.delta_knobs),
+            "predicted_values_mm": result.predicted_values_mm.tolist(),
+            "singular_values": result.singular_values.tolist(),
+            "retained_rank": result.retained_rank,
+            "condition_number": result.condition_number,
+            "normalized_rms_before": result.normalized_rms_before,
+            "normalized_rms_after": result.normalized_rms_after,
+            "uncontrollable_rms": result.uncontrollable_rms,
+            "baseline": _operation_payload(result.baseline),
+            "recommendation_is_preview_only": True,
+        }
+    if isinstance(result, JointCorrectionResult):
+        return {
+            "success": result.success,
+            "reason": result.reason,
+            "normalized_rms_before": result.normalized_rms_before,
+            "normalized_rms_after": result.normalized_rms_after,
+            "initial": _operation_payload(result.initial),
+            "final": _operation_payload(result.final),
+            "steps": [
+                {
+                    "iteration": step.iteration,
+                    "accepted": step.accepted,
+                    "reason": step.reason,
+                    "normalized_rms_after": step.normalized_rms_after,
+                    "response": _operation_payload(step.response),
+                    "measured_after": _operation_payload(step.measured_after),
+                }
+                for step in result.steps
+            ],
+        }
+    return {
+        "matrix": result.matrix.tolist(),
+        "bpm_names": list(result.bpm_names),
+        "knob_names": list(result.knob_names),
+        "singular_values": result.singular_values.tolist(),
+        "condition_number": result.condition_number,
+        "measurement": _measurement_payload(result.measurement),
+    }
+
+
+def _measurement_payload(result: DispersionMeasurement) -> dict[str, Any]:
+    return {
+        "plane": result.plane,
+        "delta": result.delta,
+        "rms_mm": result.rms_mm,
+        "measured_rms_mm": result.measured_rms_mm,
+        "bpm_names": list(result.bpm_names),
+        "values_mm": result.values_mm.tolist(),
+        "target_values_mm": result.target_values_mm.tolist(),
+        "target_mask": result.target_mask.tolist(),
+        "residual_values_mm": result.residual_values_mm.tolist(),
+        "valid": result.valid.tolist(),
+        "plus": _bpm_payload(result.plus),
+        "minus": _bpm_payload(result.minus),
+    }
+
+
+def _bpm_payload(reading) -> dict[str, Any]:
+    return {
+        "names": list(reading.names),
+        "x_mm": reading.x_mm.tolist(),
+        "y_mm": reading.y_mm.tolist(),
+        "valid": reading.valid.tolist(),
+        "charge": reading.charge,
+        "loss": reading.loss,
+    }
+
+
+def _build_profile_pv_map(context: AppContext, workflow: Mapping[str, object]) -> dict[str, Any]:
+    target_bpms = _optional_string_sequence(
+        workflow.get("target_bpms", []),
+        "target_bpms",
+    )
+    raw_monitor_bpms = workflow.get("monitor_bpms", [])
+    if not isinstance(raw_monitor_bpms, list):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.monitor_bpms must be a list."
+        )
+    monitor_bpms = tuple(str(name).strip() for name in raw_monitor_bpms)
+    if any(not name for name in monitor_bpms):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.monitor_bpms contains an empty name."
+        )
+    knobs = list(_optional_mapping_sequence(
+        workflow.get("knobs", []),
+        "knobs",
+    ))
+    joint = _mapping(
+        workflow.get("joint_response_analysis", {}),
+        "section.joint_response_analysis",
+    )
+    knobs.extend(
+        _optional_mapping_sequence(
+            joint.get("knobs", []),
+            "section.joint_response_analysis.knobs",
+        )
+    )
+    return _build_selection_pv_map(
+        context,
+        tuple(dict.fromkeys((*monitor_bpms, *target_bpms))),
+        knobs,
+        _mapping(workflow.get("energy_knob"), "energy_knob"),
+        _quadrupole_control(workflow, context.control_backend.name),
+        str(_mapping(workflow.get("measurement"), "measurement").get("plane", "x")),
+    )
+
+
+def _build_selection_pv_map(
+    context: AppContext,
+    bpm_names,
+    knobs,
+    energy_knob: Mapping[str, object],
+    quadrupole_control: str,
+    measurement_plane: str,
+) -> dict[str, Any]:
+    plane = str(measurement_plane).strip().lower()
+    if plane not in {"x", "y", "xy"}:
+        raise MachineProfileError(
+            "measurement.plane must be 'x', 'y', or 'xy'."
+        )
+    required_planes = ("x", "y") if plane == "xy" else (plane,)
+    bpms: dict[str, dict[str, str]] = {}
+    for bpm_name in bpm_names:
+        item = {
+            required_plane: resolve_channel(
+                context,
+                bpm_name,
+                required_plane,
+            )
+            for required_plane in required_planes
+        }
+        for optional_plane in ("x", "y"):
+            if optional_plane in item:
+                continue
+            try:
+                item[optional_plane] = resolve_channel(
+                    context,
+                    bpm_name,
+                    optional_plane,
+                )
+            except MachineProfileError:
+                pass
+        bpms[bpm_name] = item
+
+    device_names: list[str] = []
+    for knob in knobs:
+        devices_value = knob.devices if hasattr(knob, "devices") else knob.get("devices")
+        devices = _mapping(devices_value, "knobs[].devices")
+        device_names.extend(str(name) for name in devices)
+
+    quadrupoles: dict[str, dict[str, Any]] = {}
+    for device_name in dict.fromkeys(device_names):
+        if quadrupole_control == "current":
+            write_target = resolve_write_target(
+                context,
+                device_name,
+                quantity="current",
+                unit="A",
+            )
+            item: dict[str, Any] = {
+                "control": "current",
+                "current_set": write_target.pv_name,
+                "current_readback": resolve_channel(context, device_name, "current_readback"),
+            }
+        else:
+            write_target = resolve_write_target(
+                context,
+                device_name,
+                quantity="K1",
+                unit="1/m^2",
+            )
+            item = {"control": "k1", "K1": write_target.pv_name}
+        if (
+            write_target.machine_limit.low is not None
+            or write_target.machine_limit.high is not None
+        ):
+            item["limit"] = {
+                key: value
+                for key, value in {
+                    "low": write_target.machine_limit.low,
+                    "high": write_target.machine_limit.high,
+                    "unit": write_target.machine_limit.unit,
+                }.items()
+                if value is not None
+            }
+        quadrupoles[device_name] = item
+
+    energy_mapping: dict[str, str] = {}
+    element_id = _backend_string(
+        energy_knob.get("element", ""),
+        context.control_backend.name,
+    )
+    if element_id:
+        set_channel = _backend_string(
+            energy_knob.get("set_channel", "set"),
+            context.control_backend.name,
+        )
+        readback_channel = _backend_string(
+            energy_knob.get("readback_channel", "readback"),
+            context.control_backend.name,
+        )
+        energy_mapping["set"] = resolve_write_target(
+            context,
+            element_id,
+            logical_channel=set_channel,
+            unit=str(energy_knob.get("actuator_unit", "")).strip() or None,
+        ).pv_name
+        try:
+            energy_mapping["readback"] = resolve_channel(context, element_id, readback_channel)
+        except MachineProfileError:
+            pass
+
+    return {
+        "bpms": bpms,
+        "quadrupoles": quadrupoles,
+        "energy_knob": energy_mapping,
+    }
+
+
+def _quadrupole_control(
+    workflow: Mapping[str, object],
+    backend_name: str,
+) -> str:
+    raw = workflow.get("quadrupole_control")
+    if raw is None:
+        return "current" if backend_name == "real" else "k1"
+    controls = _mapping(raw, "quadrupole_control")
+    if backend_name not in controls:
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.quadrupole_control is missing "
+            f"backend {backend_name!r}."
+        )
+    control = str(controls[backend_name]).strip().lower()
+    if control not in {"current", "k1"}:
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.quadrupole_control.{backend_name} "
+            "must be 'current' or 'K1'."
+        )
+    return control
+
+
+def _channel_is_resolvable(context: AppContext, element_id: str, logical_channel: str) -> bool:
+    try:
+        resolve_channel(context, element_id, logical_channel)
+    except MachineProfileError:
+        return False
+    return True
+
+
+def _mapping(value: object, location: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise MachineProfileError(f"workflows.{WORKFLOW_NAME}.{location} must be a mapping.")
+    return value
+
+
+def _mapping_sequence(value: object, location: str) -> tuple[Mapping[str, Any], ...]:
+    if not isinstance(value, list) or not value:
+        raise MachineProfileError(f"workflows.{WORKFLOW_NAME}.{location} must be a non-empty list.")
+    items = []
+    for index, item in enumerate(value):
+        if not isinstance(item, Mapping):
+            raise MachineProfileError(
+                f"workflows.{WORKFLOW_NAME}.{location}[{index}] must be a mapping."
+            )
+        items.append(item)
+    return tuple(items)
+
+
+def _optional_mapping_sequence(
+    value: object,
+    location: str,
+) -> tuple[Mapping[str, Any], ...]:
+    if not isinstance(value, list):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.{location} must be a list."
+        )
+    if not value:
+        return ()
+    return _mapping_sequence(value, location)
+
+
+def _string_sequence(value: object, location: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not value:
+        raise MachineProfileError(f"workflows.{WORKFLOW_NAME}.{location} must be a non-empty list.")
+    names = tuple(str(item).strip() for item in value)
+    if any(not name for name in names):
+        raise MachineProfileError(f"workflows.{WORKFLOW_NAME}.{location} contains an empty name.")
+    return names
+
+
+def _optional_string_sequence(
+    value: object,
+    location: str,
+) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.{location} must be a list."
+        )
+    if not value:
+        return ()
+    return _string_sequence(value, location)
+
+
+def _backend_number(value: object, backend_name: str, *, default: float) -> float:
+    if isinstance(value, Mapping):
+        value = value.get(backend_name, value.get("default", default))
+    if value is None:
+        value = default
+    return float(value)
+
+
+def _backend_string(value: object, backend_name: str) -> str:
+    if isinstance(value, Mapping):
+        value = value.get(backend_name, value.get("default", ""))
+    return str(value or "").strip()
+
+
+def _select_workflow_section(
+    workflow: Mapping[str, Any],
+    section_id: str | None,
+) -> dict[str, Any]:
+    sections = workflow.get("sections")
+    if not isinstance(sections, list):
+        selected = dict(workflow)
+        selected["_section"] = dict(_mapping(workflow.get("section", {}), "section"))
+        return selected
+    if not sections:
+        raise MachineProfileError("workflows.dispersion_correction.sections must not be empty.")
+
+    requested = str(section_id or workflow.get("default_section") or "").strip()
+    selected_section: Mapping[str, Any] | None = None
+    if requested:
+        for index, raw in enumerate(sections):
+            section = _mapping(raw, f"sections[{index}]")
+            if str(section.get("id", "")).strip() == requested:
+                selected_section = section
+                break
+        if selected_section is None:
+            raise MachineProfileError(f"Unknown dispersion-correction section {requested!r}.")
+    else:
+        selected_section = _mapping(sections[0], "sections[0]")
+
+    selected = {key: value for key, value in workflow.items() if key not in {"sections", "default_section"}}
+    for key in (
+        "energy_knob",
+        "target_bpms",
+        "monitor_bpms",
+        "knobs",
+        "solver",
+        "safety",
+    ):
+        if key in selected_section:
+            selected[key] = selected_section[key]
+    if "measurement" in selected_section:
+        measurement = dict(_mapping(selected.get("measurement"), "measurement"))
+        measurement.update(
+            _mapping(selected_section["measurement"], "section.measurement")
+        )
+        selected["measurement"] = measurement
+    selected["_section"] = {
+        "id": str(selected_section.get("id", "")).strip(),
+        "display_name": str(
+            selected_section.get("display_name", selected_section.get("id", ""))
+        ).strip(),
+        "model_entrance": selected_section.get("model_entrance"),
+        "model_exit": selected_section.get("model_exit"),
+        "target_dispersion_mm": selected_section.get(
+            "target_dispersion_mm",
+            [0.0]
+            * len(
+                _optional_string_sequence(
+                    selected.get("target_bpms", []),
+                    "target_bpms",
+                )
+            ),
+        ),
+        "model_observables": selected_section.get("model_observables", []),
+        "joint_response_analysis": selected_section.get(
+            "joint_response_analysis",
+            {},
+        ),
+        "model_only": bool(selected_section.get("model_only", False)),
+        "diagnostic_only": bool(
+            selected_section.get("diagnostic_only", False)
+        ),
+    }
+    selected["joint_response_analysis"] = selected_section.get(
+        "joint_response_analysis",
+        {},
+    )
+    return selected

@@ -6,7 +6,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PyQt5.QtWidgets import QFileDialog, QMessageBox, QPushButton, QTabWidget, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import (
+    QFileDialog,
+    QHBoxLayout,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..main_window import MainWindow
@@ -34,8 +43,8 @@ class MachineController:
 
     @staticmethod
     def _default_config_directory() -> Path:
-        configs_dir = Path(__file__).resolve().parents[3] / "configs"
-        return configs_dir if configs_dir.exists() else Path.cwd()
+        pv_library_dir = Path(__file__).resolve().parents[5] / "config" / "pv_libraries"
+        return pv_library_dir if pv_library_dir.exists() else Path.cwd()
 
     def init_machine_page(self) -> None:
         self._configure_simplified_machine_page()
@@ -47,12 +56,49 @@ class MachineController:
         if hasattr(ui, "tab_advancedMachine"):
             return
 
+        self._configure_simple_connection_panel()
         self._configure_pv_mapping_actions()
         self._move_advanced_machine_controls()
 
+    def _configure_simple_connection_panel(self) -> None:
+        ui = self.window.machine_ui
+        ui.groupBox_connection.setTitle("EPICS")
+        ui.label_status.setText("Status")
+        ui.label_caAddress.setVisible(False)
+        ui.lineEdit_caAddress.setVisible(False)
+        ui.checkBox_autoConnect.setVisible(False)
+        ui.pushButton_connect.setVisible(False)
+        ui.pushButton_disconnect.setVisible(False)
+        ui.pushButton_test.setText("Check")
+        ui.pushButton_test.setToolTip("Read the first configured EPICS PV for the current online task.")
+        ui.pushButton_test.setProperty("inlineAction", True)
+        ui.pushButton_test.setFixedHeight(24)
+        ui.pushButton_test.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        ui.label_statusValue.setProperty("role", "statusPill")
+        ui.label_statusValue.setMinimumWidth(104)
+        ui.label_statusValue.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+
+        ui.verticalLayout_connectionBox.removeItem(ui.formLayout_connection)
+        connection_row = QHBoxLayout()
+        connection_row.setContentsMargins(0, 0, 0, 0)
+        connection_row.setSpacing(8)
+        ui.label_status.setParent(ui.groupBox_connection)
+        ui.label_statusValue.setParent(ui.groupBox_connection)
+        ui.pushButton_test.setParent(ui.groupBox_connection)
+        connection_row.addWidget(ui.label_status)
+        connection_row.addWidget(ui.label_statusValue)
+        connection_row.addStretch(1)
+        connection_row.addWidget(ui.pushButton_test)
+        ui.verticalLayout_connectionBox.addLayout(connection_row)
+        ui.horizontalLayout_buttons.setContentsMargins(0, 0, 0, 0)
+        ui.horizontalLayout_buttons.setSpacing(6)
+        ui.groupBox_connection.setMaximumHeight(82)
+        ui.pushButton_test.style().unpolish(ui.pushButton_test)
+        ui.pushButton_test.style().polish(ui.pushButton_test)
+
     def _configure_pv_mapping_actions(self) -> None:
         ui = self.window.machine_ui
-        select_button = QPushButton("Select PVs...", ui.frame_pvPresetLibrary)
+        select_button = QPushButton("Select PVs", ui.frame_pvPresetLibrary)
         select_button.setObjectName("pushButton_selectPvs")
         select_button.setToolTip("Load a PV library if needed, then choose knobs, objectives and constraints in one flow.")
         select_button.clicked.connect(self.open_pv_mapping_dialog)
@@ -60,6 +106,24 @@ class MachineController:
         ui.pushButton_selectPvs = select_button
 
         ui.pushButton_loadPvLibrary.setVisible(False)
+        ui.pushButton_applySelectedPvLibrary.setText("Sync To Task")
+        ui.pushButton_applySelectedPvLibrary.setToolTip("Sync the PV Mapping table into Task Builder.")
+        ui.horizontalLayout_pvLibraryControls.removeWidget(ui.pushButton_applySelectedPvLibrary)
+        ui.horizontalLayout_pvLibraryControls.insertWidget(1, ui.pushButton_applySelectedPvLibrary)
+        ui.horizontalLayout_pvLibraryControls.setContentsMargins(0, 0, 0, 0)
+        ui.horizontalLayout_pvLibraryControls.setSpacing(6)
+        ui.verticalLayout_pvPresetLibrary.setContentsMargins(8, 4, 8, 4)
+        ui.verticalLayout_pvPresetLibrary.setSpacing(4)
+        ui.frame_pvPresetLibrary.setMaximumHeight(34)
+        for button in (ui.pushButton_selectPvs, ui.pushButton_applySelectedPvLibrary):
+            button.setProperty("inlineAction", True)
+            button.setFixedHeight(24)
+            button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            button.style().unpolish(button)
+            button.style().polish(button)
+        ui.label_statusValue.style().unpolish(ui.label_statusValue)
+        ui.label_statusValue.style().polish(ui.label_statusValue)
+
         for widget in (
             ui.pushButton_pickKnobsFromLibrary,
             ui.pushButton_clearSelectedKnobs,
@@ -668,7 +732,6 @@ class MachineController:
             else "none"
         )
         restore = "restore-on-abort on" if self.window.machine_ui.checkBox_restore.isChecked() else "restore-on-abort off"
-        auto_connect = "auto-connect on" if self.window.machine_ui.checkBox_autoConnect.isChecked() else "auto-connect off"
         readback = (
             f"readback on (tol {self.window.machine_ui.doubleSpinBox_readbackTol.value():g})"
             if self.window.machine_ui.checkBox_readbackCheck.isChecked()
@@ -678,9 +741,9 @@ class MachineController:
         sample_interval = f"sample {self.window.machine_ui.doubleSpinBox_sampleInterval.value():g}s"
         status = self.window.machine_ui.label_statusValue.text().strip() or "Disconnected"
         self.window.machine_ui.label_machineSummary.setText(
-            f"Status {status} · write policy {write_policy} · objective policies {objective_policy_summary} · "
+            f"PV status {status} · write policy {write_policy} · objective policies {objective_policy_summary} · "
             f"constraint policies {constraint_policy_summary} · "
-            f"{restore} · {readback} · {set_interval} · {sample_interval} · {auto_connect}"
+            f"{restore} · {readback} · {set_interval} · {sample_interval}"
         )
 
     def resolve_epics_read_pv(self, task: dict) -> str:
@@ -699,44 +762,38 @@ class MachineController:
         if status in {"ready", "connected"}:
             return True
         if self.window.machine_ui.checkBox_autoConnect.isChecked():
-            self.connect_machine()
-            status = self.window.machine_ui.label_statusValue.text().strip().lower()
-            return status in {"ready", "connected"}
+            return self.check_machine_pv(show_dialog=False)
         return False
 
-    def connect_machine(self) -> None:
-        ca = self.window.machine_ui.lineEdit_caAddress.text().strip()
-
+    def _prepare_epics_caget(self):
         try:
-            from epics import caget  # noqa: F401
+            from epics import caget
         except ImportError as exc:
-            self.set_machine_status("Unavailable")
-            self.view.log_warning(f"EPICS backend is unavailable: {exc}")
-            QMessageBox.critical(self.window, "Connect Machine", str(exc))
-            return
+            raise RuntimeError(f"EPICS backend is unavailable: {exc}") from exc
 
-        if ca:
-            os.environ["EPICS_CA_ADDR_LIST"] = ca
-            self.view.log_pv(f"EPICS CA address list configured from GUI: {ca}")
-            self.view.log_console("Machine interface is ready for online EPICS tasks.")
-        else:
-            inherited_ca = os.environ.get("EPICS_CA_ADDR_LIST", "").strip()
-            auto_discovery = os.environ.get("EPICS_CA_AUTO_ADDR_LIST", "").strip()
-            if inherited_ca:
-                self.view.log_pv(f"Using inherited EPICS CA address list: {inherited_ca}")
-            elif auto_discovery:
-                self.view.log_pv(
-                    f"Using inherited EPICS auto-discovery setting: EPICS_CA_AUTO_ADDR_LIST={auto_discovery}"
-                )
-            else:
-                self.view.log_pv(
-                    "CA address list left empty; relying on inherited EPICS defaults or network auto-discovery."
-                )
-            self.view.log_console(
-                "Machine interface is ready for online EPICS tasks using inherited/default EPICS connection settings."
+        inherited_ca = os.environ.get("EPICS_CA_ADDR_LIST", "").strip()
+        auto_discovery = os.environ.get("EPICS_CA_AUTO_ADDR_LIST", "").strip()
+        if inherited_ca:
+            self.view.log_pv(f"Using inherited EPICS CA address list: {inherited_ca}")
+        elif auto_discovery:
+            self.view.log_pv(
+                f"Using inherited EPICS auto-discovery setting: EPICS_CA_AUTO_ADDR_LIST={auto_discovery}"
             )
+        else:
+            self.view.log_pv("Using EPICS defaults or network auto-discovery.")
+        return caget
+
+    def connect_machine(self) -> None:
+        try:
+            self._prepare_epics_caget()
+        except Exception as exc:
+            self.set_machine_status("Unavailable")
+            self.view.log_warning(str(exc))
+            QMessageBox.critical(self.window, "EPICS Unavailable", str(exc))
+            return
         self.set_machine_status("Ready")
-        self.view.append_overview_activity("Machine", status="Connection ready.")
+        self.view.log_console("EPICS module is available. Use Check PV to verify a configured PV.")
+        self.view.append_overview_activity("Machine", status="EPICS backend available.")
 
     def disconnect_machine(self) -> None:
         self.set_machine_status("Disconnected")
@@ -745,26 +802,23 @@ class MachineController:
         self.view.append_overview_activity("Machine", status="Disconnected.")
 
     def test_machine_read(self) -> None:
+        self.check_machine_pv(show_dialog=True)
+
+    def check_machine_pv(self, *, show_dialog: bool = True) -> bool:
         task = self.view.current_task()
         if not self.is_online_task(task):
-            QMessageBox.information(
-                self.window,
-                "Test Read",
-                "Current task is not an online EPICS task.",
-            )
-            return
-        if not self.ensure_machine_ready_for_online(task):
-            QMessageBox.warning(
-                self.window,
-                "Test Read",
-                "Connect the machine before testing PV reads.",
-            )
-            return
+            if show_dialog:
+                QMessageBox.information(
+                    self.window,
+                    "Check PV",
+                    "Current task is not an online EPICS task.",
+                )
+            return False
 
         try:
-            from epics import caget
-
+            caget = self._prepare_epics_caget()
             pvname = self.resolve_epics_read_pv(task)
+            self.set_machine_status("Checking")
             value = caget(
                 pvname,
                 timeout=float(self.window.machine_ui.doubleSpinBox_timeout.value()),
@@ -772,21 +826,26 @@ class MachineController:
             if value is None:
                 raise RuntimeError(f"{pvname} returned None")
         except Exception as exc:
+            self.set_machine_status("Failed")
             self.window.state.last_test_read_status = "Failed"
-            self.window.state.last_test_read_detail = f"Last test read failed: {exc}"
+            self.window.state.last_test_read_detail = f"Last PV check failed: {exc}"
             self.view.refresh_overview_readiness()
-            self.view.append_overview_activity("Machine", status="Test read failed.")
-            self.view.log_warning(f"Machine test read failed: {exc}")
-            QMessageBox.critical(self.window, "Test Read Failed", str(exc))
-            return
+            self.view.append_overview_activity("Machine", status="PV check failed.")
+            self.view.log_warning(f"EPICS PV check failed: {exc}")
+            if show_dialog:
+                QMessageBox.critical(self.window, "PV Check Failed", str(exc))
+            return False
 
+        self.set_machine_status("Connected")
         self.window.state.last_test_read_status = "Passed"
         self.window.state.last_test_read_detail = f"{pvname} = {value}"
         self.view.refresh_overview_readiness()
-        self.view.append_overview_activity("Machine", status=f"Test read passed for {pvname}.")
-        self.view.log_pv(f"Test read: {pvname} -> {value}")
-        self.view.log_console("Machine test read completed.")
-        QMessageBox.information(self.window, "Test Read", f"PV read succeeded:\n{pvname} = {value}")
+        self.view.append_overview_activity("Machine", status=f"PV check passed for {pvname}.")
+        self.view.log_pv(f"PV check: {pvname} -> {value}")
+        self.view.log_console("EPICS PV check completed.")
+        if show_dialog:
+            QMessageBox.information(self.window, "Check PV", f"PV read succeeded:\n{pvname} = {value}")
+        return True
 
     def read_current_knob_values(self, task: dict, variables: list[dict]) -> list[float]:
         if not self.is_online_task(task):

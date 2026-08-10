@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 from PyQt5.QtCore import Qt
@@ -36,6 +38,11 @@ try:
     from ..services.pv_library import PVLibraryItem
     from ..services.task_service import TaskService
 except ImportError:  # pragma: no cover
+    CURRENT_DIR = Path(__file__).resolve().parent
+    GUI_ROOT = CURRENT_DIR.parent
+    for path in (GUI_ROOT, GUI_ROOT / "services"):
+        if str(path) not in sys.path:
+            sys.path.insert(0, str(path))
     from pv_library import PVLibraryItem
     from task_service import TaskService
 

@@ -1,5 +1,9 @@
+import logging
 import sys
 import re
+import json
+import math
+from datetime import datetime
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -17,9 +21,13 @@ from PyQt5.QtWidgets import (
     QApplication,
     QCheckBox,
     QDoubleSpinBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
     QMessageBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -32,14 +40,29 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt5.QtCore import QRegExp, QTimer
+from PyQt5.QtCore import QRegExp, Qt, QTimer
 from OrbCorgui import Ui_MainWindow
 
-
-import half_linac.runtime_config as st
+from half_linac.src.shared.machine_profile import (
+    MachineProfileError,
+    RuntimeContextWidget,
+    load_app_context,
+    require_workflow_write_allowed,
+)
+from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.process_runtime import ManagedProcessGroup
+from half_linac.src.shared.window_activation import install_qt_window_raise_handler
+from half_linac.src.apps.orbit_correct.profile_runtime import (
+    APP_DIR,
+    display_unit,
+    get_active_response_matrix_record,
+    list_response_matrix_records,
+    load_orbit_runtime_settings,
+    set_active_response_matrix,
+)
 
 HEADER_ACTION_HEIGHT = 32
+logger = logging.getLogger(__name__)
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -127,11 +150,36 @@ QFrame#sectionCard, QFrame#toolbarPanel, QFrame#commandPane {{
     border-radius: 14px;
 }}
 
+QFrame#subCard {{
+    background-color: {status_strip_bg};
+    border: 1px solid {status_strip_border};
+    border-radius: 12px;
+}}
+
+QFrame#parameterGroup {{
+    background-color: transparent;
+    border: none;
+}}
+
+QFrame#targetToolbar {{
+    background-color: {status_strip_bg};
+    border: 1px solid {status_strip_border};
+    border-radius: 12px;
+}}
+
 QTabWidget::pane {{
-    border: 1px solid {panel_border};
+    border-left: 1px solid {panel_border};
+    border-right: 1px solid {panel_border};
+    border-bottom: 1px solid {panel_border};
     border-radius: 14px;
     background: {panel_bg};
     top: -1px;
+}}
+
+QTabBar::base {{
+    border: none;
+    background: transparent;
+    height: 0px;
 }}
 
 QTabBar::tab {{
@@ -150,6 +198,7 @@ QTabBar::tab {{
 QTabBar::tab:selected {{
     background: {panel_bg};
     color: {summary_title_fg};
+    border-bottom-color: {panel_bg};
 }}
 
 QTabBar::tab:hover:!selected {{
@@ -169,11 +218,18 @@ QLabel#panelTitle {{
     font-weight: 700;
 }}
 
+QLabel#subTitle {{
+    color: {summary_title_fg};
+    font-size: 13px;
+    font-weight: 700;
+    background: transparent;
+    border: none;
+}}
+
 QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
     background: transparent;
     border: none;
 }}
@@ -211,6 +267,21 @@ QPushButton[compact="true"] {{
     font-size: 11px;
 }}
 
+QPushButton[primary="true"] {{
+    background-color: {metric_active_fg};
+    border-color: {metric_active_fg};
+    color: {window_bg};
+}}
+
+QPushButton[primary="true"]:hover {{
+    background-color: {metric_active_fg};
+}}
+
+QPushButton[danger="true"] {{
+    color: {metric_warning_fg};
+    border-color: {metric_warning_fg};
+}}
+
 QLineEdit, QComboBox, QDoubleSpinBox {{
     background-color: {input_bg};
     border: 1px solid {input_border};
@@ -219,6 +290,22 @@ QLineEdit, QComboBox, QDoubleSpinBox {{
     padding: 5px 10px;
     min-height: 16px;
     selection-background-color: {metric_active_fg};
+}}
+
+QLineEdit:disabled, QComboBox:disabled, QDoubleSpinBox:disabled {{
+    background-color: {button_disabled_bg};
+    border-color: {button_disabled_border};
+    color: {button_disabled_fg};
+}}
+
+QPushButton:disabled {{
+    background-color: {button_disabled_bg};
+    border-color: {button_disabled_border};
+    color: {button_disabled_fg};
+}}
+
+QLabel:disabled {{
+    color: {button_disabled_fg};
 }}
 
 QComboBox::drop-down, QDoubleSpinBox::drop-down {{
@@ -370,6 +457,7 @@ class OrbitStatusStrip(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._items = {}
+        self._titles = {}
         self.setObjectName("statusStrip")
 
         layout = QHBoxLayout(self)
@@ -404,6 +492,7 @@ class OrbitStatusStrip(QWidget):
         inner.addWidget(value_label)
         self._layout.addWidget(container)
         self._items[key] = (container, value_label)
+        self._titles[key] = title_label
 
     def finish(self):
         self._layout.addStretch(1)
@@ -423,6 +512,11 @@ class OrbitStatusStrip(QWidget):
         value_label.setText(text)
         self._refresh_tone(container, value_label)
 
+    def set_title(self, key, text):
+        title_label = self._titles.get(key)
+        if title_label is not None:
+            title_label.setText(text)
+
     @staticmethod
     def _refresh_tone(container, value_label):
         container.style().unpolish(container)
@@ -436,47 +530,96 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.current_theme = "dark"
+        install_qt_window_raise_handler(self)
+        self.app_context = load_app_context("orbit_correct")
+        self.machine_profile = self.app_context.profile
+        self.orbit_workflow = self.app_context.orbit_workflow
+        self.orbit_runtime = load_orbit_runtime_settings(self.app_context)
+        self.runtime_defaults = self.orbit_runtime["runtime_defaults"]
+        self.response_progress_path = Path(self.orbit_runtime["response_progress_path"])
+        self.correction_progress_path = Path(self.orbit_runtime["correction_progress_path"])
+        self.current_theme = resolve_initial_theme()
         self.last_notice = "Idle"
         self.process_manager = ManagedProcessGroup(notify=self._notify)
         self.process_manager.install_signal_handlers()
+        self._response_scan_was_running = False
 
-        self.all_checkboxes = self.findChildren(QCheckBox)
+        self.all_checkboxes = []
+        self._bpmx_spinboxes = []
+        self._bpmy_spinboxes = []
+        self.global_xcor_checkboxes = []
+        self.global_ycor_checkboxes = []
         self._configure_window()
+        self._configure_machine_profile()
         self._clear_inline_styles()
         self._build_shell()
         self._configure_form_content()
 
         # connect button
         self.pushButton.clicked.connect(self.measure_res)
-        self.pushButton_4.clicked.connect(self.start_cor)
+        self.stop_response_button.clicked.connect(self.stop_measure_res)
+        self.pushButton_4.clicked.connect(self.toggle_correction)
         self.pushButton_2.clicked.connect(self.cor_off)
-        self.pushButton_3.clicked.connect(self.stop_cor)
         self.pushButton_7.clicked.connect(self.cor_recover)
 
         # other button
-        self.pushButton_5.clicked.connect(self.selectall)
-        self.pushButton_6.clicked.connect(self.cancelall)
+        self.allTargetBPMsCheckBox.clicked.connect(self._toggle_all_target_bpms)
+        self.saveTargetBPMsButton.clicked.connect(self.save_target_bpm_preset)
+        self.loadTargetBPMsButton.clicked.connect(self.load_target_bpm_preset)
+        self.load_response_matrix_button.clicked.connect(self.load_response_matrix)
 
-        self.comboBox.currentIndexChanged.connect(self._refresh_status)
-        self.tabWidget.currentChanged.connect(self._refresh_status)
+        self.comboBox.currentIndexChanged.connect(self._on_correction_method_changed)
+        self.localResponseSourceComboBox.currentIndexChanged.connect(
+            self._on_local_response_source_changed
+        )
+        self.tabWidget.currentChanged.connect(self._on_main_tab_changed)
         for cb in self.all_checkboxes:
+            cb.stateChanged.connect(self._on_target_bpm_state_changed)
+        for cb in self.global_xcor_checkboxes + self.global_ycor_checkboxes:
             cb.stateChanged.connect(self._refresh_status)
 
         # initial parameters
-        self.samplingIntervalSLineEdit.setText('6') # s
-        self.correctorAccuracyUmLineEdit.setText('10') # um
-        self.sampPerStepLineEdit.setText('2') # 
+        self._apply_default_method()
+        self._apply_default_local_response_source()
+        self.samplingIntervalSLineEdit.setText(f"{float(self.runtime_defaults['sampling_interval_s']):g}")
+        self.correctionSettleSLineEdit.setText(
+            f"{float(self.orbit_runtime['correction_settle_s']):g}"
+        )
+        self.correctorAccuracyUmLineEdit.setText(f"{float(self.runtime_defaults['accuracy_um']):g}")
+        self.sampPerStepLineEdit.setText(str(int(self.runtime_defaults["samples_per_step"])))
+        corrector_limit = float(self.orbit_runtime["corrector_upperlimit"])
+        self.correctorLimitLineEdit.setText(f"{corrector_limit:.6g}")
+        self.globalMaxIterLineEdit.setText(str(int(self.runtime_defaults["global_max_iter"])))
+        self.svdCutoffPctLineEdit.setText(
+            f"{float(self.orbit_runtime['svd_relative_cutoff']) * 100.0:g}"
+        )
+        self.oneToOneMaxIterLineEdit.setText(str(int(self.runtime_defaults["one_to_one_max_iter"])))
+        self.correctionGainLineEdit.setText(f"{float(self.runtime_defaults['correction_gain']):g}")
+        self.correctionMaxStepLineEdit.setText(f"{float(self.runtime_defaults['correction_max_step_pct']):g}")
+        self.responseKickLineEdit.setText(
+            f"{corrector_limit * float(self.runtime_defaults['local_response_kick_fraction']):.6g}"
+        )
+        self.matrixResponseKickLineEdit.setText(
+            f"{corrector_limit * float(self.runtime_defaults['matrix_response_kick_fraction']):.6g}"
+        )
+        self.matrixWaitSLineEdit.setText(f"{float(self.orbit_runtime['response_wait_s']):.6g}")
+        self.matrixSampleIntervalSLineEdit.setText(
+            f"{float(self.orbit_runtime['response_sample_interval_s']):.6g}"
+        )
+        self.matrixSamplesLineEdit.setText(str(int(self.runtime_defaults["matrix_samples_per_step"])))
 
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self._refresh_status)
         self.status_timer.start(700)
 
+        self.refresh_response_matrices()
         self._apply_theme()
-        self._refresh_status()
+        self._update_method_parameter_state()
+        self._sync_all_target_bpms_checkbox()
+        self._on_main_tab_changed(self.tabWidget.currentIndex())
 
     def _configure_window(self):
-        self.setWindowTitle("HALF Linac Orbit Correction")
+        self.setWindowTitle(f"{self.machine_profile.machine.display_name} Orbit Correction")
         self.resize(1240, 1000)
         self.setMinimumSize(1100, 820)
 
@@ -495,6 +638,91 @@ class myWindow(QMainWindow, Ui_MainWindow):
         for widget_type in widget_types:
             for widget in self.findChildren(widget_type):
                 widget.setStyleSheet("")
+
+    @staticmethod
+    def _extract_widget_index(widget):
+        match = re.search(r"(\d+)$", widget.objectName())
+        return int(match.group(1)) if match else 0
+
+    def _append_target_bpm_row(self, index):
+        row = self.gridLayout_2.rowCount()
+        checkbox = QCheckBox(self.scrollAreaWidgetContents_2)
+        checkbox.setObjectName(f"checkBox_{index:02d}_dynamic")
+
+        bpmx_widget = QDoubleSpinBox(self.scrollAreaWidgetContents_2)
+        bpmx_widget.setObjectName(f"bpmx_doubleSpinBox_{index:02d}_dynamic")
+        bpmx_widget.setDecimals(2)
+        bpmx_widget.setMinimum(-99.99)
+        bpmx_widget.setMaximum(99.99)
+        bpmx_widget.setSingleStep(0.1)
+
+        bpmy_widget = QDoubleSpinBox(self.scrollAreaWidgetContents_2)
+        bpmy_widget.setObjectName(f"bpmy_doubleSpinBox_{index:02d}_dynamic")
+        bpmy_widget.setDecimals(2)
+        bpmy_widget.setMinimum(-99.99)
+        bpmy_widget.setMaximum(99.99)
+        bpmy_widget.setSingleStep(0.1)
+
+        self.gridLayout_2.addWidget(checkbox, row, 0)
+        self.gridLayout_2.addWidget(bpmx_widget, row, 1)
+        self.gridLayout_2.addWidget(bpmy_widget, row, 2)
+
+    def _configure_machine_profile(self):
+        if self.orbit_workflow is None:
+            raise ValueError("Orbit workflow is not available in the current app context.")
+        orbit_bpms = self.orbit_workflow.bpms
+        checkbox_widgets = sorted(
+            self.findChildren(QCheckBox),
+            key=self._extract_widget_index,
+        )
+        bpmx_widgets = sorted(
+            self.findChildren(QDoubleSpinBox, QRegExp("bpmx_.*")),
+            key=self._extract_widget_index,
+        )
+        bpmy_widgets = sorted(
+            self.findChildren(QDoubleSpinBox, QRegExp("bpmy_.*")),
+            key=self._extract_widget_index,
+        )
+
+        available = min(len(checkbox_widgets), len(bpmx_widgets), len(bpmy_widgets))
+        while len(orbit_bpms) > available:
+            self._append_target_bpm_row(available + 1)
+            checkbox_widgets = sorted(
+                self.findChildren(QCheckBox),
+                key=self._extract_widget_index,
+            )
+            bpmx_widgets = sorted(
+                self.findChildren(QDoubleSpinBox, QRegExp("bpmx_.*")),
+                key=self._extract_widget_index,
+            )
+            bpmy_widgets = sorted(
+                self.findChildren(QDoubleSpinBox, QRegExp("bpmy_.*")),
+                key=self._extract_widget_index,
+            )
+            available = min(len(checkbox_widgets), len(bpmx_widgets), len(bpmy_widgets))
+
+        self.all_checkboxes = checkbox_widgets[: len(orbit_bpms)]
+        self._bpmx_spinboxes = bpmx_widgets[: len(orbit_bpms)]
+        self._bpmy_spinboxes = bpmy_widgets[: len(orbit_bpms)]
+        default_target_bpms = set(self.orbit_workflow.default_target_bpms)
+
+        for bpm_name, checkbox in zip(orbit_bpms, self.all_checkboxes):
+            checkbox.setText(bpm_name)
+            if default_target_bpms:
+                checkbox.setChecked(bpm_name in default_target_bpms)
+            else:
+                checkbox.setChecked(True)
+            checkbox.show()
+            checkbox.setEnabled(True)
+
+        for extra_widget in checkbox_widgets[len(orbit_bpms) :]:
+            extra_widget.setChecked(False)
+            extra_widget.hide()
+            extra_widget.setEnabled(False)
+
+        for extra_widget in bpmx_widgets[len(orbit_bpms) :] + bpmy_widgets[len(orbit_bpms) :]:
+            extra_widget.hide()
+            extra_widget.setEnabled(False)
 
     def _build_shell(self):
         self.verticalLayout_2.setContentsMargins(10, 10, 10, 10)
@@ -524,6 +752,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
         header_layout.addWidget(title)
         header_layout.addStretch(1)
 
+        header_layout.addWidget(
+            RuntimeContextWidget(
+                machine_id=self.machine_profile.machine.id,
+                machine_display_name=self.machine_profile.machine.display_name,
+                control_backend=self.app_context.control_backend.name,
+                parent=panel,
+            )
+        )
+
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
         self.theme_toggle_button.setFixedSize(HEADER_ACTION_HEIGHT, HEADER_ACTION_HEIGHT)
@@ -532,10 +769,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         outer_layout.addLayout(header_layout)
 
         self.status_panel = OrbitStatusStrip(panel)
-        self.status_panel.add_item("tab", "TAB", "Run Correct")
-        self.status_panel.add_item("method", "METHOD", self.comboBox.currentText())
-        self.status_panel.add_item("targets", "TARGETS", "0/0")
-        self.status_panel.add_item("process", "PROCESS", "Idle")
+        self.status_panel.add_item("tab", "Tab", "Run Correct")
+        self.status_panel.add_item("method", "Method", self.comboBox.currentText())
+        self.status_panel.add_item("targets", "Targets", "0/0")
+        self.status_panel.add_item("process", "Process", "Idle")
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
@@ -552,7 +789,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.verticalLayout_4.setContentsMargins(12, 12, 12, 12)
         self.verticalLayout_4.setSpacing(12)
-        self.verticalLayout_4.insertWidget(0, self._make_panel_title("Correction Setup", self.left_panel))
 
         self.right_panel = QFrame(self.centralwidget)
         self.right_panel.setObjectName("sectionCard")
@@ -562,14 +798,20 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.verticalLayout_5.setSpacing(12)
         self.verticalLayout_5.insertWidget(0, self._make_panel_title("Target BPMs", self.right_panel))
 
-        self.horizontalLayout_9.addWidget(self.left_panel, 2)
-        self.horizontalLayout_9.addWidget(self.right_panel, 3)
+        self.horizontalLayout_9.addWidget(self.left_panel, 1)
 
-        self.tabWidget.setDocumentMode(True)
+        self.tabWidget.setDocumentMode(False)
+        self.tabWidget.tabBar().setDrawBase(False)
         self.tabWidget.setElideMode(False)
 
         self.scrollArea.setObjectName("targetsScroll")
         self.scrollAreaWidgetContents_2.setObjectName("targetsContent")
+        self.gridLayout_3.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout_3.removeItem(self.gridLayout_2)
+        self.gridLayout_3.addLayout(self.gridLayout_2, 0, 0, 1, 1, Qt.AlignTop)
+        self.gridLayout_3.setRowStretch(0, 0)
+        self.gridLayout_3.setRowStretch(1, 1)
+        self._build_target_bpm_panel()
 
     def _build_tab_layouts(self):
         self.gridLayout_4.setHorizontalSpacing(10)
@@ -578,52 +820,466 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout_5.setVerticalSpacing(8)
         self.gridLayout_2.setHorizontalSpacing(10)
         self.gridLayout_2.setVerticalSpacing(6)
+        self.gridLayout_2.setContentsMargins(8, 8, 8, 8)
         self.gridLayout.setHorizontalSpacing(0)
         self.gridLayout.setVerticalSpacing(10)
 
-        self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
-        self.horizontalLayout.setSpacing(0)
+        self.horizontalLayout.setContentsMargins(14, 14, 14, 14)
+        self.horizontalLayout.setSpacing(14)
         self.horizontalLayout.removeItem(self.gridLayout)
         self.command_pane = QFrame(self.tab)
         self.command_pane.setObjectName("commandPane")
         command_layout = QVBoxLayout(self.command_pane)
         command_layout.setContentsMargins(14, 14, 14, 14)
-        command_layout.setSpacing(10)
-        command_layout.addWidget(self._make_panel_title("Correction Session", self.command_pane))
-        command_layout.addLayout(self.gridLayout)
+        command_layout.setSpacing(12)
+        command_layout.addWidget(self._build_correction_parameters_card())
+        command_layout.addWidget(self._build_correction_actions_card())
         command_layout.addStretch(1)
-        self.horizontalLayout.addWidget(self.command_pane)
+        self.horizontalLayout.addWidget(self.command_pane, 2)
+        self.horizontalLayout.addWidget(self.right_panel, 3)
 
         self.response_pane = QFrame(self.tab_2)
-        self.response_pane.setObjectName("commandPane")
+        self.response_pane.setObjectName("responsePane")
         response_outer = QVBoxLayout(self.tab_2)
         response_outer.setContentsMargins(0, 0, 0, 0)
         response_outer.setSpacing(0)
         response_outer.addWidget(self.response_pane)
-        response_layout = QVBoxLayout(self.response_pane)
+        response_layout = QHBoxLayout(self.response_pane)
         response_layout.setContentsMargins(14, 14, 14, 14)
         response_layout.setSpacing(12)
-        response_layout.addWidget(self._make_panel_title("Response Matrix", self.response_pane))
-        response_layout.addStretch(1)
-        self.pushButton.setParent(self.response_pane)
+        response_layout.addWidget(self._build_matrix_library_card(), 2, Qt.AlignTop)
+        response_layout.addWidget(self._build_matrix_measure_card(), 3, Qt.AlignTop)
+
+    def _build_target_bpm_panel(self):
+        self.verticalLayout_5.removeItem(self.gridLayout_5)
+        for widget in (
+            self.pushButton_5,
+            self.pushButton_6,
+            self.label_45,
+            self.label_46,
+            self.progressBar,
+        ):
+            self.gridLayout_5.removeWidget(widget)
+
+        self.verticalLayout_5.removeWidget(self.scrollArea)
+
+        self.pushButton_5.hide()
+        self.pushButton_6.hide()
+
+        self.target_bpm_tab = QWidget(self.right_panel)
+        target_layout = QVBoxLayout(self.target_bpm_tab)
+        target_layout.setContentsMargins(0, 0, 0, 0)
+        target_layout.setSpacing(10)
+
+        toolbar = QFrame(self.target_bpm_tab)
+        toolbar.setObjectName("targetToolbar")
+        toolbar_layout = QGridLayout(toolbar)
+        toolbar_layout.setContentsMargins(12, 10, 12, 10)
+        toolbar_layout.setHorizontalSpacing(10)
+        toolbar_layout.setVerticalSpacing(8)
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(8)
+        self.allTargetBPMsCheckBox = QCheckBox("All BPMs", toolbar)
+        self.allTargetBPMsCheckBox.setTristate(True)
+        action_row.addWidget(self.allTargetBPMsCheckBox)
+        self.saveTargetBPMsButton = QPushButton("Save", toolbar)
+        self.loadTargetBPMsButton = QPushButton("Load", toolbar)
+        action_row.addWidget(self.saveTargetBPMsButton)
+        action_row.addWidget(self.loadTargetBPMsButton)
+        action_row.addStretch(1)
+
+        toolbar_layout.addLayout(action_row, 0, 0, 1, 3)
+        toolbar_layout.addWidget(self.progressBar, 0, 3)
+        toolbar_layout.addWidget(self.label_45, 1, 1)
+        toolbar_layout.addWidget(self.label_46, 1, 2)
+        toolbar_layout.setColumnStretch(0, 2)
+        toolbar_layout.setColumnStretch(1, 2)
+        toolbar_layout.setColumnStretch(2, 2)
+        toolbar_layout.setColumnStretch(3, 1)
+
+        self.target_toolbar = toolbar
+        target_layout.addWidget(toolbar)
+        target_layout.addWidget(self.scrollArea, 1)
+        self.verticalLayout_5.addWidget(self.target_bpm_tab, 1)
+        self._build_global_corrector_dialog()
+
+    def _build_global_corrector_dialog(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Global Correctors")
+        dialog.setModal(True)
+        dialog.resize(560, 720)
+        dialog.setMinimumSize(460, 520)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+        layout.addWidget(self._build_global_corrector_selector(dialog), 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
+        buttons.button(QDialogButtonBox.Ok).setText("Apply")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        self.global_corrector_dialog = dialog
+
+    def _build_correction_parameters_card(self):
+        card, layout = self._make_subcard(None, self.command_pane)
+        self.correctorLimitLabel, self.correctorLimitLineEdit = self._make_parameter_field(card)
+        self.correctionSettleSLabel, self.correctionSettleSLineEdit = self._make_parameter_field(card)
+        self.globalMaxIterLabel, self.globalMaxIterLineEdit = self._make_parameter_field(card)
+        self.svdCutoffPctLabel, self.svdCutoffPctLineEdit = self._make_parameter_field(card)
+        self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit = self._make_parameter_field(card)
+        self.correctionGainLabel, self.correctionGainLineEdit = self._make_parameter_field(card)
+        self.correctionMaxStepLabel, self.correctionMaxStepLineEdit = self._make_parameter_field(card)
+        self.responseKickLabel, self.responseKickLineEdit = self._make_parameter_field(card)
+        self.localResponseSourceLabel = QLabel(card)
+        self.localResponseSourceComboBox = QComboBox(card)
+        self.localResponseSourceComboBox.addItem("Measure Live", "measure_live")
+        self.localResponseSourceComboBox.addItem("Active Matrix", "active_matrix")
+        self.activeMatrixLabel, self.activeMatrixValueLabel = self._make_parameter_display(card)
+        self.openResponseMatrixTabButton = QPushButton(card)
+        self.responseMatrixRow = QFrame(card)
+        response_matrix_row_layout = QHBoxLayout(self.responseMatrixRow)
+        response_matrix_row_layout.setContentsMargins(0, 0, 0, 0)
+        response_matrix_row_layout.setSpacing(8)
+        response_matrix_row_layout.addWidget(self.activeMatrixValueLabel, 1)
+        response_matrix_row_layout.addWidget(self.openResponseMatrixTabButton, 0)
+        self.globalCorrectorsLabel, self.globalCorrectorsValueLabel = self._make_parameter_display(card)
+        self.editCorrectorsButton = QPushButton(card)
+        self.globalCorrectorsRow = QFrame(card)
+        global_correctors_row_layout = QHBoxLayout(self.globalCorrectorsRow)
+        global_correctors_row_layout.setContentsMargins(0, 0, 0, 0)
+        global_correctors_row_layout.setSpacing(8)
+        global_correctors_row_layout.addWidget(self.globalCorrectorsValueLabel, 1)
+        global_correctors_row_layout.addWidget(self.editCorrectorsButton, 0)
+
+        self.commonRuntimeGroup = self._build_parameter_group(
+            "Common Runtime",
+            (
+                (self.label_6, self.comboBox, True),
+                (self.samplingIntervalSLabel, self.samplingIntervalSLineEdit, True),
+                (self.correctionSettleSLabel, self.correctionSettleSLineEdit, False),
+                (self.correctorAccuracyUmLabel, self.correctorAccuracyUmLineEdit, True),
+                (self.sampPerStepLabel, self.sampPerStepLineEdit, True),
+                (self.correctorLimitLabel, self.correctorLimitLineEdit, False),
+                (self.correctionGainLabel, self.correctionGainLineEdit, False),
+                (self.correctionMaxStepLabel, self.correctionMaxStepLineEdit, False),
+            ),
+            card,
+        )
+        layout.addWidget(self.commonRuntimeGroup)
+
+        self.globalCorrectionGroup = self._build_parameter_group(
+            "Global Correction",
+            (
+                (self.globalMaxIterLabel, self.globalMaxIterLineEdit, False),
+                (self.svdCutoffPctLabel, self.svdCutoffPctLineEdit, False),
+                (self.activeMatrixLabel, self.responseMatrixRow, False),
+                (self.globalCorrectorsLabel, self.globalCorrectorsRow, False),
+            ),
+            card,
+        )
+        layout.addWidget(self.globalCorrectionGroup)
+
+        self.oneToOneCorrectionGroup = self._build_parameter_group(
+            "One-to-One Correction",
+            (
+                (self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit, False),
+                (self.localResponseSourceLabel, self.localResponseSourceComboBox, False),
+                (self.responseKickLabel, self.responseKickLineEdit, False),
+            ),
+            card,
+        )
+        layout.addWidget(self.oneToOneCorrectionGroup)
+
+        return card
+
+    def _make_parameter_field(self, parent):
+        label = QLabel(parent)
+        editor = QLineEdit(parent)
+        label.setProperty("role", "field")
+        return label, editor
+
+    def _make_parameter_display(self, parent):
+        label = QLabel(parent)
+        value = QLabel("--", parent)
+        label.setProperty("role", "field")
+        value.setProperty("role", "field")
+        value.setWordWrap(True)
+        return label, value
+
+    def _build_parameter_group(self, title, rows, parent):
+        group = QFrame(parent)
+        group.setObjectName("parameterGroup")
+        group_layout = QVBoxLayout(group)
+        group_layout.setContentsMargins(10, 10, 10, 10)
+        group_layout.setSpacing(8)
+
+        if title:
+            title_label = QLabel(title, group)
+            title_label.setObjectName("subTitle")
+            group_layout.addWidget(title_label)
+
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        for row, (label, widget, from_legacy_grid) in enumerate(rows):
+            if from_legacy_grid:
+                self.gridLayout.removeWidget(label)
+                self.gridLayout.removeWidget(widget)
+            grid.addWidget(label, row, 0)
+            grid.addWidget(widget, row, 1)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
+        group_layout.addLayout(grid)
+        return group
+
+    def _build_global_corrector_selector(self, parent):
+        container = QFrame(parent)
+        container.setObjectName("correctorSelector")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        toolbar = QFrame(container)
+        toolbar.setObjectName("targetToolbar")
+        toolbar_layout = QGridLayout(toolbar)
+        toolbar_layout.setContentsMargins(12, 10, 12, 10)
+        toolbar_layout.setHorizontalSpacing(10)
+        toolbar_layout.setVerticalSpacing(8)
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(8)
+        all_button = QPushButton("All", container)
+        clear_button = QPushButton("Clear", container)
+        for button in (all_button, clear_button):
+            button.setProperty("compact", True)
+            button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            action_row.addWidget(button)
+        action_row.addStretch(1)
+
+        x_header = QLabel("X Correctors", toolbar)
+        y_header = QLabel("Y Correctors", toolbar)
+        for header in (x_header, y_header):
+            header.setProperty("role", "field")
+            header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.global_corrector_progress = QProgressBar(toolbar)
+        self.global_corrector_progress.setTextVisible(True)
+        self.global_corrector_progress.setFormat("%v/%m")
+
+        toolbar_layout.addLayout(action_row, 0, 0)
+        toolbar_layout.addWidget(x_header, 0, 1)
+        toolbar_layout.addWidget(y_header, 0, 2)
+        toolbar_layout.addWidget(self.global_corrector_progress, 0, 3)
+        toolbar_layout.setColumnStretch(0, 2)
+        toolbar_layout.setColumnStretch(1, 2)
+        toolbar_layout.setColumnStretch(2, 2)
+        toolbar_layout.setColumnStretch(3, 1)
+        layout.addWidget(toolbar)
+
+        scroll = QScrollArea(container)
+        scroll.setObjectName("targetsScroll")
+        scroll.setWidgetResizable(True)
+        content = QWidget(scroll)
+        content.setObjectName("targetsContent")
+        grid = QGridLayout(content)
+        grid.setContentsMargins(8, 8, 8, 8)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(6)
+        grid.setAlignment(Qt.AlignTop)
+        self._populate_corrector_columns(grid)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+
+        all_button.clicked.connect(lambda: self._set_global_correctors_checked(True))
+        clear_button.clicked.connect(lambda: self._set_global_correctors_checked(False))
+        return container
+
+    def _populate_corrector_columns(self, grid):
+        row_count = max(len(self.orbit_workflow.xcors), len(self.orbit_workflow.ycors))
+        for row in range(row_count):
+            if row < len(self.orbit_workflow.xcors):
+                checkbox = QCheckBox(self.orbit_workflow.xcors[row], grid.parentWidget())
+                checkbox.setChecked(True)
+                self.global_xcor_checkboxes.append(checkbox)
+                grid.addWidget(checkbox, row, 0)
+
+            if row < len(self.orbit_workflow.ycors):
+                checkbox = QCheckBox(self.orbit_workflow.ycors[row], grid.parentWidget())
+                checkbox.setChecked(True)
+                self.global_ycor_checkboxes.append(checkbox)
+                grid.addWidget(checkbox, row, 1)
+
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+
+    def _build_correction_actions_card(self):
+        card, layout = self._make_subcard(None, self.command_pane)
+
+        for button in (self.pushButton_2, self.pushButton_3, self.pushButton_4, self.pushButton_7):
+            self.gridLayout.removeWidget(button)
+        self.pushButton_2.hide()
+        self.pushButton_3.hide()
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(10)
+        self.pushButton_4.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.pushButton_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        action_row.addWidget(self.pushButton_4, 2)
+        action_row.addWidget(self.pushButton_7, 1)
+        layout.addLayout(action_row)
+
+        self.correction_progress = QProgressBar(card)
+        self.correction_progress.setRange(0, 100)
+        self.correction_progress.setValue(0)
+        self.correction_progress.setTextVisible(True)
+        self.correction_progress.setFormat("Idle")
+        self.correction_progress.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.correction_progress.hide()
+        layout.addWidget(self.correction_progress)
+
+        return card
+
+    def _build_matrix_library_card(self):
+        card, layout = self._make_subcard("Saved Matrices", self.response_pane)
+        self.response_matrix_combo = QComboBox(card)
+        self.response_matrix_combo.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.response_matrix_combo.setMinimumContentsLength(24)
+        self.response_matrix_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout.addWidget(self.response_matrix_combo)
+
+        matrix_action_row = QHBoxLayout()
+        matrix_action_row.setContentsMargins(0, 0, 0, 0)
+        matrix_action_row.setSpacing(10)
+        self.load_response_matrix_button = QPushButton("Load Selected Matrix", card)
+        for button in (self.load_response_matrix_button,):
+            button.setProperty("compact", True)
+            button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            matrix_action_row.addWidget(button)
+        matrix_action_row.addStretch(1)
+        layout.addLayout(matrix_action_row)
+        return card
+
+    def _build_matrix_measure_card(self):
+        card, layout = self._make_subcard("New Measurement", self.response_pane)
+        self.matrixScopeLabel, self.matrixScopeValueLabel = self._make_parameter_display(card)
+        self.matrixResponseKickLabel, self.matrixResponseKickLineEdit = self._make_parameter_field(card)
+        self.matrixWaitSLabel, self.matrixWaitSLineEdit = self._make_parameter_field(card)
+        self.matrixSampleIntervalSLabel, self.matrixSampleIntervalSLineEdit = self._make_parameter_field(card)
+        self.matrixSamplesLabel, self.matrixSamplesLineEdit = self._make_parameter_field(card)
+        layout.addWidget(
+            self._build_parameter_group(
+                None,
+                (
+                    (self.matrixScopeLabel, self.matrixScopeValueLabel, False),
+                    (self.matrixResponseKickLabel, self.matrixResponseKickLineEdit, False),
+                    (self.matrixWaitSLabel, self.matrixWaitSLineEdit, False),
+                    (self.matrixSampleIntervalSLabel, self.matrixSampleIntervalSLineEdit, False),
+                    (self.matrixSamplesLabel, self.matrixSamplesLineEdit, False),
+                ),
+                card,
+            )
+        )
+        measure_row = QHBoxLayout()
+        measure_row.setContentsMargins(0, 0, 0, 0)
+        measure_row.setSpacing(10)
+        self.pushButton.setParent(card)
         self.pushButton.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        response_layout.addWidget(self.pushButton, 0)
-        response_layout.addStretch(2)
+        measure_row.addWidget(self.pushButton, 0)
+        self.stop_response_button = QPushButton(card)
+        self.stop_response_button.setProperty("compact", True)
+        self.stop_response_button.setProperty("danger", True)
+        self.stop_response_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        measure_row.addWidget(self.stop_response_button, 0)
+        measure_row.addStretch(1)
+        layout.addLayout(measure_row)
+
+        self.response_matrix_progress = QProgressBar(card)
+        self.response_matrix_progress.setRange(0, 100)
+        self.response_matrix_progress.setValue(0)
+        self.response_matrix_progress.setTextVisible(True)
+        self.response_matrix_progress.setFormat("Idle")
+        self.response_matrix_progress.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout.addWidget(self.response_matrix_progress)
+        return card
 
     def _configure_form_content(self):
         self.label_6.setProperty("role", "field")
         self.samplingIntervalSLabel.setProperty("role", "field")
+        self.correctionSettleSLabel.setProperty("role", "field")
         self.correctorAccuracyUmLabel.setProperty("role", "field")
         self.sampPerStepLabel.setProperty("role", "field")
+        self.correctorLimitLabel.setProperty("role", "field")
+        self.globalMaxIterLabel.setProperty("role", "field")
+        self.svdCutoffPctLabel.setProperty("role", "field")
+        self.oneToOneMaxIterLabel.setProperty("role", "field")
+        self.correctionGainLabel.setProperty("role", "field")
+        self.correctionMaxStepLabel.setProperty("role", "field")
+        self.responseKickLabel.setProperty("role", "field")
+        self.localResponseSourceLabel.setProperty("role", "field")
+        self.matrixScopeLabel.setProperty("role", "field")
+        self.matrixResponseKickLabel.setProperty("role", "field")
+        self.matrixWaitSLabel.setProperty("role", "field")
+        self.matrixSampleIntervalSLabel.setProperty("role", "field")
+        self.matrixSamplesLabel.setProperty("role", "field")
+        self.activeMatrixLabel.setProperty("role", "field")
+        self.activeMatrixValueLabel.setProperty("role", "field")
+        self.globalCorrectorsLabel.setProperty("role", "field")
+        self.globalCorrectorsValueLabel.setProperty("role", "field")
         self.label_45.setProperty("role", "field")
         self.label_46.setProperty("role", "field")
 
+        limit_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         self.label_6.setText("Method")
         self.samplingIntervalSLabel.setText("Sampling Interval (s)")
+        self.correctionSettleSLabel.setText("Settle Time (s)")
         self.correctorAccuracyUmLabel.setText("Accuracy (um)")
         self.sampPerStepLabel.setText("Samples / Step")
-        self.label_45.setText("BPM X")
-        self.label_46.setText("BPM Y")
+        self.correctorLimitLabel.setText(f"Corrector Limit (+/- {limit_unit})")
+        self.correctorLimitLineEdit.setToolTip(
+            "Absolute corrector setpoint bound. Setpoints are clipped to this limit."
+        )
+        self.globalMaxIterLabel.setText("Global Max Iter")
+        self.svdCutoffPctLabel.setText("SVD Cutoff (%)")
+        self.svdCutoffPctLineEdit.setToolTip(
+            "Discard response-matrix modes below this percentage of the largest "
+            "singular value. Lower values retain more weak modes."
+        )
+        self.oneToOneMaxIterLabel.setText("1-to-1 Max Iter / BPM")
+        self.correctionGainLabel.setText("Correction Gain")
+        self.correctionMaxStepLabel.setText("Max Step (%)")
+        self.responseKickLabel.setText(f"Local Response Kick ({limit_unit})")
+        self.localResponseSourceLabel.setText("Local Response Source")
+        self.localResponseSourceComboBox.setToolTip(
+            "Measure Live applies a local test kick; Active Matrix uses the paired "
+            "same-plane response coefficients from the active response matrix."
+        )
+        self.matrixScopeLabel.setText("Measurement Scope")
+        self.matrixScopeValueLabel.setText(
+            f"All configured: {len(self.orbit_workflow.bpms)} BPMs, "
+            f"{len(self.orbit_workflow.xcors)} X correctors, "
+            f"{len(self.orbit_workflow.ycors)} Y correctors"
+        )
+        self.matrixScopeValueLabel.setToolTip(
+            "Target BPM and Global Corrector selections apply to orbit correction only."
+        )
+        self.matrixResponseKickLabel.setText(f"Kick Step ({limit_unit})")
+        self.matrixWaitSLabel.setText("Settle Time (s)")
+        self.matrixSampleIntervalSLabel.setText("Sample Interval (s)")
+        self.matrixSamplesLabel.setText("Samples/step")
+        self.activeMatrixLabel.setText("Response Matrix")
+        self.globalCorrectorsLabel.setText("Global Correctors")
+        self.label_45.setText("BPM X (mm)")
+        self.label_46.setText("BPM Y (mm)")
+        self._hide_target_bpm_unit_labels()
 
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), "Run Correct")
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), "Response Matrix")
@@ -636,25 +1292,55 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.pushButton_5,
             self.pushButton_6,
             self.pushButton_7,
+            self.saveTargetBPMsButton,
+            self.loadTargetBPMsButton,
+            self.load_response_matrix_button,
+            self.openResponseMatrixTabButton,
+            self.editCorrectorsButton,
         ):
             button.setProperty("compact", True)
 
-        self.pushButton.setText("Measure Response")
+        self.pushButton.setText("Measure Full Matrix")
+        self.stop_response_button.setText("Stop Measurement")
+        self.openResponseMatrixTabButton.setText("Open")
+        self.openResponseMatrixTabButton.clicked.connect(
+            lambda: self.tabWidget.setCurrentWidget(self.tab_2)
+        )
+        self.editCorrectorsButton.setText("Edit")
+        self.editCorrectorsButton.clicked.connect(self._open_global_correctors_dialog)
         self.pushButton_4.setText("Start Correction")
-        self.pushButton_3.setText("Stop Correction")
-        self.pushButton_2.setText("Zero Correctors")
-        self.pushButton_7.setText("Recover Correctors")
-        self.pushButton_5.setText("All BPMs")
-        self.pushButton_6.setText("Clear Selection")
+        self.pushButton_7.setText("Recover")
+        self.saveTargetBPMsButton.setToolTip("Save target BPM selection and X/Y values.")
+        self.loadTargetBPMsButton.setToolTip("Load a target BPM preset for this machine/backend.")
+        self.pushButton_4.setProperty("primary", True)
 
         self.progressBar.setRange(0, len(self.all_checkboxes))
         self.progressBar.setTextVisible(True)
         self.progressBar.setFormat("%v/%m")
+        self._set_response_progress(0, "Idle")
+
+    def _hide_target_bpm_unit_labels(self):
+        for label in self.scrollAreaWidgetContents_2.findChildren(QLabel):
+            if label.text().strip().lower() == "mm":
+                label.hide()
+                label.setEnabled(False)
 
     def _make_panel_title(self, text, parent):
         label = QLabel(text, parent)
         label.setObjectName("panelTitle")
         return label
+
+    def _make_subcard(self, title, parent):
+        card = QFrame(parent)
+        card.setObjectName("subCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+        if title:
+            title_label = QLabel(title, card)
+            title_label.setObjectName("subTitle")
+            layout.addWidget(title_label)
+        return card, layout
 
     def _palette(self):
         return DARK_THEME if self.current_theme == "dark" else LIGHT_THEME
@@ -662,6 +1348,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _apply_theme(self):
         palette = self._palette()
         self.centralwidget.setStyleSheet(build_orbit_correct_theme(palette))
+        if hasattr(self, "global_corrector_dialog"):
+            self.global_corrector_dialog.setStyleSheet(build_orbit_correct_theme(palette))
         self.status_panel.apply_theme(palette)
         self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
         self._update_theme_toggle_button()
@@ -680,12 +1368,47 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._refresh_status()
 
     def _notify(self, message):
-        print(message)
+        logger.info(message)
         self.last_notice = message
         self._refresh_status()
 
+    def _open_global_correctors_dialog(self):
+        if self._selected_correction_method() != "global":
+            return
+        checkboxes = self.global_xcor_checkboxes + self.global_ycor_checkboxes
+        original = [checkbox.isChecked() for checkbox in checkboxes]
+        if self.global_corrector_dialog.exec_() == QDialog.Accepted:
+            self._refresh_status()
+            return
+        for checkbox, checked in zip(checkboxes, original):
+            checkbox.blockSignals(True)
+            checkbox.setChecked(checked)
+            checkbox.blockSignals(False)
+        self._refresh_status()
+
+    def _on_main_tab_changed(self, _index):
+        self._refresh_status()
+
+    def _require_write_allowed(self, operation):
+        try:
+            require_workflow_write_allowed(self.app_context, "orbit", operation)
+            return True
+        except MachineProfileError as exc:
+            message = str(exc)
+            self._notify(message)
+            QMessageBox.warning(self, "Orbit Correct", message)
+            return False
+
     def _selected_bpm_count(self):
         return sum(1 for cb in self.all_checkboxes if cb.isChecked())
+
+    def _global_corrector_summary(self):
+        x_selected = sum(1 for checkbox in self.global_xcor_checkboxes if checkbox.isChecked())
+        y_selected = sum(1 for checkbox in self.global_ycor_checkboxes if checkbox.isChecked())
+        return (
+            f"X {x_selected}/{len(self.global_xcor_checkboxes)}, "
+            f"Y {y_selected}/{len(self.global_ycor_checkboxes)}"
+        )
 
     def _current_process_status(self):
         if self.process_manager.is_running("orbit_correction"):
@@ -698,94 +1421,774 @@ class myWindow(QMainWindow, Ui_MainWindow):
             return "Recovering", "warning"
         return "Idle", "subtle"
 
+    def _selected_correction_method(self):
+        return self.comboBox.currentText().strip().lower()
+
+    def _selected_local_response_source(self):
+        value = self.localResponseSourceComboBox.currentData()
+        return str(value or "measure_live").strip().lower()
+
+    def _apply_default_method(self):
+        method = str(self.runtime_defaults.get("method", "")).strip()
+        if not method:
+            return
+        index = self.comboBox.findText(method)
+        if index >= 0:
+            self.comboBox.setCurrentIndex(index)
+
+    def _apply_default_local_response_source(self):
+        source = str(
+            self.runtime_defaults.get("local_response_source", "measure_live")
+        ).strip().lower()
+        index = self.localResponseSourceComboBox.findData(source)
+        if index >= 0:
+            self.localResponseSourceComboBox.setCurrentIndex(index)
+
+    def _on_correction_method_changed(self, *_):
+        self._update_method_parameter_state()
+        self._refresh_status()
+
+    def _on_local_response_source_changed(self, *_):
+        self._update_local_response_source_state()
+        self._refresh_status()
+
+    def _update_method_parameter_state(self):
+        if not hasattr(self, "globalCorrectionGroup"):
+            return
+
+        method = self._selected_correction_method()
+        known_method = method in {"global", "one-to-one"}
+        show_global = method == "global" or not known_method
+        show_one_to_one = method == "one-to-one" or not known_method
+        self.globalCorrectionGroup.setVisible(show_global)
+        self.globalCorrectionGroup.setEnabled(show_global)
+        self.oneToOneCorrectionGroup.setVisible(show_one_to_one)
+        self.oneToOneCorrectionGroup.setEnabled(show_one_to_one)
+        self._update_local_response_source_state()
+        self._update_global_corrector_edit_state(method == "global")
+
+    def _update_local_response_source_state(self):
+        if not hasattr(self, "responseKickLineEdit"):
+            return
+        measure_live = self._selected_local_response_source() == "measure_live"
+        self.responseKickLabel.setEnabled(measure_live)
+        self.responseKickLineEdit.setEnabled(measure_live)
+
+    def _update_global_corrector_edit_state(self, enabled):
+        if hasattr(self, "editCorrectorsButton"):
+            self.editCorrectorsButton.setEnabled(enabled)
+
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
+        response_running = self.process_manager.is_running("response_matrix")
+        correction_running = self.process_manager.is_running("orbit_correction")
+        maintenance_running = (
+            self.process_manager.is_running("cor_off")
+            or self.process_manager.is_running("cor_recover")
+        )
+        if self._response_scan_was_running and not response_running:
+            self.refresh_response_matrices()
+        self._response_scan_was_running = response_running
+
         total = len(self.all_checkboxes)
         selected = self._selected_bpm_count()
         process_text, process_tone = self._current_process_status()
+        response_page = self.tabWidget.currentWidget() is self.tab_2
         self.status_panel.set_item("tab", self.tabWidget.tabText(self.tabWidget.currentIndex()), "subtle")
-        self.status_panel.set_item("method", self.comboBox.currentText(), "subtle")
-        self.status_panel.set_item("targets", f"{selected}/{total}", "success" if selected else "warning")
+        if response_page:
+            corrector_total = len(self.orbit_workflow.xcors) + len(self.orbit_workflow.ycors)
+            self.status_panel.set_title("method", "Measurement")
+            self.status_panel.set_item("method", "Full Matrix", "subtle")
+            self.status_panel.set_title("targets", "Scope")
+            self.status_panel.set_item(
+                "targets",
+                f"{len(self.orbit_workflow.bpms)} BPM / {corrector_total} COR",
+                "success",
+            )
+        else:
+            self.status_panel.set_title("method", "Method")
+            self.status_panel.set_item("method", self.comboBox.currentText(), "subtle")
+            self.status_panel.set_title("targets", "Targets")
+            self.status_panel.set_item(
+                "targets", f"{selected}/{total}", "success" if selected else "warning"
+            )
         self.status_panel.set_item("process", process_text, process_tone)
+        self._refresh_response_progress(response_running)
+        self._refresh_correction_progress(correction_running)
+        self.correction_progress.setVisible(correction_running)
+        if hasattr(self, "stop_response_button"):
+            self.pushButton.setEnabled(not response_running)
+            self.stop_response_button.setEnabled(response_running)
+        self._set_correction_action_state(correction_running)
+        self.pushButton_4.setEnabled(
+            correction_running or (not response_running and not maintenance_running)
+        )
+        self._update_recover_button_state(
+            enabled=not response_running and not correction_running and not maintenance_running
+        )
         self.progressBar.setValue(selected)
+        self._sync_all_target_bpms_checkbox()
+        if hasattr(self, "globalCorrectorsValueLabel"):
+            self.globalCorrectorsValueLabel.setText(self._global_corrector_summary())
+        if hasattr(self, "global_corrector_progress"):
+            corrector_total = len(self.global_xcor_checkboxes) + len(self.global_ycor_checkboxes)
+            corrector_selected = (
+                sum(1 for checkbox in self.global_xcor_checkboxes if checkbox.isChecked())
+                + sum(1 for checkbox in self.global_ycor_checkboxes if checkbox.isChecked())
+            )
+            self.global_corrector_progress.setMaximum(corrector_total)
+            self.global_corrector_progress.setValue(corrector_selected)
+
+    def _update_recover_button_state(self, *, enabled):
+        backup_path = Path(self.orbit_runtime["corrector_state_path"])
+        try:
+            backup_stat = backup_path.stat()
+        except OSError:
+            backup_stat = None
+        backup_available = backup_stat is not None and backup_path.is_file()
+        self.pushButton_7.setEnabled(enabled and backup_available)
+        if backup_available:
+            modified = datetime.fromtimestamp(backup_stat.st_mtime).astimezone()
+            self.pushButton_7.setToolTip(
+                f"Restore correctors from backup saved {modified.isoformat(timespec='seconds')}."
+            )
+        else:
+            self.pushButton_7.setToolTip("No correction backup is available for this machine/backend.")
+
+    def _format_response_matrix_record(self, record):
+        created_at = str(record.get("created_at", "--"))
+        matrix_file = Path(str(record.get("matrix_file", "--"))).name
+        shape = record.get("shape", ("?", "?"))
+        try:
+            shape_text = f"{shape[0]}x{shape[1]}"
+        except (TypeError, IndexError):
+            shape_text = "?x?"
+        return f"{created_at}  {shape_text}  {matrix_file}"
+
+    def _set_active_response_matrix_text(self, value_text):
+        if hasattr(self, "activeMatrixValueLabel"):
+            self.activeMatrixValueLabel.setText(value_text)
+
+    def refresh_response_matrices(self):
+        if not hasattr(self, "response_matrix_combo"):
+            return
+
+        current_metadata = self.response_matrix_combo.currentData()
+        self.response_matrix_combo.blockSignals(True)
+        self.response_matrix_combo.clear()
+        records = list_response_matrix_records(self.app_context)
+        for record in records:
+            self.response_matrix_combo.addItem(
+                self._format_response_matrix_record(record),
+                record.get("metadata_path"),
+            )
+        self.response_matrix_combo.blockSignals(False)
+
+        if current_metadata:
+            index = self.response_matrix_combo.findData(current_metadata)
+            if index >= 0:
+                self.response_matrix_combo.setCurrentIndex(index)
+
+        try:
+            active = get_active_response_matrix_record(self.app_context)
+        except Exception as exc:
+            self._set_active_response_matrix_text(f"invalid ({exc})")
+            return
+
+        if active is None:
+            self._set_active_response_matrix_text("--")
+            return
+
+        self._set_active_response_matrix_text(self._format_response_matrix_record(active))
+        active_metadata = active.get("metadata_path")
+        if active_metadata:
+            index = self.response_matrix_combo.findData(active_metadata)
+            if index >= 0:
+                self.response_matrix_combo.setCurrentIndex(index)
+
+    def load_response_matrix(self):
+        metadata_path = self.response_matrix_combo.currentData()
+        if not metadata_path:
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "No response matrix is available for the current machine/backend.",
+            )
+            return
+
+        try:
+            active = set_active_response_matrix(self.app_context, metadata_path)
+        except Exception as exc:
+            QMessageBox.warning(self, "Orbit Correct", str(exc))
+            self.refresh_response_matrices()
+            return
+
+        self._notify(f"Loaded response matrix: {Path(active['matrix_file']).name}")
+        self.refresh_response_matrices()
 
     def _extract_number(self, s):
         # 提取字符串中的第一个连续数字并转为整数
         match = re.search(r'\d+', s)
         return int(match.group()) if match else 0
 
+    def _toggle_all_target_bpms(self, _checked):
+        select_all = self._selected_bpm_count() < len(self.all_checkboxes)
+        self._set_all_target_bpms(select_all)
+
+    def _set_all_target_bpms(self, checked):
+        for checkbox in self.all_checkboxes:
+            checkbox.blockSignals(True)
+            checkbox.setChecked(checked)
+            checkbox.blockSignals(False)
+        self._sync_all_target_bpms_checkbox()
+        self._refresh_status()
+
+    def _on_target_bpm_state_changed(self, _state):
+        self._sync_all_target_bpms_checkbox()
+        self._refresh_status()
+
+    def _sync_all_target_bpms_checkbox(self):
+        if not hasattr(self, "allTargetBPMsCheckBox"):
+            return
+        selected = self._selected_bpm_count()
+        if selected == 0:
+            state = Qt.Unchecked
+        elif selected == len(self.all_checkboxes):
+            state = Qt.Checked
+        else:
+            state = Qt.PartiallyChecked
+        self.allTargetBPMsCheckBox.blockSignals(True)
+        self.allTargetBPMsCheckBox.setCheckState(state)
+        self.allTargetBPMsCheckBox.blockSignals(False)
+
     def selectall(self):
-        for cb in self.all_checkboxes:
-            cb.setChecked(True)
+        self._set_all_target_bpms(True)
 
     def cancelall(self):
-        for cb in self.all_checkboxes:
-            cb.setChecked(False)
+        self._set_all_target_bpms(False)
+
+    def _target_bpm_preset_dir(self):
+        return Path(self.orbit_runtime["runtime_dir"]) / "target_presets"
+
+    def save_target_bpm_preset(self):
+        preset_dir = self._target_bpm_preset_dir()
+        try:
+            preset_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            QMessageBox.warning(self, "Orbit Correct", f"Cannot create preset directory: {exc}")
+            return
+
+        created_at = datetime.now().astimezone()
+        default_path = preset_dir / f"target_{created_at.strftime('%Y%m%d_%H%M%S')}.json"
+        selected_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Target BPM Preset",
+            str(default_path),
+            "JSON files (*.json)",
+        )
+        if not selected_path:
+            return
+
+        path = Path(selected_path)
+        if path.suffix.lower() != ".json":
+            path = path.with_suffix(".json")
+        payload = {
+            "version": 1,
+            "kind": "orbit_target_bpm_preset",
+            "machine": self.machine_profile.machine.id,
+            "backend": self.app_context.control_backend.name,
+            "created_at": created_at.isoformat(timespec="seconds"),
+            "target_unit": "mm",
+            "targets": [
+                {
+                    "bpm": bpm,
+                    "enabled": checkbox.isChecked(),
+                    "x_mm": bpmx.value(),
+                    "y_mm": bpmy.value(),
+                }
+                for bpm, checkbox, bpmx, bpmy in zip(
+                    self.orbit_workflow.bpms,
+                    self.all_checkboxes,
+                    self._bpmx_spinboxes,
+                    self._bpmy_spinboxes,
+                )
+            ],
+        }
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            temp_path.replace(path)
+        except OSError as exc:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+            QMessageBox.warning(self, "Orbit Correct", f"Cannot save target BPM preset: {exc}")
+            return
+
+        self._notify(f"Saved target BPM preset: {path.name}")
+        QMessageBox.information(self, "Orbit Correct", f"Saved target BPM preset:\n{path}")
+
+    def load_target_bpm_preset(self):
+        preset_dir = self._target_bpm_preset_dir()
+        selected_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Target BPM Preset",
+            str(preset_dir),
+            "JSON files (*.json)",
+        )
+        if not selected_path:
+            return
+
+        path = Path(selected_path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            targets = self._validate_target_bpm_preset(payload)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            QMessageBox.warning(self, "Orbit Correct", f"Cannot load target BPM preset: {exc}")
+            return
+
+        for checkbox in self.all_checkboxes:
+            checkbox.blockSignals(True)
+        try:
+            for checkbox, bpmx, bpmy, target in zip(
+                self.all_checkboxes,
+                self._bpmx_spinboxes,
+                self._bpmy_spinboxes,
+                targets,
+            ):
+                checkbox.setChecked(target[0])
+                bpmx.setValue(target[1])
+                bpmy.setValue(target[2])
+        finally:
+            for checkbox in self.all_checkboxes:
+                checkbox.blockSignals(False)
+
+        self._refresh_status()
+        self._notify(f"Loaded target BPM preset: {path.name}")
+
+    def _validate_target_bpm_preset(self, payload):
+        if not isinstance(payload, dict):
+            raise ValueError("preset root must be a JSON object")
+        if payload.get("version") != 1 or payload.get("kind") != "orbit_target_bpm_preset":
+            raise ValueError("unsupported target BPM preset format")
+        if payload.get("machine") != self.machine_profile.machine.id:
+            raise ValueError("preset machine does not match the current machine")
+        if payload.get("backend") != self.app_context.control_backend.name:
+            raise ValueError("preset backend does not match the current backend")
+        if payload.get("target_unit") != "mm":
+            raise ValueError("target_unit must be mm")
+
+        raw_targets = payload.get("targets")
+        if not isinstance(raw_targets, list):
+            raise ValueError("targets must be a list")
+        targets_by_bpm = {}
+        for raw_target in raw_targets:
+            if not isinstance(raw_target, dict):
+                raise ValueError("each target must be a JSON object")
+            bpm = raw_target.get("bpm")
+            if not isinstance(bpm, str) or not bpm:
+                raise ValueError("each target must define a BPM name")
+            if bpm in targets_by_bpm:
+                raise ValueError(f"duplicate target BPM: {bpm}")
+            enabled = raw_target.get("enabled")
+            if not isinstance(enabled, bool):
+                raise ValueError(f"{bpm}: enabled must be true or false")
+            try:
+                x_mm = float(raw_target["x_mm"])
+                y_mm = float(raw_target["y_mm"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"{bpm}: x_mm and y_mm must be numbers") from exc
+            if not math.isfinite(x_mm) or not math.isfinite(y_mm):
+                raise ValueError(f"{bpm}: target values must be finite")
+            targets_by_bpm[bpm] = (enabled, x_mm, y_mm)
+
+        expected_bpms = set(self.orbit_workflow.bpms)
+        actual_bpms = set(targets_by_bpm)
+        if actual_bpms != expected_bpms:
+            missing = sorted(expected_bpms - actual_bpms)
+            unknown = sorted(actual_bpms - expected_bpms)
+            details = []
+            if missing:
+                details.append(f"missing: {', '.join(missing)}")
+            if unknown:
+                details.append(f"unknown: {', '.join(unknown)}")
+            raise ValueError("preset BPM set does not match the current profile (" + "; ".join(details) + ")")
+
+        validated = []
+        for bpm, bpmx, bpmy in zip(
+            self.orbit_workflow.bpms,
+            self._bpmx_spinboxes,
+            self._bpmy_spinboxes,
+        ):
+            enabled, x_mm, y_mm = targets_by_bpm[bpm]
+            if not bpmx.minimum() <= x_mm <= bpmx.maximum():
+                raise ValueError(f"{bpm}: x_mm is outside the supported GUI range")
+            if not bpmy.minimum() <= y_mm <= bpmy.maximum():
+                raise ValueError(f"{bpm}: y_mm is outside the supported GUI range")
+            validated.append((enabled, x_mm, y_mm))
+        return validated
+
+    def _set_global_correctors_checked(self, checked):
+        for checkbox in self.global_xcor_checkboxes + self.global_ycor_checkboxes:
+            checkbox.setChecked(checked)
+        self._refresh_status()
     
     def all_BPM_target_value(self):
-        # 将BPM的目标值按照1~43依次排列
-        all_bpmx_spinboxes = self.findChildren(QDoubleSpinBox, QRegExp("bpmx_*"))
-        # 组合数据（索引、名称、值）
-        combined_data = []
-        for sb in all_bpmx_spinboxes:
-            index = self._extract_number(sb.objectName())
-            combined_data.append( (index, sb.objectName(), sb.value()) )
-        # 按索引排序
-        combined_data.sort(key=lambda x: x[0])
-        # 解包排序后的数据
-        indeics, all_bpmx_spinboxes_names, all_bpmx_target_values = zip(*combined_data)
-        # 转换为列表（如果后续需要修改）
-        # all_bpmx_spinboxes_names = list(all_bpmx_spinboxes_names)
-        all_bpmx_target_values = list(all_bpmx_target_values)
-
-        all_bpmy_spinboxes = self.findChildren(QDoubleSpinBox, QRegExp("bpmy_*"))
-        # 组合数据（索引、名称、值）
-        combined_data = []
-        for sb in all_bpmy_spinboxes:
-            index = self._extract_number(sb.objectName())
-            combined_data.append( (index, sb.objectName(), sb.value()) )
-        # 按索引排序
-        combined_data.sort(key=lambda x: x[0])
-        # 解包排序后的数据
-        indeics, all_bpmy_spinboxes_names, all_bpmy_target_values = zip(*combined_data)
-        # 转换为列表（如果后续需要修改）
-        # all_bpmy_spinboxes_names = list(all_bpmy_spinboxes_names)
-        all_bpmy_target_values = list(all_bpmy_target_values)
-
+        all_bpmx_target_values = [spinbox.value() for spinbox in self._bpmx_spinboxes]
+        all_bpmy_target_values = [spinbox.value() for spinbox in self._bpmy_spinboxes]
         return all_bpmx_target_values, all_bpmy_target_values
 
     def target_BPMs(self):
-        all_bpmx_target_values, all_bpmy_target_values = self.all_BPM_target_value()
-
-        # print(all_bpmx_target_values)
-        # print(all_bpmy_target_values)
-        all_checkboxes = self.findChildren(QCheckBox)
-        bpm_target_list = [cb.text() for cb in all_checkboxes if cb.isChecked()]
-        bpm_target_list.sort(key=self._extract_number)
-
-        indices = []
-        for cb in bpm_target_list:
-            indices.append(self._extract_number(cb))
-        # print(indices)
-        bpmx_target_values = [all_bpmx_target_values[i-1] for i in indices]
-        bpmy_target_values = [all_bpmy_target_values[i-1] for i in indices]
-        # print(bpmx_target_values)
-        # print(bpmy_target_values)
-
-        # target_list = list(zip(bpm_target_list, bpmx_target_values, bpmy_target_values))
-        
+        bpm_target_list = []
+        bpmx_target_values = []
+        bpmy_target_values = []
+        for checkbox, bpmx_spinbox, bpmy_spinbox in zip(
+            self.all_checkboxes,
+            self._bpmx_spinboxes,
+            self._bpmy_spinboxes,
+        ):
+            if checkbox.isChecked():
+                bpm_target_list.append(checkbox.text())
+                bpmx_target_values.append(bpmx_spinbox.value())
+                bpmy_target_values.append(bpmy_spinbox.value())
         return bpm_target_list, bpmx_target_values, bpmy_target_values
-        
-    def measure_res(self): #measure response matrix
-        self.process_manager.start_process(
-            key="response_matrix",
-            label="Response Matrix Measurement",
-            cmd=["python3", "findresponse.py"],
-            cwd=st.rootpath + "/src/apps/orbit_correct",
+
+    def _selected_global_correctors(self):
+        xcors = [checkbox.text() for checkbox in self.global_xcor_checkboxes if checkbox.isChecked()]
+        ycors = [checkbox.text() for checkbox in self.global_ycor_checkboxes if checkbox.isChecked()]
+        return xcors, ycors
+
+    def _parse_positive_float(self, editor, label):
+        try:
+            value = float(editor.text())
+        except ValueError as exc:
+            raise ValueError(f"{label} must be numeric.") from exc
+        if value <= 0:
+            raise ValueError(f"{label} must be greater than 0.")
+        return value
+
+    def _parse_nonnegative_float(self, editor, label):
+        try:
+            value = float(editor.text())
+        except ValueError as exc:
+            raise ValueError(f"{label} must be numeric.") from exc
+        if value < 0:
+            raise ValueError(f"{label} must be >= 0.")
+        return value
+
+    def _parse_positive_int(self, editor, label):
+        try:
+            value = int(editor.text())
+        except ValueError as exc:
+            raise ValueError(f"{label} must be an integer.") from exc
+        if value <= 0:
+            raise ValueError(f"{label} must be greater than 0.")
+        return value
+
+    def _corrector_limit_value(self):
+        profile_limit = float(self.orbit_runtime["corrector_upperlimit"])
+        limit_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
+        corrector_limit = self._parse_positive_float(self.correctorLimitLineEdit, "Corrector Limit")
+        if corrector_limit > profile_limit:
+            raise ValueError(
+                f"Corrector Limit cannot exceed profile limit {profile_limit:g} {limit_unit}."
+            )
+        return corrector_limit
+
+    def _bounded_kick_value(self, editor, label, upper_limit, unit):
+        response_kick = self._parse_positive_float(editor, label)
+        if response_kick > upper_limit:
+            raise ValueError(f"{label} cannot exceed {upper_limit:g} {unit}.")
+        return response_kick
+
+    def _local_response_kick_value(self, corrector_limit):
+        unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
+        return self._bounded_kick_value(
+            self.responseKickLineEdit,
+            "Local Response Kick",
+            corrector_limit,
+            unit,
         )
 
+    def _matrix_measurement_args(self):
+        profile_limit = float(self.orbit_runtime["corrector_upperlimit"])
+        unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
+        response_kick = self._bounded_kick_value(
+            self.matrixResponseKickLineEdit,
+            "Kick Step",
+            profile_limit,
+            unit,
+        )
+        wait_s = self._parse_nonnegative_float(self.matrixWaitSLineEdit, "Settle Time")
+        sample_interval_s = self._parse_nonnegative_float(
+            self.matrixSampleIntervalSLineEdit,
+            "Sample Interval",
+        )
+        n_averages = self._parse_positive_int(self.matrixSamplesLineEdit, "Samples/step")
+        return response_kick, wait_s, sample_interval_s, n_averages
+
+    def _set_response_progress(self, percent, text):
+        if not hasattr(self, "response_matrix_progress"):
+            return
+        self.response_matrix_progress.setRange(0, 100)
+        self.response_matrix_progress.setValue(max(0, min(100, int(percent))))
+        self.response_matrix_progress.setFormat(text)
+
+    def _set_correction_action_state(self, running):
+        if getattr(self, "_correction_button_running", None) == running:
+            return
+        self._correction_button_running = running
+        self.pushButton_4.setText("Stop Correction" if running else "Start Correction")
+        self.pushButton_4.setProperty("primary", not running)
+        self.pushButton_4.setProperty("danger", running)
+        self.pushButton_4.style().unpolish(self.pushButton_4)
+        self.pushButton_4.style().polish(self.pushButton_4)
+        self.pushButton_4.update()
+
+    def _set_correction_progress(self, percent, text):
+        if not hasattr(self, "correction_progress"):
+            return
+        self.correction_progress.setRange(0, 100)
+        self.correction_progress.setValue(max(0, min(100, int(percent))))
+        self.correction_progress.setFormat(text)
+
+    def _read_correction_progress(self):
+        try:
+            return json.loads(self.correction_progress_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _refresh_correction_progress(self, correction_running):
+        if not hasattr(self, "correction_progress"):
+            return
+        progress = self._read_correction_progress()
+        if progress is None:
+            if correction_running:
+                self._set_correction_progress(0, "Starting...")
+            return
+
+        percent = int(progress.get("percent", 0))
+        status = str(progress.get("status", "running"))
+        current = str(progress.get("current", "")).strip()
+        if status == "completed":
+            text = "Completed (100%)"
+        elif status == "failed":
+            text = f"Failed - {current}" if current else "Failed"
+        elif status == "stopped":
+            text = "Stopped"
+        elif not correction_running:
+            text = "Interrupted"
+        else:
+            text = current or f"{percent}%"
+        self._set_correction_progress(percent, text)
+
+    def _read_response_progress(self):
+        try:
+            return json.loads(self.response_progress_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _refresh_response_progress(self, response_running):
+        if not hasattr(self, "response_matrix_progress"):
+            return
+
+        progress = self._read_response_progress()
+        if progress is None:
+            if response_running:
+                self._set_response_progress(0, "Starting...")
+            return
+
+        completed = int(progress.get("completed", 0))
+        total = int(progress.get("total", 0))
+        percent = int(progress.get("percent", 0))
+        status = str(progress.get("status", "running"))
+        current = str(progress.get("current", "")).strip()
+
+        if total > 0:
+            text = f"{completed}/{total} ({percent}%)"
+        else:
+            text = f"{percent}%"
+        if current and status not in {"completed", "failed"}:
+            text = f"{text} - {current}"
+        elif status == "completed":
+            text = "Completed (100%)"
+        elif status == "failed":
+            text = "Failed"
+
+        self._set_response_progress(percent, text)
+
+    def _correction_step_parameter_values(self):
+        gain = self._parse_positive_float(self.correctionGainLineEdit, "Correction Gain")
+        if gain > 1.0:
+            raise ValueError("Correction Gain must be <= 1.0.")
+
+        max_step_pct = self._parse_positive_float(
+            self.correctionMaxStepLineEdit,
+            "Max Step",
+        )
+        if max_step_pct > 100.0:
+            raise ValueError("Max Step must be <= 100%.")
+        return gain, max_step_pct / 100.0
+
+    def _one_to_one_parameter_values(self):
+        return self._parse_positive_int(
+            self.oneToOneMaxIterLineEdit,
+            "1-to-1 Max Iter / BPM",
+        )
+
+    def _svd_relative_cutoff_value(self):
+        cutoff_pct = self._parse_positive_float(
+            self.svdCutoffPctLineEdit,
+            "SVD Cutoff",
+        )
+        if cutoff_pct > 100.0:
+            raise ValueError("SVD Cutoff must be <= 100%.")
+        return cutoff_pct / 100.0
+
+    def _correction_parameter_args(self):
+        method = self._selected_correction_method()
+        local_response_source = self._selected_local_response_source()
+        corrector_limit = self._corrector_limit_value()
+        correction_settle_s = self._parse_nonnegative_float(
+            self.correctionSettleSLineEdit,
+            "Settle Time",
+        )
+        correction_gain, correction_max_step_fraction = self._correction_step_parameter_values()
+        svd_relative_cutoff = float(self.orbit_runtime["svd_relative_cutoff"])
+        global_xcors = []
+        global_ycors = []
+
+        if method == "global":
+            global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
+            svd_relative_cutoff = self._svd_relative_cutoff_value()
+            one_to_one_max_iter = int(self.runtime_defaults["one_to_one_max_iter"])
+            response_kick = min(
+                corrector_limit * float(self.runtime_defaults["local_response_kick_fraction"]),
+                corrector_limit,
+            )
+            global_xcors, global_ycors = self._selected_global_correctors()
+            if not global_xcors:
+                raise ValueError("Select at least one X corrector for global correction.")
+            if not global_ycors:
+                raise ValueError("Select at least one Y corrector for global correction.")
+        elif method == "one-to-one":
+            global_max_iter = int(self.runtime_defaults["global_max_iter"])
+            one_to_one_max_iter = self._one_to_one_parameter_values()
+            if local_response_source == "active_matrix":
+                try:
+                    active_matrix = get_active_response_matrix_record(self.app_context)
+                except Exception as exc:
+                    raise ValueError(f"Active response matrix is invalid: {exc}") from exc
+                if active_matrix is None:
+                    raise ValueError(
+                        "Active Matrix local response requires an active response matrix "
+                        "for the current machine/backend."
+                    )
+                response_kick = min(
+                    corrector_limit * float(
+                        self.runtime_defaults["local_response_kick_fraction"]
+                    ),
+                    corrector_limit,
+                )
+            else:
+                response_kick = self._local_response_kick_value(corrector_limit)
+        else:
+            global_max_iter = self._parse_positive_int(self.globalMaxIterLineEdit, "Global Max Iter")
+            svd_relative_cutoff = self._svd_relative_cutoff_value()
+            one_to_one_max_iter = self._one_to_one_parameter_values()
+            response_kick = self._local_response_kick_value(corrector_limit)
+
+        return [
+            f"{corrector_limit:.12g}",
+            str(global_max_iter),
+            str(one_to_one_max_iter),
+            f"{correction_gain:.12g}",
+            f"{correction_max_step_fraction:.12g}",
+            f"{response_kick:.12g}",
+            ",".join(global_xcors),
+            ",".join(global_ycors),
+            f"{correction_settle_s:.12g}",
+            local_response_source,
+            f"{svd_relative_cutoff:.12g}",
+        ]
+        
+    def measure_res(self): #measure response matrix
+        if not self._require_write_allowed("Response matrix measurement"):
+            return
+        if self.process_manager.is_running("orbit_correction"):
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "Stop orbit correction before measuring the response matrix.",
+            )
+            return
+        try:
+            response_kick, wait_s, sample_interval_s, n_averages = self._matrix_measurement_args()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Orbit Correct", str(exc))
+            return
+
+        try:
+            self.response_progress_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        self._set_response_progress(0, "Starting...")
+
+        proc = self.process_manager.start_process(
+            key="response_matrix",
+            label="Response Matrix Measurement",
+            cmd=[
+                "python3",
+                "findresponse.py",
+                f"{response_kick:.12g}",
+                str(n_averages),
+                f"{wait_s:.12g}",
+                f"{sample_interval_s:.12g}",
+            ],
+            cwd=str(APP_DIR),
+        )
+        if proc is None:
+            self._set_response_progress(0, "Failed to start")
+
+    def stop_measure_res(self):
+        stopped = self.process_manager.stop_process("response_matrix", stop_timeout_s=5.0)
+        if stopped:
+            try:
+                self.response_progress_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+            self._set_response_progress(0, "Stopped")
+        else:
+            self._notify("Response Matrix Measurement is not running.")
+        self._refresh_status()
+
+    def toggle_correction(self):
+        if self.process_manager.is_running("orbit_correction"):
+            self.stop_cor()
+        else:
+            self.start_cor()
+
     def start_cor(self):
+        if not self._require_write_allowed("Orbit correction"):
+            return
+        if self.process_manager.is_running("response_matrix"):
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "Stop response matrix measurement before starting orbit correction.",
+            )
+            return
         
         # prepare the target paras. 
         bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
@@ -798,6 +2201,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
             return
         bpmx_target_values = [str(i) for i in bpmx_target_values]
         bpmy_target_values = [str(i) for i in bpmy_target_values]
+        try:
+            runtime_args = self._correction_parameter_args()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Orbit Correct", str(exc))
+            return
         
         cmd = [
             "python3", "correct.py",                  #0
@@ -808,22 +2216,36 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.sampPerStepLineEdit.text(),          #5   samples_perstep
             ",".join(bpm_target_list),                     #6   target_BPMlist
             ",".join(bpmx_target_values),                     #7   target_BPMlist
-            ",".join(bpmy_target_values)                     #8   target_BPMlist
+            ",".join(bpmy_target_values),                    #8   target_BPMlist
+            *runtime_args,
         ]
-        self.process_manager.start_process(
+        try:
+            self.correction_progress_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        self._set_correction_progress(0, "Starting...")
+        proc = self.process_manager.start_process(
             key="orbit_correction",
             label="Orbit Correction",
             cmd=cmd,
-            cwd=st.rootpath + "/src/apps/orbit_correct",
+            cwd=str(APP_DIR),
         )
+        if proc is None:
+            self._set_correction_progress(0, "Failed to start")
+        self._refresh_status()
  
-
-
-
-    # cor_off
-    # def cor_off(self):
-    #     Popen("python3 correct.py cor_off",cwd=st.rootpath+"/apps/orbit_correct",shell=True)
     def cor_off(self):
+        if not self._require_write_allowed("Corrector reset"):
+            return
+        if self.process_manager.is_running("response_matrix") or self.process_manager.is_running("orbit_correction"):
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "Stop active measurement or correction before zeroing correctors.",
+            )
+            return
         bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
         cmd = [
             "python3", "correct.py",                  #0
@@ -834,11 +2256,20 @@ class myWindow(QMainWindow, Ui_MainWindow):
             key="cor_off",
             label="Corrector Reset",
             cmd=cmd,
-            cwd=st.rootpath + "/src/apps/orbit_correct",
+            cwd=str(APP_DIR),
             expect_running=False,
         )
 
     def cor_recover(self):
+        if not self._require_write_allowed("Corrector recover"):
+            return
+        if self.process_manager.is_running("response_matrix") or self.process_manager.is_running("orbit_correction"):
+            QMessageBox.warning(
+                self,
+                "Orbit Correct",
+                "Stop active measurement or correction before recovering correctors.",
+            )
+            return
         # bpm_target_list, bpmx_target_values, bpmy_target_values = self.target_BPMs()
         cmd = [
             "python3", "correct.py",                  #0
@@ -849,14 +2280,25 @@ class myWindow(QMainWindow, Ui_MainWindow):
             key="cor_recover",
             label="Corrector Recover",
             cmd=cmd,
-            cwd=st.rootpath + "/src/apps/orbit_correct",
+            cwd=str(APP_DIR),
             expect_running=False,
         )
 
 
     # stop_cor
     def stop_cor(self):
-        self.process_manager.stop_all()
+        stopped = self.process_manager.stop_process("orbit_correction")
+        if stopped:
+            try:
+                self.correction_progress_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+            self._set_correction_progress(0, "Stopped")
+        else:
+            self._notify("Orbit Correction is not running.")
+        self._refresh_status()
     
     # 窗口关闭事件
     def closeEvent(self, event):

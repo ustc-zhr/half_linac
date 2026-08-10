@@ -1,0 +1,39 @@
+{
+  "presets": [
+    {
+      "id": "template_bba1",
+      "family": "bba1",
+      "plane": "x",
+      "quad": "Q01",
+      "corr": "XC01",
+      "bpm1": "BPM01",
+      "bpm2": "BPM02",
+      "scan": {
+        "corrector": {
+          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
+          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+        },
+        "quadrupole": {"low": 0, "high": 1, "steps": 5, "unit": "1/m^2", "mode": "relative"},
+        "sampling": {"samples_per_point": 3, "settle_time_s": 0.5, "sample_interval_s": 0.5}
+      }
+    },
+    {
+      "id": "template_bba2",
+      "family": "bba2",
+      "plane": "x",
+      "quad": "Q01",
+      "corr": "XC01",
+      "bpm1": "BPM01",
+      "bpm2": "BPM02",
+      "analysis": {"energy_mev": 100, "quad_leff": 0.15},
+      "scan": {
+        "corrector": {
+          "vm": {"unit": "rad", "mode": "absolute"},
+          "real": {"unit": "A", "mode": "absolute"}
+        },
+        "quadrupole": {"unit": "1/m^2", "mode": "relative"},
+        "sampling": {}
+      }
+    }
+  ]
+}
