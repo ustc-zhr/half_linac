@@ -995,8 +995,7 @@
         "legacy_import"
       ],
       "limits": {
-        "low": 0.0,
-        "high": 80.0
+        "voltage_set": {"low": 0, "high": 80, "unit": "kV"}
       },
       "logical_channels": [
         "voltage_set",
@@ -1156,8 +1155,7 @@
         "coordinated_control"
       ],
       "limits": {
-        "low": 0.0,
-        "high": 65.0
+        "setpoint": {"low": 0, "high": 65, "unit": "MeV"}
       },
       "logical_channels": [
         "setpoint"

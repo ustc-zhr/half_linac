@@ -2283,8 +2283,7 @@
       "order": 239,
       "tags": ["linac", "energy_spectrum", "coordinated_control"],
       "limits": {
-        "low": 0.0,
-        "high": 2450.0
+        "setpoint": {"low": 0, "high": 2450, "unit": "MeV"}
       },
       "logical_channels": ["setpoint"]
     },

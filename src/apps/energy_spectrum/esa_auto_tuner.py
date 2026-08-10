@@ -956,6 +956,8 @@ class ESA_AutoTuner:
 
 if __name__=='__main__':
     from half_linac.src.shared.machine_profile import (
+        LimitRange,
+        effective_limit,
         get_workflow,
         load_profile,
         resolve_default_energy_spectrum_station,
@@ -1016,6 +1018,7 @@ if __name__=='__main__':
             unit=actuator_unit,
             mode=preferred_backend,
         )
+        write_target = actuator_target
         bend_pv = actuator_target.pv_name
     else:
         bend_target = resolve_write_target(
@@ -1023,9 +1026,26 @@ if __name__=='__main__':
             str(workflow["bend_element"]),
             mode=preferred_backend,
         )
+        write_target = bend_target
         bend_pv = bend_target.pv_name
         actuator_unit = bend_target.unit or "a.u."
         scan = workflow.get("bend_scan", {})
+    configured_limit = LimitRange(
+        float(scan.get("low", scan.get("min", 0))),
+        float(scan.get("high", scan.get("max", 200))),
+        actuator_unit,
+    )
+    scan_mode = str(scan.get("mode", "absolute")).strip().lower()
+    if scan_mode == "relative":
+        current_value = caget(bend_pv)
+        if current_value is None:
+            raise RuntimeError("Could not read the current ESA actuator setpoint.")
+        configured_limit = configured_limit.relative_to_absolute(float(current_value))
+    elif scan_mode != "absolute":
+        raise RuntimeError(f"Unsupported ESA auto-tune scan mode: {scan_mode!r}.")
+    selected_limit = effective_limit(configured_limit, write_target.machine_limit)
+    if selected_limit.low is None or selected_limit.high is None:
+        raise RuntimeError("ESA auto-tune scan requires finite low/high limits.")
     hybrid = workflow.get("auto_tune_hybrid", {})
     center_lock = auto_tune.get("center_lock", {})
     sampling = (
@@ -1066,8 +1086,8 @@ if __name__=='__main__':
     )
 
     best_I = esa_tuner.run(
-        B_min=float(scan.get("min", 0)),
-        B_max=float(scan.get("max", 200)),
+        B_min=selected_limit.low,
+        B_max=selected_limit.high,
         coarse_steps=int(scan.get("coarse_steps", 40)),
         fine_steps=int(scan.get("fine_steps", 81)),
     )

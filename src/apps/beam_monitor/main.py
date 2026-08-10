@@ -60,6 +60,7 @@ from half_linac.src.shared.machine_profile import (
     require_workflow_write_allowed,
     resolve_channel,
     resolve_element_image_geometry,
+    resolve_write_target,
     workflow_writes_allowed,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
@@ -920,6 +921,17 @@ class myWindow(QWidget, Ui_Form):
         except MachineProfileError:
             return None
 
+    def _resolve_optional_write_target(self, element_id, logical_channel, unit):
+        try:
+            return resolve_write_target(
+                self.app_context,
+                element_id,
+                logical_channel=logical_channel,
+                unit=unit,
+            )
+        except MachineProfileError:
+            return None
+
     def _connect_signals(self):
         self.pushButton.clicked.connect(self.start1_btn)
         self.pushButton_2.clicked.connect(self.stop1_btn)
@@ -1640,7 +1652,16 @@ class myWindow(QWidget, Ui_Form):
     def _configure_active_channels(self):
         mode = self._current_mode()
         self.pv = resolve_channel(self.app_context, self.tmppv, "image")
-        self.expoTimePV = self._resolve_optional_channel(self.tmppv, "exposure_time")
+        self.exposure_target = self._resolve_optional_write_target(
+            self.tmppv,
+            "exposure_time",
+            "s",
+        )
+        self.expoTimePV = (
+            self.exposure_target.pv_name
+            if self.exposure_target is not None
+            else None
+        )
 
         if mode not in ("real", "vm"):
             print("Error, usage: python main.py [real|vm]")
@@ -1741,6 +1762,15 @@ class myWindow(QWidget, Ui_Form):
                 expoTime = float(self.lineEdit.text())
             except ValueError:
                 print("Exposure time must be numeric.")
+                return
+            if (
+                self.exposure_target is not None
+                and not self.exposure_target.machine_limit.contains(expoTime)
+            ):
+                print(
+                    f"Exposure time {expoTime:g} s is outside machine limit "
+                    f"{self.exposure_target.machine_limit.describe()}."
+                )
                 return
             try:
                 caput(self.expoTimePV, expoTime)

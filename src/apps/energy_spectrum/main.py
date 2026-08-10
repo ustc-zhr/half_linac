@@ -3254,17 +3254,20 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.flag_pixel_width_mm = geometry.pixel_width_mm
 
         self.flag_expotime_pv = None
+        self.flag_exposure_target = None
         if self.control_backend == "real":
             raw_exposure_channel = self.energy_config.get("flag_exposure_channel")
             exposure_channel = (
                 "" if raw_exposure_channel is None else str(raw_exposure_channel).strip()
             )
             if exposure_channel:
-                self.flag_expotime_pv = resolve_channel(
+                self.flag_exposure_target = resolve_write_target(
                     self.app_context,
                     flag_element,
-                    exposure_channel,
+                    logical_channel=exposure_channel,
+                    unit="s",
                 )
+                self.flag_expotime_pv = self.flag_exposure_target.pv_name
 
             try:
                 expotime = caget(self.flag_expotime_pv) if self.flag_expotime_pv else None
@@ -3318,6 +3321,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 expoTime = float(self.lineEdit_expotime.text())
             except ValueError:
                 print("exposure time must be numeric")
+                return
+            if (
+                self.flag_exposure_target is not None
+                and not self.flag_exposure_target.machine_limit.contains(expoTime)
+            ):
+                self._warn(
+                    f"Exposure time {expoTime:g} s is outside machine limit "
+                    f"{self.flag_exposure_target.machine_limit.describe()}."
+                )
                 return
             try:
                 caput(self.flag_expotime_pv,expoTime)

@@ -65,8 +65,15 @@ app scan or operation range
 - Never apply a limit from a different logical channel or unit.
 - Resolve the writable PV and machine limit together so later application code
   cannot independently choose a PV and a limit from different channels.
+- Treat a legacy direct PV without a machine element identity as having no
+  configured machine limit. Safety-sensitive workflows must report or block
+  that state instead of guessing which element or limit owns the PV.
 - If none of the three layers defines a limit, the operation is unbounded by
   configuration; write policy and runtime safety checks still apply.
+
+Internal VM/softIOC state publication and elegant runtime synchronization are
+not operator setpoint workflows. They follow their generated-runtime contracts
+rather than application scan limits.
 
 ## Derivation And Explicitness
 

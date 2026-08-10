@@ -104,7 +104,7 @@ class EnergySpectrumStationTests(unittest.TestCase):
         self.assertEqual(stations["eny"]["energy_element"], "LINAC_ENERGY")
         self.assertEqual(
             profile.get_element("LINAC_ENERGY").limits,
-            {"low": 0.0, "high": 2450.0},
+            {"setpoint": {"low": 0, "high": 2450, "unit": "MeV"}},
         )
         self.assertEqual(
             resolve_channel(profile, "PREINJECTOR_ENERGY", "setpoint", "real"),

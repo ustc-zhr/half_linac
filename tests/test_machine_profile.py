@@ -117,6 +117,16 @@ def _write_directory_profile_fixture(
 
 
 class MachineProfileTests(unittest.TestCase):
+    def test_active_profiles_use_channel_scoped_limits(self):
+        for machine_id in ("half", "irfel"):
+            profile = load_profile(machine_id)
+            legacy = [
+                element.id
+                for element in profile.elements
+                if "low" in element.limits or "high" in element.limits
+            ]
+            self.assertEqual(legacy, [], machine_id)
+
     def test_resolve_write_target_uses_strict_backend_defaults(self):
         profile = load_profile("half")
 
@@ -2231,7 +2241,10 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow["energy_reference_channel"], "setpoint")
         energy_element = profile.get_element("ESA_ENERGY")
         self.assertEqual(energy_element.kind, "energy")
-        self.assertEqual(energy_element.limits, {"low": 0.0, "high": 65.0})
+        self.assertEqual(
+            energy_element.limits,
+            {"setpoint": {"low": 0, "high": 65, "unit": "MeV"}},
+        )
         self.assertEqual(
             resolve_channel(profile, "ESA_ENERGY", "setpoint", "real"),
             "IRFEL:AP:ENG:A3:ao",
