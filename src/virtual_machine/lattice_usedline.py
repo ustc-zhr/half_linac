@@ -11,9 +11,8 @@ from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     get_workflow,
-    resolve_bend_write_channel,
     resolve_channel,
-    resolve_corrector_write_channel,
+    resolve_write_target,
     resolve_machine_runtime,
     resolve_virtual_machine_usedline_workflow,
 )
@@ -577,10 +576,27 @@ def _resolve_vm_writable_channel(
     logical_channel: str,
 ) -> str | None:
     try:
+        if element_kind == "quad" and logical_channel in {"K1", "k1"}:
+            return resolve_write_target(
+                profile,
+                element_id,
+                quantity="K1",
+                mode="vm",
+            ).pv_name
         if element_kind == "corr" and logical_channel == "kick":
-            return resolve_corrector_write_channel(profile, element_id, "vm")
+            return resolve_write_target(
+                profile,
+                element_id,
+                logical_channel="kick",
+                mode="vm",
+            ).pv_name
         if element_kind == "bend" and logical_channel == "angle":
-            return resolve_bend_write_channel(profile, element_id, "vm")
+            return resolve_write_target(
+                profile,
+                element_id,
+                logical_channel="angle",
+                mode="vm",
+            ).pv_name
         return resolve_channel(profile, element_id, logical_channel, "vm")
     except MachineProfileError:
         return None

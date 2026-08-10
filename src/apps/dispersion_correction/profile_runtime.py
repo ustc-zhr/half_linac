@@ -25,6 +25,7 @@ from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
     resolve_channel,
+    resolve_write_target,
     new_app_run_dir,
     resolve_app_runtime_paths,
     workflow_writes_allowed,
@@ -570,22 +571,41 @@ def _build_selection_pv_map(
         devices = _mapping(devices_value, "knobs[].devices")
         device_names.extend(str(name) for name in devices)
 
-    quadrupoles: dict[str, dict[str, str]] = {}
+    quadrupoles: dict[str, dict[str, Any]] = {}
     for device_name in dict.fromkeys(device_names):
-        element = context.profile.get_element(device_name)
         if quadrupole_control == "current":
+            write_target = resolve_write_target(
+                context,
+                device_name,
+                quantity="current",
+                unit="A",
+            )
             item: dict[str, Any] = {
                 "control": "current",
-                "current_set": resolve_channel(context, device_name, "current_set"),
+                "current_set": write_target.pv_name,
                 "current_readback": resolve_channel(context, device_name, "current_readback"),
             }
-            raw_limit = element.limits_for("current_set")
         else:
-            k1_pv = resolve_channel(context, device_name, "K1")
-            item = {"control": "k1", "K1": k1_pv}
-            raw_limit = element.limits_for("K1")
-        if raw_limit:
-            item["limit"] = dict(raw_limit)
+            write_target = resolve_write_target(
+                context,
+                device_name,
+                quantity="K1",
+                unit="1/m^2",
+            )
+            item = {"control": "k1", "K1": write_target.pv_name}
+        if (
+            write_target.machine_limit.low is not None
+            or write_target.machine_limit.high is not None
+        ):
+            item["limit"] = {
+                key: value
+                for key, value in {
+                    "low": write_target.machine_limit.low,
+                    "high": write_target.machine_limit.high,
+                    "unit": write_target.machine_limit.unit,
+                }.items()
+                if value is not None
+            }
         quadrupoles[device_name] = item
 
     energy_mapping: dict[str, str] = {}
@@ -602,7 +622,12 @@ def _build_selection_pv_map(
             energy_knob.get("readback_channel", "readback"),
             context.control_backend.name,
         )
-        energy_mapping["set"] = resolve_channel(context, element_id, set_channel)
+        energy_mapping["set"] = resolve_write_target(
+            context,
+            element_id,
+            logical_channel=set_channel,
+            unit=str(energy_knob.get("actuator_unit", "")).strip() or None,
+        ).pv_name
         try:
             energy_mapping["readback"] = resolve_channel(context, element_id, readback_channel)
         except MachineProfileError:

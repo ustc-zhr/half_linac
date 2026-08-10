@@ -91,6 +91,23 @@ class OrbitCorrectorEffectiveLimitTest(unittest.TestCase):
             LimitRange(-10, 10, "A"),
         )
 
+    def test_legacy_flat_limit_does_not_apply_to_vm_kick(self):
+        context = load_app_context("orbit_correct", machine_id="irfel", control_backend="vm")
+        element = context.profile.get_element("HC01")
+        legacy_element = replace(element, limits={"low": -10.0, "high": 10.0})
+        self.assertEqual(legacy_element.limits_for("kick"), {})
+        self.assertEqual(legacy_element.limits_for("current_set")["low"], -10.0)
+
+        solenoid_context = load_app_context(
+            "solenoid_centering",
+            machine_id="irfel",
+            control_backend="real",
+        )
+        solenoid = solenoid_context.profile.get_element("MS01")
+        legacy_solenoid = replace(solenoid, limits={"low": 0, "high": 130})
+        self.assertEqual(legacy_solenoid.limits_for("current_readback"), {})
+        self.assertEqual(legacy_solenoid.limits_for("current_set")["high"], 130)
+
 
 class BBAScanEffectiveLimitTest(unittest.TestCase):
     def test_real_relative_corrector_range_intersects_current_limit(self):

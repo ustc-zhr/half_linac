@@ -7,7 +7,9 @@ from half_linac.src.shared.machine_profile import (
     LimitRange,
     MachineProfile,
     MachineProfileError,
+    WriteTarget,
     effective_limit,
+    resolve_write_target,
     resolve_app_runtime_paths,
 )
 
@@ -28,11 +30,17 @@ def effective_auto_tune_limit(
     mode: str,
     unit: str,
     center: float,
+    *,
+    write_target: WriteTarget | None = None,
 ) -> LimitRange:
     """Intersect an Energy Spectrum scan range with its actuator-channel limit."""
-    profile = target.profile if isinstance(target, AppContext) else target
-    element = profile.get_element(element_id)
     try:
+        resolved_target = write_target or resolve_write_target(
+            target,
+            element_id,
+            logical_channel=logical_channel,
+            unit=unit,
+        )
         application_limit = LimitRange(low, high, unit)
         normalized_mode = str(mode or "absolute").strip().lower()
         if normalized_mode == "relative":
@@ -40,8 +48,7 @@ def effective_auto_tune_limit(
         elif normalized_mode != "absolute":
             raise MachineProfileError(f"Unsupported scan mode: {mode!r}.")
 
-        raw_machine_limit = element.limits_for(logical_channel)
-        machine_limit = LimitRange.from_mapping(raw_machine_limit) if raw_machine_limit else None
+        machine_limit = resolved_target.machine_limit
         if machine_limit is not None and not machine_limit.contains(center):
             raise MachineProfileError(
                 f"Current value {float(center):g} is outside physical limit "

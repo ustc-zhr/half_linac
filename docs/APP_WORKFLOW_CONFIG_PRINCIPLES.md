@@ -38,8 +38,15 @@ These guidelines apply to `configs/machines/<machine>/apps/*.json`.
   `{"vm": "K1", "real": "current"}`. Do not create a backend mapping for a
   value that is backend-independent.
 - Treat logical-channel selection as explicit workflow policy when more than
-  one writable physical quantity is valid. A future shared abstraction may
-  replace app-specific fields only when the requirements are common.
+  one writable physical quantity is valid. Applications select the physical
+  quantity, while the shared machine-profile resolver selects the backend PV
+  and the limit for that same logical channel.
+- Let the shared resolver derive unambiguous magnet controls such as corrector
+  kick in VM mode, corrector current in real mode, bend angle in VM mode, and
+  solenoid current. Quadrupole workflows must explicitly select current or K1.
+- Never fall back between writable channels with different physical units.
+  Missing `kick`, `angle`, `current_set`, or `K1` mappings are configuration
+  errors rather than permission to write another channel.
 
 ## Limits
 
@@ -56,6 +63,8 @@ app scan or operation range
 - For a multi-device knob, validate every resulting device target. The first
   device to reach its physical limit constrains the combined operation.
 - Never apply a limit from a different logical channel or unit.
+- Resolve the writable PV and machine limit together so later application code
+  cannot independently choose a PV and a limit from different channels.
 - If none of the three layers defines a limit, the operation is unbounded by
   configuration; write policy and runtime safety checks still apply.
 

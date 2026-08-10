@@ -961,8 +961,8 @@ if __name__=='__main__':
         resolve_default_energy_spectrum_station,
         resolve_energy_spectrum_auto_tune,
         resolve_channel,
-        resolve_bend_write_channel,
         resolve_element_image_geometry,
+        resolve_write_target,
     )
 
     profile = load_profile()
@@ -1003,25 +1003,28 @@ if __name__=='__main__':
             "channel": workflow.get("energy_set_channel", "setpoint"),
         }
     if isinstance(actuator, dict):
-        bend_pv = resolve_channel(
-            profile,
-            str(actuator["element"]),
-            str(actuator["channel"]),
-            preferred_backend,
-        )
         scan = auto_tune.get("scan")
         if not isinstance(scan, dict):
             raise RuntimeError(
                 "Coordinated ESA auto tune requires workflows.energy_spectrum.auto_tune_scan."
             )
         actuator_unit = str(actuator.get("unit", scan.get("unit", "a.u.")))
+        actuator_target = resolve_write_target(
+            profile,
+            str(actuator["element"]),
+            logical_channel=str(actuator["channel"]),
+            unit=actuator_unit,
+            mode=preferred_backend,
+        )
+        bend_pv = actuator_target.pv_name
     else:
-        bend_pv = resolve_bend_write_channel(
+        bend_target = resolve_write_target(
             profile,
             str(workflow["bend_element"]),
-            preferred_backend,
+            mode=preferred_backend,
         )
-        actuator_unit = "A"
+        bend_pv = bend_target.pv_name
+        actuator_unit = bend_target.unit or "a.u."
         scan = workflow.get("bend_scan", {})
     hybrid = workflow.get("auto_tune_hybrid", {})
     center_lock = auto_tune.get("center_lock", {})

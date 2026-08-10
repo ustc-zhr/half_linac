@@ -5,9 +5,8 @@ from dataclasses import dataclass
 from .models import MachineProfile, MachineProfileError
 from .resolver import (
     list_elements,
-    resolve_bend_write_channel,
     resolve_channel,
-    resolve_corrector_write_channel,
+    resolve_write_target,
 )
 
 
@@ -26,10 +25,27 @@ def resolve_softioc_vm_alias(
     logical_channel: str,
 ) -> str | None:
     try:
+        if element_kind == "quad" and logical_channel in {"K1", "k1"}:
+            return resolve_write_target(
+                profile,
+                element_id,
+                quantity="K1",
+                mode="vm",
+            ).pv_name
         if element_kind == "corr" and logical_channel == "kick":
-            return resolve_corrector_write_channel(profile, element_id, "vm")
+            return resolve_write_target(
+                profile,
+                element_id,
+                logical_channel="kick",
+                mode="vm",
+            ).pv_name
         if element_kind == "bend" and logical_channel == "angle":
-            return resolve_bend_write_channel(profile, element_id, "vm")
+            return resolve_write_target(
+                profile,
+                element_id,
+                logical_channel="angle",
+                mode="vm",
+            ).pv_name
         return resolve_channel(profile, element_id, logical_channel, "vm")
     except MachineProfileError:
         return None

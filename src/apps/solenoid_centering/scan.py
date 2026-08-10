@@ -22,7 +22,6 @@ ensure_repo_import_path(__file__)
 
 from half_linac.src.shared.machine_profile import (
     AppContext,
-    ElementConfig,
     LimitRange,
     MachineProfileError,
     SolenoidCenteringPreset,
@@ -31,7 +30,8 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     require_workflow_write_allowed,
     resolve_channel,
-    resolve_corrector_write_channel,
+    resolve_write_target,
+    WriteTarget,
 )
 from half_linac.src.apps.solenoid_centering.profile_runtime import write_scan_result
 
@@ -630,18 +630,28 @@ class SolenoidCenteringScanner:
         self.candidate_finished = candidate_finished or (lambda _candidate: None)
         self.scoring_mode = normalize_scoring_mode(scoring_mode)
         self.stop_requested = stop_requested or (lambda: False)
-        self.solenoid_pv = self._resolve_solenoid_setpoint_pv()
+        self.solenoid_target = self._resolve_solenoid_write_target()
+        self.solenoid_pv = (
+            self.solenoid_target.pv_name
+            if self.solenoid_target is not None
+            else self._resolve_legacy_solenoid_setpoint_pv()
+        )
         self.solenoid_readback_pv = self._resolve_solenoid_readback_pv()
-        self.hcorr_pv = resolve_corrector_write_channel(app_context, preset.hcorr)
-        self.vcorr_pv = resolve_corrector_write_channel(app_context, preset.vcorr)
+        self.hcorr_target = resolve_write_target(app_context, preset.hcorr)
+        self.vcorr_target = resolve_write_target(app_context, preset.vcorr)
+        self.hcorr_pv = self.hcorr_target.pv_name
+        self.vcorr_pv = self.vcorr_target.pv_name
         self.hcorr_readback_pv = self._resolve_readback_pv(preset.hcorr)
         self.vcorr_readback_pv = self._resolve_readback_pv(preset.vcorr)
         self.bpm_x_pv = resolve_channel(app_context, preset.bpm, "x")
         self.bpm_y_pv = resolve_channel(app_context, preset.bpm, "y")
 
-    def _resolve_solenoid_setpoint_pv(self) -> str:
+    def _resolve_solenoid_write_target(self) -> WriteTarget | None:
         if self.preset.solenoid:
-            return resolve_channel(self.app_context, self.preset.solenoid, "current_set")
+            return resolve_write_target(self.app_context, self.preset.solenoid)
+        return None
+
+    def _resolve_legacy_solenoid_setpoint_pv(self) -> str:
         if self.preset.solenoid_setpoint_pv:
             return self.preset.solenoid_setpoint_pv
         raise MachineProfileError(
@@ -706,12 +716,8 @@ class SolenoidCenteringScanner:
             observed_candidates.append(baseline)
             self.candidate_finished(baseline)
             self.progress("baseline candidate", completed, total)
-            hcorr_limits = _element_numeric_limit(
-                self.app_context.profile.get_element(self.preset.hcorr)
-            )
-            vcorr_limits = _element_numeric_limit(
-                self.app_context.profile.get_element(self.preset.vcorr)
-            )
+            hcorr_limits = _numeric_limit(self.hcorr_target.machine_limit)
+            vcorr_limits = _numeric_limit(self.vcorr_target.machine_limit)
             recommended_h, recommended_v, axis_scans, termination = coordinate_descent(
                 original_hcorr,
                 original_vcorr,
@@ -901,8 +907,8 @@ class SolenoidCenteringScanner:
             action,
         )
         self._assert_expected_state(expected_solenoid, expected_hcorr, expected_vcorr)
-        self._check_single_value_limit(self.preset.hcorr, target_hcorr, self.hcorr_pv)
-        self._check_single_value_limit(self.preset.vcorr, target_vcorr, self.vcorr_pv)
+        self._check_single_value_limit(self.hcorr_target, target_hcorr)
+        self._check_single_value_limit(self.vcorr_target, target_vcorr)
         try:
             self._write_and_verify(
                 "HCOR",
@@ -938,39 +944,40 @@ class SolenoidCenteringScanner:
         bpm_y = self.io.read(self.bpm_y_pv)
 
         range_checks: list[RangeCheck] = []
-        solenoid_element = self._find_current_set_element(self.solenoid_pv)
-        if solenoid_element is None:
-            raise MachineProfileError(
-                f"Cannot verify physical limits for solenoid PV {self.solenoid_pv}."
-            )
-        self._require_current_within_limit(solenoid_element, original_solenoid)
-        hcorr_element = self.app_context.profile.get_element(self.preset.hcorr)
-        vcorr_element = self.app_context.profile.get_element(self.preset.vcorr)
-        self._require_current_within_limit(hcorr_element, original_hcorr)
-        self._require_current_within_limit(vcorr_element, original_vcorr)
+        if self.solenoid_target is not None:
+            self._require_current_within_limit(self.solenoid_target, original_solenoid)
+        self._require_current_within_limit(self.hcorr_target, original_hcorr)
+        self._require_current_within_limit(self.vcorr_target, original_vcorr)
         range_checks.append(
             self._build_range_check(
                 "solenoid",
-                solenoid_element,
+                (
+                    self.solenoid_target.element_id
+                    if self.solenoid_target is not None
+                    else self.preset.solenoid_setpoint_pv or "legacy-solenoid"
+                ),
                 relative_scan_points(original_solenoid, self.preset.solenoid_scan),
                 self.solenoid_pv,
+                (
+                    self.solenoid_target.machine_limit
+                    if self.solenoid_target is not None
+                    else LimitRange()
+                ),
             )
         )
 
         range_checks.append(
             self._build_corrector_range_check(
                 "HCOR",
-                hcorr_element,
+                self.hcorr_target,
                 original_hcorr,
-                self.hcorr_pv,
             )
         )
         range_checks.append(
             self._build_corrector_range_check(
                 "VCOR",
-                vcorr_element,
+                self.vcorr_target,
                 original_vcorr,
-                self.vcorr_pv,
             )
         )
         motion = self.preset.motion_verification
@@ -979,7 +986,11 @@ class SolenoidCenteringScanner:
         readback_checks = (
             ReadbackCheck(
                 "solenoid",
-                solenoid_element.id,
+                (
+                    self.solenoid_target.element_id
+                    if self.solenoid_target is not None
+                    else self.preset.solenoid_setpoint_pv or "legacy-solenoid"
+                ),
                 self.solenoid_pv,
                 self.solenoid_readback_pv,
                 original_solenoid,
@@ -1033,12 +1044,13 @@ class SolenoidCenteringScanner:
             readback_verification_configured=motion is not None,
         )
 
-    def _check_single_value_limit(self, element_id: str, value: float, pv_name: str) -> None:
+    def _check_single_value_limit(self, target: WriteTarget, value: float) -> None:
         check = self._build_range_check(
             "corrector",
-            self.app_context.profile.get_element(element_id),
+            target.element_id,
             (float(value),),
-            pv_name,
+            target.pv_name,
+            target.machine_limit,
         )
         if not check.is_ok:
             limit = (
@@ -1053,22 +1065,24 @@ class SolenoidCenteringScanner:
             )
 
     @staticmethod
-    def _require_current_within_limit(element: ElementConfig, value: float) -> None:
-        limit = _element_limit_range(element)
-        if limit is None:
+    def _require_current_within_limit(target: WriteTarget, value: float) -> None:
+        limit = target.machine_limit
+        if limit.low is None and limit.high is None:
             return
         if not limit.contains(value):
             raise MachineProfileError(
-                f"Current value for {element.id}.current_set is outside its physical limit: "
+                f"Current value for {target.element_id}.{target.logical_channel} is outside "
+                "its physical limit: "
                 f"{value:g}, expected {limit.describe()}."
             )
 
     def _build_range_check(
         self,
         label: str,
-        element: ElementConfig,
+        element_id: str,
         values: Iterable[float],
         pv_name: str,
+        machine_limit: LimitRange,
         *,
         first_values: Iterable[float] | None = None,
         requested_points: int | None = None,
@@ -1077,7 +1091,7 @@ class SolenoidCenteringScanner:
     ) -> RangeCheck:
         values_tuple = tuple(float(value) for value in values)
         if not values_tuple:
-            raise MachineProfileError(f"No planned values for {element.id}.")
+            raise MachineProfileError(f"No planned values for {element_id}.")
         planned_low = min(values_tuple)
         planned_high = max(values_tuple)
         first_scan_low = None
@@ -1085,10 +1099,10 @@ class SolenoidCenteringScanner:
         if first_values is not None:
             first_tuple = tuple(float(value) for value in first_values)
             if not first_tuple:
-                raise MachineProfileError(f"No initial-iteration values for {element.id}.")
+                raise MachineProfileError(f"No initial-iteration values for {element_id}.")
             first_scan_low = min(first_tuple)
             first_scan_high = max(first_tuple)
-        limit = _element_numeric_limit(element)
+        limit = _numeric_limit(machine_limit)
         if limit is None:
             limit_low = None
             limit_high = None
@@ -1096,7 +1110,7 @@ class SolenoidCenteringScanner:
             limit_low, limit_high = limit
         return RangeCheck(
             label=label,
-            element_id=element.id,
+            element_id=element_id,
             pv_name=pv_name,
             planned_low=planned_low,
             planned_high=planned_high,
@@ -1112,9 +1126,8 @@ class SolenoidCenteringScanner:
     def _build_corrector_range_check(
         self,
         label: str,
-        element: ElementConfig,
+        target: WriteTarget,
         center: float,
-        pv_name: str,
     ) -> RangeCheck:
         requested = tuple(
             float(value) for value in relative_scan_points(center, self.preset.corrector_scan)
@@ -1122,28 +1135,19 @@ class SolenoidCenteringScanner:
         feasible = _bounded_candidate_values(
             center,
             self.preset.corrector_scan,
-            _element_numeric_limit(element),
+            _numeric_limit(target.machine_limit),
         )
         return self._build_range_check(
             label,
-            element,
+            target.element_id,
             feasible or requested,
-            pv_name,
+            target.pv_name,
+            target.machine_limit,
             first_values=requested,
             requested_points=len(requested),
             feasible_points=len(feasible),
             clipping_allowed=True,
         )
-
-    def _find_current_set_element(self, pv_name: str) -> ElementConfig | None:
-        backend = self.app_context.control_backend.name
-        for element in self.app_context.profile.elements:
-            current_set_by_backend = element.channels.get("current_set") or element.channels.get("setpoint")
-            if current_set_by_backend is None:
-                continue
-            if current_set_by_backend.get(backend) == pv_name:
-                return element
-        return None
 
     def _read_optional(self, pv_name: str | None) -> float | None:
         return self.io.read(pv_name) if pv_name else None
@@ -1454,25 +1458,10 @@ def _rms(values: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(values))))
 
 
-def _element_numeric_limit(
-    element: ElementConfig, channel: str = "current_set"
-) -> tuple[float, float] | None:
-    limit = _element_limit_range(element, channel)
-    if limit is None or limit.low is None or limit.high is None:
+def _numeric_limit(limit: LimitRange) -> tuple[float, float] | None:
+    if limit.low is None or limit.high is None:
         return None
     return limit.low, limit.high
-
-
-def _element_limit_range(
-    element: ElementConfig, channel: str = "current_set"
-) -> LimitRange | None:
-    limits = element.limits_for(channel)
-    if limits.get("low") is None or limits.get("high") is None:
-        return None
-    try:
-        return LimitRange.from_mapping(limits)
-    except MachineProfileError:
-        return None
 
 
 def _select_preset(context: AppContext, preset_id: str | None) -> SolenoidCenteringPreset:

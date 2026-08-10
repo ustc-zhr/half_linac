@@ -24,7 +24,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     require_workflow_write_allowed,
     resolve_channel,
-    resolve_corrector_write_channel,
+    resolve_write_target,
 )
 from half_linac.src.apps.orbit_correct.profile_runtime import (
     CORRECT_LOG_PATH,
@@ -318,7 +318,7 @@ class OrbitCorrector:
         return resolve_channel(self.app_context, bpm_name, plane)
 
     def _cor_pv(self, cor_name: str) -> str:
-        return resolve_corrector_write_channel(self.app_context, cor_name)
+        return resolve_write_target(self.app_context, cor_name).pv_name
 
     def _find_positions(self, main_list: List[str], sub_list: List[str]) -> List[int]:
         """在设备列表中查找目标设备的位置索引"""

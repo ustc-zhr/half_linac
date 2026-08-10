@@ -86,6 +86,12 @@ When a physical quantity is not implemented by a backend, omit that backend mapp
 reusing another logical channel with a different unit. For example, do not put a real-machine
 current PV under VM `kick`, and do not put a VM bend angle under real `current_set`.
 
+Writable magnet endpoints are resolved strictly by the shared machine-profile resolver. Corrector,
+bend, and solenoid channels are derived when the element kind and backend make the physical quantity
+unambiguous. Quadrupole applications must select `current` or `K1`; the resolver then returns the PV
+and the limit for the same logical channel. Missing channels fail validation and never fall back to a
+channel with a different unit.
+
 `real.json` is the source of truth for real-machine PV names. Keep it accurate because real
 machine operation has no softIOC fallback.
 

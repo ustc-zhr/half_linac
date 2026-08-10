@@ -81,6 +81,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_app_runtime_paths,
     resolve_channel,
     resolve_element_image_geometry,
+    resolve_write_target,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from half_linac.src.apps.emit_measure.adaptive_scan import (
@@ -3114,7 +3115,12 @@ class myWindow(QWidget,Ui_Form):
                 raise ValueError(
                     f"No emit_measure preset is defined for {para.quad_name} -> {para.flag_name}."
                 )
-            para.quadPV = resolve_channel(self.machine_profile, para.quad_name, "k1", self.machine_type)
+            para.quadPV = resolve_write_target(
+                self.machine_profile,
+                para.quad_name,
+                quantity="K1",
+                mode=self.machine_type,
+            ).pv_name
             para.flagImagePV = resolve_channel(self.machine_profile, para.flag_name, "image", self.machine_type)
             para.flagSigxPV = self._resolve_optional_channel(para.flag_name, "sigx")
             para.flagSigyPV = self._resolve_optional_channel(para.flag_name, "sigy")

@@ -28,6 +28,7 @@ from .pixel_geometry import (
     resolve_flag_pixel_geometry,
 )
 from .resolver import (
+    WriteTarget,
     get_bba_preset,
     get_emit_preset,
     get_workflow,
@@ -35,11 +36,13 @@ from .resolver import (
     resolve_channel,
     resolve_bend_write_channel,
     resolve_corrector_write_channel,
+    resolve_write_target,
 )
 from .write_control import require_workflow_write_allowed, workflow_write_policy, workflow_writes_allowed
 
 __all__ = [
     "CONTROL_BACKEND_ENV",
+    "WriteTarget",
     "FlagPixelGeometry",
     "LEGACY_CONTROL_BACKEND_ENV",
     "LEGACY_MACHINE_ID_ENV",
@@ -65,6 +68,7 @@ __all__ = [
     "resolve_channel",
     "resolve_bend_write_channel",
     "resolve_corrector_write_channel",
+    "resolve_write_target",
     "resolve_element_image_geometry",
     "resolve_flag_pixel_geometry",
     "require_workflow_write_allowed",

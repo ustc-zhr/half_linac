@@ -56,7 +56,7 @@ from half_linac.src.shared.machine_profile import (
     model_snapshot_lattice_overrides,
     require_workflow_write_allowed,
     resolve_channel,
-    resolve_corrector_write_channel,
+    resolve_write_target,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.apps.bba.profile_runtime import (
@@ -2259,8 +2259,19 @@ class myWindow(QWidget, Ui_Form):
             mode = self._profile_default_control_backend()
             self._require_family_control_backend(self.bba_workflow.bba1, mode, "BBA-1")
             bpm_channel = self._bpm_logical_channel(params.plane)
-            params.corrPV = resolve_corrector_write_channel(self.app_context, params.corr, mode)
-            params.quadPV = resolve_channel(self.app_context, params.quad, "k1", mode)
+            params.corr_target = resolve_write_target(
+                self.app_context,
+                params.corr,
+                mode=mode,
+            )
+            params.quad_target = resolve_write_target(
+                self.app_context,
+                params.quad,
+                quantity="K1",
+                mode=mode,
+            )
+            params.corrPV = params.corr_target.pv_name
+            params.quadPV = params.quad_target.pv_name
             params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, mode)
             params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, mode)
             params.control_backend = mode
@@ -2301,12 +2312,19 @@ class myWindow(QWidget, Ui_Form):
             params.control_backend = self._profile_default_control_backend()
             self._require_family_control_backend(self.bba_workflow.bba2, params.control_backend, "BBA-2")
             bpm_channel = self._bpm_logical_channel(params.plane)
-            params.quadPV = resolve_channel(self.app_context, params.quad, "k1", params.control_backend)
-            params.corrPV = resolve_corrector_write_channel(
+            params.quad_target = resolve_write_target(
+                self.app_context,
+                params.quad,
+                quantity="K1",
+                mode=params.control_backend,
+            )
+            params.corr_target = resolve_write_target(
                 self.app_context,
                 params.corr,
-                params.control_backend,
+                mode=params.control_backend,
             )
+            params.quadPV = params.quad_target.pv_name
+            params.corrPV = params.corr_target.pv_name
             params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, params.control_backend)
             params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, params.control_backend)
 
@@ -2904,6 +2922,7 @@ class BBAScanThread(BBABaseThread):
             self.params.quad_mode,
             self.params.quad_unit,
             initial_quad,
+            write_target=self.params.quad_target,
         )
         kick_values = resolve_limited_scan_values(
             self.params.app_context,
@@ -2915,6 +2934,7 @@ class BBAScanThread(BBABaseThread):
             self.params.corr_mode,
             self.params.corr_unit,
             initial_kick,
+            write_target=self.params.corr_target,
         )
         print("ini values of the quad and corrector=", initial_quad, initial_kick)
 
@@ -3235,6 +3255,7 @@ class BBAScanThreadBBA2(BBABaseThread):
             self.params.quad_mode,
             self.params.quad_unit,
             initial_quad,
+            write_target=self.params.quad_target,
         )
         try:
             self.initial_quad_k1 = float(initial_quad)
@@ -3328,6 +3349,7 @@ class BBAScanThreadBBA2(BBABaseThread):
             self.params.corr_mode,
             self.params.corr_unit,
             initial_kick,
+            write_target=self.params.corr_target,
         )
         angle_values = self._calculate_kick_angles(kick_values)
         print("ini values of the corrector=", initial_kick)

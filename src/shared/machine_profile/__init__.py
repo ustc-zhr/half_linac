@@ -26,6 +26,7 @@ from .compatibility import (
     resolve_channel,
     resolve_bend_write_channel,
     resolve_corrector_write_channel,
+    resolve_write_target,
     resolve_element_image_geometry,
     resolve_flag_pixel_geometry,
 )
@@ -38,6 +39,7 @@ from .loader import (
     resolve_hv_feedback_workflow,
 )
 from .limits import LimitRange, effective_limit
+from .resolver import WriteTarget
 from .energy_spectrum import (
     LEGACY_ENERGY_SPECTRUM_STATION_ID,
     resolve_default_energy_spectrum_station,
@@ -195,6 +197,7 @@ __all__ = [
     "VirtualMachineUsedlineWorkflow",
     "WRITE_ALLOWED",
     "WRITE_BLOCKED",
+    "WriteTarget",
     "MachineValidationCheck",
     "MachineValidationReport",
     "apply_snapshot_conversion",
@@ -233,6 +236,7 @@ __all__ = [
     "resolve_hv_feedback_workflow",
     "resolve_bend_write_channel",
     "resolve_corrector_write_channel",
+    "resolve_write_target",
     "resolve_element_image_geometry",
     "resolve_flag_pixel_geometry",
     "resolve_default_energy_spectrum_station",

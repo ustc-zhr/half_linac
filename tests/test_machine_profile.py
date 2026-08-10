@@ -48,6 +48,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_element_image_geometry,
     resolve_flag_pixel_geometry,
     resolve_machine_runtime,
+    resolve_write_target,
     resolve_virtual_machine_segment_choices,
     resolve_virtual_machine_usedline_workflow,
     save_model_snapshot,
@@ -66,6 +67,7 @@ from half_linac.src.shared.machine_profile.loader import (
     load_bba_workflow,
     load_emit_measure_workflow,
 )
+from half_linac.src.shared.machine_profile.models import _parse_element
 from half_linac.src.shared.machine_profile.runtime_selector import (
     default_control_backend_choices,
     list_machine_choices,
@@ -115,6 +117,156 @@ def _write_directory_profile_fixture(
 
 
 class MachineProfileTests(unittest.TestCase):
+    def test_resolve_write_target_uses_strict_backend_defaults(self):
+        profile = load_profile("half")
+
+        vm_corrector = resolve_write_target(profile, "XC21", mode="vm")
+        real_corrector = resolve_write_target(profile, "XC21", mode="real")
+        vm_bend = resolve_write_target(profile, "BENY", mode="vm")
+        real_bend = resolve_write_target(profile, "BENY", mode="real")
+        real_solenoid = resolve_write_target(profile, "SL01-1", mode="real")
+        irfel_profile = load_profile("irfel")
+        vm_solenoid = resolve_write_target(irfel_profile, "MS01", mode="vm")
+
+        self.assertEqual((vm_corrector.logical_channel, vm_corrector.unit), ("kick", "rad"))
+        self.assertEqual(
+            (real_corrector.logical_channel, real_corrector.unit),
+            ("current_set", "A"),
+        )
+        self.assertEqual((vm_bend.logical_channel, vm_bend.unit), ("angle", "rad"))
+        self.assertEqual((real_bend.logical_channel, real_bend.unit), ("current_set", "A"))
+        self.assertEqual((vm_solenoid.logical_channel, vm_solenoid.unit), ("current_set", "A"))
+        self.assertEqual((real_solenoid.logical_channel, real_solenoid.unit), ("current_set", "A"))
+
+    def test_resolve_write_target_requires_quadrupole_quantity(self):
+        profile = load_profile("half")
+        with self.assertRaisesRegex(MachineProfileError, "requires quantity"):
+            resolve_write_target(profile, "QT02", mode="real")
+
+        k1_target = resolve_write_target(
+            profile,
+            "QT02",
+            quantity="K1",
+            mode="real",
+        )
+        current_target = resolve_write_target(
+            profile,
+            "QT02",
+            quantity="current",
+            mode="real",
+        )
+        self.assertEqual((k1_target.logical_channel, k1_target.unit), ("K1", "1/m^2"))
+        self.assertEqual(
+            (current_target.logical_channel, current_target.unit),
+            ("current_set", "A"),
+        )
+
+    def test_resolve_write_target_does_not_fallback_across_physical_quantities(self):
+        profile = load_profile("half")
+        element = profile.get_element("XC21")
+        limited_channels = {
+            name: modes for name, modes in element.channels.items() if name != "kick"
+        }
+        modified = replace(element, channels=limited_channels)
+        elements = tuple(modified if item.id == modified.id else item for item in profile.elements)
+        profile = replace(
+            profile,
+            elements=elements,
+            _elements_by_id={item.id: item for item in elements},
+        )
+
+        with self.assertRaisesRegex(MachineProfileError, "kick"):
+            resolve_write_target(profile, "XC21", mode="vm")
+
+    def test_resolve_write_target_validates_explicit_selection_and_units(self):
+        profile = load_profile("half")
+        with self.assertRaisesRegex(MachineProfileError, "not both"):
+            resolve_write_target(
+                profile,
+                "QT02",
+                quantity="K1",
+                logical_channel="K1",
+                mode="real",
+            )
+        with self.assertRaisesRegex(MachineProfileError, "Unit mismatch"):
+            resolve_write_target(
+                profile,
+                "QT02",
+                quantity="K1",
+                unit="A",
+                mode="real",
+            )
+        self.assertEqual(
+            resolve_write_target(
+                profile,
+                "QT02",
+                logical_channel="k1",
+                mode="real",
+            ).logical_channel,
+            "K1",
+        )
+
+        element = profile.get_element("XC21")
+        legacy_channels = dict(element.channels)
+        legacy_channels["setpoint"] = legacy_channels.pop("current_set")
+        legacy_element = replace(element, channels=legacy_channels)
+        elements = tuple(
+            legacy_element if item.id == legacy_element.id else item
+            for item in profile.elements
+        )
+        legacy_profile = replace(
+            profile,
+            elements=elements,
+            _elements_by_id={item.id: item for item in elements},
+        )
+        legacy_target = resolve_write_target(
+            legacy_profile,
+            "XC21",
+            quantity="current",
+            mode="real",
+        )
+        self.assertEqual(legacy_target.logical_channel, "setpoint")
+
+        quad = profile.get_element("QT02")
+        invalid_quad = replace(
+            quad,
+            limits={**quad.limits, "K1": {"low": -1, "high": 1, "unit": "A"}},
+        )
+        elements = tuple(
+            invalid_quad if item.id == invalid_quad.id else item
+            for item in profile.elements
+        )
+        invalid_profile = replace(
+            profile,
+            elements=elements,
+            _elements_by_id={item.id: item for item in elements},
+        )
+        with self.assertRaisesRegex(MachineProfileError, "Unit mismatch"):
+            resolve_write_target(
+                invalid_profile,
+                "QT02",
+                quantity="K1",
+                mode="real",
+            )
+
+    def test_ambiguous_flat_magnet_limits_are_rejected(self):
+        for kind, channel in (("quad", "K1"), ("bend", "angle")):
+            raw = {
+                "id": f"{kind.upper()}TEST",
+                "kind": kind,
+                "display_name": f"{kind.upper()}TEST",
+                "order": 1,
+                "tags": [],
+                "limits": {"low": -1, "high": 1},
+                "channels": {channel: {"vm": f"TEST:{channel}"}},
+            }
+            with self.subTest(kind=kind):
+                with self.assertRaisesRegex(
+                    MachineProfileError,
+                    "nested by logical channel",
+                ):
+                    _parse_element(raw, 0)
+
     def test_real_write_blocking_status_rejects_allowed_write_policy(self):
         profile = deepcopy(load_profile("irfel"))
         workflow = get_workflow(profile, "dispersion_correction")

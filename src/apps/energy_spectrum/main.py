@@ -86,10 +86,10 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     prepare_elegant_model_workdir,
     require_workflow_write_allowed,
-    resolve_bend_write_channel,
     resolve_channel,
     resolve_element_image_geometry,
     resolve_energy_spectrum_auto_tune,
+    resolve_write_target,
     save_model_snapshot,
     workflow_writes_allowed,
 )
@@ -793,12 +793,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.energy_set_limits = self._load_energy_set_limits()
         self.esa_quad_ids = tuple(self.energy_config["esa_quads"])
         self.pushButton_sample_bg = self.pushButton_sapmles
-        self.bend_pv = resolve_bend_write_channel(
+        self.bend_target = resolve_write_target(
             self.app_context,
             self.energy_config["bend_element"],
         )
+        self.bend_pv = self.bend_target.pv_name
         self.bend_readback_pv = self._resolve_bend_readback_pv()
-        self.auto_tune_pv, self.auto_tune_unit = self._load_auto_tune_actuator()
+        self.auto_tune_target = self._load_auto_tune_actuator()
+        self.auto_tune_pv = self.auto_tune_target.pv_name
+        self.auto_tune_unit = self.auto_tune_target.unit or "a.u."
         self.auto_tune_mode = self._load_auto_tune_scan_mode()
 
         self.current_theme = resolve_initial_theme()
@@ -986,12 +989,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.energy_reference_pv = self._load_energy_reference_pv()
         self.energy_set_limits = self._load_energy_set_limits()
         self.esa_quad_ids = tuple(self.energy_config["esa_quads"])
-        self.bend_pv = resolve_bend_write_channel(
+        self.bend_target = resolve_write_target(
             self.app_context,
             self.energy_config["bend_element"],
         )
+        self.bend_pv = self.bend_target.pv_name
         self.bend_readback_pv = self._resolve_bend_readback_pv()
-        self.auto_tune_pv, self.auto_tune_unit = self._load_auto_tune_actuator()
+        self.auto_tune_target = self._load_auto_tune_actuator()
+        self.auto_tune_pv = self.auto_tune_target.pv_name
+        self.auto_tune_unit = self.auto_tune_target.unit or "a.u."
         self.auto_tune_mode = self._load_auto_tune_scan_mode()
         self.init_ESAflag()
         self._sync_exposure_control_state()
@@ -1145,9 +1151,22 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return [element.id for element in list_elements(self.app_context, kind="quad")]
 
     def _load_energy_set_pv(self):
-        return self._load_energy_element_pv("energy_set_channel") or self._load_backend_pv(
-            "energy_set_pv"
-        )
+        self.energy_set_target = None
+        element_id = str(self.energy_config.get("energy_element", "")).strip()
+        channel = str(self.energy_config.get("energy_set_channel", "")).strip()
+        if element_id and channel:
+            try:
+                self.energy_set_target = resolve_write_target(
+                    self.app_context,
+                    element_id,
+                    logical_channel=channel,
+                    unit="MeV",
+                )
+                return self.energy_set_target.pv_name
+            except MachineProfileError:
+                if self.control_backend != "vm":
+                    raise
+        return self._load_backend_pv("energy_set_pv")
 
     def _load_energy_reference_pv(self):
         return self._load_energy_element_pv(
@@ -1167,6 +1186,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             raise
 
     def _load_energy_set_limits(self):
+        if self.energy_set_target is not None:
+            limit = self.energy_set_target.machine_limit
+            if limit.low is None or limit.high is None:
+                return None
+            return limit.low, limit.high
         element_id = str(self.energy_config.get("energy_element", "")).strip()
         if not element_id:
             return None
@@ -1248,7 +1272,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if not isinstance(actuator, dict):
             energy_element = str(self.energy_config.get("energy_element", "")).strip()
             if not energy_element:
-                return self.bend_pv, "A"
+                return self.bend_target
             actuator = {
                 "element": energy_element,
                 "channel": self.energy_config.get("energy_set_channel", "setpoint"),
@@ -1263,12 +1287,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 "workflows.energy_spectrum.auto_tune_actuator requires element and channel."
             )
         try:
-            actuator_pv = resolve_channel(self.app_context, element_id, channel)
+            return resolve_write_target(
+                self.app_context,
+                element_id,
+                logical_channel=channel,
+                unit=unit,
+            )
         except MachineProfileError:
             if not self._auto_tune_configured_for_backend():
-                return self.bend_pv, "A"
+                return self.bend_target
             raise
-        return actuator_pv, unit
 
     def _auto_tune_scan_config(self):
         return dict(resolve_energy_spectrum_auto_tune(self.energy_config).get("scan", {}))
@@ -1284,17 +1312,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return actuator_low, actuator_high
         span = float(actuator_high) - float(actuator_low)
         return -span, span
-
-    def _auto_tune_actuator_identity(self):
-        actuator = resolve_energy_spectrum_auto_tune(self.energy_config).get("actuator")
-        if isinstance(actuator, dict):
-            return str(actuator["element"]), str(actuator["channel"])
-        energy_element = str(self.energy_config.get("energy_element", "")).strip()
-        if energy_element:
-            return energy_element, str(
-                self.energy_config.get("energy_set_channel", "setpoint")
-            )
-        return str(self.energy_config["bend_element"]), "current_set"
 
     def _load_x_reference_mm(self):
         raw_value = self.energy_config.get("x_reference_mm", 0.0)
@@ -2040,16 +2057,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         current = caget(self.auto_tune_pv)
         if current is None:
             raise ValueError("Auto Find could not read the current actuator setpoint.")
-        element_id, logical_channel = self._auto_tune_actuator_identity()
         selected = effective_auto_tune_limit(
             self.app_context,
-            element_id,
-            logical_channel,
+            self.auto_tune_target.element_id,
+            self.auto_tune_target.logical_channel,
             minimum,
             maximum,
             self.auto_tune_mode,
             configured_unit,
             float(current),
+            write_target=self.auto_tune_target,
         )
         assert selected.low is not None and selected.high is not None
         objective = str(self.auto_tune_objective_combo.currentData())

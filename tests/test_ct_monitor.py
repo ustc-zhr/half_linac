@@ -284,7 +284,7 @@ class CTMonitorProfileTests(unittest.TestCase):
         self.assertEqual(workflow["rolling_window_options"], [10, 20, 50, 100])
         self.assertEqual(workflow["rolling_window_input_range"], [5, 1000])
         self.assertEqual(workflow["trend_window_options_s"], [30, 60, 120, 300])
-        self.assertEqual(workflow["trend_window_input_range_s"], [10, 1800])
+        self.assertEqual(workflow["trend_window_input_range_s"], [10, 5000])
         self.assertEqual(workflow["max_plot_points"], 2000)
 
     def test_irfel_real_exposes_three_current_icts_and_vm_is_unsupported(self):

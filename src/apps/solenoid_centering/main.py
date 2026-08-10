@@ -53,6 +53,7 @@ from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
     resolve_channel,
+    resolve_write_target,
     workflow_writes_allowed,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
@@ -720,7 +721,7 @@ class MainWindow(QMainWindow):
     def _solenoid_setpoint_label(self, preset: SolenoidCenteringPreset) -> str:
         if preset.solenoid:
             try:
-                return resolve_channel(self.context, preset.solenoid, "current_set")
+                return resolve_write_target(self.context, preset.solenoid).pv_name
             except MachineProfileError:
                 return preset.solenoid
         return preset.solenoid_setpoint_pv or ""

@@ -123,7 +123,7 @@ class pv_server:
         with self.substitutions_path.open("w", encoding="utf-8") as handle:
             quad_rows: list[str] = []
             for element in quad_elements:
-                alias = self._resolve_vm_channel(element.id, "k1")
+                alias = self._resolve_vm_writable_channel(element.id, element.kind, "k1")
                 if not alias:
                     continue
                 record = self._internal_record_name("QUAD", element.id, "K1")

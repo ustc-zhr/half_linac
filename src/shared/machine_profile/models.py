@@ -31,11 +31,26 @@ class ElementConfig:
     image_geometry: Mapping[str, Any] = field(default_factory=dict)
 
     def limits_for(self, channel: str) -> Mapping[str, Any]:
-        """Return limits for one logical channel, with legacy element-level fallback."""
+        """Return limits for one logical channel with controlled legacy fallback."""
         channel_limits = self.limits.get(channel)
         if isinstance(channel_limits, Mapping):
             return channel_limits
-        if "low" in self.limits or "high" in self.limits:
+
+        if self.kind in {"corr", "quad", "bend", "solenoid"}:
+            alias = {"current_set": "setpoint", "setpoint": "current_set"}.get(
+                channel
+            )
+            alias_limits = self.limits.get(alias) if alias is not None else None
+            if isinstance(alias_limits, Mapping):
+                return alias_limits
+
+        legacy_channel = {
+            "corr": "current_set",
+            "solenoid": "current_set",
+            "energy": "setpoint",
+            "modulator": "voltage_set",
+        }.get(self.kind)
+        if channel == legacy_channel and ("low" in self.limits or "high" in self.limits):
             return self.limits
         return {}
 
@@ -431,6 +446,10 @@ def _parse_element(raw_element: Any, index: int) -> ElementConfig:
     limits_raw = element_raw.get("limits", {})
     if not isinstance(limits_raw, Mapping):
         raise MachineProfileError(f"{location}.limits must be a mapping.")
+    if kind in {"quad", "bend"} and ("low" in limits_raw or "high" in limits_raw):
+        raise MachineProfileError(
+            f"{location}.limits must be nested by logical channel for {kind} elements."
+        )
 
     image_geometry = _parse_image_geometry(
         element_raw.get("image_geometry", {}),

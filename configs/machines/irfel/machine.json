@@ -182,8 +182,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -201,8 +200,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -220,8 +218,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -239,8 +236,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -258,8 +254,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -277,8 +272,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -296,8 +290,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -315,8 +308,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -334,8 +326,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -353,8 +344,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -372,8 +362,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -391,8 +380,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -410,8 +398,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -429,8 +416,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -448,8 +434,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -467,8 +452,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -486,8 +470,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -505,8 +488,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -524,8 +506,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -543,8 +524,7 @@
         "orbit"
       ],
       "limits": {
-        "low": -10.0,
-        "high": 10.0
+        "current_set": {"low": -10.0, "high": 10.0, "unit": "A"}
       },
       "logical_channels": [
         "kick",
@@ -930,8 +910,7 @@
         "focus"
       ],
       "limits": {
-        "low": 0,
-        "high": 130
+        "current_set": {"low": 0, "high": 130, "unit": "A"}
       },
       "logical_channels": [
         "current_set",
@@ -948,8 +927,7 @@
         "focus"
       ],
       "limits": {
-        "low": 0,
-        "high": 120
+        "current_set": {"low": 0, "high": 120, "unit": "A"}
       },
       "logical_channels": [
         "current_set",
@@ -981,8 +959,7 @@
         "focus"
       ],
       "limits": {
-        "low": 0,
-        "high": 25
+        "current_set": {"low": 0, "high": 25, "unit": "A"}
       },
       "logical_channels": [
         "current_set",

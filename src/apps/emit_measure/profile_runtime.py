@@ -6,6 +6,7 @@ from half_linac.src.shared.machine_profile import (
     MachineProfile,
     MachineProfileError,
     effective_limit,
+    resolve_write_target,
 )
 
 
@@ -19,9 +20,13 @@ def effective_k1_scan_limit(
     center: float,
 ) -> LimitRange:
     """Intersect an Emit application range with the machine K1 channel limit."""
-    profile = target.profile if isinstance(target, AppContext) else target
-    element = profile.get_element(element_id)
     try:
+        write_target = resolve_write_target(
+            target,
+            element_id,
+            quantity="K1",
+            unit=unit,
+        )
         application_limit = LimitRange(low, high, unit)
         normalized_mode = str(mode or "absolute").strip().lower()
         if normalized_mode == "relative":
@@ -29,8 +34,7 @@ def effective_k1_scan_limit(
         elif normalized_mode != "absolute":
             raise MachineProfileError(f"Unsupported scan mode: {mode!r}.")
 
-        raw_machine_limit = element.limits_for("K1")
-        machine_limit = LimitRange.from_mapping(raw_machine_limit) if raw_machine_limit else None
+        machine_limit = write_target.machine_limit
         if machine_limit is not None and not machine_limit.contains(center):
             raise MachineProfileError(
                 f"Current value {float(center):g} is outside physical limit "

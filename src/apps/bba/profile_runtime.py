@@ -9,7 +9,9 @@ from half_linac.src.shared.machine_profile import (
     LimitRange,
     MachineProfile,
     MachineProfileError,
+    WriteTarget,
     effective_limit,
+    resolve_write_target,
     new_app_run_dir,
     resolve_app_runtime_paths,
 )
@@ -55,19 +57,24 @@ def resolve_limited_scan_values(
     mode: str,
     unit: str,
     center: float,
+    *,
+    write_target: WriteTarget | None = None,
 ) -> np.ndarray:
     """Resolve an application scan range and intersect it with channel limits."""
-    profile = target.profile if isinstance(target, AppContext) else target
-    element = profile.get_element(element_id)
     try:
+        resolved_target = write_target or resolve_write_target(
+            target,
+            element_id,
+            logical_channel=logical_channel,
+            unit=unit,
+        )
         application_limit = LimitRange(low, high, unit)
         if str(mode or "absolute").strip().lower() == "relative":
             application_limit = application_limit.relative_to_absolute(center)
         elif str(mode or "absolute").strip().lower() != "absolute":
             raise MachineProfileError(f"Unsupported scan mode: {mode!r}.")
 
-        raw_machine_limit = element.limits_for(logical_channel)
-        machine_limit = LimitRange.from_mapping(raw_machine_limit) if raw_machine_limit else None
+        machine_limit = resolved_target.machine_limit
         if machine_limit is not None and not machine_limit.contains(center):
             raise MachineProfileError(
                 f"Current value {float(center):g} is outside physical limit "
