@@ -989,9 +989,12 @@ class MachineProfileTests(unittest.TestCase):
 
         self.assertEqual(usedline[0], "C")
         self.assertEqual(
-            usedline[-9:],
+            usedline[-12:],
             [
                 "QT06",
+                "BPM22",
+                "XC23",
+                "YC23",
                 "DUMP_QT06_QDU01",
                 "QDU01",
                 "XCA23",
