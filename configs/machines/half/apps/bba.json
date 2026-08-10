@@ -301,5 +301,5 @@
   ],
   "bba1": {"default_preset": "bba1_qt04_xc21"},
   "bba2": {"default_preset": "bba2_qt04_xc22"},
-  "write_control": {"vm": "allowed", "real": "blocked"}
+  "write_control": {"vm": "allowed", "real": "allowed"}
 }

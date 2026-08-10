@@ -25,5 +25,5 @@
     "matrix_response_kick_fraction": 0.04,
     "matrix_samples_per_step": 1
   },
-  "write_control": {"vm": "allowed", "real": "blocked"}
+  "write_control": {"vm": "allowed", "real": "allowed"}
 }

@@ -47,5 +47,5 @@
     }
   ],
   "default_preset": "sl01_1_centering",
-  "write_control": {"vm": "blocked", "real": "blocked"}
+  "write_control": {"vm": "blocked", "real": "allowed"}
 }

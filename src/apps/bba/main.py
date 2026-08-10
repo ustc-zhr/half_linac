@@ -853,7 +853,7 @@ class myWindow(QWidget, Ui_Form):
             self.lineEdit_8,
         )
         for widget in setup_inputs:
-            widget.setFixedWidth(96)
+            widget.setMinimumWidth(72)
 
         rows = [
             ("COR", self.comboBox, "From", self.lineEdit, "To", self.lineEdit_2, "Steps", self.lineEdit_3),
@@ -867,19 +867,22 @@ class myWindow(QWidget, Ui_Form):
                 widget = items[col + 1]
                 if not text or widget is None:
                     continue
-                form.addWidget(self._make_field_label(text, self.frame), row, col * 2)
+                form.addWidget(self._make_field_label(text, self.frame), row, col)
                 widget.setParent(self.frame)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                form.addWidget(widget, row, col * 2 + 1)
+                form.addWidget(widget, row, col + 1)
 
         form.addWidget(self._make_field_label("Range mode", self.frame), 6, 0)
         self.bba1_scan_mode_label = QLabel(self.frame)
         self.bba1_scan_mode_label.setToolTip(
             "Relative ranges are offsets from the setpoint read at scan start."
         )
-        form.addWidget(self.bba1_scan_mode_label, 6, 1, 1, 9)
+        self.bba1_scan_mode_label.setWordWrap(True)
+        self.bba1_scan_mode_label.setMinimumWidth(0)
+        self.bba1_scan_mode_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        form.addWidget(self.bba1_scan_mode_label, 6, 1, 1, 7)
 
-        for column in (1, 3, 5, 7, 9):
+        for column in (1, 3, 5, 7):
             form.setColumnStretch(column, 1)
 
         layout.addLayout(form)
@@ -1035,7 +1038,7 @@ class myWindow(QWidget, Ui_Form):
             self.bba2_quad_leff_edit,
         )
         for widget in setup_inputs:
-            widget.setFixedWidth(96)
+            widget.setMinimumWidth(72)
 
         for row, items in enumerate(rows, start=1):
             for col in range(0, len(items), 2):
@@ -1043,16 +1046,19 @@ class myWindow(QWidget, Ui_Form):
                 widget = items[col + 1]
                 if not text or widget is None:
                     continue
-                form.addWidget(self._make_field_label(text, self.frame_3), row, col * 2)
+                form.addWidget(self._make_field_label(text, self.frame_3), row, col)
                 widget.setParent(self.frame_3)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                form.addWidget(widget, row, col * 2 + 1)
+                form.addWidget(widget, row, col + 1)
 
         form.addWidget(self._make_field_label("Range mode", self.frame_3), 6, 0)
         self.bba2_scan_mode_label = QLabel(self.frame_3)
         self.bba2_scan_mode_label.setToolTip(
             "Relative ranges are offsets from the setpoint read at scan start."
         )
+        self.bba2_scan_mode_label.setWordWrap(True)
+        self.bba2_scan_mode_label.setMinimumWidth(0)
+        self.bba2_scan_mode_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         form.addWidget(self.bba2_scan_mode_label, 6, 1, 1, 7)
 
         for column in (1, 3, 5, 7):

@@ -430,7 +430,28 @@ class MachineProfileTests(unittest.TestCase):
             workflow.presets_by_id["sm01_centering"].display_name,
             "SM01 Centering",
         )
-        self.assertFalse(workflow_writes_allowed(context, "solenoid_centering"))
+        self.assertTrue(workflow_writes_allowed(context, "solenoid_centering"))
+        require_workflow_write_allowed(context, "solenoid_centering", "test write")
+
+    def test_half_real_write_permissions_are_enabled_for_operational_apps(self):
+        writable_apps = (
+            ("orbit_correct", "orbit"),
+            ("beam_monitor", "beam_monitor"),
+            ("bba", "bba"),
+            ("emit_measure", "emit_measure"),
+            ("energy_spectrum", "energy_spectrum"),
+            ("dispersion_correction", "dispersion_correction"),
+            ("solenoid_centering", "solenoid_centering"),
+        )
+        for app_name, workflow_name in writable_apps:
+            with self.subTest(app=app_name):
+                context = load_app_context(
+                    app_name,
+                    machine_id="half",
+                    control_backend="real",
+                )
+                self.assertTrue(workflow_writes_allowed(context, workflow_name))
+                require_workflow_write_allowed(context, workflow_name, "test write")
 
     def test_load_irfel_solenoid_centering_app_context(self):
         context = load_app_context(
@@ -1003,6 +1024,7 @@ class MachineProfileTests(unittest.TestCase):
 
     def test_load_bba_app_context(self):
         context = load_app_context("bba")
+        real_context = load_app_context("bba", machine_id="half", control_backend="real")
         self.assertIsInstance(context, AppContext)
         self.assertIsNotNone(context.bba_workflow)
         self.assertIsNotNone(context.model_backend)
@@ -1016,6 +1038,8 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(context.bba_workflow.bba2.control_backends, ())
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
+        self.assertTrue(workflow_writes_allowed(real_context, "bba"))
+        require_workflow_write_allowed(real_context, "bba", "test write")
 
     def test_bba_runtime_paths_are_machine_backend_scoped(self):
         from half_linac.src.apps.bba.profile_runtime import (

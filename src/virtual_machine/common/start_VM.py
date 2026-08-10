@@ -75,38 +75,60 @@ def _run_elegant(elegant_dir):
     raise RuntimeError(message)
 
 
+def _format_device_count(count):
+    return f"{count} device{'s' if count != 1 else ''}"
+
+
 def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
     lattice_file = elegant_dir / "lattice.lte"
     ele_file = elegant_dir / "one.ele"
 
     parser.json_to_lte_ele(lattice_file, ele_file, jsonpath)
 
-    print("Elegant is running ...")
+    print("Running Elegant simulation...")
     _run_elegant(elegant_dir)
-    if publisher.publish_bpms(publish_plan, elegant_dir / "one.bpmcen"):
-        print("bpm data updated.")
-    else:
-        print("bpm publish skipped or incomplete.")
+    print("Elegant simulation completed.")
 
-    if publisher.publish_watch_images(
-        publish_plan,
-        lattice=parser.lattice,
-        usedline=read_runtime_state(jsonpath)["usedline"],
-        elegant_dir=elegant_dir,
-    ):
-        print("flag data updated.")
-    else:
-        print("flag publish skipped or incomplete.")
+    usedline = read_runtime_state(jsonpath)["usedline"]
+    bpm_count = len(publish_plan.bpm_specs)
+    if bpm_count:
+        if publisher.publish_bpms(publish_plan, elegant_dir / "one.bpmcen"):
+            print(f"Published BPM positions ({_format_device_count(bpm_count)}).")
+        else:
+            print(
+                "BPM position publishing skipped or incomplete "
+                f"({_format_device_count(bpm_count)})."
+            )
 
-    if publisher.publish_watch_scalars(
-        publish_plan,
-        lattice=parser.lattice,
-        usedline=read_runtime_state(jsonpath)["usedline"],
-        elegant_dir=elegant_dir,
-    ):
-        print("scalar diagnostic data updated.")
-    else:
-        print("scalar diagnostic publish skipped or incomplete.")
+    image_count = len(publish_plan.watch_image_specs)
+    if image_count:
+        if publisher.publish_watch_images(
+            publish_plan,
+            lattice=parser.lattice,
+            usedline=usedline,
+            elegant_dir=elegant_dir,
+        ):
+            print(f"Published screen images ({_format_device_count(image_count)}).")
+        else:
+            print(
+                "Screen image publishing skipped or incomplete "
+                f"({_format_device_count(image_count)})."
+            )
+
+    scalar_count = len(publish_plan.watch_scalar_specs)
+    if scalar_count:
+        if publisher.publish_watch_scalars(
+            publish_plan,
+            lattice=parser.lattice,
+            usedline=usedline,
+            elegant_dir=elegant_dir,
+        ):
+            print(f"Published ICT bunch charge ({_format_device_count(scalar_count)}).")
+        else:
+            print(
+                "ICT bunch charge publishing skipped or incomplete "
+                f"({_format_device_count(scalar_count)})."
+            )
 
 
 def main():
@@ -165,7 +187,7 @@ def main():
     except Exception as exc:
         print(f"failed to start VM runtime: {exc}", file=sys.stderr)
         return 1
-    print("VM is waiting for lattice changes.")
+    print("VM ready; waiting for lattice changes...")
 
     while not _stop_requested:
         time.sleep(JSON_POLL_INTERVAL_S)
@@ -177,7 +199,7 @@ def main():
         print("\njson changed, refreshing VM ...")
         try:
             _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath)
-            print("VM is waiting for lattice changes.")
+            print("VM ready; waiting for lattice changes...")
         except Exception as exc:
             print(f"failed to refresh VM after json change: {exc}")
 
