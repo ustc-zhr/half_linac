@@ -58,6 +58,7 @@ from half_linac.src.apps.energy_spectrum.profile_runtime import (
     resolve_energy_spectrum_runtime_paths,
 )
 from half_linac.src.apps.bba.profile_runtime import resolve_scan_values
+from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile.loader import (
     _parse_solenoid_centering_preset,
     _validate_beam_monitor_workflow,
@@ -72,6 +73,7 @@ from half_linac.src.shared.machine_profile.runtime_selector import (
 from half_linac.src.shared.machine_profile.validation import (
     _validate_real_commissioning_status,
 )
+from half_linac.src.virtual_machine.lattice_usedline import expand_lattice_line
 
 
 def _write_directory_profile_fixture(
@@ -780,7 +782,7 @@ class MachineProfileTests(unittest.TestCase):
         segment = workflow.local_segments[0]
         self.assertEqual(
             tuple(choice.id for choice in workflow.predefined_usedlines),
-            ("ALL_MAIN", "ALL_ESA"),
+            ("ALL_MAIN", "ALL_ESA", "ALL_DUMP"),
         )
         self.assertEqual(workflow.default_usedline, "ALL_MAIN")
         self.assertEqual(workflow.segment_wait_s, 8.0)
@@ -791,6 +793,42 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(default_end, "PRF04")
         self.assertEqual(start_ids, ("QL27", "QT01", "QT02", "QL15", "QL16"))
         self.assertEqual(end_ids, ("PRF04", "PRF06", "PRF07", "PRF08"))
+
+    def test_half_dump_usedline_matches_configured_lattice(self):
+        runtime = resolve_machine_runtime(load_profile("half"))
+        state = ElegantParser(
+            runtime.vm.bootstrap_lattice,
+            runtime.vm.bootstrap_ele,
+            runtime.vm.line_name,
+        ).build_runtime_state()
+        lattice = state["lattice"]
+        usedline = expand_lattice_line(lattice, "ALL_DUMP")
+
+        self.assertEqual(usedline[0], "C")
+        self.assertEqual(
+            usedline[-9:],
+            [
+                "QT06",
+                "DUMP_QT06_QDU01",
+                "QDU01",
+                "XCA23",
+                "DUMP_QDU01_QDU02",
+                "QDU02",
+                "YCA23",
+                "DUMP_QDU02_PRFD",
+                "PRFD",
+            ],
+        )
+        expected_values = {
+            "QDU01": {"L": 0.15, "K1": 1.0},
+            "QDU02": {"L": 0.3, "K1": 1.0},
+            "DUMP_QT06_QDU01": {"L": 10.45},
+            "DUMP_QDU01_QDU02": {"L": 9.925},
+            "DUMP_QDU02_PRFD": {"L": 8.49},
+        }
+        for element_id, fields in expected_values.items():
+            for field_name, expected in fields.items():
+                self.assertEqual(float(lattice[element_id][field_name]), expected)
 
     def test_load_energy_spectrum_app_context(self):
         context = load_app_context("energy_spectrum")
@@ -995,6 +1033,15 @@ class MachineProfileTests(unittest.TestCase):
                         "unit": "A",
                     },
                 )
+
+        self.assertEqual(
+            resolve_channel(profile, "XCA23", "kick", "vm"),
+            "HALF:IN:COR:XCA23:ao",
+        )
+        self.assertEqual(
+            resolve_channel(profile, "YCA23", "kick", "vm"),
+            "HALF:IN:COR:YCA23:ao",
+        )
 
         with self.assertRaisesRegex(MachineProfileError, "Unknown element id: SL01"):
             profile.get_element("SL01")
@@ -1266,7 +1313,7 @@ class MachineProfileTests(unittest.TestCase):
             )
         }
         self.assertEqual(real_image_flags, expected_image_flags)
-        self.assertEqual(vm_image_flags, expected_image_flags - {"PRF01", "PRFD"})
+        self.assertEqual(vm_image_flags, expected_image_flags - {"PRF01"})
         for index in range(1, 15):
             flag_id = f"PRF{index:02d}"
             self.assertEqual(

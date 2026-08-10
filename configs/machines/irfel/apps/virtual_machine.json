@@ -4,14 +4,16 @@
     {"id": "ALL_ESA", "label": "ESA Line", "role": "energy_spectrum"},
     {"id": "ALL_DUMP", "label": "Dump Line", "role": "dump"}
   ],
-  "default_usedline": "ALL_MAIN",
-  "segment_wait_s": 3,
   "local_segments": [
     {
       "id": "main_segment",
       "label": "Main Segment",
       "parent_usedline": "ALL_MAIN",
-      "start_ids": ["BPM02", "QM01", "QM02", "QM03", "QM04", "BPM03", "HC05", "VC05", "QM11", "BPM07", "QM12", "QM13", "QM14", "BPM08", "QM15"],
+      "start_ids": [
+        "BPM02", "QM01", "QM02", "QM03", "QM04",
+        "BPM03", "HC05", "VC05", "QM11", "BPM07",
+        "QM12", "QM13", "QM14", "BPM08", "QM15"
+      ],
       "end_ids": ["PRF03"],
       "default_start_id": "QM13",
       "default_end_id": "PRF03"
@@ -29,11 +31,16 @@
       "id": "dump_segment",
       "label": "Dump Segment",
       "parent_usedline": "ALL_DUMP",
-      "start_ids": ["BPM02", "QM01", "QM02", "QM03", "QM04", "BPM03", "HC05", "VC05", "QM11", "BPM07", "QM12"],
+      "start_ids": [
+        "BPM02", "QM01", "QM02", "QM03", "QM04",
+        "BPM03", "HC05", "VC05", "QM11", "BPM07", "QM12"
+      ],
       "end_ids": ["PRF04"],
       "default_start_id": "QM11",
       "default_end_id": "PRF04"
     }
   ],
+  "segment_wait_s": 3,
+  "default_usedline": "ALL_MAIN",
   "default_segment_id": "main_segment"
 }

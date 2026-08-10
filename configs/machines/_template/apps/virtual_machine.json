@@ -3,7 +3,6 @@
     {"id": "ALL_MAIN", "label": "Main Line", "role": "main"},
     {"id": "ALL_ESA", "label": "ESA Line", "role": "energy_spectrum"}
   ],
-  "default_usedline": "ALL_MAIN",
   "local_segments": [
     {
       "id": "main_segment",
@@ -15,5 +14,6 @@
       "default_end_id": "PRF01"
     }
   ],
+  "default_usedline": "ALL_MAIN",
   "default_segment_id": "main_segment"
 }

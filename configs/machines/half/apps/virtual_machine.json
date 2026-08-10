@@ -1,10 +1,9 @@
 {
   "predefined_usedlines": [
     {"id": "ALL_MAIN", "label": "Main Line", "role": "main"},
-    {"id": "ALL_ESA", "label": "ESA Line", "role": "energy_spectrum"}
+    {"id": "ALL_ESA", "label": "ESA Line", "role": "energy_spectrum"},
+    {"id": "ALL_DUMP", "label": "Dump Line", "role": "dump"}
   ],
-  "default_usedline": "ALL_MAIN",
-  "segment_wait_s": 8,
   "local_segments": [
     {
       "id": "main_segment",
@@ -16,5 +15,7 @@
       "default_end_id": "PRF04"
     }
   ],
+  "segment_wait_s": 8,
+  "default_usedline": "ALL_MAIN",
   "default_segment_id": "main_segment"
 }

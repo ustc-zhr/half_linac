@@ -449,6 +449,12 @@
     "YC43": {
       "kick": "HALF:IN:COR:YC43:ao"
     },
+    "XCA23": {
+      "kick": "HALF:IN:COR:XCA23:ao"
+    },
+    "YCA23": {
+      "kick": "HALF:IN:COR:YCA23:ao"
+    },
     "QL01": {
       "K1": "HALF:IN:AP:QUAD:QL01:K1:ao"
     },
@@ -739,6 +745,12 @@
     "PRF14": {
       "image": "HALF:IN:FLAG:PRF14:image1:ArrayData:vm",
       "exposure_time": "HALF:IN:FLAG:PRF14:cam1:AcquireTime:vm"
+    },
+    "PRFD": {
+      "image": "HALF:IN:FLAG:PRFD:image1:ArrayData:vm",
+      "exposure_time": "HALF:IN:FLAG:PRFD:cam1:AcquireTime:vm",
+      "sigx": "HALF:IN:FLAG:PRFD:sigx",
+      "sigy": "HALF:IN:FLAG:PRFD:sigy"
     },
     "ENY": {
       "image": "HALF:IN:FLAG:ENY:image1:ArrayData:vm",

@@ -1346,7 +1346,7 @@
       "order": 137,
       "tags": ["orbit", "dump"],
       "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
-      "logical_channels": ["current_set", "current_readback"],
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "x"
     },
     {
@@ -1356,7 +1356,7 @@
       "order": 138,
       "tags": ["orbit", "dump"],
       "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
-      "logical_channels": ["current_set", "current_readback"],
+      "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
     {
