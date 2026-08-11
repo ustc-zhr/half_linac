@@ -323,6 +323,8 @@ class CalibrationEditorDialog(QDialog):
         bottom.addWidget(self.activate_button)
         layout.addLayout(bottom)
 
+        self._disable_button_enter_defaults()
+
         for _ in range(5):
             self._add_empty_row()
         self._energy_unit_changed(self.energy_unit_combo.currentText())
@@ -335,6 +337,11 @@ class CalibrationEditorDialog(QDialog):
         spin.setRange(-1.0e9, 1.0e9)
         spin.setSingleStep(0.1)
         return spin
+
+    def _disable_button_enter_defaults(self) -> None:
+        for button in self.findChildren(QPushButton):
+            button.setAutoDefault(False)
+            button.setDefault(False)
 
     def set_draft(self, draft: EnergyCalibrationDraft) -> None:
         self._updating = True
