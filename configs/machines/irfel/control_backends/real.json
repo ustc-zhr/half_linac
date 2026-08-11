@@ -132,52 +132,52 @@
       "current_readback": "IRFEL:PS:MS:VC:current:ai"
     },
     "QM01": {
-      "K1": "IRFEL:PS:QM01:K1:ao",
+      "K1": "IRFEL:AP:QUAD:CQ1:K1:ao",
       "current_set": "IRFEL:PS:QM01:current:ao",
       "current_readback": "IRFEL:PS:QM01:current:ai"
     },
     "QM02": {
-      "K1": "IRFEL:PS:QM02:K1:ao",
+      "K1": "IRFEL:AP:QUAD:CQ2:K1:ao",
       "current_set": "IRFEL:PS:QM02:current:ao",
       "current_readback": "IRFEL:PS:QM02:current:ai"
     },
     "QM03": {
-      "K1": "IRFEL:PS:QM03:K1:ao",
+      "K1": "IRFEL:AP:QUAD:CQ3:K1:ao",
       "current_set": "IRFEL:PS:QM03:current:ao",
       "current_readback": "IRFEL:PS:QM03:current:ai"
     },
     "QM04": {
-      "K1": "IRFEL:PS:QM04:K1:ao",
+      "K1": "IRFEL:AP:QUAD:Q4:K1:ao",
       "current_set": "IRFEL:PS:QM04:current:ao",
       "current_readback": "IRFEL:PS:QM04:current:ai"
     },
     "QM05": {
-      "K1": "IRFEL:PS:QM05:K1:ao",
+      "K1": "IRFEL:AP:QUAD:FQ1:K1:ao",
       "current_set": "IRFEL:PS:QM05:current:ao",
       "current_readback": "IRFEL:PS:QM05:current:ai"
     },
     "QM06": {
-      "K1": "IRFEL:PS:QM06:K1:ao",
+      "K1": "IRFEL:AP:QUAD:FQ2:K1:ao",
       "current_set": "IRFEL:PS:QM06:current:ao",
       "current_readback": "IRFEL:PS:QM06:current:ai"
     },
     "QM07": {
-      "K1": "IRFEL:PS:QM07:K1:ao",
+      "K1": "IRFEL:AP:QUAD:FQ3:K1:ao",
       "current_set": "IRFEL:PS:QM07:current:ao",
       "current_readback": "IRFEL:PS:QM07:current:ai"
     },
     "QM08": {
-      "K1": "IRFEL:PS:QM08:K1:ao",
+      "K1": "IRFEL:AP:QUAD:FQ4:K1:ao",
       "current_set": "IRFEL:PS:QM08:current:ao",
       "current_readback": "IRFEL:PS:QM08:current:ai"
     },
     "QM09": {
-      "K1": "IRFEL:PS:QM09:K1:ao",
+      "K1": "IRFEL:AP:QUAD:FQ5:K1:ao",
       "current_set": "IRFEL:PS:QM09:current:ao",
       "current_readback": "IRFEL:PS:QM09:current:ai"
     },
     "QM10": {
-      "K1": "IRFEL:PS:QM10:K1:ao",
+      "K1": "IRFEL:AP:QUAD:FQ6:K1:ao",
       "current_set": "IRFEL:PS:QM10:current:ao",
       "current_readback": "IRFEL:PS:QM10:current:ai"
     },
