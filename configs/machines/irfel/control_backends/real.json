@@ -147,7 +147,7 @@
       "current_readback": "IRFEL:PS:QM03:current:ai"
     },
     "QM04": {
-      "K1": "IRFEL:AP:QUAD:Q4:K1:ao",
+      "K1": "IRFEL:AP:QUAD:CQ4:K1:ao",
       "current_set": "IRFEL:PS:QM04:current:ao",
       "current_readback": "IRFEL:PS:QM04:current:ai"
     },
