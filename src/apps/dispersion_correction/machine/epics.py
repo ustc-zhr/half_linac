@@ -6,7 +6,9 @@ import time
 import numpy as np
 
 from half_linac.src.apps.dispersion_correction.calibration import (
+    calibration_actuator_for_delta,
     calibration_actuator_per_delta,
+    calibration_delta_for_actuator,
     is_direct_delta_actuator,
 )
 from half_linac.src.apps.dispersion_correction.machine.base import MachineInterface
@@ -117,13 +119,11 @@ class EpicsMachine(MachineInterface):
 
     def get_energy_delta(self) -> float:
         actuator_value = self._read_energy_actuator()
-        scale = self._energy_actuator_per_delta()
-        return actuator_value / scale
+        return self._energy_delta_from_actuator(actuator_value)
 
     def get_energy_setpoint_delta(self) -> float:
         actuator_value = self._read_energy_setpoint()
-        scale = self._energy_actuator_per_delta()
-        return actuator_value / scale
+        return self._energy_delta_from_actuator(actuator_value)
 
     def set_energy_delta(self, value: float) -> None:
         self._require_write_enabled()
@@ -132,8 +132,7 @@ class EpicsMachine(MachineInterface):
         if not set_pv:
             raise ValueError("pv_map.energy_knob requires set for writes")
         readback_pv = item.get("readback") or item.get("phase_readback") or set_pv
-        scale = self._energy_actuator_per_delta()
-        actuator_target = float(value) * scale
+        actuator_target = self._energy_actuator_for_delta(float(value))
         self._write_and_verify(
             str(set_pv),
             actuator_target,
@@ -318,6 +317,28 @@ class EpicsMachine(MachineInterface):
                 "Physical energy actuator requires calibration.actuator_per_delta"
             )
         return scale
+
+    def _energy_delta_from_actuator(self, actuator_value: float) -> float:
+        if is_direct_delta_actuator(self.config.energy_knob.actuator):
+            return float(actuator_value)
+        try:
+            return calibration_delta_for_actuator(
+                float(actuator_value),
+                self.config.energy_knob.calibration,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(str(exc)) from exc
+
+    def _energy_actuator_for_delta(self, delta_value: float) -> float:
+        if is_direct_delta_actuator(self.config.energy_knob.actuator):
+            return float(delta_value)
+        try:
+            return calibration_actuator_for_delta(
+                float(delta_value),
+                self.config.energy_knob.calibration,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(str(exc)) from exc
 
     def _write_quadrupole_targets(self, targets: Mapping[str, float]) -> None:
         if not targets:

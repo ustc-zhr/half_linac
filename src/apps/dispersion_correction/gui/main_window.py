@@ -6264,8 +6264,12 @@ class MainWindow(QMainWindow):
         plan = self._energy_step_plan()
         if not plan.get("calibrated"):
             return f"±{delta:g} Δp/p"
-        step = abs(float(plan["actuator_step"]))
-        return f"±{delta:g} / ±{step:g} {self.config.energy_knob.actuator_unit}"
+        plus = float(plan["plus_offset"])
+        minus = float(plan["minus_offset"])
+        unit = self.config.energy_knob.actuator_unit
+        if abs(abs(plus) - abs(minus)) <= max(abs(plus), abs(minus), 1.0) * 1.0e-9:
+            return f"±{delta:g} / ±{abs(plus):g} {unit}"
+        return f"±{delta:g} / +{plus:g}/{minus:g} {unit}"
 
     def _update_energy_step_summary(self) -> None:
         if not hasattr(self, "energy_step_summary"):
