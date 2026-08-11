@@ -1,4 +1,5 @@
 {
+  "bpm_position_scale_to_mm": {"vm": 1000, "real": 1},
   "presets": [
     {
       "id": "bba1_qt04_xc21",
