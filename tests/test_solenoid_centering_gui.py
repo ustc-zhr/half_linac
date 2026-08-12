@@ -223,11 +223,24 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         self.window.sol_from.setValue(self.window.sol_from.value() - 0.1)
 
         self.assertFalse(self.window.preflight_ready)
-        self.assertFalse(self.window.start_button.isEnabled())
+        self.assertTrue(self.window.start_button.isEnabled())
         self.assertEqual(
             self.window.status_strip.items["READINESS"].value_label.text(),
             "UNCHECKED",
         )
+
+    def test_start_without_preflight_prompts_for_check_pvs(self):
+        with patch(
+            "half_linac.src.apps.solenoid_centering.main.QMessageBox.warning"
+        ) as warning:
+            self.window.start_scan()
+
+        warning.assert_called_once_with(
+            self.window,
+            "Solenoid Centering",
+            "Configuration changed or has not been checked. Run Check PVs again.",
+        )
+        self.assertIsNone(self.window.worker)
 
     def test_successful_current_revision_preflight_enables_start(self):
         report = type(

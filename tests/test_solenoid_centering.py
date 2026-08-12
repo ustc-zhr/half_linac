@@ -175,6 +175,35 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertAlmostEqual(result.slope_score, 2.0)
         self.assertAlmostEqual(result.trajectory_length, 4.0)
 
+    def test_evaluate_solenoid_response_uses_local_quadratic_derivative(self):
+        solenoid_values = [8.0, 9.0, 10.0, 11.0, 12.0]
+        local_solenoid = [-2.0, -1.0, 0.0, 1.0, 2.0]
+        result = scan.evaluate_solenoid_response(
+            solenoid_values,
+            [[3.0 * value**2 + 2.0 * value + 4.0] for value in local_solenoid],
+            [[-2.0 * value**2 - 5.0 * value + 1.0] for value in local_solenoid],
+            reference_solenoid=10.0,
+        )
+
+        self.assertAlmostEqual(result.slope_x, 2.0)
+        self.assertAlmostEqual(result.slope_y, -5.0)
+        self.assertAlmostEqual(result.offset_x, 4.0)
+        self.assertAlmostEqual(result.offset_y, 1.0)
+        self.assertAlmostEqual(result.residual_rms_x, 0.0)
+        self.assertAlmostEqual(result.residual_rms_y, 0.0)
+
+    def test_evaluate_solenoid_response_keeps_trajectory_length_unchanged(self):
+        result = scan.evaluate_solenoid_response(
+            [-1.0, 0.0, 1.0],
+            [[1.0], [0.0], [1.0]],
+            [[0.0], [0.0], [0.0]],
+            scoring_mode=scan.SCORING_MODE_TRAJECTORY_LENGTH,
+        )
+
+        self.assertAlmostEqual(result.slope_score, 0.0)
+        self.assertAlmostEqual(result.trajectory_length, 2.0)
+        self.assertAlmostEqual(result.score, 2.0)
+
     def test_evaluate_solenoid_response_uses_noise_scale_when_available(self):
         result = scan.evaluate_solenoid_response(
             [-1.0, 0.0, 1.0],

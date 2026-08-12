@@ -772,7 +772,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_write_state(self):
         allowed = workflow_writes_allowed(self.context, "solenoid_centering")
-        self.start_button.setEnabled(allowed and self.preflight_ready)
+        self.start_button.setEnabled(allowed)
         self.status_strip.set_value("ACCESS", "WRITE ENABLED" if allowed else "READ ONLY",
                                     "success" if allowed else "warning")
         if self.context.control_backend.name != "real":
@@ -792,7 +792,7 @@ class MainWindow(QMainWindow):
         self._set_result_action(None)
         self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
         self.status_strip.set_value("READBACK VERIFIED", "UNCHECKED", "warning")
-        self.start_button.setEnabled(False)
+        self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
 
     def _set_preflight_inputs_enabled(self, enabled: bool) -> None:
         for widget in self.preflight_inputs:
@@ -1026,10 +1026,7 @@ class MainWindow(QMainWindow):
     def _on_preflight_done(self):
         self._set_preflight_inputs_enabled(True)
         self.check_button.setEnabled(True)
-        self.start_button.setEnabled(
-            self.preflight_ready
-            and workflow_writes_allowed(self.context, "solenoid_centering")
-        )
+        self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
 
     def _on_scan_finished(self, result):
         self.last_result = result
@@ -1168,10 +1165,7 @@ class MainWindow(QMainWindow):
     def _on_worker_done(self):
         self._set_preflight_inputs_enabled(True)
         self.check_button.setEnabled(True)
-        self.start_button.setEnabled(
-            self.preflight_ready
-            and workflow_writes_allowed(self.context, "solenoid_centering")
-        )
+        self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
         self._set_scan_action_running(False)
         self.progress.setVisible(False)
 

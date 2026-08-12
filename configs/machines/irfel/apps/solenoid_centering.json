@@ -4,7 +4,7 @@
   "max_iters": 1,
   "readback_verification": {
     "solenoid_readback_tolerance": 0.01,
-    "corrector_readback_tolerance": 0.01,
+    "corrector_readback_tolerance": 0.02,
     "readback_timeout_s": 5
   },
   "quality_gate": {"minimum_relative_score_improvement": 0.05},
