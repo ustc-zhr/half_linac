@@ -108,9 +108,11 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             self.window.hcorr_combo.parentWidget(),
             self.window.vcorr_combo.parentWidget(),
         )
+        self.assertIsNotNone(self.window.solenoid_combo.parentWidget())
 
         labels = {label.text() for label in self.window.findChildren(QLabel)}
         self.assertIn("Correctors", labels)
+        self.assertIn("Solenoid", labels)
         self.assertIn("Devices", labels)
         self.assertIn("Scan", labels)
         self.assertIn("Relative Scan Range", labels)
@@ -126,6 +128,22 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             self.window.run_card,
         )
         self.assertIs(self.window.max_iters.parentWidget(), self.window.run_card)
+
+    def test_selected_solenoid_overrides_the_preset_default(self):
+        default_solenoid = self.window._current_preset().solenoid
+        index = next(
+            index
+            for index in range(self.window.solenoid_combo.count())
+            if self.window.solenoid_combo.itemData(index) != default_solenoid
+        )
+        selected_solenoid = self.window.solenoid_combo.itemData(index)
+
+        self.window.solenoid_combo.setCurrentIndex(index)
+        preset = self.window._preset_with_overrides()
+
+        self.assertEqual(preset.solenoid, selected_solenoid)
+        self.assertIsNone(preset.solenoid_setpoint_pv)
+        self.assertIsNone(preset.solenoid_readback_pv)
 
     def test_abort_action_is_visible_only_while_scan_is_running(self):
         self.assertFalse(self.window.start_button.isHidden())
