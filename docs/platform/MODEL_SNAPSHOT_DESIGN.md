@@ -78,6 +78,13 @@ ambiguous PV, the app must not label the calculation as live-model accurate.
 It should either fail clearly or fall back to the design lattice with metadata
 that records the fallback.
 
+When a model-native field is exposed uniformly by every control backend, a
+field-level rule may be placed in `snapshot_mapping.defaults`. For example,
+HALF and IRFEL expose quadrupole `K1` directly in `1/m^2`, so one default `K1`
+rule covers all Twiss-selectable quadrupoles. Entries under
+`snapshot_mapping.fields.<element>` override the default and remain mandatory
+for element-specific calibration or unit conversion.
+
 ## Elegant Backend Contract
 
 The elegant backend accepts field-level lattice overrides:
@@ -105,12 +112,12 @@ runtime directory:
 
 ```text
 runtime/model_backend/<machine>/<backend>/
-  emit/
-    emit.json
-    emit.lte
-    emit.ele
-    emit.mat
-    emit.log
+  optics/
+    optics.json
+    optics.lte
+    optics.ele
+    optics.mat
+    optics.log
   energy/
     esa.json
     esa.lte
@@ -138,6 +145,11 @@ They are runtime working files, not source files. They should stay ignored and
 untracked. The source contract is the design lattice, the initial elegant input
 files, the machine profile config, and the snapshot metadata recorded with each
 calculation.
+
+The tracked `emit_ini.ele` filename is retained as a source-asset compatibility
+name. In model-backend configuration and runtime output, this capability is
+called `optics` because it serves BBA, emittance, dispersion correction, and
+other transfer-matrix/Twiss calculations.
 
 Application result metadata records snapshots close to the measured data:
 

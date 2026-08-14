@@ -31,6 +31,17 @@ The Python environment expects this import to work:
 python3 -c "import sdds; print('sdds OK')"
 ```
 
+The recommended repository installer treats these as standard dependencies:
+
+```bash
+bash scripts/install_env.sh --check
+```
+
+It installs Python `sdds` after creating the main Conda environment and checks
+that `elegant` is available in `PATH`. It does not install the system-level
+Elegant package because the correct build depends on the host OS and its
+MPI/GSL runtime.
+
 ## Recommended Control-Room Path
 
 If the control-room machine already has a shared software stack or environment
@@ -118,10 +129,9 @@ conda activate half_linac
 conda install soliday::sdds
 ```
 
-`environment.yml` intentionally does not declare `soliday::sdds`, so the base
-control-room environment can be solved without the extra channel. The command
-above has been verified in the control room and should be run after creating the
-main `half_linac` environment.
+`environment.yml` intentionally does not declare `soliday::sdds`, so the main
+environment can be solved without the extra channel. `scripts/install_env.sh`
+runs the command above automatically unless `--core-only` is selected.
 
 Verify:
 

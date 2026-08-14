@@ -24,7 +24,12 @@ from half_linac.src.shared.elegant_backend import (
     VmWatchImagePublishSpec,
     build_vm_publish_plan,
 )
-from half_linac.src.shared.machine_profile import load_profile, resolve_machine_runtime
+from half_linac.src.shared.machine_profile import (
+    build_model_backend,
+    load_app_context,
+    load_profile,
+    resolve_machine_runtime,
+)
 from half_linac.src.shared.machine_profile.model_backend import ElegantModelBackend
 from half_linac.src.shared.machine_profile.models import ModelBackendConfig
 from half_linac.src.shared.runtime_state import read_runtime_state
@@ -351,6 +356,171 @@ class ElegantBackendTests(unittest.TestCase):
             emit_lte_text = emit_lte.read_text(encoding="utf-8")
             self.assertIn('QT02: QUAD,L="0.15",K1="9.5"', emit_lte_text)
             self.assertIn('C1: HKICK,L="0",KICK="0.004"', emit_lte_text)
+
+    def test_model_backend_twiss_profile_orders_forward_and_backward_paths(self):
+        backend = build_model_backend(
+            load_app_context(
+                "emit_measure",
+                machine_id="half",
+                control_backend="vm",
+            )
+        )
+        matrix = np.eye(6)
+        rows = (
+            {
+                "element_name": "_BEG_",
+                "element_type": "MARK",
+                "s_m": 0.0,
+                "beta_x_m": 10.0,
+                "alpha_x": 1.0,
+            },
+            {
+                "element_name": "D1",
+                "element_type": "DRIF",
+                "s_m": 1.0,
+                "beta_x_m": 11.0,
+                "alpha_x": 0.5,
+            },
+            {
+                "element_name": "Q2",
+                "element_type": "QUAD",
+                "element_length_m": 0.2,
+                "element_k1_m2": -3.0,
+                "s_m": 2.0,
+                "beta_x_m": 12.0,
+                "alpha_x": 0.0,
+            },
+        )
+        twiss0 = {"beta0": 10.0, "alpha0": 1.0, "gamma0": 0.2}
+
+        with patch.object(backend, "_usedline_index_pair", return_value=(0, 2)), patch.object(
+            backend,
+            "_run_optics_profile",
+            return_value=(matrix, rows),
+        ):
+            forward = backend.get_twiss_profile("Q1", "Q2", twiss0)
+
+        self.assertEqual([row["element_name"] for row in forward.rows], ["Q1", "D1", "Q2"])
+        self.assertEqual([row["distance_m"] for row in forward.rows], [0.0, 1.0, 2.0])
+        self.assertAlmostEqual(forward.rows[0]["gamma"], 0.2)
+        self.assertAlmostEqual(forward.rows[-1]["element_length_m"], 0.2)
+        self.assertAlmostEqual(forward.rows[-1]["element_k1_m2"], -3.0)
+
+        with patch.object(backend, "_usedline_index_pair", return_value=(2, 0)), patch.object(
+            backend,
+            "_run_optics_profile",
+            side_effect=((matrix, ()), (matrix, rows)),
+        ):
+            backward = backend.get_twiss_profile("Q2", "Q1", twiss0, inverse=True)
+
+        self.assertEqual([row["element_name"] for row in backward.rows], ["Q2", "D1", "Q1"])
+        self.assertEqual([row["distance_m"] for row in backward.rows], [0.0, 1.0, 2.0])
+        self.assertAlmostEqual(backward.rows[-1]["gamma"], 0.2)
+
+    def test_model_backend_owns_energy_dispersion_and_optics_runs(self):
+        class FakeSdds:
+            def __init__(self, _index):
+                self.columnName = []
+                self.columnData = []
+
+            def load(self, path):
+                if str(path).endswith(".mat"):
+                    self.columnData = [[[float(index)]] for index in range(48)]
+                    return
+                self.columnName = ["s", "betax", "alphax", "x", "etax"]
+                self.columnData = [
+                    [[0.0, 1.0]],
+                    [[10.0, 12.0]],
+                    [[-1.0, -2.0]],
+                    [[0.0, 0.0]],
+                    [[0.4, 0.75]],
+                ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source_lattice = root / "lattice_ini.lte"
+            optics_ini = root / "optics_ini.ele"
+            energy_ini = root / "esa_ini.ele"
+            source_lattice.write_text(
+                "\n".join(
+                    [
+                        "Q1: QUAD,L=0.1,K1=1.0",
+                        "D1: DRIF,L=1.0",
+                        'FLAG: WATCH,FILENAME="flag.out",MODE="coord",DISABLE=0',
+                        "ESA: LINE = (Q1,D1,FLAG)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            controls = "\n".join(
+                [
+                    "&run_setup",
+                    "  lattice=initial.lte,use_beamline=ESA",
+                    "&end",
+                    "&run_control",
+                    "  n_steps=1",
+                    "&end",
+                    "&matrix_output",
+                    "  SDDS_output=%s.mat",
+                    "&end",
+                    "&twiss_output",
+                    "  filename=%s.twi,beta_x=1,alpha_x=0",
+                    "&end",
+                    "&track",
+                    "&end",
+                ]
+            )
+            optics_ini.write_text(controls, encoding="utf-8")
+            energy_ini.write_text(controls, encoding="utf-8")
+            backend = ElegantModelBackend(
+                ModelBackendConfig(
+                    name="simulation",
+                    engine="elegant",
+                    config={
+                        "source_json": str(root / "source.json"),
+                        "source_lattice": str(source_lattice),
+                        "asset_dir": str(root),
+                        "optics_working_dir": str(root / "optics"),
+                        "optics_ini_ele": str(optics_ini),
+                        "optics_lte": str(root / "optics/optics.lte"),
+                        "optics_ele": str(root / "optics/optics.ele"),
+                        "optics_json": str(root / "optics/optics.json"),
+                        "optics_mat": str(root / "optics/optics.mat"),
+                        "optics_log": "optics.log",
+                        "line_name": "ESA",
+                        "energy_working_dir": str(root / "energy"),
+                        "energy_ini_ele": str(energy_ini),
+                        "energy_json": str(root / "energy/esa.json"),
+                        "energy_lte": str(root / "energy/esa.lte"),
+                        "energy_ele": str(root / "energy/esa.ele"),
+                        "energy_mat": str(root / "energy/esa.mat"),
+                        "energy_twi": str(root / "energy/esa.twi"),
+                        "energy_log": "esa.log",
+                    },
+                )
+            )
+
+            with patch(
+                "half_linac.src.shared.machine_profile.model_backend.run_elegant_input",
+            ), patch("half_linac.src.shared.machine_profile.model_backend.sdds.SDDS", FakeSdds):
+                dispersion = backend.get_energy_dispersion(
+                    "ESA",
+                    lattice_overrides={"Q1": {"K1": 2.5}},
+                )
+                optics = backend.get_energy_optics(
+                    "ESA",
+                    "Q1",
+                    "FLAG",
+                    beta_x_m=8.0,
+                    alpha_x=-0.5,
+                    lattice_overrides={"Q1": {"K1": 2.5}},
+                )
+
+            self.assertEqual(dispersion, 17.0)
+            self.assertEqual(optics.beta_x_m, 12.0)
+            self.assertEqual(optics.alpha_x, -2.0)
+            self.assertEqual(optics.dispersion_x_m, 0.75)
+            self.assertIn('K1="2.5"', (root / "energy/esa.lte").read_text(encoding="utf-8"))
 
     def test_lattice_usedline_helper_expands_irfel_main_and_esa_lines(self):
         runtime = resolve_machine_runtime("irfel")

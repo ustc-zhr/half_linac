@@ -3,26 +3,33 @@
   "engine": "elegant",
   "config": {
     "asset_dir": "src/virtual_machine/template_elegant/elegant",
-    "working_dir": "runtime/model_backend/template_machine/simulation/emit",
-    "emit_working_dir": "runtime/model_backend/template_machine/simulation/emit",
+    "optics_working_dir": "runtime/model_backend/template_machine/simulation/optics",
     "source_json": "src/virtual_machine/template_elegant/template.json",
     "source_lattice": "src/virtual_machine/template_elegant/elegant/lattice_ini.lte",
-    "emit_ini_ele": "src/virtual_machine/template_elegant/elegant/emit_ini.ele",
-    "emit_lte": "runtime/model_backend/template_machine/simulation/emit/emit.lte",
-    "emit_ele": "runtime/model_backend/template_machine/simulation/emit/emit.ele",
-    "emit_json": "runtime/model_backend/template_machine/simulation/emit/emit.json",
-    "emit_mat": "runtime/model_backend/template_machine/simulation/emit/emit.mat",
-    "emit_log": "emit.log",
+    "optics_ini_ele": "src/virtual_machine/template_elegant/elegant/emit_ini.ele",
+    "optics_lte": "runtime/model_backend/template_machine/simulation/optics/optics.lte",
+    "optics_ele": "runtime/model_backend/template_machine/simulation/optics/optics.ele",
+    "optics_json": "runtime/model_backend/template_machine/simulation/optics/optics.json",
+    "optics_mat": "runtime/model_backend/template_machine/simulation/optics/optics.mat",
+    "optics_log": "optics.log",
     "line_name": "ALL_MAIN",
-    "energy_ini_ele_file": "src/virtual_machine/template_elegant/elegant/esa_ini.ele",
+    "energy_ini_ele": "src/virtual_machine/template_elegant/elegant/esa_ini.ele",
     "energy_working_dir": "runtime/model_backend/template_machine/simulation/energy",
-    "energy_json_path": "runtime/model_backend/template_machine/simulation/energy/esa.json",
-    "energy_lte_file": "runtime/model_backend/template_machine/simulation/energy/esa.lte",
-    "energy_ele_file": "runtime/model_backend/template_machine/simulation/energy/esa.ele",
-    "energy_mat_file": "runtime/model_backend/template_machine/simulation/energy/esa.mat",
-    "energy_twi_file": "runtime/model_backend/template_machine/simulation/energy/esa.twi",
+    "energy_json": "runtime/model_backend/template_machine/simulation/energy/esa.json",
+    "energy_lte": "runtime/model_backend/template_machine/simulation/energy/esa.lte",
+    "energy_ele": "runtime/model_backend/template_machine/simulation/energy/esa.ele",
+    "energy_mat": "runtime/model_backend/template_machine/simulation/energy/esa.mat",
+    "energy_twi": "runtime/model_backend/template_machine/simulation/energy/esa.twi",
     "energy_log": "esa.log",
     "snapshot_mapping": {
+      "defaults": {
+        "K1": {
+          "logical_channel": "K1",
+          "source_unit": "1/m^2",
+          "model_unit": "1/m^2",
+          "conversion": {"type": "direct"}
+        }
+      },
       "fields": {
         "QE01": {
           "K1": {

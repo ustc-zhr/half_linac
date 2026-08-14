@@ -145,8 +145,7 @@ writes are allowed by the workflow policy.
 Defines the real-only solenoid-centering presets and their scan, limit,
 readback-verification, and restoration settings. The IRFEL workflow is
 `commissioned`, and real writes are allowed subject to static/live preflight and
-the application safety checks. See `IRFEL_SOLENOID_CENTERING_TEST.md` for the
-bring-up and operating procedure retained from commissioning.
+the application safety checks.
 
 ### `apps/energy_spectrum.json`
 
@@ -265,16 +264,15 @@ It contains paths for:
 - working directory
 - source runtime JSON
 - source lattice
-- emit-measurement elegant files
-- energy-spectrum elegant files
+- shared optics/matrix elegant files
+- energy-spectrum dispersion and Twiss files
 - matrix and Twiss outputs
 - line names used by the model
 
-App workflow files can refer to this backend by name, for example
-`"model_backend": "simulation"` in `apps/energy_spectrum.json`.
-
-The app says which model backend it wants; the model backend file says how to
-run that model and where its inputs and outputs live.
+Model-driven apps currently select the default `simulation` backend through the
+shared loader. App workflow files provide only calculation-specific facts such
+as model line names; the model backend file defines how to run the model and
+where its inputs and outputs live.
 
 ## Runtime Paths
 

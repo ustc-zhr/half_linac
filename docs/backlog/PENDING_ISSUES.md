@@ -2,6 +2,23 @@
 
 ## Open
 
+### 0. Twiss Transport Across Accelerating Sections
+
+- Status: open
+- Priority: high
+- Current scope:
+  - Emit Measure Twiss transport is supported only for paths that do not cross accelerating sections.
+  - HALF `QL13–QL27` are temporarily excluded from the Twiss From/To selectors; scan and other app workflows are unchanged.
+- Problem:
+  - `ElegantModelBackend` accepts `energy_mev` but does not yet establish the correct segment-entry `p_central` for every path.
+  - Backward transport across cavities needs the upstream entrance momentum, which cannot be obtained by blindly applying the downstream From energy.
+- Follow-up:
+  - Define the UI energy as the beam energy at From.
+  - Detect accelerating elements in the selected model segment.
+  - Resolve the segment-entry reference momentum from direction and configured cavity gains.
+  - Write the resulting `p_central` into the generated Elegant input and add Forward/Backward regression tests.
+  - Re-enable `QL13–QL27` only after the cross-acceleration behavior is validated.
+
 ### 1. HALF Standard BBA Physical Mapping Audit
 
 - Status: open
@@ -125,7 +142,7 @@
 - Priority: high
 - Background:
   - IRFEL VM workflows have been brought up incrementally for orbit, beam monitor, energy spectrum, and emit measurement.
-  - Current VM acceptance is recorded in `docs/IRFEL_VM_ACCEPTANCE.md`.
+  - Current VM acceptance checks are encoded in `scripts/check_irfel_vm.sh`.
   - IRFEL `real` backend entries exist so the profile can be validated offline, but most real-machine behavior has not been verified on site.
   - The current rule is: VM verification is not evidence that the same app is safe or physically correct in `real` mode.
 - Offline acceptance entrypoint:
@@ -286,15 +303,14 @@
 - Background:
   - VM runtime and model backend calculations both use elegant, but they play different roles.
   - The VM is a control object with runtime state such as `halflinac.json`, `elegant/lattice.lte`, and `elegant/one.ele`.
-  - The model backend is a calculation object that writes temporary model files such as `emit.json`, `emit.lte`, `emit.ele`, `esa.json`, `esa.lte`, and `esa.ele`.
+  - The model backend is a calculation object that writes temporary model files such as `optics.json`, `optics.lte`, `optics.ele`, `esa.json`, `esa.lte`, and `esa.ele`.
   - The generated model working files can be rebuilt from `lattice_ini.lte`, `emit_ini.ele`, `esa_ini.ele`, configured line names, and explicit snapshot overrides.
 - Problem:
   - Keeping model backend working files under `src/virtual_machine/<machine>_elegant/` visually coupled model calculations to the VM control object.
   - Runtime diffs could look like source changes when generated files were still tracked by git.
 - Current implementation:
-  - HALF and IRFEL model backend working files now use `runtime/model_backend/<machine>/simulation/{emit,energy}/`.
+  - HALF and IRFEL model backend working files now use `runtime/model_backend/<machine>/simulation/{optics,energy}/`.
   - VM source assets such as `lattice_ini.lte`, `emit_ini.ele`, and `esa_ini.ele` remain in the VM elegant asset directory.
   - Generated model working files are ignored and untracked.
   - Template machine configs now describe model backend runtime output paths instead of app-local ESA output files.
-- Follow-up:
-  - Consider moving the remaining app-local ESA elegant orchestration into the shared model backend once the runtime boundary is stable.
+  - Energy-spectrum dispersion and Twiss runs are owned by the shared elegant model backend; the GUI now supplies snapshots and displays results without orchestrating model files directly.

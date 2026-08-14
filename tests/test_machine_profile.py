@@ -672,12 +672,30 @@ class MachineProfileTests(unittest.TestCase):
             control_backend="real",
         )
 
-        with self.assertRaisesRegex(MachineProfileError, "QM01.K1"):
+        with self.assertRaisesRegex(MachineProfileError, "QM01.ANGLE"):
             build_model_snapshot(
                 context,
-                (("QM01", "K1"),),
+                (("QM01", "ANGLE"),),
                 pv_reader=lambda _pv_name: 1.0,
             )
+
+    def test_model_snapshot_default_k1_mapping_covers_twiss_path_quads(self):
+        context = load_app_context(
+            "emit_measure",
+            machine_id="half",
+            control_backend="vm",
+        )
+        qt03_pv = resolve_channel(context, "QT03", "k1", "vm")
+
+        snapshot = build_model_snapshot(
+            context,
+            (("QT03", "K1"),),
+            pv_reader={qt03_pv: 4.25}.__getitem__,
+        )
+
+        self.assertEqual(snapshot.lattice_overrides, {"QT03": {"K1": 4.25}})
+        self.assertEqual(snapshot.fields[0].source_pv, qt03_pv)
+        self.assertEqual(snapshot.fields[0].conversion, {"type": "direct"})
 
     def test_emit_measure_model_snapshot_fields_build_lattice_overrides(self):
         half_context = load_app_context(
@@ -1594,16 +1612,19 @@ class MachineProfileTests(unittest.TestCase):
         assert context.model_backend is not None
         source_json = Path(context.model_backend.config["source_json"])
         source_lattice = Path(context.model_backend.config["source_lattice"])
-        working_dir = Path(context.model_backend.config["working_dir"])
+        working_dir = Path(context.model_backend.config["optics_working_dir"])
+        energy_twi = Path(context.model_backend.config["energy_twi"])
         asset_dir = Path(context.model_backend.config["asset_dir"])
         self.assertTrue(source_json.is_absolute())
         self.assertTrue(source_lattice.is_absolute())
         self.assertTrue(working_dir.is_absolute())
+        self.assertTrue(energy_twi.is_absolute())
         self.assertTrue(asset_dir.is_absolute())
         self.assertTrue(str(source_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
         self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
         self.assertTrue(str(asset_dir).endswith("src/virtual_machine/half_elegant/elegant"))
-        self.assertTrue(str(working_dir).endswith("runtime/model_backend/half/simulation/emit"))
+        self.assertTrue(str(working_dir).endswith("runtime/model_backend/half/simulation/optics"))
+        self.assertTrue(str(energy_twi).endswith("runtime/model_backend/half/simulation/energy/esa.twi"))
         lattice_text = source_lattice.read_text(encoding="utf-8")
         self.assertIn("BPME02: MARK", lattice_text)
         self.assertEqual(lattice_text.count("BPME02"), 1)

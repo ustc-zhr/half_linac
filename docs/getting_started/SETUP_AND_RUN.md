@@ -86,7 +86,23 @@ softIoc
 
 ## 4. Python 环境
 
-当前仓库已经提供 [environment.yml](../environment.yml)。优先尝试：
+当前仓库已经提供 [environment.yml](../../environment.yml)。优先尝试：
+
+```bash
+bash scripts/install_env.sh --check
+```
+
+这个脚本会创建或更新 `half_linac` Conda 环境、安装 Python `sdds`、检查外部
+`elegant` 命令，并在 `--check` 打开时运行 `bash scripts/check.sh`。
+
+只有在只连接已有 IOC、确定不运行 VM、model backend、energy spectrum 或其他
+模型计算时，才建议跳过模型依赖：
+
+```bash
+bash scripts/install_env.sh --core-only --check
+```
+
+也可以手动执行等价步骤：
 
 ```bash
 conda env create -f environment.yml
@@ -109,7 +125,9 @@ conda activate half_linac
 conda install soliday::sdds
 ```
 
-`environment.yml` 有意不直接声明 `soliday::sdds`，这样主环境求解不依赖额外 channel。需要运行 VM、model backend 或 energy spectrum 这类导入 `sdds.SDDS` 的流程时，再执行上面的后装命令。只做 orbit display、beam monitor、orbit correct 等实机 PV 在线测试时，可以先不安装 `sdds`。
+`environment.yml` 有意不直接声明 `soliday::sdds`，安装脚本会在主环境求解完成后
+单独安装它，避免额外 channel 影响基础环境求解。只做 orbit display、beam
+monitor、orbit correct 等实机 PV 在线测试时，可以使用 `--core-only`。
 
 如果你不想直接复用这份环境文件，至少需要这些依赖：
 

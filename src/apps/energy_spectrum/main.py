@@ -3,7 +3,6 @@ import sys
 import time
 import numpy as np
 import os
-import sdds
 import math
 import json
 from datetime import datetime
@@ -74,17 +73,15 @@ from half_linac.src.apps.energy_spectrum.stations import (
     LEGACY_STATION_ID,
     resolve_energy_spectrum_stations,
 )
-from half_linac.src.shared.elegant_backend import ElegantParser
-from half_linac.src.shared.elegant_runtime import run_elegant_input
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     RuntimeContextWidget,
+    build_model_backend,
     build_model_snapshot,
     get_workflow,
     list_elements,
     load_app_context,
-    prepare_elegant_model_workdir,
     require_workflow_write_allowed,
     resolve_channel,
     resolve_element_image_geometry,
@@ -780,9 +777,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._model_tone = "subtle"
         self._model_tooltip = None
         try:
-            self.energy_model_config = self._load_energy_model_config()
+            self.model_backend = self._load_energy_model_backend()
         except MachineProfileError as exc:
-            self.energy_model_config = None
+            self.model_backend = None
             self._model_error = str(exc)
             self._model_text = "Unavailable"
             self._model_tone = "warning"
@@ -1104,34 +1101,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         return self.bend_pv
 
-    def _load_energy_model_config(self):
-        if self.app_context.model_backend is None:
-            raise MachineProfileError("energy_spectrum requires a configured model backend.")
-
-        config = dict(self.app_context.model_backend.config)
-        required_keys = (
-            "source_lattice",
-            "energy_ini_ele_file",
-            "energy_json_path",
-            "energy_lte_file",
-            "energy_ele_file",
-            "energy_mat_file",
-            "energy_twi_file",
-            "energy_log",
-        )
-        for key in required_keys:
-            value = config.get(key)
-            if not isinstance(value, str) or not value.strip():
-                raise MachineProfileError(
-                    f"energy_spectrum model backend is missing required key {key!r}."
-                )
-        working_dir = config.get("energy_working_dir") or config.get("working_dir")
-        if not isinstance(working_dir, str) or not working_dir.strip():
-            raise MachineProfileError(
-                "energy_spectrum model backend is missing required key "
-                "'energy_working_dir' or fallback 'working_dir'."
-            )
-        return config
+    def _load_energy_model_backend(self):
+        backend = build_model_backend(self.app_context)
+        backend.validate_energy_capability()
+        return backend
 
     def _build_start_elements(self):
         explicit = self.energy_config.get("start_elements")
@@ -1337,17 +1310,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         except KeyError as exc:
             raise MachineProfileError(f"{location} is missing backend {mode!r}.") from exc
 
-    def _energy_model_path(self, key):
-        if self.energy_model_config is None:
-            raise MachineProfileError(self._model_error or "energy_spectrum model backend is unavailable.")
-        return Path(self.energy_model_config[key])
-
-    def _energy_model_working_dir(self):
-        if self.energy_model_config is None:
-            raise MachineProfileError(self._model_error or "energy_spectrum model backend is unavailable.")
-        working_dir = self.energy_model_config.get("energy_working_dir") or self.energy_model_config["working_dir"]
-        return Path(working_dir)
-
     def _energy_model_line(self, calculation):
         model_lines = self.energy_config.get("model_lines")
         if isinstance(model_lines, dict):
@@ -1355,9 +1317,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             if line_name:
                 return line_name
         legacy_key = f"energy_{calculation}_line_name"
+        backend_config = (
+            self.app_context.model_backend.config
+            if self.app_context.model_backend is not None
+            else {}
+        )
         line_name = self.energy_config.get(
             legacy_key,
-            self.energy_model_config.get(legacy_key),
+            backend_config.get(legacy_key),
         )
         if not isinstance(line_name, str) or not line_name.strip():
             raise MachineProfileError(
@@ -1366,7 +1333,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return line_name.strip()
 
     def _model_available(self):
-        return self.energy_model_config is not None
+        return self.model_backend is not None
 
     def _model_unavailable_message(self):
         return self._model_error or "energy_spectrum model backend is unavailable."
@@ -1453,19 +1420,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             pv_text = f" from {field.source_pv}" if field.source_pv else ""
             lines.append(f"{field.element_id}.{field.field_name} = {field.value:g}{pv_text}")
         return "\n".join(lines)
-
-    @staticmethod
-    def _apply_lattice_overrides(lattice, lattice_overrides):
-        for element_id, field_overrides in lattice_overrides.items():
-            if element_id not in lattice:
-                raise MachineProfileError(f"Model lattice does not define element {element_id!r}.")
-            element = lattice[element_id]
-            for field_name, value in field_overrides.items():
-                if field_name not in element:
-                    raise MachineProfileError(
-                        f"Model lattice element {element_id!r} does not define field {field_name!r}."
-                    )
-                element[field_name] = str(value)
 
     def _twiss_target_element(self):
         """Return the model element where ESA optics/readout values are reported."""
@@ -3586,59 +3540,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
             snapshot = self._build_esa_quad_model_snapshot()
 
-            #
-            lattice_file = self._energy_model_path("source_lattice")
-            esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
             line_name = self._energy_model_line("dispersion")
-            working_dir = self._energy_model_working_dir()
-
-            esajson_path = self._energy_model_path("energy_json_path")
-            esa_lte_file = self._energy_model_path("energy_lte_file")
-            esa_ele_file = self._energy_model_path("energy_ele_file")
-            esa_mat_file = self._energy_model_path("energy_mat_file")
-            prepare_elegant_model_workdir(
-                working_dir,
-                output_paths=(esajson_path, esa_lte_file, esa_ele_file, esa_mat_file),
-            )
-
-            lte1 = ElegantParser(
-                lattice_file,
-                esa_ini_ele_file,
+            self.eta_flag = self.model_backend.get_energy_dispersion(
                 line_name,
-                runtime_json_path=esajson_path,
-                elegant_dir=working_dir,
+                lattice_overrides=snapshot.lattice_overrides,
             )
-            lte1.dump_runtime_state()
-            with open(esajson_path, "r", encoding="utf-8") as f:
-                lte = json.load(f)
-            contl = lte["control"]
-            lattice  = lte["lattice"]
-
-            contl['run_setup']['lattice'] = esa_lte_file.name
-            self._apply_lattice_overrides(lattice, snapshot.lattice_overrides)
-
-            lte["control"]  = contl
-            lte["lattice"]  = lattice
-
-            with open(esajson_path, "w", encoding="utf-8") as f:
-                f.write(json.dumps(lte, indent=4))
-            
-            lte1.json_to_lte_ele(esa_lte_file, esa_ele_file)
-
-            # run elegant
-            # ==========================
-            run_elegant_input(
-                esa_ele_file.name,
-                self.energy_model_config["energy_log"],
-                workdir=working_dir,
-            )
-            
-            tmp = sdds.SDDS(0)
-            tmp.load(str(esa_mat_file))
-            list_R = [tmp.columnData[i][0][0] for i in range(12, 48)]
-            Rj = np.array(list_R).reshape(6,6)
-
-            self.eta_flag = Rj[0, -1] 
             print(
                 f"dispersion at {self.energy_config['flag_element']} updates: ",
                 self.eta_flag,
@@ -3703,76 +3609,17 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             print("missing start element")
             return
 
-        # run ESA lattice 
-        #
-        lattice_file = self._energy_model_path("source_lattice")
-        esa_ini_ele_file = self._energy_model_path("energy_ini_ele_file")
         line_name = self._energy_model_line("twiss")
-        working_dir = self._energy_model_working_dir()
-
-        esajson_path = self._energy_model_path("energy_json_path")
-        esa_lte_file = self._energy_model_path("energy_lte_file")
-        esa_ele_file = self._energy_model_path("energy_ele_file")
-        esa_twi_file = self._energy_model_path("energy_twi_file")
-        prepare_elegant_model_workdir(
-            working_dir,
-            output_paths=(esajson_path, esa_lte_file, esa_ele_file, esa_twi_file),
-        )
 
         try:
-            lte1 = ElegantParser(
-                lattice_file,
-                esa_ini_ele_file,
+            result = self.model_backend.get_energy_optics(
                 line_name,
-                runtime_json_path=esajson_path,
-                elegant_dir=working_dir,
+                start_element,
+                self._twiss_target_element(),
+                beta_x_m=beta_in,
+                alpha_x=alpha_in,
+                lattice_overrides=snapshot.lattice_overrides,
             )
-            lte1.dump_runtime_state()
-            with open(esajson_path, "r", encoding="utf-8") as f:
-                lte = json.load(f)
-            contl = lte["control"]
-            lattice  = lte["lattice"]
-            usedline = lte["usedline"]
-
-            self._apply_lattice_overrides(lattice, snapshot.lattice_overrides)
-
-            contl['run_setup']['lattice'] = esa_lte_file.name
-            contl['twiss_output']['beta_x'] = str(beta_in)
-            contl['twiss_output']['alpha_x'] = str(alpha_in)
-
-            # Map from the entrance of start_element to the configured flag/watch element.
-            target_element = self._twiss_target_element()
-            id1 = usedline.index(start_element)
-            id2 = usedline.index(target_element)
-            if id2 < id1:
-                raise MachineProfileError(
-                    f"Twiss target {target_element!r} is upstream of start element {start_element!r}."
-                )
-            scanline = usedline[id1 : id2 + 1]
-
-            # update json with new lte and new control
-            lte["control"]  = contl
-            lte["lattice"]  = lattice
-            lte["usedline"] = scanline
-
-            with open(esajson_path, "w", encoding="utf-8") as f:
-                f.write(json.dumps(lte, indent=4))
-            
-            lte1.json_to_lte_ele(esa_lte_file, esa_ele_file)
-
-            # run elegant
-            # ==========================
-            run_elegant_input(
-                esa_ele_file.name,
-                self.energy_model_config["energy_log"],
-                workdir=working_dir,
-            )
-            
-            tmp = sdds.SDDS(0)
-            tmp.load(str(esa_twi_file))
-            betax   = tmp.columnData[1][0][-1]
-            alphax  = tmp.columnData[2][0][-1]
-            eta     = tmp.columnData[4][0][-1]
         except Exception as e:
             print(f"Error in cal_twiss_disp: {e}")
             self.latest_model_snapshot_metadata = None
@@ -3782,11 +3629,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
 
         # results
-        self.alpha_flag = alphax
-        self.beta_flag = betax
+        self.alpha_flag = result.alpha_x
+        self.beta_flag = result.beta_x_m
         self.emi_flag = emi_in # m
 
-        self.eta_flag = eta # m.
+        self.eta_flag = result.dispersion_x_m
 
         print('cal results: beta=',self.beta_flag, 'm, alpha=',self.alpha_flag, 'eta=',self.eta_flag, ' m')
 
