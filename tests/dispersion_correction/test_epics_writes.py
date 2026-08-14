@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from half_linac.src.apps.dispersion_correction.config import load_config
+from half_linac.src.apps.dispersion_correction.calibration import calibration_actuator_for_delta
 from half_linac.src.apps.dispersion_correction.machine.epics import EpicsMachine
 from half_linac.src.apps.dispersion_correction.preflight import run_live_preflight, run_preflight
 from half_linac.src.apps.dispersion_correction.recommendation import (
@@ -165,6 +166,43 @@ def test_modulator_voltage_uses_same_normalized_energy_delta_interface() -> None
 
     assert baseline_delta == pytest.approx(20.0 / 5000.0)
     assert epics.values["TEST:MODULATOR:HV"] == pytest.approx(20.5)
+
+
+def test_modulator_voltage_polynomial_calibration_writes_baseline_relative_target() -> None:
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    options["pv_map"]["energy_knob"] = {
+        "set": "TEST:MODULATOR:HV",
+        "readback": "TEST:MODULATOR:HV",
+    }
+    calibration = {
+        "kind": "polynomial_relative",
+        "baseline_actuator": 20.0,
+        "coefficients": [1.0e-4, 5.0e-4, 0.0],
+        "valid_actuator_min": 18.0,
+        "valid_actuator_max": 22.0,
+    }
+    config = replace(
+        config,
+        backend=replace(config.backend, options=options),
+        energy_knob=replace(
+            config.energy_knob,
+            name="MODULATOR_HV",
+            actuator="modulator_voltage",
+            actuator_unit="kV",
+            calibration=calibration,
+        ),
+    )
+    epics = FakeEpics({"TEST:MODULATOR:HV": 20.0})
+    machine = EpicsMachine(config, epics_client=epics)
+
+    baseline_delta = machine.get_energy_delta()
+    machine.set_energy_delta(baseline_delta + 4.0e-4)
+
+    assert baseline_delta == pytest.approx(0.0)
+    assert epics.values["TEST:MODULATOR:HV"] == pytest.approx(
+        calibration_actuator_for_delta(4.0e-4, calibration)
+    )
 
 
 def test_snapshot_and_restore_preserve_energy_setpoint_not_initial_readback() -> None:

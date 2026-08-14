@@ -2,6 +2,7 @@ import pytest
 
 from half_linac.src.apps.dispersion_correction.calibration import (
     actuator_step_for_delta,
+    calibration_actuator_for_delta,
     load_energy_knob_calibration_csv,
     load_phase_calibration_csv,
 )
@@ -55,6 +56,26 @@ def test_generic_energy_knob_calibration_csv_fit(tmp_path) -> None:
     assert fit.slope_delta_per_actuator == pytest.approx(0.0002)
     assert fit.actuator_per_delta == pytest.approx(5000.0)
     assert plan["actuator_step"] == pytest.approx(0.5)
+
+
+def test_polynomial_calibration_solves_asymmetric_offsets() -> None:
+    calibration = {
+        "kind": "polynomial_relative",
+        "baseline_actuator": 20.0,
+        "coefficients": [1.0e-4, 5.0e-4, 0.0],
+        "valid_actuator_min": 18.0,
+        "valid_actuator_max": 22.0,
+    }
+
+    plan = actuator_step_for_delta(4.0e-4, calibration)
+
+    assert plan["calibrated"]
+    assert plan["plus_offset"] > 0
+    assert plan["minus_offset"] < 0
+    assert abs(plan["plus_offset"]) != pytest.approx(abs(plan["minus_offset"]))
+    assert calibration_actuator_for_delta(4.0e-4, calibration) == pytest.approx(
+        20.0 + plan["plus_offset"]
+    )
 
 
 def direct_delta_draft() -> EnergyCalibrationDraft:
@@ -135,6 +156,46 @@ def test_measured_energy_draft_computes_relative_momentum() -> None:
     assert analysis.delta_values.tolist() == pytest.approx(
         [-0.0002, -0.0001, 0.0, 0.0001, 0.0002]
     )
+
+
+def test_quadratic_draft_fallback_handles_directional_slope_mismatch() -> None:
+    draft = EnergyCalibrationDraft(
+        actuator="modulator_voltage",
+        actuator_unit="kV",
+        input_mode="direct_delta",
+        baseline_actuator=20.0,
+        reference_energy=None,
+        points=tuple(
+            EnergyCalibrationPoint(
+                actuator_value=20.0 + offset,
+                delta_p_over_p=1.0e-4 * offset * offset + 5.0e-4 * offset,
+            )
+            for offset in (-2.0, -1.0, 0.0, 1.0, 2.0)
+        ),
+    )
+
+    analysis = analyze_energy_calibration_draft(
+        draft,
+        target_delta=4.0e-4,
+    )
+    fragment = calibration_fragment(
+        draft,
+        analysis,
+        source_path="runtime/calibrations/latest.json",
+    )
+
+    assert analysis.valid
+    assert analysis.fit is not None
+    assert analysis.fit.order == 2
+    assert analysis.plus_actuator_offset is not None
+    assert analysis.minus_actuator_offset is not None
+    assert abs(analysis.plus_actuator_offset) != pytest.approx(
+        abs(analysis.minus_actuator_offset)
+    )
+    assert any("directional slopes differ" in item for item in analysis.warnings)
+    assert fragment["kind"] == "polynomial_relative"
+    assert fragment["order"] == 2
+    assert fragment["coefficients"] == pytest.approx([1.0e-4, 5.0e-4, 0.0])
 
 
 def test_calibration_draft_rejects_insufficient_or_one_sided_data() -> None:

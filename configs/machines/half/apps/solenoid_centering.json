@@ -10,39 +10,63 @@
   "quality_gate": {"minimum_relative_score_improvement": 0.05},
   "presets": [
     {
+      "id": "ss01_centering",
+      "display_name": "SS01 Centering",
+      "solenoid": "SS01",
+      "hcorr": "XC00",
+      "vcorr": "YC00",
+      "bpm": "BPM01",
+      "scan": {
+        "solenoid": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"},
+        "corrector": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"}
+      }
+    },
+    {
+      "id": "ss02_centering",
+      "display_name": "SS02 Centering",
+      "solenoid": "SS02",
+      "hcorr": "XC01",
+      "vcorr": "YC01",
+      "bpm": "BPM01",
+      "scan": {
+        "solenoid": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"},
+        "corrector": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"}
+      }
+    },
+    {
       "id": "sl01_1_centering",
       "display_name": "SL01-1 Centering",
       "solenoid": "SL01-1",
-      "hcorr": "SL01-DX",
-      "vcorr": "SL01-DY",
-      "bpm": "BPM03",
+      "hcorr": "SM01-DX",
+      "vcorr": "SM01-DY",
+      "bpm": "BPM02",
       "scan": {
-        "solenoid": {"low": -0.05, "high": 0.05, "steps": 5, "unit": "A", "mode": "relative"},
-        "corrector": {"low": -0.0002, "high": 0.0002, "steps": 5, "unit": "A", "mode": "relative"}
+        "solenoid": {"low": -4, "high": 4, "steps": 5, "unit": "A", "mode": "relative"},
+        "corrector": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"}
       }
     },
     {
       "id": "sl01_2_centering",
       "display_name": "SL01-2 Centering",
       "solenoid": "SL01-2",
-      "hcorr": "SL01-DX",
-      "vcorr": "SL01-DY",
-      "bpm": "BPM03",
+      "hcorr": "SM01-DX",
+      "vcorr": "SM01-DY",
+      "bpm": "BPM02",
       "scan": {
-        "solenoid": {"low": -0.05, "high": 0.05, "steps": 5, "unit": "A", "mode": "relative"},
-        "corrector": {"low": -0.0002, "high": 0.0002, "steps": 5, "unit": "A", "mode": "relative"}
+        "solenoid": {"low": -4, "high": 4, "steps": 5, "unit": "A", "mode": "relative"},
+        "corrector": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"}
       }
     },
     {
       "id": "sm01_centering",
       "display_name": "SM01 Centering",
       "solenoid": "SM01",
-      "hcorr": "SM01-DX",
-      "vcorr": "SM01-DY",
-      "bpm": "BPM03",
+      "hcorr": "XC02",
+      "vcorr": "YC02",
+      "bpm": "BPM01",
       "scan": {
-        "solenoid": {"low": -0.05, "high": 0.05, "steps": 5, "unit": "A", "mode": "relative"},
-        "corrector": {"low": -0.0002, "high": 0.0002, "steps": 5, "unit": "A", "mode": "relative"}
+        "solenoid": {"low": -4, "high": 4, "steps": 5, "unit": "A", "mode": "relative"},
+        "corrector": {"low": -2, "high": 2, "steps": 5, "unit": "A", "mode": "relative"}
       }
     }
   ],

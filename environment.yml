@@ -33,10 +33,10 @@ dependencies:
   # Optimization helpers used by optional workflows.
   - bayesian-optimization
 
-  # SDDS Python bindings are intentionally not pinned here so the base
-  # control-room environment can be solved without the extra channel.
-  # After creating the environment, install the control-room verified
-  # binding with:
+  # SDDS Python bindings are intentionally installed after this file is solved,
+  # so the extra channel cannot disrupt the main environment. The recommended
+  # scripts/install_env.sh entrypoint installs the control-room verified binding
+  # with:
   #
   #   conda activate half_linac
   #   conda install soliday::sdds

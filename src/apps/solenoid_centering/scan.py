@@ -402,6 +402,7 @@ def evaluate_solenoid_response(
     *,
     scoring_mode: str = SCORING_MODE_SLOPE,
     noise_floor: float = NOISE_FLOOR,
+    reference_solenoid: float | None = None,
 ) -> ResponseScore:
     scoring_mode = normalize_scoring_mode(scoring_mode)
     sol = np.asarray(list(solenoid_values), dtype=float)
@@ -419,10 +420,25 @@ def evaluate_solenoid_response(
     scale_x = _noise_scale(x_stds, noise_floor)
     scale_y = _noise_scale(y_stds, noise_floor)
 
-    slope_x, offset_x = np.polyfit(sol, x_means, 1)
-    slope_y, offset_y = np.polyfit(sol, y_means, 1)
-    residual_x = x_means - (slope_x * sol + offset_x)
-    residual_y = y_means - (slope_y * sol + offset_y)
+    if reference_solenoid is None:
+        reference_solenoid = float((sol[0] + sol[-1]) / 2.0)
+    if not np.isfinite(reference_solenoid):
+        raise ValueError("reference_solenoid must be finite.")
+
+    local_sol = sol - float(reference_solenoid)
+    fit_order = 2 if len(sol) >= 3 else 1
+    x_coefficients = np.polyfit(local_sol, x_means, fit_order)
+    y_coefficients = np.polyfit(local_sol, y_means, fit_order)
+    x_fit = np.polyval(x_coefficients, local_sol)
+    y_fit = np.polyval(y_coefficients, local_sol)
+    residual_x = x_means - x_fit
+    residual_y = y_means - y_fit
+    if fit_order == 2:
+        slope_x, offset_x = x_coefficients[1], x_coefficients[2]
+        slope_y, offset_y = y_coefficients[1], y_coefficients[2]
+    else:
+        slope_x, offset_x = x_coefficients
+        slope_y, offset_y = y_coefficients
     centered_x = x_means - x_means.mean()
     centered_y = y_means - y_means.mean()
     slope_score = float(np.hypot(slope_x / scale_x, slope_y / scale_y))
@@ -1294,6 +1310,7 @@ class SolenoidCenteringScanner:
             x_samples,
             y_samples,
             scoring_mode=self.scoring_mode,
+            reference_solenoid=original_solenoid,
         )
         return CandidateResult(
             axis=axis,

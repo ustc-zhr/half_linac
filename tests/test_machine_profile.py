@@ -413,13 +413,15 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow.default_preset, "sl01_1_centering")
         preset = workflow.presets_by_id["sl01_1_centering"]
         self.assertEqual(preset.solenoid, "SL01-1")
-        self.assertEqual(preset.hcorr, "SL01-DX")
+        self.assertEqual(preset.hcorr, "SM01-DX")
+        self.assertEqual(preset.vcorr, "SM01-DY")
+        self.assertEqual(preset.bpm, "BPM02")
         self.assertEqual(preset.samples_per_point, 3)
         self.assertEqual(preset.settle_time_s, 2.0)
         self.assertEqual(preset.sample_interval_s, 0.2)
         self.assertEqual(preset.max_rounds, 2)
-        self.assertEqual(preset.solenoid_scan.relative_from, -0.05)
-        self.assertEqual(preset.corrector_scan.relative_to, 0.0002)
+        self.assertEqual(preset.solenoid_scan.relative_from, -4.0)
+        self.assertEqual(preset.corrector_scan.relative_to, 2.0)
         self.assertIsNotNone(preset.motion_verification)
         self.assertEqual(preset.minimum_relative_score_improvement, 0.05)
         self.assertEqual(
@@ -672,12 +674,30 @@ class MachineProfileTests(unittest.TestCase):
             control_backend="real",
         )
 
-        with self.assertRaisesRegex(MachineProfileError, "QM01.K1"):
+        with self.assertRaisesRegex(MachineProfileError, "QM01.ANGLE"):
             build_model_snapshot(
                 context,
-                (("QM01", "K1"),),
+                (("QM01", "ANGLE"),),
                 pv_reader=lambda _pv_name: 1.0,
             )
+
+    def test_model_snapshot_default_k1_mapping_covers_twiss_path_quads(self):
+        context = load_app_context(
+            "emit_measure",
+            machine_id="half",
+            control_backend="vm",
+        )
+        qt03_pv = resolve_channel(context, "QT03", "k1", "vm")
+
+        snapshot = build_model_snapshot(
+            context,
+            (("QT03", "K1"),),
+            pv_reader={qt03_pv: 4.25}.__getitem__,
+        )
+
+        self.assertEqual(snapshot.lattice_overrides, {"QT03": {"K1": 4.25}})
+        self.assertEqual(snapshot.fields[0].source_pv, qt03_pv)
+        self.assertEqual(snapshot.fields[0].conversion, {"type": "direct"})
 
     def test_emit_measure_model_snapshot_fields_build_lattice_overrides(self):
         half_context = load_app_context(
@@ -770,6 +790,17 @@ class MachineProfileTests(unittest.TestCase):
             if element.get("TYPE") == "QUAD" and "K1" in element
         ]
         self.assertEqual(ql27_path_quads, ["QL27", "QT01", "QT02"])
+
+        qt18_path_elements = backend.get_line_elements("QT02", "QT18")
+        qt18_path_quads = [
+            element["NAME"]
+            for element in qt18_path_elements
+            if element.get("TYPE") == "QUAD" and "K1" in element
+        ]
+        self.assertEqual(qt18_path_quads.count("QT17"), 1)
+        self.assertNotIn("QTR1", qt18_path_quads)
+        qt17 = next(element for element in qt18_path_elements if element["NAME"] == "QT17")
+        self.assertAlmostEqual(float(qt17["L"]), 0.15)
 
     def test_model_snapshot_can_use_design_lattice_without_pv_read(self):
         context = load_app_context(
@@ -989,9 +1020,12 @@ class MachineProfileTests(unittest.TestCase):
 
         self.assertEqual(usedline[0], "C")
         self.assertEqual(
-            usedline[-9:],
+            usedline[-12:],
             [
                 "QT06",
+                "BPM22",
+                "XC23",
+                "YC23",
                 "DUMP_QT06_QDU01",
                 "QDU01",
                 "XCA23",
@@ -1591,16 +1625,19 @@ class MachineProfileTests(unittest.TestCase):
         assert context.model_backend is not None
         source_json = Path(context.model_backend.config["source_json"])
         source_lattice = Path(context.model_backend.config["source_lattice"])
-        working_dir = Path(context.model_backend.config["working_dir"])
+        working_dir = Path(context.model_backend.config["optics_working_dir"])
+        energy_twi = Path(context.model_backend.config["energy_twi"])
         asset_dir = Path(context.model_backend.config["asset_dir"])
         self.assertTrue(source_json.is_absolute())
         self.assertTrue(source_lattice.is_absolute())
         self.assertTrue(working_dir.is_absolute())
+        self.assertTrue(energy_twi.is_absolute())
         self.assertTrue(asset_dir.is_absolute())
         self.assertTrue(str(source_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
         self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
         self.assertTrue(str(asset_dir).endswith("src/virtual_machine/half_elegant/elegant"))
-        self.assertTrue(str(working_dir).endswith("runtime/model_backend/half/simulation/emit"))
+        self.assertTrue(str(working_dir).endswith("runtime/model_backend/half/simulation/optics"))
+        self.assertTrue(str(energy_twi).endswith("runtime/model_backend/half/simulation/energy/esa.twi"))
         lattice_text = source_lattice.read_text(encoding="utf-8")
         self.assertIn("BPME02: MARK", lattice_text)
         self.assertEqual(lattice_text.count("BPME02"), 1)
@@ -2196,7 +2233,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(len(list_elements(profile, "flag")), 5)
         self.assertEqual(
             resolve_channel(profile, "QM01", "k1", "real"),
-            "IRFEL:PS:QM01:K1:ao",
+            "IRFEL:AP:QUAD:CQ1:K1:ao",
         )
         self.assertEqual(
             resolve_channel(profile, "QM20", "readback", "real"),

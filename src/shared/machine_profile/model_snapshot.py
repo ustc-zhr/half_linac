@@ -339,6 +339,7 @@ def _build_design_fields(
 ) -> list[ModelSnapshotField]:
     lattice = _load_design_lattice(app_context)
     specs = _snapshot_field_specs(app_context)
+    defaults = _snapshot_default_specs(app_context)
     fields: list[ModelSnapshotField] = []
 
     for element_id, field_name in requested_fields:
@@ -351,7 +352,13 @@ def _build_design_fields(
                 f"Design lattice does not define {element_id}.{field_name}."
             ) from exc
         value = _finite_float(raw_value, f"design lattice {element_id}.{field_name}")
-        spec = _find_snapshot_field_spec(specs, element_id, field_name, required=False)
+        spec = _find_snapshot_field_spec(
+            specs,
+            defaults,
+            element_id,
+            field_name,
+            required=False,
+        )
         fields.append(
             ModelSnapshotField(
                 element_id=element_id,
@@ -377,12 +384,19 @@ def _build_live_fields(
 ) -> list[ModelSnapshotField]:
     backend = "real" if source == MODEL_SNAPSHOT_SOURCE_LIVE_FROM_REAL else "vm"
     specs = _snapshot_field_specs(app_context)
+    defaults = _snapshot_default_specs(app_context)
     fields: list[ModelSnapshotField] = []
 
     for element_id, field_name in requested_fields:
         element_id = str(element_id)
         field_name = str(field_name)
-        spec = _find_snapshot_field_spec(specs, element_id, field_name, required=True)
+        spec = _find_snapshot_field_spec(
+            specs,
+            defaults,
+            element_id,
+            field_name,
+            required=True,
+        )
         logical_channel = _required_string(
             spec.get("logical_channel"),
             f"model snapshot {element_id}.{field_name}.logical_channel",
@@ -433,6 +447,24 @@ def apply_snapshot_conversion(source_value: float, conversion: Mapping[str, Any]
 
 
 def _snapshot_field_specs(app_context: AppContext) -> Mapping[str, Any]:
+    snapshot_mapping = _snapshot_mapping(app_context)
+    fields = snapshot_mapping.get("fields", {})
+    if not isinstance(fields, Mapping):
+        raise MachineProfileError("model backend config.snapshot_mapping.fields must be a mapping.")
+    return fields
+
+
+def _snapshot_default_specs(app_context: AppContext) -> Mapping[str, Any]:
+    snapshot_mapping = _snapshot_mapping(app_context)
+    defaults = snapshot_mapping.get("defaults", {})
+    if not isinstance(defaults, Mapping):
+        raise MachineProfileError(
+            "model backend config.snapshot_mapping.defaults must be a mapping."
+        )
+    return defaults
+
+
+def _snapshot_mapping(app_context: AppContext) -> Mapping[str, Any]:
     if app_context.model_backend is None:
         raise MachineProfileError(
             f"AppContext for {app_context.app_name!r} does not define a model backend."
@@ -444,28 +476,35 @@ def _snapshot_field_specs(app_context: AppContext) -> Mapping[str, Any]:
         return {}
     if not isinstance(snapshot_mapping, Mapping):
         raise MachineProfileError("model backend config.snapshot_mapping must be a mapping.")
-    fields = snapshot_mapping.get("fields", {})
-    if not isinstance(fields, Mapping):
-        raise MachineProfileError("model backend config.snapshot_mapping.fields must be a mapping.")
-    return fields
+    return snapshot_mapping
+
+
+def resolve_model_snapshot_field_spec(
+    app_context: AppContext,
+    element_id: str,
+    field_name: str,
+) -> Mapping[str, Any]:
+    return _find_snapshot_field_spec(
+        _snapshot_field_specs(app_context),
+        _snapshot_default_specs(app_context),
+        str(element_id),
+        str(field_name),
+        required=True,
+    )
 
 
 def _find_snapshot_field_spec(
     specs: Mapping[str, Any],
+    defaults: Mapping[str, Any],
     element_id: str,
     field_name: str,
     *,
     required: bool,
 ) -> Mapping[str, Any]:
     element_specs = specs.get(element_id)
-    if not isinstance(element_specs, Mapping):
-        if required:
-            raise MachineProfileError(
-                f"model backend snapshot_mapping is missing field mapping for {element_id}.{field_name}."
-            )
-        return {}
-
-    field_spec = element_specs.get(field_name)
+    field_spec = element_specs.get(field_name) if isinstance(element_specs, Mapping) else None
+    if not isinstance(field_spec, Mapping):
+        field_spec = defaults.get(field_name)
     if not isinstance(field_spec, Mapping):
         if required:
             raise MachineProfileError(
@@ -491,7 +530,10 @@ def _load_design_lattice(app_context: AppContext) -> Mapping[str, Mapping[str, s
         )
     config = app_context.model_backend.config
     source_lattice = _required_string(config.get("source_lattice"), "model backend source_lattice")
-    ele_file = _required_string(config.get("emit_ini_ele"), "model backend emit_ini_ele")
+    ele_file = _required_string(
+        config.get("optics_ini_ele") or config.get("emit_ini_ele"),
+        "model backend optics_ini_ele",
+    )
     line_name = _required_string(config.get("line_name"), "model backend line_name")
     parser = ElegantParser(source_lattice, ele_file, line_name)
     return parser.build_runtime_state()["lattice"]

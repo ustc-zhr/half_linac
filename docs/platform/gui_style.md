@@ -330,7 +330,7 @@ Tabs 用于真正的工作模式或结果视图，不用于装饰。
 后续需要实现新 GUI 或调整旧 GUI 时，可在任务中引用：
 
 ```text
-请遵循 docs/gui_style.md 的 HALF GUI 风格：
+请遵循 docs/platform/gui_style.md 的 HALF GUI 风格：
 使用 PyQt/Fusion 风格，保留 night_shift 与 control_room 双主题；
 采用顶部 header + 状态条 + 卡片/分组工作区结构；
 按钮按 diagnostic/control/danger/subtle/statusAction 角色设置；

@@ -43,7 +43,14 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        self.window = MainWindow()
+        with patch.dict(
+            os.environ,
+            {
+                "HALF_LINAC_MACHINE_ID": "half",
+                "HALF_LINAC_CONTROL_BACKEND": "real",
+            },
+        ):
+            self.window = MainWindow()
 
     def tearDown(self):
         self.window.close()
@@ -108,9 +115,11 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             self.window.hcorr_combo.parentWidget(),
             self.window.vcorr_combo.parentWidget(),
         )
+        self.assertIsNotNone(self.window.solenoid_combo.parentWidget())
 
         labels = {label.text() for label in self.window.findChildren(QLabel)}
         self.assertIn("Correctors", labels)
+        self.assertIn("Solenoid", labels)
         self.assertIn("Devices", labels)
         self.assertIn("Scan", labels)
         self.assertIn("Relative Scan Range", labels)
@@ -126,6 +135,22 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             self.window.run_card,
         )
         self.assertIs(self.window.max_iters.parentWidget(), self.window.run_card)
+
+    def test_selected_solenoid_overrides_the_preset_default(self):
+        default_solenoid = self.window._current_preset().solenoid
+        index = next(
+            index
+            for index in range(self.window.solenoid_combo.count())
+            if self.window.solenoid_combo.itemData(index) != default_solenoid
+        )
+        selected_solenoid = self.window.solenoid_combo.itemData(index)
+
+        self.window.solenoid_combo.setCurrentIndex(index)
+        preset = self.window._preset_with_overrides()
+
+        self.assertEqual(preset.solenoid, selected_solenoid)
+        self.assertIsNone(preset.solenoid_setpoint_pv)
+        self.assertIsNone(preset.solenoid_readback_pv)
 
     def test_abort_action_is_visible_only_while_scan_is_running(self):
         self.assertFalse(self.window.start_button.isHidden())
@@ -223,11 +248,24 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         self.window.sol_from.setValue(self.window.sol_from.value() - 0.1)
 
         self.assertFalse(self.window.preflight_ready)
-        self.assertFalse(self.window.start_button.isEnabled())
+        self.assertTrue(self.window.start_button.isEnabled())
         self.assertEqual(
             self.window.status_strip.items["READINESS"].value_label.text(),
             "UNCHECKED",
         )
+
+    def test_start_without_preflight_prompts_for_check_pvs(self):
+        with patch(
+            "half_linac.src.apps.solenoid_centering.main.QMessageBox.warning"
+        ) as warning:
+            self.window.start_scan()
+
+        warning.assert_called_once_with(
+            self.window,
+            "Solenoid Centering",
+            "Configuration changed or has not been checked. Run Check PVs again.",
+        )
+        self.assertIsNone(self.window.worker)
 
     def test_successful_current_revision_preflight_enables_start(self):
         report = type(

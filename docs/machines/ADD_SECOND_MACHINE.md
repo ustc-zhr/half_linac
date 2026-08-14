@@ -83,7 +83,7 @@ Minimal shape:
 
 Source file:
 
-- [configs/machines/irfel/references/control_system/irfel_pvlist.json](../configs/machines/irfel/references/control_system/irfel_pvlist.json)
+- [configs/machines/irfel/references/control_system/irfel_pvlist.json](../../configs/machines/irfel/references/control_system/irfel_pvlist.json)
 
 This file is not already in our machine-profile schema, but it contains enough structured
 information to build the first machine-profile version for IRFEL.

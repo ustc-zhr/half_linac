@@ -84,9 +84,62 @@ softIoc
 
 如果环境正常，会进入 `epics>` 提示符。
 
+### 配置并构建仓库 softIOC
+
+仓库不提交任何电脑的 EPICS Base、checkout 路径或已构建 IOC 二进制。EPICS Base
+安装完成后，在仓库根目录运行：
+
+```bash
+# 配置并构建当前默认的 HALF softIOC
+bash scripts/configure_softioc.sh --epics-base "$EPICS_BASE"
+
+# 只构建 IRFEL
+bash scripts/configure_softioc.sh --machine irfel --epics-base "$EPICS_BASE"
+
+# 一次配置并构建两个 IOC 工程
+bash scripts/configure_softioc.sh --all --epics-base "$EPICS_BASE"
+```
+
+如果 `softIoc` 已经位于 `PATH`，脚本通常可以自动推导 EPICS Base，此时可省略
+`--epics-base`：
+
+```bash
+bash scripts/configure_softioc.sh --all
+```
+
+脚本会执行以下操作：
+
+1. 验证 `configure/CONFIG_BASE`、`startup/EpicsHostArch` 和当前架构的 `softIoc`。
+2. 为目标 IOC 生成 `configure/RELEASE.local`；该文件只属于当前电脑并被 Git 忽略。
+3. 在当前 checkout 路径执行 `make rebuild`。
+4. 检查生成的 `envPaths` 是否记录当前 `TOP` 和 EPICS Base。
+5. 检查 `bin/$EPICS_HOST_ARCH/target` 是否成功生成。
+
+只希望生成本地配置、暂不编译时使用：
+
+```bash
+bash scripts/configure_softioc.sh --all --epics-base "$EPICS_BASE" --configure-only
+```
+
 ## 4. Python 环境
 
-当前仓库已经提供 [environment.yml](../environment.yml)。优先尝试：
+当前仓库已经提供 [environment.yml](../../environment.yml)。优先尝试：
+
+```bash
+bash scripts/install_env.sh --check
+```
+
+这个脚本会创建或更新 `half_linac` Conda 环境、安装 Python `sdds`、检查外部
+`elegant` 命令，并在 `--check` 打开时运行 `bash scripts/check.sh`。
+
+只有在只连接已有 IOC、确定不运行 VM、model backend、energy spectrum 或其他
+模型计算时，才建议跳过模型依赖：
+
+```bash
+bash scripts/install_env.sh --core-only --check
+```
+
+也可以手动执行等价步骤：
 
 ```bash
 conda env create -f environment.yml
@@ -109,7 +162,9 @@ conda activate half_linac
 conda install soliday::sdds
 ```
 
-`environment.yml` 有意不直接声明 `soliday::sdds`，这样主环境求解不依赖额外 channel。需要运行 VM、model backend 或 energy spectrum 这类导入 `sdds.SDDS` 的流程时，再执行上面的后装命令。只做 orbit display、beam monitor、orbit correct 等实机 PV 在线测试时，可以先不安装 `sdds`。
+`environment.yml` 有意不直接声明 `soliday::sdds`，安装脚本会在主环境求解完成后
+单独安装它，避免额外 channel 影响基础环境求解。只做 orbit display、beam
+monitor、orbit correct 等实机 PV 在线测试时，可以使用 `--core-only`。
 
 如果你不想直接复用这份环境文件，至少需要这些依赖：
 
@@ -218,27 +273,39 @@ source scripts/setup.sh
 
 这只是一个方便的 shell 级捷径，不再是运行 `half_linac` 的前置条件。
 
-## 8. 修改机器相关配置
+## 8. softIOC 本机配置原理
 
-当前最关键的机器相关文件是：
+softIOC 中三类路径的职责不同：
 
-- `src/softIOC/halflinac/configure/RELEASE`
+- `configure/RELEASE` 是仓库模板，不应保存个人电脑路径。
+- `configure/RELEASE.local` 是本机 EPICS Base 配置，由
+  `scripts/configure_softioc.sh` 生成，不提交 Git。
+- `iocBoot/ioctarget/envPaths` 是 EPICS build 生成物，其中包含当前 checkout 的
+  绝对 `TOP` 和最终采用的 EPICS Base，不应手工修改或提交。
 
-至少要检查：
+下载仓库后不能直接复制使用另一台电脑构建出的 `bin/`、`lib/`、`dbd/` 或
+`envPaths`。IOC 可执行文件的 RUNPATH 会包含构建时的仓库路径和 EPICS Base，必须
+在目标电脑重新构建：
 
-- `EPICS_BASE`
+```bash
+bash scripts/configure_softioc.sh --epics-base /absolute/path/to/epics-base
+```
 
-这些路径目前不是自动发现的，而是显式写死在 `configure/RELEASE` 里。
-
-`src/softIOC/halflinac/iocBoot/ioctarget/envPaths` 不是手工维护源文件，而是 `make rebuild` 生成的派生文件。不要把它当成长期配置入口。
-
-如果你改了 `configure/RELEASE` 里的路径，不要直接启动 IOC，先在仓库根目录执行：
+完成首次配置后，普通重建可以使用：
 
 ```bash
 bash scripts/build_ioc.sh
 ```
 
-原因是 `softIOC` 二进制会记住 build-time `TOP`，而 `envPaths` 也会在重建时一起刷新。只改运行时派生文件不能消掉旧路径，必须在当前仓库路径下重新构建一次。
+选择其他机器或临时覆盖 EPICS Base：
+
+```bash
+bash scripts/build_ioc.sh --machine irfel
+bash scripts/build_ioc.sh --machine half --epics-base /opt/epics/base-7.0.8.1
+```
+
+不要通过复制另一个 IOC 工程的 `envPaths` 解决路径问题。两个工程的 `TOP`、数据库
+模板和 substitutions 文件不同，但可以共享同一个 EPICS Base。
 
 ## 9. 静态检查
 
@@ -323,9 +390,13 @@ cd src/softIOC/halflinac
 ### 手动测试 `st.cmd`
 
 ```bash
-cd src/softIOC/halflinac/iocBoot/ioctarget
-./st.cmd
+cd src/softIOC/halflinac
+./runMe
 ```
+
+`runMe` 会从生成的 `envPaths` 读取 EPICS Base，并选择
+`bin/$EPICS_HOST_ARCH/target`。不要依赖 `st.cmd` 中可能由 EPICS 模板留下的固定
+架构 shebang。
 
 ## 11. 常见注意事项
 

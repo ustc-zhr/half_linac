@@ -10,7 +10,8 @@ from half_linac.src.shared.elegant_backend.parser import ElegantParser
 
 from .loader import SUPPORTED_APP_NAMES, resolve_machine_id
 from .model_backend import ElegantModelBackend, build_model_backend
-from .models import AppContext, MachineProfile, MachineProfileError, ModelBackendConfig
+from .model_snapshot import resolve_model_snapshot_field_spec
+from .models import AppContext, MachineProfile, MachineProfileError
 from .resolver import get_workflow, resolve_channel
 from .runtime_resolver import resolve_machine_runtime
 from .softioc_contract import iter_softioc_vm_aliases
@@ -581,10 +582,8 @@ def _validate_app(profile: MachineProfile, app_name: str) -> list[MachineValidat
         )
     ]
 
-    if app_name in {"bba", "emit_measure"} and contexts:
+    if app_name in MODEL_VALIDATED_APP_NAMES and contexts:
         checks.append(_validate_elegant_model_backend(app_name, contexts[0]))
-    elif app_name == "energy_spectrum" and contexts:
-        checks.append(_validate_energy_spectrum_model_config(contexts[0].model_backend))
 
     if profile.machine.id == "irfel":
         checks.append(_validate_real_commissioning_status(profile, app_name))
@@ -624,7 +623,9 @@ def _validate_real_commissioning_status(
     )
 
 
-MODEL_VALIDATED_APP_NAMES = frozenset({"bba", "emit_measure", "energy_spectrum"})
+MODEL_VALIDATED_APP_NAMES = frozenset(
+    {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
+)
 
 
 def describe_app_model_support(machine_id: str | None, app_name: str) -> tuple[bool, str | None]:
@@ -636,10 +637,7 @@ def describe_app_model_support(machine_id: str | None, app_name: str) -> tuple[b
     except MachineProfileError as exc:
         return False, str(exc)
 
-    if app_name in {"bba", "emit_measure"}:
-        check = _validate_elegant_model_backend(app_name, context)
-    else:
-        check = _validate_energy_spectrum_model_config(context.model_backend)
+    check = _validate_elegant_model_backend(app_name, context)
 
     if check.ok:
         return True, None
@@ -663,17 +661,31 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
     required_files = {
         "source_json": backend.source_json,
         "source_lattice": backend.source_lattice,
-        "emit_ini_ele": backend.emit_ini_ele,
+        "optics_ini_ele": backend.optics_ini_ele,
     }
     required_dirs = {
         "asset_dir": backend.asset_dir,
     }
     generated_targets = {
-        "emit_lte": backend.emit_lte,
-        "emit_ele": backend.emit_ele,
-        "emit_json": backend.emit_json,
-        "emit_mat": backend.emit_mat,
+        "optics_lte": backend.optics_lte,
+        "optics_ele": backend.optics_ele,
+        "optics_json": backend.optics_json,
+        "optics_mat": backend.optics_mat,
     }
+
+    if app_name == "energy_spectrum":
+        try:
+            energy_paths = backend.energy_paths()
+        except MachineProfileError as exc:
+            missing.append(str(exc))
+        else:
+            required_files["energy_ini_ele"] = energy_paths.ini_ele
+            generated_targets.update(
+                {
+                    f"energy_{key}": getattr(energy_paths, key)
+                    for key in ("json", "lte", "ele", "mat", "twi")
+                }
+            )
 
     for label, path in required_files.items():
         if not path.is_file():
@@ -693,7 +705,7 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
         try:
             runtime_state = ElegantParser(
                 backend.source_lattice,
-                backend.emit_ini_ele,
+                backend.optics_ini_ele,
                 backend.line_name,
                 elegant_dir=backend.working_dir,
             ).build_runtime_state()
@@ -705,6 +717,23 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
             )
 
         lattice = runtime_state.get("lattice", {})
+        for element in context.profile.elements:
+            lattice_element = lattice.get(element.id)
+            if (
+                element.kind != "quad"
+                or not isinstance(lattice_element, Mapping)
+                or "K1" not in lattice_element
+            ):
+                continue
+            try:
+                resolve_model_snapshot_field_spec(context, element.id, "K1")
+            except MachineProfileError as exc:
+                return MachineValidationCheck(
+                    f"model:{app_name}",
+                    FAIL,
+                    f"Twiss-selectable quadrupole mapping is incomplete: {exc}",
+                )
+
         line_names = {backend.line_name}
         line_names.update(
             preset.model_line
@@ -731,65 +760,6 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
         PASS,
         "validated elegant model backend input files and output parents.",
     )
-
-
-def _validate_energy_spectrum_model_config(
-    model_backend: ModelBackendConfig | None,
-) -> MachineValidationCheck:
-    if model_backend is None:
-        return MachineValidationCheck(
-            "model:energy_spectrum",
-            FAIL,
-            "energy_spectrum does not define a model backend.",
-        )
-    if model_backend.engine != "elegant":
-        return MachineValidationCheck(
-            "model:energy_spectrum",
-            SKIP,
-            f"validator only checks elegant energy-spectrum backends, got {model_backend.engine!r}.",
-        )
-
-    config = model_backend.config
-    missing: list[str] = []
-    required_files = {
-        "source_lattice": _require_model_path(config, "source_lattice"),
-        "energy_ini_ele_file": _require_model_path(config, "energy_ini_ele_file"),
-    }
-    asset_dir = Path(str(config.get("asset_dir") or required_files["source_lattice"].parent))
-    generated_targets = {
-        "energy_json_path": _require_model_path(config, "energy_json_path"),
-        "energy_lte_file": _require_model_path(config, "energy_lte_file"),
-        "energy_ele_file": _require_model_path(config, "energy_ele_file"),
-        "energy_mat_file": _require_model_path(config, "energy_mat_file"),
-        "energy_twi_file": _require_model_path(config, "energy_twi_file"),
-    }
-
-    if not asset_dir.is_dir():
-        missing.append(f"asset_dir directory not found: {asset_dir}")
-    for label in ("source_lattice", "energy_ini_ele_file"):
-        path = required_files[label]
-        if not path.is_file():
-            missing.append(f"{label} file not found: {path}")
-    for label, path in generated_targets.items():
-        problem = _generated_target_parent_problem(label, path)
-        if problem:
-            missing.append(problem)
-
-    if missing:
-        return MachineValidationCheck("model:energy_spectrum", FAIL, "; ".join(missing))
-
-    return MachineValidationCheck(
-        "model:energy_spectrum",
-        PASS,
-        "validated energy-spectrum elegant input files and output parents.",
-    )
-
-
-def _require_model_path(config: Mapping[str, Any], key: str) -> Path:
-    raw_value = config.get(key)
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        raise MachineProfileError(f"Model backend config is missing {key!r}.")
-    return Path(raw_value)
 
 
 def _generated_target_parent_problem(label: str, path: Path) -> str | None:

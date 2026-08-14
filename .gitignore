@@ -93,6 +93,7 @@ src/softIOC/*/iocBoot/ioctarget/envPaths
 src/softIOC/*/iocBoot/ioctarget/cdCommands
 src/softIOC/*/iocBoot/ioctarget/relPaths.sh
 src/softIOC/*/iocBoot/ioctarget/dllPath.bat
+src/softIOC/*/configure/RELEASE.local
 
 # Local environment exports
 scripts/export_env.sh

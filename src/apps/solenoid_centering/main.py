@@ -53,7 +53,6 @@ from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
     resolve_channel,
-    resolve_write_target,
     workflow_writes_allowed,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
@@ -437,13 +436,12 @@ class MainWindow(QMainWindow):
         self.preset_combo.setMinimumWidth(190)
         self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
         device_layout.addRow(preset_label, self.preset_combo)
-        self.solenoid_pv_label = QLabel("--", setup_card)
-        self.solenoid_pv_label.setWordWrap(True)
+        self.solenoid_combo = QComboBox(setup_card)
         self.hcorr_combo = QComboBox(setup_card)
         self.vcorr_combo = QComboBox(setup_card)
         self.bpm_combo = QComboBox(setup_card)
         for label, widget in (
-            ("Solenoid PV", self.solenoid_pv_label),
+            ("Solenoid", self.solenoid_combo),
             ("BPM", self.bpm_combo),
         ):
             field_label = QLabel(label, content)
@@ -580,6 +578,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(scroll, 1)
         self.preflight_inputs = (
             self.preset_combo,
+            self.solenoid_combo,
             self.hcorr_combo,
             self.vcorr_combo,
             self.bpm_combo,
@@ -597,6 +596,7 @@ class MainWindow(QMainWindow):
         )
         for combo in (
             self.preset_combo,
+            self.solenoid_combo,
             self.hcorr_combo,
             self.vcorr_combo,
             self.bpm_combo,
@@ -648,6 +648,7 @@ class MainWindow(QMainWindow):
         self._apply_theme()
 
     def _load_device_choices(self):
+        self._populate_element_combo(self.solenoid_combo, self._solenoid_choices())
         self._populate_element_combo(
             self.hcorr_combo,
             self._corrector_choices("x", ("HC", "HIC", "XCOR")),
@@ -662,6 +663,25 @@ class MainWindow(QMainWindow):
             if "y" in element.channels
         ]
         self._populate_element_combo(self.bpm_combo, bpms)
+
+    def _solenoid_choices(self):
+        backend = self.context.control_backend.name
+        setpoint_elements = list_elements(
+            self.context,
+            kind="solenoid",
+            logical_channel="current_set",
+            control_backend=backend,
+        )
+        readback_ids = {
+            element.id
+            for element in list_elements(
+                self.context,
+                kind="solenoid",
+                logical_channel="current_readback",
+                control_backend=backend,
+            )
+        }
+        return [element for element in setpoint_elements if element.id in readback_ids]
 
     def _corrector_choices(self, plane, fallback_tokens):
         correctors = list_elements(self.context, kind="corr", logical_channel="current_set")
@@ -703,7 +723,11 @@ class MainWindow(QMainWindow):
             return
         preset = self._current_preset()
         self.status_strip.set_value("PRESET", preset.display_name)
-        self.solenoid_pv_label.setText(self._solenoid_setpoint_label(preset))
+        if preset.solenoid is None:
+            raise MachineProfileError(
+                f"Solenoid centering preset {preset.id!r} does not define a selectable solenoid element."
+            )
+        self._set_combo_value(self.solenoid_combo, preset.solenoid, "Solenoid")
         self._set_combo_value(self.hcorr_combo, preset.hcorr, "HCOR")
         self._set_combo_value(self.vcorr_combo, preset.vcorr, "VCOR")
         self._set_combo_value(self.bpm_combo, preset.bpm, "BPM")
@@ -717,14 +741,6 @@ class MainWindow(QMainWindow):
         self.settle.setValue(preset.settle_time_s)
         self.sample_interval.setValue(preset.sample_interval_s)
         self.max_iters.setValue(preset.max_rounds)
-
-    def _solenoid_setpoint_label(self, preset: SolenoidCenteringPreset) -> str:
-        if preset.solenoid:
-            try:
-                return resolve_write_target(self.context, preset.solenoid).pv_name
-            except MachineProfileError:
-                return preset.solenoid
-        return preset.solenoid_setpoint_pv or ""
 
     @staticmethod
     def _set_combo_value(combo, value, label):
@@ -751,6 +767,9 @@ class MainWindow(QMainWindow):
             raise ValueError("Corrector scan range must not be zero.")
         return replace(
             preset,
+            solenoid=self._combo_value(self.solenoid_combo, "Solenoid"),
+            solenoid_setpoint_pv=None,
+            solenoid_readback_pv=None,
             hcorr=self._combo_value(self.hcorr_combo, "HCOR"),
             vcorr=self._combo_value(self.vcorr_combo, "VCOR"),
             bpm=self._combo_value(self.bpm_combo, "BPM"),
@@ -772,7 +791,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_write_state(self):
         allowed = workflow_writes_allowed(self.context, "solenoid_centering")
-        self.start_button.setEnabled(allowed and self.preflight_ready)
+        self.start_button.setEnabled(allowed)
         self.status_strip.set_value("ACCESS", "WRITE ENABLED" if allowed else "READ ONLY",
                                     "success" if allowed else "warning")
         if self.context.control_backend.name != "real":
@@ -792,7 +811,7 @@ class MainWindow(QMainWindow):
         self._set_result_action(None)
         self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
         self.status_strip.set_value("READBACK VERIFIED", "UNCHECKED", "warning")
-        self.start_button.setEnabled(False)
+        self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
 
     def _set_preflight_inputs_enabled(self, enabled: bool) -> None:
         for widget in self.preflight_inputs:
@@ -1026,10 +1045,7 @@ class MainWindow(QMainWindow):
     def _on_preflight_done(self):
         self._set_preflight_inputs_enabled(True)
         self.check_button.setEnabled(True)
-        self.start_button.setEnabled(
-            self.preflight_ready
-            and workflow_writes_allowed(self.context, "solenoid_centering")
-        )
+        self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
 
     def _on_scan_finished(self, result):
         self.last_result = result
@@ -1168,10 +1184,7 @@ class MainWindow(QMainWindow):
     def _on_worker_done(self):
         self._set_preflight_inputs_enabled(True)
         self.check_button.setEnabled(True)
-        self.start_button.setEnabled(
-            self.preflight_ready
-            and workflow_writes_allowed(self.context, "solenoid_centering")
-        )
+        self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
         self._set_scan_action_running(False)
         self.progress.setVisible(False)
 

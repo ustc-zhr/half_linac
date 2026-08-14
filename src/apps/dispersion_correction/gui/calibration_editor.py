@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from PyQt5.QtCore import QPointF, QRectF, Qt
 from PyQt5.QtGui import QColor, QPainter, QPen
 from PyQt5.QtWidgets import (
@@ -97,16 +99,27 @@ class CalibrationPlotWidget(QWidget):
         if analysis.fit is not None:
             fit = analysis.fit
             painter.setPen(QPen(QColor(tokens["status_warning"]), 2))
-            painter.drawLine(
-                point(
-                    x_min,
-                    fit.slope_delta_per_actuator * x_min + fit.intercept_delta,
-                ),
-                point(
-                    x_max,
-                    fit.slope_delta_per_actuator * x_max + fit.intercept_delta,
-                ),
-            )
+            if fit.order == 2 and fit.baseline_actuator is not None and fit.coefficients:
+                path_points = []
+                coefficients = np.asarray(fit.coefficients, dtype=float)
+                for x_value in np.linspace(x_min, x_max, 80):
+                    offset = float(x_value) - float(fit.baseline_actuator)
+                    path_points.append(
+                        point(float(x_value), float(np.polyval(coefficients, offset)))
+                    )
+                for start, end in zip(path_points, path_points[1:]):
+                    painter.drawLine(start, end)
+            else:
+                painter.drawLine(
+                    point(
+                        x_min,
+                        fit.slope_delta_per_actuator * x_min + fit.intercept_delta,
+                    ),
+                    point(
+                        x_max,
+                        fit.slope_delta_per_actuator * x_max + fit.intercept_delta,
+                    ),
+                )
         painter.setPen(QPen(QColor(tokens["focus"]), 2))
         painter.setBrush(QColor(tokens["focus"]))
         for x_value, y_value in zip(x, y):
@@ -323,6 +336,8 @@ class CalibrationEditorDialog(QDialog):
         bottom.addWidget(self.activate_button)
         layout.addLayout(bottom)
 
+        self._disable_button_enter_defaults()
+
         for _ in range(5):
             self._add_empty_row()
         self._energy_unit_changed(self.energy_unit_combo.currentText())
@@ -335,6 +350,11 @@ class CalibrationEditorDialog(QDialog):
         spin.setRange(-1.0e9, 1.0e9)
         spin.setSingleStep(0.1)
         return spin
+
+    def _disable_button_enter_defaults(self) -> None:
+        for button in self.findChildren(QPushButton):
+            button.setAutoDefault(False)
+            button.setDefault(False)
 
     def set_draft(self, draft: EnergyCalibrationDraft) -> None:
         self._updating = True
@@ -530,18 +550,31 @@ class CalibrationEditorDialog(QDialog):
         ]
         if analysis.fit is not None:
             fit = analysis.fit
+            fit_kind = "quadratic" if fit.order == 2 else "linear"
             lines.extend(
                 [
+                    f"Fit kind: {fit_kind}",
                     f"Points: {fit.n_samples}",
                     f"actuator_per_delta: {fit.actuator_per_delta:.12g}",
                     f"R²: {fit.r_squared:.8g}",
                     f"Maximum fit residual: {analysis.max_abs_residual:.6g}",
-                    (
-                        "Predicted actuator step: "
-                        f"±{analysis.target_actuator_step:.8g} {self.actuator_unit}"
-                    ),
                 ]
             )
+            if (
+                analysis.plus_actuator_offset is not None
+                and analysis.minus_actuator_offset is not None
+            ):
+                lines.append(
+                    "Predicted actuator offsets: "
+                    f"+{analysis.target_delta:g} → {analysis.plus_actuator_offset:+.8g}, "
+                    f"-{analysis.target_delta:g} → {analysis.minus_actuator_offset:+.8g} "
+                    f"{self.actuator_unit}"
+                )
+            elif analysis.target_actuator_step is not None:
+                lines.append(
+                    "Predicted actuator step: "
+                    f"±{analysis.target_actuator_step:.8g} {self.actuator_unit}"
+                )
         if analysis.blockers:
             lines.extend(["", "Blockers:", *(f"- {item}" for item in analysis.blockers)])
         if analysis.warnings:

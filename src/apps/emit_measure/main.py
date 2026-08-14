@@ -32,6 +32,7 @@ from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication,
     QAbstractItemView,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -101,6 +102,7 @@ TWISS_RESULTS_FILENAME = "twissResults.jsonl"
 APP_DIR = Path(__file__).resolve().parent
 SCAN_DATA_SCHEMA_VERSION = "emit_scan_v1"
 SCAN_POINT_COLUMNS = ("Use", "K1", "sigx (mm)", "sigy (mm)")
+HALF_UNAVAILABLE_TWISS_QUADS = frozenset(f"QL{index:02d}" for index in range(13, 28))
 TWISS_TRANSPORT_TOOLTIP = (
     "Twiss transport assumes geometric emittance is conserved along the selected "
     "model path. Use it only for paths without acceleration or other processes "
@@ -527,6 +529,12 @@ QPushButton:pressed {{
     background-color: {button_pressed_bg};
 }}
 
+QPushButton[twissMetric="true"]:checked {{
+    background-color: {metric_active_fg};
+    border-color: {metric_active_fg};
+    color: {panel_bg};
+}}
+
 QPushButton:disabled {{
     color: {button_disabled_fg};
     border-color: {button_disabled_border};
@@ -836,6 +844,8 @@ class myWindow(QWidget,Ui_Form):
         self.latest_scan_completion = None
         self._scan_result_ready = False
         self.latest_twiss_summary = None
+        self.latest_twiss_profile = None
+        self.latest_twiss_design_profile = None
         self.twiss_initial_source = {"kind": "manual"}
         self.latest_beam_image = None
         self.latest_beam_fit_result = None
@@ -885,7 +895,8 @@ class myWindow(QWidget,Ui_Form):
         self.twiss_plane_combo.currentIndexChanged.connect(self._update_twiss_path_status)
         self.lineEdit.textEdited.connect(self._mark_twiss_initial_manual)
         self.lineEdit_3.textEdited.connect(self._mark_twiss_initial_manual)
-        self.lineEdit_6.textEdited.connect(self._mark_twiss_initial_manual)
+        self.lineEdit.textChanged.connect(self._sync_initial_twiss_gamma)
+        self.lineEdit_3.textChanged.connect(self._sync_initial_twiss_gamma)
         self.tabWidget.currentChanged.connect(self._refresh_status)
         for edit in (
             self.lineEdit_2,
@@ -904,6 +915,7 @@ class myWindow(QWidget,Ui_Form):
         self._refresh_model_controls()
         self._apply_theme()
         self._draw_placeholder_plots()
+        self._draw_twiss_profile()
         self._refresh_status()
         self._beam_image_auto_refresh_ready = True
         self._schedule_beam_image_refresh()
@@ -946,8 +958,78 @@ class myWindow(QWidget,Ui_Form):
         self.twiss_tab_layout = QGridLayout(self.twiss_tab)
         self.twiss_tab_layout.setContentsMargins(0, 0, 6, 6)
         self.twiss_tab_layout.setSpacing(10)
+        self._build_twiss_plot_panel()
         twiss_tab_index = self.tabWidget.addTab(self.twiss_tab, "Twiss")
         self.tabWidget.setTabToolTip(twiss_tab_index, TWISS_TRANSPORT_TOOLTIP)
+
+    def _build_twiss_plot_panel(self):
+        self.twiss_plot_card = QFrame(self.twiss_tab)
+        self.twiss_plot_card.setObjectName("plotCard")
+        self.twiss_plot_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        layout = QVBoxLayout(self.twiss_plot_card)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(6)
+        title = QLabel("Twiss Profile", self.twiss_plot_card)
+        title.setObjectName("panelTitle")
+        header.addWidget(title)
+        header.addStretch(1)
+
+        self.twiss_plot_cursor_label = QLabel("--", self.twiss_plot_card)
+        self.twiss_plot_cursor_label.setProperty("role", "field")
+        header.addWidget(self.twiss_plot_cursor_label)
+
+        self.twiss_design_checkbox = QCheckBox("Design", self.twiss_plot_card)
+        self.twiss_design_checkbox.setChecked(True)
+        self.twiss_design_checkbox.setToolTip(
+            "Overlay the Elegant design-lattice Twiss profile."
+        )
+        self.twiss_design_checkbox.toggled.connect(self._draw_twiss_profile)
+        header.addWidget(self.twiss_design_checkbox)
+
+        self.twiss_metric_group = QButtonGroup(self.twiss_plot_card)
+        self.twiss_metric_group.setExclusive(True)
+        self.twiss_metric_buttons = {}
+        self.twiss_plot_metric = "beta"
+        for metric, label in (("beta", "β"), ("alpha", "α"), ("gamma", "γ")):
+            button = QPushButton(label, self.twiss_plot_card)
+            button.setCheckable(True)
+            button.setFixedWidth(40)
+            button.setProperty("compact", True)
+            button.setProperty("twissMetric", True)
+            button.setToolTip(f"Plot {metric} along the selected model path.")
+            button.clicked.connect(
+                lambda _checked=False, selected=metric: self._select_twiss_plot_metric(selected)
+            )
+            self.twiss_metric_group.addButton(button)
+            self.twiss_metric_buttons[metric] = button
+            header.addWidget(button)
+        self.twiss_metric_buttons["beta"].setChecked(True)
+        layout.addLayout(header)
+
+        self.twiss_plot_widget = MplWidget(self.twiss_plot_card)
+        self.twiss_plot_widget.fig.clear()
+        twiss_grid = self.twiss_plot_widget.fig.add_gridspec(
+            2,
+            1,
+            height_ratios=(10, 2),
+            hspace=0.04,
+        )
+        self.twiss_plot_widget.axes = self.twiss_plot_widget.fig.add_subplot(twiss_grid[0])
+        self.twiss_lattice_axes = self.twiss_plot_widget.fig.add_subplot(
+            twiss_grid[1],
+            sharex=self.twiss_plot_widget.axes,
+        )
+        self.twiss_plot_widget.setMinimumHeight(360)
+        self.twiss_plot_widget.canvas.mpl_connect(
+            "motion_notify_event",
+            self._handle_twiss_plot_hover,
+        )
+        layout.addWidget(self.twiss_plot_widget, 1)
 
     def _build_summary_panel(self):
         panel = QFrame(self)
@@ -1227,8 +1309,11 @@ class myWindow(QWidget,Ui_Form):
         self.gridLayout_4.setRowStretch(0, 4)
         self.gridLayout_4.setRowStretch(1, 1)
 
-        self.twiss_tab_layout.addWidget(self.widget_13, 0, 0, Qt.AlignTop | Qt.AlignLeft)
-        self.twiss_tab_layout.setColumnStretch(0, 1)
+        self.twiss_tab_layout.addWidget(self.widget_13, 0, 0, Qt.AlignTop)
+        self.twiss_tab_layout.addWidget(self.twiss_plot_card, 0, 1)
+        self.twiss_tab_layout.setColumnStretch(0, 2)
+        self.twiss_tab_layout.setColumnStretch(1, 5)
+        self.twiss_tab_layout.setRowStretch(0, 1)
 
     def _wrap_plot_card(self, layout, widget, title_text, row, col, parent):
         layout.removeWidget(widget)
@@ -1272,7 +1357,7 @@ class myWindow(QWidget,Ui_Form):
             self.widget_13,
         ):
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.widget_13.setMaximumWidth(900)
+        self.widget_13.setMaximumWidth(580)
 
         self.label_9.setText("Scan Control")
         self.label_15.setText("X Plane Results")
@@ -1370,6 +1455,9 @@ class myWindow(QWidget,Ui_Form):
         self.twiss_map_edit.setPlainText("No Twiss calculation yet")
         self.twiss_map_edit.setFixedHeight(58)
         self.twiss_map_edit.setLineWrapMode(QTextEdit.NoWrap)
+        self.lineEdit_6.setReadOnly(True)
+        self.lineEdit_6.setToolTip("Derived from beta and alpha using gamma = (1 + alpha²) / beta.")
+        self.label_49.setToolTip(self.lineEdit_6.toolTip())
 
         self._result_fields = [
             self.lineEdit_11, self.lineEdit_12, self.lineEdit_13, self.lineEdit_14, self.lineEdit_15, self.lineEdit_16,
@@ -1420,8 +1508,18 @@ class myWindow(QWidget,Ui_Form):
         )
         self.adaptive_search_button.setToolTip(search_tooltip)
         self.comboBox_2.setToolTip("Start element for Twiss transport.")
+        if self.machine_profile.machine.id == "half":
+            self.comboBox_2.setToolTip(
+                self.comboBox_2.toolTip()
+                + " QL13–QL27 are temporarily unavailable until transport across accelerating sections is validated."
+            )
         self.label_4.setToolTip(self.comboBox_2.toolTip())
         self.comboBox_3.setToolTip("End element for Twiss transport.")
+        if self.machine_profile.machine.id == "half":
+            self.comboBox_3.setToolTip(
+                self.comboBox_3.toolTip()
+                + " QL13–QL27 are temporarily unavailable until transport across accelerating sections is validated."
+            )
         self.label_7.setToolTip(self.comboBox_3.toolTip())
         self.twiss_direction_combo.setToolTip("Choose forward transport or the inverse transfer map from To back to From.")
         self.twiss_direction_label.setToolTip(self.twiss_direction_combo.toolTip())
@@ -1731,6 +1829,7 @@ class myWindow(QWidget,Ui_Form):
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
         self._apply_theme()
         self._redraw_current_results()
+        self._draw_twiss_profile()
         self._refresh_status()
 
     def _style_axes(self, widget, xlabel=None, ylabel=None):
@@ -1748,6 +1847,26 @@ class myWindow(QWidget,Ui_Form):
             widget.axes.set_ylabel(ylabel)
         widget.axes.grid(alpha=0.75, linestyle="--", color=palette["plot_grid"])
 
+    def _style_twiss_plot_axes(self, metric):
+        labels = {
+            "beta": "β (m)",
+            "alpha": "α",
+            "gamma": "γ (1/m)",
+        }
+        self._style_axes(self.twiss_plot_widget, ylabel=labels[metric])
+        self.twiss_plot_widget.axes.tick_params(labelbottom=False)
+
+        palette = self._palette()
+        axes = self.twiss_lattice_axes
+        axes.set_facecolor(palette["plot_bg"])
+        axes.set_ylim(0, 1.15)
+        axes.set_yticks([])
+        axes.set_xlabel("Distance from From (m)", color=palette["plot_text"])
+        axes.tick_params(colors=palette["plot_text"], which="both", labelsize=9)
+        for spine in axes.spines.values():
+            spine.set_edgecolor(palette["plot_spine"])
+        axes.grid(False)
+
     def _style_all_plots(self):
         self._style_axes(self.widget, "$K_1 (m^{-2})$", "sigx (mm)")
         self._style_axes(self.widget_2, "$-K= K_1 L_q (m^{-1})$", "$sigx^2 (mm^2)$")
@@ -1755,10 +1874,259 @@ class myWindow(QWidget,Ui_Form):
         self._style_axes(self.widget_9, "$K= K_1 L_q (m^{-1})$", "$sigy^2 (mm^2)$")
         if hasattr(self, "beam_image_widget"):
             self._style_axes(self.beam_image_widget, "x (mm)", "y (mm)")
+        if hasattr(self, "twiss_plot_widget"):
+            self._style_twiss_plot_axes(self.twiss_plot_metric)
         for plot in (self.widget, self.widget_2, self.widget_8, self.widget_9):
             plot.canvas.draw_idle()
         if hasattr(self, "beam_image_widget"):
             self.beam_image_widget.canvas.draw_idle()
+        if hasattr(self, "twiss_plot_widget"):
+            self.twiss_plot_widget.canvas.draw_idle()
+
+    def _select_twiss_plot_metric(self, metric):
+        if metric not in {"beta", "alpha", "gamma"}:
+            return
+        self.twiss_plot_metric = metric
+        self.twiss_metric_buttons[metric].setChecked(True)
+        self._draw_twiss_profile()
+
+    def _draw_twiss_profile(self):
+        if not hasattr(self, "twiss_plot_widget"):
+            return
+        rows = self.latest_twiss_profile or ()
+        design_rows = self.latest_twiss_design_profile or ()
+        metric = self.twiss_plot_metric
+        if not rows:
+            self.twiss_plot_cursor_label.setText("--")
+            axes = self.twiss_plot_widget.axes
+            axes.clear()
+            self.twiss_lattice_axes.clear()
+            self._style_twiss_plot_axes(metric)
+            axes.text(
+                0.5,
+                0.5,
+                "No Twiss profile yet",
+                transform=axes.transAxes,
+                ha="center",
+                va="center",
+                color=self._palette()["muted_fg"],
+                fontsize=10,
+            )
+            self._twiss_cursor_line = None
+            self._twiss_lattice_cursor_line = None
+            self.twiss_plot_widget.canvas.draw_idle()
+            return
+
+        palette = self._palette()
+        distances = np.asarray([row["distance_m"] for row in rows], dtype=float)
+        values = np.asarray([row[metric] for row in rows], dtype=float)
+        axes = self.twiss_plot_widget.axes
+        axes.clear()
+        self.twiss_lattice_axes.clear()
+        self._style_twiss_plot_axes(metric)
+        if self.twiss_design_checkbox.isChecked() and design_rows:
+            design_distances = np.asarray(
+                [row["distance_m"] for row in design_rows], dtype=float
+            )
+            design_values = np.asarray([row[metric] for row in design_rows], dtype=float)
+            axes.plot(
+                design_distances,
+                design_values,
+                color=palette["muted_fg"],
+                linewidth=1.4,
+                linestyle="--",
+                label="Design",
+            )
+        axes.plot(
+            distances,
+            values,
+            color=palette["plot_fit"],
+            linewidth=1.8,
+            label="Current K1",
+        )
+        axes.scatter(
+            (distances[0], distances[-1]),
+            (values[0], values[-1]),
+            color=palette["plot_point"],
+            s=24,
+            zorder=3,
+        )
+        axes.margins(x=0.02, y=0.08)
+        legend = axes.legend(loc="upper right", frameon=False, fontsize=8)
+        for text in legend.get_texts():
+            text.set_color(palette["plot_text"])
+        self._twiss_cursor_line = axes.axvline(
+            distances[0],
+            color=palette["plot_point"],
+            linewidth=1,
+            alpha=0.65,
+            visible=False,
+        )
+        self._draw_twiss_lattice_strip(rows)
+        self._set_twiss_cursor_point(rows[0], metric)
+        self.twiss_plot_widget.canvas.draw_idle()
+
+    def _draw_twiss_lattice_strip(self, rows):
+        axes = self.twiss_lattice_axes
+        palette = self._palette()
+        total_distance = max(float(row["distance_m"]) for row in rows)
+        backward = (self.latest_twiss_summary or {}).get("direction") == "backward"
+        span = max(total_distance, 1.0)
+        minimum_width = span * 0.003
+        colors = {
+            "bend_h": "#db8b3d",
+            "bend_v": "#3aa6b9",
+            "quad": "#9b72cf",
+            "bpm": "#4dbb83",
+            "rf": "#b27ad8",
+        }
+        visible_families = set()
+
+        axes.axhline(0.5, color=palette["muted_fg"], linewidth=0.8, alpha=0.75)
+
+        for row in rows:
+            name = str(row.get("element_name", ""))
+            element_type = str(row.get("element_type", "")).upper()
+            is_bend = "BEND" in element_type or element_type in {"SBEN", "RBEN"}
+            is_bpm = name.upper().startswith("BPM") or element_type == "MONI"
+            is_rf = "RF" in element_type or element_type in {"TWLA", "KICKMAP"}
+            if is_bend:
+                tilt = float(row.get("element_tilt_rad", 0.0))
+                family = "bend_v" if abs(math.sin(tilt)) > 0.7 else "bend_h"
+            elif "QUAD" in element_type:
+                family = "quad"
+            elif is_bpm:
+                family = "bpm"
+            elif is_rf:
+                family = "rf"
+            else:
+                continue
+            visible_families.add(family)
+
+            distance = float(row["distance_m"])
+            length = max(0.0, float(row.get("element_length_m", 0.0)))
+            left = distance if backward else distance - length
+            left = min(max(0.0, left), total_distance)
+            width = max(min(total_distance, left + length) - left, minimum_width)
+            center = left + width / 2.0
+
+            if family == "quad":
+                k1 = float(row.get("element_k1_m2", float("nan")))
+                bottom = 0.5 if not math.isfinite(k1) or k1 >= 0 else 0.12
+                axes.add_patch(
+                    mpl.patches.Rectangle(
+                        (left, bottom), width, 0.38,
+                        facecolor=colors[family], edgecolor=colors[family], alpha=0.95,
+                    )
+                )
+            elif family == "bpm":
+                axes.vlines(center, 0.27, 0.76, color=colors[family], linewidth=1.5)
+                axes.scatter(
+                    [center], [0.82], marker="v", s=22,
+                    color=colors[family], edgecolors="none", zorder=3,
+                )
+            else:
+                height = 0.34 if family.startswith("bend") else 0.24
+                axes.add_patch(
+                    mpl.patches.Rectangle(
+                        (left, 0.5 - height / 2.0), width, height,
+                        facecolor=colors[family], edgecolor=colors[family], alpha=0.95,
+                    )
+                )
+
+        legend_labels = (
+            ("bend_h", "Bend-H"),
+            ("bend_v", "Bend-V"),
+            ("quad", "Quad +/-"),
+            ("bpm", "BPM"),
+            ("rf", "RF"),
+        )
+        handles = [
+            mpl.patches.Patch(color=colors[family], label=label)
+            for family, label in legend_labels
+            if family in visible_families
+        ]
+        if handles:
+            legend = axes.legend(
+                handles=handles,
+                loc="upper left",
+                bbox_to_anchor=(0.0, 1.03),
+                ncol=len(handles),
+                frameon=False,
+                fontsize=7,
+                handlelength=1.0,
+                handletextpad=0.35,
+                columnspacing=0.8,
+                borderaxespad=0.0,
+            )
+            for text in legend.get_texts():
+                text.set_color(palette["muted_fg"])
+
+        self._twiss_lattice_cursor_line = axes.axvline(
+            0.0,
+            color=palette["window_fg"],
+            linewidth=1,
+            visible=False,
+        )
+        axes.set_xlim(0.0, total_distance if total_distance > 0 else 1.0)
+
+    @staticmethod
+    def _format_twiss_profile_point(row, metric, design_row=None):
+        units = {"beta": "m", "alpha": "", "gamma": "1/m"}
+        suffix = f" {units[metric]}" if units[metric] else ""
+        if design_row is None:
+            text = (
+                f"{row['element_name']} · {row['distance_m']:.3f} m · "
+                f"{metric} {row[metric]:.5g}{suffix}"
+            )
+        else:
+            current_value = float(row[metric])
+            design_value = float(design_row[metric])
+            text = (
+                f"{row['element_name']} · {row['distance_m']:.3f} m · "
+                f"Current {current_value:.5g} · Design {design_value:.5g} · "
+                f"Δ {current_value - design_value:+.4g}{suffix}"
+            )
+        k1 = float(row.get("element_k1_m2", float("nan")))
+        if math.isfinite(k1):
+            text += f" · K1 {k1:.5g} 1/m²"
+        return text
+
+    def _set_twiss_cursor_point(self, row, metric):
+        design_row = None
+        design_rows = self.latest_twiss_design_profile or ()
+        if self.twiss_design_checkbox.isChecked() and design_rows:
+            design_row = min(
+                design_rows,
+                key=lambda candidate: abs(
+                    float(candidate["distance_m"]) - float(row["distance_m"])
+                ),
+            )
+        self.twiss_plot_cursor_label.setText(
+            self._format_twiss_profile_point(row, metric, design_row)
+        )
+
+    def _handle_twiss_plot_hover(self, event):
+        rows = self.latest_twiss_profile or ()
+        if (
+            not rows
+            or event.inaxes not in {self.twiss_plot_widget.axes, self.twiss_lattice_axes}
+            or event.xdata is None
+        ):
+            return
+        distances = np.asarray([row["distance_m"] for row in rows], dtype=float)
+        index = int(np.argmin(np.abs(distances - float(event.xdata))))
+        row = rows[index]
+        self._set_twiss_cursor_point(row, self.twiss_plot_metric)
+        if self._twiss_cursor_line is not None:
+            self._twiss_cursor_line.set_xdata([row["distance_m"], row["distance_m"]])
+            self._twiss_cursor_line.set_visible(True)
+            if self._twiss_lattice_cursor_line is not None:
+                self._twiss_lattice_cursor_line.set_xdata(
+                    [row["distance_m"], row["distance_m"]]
+                )
+                self._twiss_lattice_cursor_line.set_visible(True)
+            self.twiss_plot_widget.canvas.draw_idle()
 
     def _draw_placeholder(self, widget, xlabel, ylabel, note):
         palette = self._palette()
@@ -2442,7 +2810,17 @@ class myWindow(QWidget,Ui_Form):
                 "gamma": _finite_float_or_none(result.get("gamma")),
             },
             "transfer_matrix": result.get("matrix"),
+            "profile": [dict(row) for row in result.get("profile", ())],
+            "design_profile": [dict(row) for row in result.get("design_profile", ())],
         }
+        design_endpoint = result.get("design_endpoint")
+        if isinstance(design_endpoint, Mapping):
+            record["design_result_twiss"] = {
+                key: _finite_float_or_none(design_endpoint.get(key))
+                for key in ("beta", "alpha", "gamma")
+            }
+        if result.get("design_error"):
+            record["design_error"] = str(result["design_error"])
         if self.loaded_scan_results_path is not None:
             record["scan_results_path"] = str(Path(self.loaded_scan_results_path))
         elif self.loaded_scan_metadata or self.pending_scan_metadata:
@@ -2630,6 +3008,27 @@ class myWindow(QWidget,Ui_Form):
     def _update_twiss_path_status(self):
         if not hasattr(self, "twiss_status_edit") or self._twiss_is_running():
             return
+        summary = self.latest_twiss_summary or {}
+        current_selection = (
+            self.comboBox_2.currentText(),
+            self.comboBox_3.currentText(),
+            "backward" if self._selected_twiss_inverse_map() else "forward",
+            self._selected_twiss_plane(),
+        )
+        result_selection = (
+            summary.get("from_element"),
+            summary.get("to_element"),
+            summary.get("direction"),
+            summary.get("plane"),
+        )
+        if summary.get("status") in {"valid", "error"} and current_selection != result_selection:
+            self.latest_twiss_summary = None
+            self.latest_twiss_profile = None
+            self.latest_twiss_design_profile = None
+            for field in (self.lineEdit_17, self.lineEdit_21, self.lineEdit_22):
+                field.clear()
+            self.twiss_map_edit.setPlainText("No Twiss calculation yet")
+            self._draw_twiss_profile()
         message = self._twiss_path_validation_message()
         self.twiss_status_edit.setText(message or self._format_twiss_path_status())
 
@@ -2638,6 +3037,18 @@ class myWindow(QWidget,Ui_Form):
             "kind": "manual",
             "source_quad": self.comboBox_2.currentText() or None,
         }
+
+    def _sync_initial_twiss_gamma(self):
+        try:
+            beta = float(self.lineEdit.text())
+            alpha = float(self.lineEdit_3.text())
+        except ValueError:
+            self.lineEdit_6.clear()
+            return
+        if beta <= 0 or not math.isfinite(beta) or not math.isfinite(alpha):
+            self.lineEdit_6.clear()
+            return
+        self.lineEdit_6.setText(f"{(1.0 + alpha**2) / beta:.8g}")
 
     def _latest_fit_source_quad(self):
         for source in (
@@ -2673,14 +3084,13 @@ class myWindow(QWidget,Ui_Form):
 
         beta = _finite_float_or_none(plane_summary.get("beta"))
         alpha = _finite_float_or_none(plane_summary.get("alpha"))
-        gamma = _finite_float_or_none(plane_summary.get("gamma"))
-        if beta is None or alpha is None or gamma is None:
+        if beta is None or alpha is None:
             self._warn_twiss(f"Latest {self._format_twiss_plane_label(plane)} plane fit has incomplete Twiss values.")
             return
 
         self.lineEdit.setText(f"{beta:.8g}")
         self.lineEdit_3.setText(f"{alpha:.8g}")
-        self.lineEdit_6.setText(f"{gamma:.8g}")
+        self._sync_initial_twiss_gamma()
         source_quad = self._latest_fit_source_quad()
         if source_quad and not self._set_combo_current_text(self.comboBox_2, source_quad):
             self._warn_twiss(f"Latest fit source element {source_quad} is not available in the Twiss From list.")
@@ -2938,19 +3348,29 @@ class myWindow(QWidget,Ui_Form):
 
     def _twiss_from_choices(self):
         if self.emit_workflow.twiss_quads:
-            return list(self.emit_workflow.twiss_quads)
+            return [
+                element_id
+                for element_id in self.emit_workflow.twiss_quads
+                if self._twiss_element_is_available(element_id)
+            ]
 
         choices = []
         for preset in self.emit_workflow.presets:
-            if preset.quad not in choices:
+            if preset.quad not in choices and self._twiss_element_is_available(preset.quad):
                 choices.append(preset.quad)
         return choices
+
+    def _twiss_element_is_available(self, element_id):
+        return not (
+            self.machine_profile.machine.id == "half"
+            and element_id in HALF_UNAVAILABLE_TWISS_QUADS
+        )
 
     def _twiss_to_choices(self):
         choices = [
             element.id
             for element in self.machine_profile.elements
-            if element.kind == "quad"
+            if element.kind == "quad" and self._twiss_element_is_available(element.id)
         ]
         return choices or self._twiss_from_choices()
 
@@ -3850,19 +4270,6 @@ class myWindow(QWidget,Ui_Form):
         para["quad1"] = self.comboBox_2.currentText()
         para["quad2"] = self.comboBox_3.currentText()
 
-        expected_gamma = (1.0 + alpha0**2) / beta0
-        gamma_delta = abs(gamma0 - expected_gamma)
-        gamma_scale = max(1.0, abs(expected_gamma))
-        if gamma_delta / gamma_scale > 0.05:
-            QMessageBox.warning(
-                self,
-                "Twiss Calculation",
-                (
-                    "Initial gamma is not consistent with beta and alpha. "
-                    f"Expected gamma is about {expected_gamma:.6g} 1/m."
-                ),
-            )
-        
         para["inverse_map"] = self._selected_twiss_inverse_map()
         para["direction"] = "backward" if para["inverse_map"] else "forward"
 
@@ -3898,6 +4305,14 @@ class myWindow(QWidget,Ui_Form):
             "alpha0": alpha0,
             "gamma0": gamma0,
         }
+        self.latest_twiss_profile = None
+        self.latest_twiss_design_profile = None
+        if not self.twiss_design_checkbox.isEnabled():
+            blocked = self.twiss_design_checkbox.blockSignals(True)
+            self.twiss_design_checkbox.setChecked(True)
+            self.twiss_design_checkbox.blockSignals(blocked)
+        self.twiss_design_checkbox.setEnabled(False)
+        self._draw_twiss_profile()
         for field in (self.lineEdit_17, self.lineEdit_21, self.lineEdit_22):
             field.setText("")
         self.twiss_map_edit.setPlainText("Calculating transfer map...")
@@ -3970,7 +4385,10 @@ class myWindow(QWidget,Ui_Form):
             self.latest_scan_completion = None
             self._scan_result_ready = False
             self.latest_twiss_summary = None
+            self.latest_twiss_profile = None
+            self.latest_twiss_design_profile = None
             self.twiss_initial_source = {"kind": "manual"}
+            self._draw_twiss_profile()
             if self._selected_scan_strategy() == "grid":
                 self.scan_strategy_status_label.setText("Grid scan")
                 self.scan_strategy_status_label.setToolTip("")
@@ -4164,6 +4582,10 @@ class myWindow(QWidget,Ui_Form):
             self.lineEdit_22.setText("--")
             self.twiss_map_edit.setPlainText("--")
             self.twiss_status_edit.setText("Error")
+            self.latest_twiss_profile = None
+            self.latest_twiss_design_profile = None
+            self.twiss_design_checkbox.setEnabled(True)
+            self._draw_twiss_profile()
             self._refresh_status()
             self._warn_twiss(message)
             return
@@ -4171,6 +4593,21 @@ class myWindow(QWidget,Ui_Form):
         alpha = round(dict["alpha"], 2)
         gamma = round(dict["gamma"], 2)
         matrix_summary = dict.get("matrix")
+        self.latest_twiss_profile = tuple(dict.get("profile") or ())
+        self.latest_twiss_design_profile = tuple(dict.get("design_profile") or ())
+        if self.latest_twiss_design_profile:
+            self.twiss_design_checkbox.setEnabled(True)
+            self.twiss_design_checkbox.setToolTip(
+                "Overlay the Elegant design-lattice Twiss profile."
+            )
+        else:
+            blocked = self.twiss_design_checkbox.blockSignals(True)
+            self.twiss_design_checkbox.setChecked(False)
+            self.twiss_design_checkbox.blockSignals(blocked)
+            self.twiss_design_checkbox.setEnabled(False)
+            self.twiss_design_checkbox.setToolTip(
+                str(dict.get("design_error") or "Design profile is unavailable.")
+            )
 
         self.latest_twiss_summary = {
             "status": "valid",
@@ -4191,6 +4628,7 @@ class myWindow(QWidget,Ui_Form):
         self.lineEdit_21.setText(str(alpha))
         self.lineEdit_22.setText(str(gamma))
         self.twiss_map_edit.setPlainText(_format_matrix_summary(matrix_summary) or "No transfer map returned")
+        self._draw_twiss_profile()
         status_text = self._format_twiss_status_tooltip(self.latest_twiss_summary)
         try:
             log_path = self._append_twiss_result_log(dict)
@@ -4198,6 +4636,8 @@ class myWindow(QWidget,Ui_Form):
             print(f"Warning: failed to write Twiss result log: {exc}")
         else:
             status_text = f"{status_text}; logged to {log_path.name}"
+        if dict.get("design_error"):
+            status_text = f"{status_text}; design comparison unavailable"
         self.twiss_status_edit.setText(status_text)
         self._refresh_status()
 
@@ -4252,11 +4692,43 @@ class twissCalThread(QThread):
                 app_context=self.input["app_context"],
                 lattice_overrides=self.input.get("model_lattice_overrides"),
             )
-            if inverse:
-                matrix = np.linalg.inv(trans.get_map(quad2, quad1, seq="ent2exit"))
+            profile = trans.getTwissProfile(
+                quad1,
+                quad2,
+                twiss0,
+                plane=plane,
+                inverse=inverse,
+            )
+            matrix = profile.matrix
+            endpoint = profile.rows[-1]
+            twiss1 = {
+                "beta": endpoint["beta"],
+                "alpha": endpoint["alpha"],
+                "gamma": endpoint["gamma"],
+                "profile": [dict(row) for row in profile.rows],
+            }
+            try:
+                design_trans = transfer(
+                    self.input["EnergyMeV"],
+                    app_context=self.input["app_context"],
+                )
+                design_profile = design_trans.getTwissProfile(
+                    quad1,
+                    quad2,
+                    twiss0,
+                    plane=plane,
+                    inverse=inverse,
+                )
+            except Exception as exc:
+                twiss1["design_profile"] = []
+                twiss1["design_endpoint"] = None
+                twiss1["design_error"] = str(exc)
             else:
-                matrix = trans.get_map(quad1, quad2, seq="ent2exit")
-            twiss1 = _twiss_from_transfer_matrix(matrix, twiss0, plane=plane)
+                twiss1["design_profile"] = [dict(row) for row in design_profile.rows]
+                design_endpoint = design_profile.rows[-1]
+                twiss1["design_endpoint"] = {
+                    key: design_endpoint[key] for key in ("beta", "alpha", "gamma")
+                }
             twiss1.update(context)
             twiss1["beta0"] = twiss0["beta0"]
             twiss1["alpha0"] = twiss0["alpha0"]
@@ -5103,6 +5575,16 @@ class transfer:
 
     def getTwiss1(self, quad1, quad2, twiss0, plane="xplane", inverse=False):
         return self.model_backend.get_twiss1(
+            quad1,
+            quad2,
+            twiss0,
+            plane=plane,
+            inverse=inverse,
+            lattice_overrides=self.lattice_overrides,
+        )
+
+    def getTwissProfile(self, quad1, quad2, twiss0, plane="xplane", inverse=False):
+        return self.model_backend.get_twiss_profile(
             quad1,
             quad2,
             twiss0,

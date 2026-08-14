@@ -10,7 +10,10 @@ import numpy as np
 
 from half_linac.src.apps.dispersion_correction.calibration import (
     EnergyKnobCalibrationFit,
+    actuator_step_for_delta,
     fit_actuator_to_delta,
+    fit_quadratic_actuator_to_delta,
+    predict_delta_from_fit,
 )
 
 
@@ -49,6 +52,8 @@ class EnergyCalibrationAnalysis:
     target_actuator_step: float | None
     max_abs_residual: float | None
     directional_slope_mismatch: float | None
+    plus_actuator_offset: float | None = None
+    minus_actuator_offset: float | None = None
 
     @property
     def valid(self) -> bool:
@@ -145,6 +150,7 @@ def analyze_energy_calibration_draft(
     max_residual: float | None = None
     slope_mismatch: float | None = None
     if actuator_array.size >= 2 and np.ptp(actuator_array) > 0:
+        directional_slope_blocker: str | None = None
         try:
             fit = fit_actuator_to_delta(
                 actuator_array.tolist(),
@@ -153,10 +159,7 @@ def analyze_energy_calibration_draft(
         except ValueError as exc:
             blockers.append(str(exc))
         if fit is not None:
-            predicted = (
-                fit.slope_delta_per_actuator * actuator_array
-                + fit.intercept_delta
-            )
+            predicted = predict_delta_from_fit(fit, actuator_array)
             max_residual = float(np.max(np.abs(delta_array - predicted)))
             baseline_delta = (
                 fit.slope_delta_per_actuator * float(draft.baseline_actuator)
@@ -200,20 +203,76 @@ def analyze_energy_calibration_draft(
                     "directional linearity checking"
                 )
             elif slope_mismatch > 0.35:
-                blockers.append(
+                directional_slope_blocker = (
                     "Positive/negative directional slopes differ by "
                     f"{100.0 * slope_mismatch:.1f}%"
                 )
+                blockers.append(directional_slope_blocker)
             elif slope_mismatch > 0.20:
                 warnings.append(
                     "Positive/negative directional slopes differ by "
                     f"{100.0 * slope_mismatch:.1f}%"
                 )
+        if directional_slope_blocker is not None and actuator_array.size >= 5:
+            quadratic_fit, quadratic_blockers, quadratic_warnings = (
+                _quadratic_fallback_analysis(
+                    actuator_array,
+                    delta_array,
+                    baseline_actuator=float(draft.baseline_actuator),
+                    target_delta=float(target_delta),
+                    minimum_r_squared=float(minimum_r_squared),
+                    linear_max_residual=max_residual,
+                )
+            )
+            if quadratic_fit is not None and not quadratic_blockers:
+                fit = quadratic_fit
+                predicted = predict_delta_from_fit(fit, actuator_array)
+                max_residual = float(np.max(np.abs(delta_array - predicted)))
+                plan = actuator_step_for_delta(
+                    float(target_delta),
+                    _calibration_payload_for_fit(
+                        draft,
+                        fit,
+                        actuator_array,
+                        source_path="",
+                    ),
+                )
+                target_step = (
+                    max(abs(float(plan["plus_offset"])), abs(float(plan["minus_offset"])))
+                    if plan.get("calibrated")
+                    else None
+                )
+                blockers = [
+                    item
+                    for item in blockers
+                    if not _linear_fit_blocker(item, directional_slope_blocker)
+                ]
+                warnings.append(directional_slope_blocker)
+                warnings.append(
+                    "Using quadratic calibration because linear directional slopes differ"
+                )
+                warnings.extend(quadratic_warnings)
+            else:
+                blockers.extend(quadratic_blockers)
     if uncertainties_present:
         warnings.append(
-            "Uncertainty values are archived for traceability; the current "
-            "linear fit is unweighted"
+            "Uncertainty values are archived for traceability; the current fit is unweighted"
         )
+
+    plus_offset = minus_offset = None
+    if fit is not None:
+        plan = actuator_step_for_delta(
+            float(target_delta),
+            _calibration_payload_for_fit(
+                draft,
+                fit,
+                actuator_array,
+                source_path="",
+            ),
+        )
+        if plan.get("calibrated"):
+            plus_offset = float(plan["plus_offset"])
+            minus_offset = float(plan["minus_offset"])
 
     return EnergyCalibrationAnalysis(
         actuator_values=actuator_array,
@@ -225,6 +284,8 @@ def analyze_energy_calibration_draft(
         target_actuator_step=target_step,
         max_abs_residual=max_residual,
         directional_slope_mismatch=slope_mismatch,
+        plus_actuator_offset=plus_offset,
+        minus_actuator_offset=minus_offset,
     )
 
 
@@ -236,17 +297,44 @@ def calibration_fragment(
 ) -> dict[str, Any]:
     if not analysis.valid or analysis.fit is None:
         raise ValueError("Calibration draft has not passed quality checks")
-    return {
+    return _calibration_payload_for_fit(
+        draft,
+        analysis.fit,
+        analysis.actuator_values,
+        source_path=source_path,
+    )
+
+
+def _calibration_payload_for_fit(
+    draft: EnergyCalibrationDraft,
+    fit: EnergyKnobCalibrationFit,
+    actuator_values: np.ndarray,
+    *,
+    source_path: str,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "kind": "linear_relative",
-        "actuator_per_delta": analysis.fit.actuator_per_delta,
+        "actuator_per_delta": fit.actuator_per_delta,
         "session_override": True,
         "source": str(source_path),
         "baseline_actuator": float(draft.baseline_actuator),
-        "fit_r_squared": analysis.fit.r_squared,
-        "fit_points": analysis.fit.n_samples,
-        "valid_actuator_min": float(np.min(analysis.actuator_values)),
-        "valid_actuator_max": float(np.max(analysis.actuator_values)),
+        "fit_r_squared": fit.r_squared,
+        "fit_points": fit.n_samples,
+        "valid_actuator_min": float(np.min(actuator_values)),
+        "valid_actuator_max": float(np.max(actuator_values)),
     }
+    if fit.order == 2 and fit.coefficients:
+        payload.update(
+            {
+                "kind": "polynomial_relative",
+                "order": 2,
+                "coefficients": list(fit.coefficients),
+                "actuator_per_delta": fit.actuator_per_delta,
+            }
+        )
+    else:
+        payload["actuator_per_delta"] = fit.actuator_per_delta
+    return payload
 
 
 def save_energy_calibration_draft(
@@ -324,6 +412,88 @@ def _directional_slope_mismatch(
     return abs(positive_slope - negative_slope) / scale
 
 
+def _linear_fit_blocker(item: str, directional_slope_blocker: str | None) -> bool:
+    return (
+        item == directional_slope_blocker
+        or item.startswith("The fitted calibration does not give")
+        or item.startswith("R² ")
+        or item.startswith("Target energy step lies outside")
+    )
+
+
+def _quadratic_fallback_analysis(
+    actuators: np.ndarray,
+    deltas: np.ndarray,
+    *,
+    baseline_actuator: float,
+    target_delta: float,
+    minimum_r_squared: float,
+    linear_max_residual: float | None,
+) -> tuple[EnergyKnobCalibrationFit | None, list[str], list[str]]:
+    blockers: list[str] = []
+    warnings: list[str] = []
+    try:
+        fit = fit_quadratic_actuator_to_delta(
+            actuators.tolist(),
+            deltas.tolist(),
+            baseline_actuator=baseline_actuator,
+        )
+    except ValueError as exc:
+        return None, [f"Quadratic calibration failed: {exc}"], warnings
+
+    predicted = predict_delta_from_fit(fit, actuators)
+    max_residual = float(np.max(np.abs(deltas - predicted)))
+    baseline_delta = float(np.polyval(np.asarray(fit.coefficients), 0.0))
+    baseline_tolerance = max(
+        abs(float(target_delta)) * 0.25,
+        2.0 * max_residual,
+        1.0e-12,
+    )
+    if abs(baseline_delta) > baseline_tolerance:
+        blockers.append(
+            "Quadratic calibration does not give Δp/p≈0 at the configured baseline actuator"
+        )
+    if fit.r_squared < minimum_r_squared:
+        blockers.append(
+            f"Quadratic R² {fit.r_squared:.6g} is below the required {minimum_r_squared:.6g}"
+        )
+    if linear_max_residual is not None and max_residual > linear_max_residual * 1.05:
+        warnings.append("Quadratic calibration residual is not better than the linear fit")
+
+    negative = actuators < baseline_actuator
+    positive = actuators > baseline_actuator
+    if np.count_nonzero(negative) < 2 or np.count_nonzero(positive) < 2:
+        warnings.append(
+            "At least two points on each side are recommended for quadratic calibration"
+        )
+
+    calibration = {
+        "kind": "polynomial_relative",
+        "order": 2,
+        "baseline_actuator": float(baseline_actuator),
+        "coefficients": list(fit.coefficients),
+        "valid_actuator_min": float(np.min(actuators)),
+        "valid_actuator_max": float(np.max(actuators)),
+        "actuator_per_delta": fit.actuator_per_delta,
+    }
+    plan = actuator_step_for_delta(float(target_delta), calibration)
+    if not plan.get("calibrated"):
+        blockers.append(f"Quadratic target step is unavailable: {plan.get('reason')}")
+
+    plus = fit.slope_delta_per_actuator
+    a = fit.coefficients[0] if fit.coefficients else 0.0
+    offsets = np.linspace(
+        float(np.min(actuators)) - baseline_actuator,
+        float(np.max(actuators)) - baseline_actuator,
+        80,
+    )
+    local_slopes = 2.0 * float(a) * offsets + float(plus)
+    if np.any(np.sign(local_slopes) != np.sign(plus)):
+        blockers.append("Quadratic calibration is not monotonic across the scanned range")
+
+    return fit, blockers, warnings
+
+
 def _analysis_payload(analysis: EnergyCalibrationAnalysis) -> dict[str, Any]:
     return {
         "valid": analysis.valid,
@@ -333,6 +503,8 @@ def _analysis_payload(analysis: EnergyCalibrationAnalysis) -> dict[str, Any]:
         "target_actuator_step": analysis.target_actuator_step,
         "max_abs_residual": analysis.max_abs_residual,
         "directional_slope_mismatch": analysis.directional_slope_mismatch,
+        "plus_actuator_offset": analysis.plus_actuator_offset,
+        "minus_actuator_offset": analysis.minus_actuator_offset,
         "fit": analysis.fit.as_dict() if analysis.fit is not None else None,
     }
 

@@ -521,6 +521,7 @@ class ScanParameters:
     model_lattice_overrides: dict | None = None
     model_snapshot_error: str | None = None
     archive_dir: Path | None = None
+    bpm_position_scale_to_m: float = 1.0
 
 
 class myWindow(QWidget, Ui_Form):
@@ -2241,6 +2242,16 @@ class myWindow(QWidget, Ui_Form):
         )
         return snapshot.as_metadata()
 
+    def _bba_bpm_position_scale_to_m(self, backend):
+        workflow = self.machine_profile.workflows.get("bba", {})
+        scale_by_backend = workflow.get("bpm_position_scale_to_mm", {})
+        if not isinstance(scale_by_backend, Mapping) or backend not in scale_by_backend:
+            return 1.0
+        scale_to_mm = float(scale_by_backend[backend])
+        if not np.isfinite(scale_to_mm) or scale_to_mm <= 0:
+            raise ValueError(f"bpm_position_scale_to_mm.{backend} must be positive.")
+        return scale_to_mm * 1e-3
+
     def _prepare_bba2_model_snapshot(self, params):
         try:
             metadata = self._build_bba2_model_snapshot_metadata(params)
@@ -2282,6 +2293,7 @@ class myWindow(QWidget, Ui_Form):
             params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, mode)
             params.control_backend = mode
             params.app_context = self.app_context
+            params.bpm_position_scale_to_m = self._bba_bpm_position_scale_to_m(mode)
 
             params.corr_from = float(self.lineEdit.text())
             params.corr_end = float(self.lineEdit_2.text())
@@ -2333,6 +2345,7 @@ class myWindow(QWidget, Ui_Form):
             params.corrPV = params.corr_target.pv_name
             params.bpm1PV = resolve_channel(self.app_context, params.bpm1, bpm_channel, params.control_backend)
             params.bpm2PV = resolve_channel(self.app_context, params.bpm2, bpm_channel, params.control_backend)
+            params.bpm_position_scale_to_m = self._bba_bpm_position_scale_to_m(params.control_backend)
 
             params.quad_from = float(self.lineEdit_14.text())
             params.quad_end = float(self.lineEdit_17.text())
@@ -2704,6 +2717,9 @@ class BBABaseThread(QThread):
         if value is not None:
             pv.put(value)
 
+    def _read_bpm_m(self, pv, label):
+        return float(self._safe_get(pv, label)) * float(self.params.bpm_position_scale_to_m)
+
     def _sleep_or_stop(self, seconds):
         if seconds <= 0:
             return self.is_running
@@ -2968,8 +2984,8 @@ class BBAScanThread(BBABaseThread):
                         if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                             return None
 
-                        bpm2_value = self._safe_get(bpm2, self.params.bpm2PV)
-                        bpm1_value = self._safe_get(bpm1, self.params.bpm1PV)
+                        bpm2_value = self._read_bpm_m(bpm2, self.params.bpm2PV)
+                        bpm1_value = self._read_bpm_m(bpm1, self.params.bpm1PV)
                         bpm2_samples.append(bpm2_value)
                         bpm1_samples.append(bpm1_value)
                         quad_k1 = k1 * sign
@@ -3282,7 +3298,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 for sample_index in range(self.params.samples):
                     if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                         return None
-                    bpm2_value = self._safe_get(bpm2, self.params.bpm2PV)
+                    bpm2_value = self._read_bpm_m(bpm2, self.params.bpm2PV)
                     print("K1=", k1, "bpm2=", bpm2_value)
                     bpm2_samples.append(bpm2_value)
                     k1_samples.append(k1)
@@ -3329,7 +3345,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 return None
             if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                 return None
-            value = self._safe_get(bpm1, self.params.bpm1PV)
+            value = self._read_bpm_m(bpm1, self.params.bpm1PV)
             samples.append(value)
             print("BPM1 m1=", value * 1e3, "mm")
             self._emit({
@@ -3372,7 +3388,7 @@ class BBAScanThreadBBA2(BBABaseThread):
                 for sample_index in range(self.params.samples):
                     if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                         return None
-                    bpm2_value = self._safe_get(bpm2, self.params.bpm2PV)
+                    bpm2_value = self._read_bpm_m(bpm2, self.params.bpm2PV)
                     print("corrector=", kick, "bpm2=", bpm2_value)
                     bpm2_samples.append(bpm2_value)
                     theta_samples.append(angle_values[idx])

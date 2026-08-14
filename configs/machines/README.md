@@ -118,7 +118,7 @@ Do not duplicate broad selectable element lists in app configs when they can be
 derived from element `kind`, `plane`, or minimal tags.
 Prefer element ids plus logical channels over direct PV strings. Keep direct PVs in
 app configs only for external controls that are not yet represented as machine elements.
-See [`docs/APP_WORKFLOW_CONFIG_PRINCIPLES.md`](../../docs/APP_WORKFLOW_CONFIG_PRINCIPLES.md)
+See [`docs/platform/APP_WORKFLOW_CONFIG_PRINCIPLES.md`](../../docs/platform/APP_WORKFLOW_CONFIG_PRINCIPLES.md)
 for the shared layout, scan, limit, derivation, and compatibility conventions used by
 these workflow files.
 
@@ -127,10 +127,16 @@ model-driven apps. App workflow files may select one of these backends by name.
 For elegant backends, keep source assets and generated working files separate:
 
 - `asset_dir`, `source_lattice`, and `*_ini_ele` point to tracked model assets.
-- `emit_working_dir` and `energy_working_dir` point to ignored runtime workspaces
+- `optics_working_dir` and `energy_working_dir` point to ignored runtime workspaces
   under `runtime/model_backend/<machine>/<backend>/`.
-- Generated files such as `emit.json`, `emit.lte`, `esa.json`, and `esa.lte`
+- Generated files such as `optics.json`, `optics.lte`, `esa.json`, and `esa.lte`
   are runtime artifacts and should not be tracked.
+
+Model snapshots may define field-level rules in `snapshot_mapping.defaults` when
+the logical channel, units, and conversion are genuinely identical for every
+element using that model field. Element-specific entries in
+`snapshot_mapping.fields` take precedence. Current-based magnets or any channel
+requiring calibration must keep an explicit element mapping and conversion.
 
 `references/` is for machine-specific source references and migration material, not runtime
 profile data. Use `references/control_system/` for raw PV lists or interface documents supplied

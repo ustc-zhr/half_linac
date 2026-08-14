@@ -48,7 +48,10 @@ from .energy_spectrum import (
 )
 from .model_backend import (
     BeamModelBackend,
+    EnergyModelBackend,
+    EnergyOpticsResult,
     ElegantModelBackend,
+    TwissProfileResult,
     build_model_backend,
     prepare_elegant_model_workdir,
 )
@@ -64,6 +67,7 @@ from .model_snapshot import (
     build_model_snapshot,
     load_model_snapshot,
     model_snapshot_lattice_overrides,
+    resolve_model_snapshot_field_spec,
     save_model_snapshot,
 )
 from .models import (
@@ -146,6 +150,9 @@ __all__ = [
     "ControlBackendConfig",
     "CONTROL_BACKEND_ENV",
     "ElementConfig",
+    "EnergyModelBackend",
+    "EnergyOpticsResult",
+    "TwissProfileResult",
     "ElegantModelBackend",
     "EmitAdaptiveScanConfig",
     "EmitAnalysisConfig",
@@ -218,6 +225,7 @@ __all__ = [
     "load_solenoid_centering_workflow",
     "make_runtime_run_id",
     "model_snapshot_lattice_overrides",
+    "resolve_model_snapshot_field_spec",
     "new_app_run_dir",
     "normalize_mode",
     "normalize_plane",
