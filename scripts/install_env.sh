@@ -97,7 +97,7 @@ elegant was not found in PATH. VM and model-backend workflows require both
 elegant and Python sdds.
 
 Install or load elegant, then rerun this script. See:
-  $REPO_ROOT/docs/ELEGANT_INSTALL.md
+  $REPO_ROOT/docs/getting_started/ELEGANT_INSTALL.md
 
 For an IOC-only environment without model calculations, rerun with --core-only.
 EOF

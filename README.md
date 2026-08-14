@@ -52,7 +52,8 @@ bash scripts/check.sh              # 快速静态检查
 bash scripts/runMe                 # 启动 Control Room GUI
 bash scripts/start_vm.sh           # 启动 virtual machine 管理器
 bash scripts/start_ioc_manager.sh  # 启动 Python IOC 管理器
-bash scripts/build_ioc.sh          # 重建 softIOC
+bash scripts/configure_softioc.sh --epics-base "$EPICS_BASE"  # 首次配置并重建 softIOC
+bash scripts/build_ioc.sh          # 使用本机配置再次重建 softIOC
 ```
 
 脚本会自行定位仓库路径。只有在当前 shell 里反复手动运行多个 Python 入口时，

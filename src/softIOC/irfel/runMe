@@ -1,9 +1,26 @@
 #!/bin/bash
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
-EPICS_BASE="${EPICS_BASE:-/mnt/d/A/base-7.0.8/base-7.0.8}"
-export LD_LIBRARY_PATH="$APP_DIR/lib/linux-x86_64:$EPICS_BASE/lib/linux-x86_64:${LD_LIBRARY_PATH:-}"
+BOOT_DIR="$APP_DIR/iocBoot/ioctarget"
+ENV_PATHS="$BOOT_DIR/envPaths"
 
-cd iocBoot/ioctarget
+if [[ ! -f "$ENV_PATHS" ]]; then
+  echo "Missing generated envPaths. Run scripts/configure_softioc.sh first." >&2
+  exit 1
+fi
 
-./st.cmd 
+EPICS_BASE="$(sed -n 's/^epicsEnvSet("EPICS_BASE","\(.*\)")$/\1/p' "$ENV_PATHS")"
+if [[ -z "$EPICS_BASE" || ! -x "$EPICS_BASE/startup/EpicsHostArch" ]]; then
+  echo "envPaths does not contain a usable EPICS_BASE: $ENV_PATHS" >&2
+  exit 1
+fi
+
+HOST_ARCH="$("$EPICS_BASE/startup/EpicsHostArch")"
+TARGET="$APP_DIR/bin/$HOST_ARCH/target"
+if [[ ! -x "$TARGET" ]]; then
+  echo "Missing IOC target for $HOST_ARCH. Rebuild with scripts/build_ioc.sh." >&2
+  exit 1
+fi
+
+cd "$BOOT_DIR"
+exec "$TARGET" st.cmd

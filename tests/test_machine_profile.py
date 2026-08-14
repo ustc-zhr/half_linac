@@ -791,6 +791,17 @@ class MachineProfileTests(unittest.TestCase):
         ]
         self.assertEqual(ql27_path_quads, ["QL27", "QT01", "QT02"])
 
+        qt18_path_elements = backend.get_line_elements("QT02", "QT18")
+        qt18_path_quads = [
+            element["NAME"]
+            for element in qt18_path_elements
+            if element.get("TYPE") == "QUAD" and "K1" in element
+        ]
+        self.assertEqual(qt18_path_quads.count("QT17"), 1)
+        self.assertNotIn("QTR1", qt18_path_quads)
+        qt17 = next(element for element in qt18_path_elements if element["NAME"] == "QT17")
+        self.assertAlmostEqual(float(qt17["L"]), 0.15)
+
     def test_model_snapshot_can_use_design_lattice_without_pv_read(self):
         context = load_app_context(
             "energy_spectrum",

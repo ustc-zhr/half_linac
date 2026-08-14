@@ -29,7 +29,8 @@
 #SNCSEQ = $(MODULES)/seq-ver
 
 # EPICS_BASE should appear last so earlier modules can override stuff:
-EPICS_BASE = /mnt/d/A/base-7.0.8/base-7.0.8
+# Machine-local value is generated in RELEASE.local by configure_softioc.sh.
+EPICS_BASE = /path/to/epics-base
 
 # Set RULES here if you want to use build rules from somewhere
 # other than EPICS_BASE:
