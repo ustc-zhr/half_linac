@@ -43,7 +43,14 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        self.window = MainWindow()
+        with patch.dict(
+            os.environ,
+            {
+                "HALF_LINAC_MACHINE_ID": "half",
+                "HALF_LINAC_CONTROL_BACKEND": "real",
+            },
+        ):
+            self.window = MainWindow()
 
     def tearDown(self):
         self.window.close()

@@ -413,13 +413,15 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(workflow.default_preset, "sl01_1_centering")
         preset = workflow.presets_by_id["sl01_1_centering"]
         self.assertEqual(preset.solenoid, "SL01-1")
-        self.assertEqual(preset.hcorr, "SL01-DX")
+        self.assertEqual(preset.hcorr, "SM01-DX")
+        self.assertEqual(preset.vcorr, "SM01-DY")
+        self.assertEqual(preset.bpm, "BPM02")
         self.assertEqual(preset.samples_per_point, 3)
         self.assertEqual(preset.settle_time_s, 2.0)
         self.assertEqual(preset.sample_interval_s, 0.2)
         self.assertEqual(preset.max_rounds, 2)
-        self.assertEqual(preset.solenoid_scan.relative_from, -0.05)
-        self.assertEqual(preset.corrector_scan.relative_to, 0.0002)
+        self.assertEqual(preset.solenoid_scan.relative_from, -4.0)
+        self.assertEqual(preset.corrector_scan.relative_to, 2.0)
         self.assertIsNotNone(preset.motion_verification)
         self.assertEqual(preset.minimum_relative_score_improvement, 0.05)
         self.assertEqual(
@@ -2220,7 +2222,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(len(list_elements(profile, "flag")), 5)
         self.assertEqual(
             resolve_channel(profile, "QM01", "k1", "real"),
-            "IRFEL:PS:QM01:K1:ao",
+            "IRFEL:AP:QUAD:CQ1:K1:ao",
         )
         self.assertEqual(
             resolve_channel(profile, "QM20", "readback", "real"),
