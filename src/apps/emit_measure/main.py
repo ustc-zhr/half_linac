@@ -45,6 +45,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QSizePolicy,
@@ -602,6 +603,17 @@ QPushButton:pressed {{
     background-color: {button_pressed_bg};
 }}
 
+QPushButton[role="primary"] {{
+    background-color: {metric_active_fg};
+    border-color: {metric_active_fg};
+    color: {panel_bg};
+}}
+
+QPushButton[role="danger"] {{
+    border-color: {metric_warning_fg};
+    color: {metric_warning_fg};
+}}
+
 QPushButton[twissMetric="true"]:checked {{
     background-color: {metric_active_fg};
     border-color: {metric_active_fg};
@@ -692,6 +704,21 @@ QRadioButton::indicator, QCheckBox::indicator {{
 QRadioButton::indicator:checked, QCheckBox::indicator:checked {{
     background-color: {metric_active_fg};
     border: 2px solid {window_fg};
+}}
+
+QProgressBar {{
+    background-color: {input_bg};
+    border: 1px solid {input_border};
+    border-radius: 7px;
+    color: {window_fg};
+    min-height: 20px;
+    max-height: 20px;
+    text-align: center;
+}}
+
+QProgressBar::chunk {{
+    background-color: {metric_active_fg};
+    border-radius: 6px;
 }}
 
 QToolButton#themeToggleButton {{
@@ -939,6 +966,11 @@ class myWindow(QWidget,Ui_Form):
         self.background_metadata = {}
         self.background_image_path = None
         self.background_flag_id = None
+        self.scan_progress = None
+        self._scan_progress_completed = 0
+        self._scan_progress_limit = 1
+        self._scan_progress_bounded = True
+        self._scan_progress_stage = "Idle"
         self._beam_image_auto_refresh_ready = False
         self._model_backend_available, self._model_backend_error = describe_app_model_support(
             self.machine_profile.machine.id,
@@ -1457,11 +1489,11 @@ class myWindow(QWidget,Ui_Form):
         self.gridLayout_4.setAlignment(self.widget_10, Qt.AlignTop)
 
     def _configure_form_content(self):
-        self.pushButton.setText("Start Scan")
+        self.pushButton.setText("Start")
         self.pushButton_2.setText("Recalculate")
         self.pushButton_3.setText("Clear Results")
         self.pushButton_4.setText("Calculate Twiss")
-        self.pushButton_5.setText("Stop Scan")
+        self.pushButton_5.setText("Stop")
         self.use_latest_fit_button.setText("Use Latest Fit")
         self.label_32.setText("Settle time (s)")
         self.label_4.setText("From")
@@ -1563,7 +1595,7 @@ class myWindow(QWidget,Ui_Form):
         self.label_8.setToolTip(TWISS_TRANSPORT_TOOLTIP)
         self.twiss_tab.setToolTip(TWISS_TRANSPORT_TOOLTIP)
         self.pushButton_4.setToolTip(self._twiss_transport_tooltip())
-        self.pushButton_5.setToolTip("Request the running scan to stop and restore the quadrupole setting.")
+        self.pushButton_5.setToolTip("Stop the running scan and restore the quadrupole setting.")
         self.use_latest_fit_button.setToolTip(
             "Copy beta, alpha and gamma from the latest valid emittance fit for the selected Twiss plane."
         )
@@ -1693,11 +1725,26 @@ class myWindow(QWidget,Ui_Form):
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(6)
 
-        for button in (self.pushButton, self.pushButton_5, self.pushButton_3):
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.pushButton.setProperty("role", "primary")
+        self.pushButton_5.setProperty("role", "danger")
+        for button in (self.pushButton, self.pushButton_5):
+            button.setMinimumWidth(88)
+            button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
             actions.addWidget(button)
+        actions.addStretch(1)
+        self.pushButton_3.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        actions.addWidget(self.pushButton_3)
 
         layout.addLayout(actions)
+
+        self.scan_progress = QProgressBar(self.widget_4)
+        self.scan_progress.setRange(0, 1)
+        self.scan_progress.setValue(0)
+        self.scan_progress.setFormat("Idle")
+        self.scan_progress.setToolTip(
+            "Grid shows exact K1 progress. Adaptive shows consumed point budget."
+        )
+        layout.addWidget(self.scan_progress)
 
         points_layout = QVBoxLayout(self.scan_points_card)
         points_layout.setContentsMargins(8, 8, 8, 8)
@@ -2440,6 +2487,7 @@ class myWindow(QWidget,Ui_Form):
                 self.status_panel.set_item("data", "runtime latest", "success")
         else:
             self.status_panel.set_item("data", "No scan file", "warning")
+        self._update_scan_run_controls()
 
     def _refresh_emit_fit_status(self):
         summary = self.latest_emit_fit_summary
@@ -2553,6 +2601,7 @@ class myWindow(QWidget,Ui_Form):
 
         for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
             self._refresh_widget_style(button)
+        self._update_scan_run_controls()
 
     def _require_model_backend_available(self, operation, *, title="Emittance Measurement"):
         if self._model_backend_available:
@@ -3172,6 +3221,93 @@ class myWindow(QWidget,Ui_Form):
     def _scan_is_running(self):
         return self.scan is not None and self.scan.isRunning()
 
+    @staticmethod
+    def _scan_progress_stage_label(stage):
+        return {
+            "grid": "Grid",
+            "seed": "Seed",
+            "seed_recovery": "Seed recovery",
+            "adapt_range": "Planning",
+            "refine": "Refine",
+            "validation_supplement": "Validate",
+            "quality_supplement": "Quality supplement",
+            "validate": "Validate",
+            "finalizing": "Finalizing",
+        }.get(str(stage or ""), "Scanning")
+
+    def _update_scan_run_controls(self):
+        if not hasattr(self, "pushButton_5"):
+            return
+        running = self.scan is not None and (
+            self.scan.isRunning() or self.scan_mode in {"scan", "recalculate", "stopping"}
+        )
+        stopping = running and self.scan_mode == "stopping"
+        self.pushButton.setEnabled(self._model_backend_available and not running)
+        self.pushButton_5.setEnabled(running and not stopping)
+        self.pushButton_5.setText("Stopping..." if stopping else "Stop")
+        self.pushButton_3.setEnabled(not running)
+
+    def _begin_scan_progress(self, paras):
+        strategy = str(paras.scan_strategy)
+        self._scan_progress_completed = 0
+        self._scan_progress_bounded = strategy == "grid"
+        if strategy == "grid":
+            self._scan_progress_limit = max(1, int(paras.k1_steps))
+            self._scan_progress_stage = "Grid"
+            suffix = str(self._scan_progress_limit)
+        else:
+            extra = MAX_QUALITY_SUPPLEMENT_POINTS if strategy == "adaptive_quality" else 0
+            self._scan_progress_limit = max(
+                1,
+                int(paras.adaptive_config.max_unique_points) + extra,
+            )
+            self._scan_progress_stage = "Seed"
+            suffix = f"≤{self._scan_progress_limit}"
+        self.scan_progress.setRange(0, self._scan_progress_limit)
+        self.scan_progress.setValue(0)
+        self.scan_progress.setFormat(
+            f"{self._scan_progress_stage} · 0 / {suffix} points"
+        )
+
+    def _update_scan_progress(self, payload):
+        if self.scan_progress is None or not isinstance(payload, Mapping):
+            return
+        completed = max(0, int(payload.get("completed_points", self._scan_progress_completed)))
+        self._scan_progress_completed = completed
+        if payload.get("stage"):
+            self._scan_progress_stage = self._scan_progress_stage_label(payload["stage"])
+        self.scan_progress.setValue(min(completed, self._scan_progress_limit))
+        total_text = (
+            str(self._scan_progress_limit)
+            if self._scan_progress_bounded
+            else f"≤{self._scan_progress_limit}"
+        )
+        sample_index = payload.get("sample_index")
+        sample_count = payload.get("sample_count")
+        if sample_index is not None and sample_count is not None:
+            current_point = min(completed + 1, self._scan_progress_limit)
+            text = (
+                f"{self._scan_progress_stage} · Point {current_point} / {total_text} "
+                f"· Sample {int(sample_index)}/{int(sample_count)}"
+            )
+        else:
+            text = (
+                f"{self._scan_progress_stage} · {completed} / {total_text} points"
+            )
+        self.scan_progress.setFormat(text)
+
+    def _finish_scan_progress(self, status):
+        if self.scan_progress is None:
+            return
+        completed = self._scan_progress_completed
+        if status == "complete":
+            self.scan_progress.setValue(self._scan_progress_limit)
+            self.scan_progress.setFormat(f"Complete · {completed} points")
+        elif status == "stopped":
+            self.scan_progress.setFormat(f"Stopped · {completed} points")
+        else:
+            self.scan_progress.setFormat(f"Failed · {completed} points")
+
     def _twiss_is_running(self):
         return self.twissCal is not None and self.twissCal.isRunning()
 
@@ -3199,6 +3335,14 @@ class myWindow(QWidget,Ui_Form):
             self.scan_strategy_status_label.setToolTip(
                 "Measurement and transfer-matrix reconstruction completed."
             )
+            if completed_mode == "recalculate":
+                self.scan_progress.setRange(0, 1)
+                self.scan_progress.setValue(1)
+                self.scan_progress.setFormat("Recalculated")
+            else:
+                self._finish_scan_progress("complete")
+        elif completed_mode == "stopping":
+            self._finish_scan_progress("stopped")
         self.scan = None
         self.scan_mode = None
         self.pending_scan_metadata = None
@@ -4521,6 +4665,7 @@ class myWindow(QWidget,Ui_Form):
         self.paras.scan_archive_dir = self._scan_archive_dir()
         self.pending_scan_metadata = dict(self.paras.scan_metadata)
         self.scan_mode = "scan"
+        self._begin_scan_progress(self.paras)
         self.scan_strategy_combo.setEnabled(False)
         scan_start_label = (
             "Starting adaptive scan"
@@ -4542,6 +4687,9 @@ class myWindow(QWidget,Ui_Form):
             self.scan_mode = "stopping"
             self.latest_scan_completion = None
             self._scan_result_ready = False
+            self.scan_progress.setFormat(
+                f"Stopping · {self._scan_progress_completed} points"
+            )
             self._refresh_status()
             self.scan.stop()
             if not self.scan.wait(3000):
@@ -4602,6 +4750,12 @@ class myWindow(QWidget,Ui_Form):
         self.latest_scan_completion = None
         self._scan_result_ready = False
         self.scan_mode = "recalculate"
+        self._scan_progress_completed = 0
+        self._scan_progress_limit = 1
+        self._scan_progress_bounded = True
+        self.scan_progress.setRange(0, 1)
+        self.scan_progress.setValue(0)
+        self.scan_progress.setFormat("Recalculating")
         self.scan = scanThread(self.paras)
         self.scan.trigger.connect(self.display)
         self.scan.finished.connect(self._on_scan_finished)
@@ -4718,9 +4872,13 @@ class myWindow(QWidget,Ui_Form):
                 "status": "error",
                 "message": str(dict["error"]),
             }
+            self._finish_scan_progress("failed")
             self._refresh_status()
             self._warn(dict["error"])
             return
+
+        if "scan_progress" in dict:
+            self._update_scan_progress(dict["scan_progress"])
         if "clear" in dict:
             # clear all the results
             if dict.get("preserve_beam_image"):
@@ -4770,6 +4928,12 @@ class myWindow(QWidget,Ui_Form):
             self.latest_twiss_profile = None
             self.latest_twiss_design_profile = None
             self.twiss_initial_source = {"kind": "manual"}
+            if self.scan_progress is not None:
+                self._scan_progress_completed = 0
+                self._scan_progress_limit = 1
+                self.scan_progress.setRange(0, 1)
+                self.scan_progress.setValue(0)
+                self.scan_progress.setFormat("Idle")
             self._draw_twiss_profile()
             if self._selected_scan_strategy() == "grid":
                 self.scan_strategy_status_label.setText("Grid scan")
@@ -5176,6 +5340,8 @@ class scanThread(QThread):
         self.point_quality = []
         self.x_quality_usable = []
         self.y_quality_usable = []
+        self.completed_k1_points = 0
+        self._progress_stage = "grid" if self.scan_strategy == "grid" else "seed"
         self.adaptive_plane_validation = None
         self.final_plane_validation = None
         self.is_running = True
@@ -5201,7 +5367,36 @@ class scanThread(QThread):
     def _emit_adaptive_status(self, text, **extra):
         payload = {"method": None, "adaptive_status": text}
         payload.update(extra)
+        if extra.get("adaptive_stage"):
+            self._progress_stage = str(extra["adaptive_stage"])
+            payload["scan_progress"] = self._scan_progress_payload()
         self.trigger.emit(payload)
+
+    def _scan_progress_payload(self, *, sample_index=None):
+        payload = {
+            "completed_points": self.completed_k1_points,
+            "stage": self._progress_stage,
+        }
+        if sample_index is not None:
+            payload.update(
+                {
+                    "sample_index": sample_index,
+                    "sample_count": self.samples,
+                }
+            )
+        return payload
+
+    def _emit_scan_progress(self, *, stage=None, sample_index=None):
+        if stage is not None:
+            self._progress_stage = str(stage)
+        self.trigger.emit(
+            {
+                "method": None,
+                "scan_progress": self._scan_progress_payload(
+                    sample_index=sample_index,
+                ),
+            }
+        )
 
     def _acquire_k1(self, k1, *, adaptive=False):
         if self.effective_k1_limit is not None and not self.effective_k1_limit.contains(k1):
@@ -5220,6 +5415,7 @@ class scanThread(QThread):
         for sample_index in range(self.samples):
             if not self.is_running:
                 return None
+            self._emit_scan_progress(sample_index=sample_index + 1)
             if sample_index > 0 and not self._sleep_or_stop(self.sample_interval):
                 return None
 
@@ -5330,6 +5526,8 @@ class scanThread(QThread):
 
         if not sigx_values:
             return None
+        self.completed_k1_points += 1
+        self._emit_scan_progress()
         return AdaptiveObservation(
             k1=float(k1),
             sigx=float(np.mean(usable_sigx_values)) if usable_sigx_values else None,
@@ -5341,6 +5539,7 @@ class scanThread(QThread):
         )
 
     def _run_grid_scan(self):
+        self._emit_scan_progress(stage="grid")
         for k1 in np.linspace(self.k1_from, self.k1_end, self.k1_steps):
             if not self.is_running:
                 return
@@ -5637,7 +5836,8 @@ class scanThread(QThread):
                 if not self.is_running:
                     print("Stop scan, quad is back to initial values, K1=", iniK1)
                     return
-                           
+
+                self._emit_scan_progress(stage="finalizing")
                 print("Scan finished, quad is back to initial values, K1=",iniK1)
 
                 txt = np.matrix([self.k1l,self.sigxl,self.sigyl]).transpose()
