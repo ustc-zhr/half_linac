@@ -15,6 +15,8 @@ import numpy as np
 
 
 FINAL_VALIDATION_RESERVED_POINTS = 2
+MIN_FINAL_POINTS_PER_PLANE = 5
+MAX_QUALITY_SUPPLEMENT_POINTS = 4
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,8 @@ class AdaptiveObservation:
     sigy: float | None
     sigx_err: float | None = None
     sigy_err: float | None = None
+    x_usable: bool = True
+    y_usable: bool = True
 
 
 @dataclass(frozen=True)
@@ -72,6 +76,12 @@ class AdaptiveScanPlan:
     y: PlaneScanPlan
     new_values: tuple[float, ...]
     validation_reserved_points: int
+
+
+@dataclass(frozen=True)
+class AdaptiveFitWindows:
+    x: PlaneScanPlan
+    y: PlaneScanPlan
 
 
 @dataclass(frozen=True)
@@ -173,6 +183,156 @@ def build_adaptive_plan(
     )
 
 
+def build_final_fit_windows(
+    observations: Sequence[AdaptiveObservation],
+    config: AdaptiveScanConfig,
+) -> AdaptiveFitWindows:
+    """Re-estimate windows and include enough existing usable points when possible."""
+    x_plan = _plan_plane(observations, "x", config)
+    y_plan = _plan_plane(observations, "y", config)
+    return AdaptiveFitWindows(
+        x=_expand_plane_window(
+            x_plan,
+            observations,
+            "x",
+            config,
+            MIN_FINAL_POINTS_PER_PLANE,
+        ),
+        y=_expand_plane_window(
+            y_plan,
+            observations,
+            "y",
+            config,
+            MIN_FINAL_POINTS_PER_PLANE,
+        ),
+    )
+
+
+def final_window_point_count(
+    observations: Sequence[AdaptiveObservation],
+    plan: PlaneScanPlan,
+    config: AdaptiveScanConfig,
+) -> int:
+    values = _usable_plane_values(observations, plan.plane, config.reuse_tolerance)
+    return sum(
+        plan.k1_from - config.reuse_tolerance
+        <= value
+        <= plan.k1_to + config.reuse_tolerance
+        for value in values
+    )
+
+
+def quality_supplement_values(
+    observations: Sequence[AdaptiveObservation],
+    config: AdaptiveScanConfig,
+    *,
+    excluded_values: Iterable[float] = (),
+    max_new_points: int = MAX_QUALITY_SUPPLEMENT_POINTS,
+) -> tuple[float, ...]:
+    """Suggest bounded quality-recovery points after the normal budget is exhausted."""
+    if max_new_points <= 0:
+        return ()
+    measured = _unique_values((point.k1 for point in observations), config.reuse_tolerance)
+    excluded = _unique_values(excluded_values, config.reuse_tolerance)
+    per_plane = []
+    for plane in ("x", "y"):
+        usable = _usable_plane_values(observations, plane, config.reuse_tolerance)
+        needed = max(0, MIN_FINAL_POINTS_PER_PLANE - len(usable))
+        if needed == 0:
+            per_plane.append([])
+            continue
+        rejected = _unique_values(
+            (
+                point.k1
+                for point in observations
+                if not getattr(point, f"{plane}_usable")
+                or getattr(point, f"sig{plane}") is None
+            ),
+            config.reuse_tolerance,
+        )
+        ranked = sorted(
+            (
+                (abs(bad - good), 0.5 * (bad + good))
+                for bad in rejected
+                for good in usable
+                if not math.isclose(bad, good, rel_tol=0.0, abs_tol=config.reuse_tolerance)
+            ),
+            key=lambda item: item[0],
+        )
+        if len(usable) >= 2:
+            ranked.extend(
+                (-abs(high - low), 0.5 * (low + high))
+                for low, high in zip(usable, usable[1:])
+            )
+        candidates = []
+        for _priority, value in ranked:
+            value = float(np.clip(value, config.k1_min, config.k1_max))
+            if _contains_close((*measured, *excluded, *candidates), value, config.reuse_tolerance):
+                continue
+            candidates.append(value)
+            if len(candidates) >= needed:
+                break
+        per_plane.append(candidates)
+
+    merged = []
+    while len(merged) < max_new_points and any(per_plane):
+        for candidates in per_plane:
+            if not candidates:
+                continue
+            value = candidates.pop(0)
+            if not _contains_close(merged, value, config.reuse_tolerance):
+                merged.append(value)
+            if len(merged) >= max_new_points:
+                break
+    return tuple(merged)
+
+
+def quality_recovery_values(
+    observations: Sequence[AdaptiveObservation],
+    config: AdaptiveScanConfig,
+) -> tuple[float, ...]:
+    """Suggest inward midpoints when a plane has too few usable seed values."""
+    measured = _unique_values((point.k1 for point in observations), config.reuse_tolerance)
+    candidates = []
+    for plane in ("x", "y"):
+        sigma_name = f"sig{plane}"
+        usable_name = f"{plane}_usable"
+        usable = sorted(
+            float(point.k1)
+            for point in observations
+            if getattr(point, usable_name)
+            and getattr(point, sigma_name) is not None
+        )
+        if len(usable) >= 3 or not usable:
+            continue
+        rejected = sorted(
+            float(point.k1)
+            for point in observations
+            if not getattr(point, usable_name) or getattr(point, sigma_name) is None
+        )
+        plane_candidates = sorted(
+            (
+                (abs(bad - good), 0.5 * (bad + good))
+                for bad in rejected
+                for good in usable
+                if not math.isclose(bad, good, rel_tol=0.0, abs_tol=config.reuse_tolerance)
+            ),
+            key=lambda item: item[0],
+        )
+        needed = 3 - len(usable)
+        for _distance, value in plane_candidates:
+            value = float(np.clip(value, config.k1_min, config.k1_max))
+            if _contains_close((*measured, *candidates), value, config.reuse_tolerance):
+                continue
+            candidates.append(value)
+            needed -= 1
+            if needed <= 0:
+                break
+
+    remaining = max(0, config.max_unique_points - len(measured))
+    return tuple(_unique_values(candidates, config.reuse_tolerance)[:remaining])
+
+
 def validate_adaptive_scan(
     observations: Sequence[AdaptiveObservation],
     config: AdaptiveScanConfig,
@@ -218,7 +378,12 @@ def _validate_plane(
     for point in observations:
         sigma = getattr(point, sigma_name)
         error = getattr(point, error_name)
-        if sigma is None or not math.isfinite(float(sigma)) or float(sigma) <= 0:
+        if (
+            not getattr(point, f"{plane}_usable")
+            or sigma is None
+            or not math.isfinite(float(sigma))
+            or float(sigma) <= 0
+        ):
             continue
         valid.append((float(point.k1), float(sigma), _positive_error_or_none(error)))
     valid.sort(key=lambda item: item[0])
@@ -375,6 +540,62 @@ def _unresolved_plane_validation(
     )
 
 
+def _usable_plane_values(
+    observations: Sequence[AdaptiveObservation],
+    plane: str,
+    tolerance: float,
+) -> tuple[float, ...]:
+    values = [
+        float(point.k1)
+        for point in observations
+        if getattr(point, f"{plane}_usable")
+        and getattr(point, f"sig{plane}") is not None
+    ]
+    return _unique_values(values, tolerance)
+
+
+def _expand_plane_window(
+    plan: PlaneScanPlan,
+    observations: Sequence[AdaptiveObservation],
+    plane: str,
+    config: AdaptiveScanConfig,
+    minimum_points: int,
+) -> PlaneScanPlan:
+    usable = _usable_plane_values(observations, plane, config.reuse_tolerance)
+    selected = [
+        value
+        for value in usable
+        if plan.k1_from - config.reuse_tolerance
+        <= value
+        <= plan.k1_to + config.reuse_tolerance
+    ]
+    if len(selected) >= minimum_points:
+        return plan
+    outside = sorted(
+        (min(abs(value - plan.k1_from), abs(value - plan.k1_to)), value)
+        for value in usable
+        if value not in selected
+    )
+    for _distance, value in outside:
+        selected.append(value)
+        if len(selected) >= minimum_points:
+            break
+    if len(selected) < minimum_points:
+        return plan
+    lower = min(plan.k1_from, min(selected))
+    upper = max(plan.k1_to, max(selected))
+    if lower == plan.k1_from and upper == plan.k1_to:
+        return plan
+    return PlaneScanPlan(
+        plane=plan.plane,
+        k1_from=lower,
+        k1_to=upper,
+        waist_k1=plan.waist_k1,
+        values=plan.values,
+        method=plan.method,
+    )
+
+
 def _plan_plane(
     observations: Sequence[AdaptiveObservation],
     plane: str,
@@ -388,7 +609,12 @@ def _plan_plane(
     for point in observations:
         sigma = getattr(point, sigma_name)
         error = getattr(point, error_name)
-        if sigma is None or not math.isfinite(float(sigma)) or float(sigma) <= 0:
+        if (
+            not getattr(point, f"{plane}_usable")
+            or sigma is None
+            or not math.isfinite(float(sigma))
+            or float(sigma) <= 0
+        ):
             continue
         valid.append((float(point.k1), float(sigma), _positive_error_or_none(error)))
     if len(valid) < 3:

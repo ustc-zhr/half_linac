@@ -1,0 +1,15 @@
+{
+  "control_backend": "vm",
+  "created_at": "2026-08-14T15:27:54+08:00",
+  "exposure_s": null,
+  "flag_id": "PRF11",
+  "image_pv": "HALF:IN:FLAG:PRF11:image1:ArrayData:vm",
+  "machine_id": "half",
+  "pixel_shape": [
+    360,
+    270
+  ],
+  "sample_count": 5,
+  "sample_interval_s": 1.0,
+  "source": "sampled"
+}

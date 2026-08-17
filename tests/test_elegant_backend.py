@@ -682,7 +682,7 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertEqual(eny_specs[0].logical_channel, "image")
         self.assertEqual(eny_specs[0].pv_name, "HALF:IN:FLAG:ENY:image1:ArrayData:vm")
         self.assertEqual(eny_specs[0].pixel_shape, (720, 270))
-        self.assertEqual(eny_specs[0].pixel_width_mm, 0.02)
+        self.assertEqual(eny_specs[0].pixel_width_mm, 0.1756)
 
     def test_shared_publisher_uses_plan_pvs_for_bpm_updates(self):
         publisher = VmPublisher()
@@ -833,7 +833,10 @@ class ElegantBackendTests(unittest.TestCase):
         emit_source = (REPO_ROOT / "src/apps/emit_measure/main.py").read_text(encoding="utf-8")
         self.assertIn("self.flag_selec.clear()", beam_source)
         self.assertIn("self.flag_selec.addItems(self.flag_ids)", beam_source)
-        self.assertIn("self._set_combo_items(self.comboBox_4, flag_items)", emit_source)
+        self.assertIn(
+            "self._set_combo_items(self.comboBox_4, self._emit_flag_choices())",
+            emit_source,
+        )
 
     def test_emit_measure_fit_summary_marks_partial_plane_results(self):
         os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
@@ -926,6 +929,123 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertEqual(result.rank, 3)
         self.assertGreater(result.condition_number, 1.0e12)
         self.assertIn("condition", result.message)
+
+    def test_emit_measure_adaptive_selects_independent_plane_windows(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        k1 = np.array([-10.0, -8.0, -6.0, 2.0, 3.0, 4.0])
+        design = np.column_stack((np.ones_like(k1), k1, k1**2))
+        worker = SimpleNamespace(
+            scan_strategy="adaptive",
+            scan_metadata={
+                "adaptive": {"reuse_tolerance": 0.01},
+                "adaptive_result": {
+                    "x_range": [2.0, 4.0],
+                    "y_range": [-10.0, -6.0],
+                },
+            },
+        )
+
+        x_indices, x_selection = scanThread._least_squares_selection(
+            worker, k1, design, "xplane"
+        )
+        y_indices, y_selection = scanThread._least_squares_selection(
+            worker, k1, design, "yplane"
+        )
+
+        np.testing.assert_allclose(k1[x_indices], [2.0, 3.0, 4.0])
+        np.testing.assert_allclose(k1[y_indices], [-10.0, -8.0, -6.0])
+        self.assertEqual(x_selection["status"], "window")
+        self.assertEqual(y_selection["status"], "window")
+
+    def test_emit_measure_adaptive_expands_an_underconstrained_window(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        k1 = np.array([1.0, 2.0, 3.0, 4.0])
+        design = np.column_stack((np.ones_like(k1), k1, k1**2))
+        worker = SimpleNamespace(
+            scan_strategy="adaptive",
+            scan_metadata={"adaptive_result": {"x_range": [3.0, 4.0]}},
+        )
+
+        indices, selection = scanThread._least_squares_selection(
+            worker, k1, design, "xplane"
+        )
+
+        np.testing.assert_allclose(k1[indices], [2.0, 3.0, 4.0])
+        self.assertEqual(selection["status"], "expanded_window")
+        self.assertEqual(selection["points_used"], 3)
+
+    def test_emit_measure_adaptive_quality_excludes_rejected_plane_points(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        k1 = np.array([0.0, 1.0, 2.0, 3.0])
+        design = np.column_stack((np.ones_like(k1), k1, k1**2))
+        worker = SimpleNamespace(
+            scan_strategy="adaptive_quality",
+            scan_metadata={"adaptive_result": {"x_range": [0.0, 3.0]}},
+            x_quality_usable=[False, True, True, True],
+            y_quality_usable=[True, True, True, True],
+        )
+
+        indices, selection = scanThread._least_squares_selection(
+            worker, k1, design, "xplane"
+        )
+
+        np.testing.assert_allclose(k1[indices], [1.0, 2.0, 3.0])
+        self.assertEqual(selection["status"], "window")
+
+    def test_emit_measure_projection_quality_detects_clipping_and_resolution(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import _projection_measurement_quality
+        from half_linac.src.shared.beam_diagnostics.image_fit import GaussianProjectionFit
+
+        axis = np.linspace(-3.6, 3.6, 361)
+
+        def projection(sigma):
+            values = np.exp(-(axis**2) / (2 * sigma**2))
+            return GaussianProjectionFit(
+                axis=axis,
+                projection=values,
+                normalized_projection=values,
+                fitted_projection=values,
+                center=0.0,
+                sigma=sigma,
+                offset=0.0,
+                residual_rms=0.0,
+            )
+
+        self.assertEqual(
+            _projection_measurement_quality(projection(2.0))["status"],
+            "clipped",
+        )
+        self.assertEqual(
+            _projection_measurement_quality(projection(0.02))["status"],
+            "underresolved",
+        )
+        self.assertEqual(
+            _projection_measurement_quality(projection(0.2))["status"],
+            "usable",
+        )
 
     def test_emit_measure_adaptive_validation_combines_coverage_and_reconstruction(self):
         os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
