@@ -304,13 +304,64 @@
   - VM runtime and model backend calculations both use elegant, but they play different roles.
   - The VM is a control object with runtime state such as `halflinac.json`, `elegant/lattice.lte`, and `elegant/one.ele`.
   - The model backend is a calculation object that writes temporary model files such as `optics.json`, `optics.lte`, `optics.ele`, `esa.json`, `esa.lte`, and `esa.ele`.
-  - The generated model working files can be rebuilt from `lattice_ini.lte`, `emit_ini.ele`, `esa_ini.ele`, configured line names, and explicit snapshot overrides.
+  - The generated model working files can be rebuilt from `lattice_ini.lte`, the model-owned `optics_ini.ele` and `energy_ini.ele` templates, configured line names, and explicit snapshot overrides.
 - Problem:
   - Keeping model backend working files under `src/virtual_machine/<machine>_elegant/` visually coupled model calculations to the VM control object.
   - Runtime diffs could look like source changes when generated files were still tracked by git.
 - Current implementation:
   - HALF and IRFEL model backend working files now use `runtime/model_backend/<machine>/simulation/{optics,energy}/`.
-  - VM source assets such as `lattice_ini.lte`, `emit_ini.ele`, and `esa_ini.ele` remain in the VM elegant asset directory.
+  - The shared design `lattice_ini.lte` remains in the VM elegant directory; model-only elegant templates live under `configs/machines/<machine>/model_backends/elegant/`.
   - Generated model working files are ignored and untracked.
   - Template machine configs now describe model backend runtime output paths instead of app-local ESA output files.
   - Energy-spectrum dispersion and Twiss runs are owned by the shared elegant model backend; the GUI now supplies snapshots and displays results without orchestrating model files directly.
+
+### 10. Model Backend Concurrent Execution
+
+- Status: completed
+- Priority: high
+- Background:
+  - Optics calculations share fixed files under `runtime/model_backend/<machine>/<backend>/optics/`.
+  - Energy calculations share fixed files under `runtime/model_backend/<machine>/<backend>/energy/`.
+  - BBA, emittance, energy-spectrum, and dispersion-correction processes may request model calculations at the same time.
+- Problem:
+  - A calculation writes JSON, lattice, elegant input, log, matrix, and Twiss files as one sequence, then reads the generated result.
+  - Concurrent sequences can overwrite one another and return a result produced from a different request or snapshot.
+- Current implementation:
+  - Each model working directory uses a cross-process `.model_backend.lock` file.
+  - Lock acquisition waits for at most 30 seconds and reports a model-workspace busy error on timeout.
+  - The lock covers the complete write, elegant execution, and matrix/Twiss/runtime-state read sequence.
+  - Separate optics and energy working directories remain independent and can execute concurrently.
+- Follow-up:
+  - Track the per-calculation workspace alternative separately below.
+
+### 11. Shared Design Lattice Ownership
+
+- Status: deferred
+- Priority: low
+- Background:
+  - VM and model backend intentionally consume the same tracked `lattice_ini.lte` so there is one machine design source.
+  - The file currently lives under the VM elegant directory because VM code derives its elegant working directory from `bootstrap_lattice.parent`.
+- Follow-up:
+  - First add an explicit VM elegant working directory/runner location independent of the bootstrap source paths.
+  - Then consider moving the single design lattice and its required static assets to a machine-owned neutral directory referenced by both VM and model backend.
+  - Do not create separate VM and model copies of the design lattice.
+  - Keep `ElegantModelBackend` unified until a second model engine or materially different capability lifecycle makes decomposition useful.
+- Trigger:
+  - Revisit when VM runtime relocation, standalone model packaging, a second model engine, or parallel/remote model execution requires the additional boundary.
+
+### 12. Per-Calculation Model Workspaces
+
+- Status: deferred
+- Priority: medium
+- Background:
+  - The current file lock makes shared optics and energy workspaces safe by serializing calculations that use the same directory.
+  - A unique directory per calculation would allow true parallel execution and retain complete inputs, logs, and outputs for one request.
+- Follow-up:
+  - Create each run under `runtime/model_backend/<machine>/<backend>/<capability>/runs/<run-id>/` and derive all JSON, LTE, ELE, MAT, TWI, and log paths from that directory.
+  - Record the run id, model snapshot identity, source line, timestamps, status, and result paths in run metadata.
+  - Define a bounded retention policy and cleanup behavior for successful, failed, and cancelled runs.
+  - Keep a stable `latest` reference only as a convenience; calculation results must be read from their own run directory.
+  - Stage or explicitly resolve any static lattice assets referenced by relative path before running elegant.
+  - Remove shared-workspace locking only after every caller reads exclusively from its own run directory; retain a small lock if updating shared `latest` metadata is not atomic.
+- Trigger:
+  - Implement when parallel calculations, per-run cancellation, retained diagnostics, remote workers, or auditable model replay become required.

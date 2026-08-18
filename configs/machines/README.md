@@ -126,7 +126,8 @@ these workflow files.
 model-driven apps. App workflow files may select one of these backends by name.
 For elegant backends, keep source assets and generated working files separate:
 
-- `asset_dir`, `source_lattice`, and `*_ini_ele` point to tracked model assets.
+- `source_lattice` points to the tracked machine design lattice.
+- `*_ini_ele` points to tracked, model-backend-owned elegant input templates.
 - `optics_working_dir` and `energy_working_dir` point to ignored runtime workspaces
   under `runtime/model_backend/<machine>/<backend>/`.
 - Generated files such as `optics.json`, `optics.lte`, `esa.json`, and `esa.lte`

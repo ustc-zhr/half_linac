@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -30,7 +31,10 @@ from half_linac.src.shared.machine_profile import (
     load_profile,
     resolve_machine_runtime,
 )
-from half_linac.src.shared.machine_profile.model_backend import ElegantModelBackend
+from half_linac.src.shared.machine_profile.model_backend import (
+    ElegantModelBackend,
+    _exclusive_model_workspace,
+)
 from half_linac.src.shared.machine_profile.models import ModelBackendConfig
 from half_linac.src.shared.runtime_state import read_runtime_state
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
@@ -48,6 +52,83 @@ class ElegantBackendTests(unittest.TestCase):
         self.elegant_dir = REPO_ROOT / "src/virtual_machine/half_elegant/elegant"
         self.lattice_file = self.elegant_dir / "lattice_ini.lte"
         self.ele_file = self.elegant_dir / "one_ini.ele"
+
+    def test_model_workspace_lock_times_out_and_releases_after_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir) / "optics"
+
+            with _exclusive_model_workspace(workspace):
+                with patch(
+                    "half_linac.src.shared.machine_profile.model_backend.time.monotonic",
+                    side_effect=(100.0, 130.0),
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        r"Model backend workspace is busy after 30\.0s: .*optics",
+                    ):
+                        with _exclusive_model_workspace(workspace):
+                            self.fail("A second owner unexpectedly acquired the workspace lock.")
+
+            self.assertTrue((workspace / ".model_backend.lock").is_file())
+
+            with self.assertRaisesRegex(RuntimeError, "calculation failed"):
+                with _exclusive_model_workspace(workspace):
+                    raise RuntimeError("calculation failed")
+
+            with _exclusive_model_workspace(workspace, timeout_s=0.0):
+                pass
+
+    def test_model_workspace_locks_are_independent_by_working_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            with _exclusive_model_workspace(root / "optics", timeout_s=0.0):
+                with _exclusive_model_workspace(root / "energy", timeout_s=0.0):
+                    pass
+
+    def test_optics_profile_reads_outputs_before_releasing_workspace_lock(self):
+        backend = build_model_backend(
+            load_app_context(
+                "emit_measure",
+                machine_id="half",
+                control_backend="vm",
+            )
+        )
+        lock_state = {"active": False}
+
+        @contextmanager
+        def tracked_lock(_working_dir):
+            self.assertFalse(lock_state["active"])
+            lock_state["active"] = True
+            try:
+                yield
+            finally:
+                lock_state["active"] = False
+
+        def calculate_map(*_args, **_kwargs):
+            self.assertTrue(lock_state["active"])
+            return np.eye(6)
+
+        def load_rows():
+            self.assertTrue(lock_state["active"])
+            return ()
+
+        with patch(
+            "half_linac.src.shared.machine_profile.model_backend._exclusive_model_workspace",
+            side_effect=tracked_lock,
+        ), patch.object(
+            backend,
+            "_get_map_unlocked",
+            side_effect=calculate_map,
+        ), patch.object(
+            backend,
+            "_load_optics_profile_rows",
+            side_effect=load_rows,
+        ):
+            matrix, rows = backend._run_optics_profile("QT02", "PRF07")
+
+        np.testing.assert_array_equal(matrix, np.eye(6))
+        self.assertEqual(rows, ())
+        self.assertFalse(lock_state["active"])
 
     def test_shared_runtime_state_matches_half_wrapper(self):
         shared_parser = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN")
@@ -252,7 +333,6 @@ class ElegantBackendTests(unittest.TestCase):
                     engine="elegant",
                     config={
                         "working_dir": str(elegant_dir),
-                        "source_json": str(tmpdir_path / "runtime.json"),
                         "source_lattice": str(source_lte),
                         "emit_ini_ele": str(emit_ini),
                         "emit_lte": str(emit_lte),
@@ -328,7 +408,6 @@ class ElegantBackendTests(unittest.TestCase):
                     engine="elegant",
                     config={
                         "working_dir": str(elegant_dir),
-                        "source_json": str(tmpdir_path / "runtime.json"),
                         "source_lattice": str(source_lte),
                         "emit_ini_ele": str(emit_ini),
                         "emit_lte": str(emit_lte),
@@ -418,12 +497,26 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertAlmostEqual(backward.rows[-1]["gamma"], 0.2)
 
     def test_model_backend_owns_energy_dispersion_and_optics_runs(self):
+        lock_state = {"active": False, "workdirs": []}
+
+        @contextmanager
+        def tracked_lock(working_dir):
+            self.assertFalse(lock_state["active"])
+            lock_state["active"] = True
+            lock_state["workdirs"].append(Path(working_dir))
+            try:
+                yield
+            finally:
+                lock_state["active"] = False
+
         class FakeSdds:
             def __init__(self, _index):
                 self.columnName = []
                 self.columnData = []
 
             def load(self, path):
+                if not lock_state["active"]:
+                    raise AssertionError(f"SDDS output was read without a workspace lock: {path}")
                 if str(path).endswith(".mat"):
                     self.columnData = [[[float(index)]] for index in range(48)]
                     return
@@ -477,9 +570,7 @@ class ElegantBackendTests(unittest.TestCase):
                     name="simulation",
                     engine="elegant",
                     config={
-                        "source_json": str(root / "source.json"),
                         "source_lattice": str(source_lattice),
-                        "asset_dir": str(root),
                         "optics_working_dir": str(root / "optics"),
                         "optics_ini_ele": str(optics_ini),
                         "optics_lte": str(root / "optics/optics.lte"),
@@ -500,8 +591,15 @@ class ElegantBackendTests(unittest.TestCase):
                 )
             )
 
+            def run_elegant(*_args, **_kwargs):
+                self.assertTrue(lock_state["active"])
+
             with patch(
                 "half_linac.src.shared.machine_profile.model_backend.run_elegant_input",
+                side_effect=run_elegant,
+            ), patch(
+                "half_linac.src.shared.machine_profile.model_backend._exclusive_model_workspace",
+                side_effect=tracked_lock,
             ), patch("half_linac.src.shared.machine_profile.model_backend.sdds.SDDS", FakeSdds):
                 dispersion = backend.get_energy_dispersion(
                     "ESA",
@@ -521,6 +619,8 @@ class ElegantBackendTests(unittest.TestCase):
             self.assertEqual(optics.alpha_x, -2.0)
             self.assertEqual(optics.dispersion_x_m, 0.75)
             self.assertIn('K1="2.5"', (root / "energy/esa.lte").read_text(encoding="utf-8"))
+            self.assertEqual(lock_state["workdirs"], [root / "energy", root / "energy"])
+            self.assertFalse(lock_state["active"])
 
     def test_lattice_usedline_helper_expands_irfel_main_and_esa_lines(self):
         runtime = resolve_machine_runtime("irfel")
@@ -682,7 +782,7 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertEqual(eny_specs[0].logical_channel, "image")
         self.assertEqual(eny_specs[0].pv_name, "HALF:IN:FLAG:ENY:image1:ArrayData:vm")
         self.assertEqual(eny_specs[0].pixel_shape, (720, 270))
-        self.assertEqual(eny_specs[0].pixel_width_mm, 0.02)
+        self.assertEqual(eny_specs[0].pixel_width_mm, 0.1756)
 
     def test_shared_publisher_uses_plan_pvs_for_bpm_updates(self):
         publisher = VmPublisher()
@@ -833,7 +933,10 @@ class ElegantBackendTests(unittest.TestCase):
         emit_source = (REPO_ROOT / "src/apps/emit_measure/main.py").read_text(encoding="utf-8")
         self.assertIn("self.flag_selec.clear()", beam_source)
         self.assertIn("self.flag_selec.addItems(self.flag_ids)", beam_source)
-        self.assertIn("self._set_combo_items(self.comboBox_4, flag_items)", emit_source)
+        self.assertIn(
+            "self._set_combo_items(self.comboBox_4, self._emit_flag_choices())",
+            emit_source,
+        )
 
     def test_emit_measure_fit_summary_marks_partial_plane_results(self):
         os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
@@ -926,6 +1029,123 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertEqual(result.rank, 3)
         self.assertGreater(result.condition_number, 1.0e12)
         self.assertIn("condition", result.message)
+
+    def test_emit_measure_adaptive_selects_independent_plane_windows(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        k1 = np.array([-10.0, -8.0, -6.0, 2.0, 3.0, 4.0])
+        design = np.column_stack((np.ones_like(k1), k1, k1**2))
+        worker = SimpleNamespace(
+            scan_strategy="adaptive",
+            scan_metadata={
+                "adaptive": {"reuse_tolerance": 0.01},
+                "adaptive_result": {
+                    "x_range": [2.0, 4.0],
+                    "y_range": [-10.0, -6.0],
+                },
+            },
+        )
+
+        x_indices, x_selection = scanThread._least_squares_selection(
+            worker, k1, design, "xplane"
+        )
+        y_indices, y_selection = scanThread._least_squares_selection(
+            worker, k1, design, "yplane"
+        )
+
+        np.testing.assert_allclose(k1[x_indices], [2.0, 3.0, 4.0])
+        np.testing.assert_allclose(k1[y_indices], [-10.0, -8.0, -6.0])
+        self.assertEqual(x_selection["status"], "window")
+        self.assertEqual(y_selection["status"], "window")
+
+    def test_emit_measure_adaptive_expands_an_underconstrained_window(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        k1 = np.array([1.0, 2.0, 3.0, 4.0])
+        design = np.column_stack((np.ones_like(k1), k1, k1**2))
+        worker = SimpleNamespace(
+            scan_strategy="adaptive",
+            scan_metadata={"adaptive_result": {"x_range": [3.0, 4.0]}},
+        )
+
+        indices, selection = scanThread._least_squares_selection(
+            worker, k1, design, "xplane"
+        )
+
+        np.testing.assert_allclose(k1[indices], [2.0, 3.0, 4.0])
+        self.assertEqual(selection["status"], "expanded_window")
+        self.assertEqual(selection["points_used"], 3)
+
+    def test_emit_measure_adaptive_quality_excludes_rejected_plane_points(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        k1 = np.array([0.0, 1.0, 2.0, 3.0])
+        design = np.column_stack((np.ones_like(k1), k1, k1**2))
+        worker = SimpleNamespace(
+            scan_strategy="adaptive_quality",
+            scan_metadata={"adaptive_result": {"x_range": [0.0, 3.0]}},
+            x_quality_usable=[False, True, True, True],
+            y_quality_usable=[True, True, True, True],
+        )
+
+        indices, selection = scanThread._least_squares_selection(
+            worker, k1, design, "xplane"
+        )
+
+        np.testing.assert_allclose(k1[indices], [1.0, 2.0, 3.0])
+        self.assertEqual(selection["status"], "window")
+
+    def test_emit_measure_projection_quality_detects_clipping_and_resolution(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import _projection_measurement_quality
+        from half_linac.src.shared.beam_diagnostics.image_fit import GaussianProjectionFit
+
+        axis = np.linspace(-3.6, 3.6, 361)
+
+        def projection(sigma):
+            values = np.exp(-(axis**2) / (2 * sigma**2))
+            return GaussianProjectionFit(
+                axis=axis,
+                projection=values,
+                normalized_projection=values,
+                fitted_projection=values,
+                center=0.0,
+                sigma=sigma,
+                offset=0.0,
+                residual_rms=0.0,
+            )
+
+        self.assertEqual(
+            _projection_measurement_quality(projection(2.0))["status"],
+            "clipped",
+        )
+        self.assertEqual(
+            _projection_measurement_quality(projection(0.02))["status"],
+            "underresolved",
+        )
+        self.assertEqual(
+            _projection_measurement_quality(projection(0.2))["status"],
+            "usable",
+        )
 
     def test_emit_measure_adaptive_validation_combines_coverage_and_reconstruction(self):
         os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))

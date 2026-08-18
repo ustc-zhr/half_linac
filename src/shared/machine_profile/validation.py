@@ -659,12 +659,8 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
 
     missing: list[str] = []
     required_files = {
-        "source_json": backend.source_json,
         "source_lattice": backend.source_lattice,
         "optics_ini_ele": backend.optics_ini_ele,
-    }
-    required_dirs = {
-        "asset_dir": backend.asset_dir,
     }
     generated_targets = {
         "optics_lte": backend.optics_lte,
@@ -690,9 +686,6 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
     for label, path in required_files.items():
         if not path.is_file():
             missing.append(f"{label} file not found: {path}")
-    for label, path in required_dirs.items():
-        if not path.is_dir():
-            missing.append(f"{label} directory not found: {path}")
     for label, path in generated_targets.items():
         problem = _generated_target_parent_problem(label, path)
         if problem:

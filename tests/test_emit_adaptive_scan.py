@@ -13,6 +13,10 @@ from half_linac.src.apps.emit_measure.adaptive_scan import (
     AdaptiveObservation,
     AdaptiveScanConfig,
     build_adaptive_plan,
+    build_final_fit_windows,
+    final_window_point_count,
+    quality_recovery_values,
+    quality_supplement_values,
     seed_values,
     validate_adaptive_scan,
 )
@@ -149,6 +153,93 @@ class AdaptiveScanPlanTests(unittest.TestCase):
         validation = validate_adaptive_scan(observations, config)
 
         self.assertEqual(len(validation.new_values), 1)
+
+    def test_quality_plan_filters_each_plane_independently(self):
+        observations = [
+            AdaptiveObservation(
+                k1=k1,
+                sigx=np.sqrt((k1 - 2.0) ** 2 + 0.2),
+                sigy=np.sqrt((k1 + 1.0) ** 2 + 0.3),
+                x_usable=k1 >= 0.0,
+            )
+            for k1 in (-5.0, -2.5, 0.0, 2.5, 5.0)
+        ]
+
+        plan = build_adaptive_plan(observations, self.config)
+
+        self.assertAlmostEqual(plan.x.waist_k1, 2.0, places=6)
+        self.assertAlmostEqual(plan.y.waist_k1, -1.0, places=6)
+
+    def test_quality_recovery_moves_rejected_seed_inward(self):
+        observations = [
+            AdaptiveObservation(-5.0, 4.0, 1.0, x_usable=False),
+            AdaptiveObservation(-2.5, 2.0, 1.0, x_usable=False),
+            AdaptiveObservation(0.0, 1.0, 1.0),
+            AdaptiveObservation(2.5, 0.5, 1.0),
+            AdaptiveObservation(5.0, 2.0, 1.0, x_usable=False),
+        ]
+
+        values = quality_recovery_values(observations, self.config)
+
+        self.assertEqual(values, (-1.25,))
+
+    def test_final_windows_use_all_quality_filtered_observations(self):
+        observations = [
+            AdaptiveObservation(
+                k1=k1,
+                sigx=np.sqrt((k1 - 1.5) ** 2 + 0.2),
+                sigy=np.sqrt((k1 + 0.5) ** 2 + 0.3),
+                x_usable=k1 > -4.0,
+            )
+            for k1 in (-5.0, -2.0, 0.0, 1.5, 3.0, 5.0)
+        ]
+
+        windows = build_final_fit_windows(observations, self.config)
+
+        self.assertAlmostEqual(windows.x.waist_k1, 1.5, places=6)
+        self.assertAlmostEqual(windows.y.waist_k1, -0.5, places=6)
+
+    def test_final_window_expands_to_five_existing_quality_points(self):
+        observations = [
+            AdaptiveObservation(
+                k1=k1,
+                sigx=np.sqrt((k1 - 2.3) ** 2 + 0.01),
+                sigy=np.sqrt((k1 - 0.5) ** 2 + 0.3),
+                x_usable=k1 not in (2.3, 2.5),
+            )
+            for k1 in (0.0, 1.0, 1.5, 1.9, 2.3, 2.5, 3.1, 3.9)
+        ]
+
+        windows = build_final_fit_windows(observations, self.config)
+
+        self.assertGreaterEqual(
+            final_window_point_count(observations, windows.x, self.config),
+            5,
+        )
+        self.assertLessEqual(windows.x.k1_from, 1.5)
+        self.assertGreaterEqual(windows.x.k1_to, 3.1)
+
+    def test_quality_supplement_can_exceed_normal_point_budget(self):
+        observations = [
+            AdaptiveObservation(-2.0, 2.0, 2.0),
+            AdaptiveObservation(0.0, 1.0, 1.0),
+            AdaptiveObservation(1.0, 0.2, 0.5, x_usable=False),
+            AdaptiveObservation(2.0, 1.0, 1.0),
+        ]
+        config = AdaptiveScanConfig(
+            k1_min=-5.0,
+            k1_max=5.0,
+            initial_points=4,
+            target_points_per_plane=7,
+            max_unique_points=4,
+            reuse_tolerance=1e-6,
+        )
+
+        values = quality_supplement_values(observations, config, max_new_points=4)
+
+        self.assertTrue(values)
+        self.assertLessEqual(len(values), 4)
+        self.assertTrue(all(config.k1_min <= value <= config.k1_max for value in values))
 
 
 if __name__ == "__main__":
