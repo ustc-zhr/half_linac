@@ -605,6 +605,16 @@ class LauncherStatusStrip(QWidget):
         value_label.update()
 
 APP_DEFINITIONS = {
+    "pv_connection_check": {
+        "button_name": "pv_connection_check_button",
+        "category": "core",
+        "button_text": "PV Connection Check",
+        "label": "PV Connection Check",
+        "window_title_patterns": ("PV Connection Check",),
+        "description": "Check read-only EPICS connectivity for configured VM and real-machine PVs.",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/pv_connection_check",
+    },
     "vm_manager": {
         "button_name": "vmbtn",
         "category": "core",
@@ -947,9 +957,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.dispersion_correction_button.setObjectName("dispersion_correction_button")
         self.ct_monitor_button = QPushButton(self.groupBox_4)
         self.ct_monitor_button.setObjectName("ct_monitor_button")
+        self.pv_connection_check_button = QPushButton(self.groupBox_3)
+        self.pv_connection_check_button.setObjectName("pv_connection_check_button")
 
         self.group_button_specs = [
-            (self.gridLayout_3, self.groupBox_3, [self.vmbtn, self.online_opt], 1),
+            (
+                self.gridLayout_3,
+                self.groupBox_3,
+                [self.pv_connection_check_button, self.vmbtn, self.online_opt],
+                1,
+            ),
             (
                 self.gridLayout_2,
                 self.groupBox_4,
