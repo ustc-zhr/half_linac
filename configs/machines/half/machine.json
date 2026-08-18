@@ -4,7 +4,7 @@
     "id": "half",
     "family": "linac",
     "display_name": "HALF Linac",
-    "default_mode": "vm"
+    "default_mode": "real"
   },
   "runtime": {
     "vm": {

@@ -324,7 +324,7 @@ class MachineProfileTests(unittest.TestCase):
     def test_load_half_profile(self):
         profile = load_profile("half")
         self.assertEqual(profile.machine.id, "half")
-        self.assertEqual(profile.machine.default_mode, "vm")
+        self.assertEqual(profile.machine.default_mode, "real")
         self.assertEqual(profile.schema_version, "1")
 
     def test_half_vm_pvs_are_covered_by_softioc_contract(self):
@@ -339,7 +339,7 @@ class MachineProfileTests(unittest.TestCase):
         context = load_app_context("orbit_correct")
         self.assertIsInstance(context, AppContext)
         self.assertEqual(context.machine.id, "half")
-        self.assertEqual(context.control_backend.name, "vm")
+        self.assertEqual(context.control_backend.name, "real")
         self.assertIsNone(context.model_backend)
         self.assertIsNotNone(context.orbit_workflow)
         assert context.orbit_workflow is not None
@@ -352,7 +352,7 @@ class MachineProfileTests(unittest.TestCase):
         context = load_app_context("orbit_display")
         self.assertIsInstance(context, AppContext)
         self.assertEqual(context.machine.id, "half")
-        self.assertEqual(context.control_backend.name, "vm")
+        self.assertEqual(context.control_backend.name, "real")
         self.assertIsNone(context.model_backend)
         self.assertIsNone(context.orbit_workflow)
 
@@ -360,7 +360,7 @@ class MachineProfileTests(unittest.TestCase):
         context = load_app_context("beam_monitor")
         self.assertIsInstance(context, AppContext)
         self.assertEqual(context.machine.id, "half")
-        self.assertEqual(context.control_backend.name, "vm")
+        self.assertEqual(context.control_backend.name, "real")
         self.assertIsNone(context.model_backend)
         self.assertIsNone(context.emit_measure_workflow)
 
@@ -400,9 +400,9 @@ class MachineProfileTests(unittest.TestCase):
 
     def test_load_solenoid_centering_app_context(self):
         with self.assertRaisesRegex(MachineProfileError, "supports only real"):
-            load_app_context("solenoid_centering")
+            load_app_context("solenoid_centering", control_backend="vm")
 
-        context = load_app_context("solenoid_centering", control_backend="real")
+        context = load_app_context("solenoid_centering")
         self.assertIsInstance(context, AppContext)
         self.assertEqual(context.machine.id, "half")
         self.assertEqual(context.control_backend.name, "real")
@@ -1051,7 +1051,7 @@ class MachineProfileTests(unittest.TestCase):
         context = load_app_context("energy_spectrum")
         self.assertIsInstance(context, AppContext)
         self.assertEqual(context.machine.id, "half")
-        self.assertEqual(context.control_backend.name, "vm")
+        self.assertEqual(context.control_backend.name, "real")
         self.assertIsNotNone(context.model_backend)
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
@@ -1289,7 +1289,7 @@ class MachineProfileTests(unittest.TestCase):
         context = load_app_context("orbit_correct")
         self.assertEqual(
             resolve_channel(context, "BPM03", "x"),
-            "HALF:IN:BPM:BPM03:X:ao",
+            "IN:BD:LE05:DBPM:03:BPM_X",
         )
 
     def test_orbit_workflow_matches_expected_shape(self):
@@ -1618,7 +1618,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(any(choice.display_name for choice in choices if choice.machine_id == "half"))
 
     def test_runtime_selector_discovers_control_backends_from_directory_profile(self):
-        self.assertEqual(default_control_backend_choices("half"), ("vm", "real"))
+        self.assertEqual(default_control_backend_choices("half"), ("real", "vm"))
 
     def test_half_model_backend_paths_are_resolved_from_directory_config(self):
         context = load_app_context("emit_measure")
