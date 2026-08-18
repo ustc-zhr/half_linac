@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -486,7 +487,10 @@ class PvConnectionWindow(QMainWindow):
 
     def _export_report(self):
         machine_id = self.machine_profile.machine.id
-        default_name = f"{machine_id}_pv_connection_report.csv"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = (
+            f"{machine_id}_{self.control_backend}_pv_connection_{timestamp}.csv"
+        )
         filename, _ = QFileDialog.getSaveFileName(
             self, "Export PV connection report", default_name, "CSV files (*.csv)"
         )
