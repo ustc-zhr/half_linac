@@ -282,6 +282,7 @@ class RuntimeContextWidget(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("runtimeContext")
         self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
 
         layout = QHBoxLayout(self)

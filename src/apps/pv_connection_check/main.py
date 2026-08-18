@@ -83,7 +83,11 @@ LIGHT = {
 
 def build_theme(colors: dict[str, str]) -> str:
     return f"""
-QMainWindow, QWidget {{ background: {colors['window']}; color: {colors['text']}; }}
+QMainWindow, QWidget {{
+    background: {colors['window']};
+    color: {colors['text']};
+    font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif;
+}}
 QFrame#headerPanel {{
     background: {colors['panel']}; border: 1px solid {colors['border']}; border-radius: 14px;
 }}
@@ -91,6 +95,13 @@ QFrame#tableToolbar {{
     background: {colors['panel']}; border: 1px solid {colors['border']}; border-radius: 10px;
 }}
 QLabel#title {{ background: transparent; font-size: 22px; font-weight: 700; }}
+QLabel[role="field"] {{
+    background: transparent;
+    border: none;
+    color: {colors['muted']};
+    font-size: 11px;
+    font-weight: 600;
+}}
 QFrame#statusStrip {{
     background: transparent; border: none; border-radius: 0px;
 }}
@@ -113,6 +124,9 @@ QLabel[role="statusValue"][tone="danger"] {{ color: {colors['danger']}; }}
 QLabel#fieldLabel {{ background: transparent; color: {colors['muted']}; font-size: 11px; font-weight: 600; }}
 QLabel#tableTitle {{ background: transparent; font-size: 13px; font-weight: 700; }}
 QWidget#runtimeContext {{ background: transparent; border: none; }}
+QWidget#runtimeContext QLabel#runtimeBackendLabel {{
+    background: transparent;
+}}
 QFrame#headerPanel QLineEdit, QFrame#headerPanel QComboBox, QFrame#headerPanel QDoubleSpinBox,
 QFrame#tableToolbar QLineEdit, QFrame#tableToolbar QComboBox {{
     background: {colors['input']};

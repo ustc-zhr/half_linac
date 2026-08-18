@@ -911,7 +911,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _configure_groups(self):
         self.groupBox_4.setTitle("Diagnostics")
         self.groupBox_5.setTitle("Beam Tuning")
-        self.groupBox_3.setTitle("Core Systems")
+        self.groupBox_3.setTitle("System Tools")
         self.feedback_group = QGroupBox("Feedback", self.frame_2)
         self.feedback_group.setObjectName("feedback_group")
         self.feedback_outer_layout = QVBoxLayout(self.feedback_group)
@@ -964,7 +964,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             (
                 self.gridLayout_3,
                 self.groupBox_3,
-                [self.pv_connection_check_button, self.vmbtn, self.online_opt],
+                [self.vmbtn, self.pv_connection_check_button, self.online_opt],
                 1,
             ),
             (
