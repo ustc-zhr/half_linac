@@ -332,7 +332,7 @@
   - The lock covers the complete write, elegant execution, and matrix/Twiss/runtime-state read sequence.
   - Separate optics and energy working directories remain independent and can execute concurrently.
 - Follow-up:
-  - Reconsider per-calculation workspaces when parallel model execution, cancellation, retained run diagnostics, or remote workers become required.
+  - Track the per-calculation workspace alternative separately below.
 
 ### 11. Shared Design Lattice Ownership
 
@@ -348,3 +348,20 @@
   - Keep `ElegantModelBackend` unified until a second model engine or materially different capability lifecycle makes decomposition useful.
 - Trigger:
   - Revisit when VM runtime relocation, standalone model packaging, a second model engine, or parallel/remote model execution requires the additional boundary.
+
+### 12. Per-Calculation Model Workspaces
+
+- Status: deferred
+- Priority: medium
+- Background:
+  - The current file lock makes shared optics and energy workspaces safe by serializing calculations that use the same directory.
+  - A unique directory per calculation would allow true parallel execution and retain complete inputs, logs, and outputs for one request.
+- Follow-up:
+  - Create each run under `runtime/model_backend/<machine>/<backend>/<capability>/runs/<run-id>/` and derive all JSON, LTE, ELE, MAT, TWI, and log paths from that directory.
+  - Record the run id, model snapshot identity, source line, timestamps, status, and result paths in run metadata.
+  - Define a bounded retention policy and cleanup behavior for successful, failed, and cancelled runs.
+  - Keep a stable `latest` reference only as a convenience; calculation results must be read from their own run directory.
+  - Stage or explicitly resolve any static lattice assets referenced by relative path before running elegant.
+  - Remove shared-workspace locking only after every caller reads exclusively from its own run directory; retain a small lock if updating shared `latest` metadata is not atomic.
+- Trigger:
+  - Implement when parallel calculations, per-run cancellation, retained diagnostics, remote workers, or auditable model replay become required.
