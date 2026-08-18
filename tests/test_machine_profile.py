@@ -1623,19 +1623,27 @@ class MachineProfileTests(unittest.TestCase):
     def test_half_model_backend_paths_are_resolved_from_directory_config(self):
         context = load_app_context("emit_measure")
         assert context.model_backend is not None
-        source_json = Path(context.model_backend.config["source_json"])
         source_lattice = Path(context.model_backend.config["source_lattice"])
+        optics_ini_ele = Path(context.model_backend.config["optics_ini_ele"])
+        energy_ini_ele = Path(context.model_backend.config["energy_ini_ele"])
         working_dir = Path(context.model_backend.config["optics_working_dir"])
         energy_twi = Path(context.model_backend.config["energy_twi"])
-        asset_dir = Path(context.model_backend.config["asset_dir"])
-        self.assertTrue(source_json.is_absolute())
         self.assertTrue(source_lattice.is_absolute())
+        self.assertTrue(optics_ini_ele.is_absolute())
+        self.assertTrue(energy_ini_ele.is_absolute())
         self.assertTrue(working_dir.is_absolute())
         self.assertTrue(energy_twi.is_absolute())
-        self.assertTrue(asset_dir.is_absolute())
-        self.assertTrue(str(source_json).endswith("src/virtual_machine/half_elegant/halflinac.json"))
         self.assertTrue(str(source_lattice).endswith("src/virtual_machine/half_elegant/elegant/lattice_ini.lte"))
-        self.assertTrue(str(asset_dir).endswith("src/virtual_machine/half_elegant/elegant"))
+        self.assertTrue(
+            str(optics_ini_ele).endswith(
+                "configs/machines/half/model_backends/elegant/optics_ini.ele"
+            )
+        )
+        self.assertTrue(
+            str(energy_ini_ele).endswith(
+                "configs/machines/half/model_backends/elegant/energy_ini.ele"
+            )
+        )
         self.assertTrue(str(working_dir).endswith("runtime/model_backend/half/simulation/optics"))
         self.assertTrue(str(energy_twi).endswith("runtime/model_backend/half/simulation/energy/esa.twi"))
         lattice_text = source_lattice.read_text(encoding="utf-8")
@@ -2999,7 +3007,7 @@ class MachineProfileTests(unittest.TestCase):
             "config": {
                 "working_dir": "runtime/model_backend/test_machine/simulation/emit",
                 "source_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
-                "energy_ini_ele_file": "src/virtual_machine/half_elegant/elegant/esa_ini.ele",
+                "energy_ini_ele_file": "configs/machines/half/model_backends/elegant/energy_ini.ele",
                 "energy_working_dir": "runtime/model_backend/test_machine/simulation/energy",
                 "energy_json_path": "runtime/model_backend/test_machine/simulation/energy/esa.json",
                 "energy_lte_file": "runtime/model_backend/test_machine/simulation/energy/esa.lte",
@@ -4364,7 +4372,7 @@ class MachineProfileTests(unittest.TestCase):
             "config": {
                 "working_dir": "runtime/model_backend/realonly/simulation/emit",
                 "source_lattice": "src/virtual_machine/half_elegant/elegant/lattice_ini.lte",
-                "energy_ini_ele_file": "src/virtual_machine/half_elegant/elegant/esa_ini.ele",
+                "energy_ini_ele_file": "configs/machines/half/model_backends/elegant/energy_ini.ele",
                 "energy_working_dir": "runtime/model_backend/realonly/simulation/energy",
                 "energy_json_path": "runtime/model_backend/realonly/simulation/energy/esa.json",
                 "energy_lte_file": "runtime/model_backend/realonly/simulation/energy/esa.lte",

@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -30,7 +31,10 @@ from half_linac.src.shared.machine_profile import (
     load_profile,
     resolve_machine_runtime,
 )
-from half_linac.src.shared.machine_profile.model_backend import ElegantModelBackend
+from half_linac.src.shared.machine_profile.model_backend import (
+    ElegantModelBackend,
+    _exclusive_model_workspace,
+)
 from half_linac.src.shared.machine_profile.models import ModelBackendConfig
 from half_linac.src.shared.runtime_state import read_runtime_state
 from half_linac.src.virtual_machine.half_elegant.elegant_parser import elegant_parser
@@ -48,6 +52,83 @@ class ElegantBackendTests(unittest.TestCase):
         self.elegant_dir = REPO_ROOT / "src/virtual_machine/half_elegant/elegant"
         self.lattice_file = self.elegant_dir / "lattice_ini.lte"
         self.ele_file = self.elegant_dir / "one_ini.ele"
+
+    def test_model_workspace_lock_times_out_and_releases_after_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir) / "optics"
+
+            with _exclusive_model_workspace(workspace):
+                with patch(
+                    "half_linac.src.shared.machine_profile.model_backend.time.monotonic",
+                    side_effect=(100.0, 130.0),
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        r"Model backend workspace is busy after 30\.0s: .*optics",
+                    ):
+                        with _exclusive_model_workspace(workspace):
+                            self.fail("A second owner unexpectedly acquired the workspace lock.")
+
+            self.assertTrue((workspace / ".model_backend.lock").is_file())
+
+            with self.assertRaisesRegex(RuntimeError, "calculation failed"):
+                with _exclusive_model_workspace(workspace):
+                    raise RuntimeError("calculation failed")
+
+            with _exclusive_model_workspace(workspace, timeout_s=0.0):
+                pass
+
+    def test_model_workspace_locks_are_independent_by_working_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            with _exclusive_model_workspace(root / "optics", timeout_s=0.0):
+                with _exclusive_model_workspace(root / "energy", timeout_s=0.0):
+                    pass
+
+    def test_optics_profile_reads_outputs_before_releasing_workspace_lock(self):
+        backend = build_model_backend(
+            load_app_context(
+                "emit_measure",
+                machine_id="half",
+                control_backend="vm",
+            )
+        )
+        lock_state = {"active": False}
+
+        @contextmanager
+        def tracked_lock(_working_dir):
+            self.assertFalse(lock_state["active"])
+            lock_state["active"] = True
+            try:
+                yield
+            finally:
+                lock_state["active"] = False
+
+        def calculate_map(*_args, **_kwargs):
+            self.assertTrue(lock_state["active"])
+            return np.eye(6)
+
+        def load_rows():
+            self.assertTrue(lock_state["active"])
+            return ()
+
+        with patch(
+            "half_linac.src.shared.machine_profile.model_backend._exclusive_model_workspace",
+            side_effect=tracked_lock,
+        ), patch.object(
+            backend,
+            "_get_map_unlocked",
+            side_effect=calculate_map,
+        ), patch.object(
+            backend,
+            "_load_optics_profile_rows",
+            side_effect=load_rows,
+        ):
+            matrix, rows = backend._run_optics_profile("QT02", "PRF07")
+
+        np.testing.assert_array_equal(matrix, np.eye(6))
+        self.assertEqual(rows, ())
+        self.assertFalse(lock_state["active"])
 
     def test_shared_runtime_state_matches_half_wrapper(self):
         shared_parser = ElegantParser(self.lattice_file, self.ele_file, "ALL_MAIN")
@@ -252,7 +333,6 @@ class ElegantBackendTests(unittest.TestCase):
                     engine="elegant",
                     config={
                         "working_dir": str(elegant_dir),
-                        "source_json": str(tmpdir_path / "runtime.json"),
                         "source_lattice": str(source_lte),
                         "emit_ini_ele": str(emit_ini),
                         "emit_lte": str(emit_lte),
@@ -328,7 +408,6 @@ class ElegantBackendTests(unittest.TestCase):
                     engine="elegant",
                     config={
                         "working_dir": str(elegant_dir),
-                        "source_json": str(tmpdir_path / "runtime.json"),
                         "source_lattice": str(source_lte),
                         "emit_ini_ele": str(emit_ini),
                         "emit_lte": str(emit_lte),
@@ -418,12 +497,26 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertAlmostEqual(backward.rows[-1]["gamma"], 0.2)
 
     def test_model_backend_owns_energy_dispersion_and_optics_runs(self):
+        lock_state = {"active": False, "workdirs": []}
+
+        @contextmanager
+        def tracked_lock(working_dir):
+            self.assertFalse(lock_state["active"])
+            lock_state["active"] = True
+            lock_state["workdirs"].append(Path(working_dir))
+            try:
+                yield
+            finally:
+                lock_state["active"] = False
+
         class FakeSdds:
             def __init__(self, _index):
                 self.columnName = []
                 self.columnData = []
 
             def load(self, path):
+                if not lock_state["active"]:
+                    raise AssertionError(f"SDDS output was read without a workspace lock: {path}")
                 if str(path).endswith(".mat"):
                     self.columnData = [[[float(index)]] for index in range(48)]
                     return
@@ -477,9 +570,7 @@ class ElegantBackendTests(unittest.TestCase):
                     name="simulation",
                     engine="elegant",
                     config={
-                        "source_json": str(root / "source.json"),
                         "source_lattice": str(source_lattice),
-                        "asset_dir": str(root),
                         "optics_working_dir": str(root / "optics"),
                         "optics_ini_ele": str(optics_ini),
                         "optics_lte": str(root / "optics/optics.lte"),
@@ -500,8 +591,15 @@ class ElegantBackendTests(unittest.TestCase):
                 )
             )
 
+            def run_elegant(*_args, **_kwargs):
+                self.assertTrue(lock_state["active"])
+
             with patch(
                 "half_linac.src.shared.machine_profile.model_backend.run_elegant_input",
+                side_effect=run_elegant,
+            ), patch(
+                "half_linac.src.shared.machine_profile.model_backend._exclusive_model_workspace",
+                side_effect=tracked_lock,
             ), patch("half_linac.src.shared.machine_profile.model_backend.sdds.SDDS", FakeSdds):
                 dispersion = backend.get_energy_dispersion(
                     "ESA",
@@ -521,6 +619,8 @@ class ElegantBackendTests(unittest.TestCase):
             self.assertEqual(optics.alpha_x, -2.0)
             self.assertEqual(optics.dispersion_x_m, 0.75)
             self.assertIn('K1="2.5"', (root / "energy/esa.lte").read_text(encoding="utf-8"))
+            self.assertEqual(lock_state["workdirs"], [root / "energy", root / "energy"])
+            self.assertFalse(lock_state["active"])
 
     def test_lattice_usedline_helper_expands_irfel_main_and_esa_lines(self):
         runtime = resolve_machine_runtime("irfel")

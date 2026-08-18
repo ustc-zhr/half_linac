@@ -86,7 +86,6 @@ PATHLIKE_MODEL_CONFIG_KEYS = (
     "_path",
 )
 PATHLIKE_MODEL_CONFIG_NAMES = {
-    "asset_dir",
     "working_dir",
     "optics_working_dir",
     "emit_working_dir",

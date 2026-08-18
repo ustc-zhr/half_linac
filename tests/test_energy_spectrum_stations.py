@@ -133,10 +133,11 @@ class EnergySpectrumStationTests(unittest.TestCase):
         self.assertTrue(str(prf02["runs_dir"]).endswith("runs/stations/prf02"))
 
     def test_prf02_local_model_line_uses_bl01a_and_ends_at_prf02(self):
-        elegant_dir = REPO_ROOT / "src/virtual_machine/half_elegant/elegant"
+        context = load_app_context("energy_spectrum", machine_id="half")
+        assert context.model_backend is not None
         parser = ElegantParser(
-            elegant_dir / "lattice_ini.lte",
-            elegant_dir / "esa_ini.ele",
+            context.model_backend.config["source_lattice"],
+            context.model_backend.config["energy_ini_ele"],
             "PRF02local",
         )
 
@@ -148,10 +149,11 @@ class EnergySpectrumStationTests(unittest.TestCase):
         self.assertIn("QL02", usedline)
 
     def test_eny_local_model_line_uses_beny_and_ends_at_eny(self):
-        elegant_dir = REPO_ROOT / "src/virtual_machine/half_elegant/elegant"
+        context = load_app_context("energy_spectrum", machine_id="half")
+        assert context.model_backend is not None
         parser = ElegantParser(
-            elegant_dir / "lattice_ini.lte",
-            elegant_dir / "esa_ini.ele",
+            context.model_backend.config["source_lattice"],
+            context.model_backend.config["energy_ini_ele"],
             "ESAlocal",
         )
 

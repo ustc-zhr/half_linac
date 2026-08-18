@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import fcntl
 import json
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol
@@ -15,6 +18,8 @@ from .models import AppContext, MachineProfileError, ModelBackendConfig
 
 
 LatticeOverrides = Mapping[str, Mapping[str, float | int | str]]
+_MODEL_WORKSPACE_LOCK_TIMEOUT_S = 30.0
+_MODEL_WORKSPACE_LOCK_POLL_S = 0.1
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,36 @@ def prepare_elegant_model_workdir(
     for output_path in output_paths:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     return workdir
+
+
+@contextmanager
+def _exclusive_model_workspace(
+    working_dir: str | Path,
+    *,
+    timeout_s: float = _MODEL_WORKSPACE_LOCK_TIMEOUT_S,
+):
+    workdir = Path(working_dir)
+    workdir.mkdir(parents=True, exist_ok=True)
+    lock_path = workdir / ".model_backend.lock"
+    deadline = time.monotonic() + timeout_s
+
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        while True:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                remaining_s = deadline - time.monotonic()
+                if remaining_s <= 0:
+                    raise RuntimeError(
+                        f"Model backend workspace is busy after {timeout_s:.1f}s: {workdir}"
+                    ) from None
+                time.sleep(min(_MODEL_WORKSPACE_LOCK_POLL_S, remaining_s))
+
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 class BeamModelBackend(Protocol):
@@ -159,11 +194,7 @@ class ElegantModelBackend:
         config = dict(model_config.config)
         self.config = config
         self.energy_mev = energy_mev
-        self.source_json = Path(_require_config(config, "source_json"))
         self.source_lattice = Path(_require_config(config, "source_lattice"))
-        self.asset_dir = Path(
-            str(config.get("asset_dir") or config.get("working_dir") or self.source_lattice.parent)
-        )
         self.optics_ini_ele = Path(_require_config_alias(config, "optics_ini_ele", "emit_ini_ele"))
         self.optics_lte = Path(_require_config_alias(config, "optics_lte", "emit_lte"))
         self.optics_ele = Path(_require_config_alias(config, "optics_ele", "emit_ele"))
@@ -344,6 +375,29 @@ class ElegantModelBackend:
         initial_twiss: Mapping[str, float] | None = None,
         twiss_plane: str = "xplane",
     ) -> np.ndarray:
+        with _exclusive_model_workspace(self.working_dir):
+            return self._get_map_unlocked(
+                elem1,
+                elem2,
+                k1=k1,
+                element_overrides=element_overrides,
+                lattice_overrides=lattice_overrides,
+                seq=seq,
+                initial_twiss=initial_twiss,
+                twiss_plane=twiss_plane,
+            )
+
+    def _get_map_unlocked(
+        self,
+        elem1: str,
+        elem2: str,
+        k1: float | None = None,
+        element_overrides: Mapping[str, float] | None = None,
+        lattice_overrides: LatticeOverrides | None = None,
+        seq: str = "exit2exit",
+        initial_twiss: Mapping[str, float] | None = None,
+        twiss_plane: str = "xplane",
+    ) -> np.ndarray:
         prepare_elegant_model_workdir(
             self.working_dir,
             output_paths=(self.optics_json, self.optics_lte, self.optics_ele, self.optics_mat),
@@ -481,14 +535,19 @@ class ElegantModelBackend:
         initial_twiss: Mapping[str, float] | None = None,
         plane: str = "xplane",
     ) -> tuple[np.ndarray, tuple[Mapping[str, Any], ...]]:
-        matrix = self.get_map(
-            elem1,
-            elem2,
-            lattice_overrides=lattice_overrides,
-            seq=seq,
-            initial_twiss=initial_twiss,
-            twiss_plane=plane,
-        )
+        with _exclusive_model_workspace(self.working_dir):
+            matrix = self._get_map_unlocked(
+                elem1,
+                elem2,
+                lattice_overrides=lattice_overrides,
+                seq=seq,
+                initial_twiss=initial_twiss,
+                twiss_plane=plane,
+            )
+            rows = self._load_optics_profile_rows()
+        return matrix, rows
+
+    def _load_optics_profile_rows(self) -> tuple[Mapping[str, Any], ...]:
         twiss_path = self.optics_ele.with_suffix(".twi")
         twiss = sdds.SDDS(0)
         twiss.load(str(twiss_path))
@@ -542,7 +601,7 @@ class ElegantModelBackend:
                     "alpha_y": float(columns["alphay"][index]),
                 }
             )
-        return matrix, tuple(rows)
+        return tuple(rows)
 
     def validate_energy_capability(self) -> None:
         self.energy_paths()
@@ -553,11 +612,12 @@ class ElegantModelBackend:
         *,
         lattice_overrides: LatticeOverrides | None = None,
     ) -> float:
-        paths, parser, state = self._prepare_energy_state(line_name, lattice_overrides)
-        state["control"]["run_setup"]["lattice"] = paths.lte.name
-        self._run_energy_state(paths, parser, state)
-        matrix = _load_matrix(paths.mat)
-        return float(matrix[0, 5])
+        with _exclusive_model_workspace(self.energy_paths().working_dir):
+            paths, parser, state = self._prepare_energy_state(line_name, lattice_overrides)
+            state["control"]["run_setup"]["lattice"] = paths.lte.name
+            self._run_energy_state(paths, parser, state)
+            matrix = _load_matrix(paths.mat)
+            return float(matrix[0, 5])
 
     def get_energy_optics(
         self,
@@ -571,6 +631,26 @@ class ElegantModelBackend:
     ) -> EnergyOpticsResult:
         if beta_x_m <= 0:
             raise MachineProfileError("Energy optics beta_x_m must be positive.")
+        with _exclusive_model_workspace(self.energy_paths().working_dir):
+            return self._get_energy_optics_unlocked(
+                line_name,
+                start_element,
+                target_element,
+                beta_x_m=beta_x_m,
+                alpha_x=alpha_x,
+                lattice_overrides=lattice_overrides,
+            )
+
+    def _get_energy_optics_unlocked(
+        self,
+        line_name: str,
+        start_element: str,
+        target_element: str,
+        *,
+        beta_x_m: float,
+        alpha_x: float,
+        lattice_overrides: LatticeOverrides | None = None,
+    ) -> EnergyOpticsResult:
         paths, parser, state = self._prepare_energy_state(line_name, lattice_overrides)
         usedline = state["usedline"]
         try:

@@ -136,8 +136,8 @@ runtime/model_backend/half/simulation/
 These files are generated from the tracked source inputs:
 
 - `src/virtual_machine/<machine>_elegant/elegant/lattice_ini.lte`
-- `src/virtual_machine/<machine>_elegant/elegant/emit_ini.ele`
-- `src/virtual_machine/<machine>_elegant/elegant/esa_ini.ele`
+- `configs/machines/<machine>/model_backends/elegant/optics_ini.ele`
+- `configs/machines/<machine>/model_backends/elegant/energy_ini.ele`
 - the configured model line name
 - any explicit model snapshot lattice overrides
 
@@ -146,10 +146,9 @@ untracked. The source contract is the design lattice, the initial elegant input
 files, the machine profile config, and the snapshot metadata recorded with each
 calculation.
 
-The tracked `emit_ini.ele` filename is retained as a source-asset compatibility
-name. In model-backend configuration and runtime output, this capability is
-called `optics` because it serves BBA, emittance, dispersion correction, and
-other transfer-matrix/Twiss calculations.
+The `optics` template serves BBA, emittance, dispersion correction, and other
+transfer-matrix/Twiss calculations. The `energy` template serves the energy
+spectrum model calculations.
 
 Application result metadata records snapshots close to the measured data:
 

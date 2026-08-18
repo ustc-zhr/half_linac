@@ -1,5 +1,5 @@
 &run_setup
-  lattice                  = emit_ini.lte,
+  lattice                  = energy.lte,
   use_beamline             = USEDLINE,
   combine_bunch_statistics = 0,
   default_order            = 3,
