@@ -625,6 +625,16 @@ APP_DEFINITIONS = {
         "cmd": ["python3", "mainVM.py"],
         "cwd": ROOT / "src/virtual_machine/half_elegant",
     },
+    "setpoint_transfer": {
+        "button_name": "setpoint_transfer_button",
+        "category": "core",
+        "button_text": "Machine Setpoints",
+        "label": "Machine Setpoints",
+        "window_title_patterns": ("Machine Setpoints",),
+        "description": "Compare design Quad K1 values with the VM control backend and apply them after confirmation.",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/setpoint_transfer",
+    },
     "optimization": {
         "button_name": "online_opt",
         "category": "core",
@@ -959,12 +969,19 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.ct_monitor_button.setObjectName("ct_monitor_button")
         self.pv_connection_check_button = QPushButton(self.groupBox_3)
         self.pv_connection_check_button.setObjectName("pv_connection_check_button")
+        self.setpoint_transfer_button = QPushButton(self.groupBox_3)
+        self.setpoint_transfer_button.setObjectName("setpoint_transfer_button")
 
         self.group_button_specs = [
             (
                 self.gridLayout_3,
                 self.groupBox_3,
-                [self.vmbtn, self.pv_connection_check_button, self.online_opt],
+                [
+                    self.vmbtn,
+                    self.setpoint_transfer_button,
+                    self.pv_connection_check_button,
+                    self.online_opt,
+                ],
                 1,
             ),
             (

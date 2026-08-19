@@ -130,7 +130,13 @@ class EleParser(lattice_parser):
 
         return control
 
-    def back2ele(self, ele_file: str | Path, lattice_file: str | Path) -> None:
+    def back2ele(
+        self,
+        ele_file: str | Path,
+        lattice_file: str | Path,
+        *,
+        include_track: bool = True,
+    ) -> None:
         ele_path = Path(ele_file)
         lattice_path = Path(lattice_file)
 
@@ -155,7 +161,8 @@ class EleParser(lattice_parser):
             if "bunched_beam" in self.control:
                 lines.extend(self._section_lines("bunched_beam"))
 
-            lines.append("&track &end")
+            if include_track:
+                lines.append("&track &end")
             handle.write("".join(lines))
 
     def _section_lines(self, section_name: str) -> list[str]:
@@ -208,6 +215,8 @@ class ElegantParser:
         lattice_path: str | Path,
         ele_path: str | Path,
         json_path: str | Path | None = None,
+        *,
+        include_track: bool = True,
     ) -> tuple[Path, Path]:
         runtime_json_path = self._resolve_runtime_json_path(json_path)
         lattice_path = Path(lattice_path)
@@ -240,7 +249,7 @@ class ElegantParser:
 
         self.ele.control = control
         self.ele.control["run_setup"]["use_beamline"] = self.line_name
-        self.ele.back2ele(ele_path, lattice_path)
+        self.ele.back2ele(ele_path, lattice_path, include_track=include_track)
         return lattice_path, ele_path
 
     def load_bpm_centroids(self, bpmcen_path: str | Path) -> dict[str, dict[str, float]]:

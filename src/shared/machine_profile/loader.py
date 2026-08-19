@@ -184,6 +184,26 @@ def load_app_context(
     )
 
 
+def load_model_context(
+    machine_id: str | None = None,
+    model_backend: str | None = None,
+) -> AppContext:
+    """Load a model-only context without selecting an application workflow."""
+    profile_id = resolve_machine_id(machine_id)
+    profile = _load_profile_for_machine_id(profile_id)
+    selected_model_backend = _resolve_model_backend(
+        "emit_measure",
+        machine_root(profile_id),
+        model_backend,
+    )
+    return AppContext(
+        app_name="model_preview",
+        profile=profile,
+        control_backend=ControlBackendConfig(name="vm"),
+        model_backend=selected_model_backend,
+    )
+
+
 def load_orbit_workflow(profile: MachineProfile) -> OrbitWorkflowConfig:
     workflow = _expect_mapping(profile.workflows.get("orbit"), "workflows.orbit")
     if not any(name in workflow for name in ("bpms", "xcors", "ycors")):

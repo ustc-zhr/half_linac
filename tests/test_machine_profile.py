@@ -630,25 +630,21 @@ class MachineProfileTests(unittest.TestCase):
                 f"{pv_prefix}:TOTAL",
             )
 
-    def test_half_dispersion_hv_draft_is_real_only(self):
+    def test_half_dispersion_hvdc_modulators_are_real_only(self):
         profile = load_profile("half")
 
-        self.assertEqual(
-            resolve_channel(
-                profile,
-                "MODULATOR_HV1",
-                "voltage_set",
-                "real",
-            ),
-            "HALF:modulator1:HV_set:ao",
-        )
-        with self.assertRaises(MachineProfileError):
-            resolve_channel(
-                profile,
-                "MODULATOR_HV1",
-                "voltage_set",
-                "vm",
+        for index in range(1, 21):
+            element_id = f"KLY{index:02d}"
+            self.assertEqual(
+                resolve_channel(profile, element_id, "voltage_set", "real"),
+                f"IN:PP:{element_id}:setVoltageHVDC:ao",
             )
+            self.assertEqual(
+                resolve_channel(profile, element_id, "voltage_readback", "real"),
+                f"IN:PP:{element_id}:voltageHVDC:ai",
+            )
+            with self.assertRaises(MachineProfileError):
+                resolve_channel(profile, element_id, "voltage_set", "vm")
 
     def test_model_snapshot_conversion_helpers(self):
         self.assertEqual(apply_snapshot_conversion(2.0, {"type": "direct"}), 2.0)

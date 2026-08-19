@@ -14,12 +14,12 @@
   },
   "safety": {"max_reference_orbit_change_mm": 0.5},
   "energy_knob": {
-    "name": "MODULATOR_HV1",
+    "name": "KLY01",
     "actuator": "modulator_voltage",
-    "actuator_unit": "kV",
-    "delta": 0.004,
-    "readback_tolerance": 0.015,
-    "element": {"real": "MODULATOR_HV1"},
+    "actuator_unit": "V",
+    "delta": 4.0,
+    "readback_tolerance": 15.0,
+    "element": {"real": "KLY01"},
     "set_channel": "voltage_set",
     "readback_channel": "voltage_readback"
   },

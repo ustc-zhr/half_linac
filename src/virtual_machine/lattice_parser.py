@@ -6,7 +6,6 @@ import re
 from math import *
 import random
 from collections import defaultdict
-import epics 
 import json
 
 nest_dict = lambda: defaultdict(nest_dict)

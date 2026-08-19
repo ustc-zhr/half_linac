@@ -1143,9 +1143,85 @@
     "TRANSPORT_ENERGY": {
       "setpoint": "IN:TL:ENG"
     },
-    "MODULATOR_HV1": {
-      "voltage_set": "HALF:modulator1:HV_set:ao",
-      "voltage_readback": "HALF:modulator1:HV:ai"
+    "KLY01": {
+      "voltage_set": "IN:PP:KLY01:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY01:voltageHVDC:ai"
+    },
+    "KLY02": {
+      "voltage_set": "IN:PP:KLY02:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY02:voltageHVDC:ai"
+    },
+    "KLY03": {
+      "voltage_set": "IN:PP:KLY03:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY03:voltageHVDC:ai"
+    },
+    "KLY04": {
+      "voltage_set": "IN:PP:KLY04:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY04:voltageHVDC:ai"
+    },
+    "KLY05": {
+      "voltage_set": "IN:PP:KLY05:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY05:voltageHVDC:ai"
+    },
+    "KLY06": {
+      "voltage_set": "IN:PP:KLY06:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY06:voltageHVDC:ai"
+    },
+    "KLY07": {
+      "voltage_set": "IN:PP:KLY07:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY07:voltageHVDC:ai"
+    },
+    "KLY08": {
+      "voltage_set": "IN:PP:KLY08:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY08:voltageHVDC:ai"
+    },
+    "KLY09": {
+      "voltage_set": "IN:PP:KLY09:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY09:voltageHVDC:ai"
+    },
+    "KLY10": {
+      "voltage_set": "IN:PP:KLY10:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY10:voltageHVDC:ai"
+    },
+    "KLY11": {
+      "voltage_set": "IN:PP:KLY11:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY11:voltageHVDC:ai"
+    },
+    "KLY12": {
+      "voltage_set": "IN:PP:KLY12:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY12:voltageHVDC:ai"
+    },
+    "KLY13": {
+      "voltage_set": "IN:PP:KLY13:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY13:voltageHVDC:ai"
+    },
+    "KLY14": {
+      "voltage_set": "IN:PP:KLY14:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY14:voltageHVDC:ai"
+    },
+    "KLY15": {
+      "voltage_set": "IN:PP:KLY15:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY15:voltageHVDC:ai"
+    },
+    "KLY16": {
+      "voltage_set": "IN:PP:KLY16:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY16:voltageHVDC:ai"
+    },
+    "KLY17": {
+      "voltage_set": "IN:PP:KLY17:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY17:voltageHVDC:ai"
+    },
+    "KLY18": {
+      "voltage_set": "IN:PP:KLY18:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY18:voltageHVDC:ai"
+    },
+    "KLY19": {
+      "voltage_set": "IN:PP:KLY19:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY19:voltageHVDC:ai"
+    },
+    "KLY20": {
+      "voltage_set": "IN:PP:KLY20:setVoltageHVDC:ao",
+      "voltage_readback": "IN:PP:KLY20:voltageHVDC:ai"
     },
     "FCT1": {
       "peak_current": "IN:BD:FCT1:I"

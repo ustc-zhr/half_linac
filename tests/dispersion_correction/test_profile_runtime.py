@@ -446,13 +446,13 @@ def test_half_bv01_bv02_section_uses_vertical_bpms_and_real_hv_draft() -> None:
         section_id="bv01_bv02",
     )
 
-    assert real_config.energy_knob.name == "MODULATOR_HV1"
-    assert real_config.energy_knob.actuator_unit == "kV"
-    assert real_config.energy_knob.delta == pytest.approx(0.004)
+    assert real_config.energy_knob.name == "KLY01"
+    assert real_config.energy_knob.actuator_unit == "V"
+    assert real_config.energy_knob.delta == pytest.approx(4.0)
     assert real_config.backend.options["readback_timeout"] == 10.0
     assert real_config.backend.options["pv_map"]["energy_knob"] == {
-        "set": "HALF:modulator1:HV_set:ao",
-        "readback": "HALF:modulator1:HV:ai",
+        "set": "IN:PP:KLY01:setVoltageHVDC:ao",
+        "readback": "IN:PP:KLY01:voltageHVDC:ai",
     }
     quadrupole_map = real_config.backend.options["pv_map"]["quadrupoles"]
     assert "QT29" not in quadrupole_map

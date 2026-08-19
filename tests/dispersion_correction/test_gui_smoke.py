@@ -993,7 +993,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert half_window.energy_step_field_label.isVisibleTo(half_window)
     assert half_window.energy_calibration_controls.isVisibleTo(half_window)
     assert half_window.calibration_button.isEnabled()
-    assert "MODULATOR_HV1" in half_window.energy_step_summary.text()
+    assert "KLY01" in half_window.energy_step_summary.text()
     assert "Energy knob PV is not configured" in half_window.operation_banner.text()
     assert half_window.online_page.isVisibleTo(half_window)
     assert half_window.model_dialog.isHidden()

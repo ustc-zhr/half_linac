@@ -219,6 +219,16 @@ class ElegantModelBackend:
                 f"Model backend lattice does not define element {element_id!r}."
             ) from exc
 
+    def get_line_endpoints(self) -> tuple[str, str]:
+        """Return the first and last element of the configured model line."""
+        runtime_state = self._new_parser().build_runtime_state()
+        usedline = runtime_state.get("usedline", ())
+        if len(usedline) < 2:
+            raise MachineProfileError(
+                f"Model backend line {self.line_name!r} must contain at least two elements."
+            )
+        return str(usedline[0]), str(usedline[-1])
+
     def get_line_elements(
         self,
         elem1: str,
@@ -397,6 +407,7 @@ class ElegantModelBackend:
         seq: str = "exit2exit",
         initial_twiss: Mapping[str, float] | None = None,
         twiss_plane: str = "xplane",
+        twiss_only: bool = False,
     ) -> np.ndarray:
         prepare_elegant_model_workdir(
             self.working_dir,
@@ -465,6 +476,9 @@ class ElegantModelBackend:
         control["run_setup"]["lattice"] = self.optics_lte.name
         if initial_twiss is not None:
             _apply_initial_twiss(control, initial_twiss, twiss_plane)
+        if twiss_only:
+            control.pop("bunched_beam", None)
+            control.pop("track", None)
         lte["control"] = control
         lte["lattice"] = lattice
         lte["usedline"] = scanline
@@ -472,7 +486,11 @@ class ElegantModelBackend:
         with self.optics_json.open("w", encoding="utf-8") as handle:
             handle.write(json.dumps(lte, indent=4))
 
-        parser.json_to_lte_ele(self.optics_lte, self.optics_ele)
+        parser.json_to_lte_ele(
+            self.optics_lte,
+            self.optics_ele,
+            include_track=not twiss_only,
+        )
         run_elegant_input(
             self.optics_ele.name,
             self.optics_log,
@@ -512,6 +530,7 @@ class ElegantModelBackend:
         seq: str = "exit2exit",
         initial_twiss: Mapping[str, float] | None = None,
         plane: str = "xplane",
+        twiss_only: bool = False,
     ) -> tuple[Mapping[str, Any], ...]:
         """Return one Elegant Twiss/dispersion row per element in a model segment."""
 
@@ -522,6 +541,7 @@ class ElegantModelBackend:
             seq=seq,
             initial_twiss=initial_twiss,
             plane=plane,
+            twiss_only=twiss_only,
         )
         return rows
 
@@ -534,6 +554,7 @@ class ElegantModelBackend:
         seq: str = "exit2exit",
         initial_twiss: Mapping[str, float] | None = None,
         plane: str = "xplane",
+        twiss_only: bool = False,
     ) -> tuple[np.ndarray, tuple[Mapping[str, Any], ...]]:
         with _exclusive_model_workspace(self.working_dir):
             matrix = self._get_map_unlocked(
@@ -543,6 +564,7 @@ class ElegantModelBackend:
                 seq=seq,
                 initial_twiss=initial_twiss,
                 twiss_plane=plane,
+                twiss_only=twiss_only,
             )
             rows = self._load_optics_profile_rows()
         return matrix, rows
