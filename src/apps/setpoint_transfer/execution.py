@@ -24,6 +24,15 @@ class AppliedSetpoint:
     actual_value: float
 
 
+@dataclass(frozen=True)
+class RestoredSetpoint:
+    element_id: str
+    pv_name: str
+    value_before_restore: float
+    restored_value: float
+    actual_value: float
+
+
 class TransferExecutionError(RuntimeError):
     def __init__(
         self,
@@ -36,10 +45,77 @@ class TransferExecutionError(RuntimeError):
         self.failed_element_id = failed_element_id
 
 
+class RestoreExecutionError(RuntimeError):
+    def __init__(self, message, completed, failed_element_id):
+        super().__init__(message)
+        self.completed = tuple(completed)
+        self.failed_element_id = failed_element_id
+
+
+def find_restore_conflicts(result, client: PvClient, *, tolerance: float = 1.0e-6):
+    conflicts = []
+    for item in reversed(tuple(result)):
+        try:
+            current = float(client.read(item.pv_name))
+        except Exception as exc:
+            conflicts.append((item.element_id, None, str(exc)))
+            continue
+        if not math.isfinite(current) or abs(current - item.actual_value) > tolerance:
+            conflicts.append((item.element_id, current, "changed since Apply"))
+    return tuple(conflicts)
+
+
+def execute_restore(result, client: PvClient, *, tolerance: float = 1.0e-6):
+    completed = []
+    for item in reversed(tuple(result)):
+        try:
+            before = float(client.read(item.pv_name))
+            if not math.isfinite(before):
+                raise RuntimeError("current value is non-finite")
+            client.write(item.pv_name, item.old_value)
+            actual = float(client.read(item.pv_name))
+            if not math.isfinite(actual) or abs(actual - item.old_value) > tolerance:
+                raise RuntimeError(
+                    f"readback mismatch: target={item.old_value:g}, actual={actual:g}"
+                )
+            completed.append(
+                RestoredSetpoint(
+                    item.element_id, item.pv_name, before, item.old_value, actual
+                )
+            )
+        except Exception as exc:
+            raise RestoreExecutionError(
+                f"{item.element_id} restore failed: {exc}", completed, item.element_id
+            ) from exc
+    return tuple(completed)
+
+
+def save_transfer_transaction(path, *, machine_id, backend, result):
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": "1",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "machine": machine_id,
+        "backend": backend,
+        "items": [
+            {
+                "element_id": item.element_id,
+                "pv_name": item.pv_name,
+                "old_value": item.old_value,
+                "target_value": item.target_value,
+                "readback_value": item.actual_value,
+            }
+            for item in result
+        ],
+    }
+    destination.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def preflight_transfer_plan(plan: TransferPlan, client: PvClient) -> None:
     """Verify every selected PV is readable immediately before a write."""
-    if plan.target_backend != "vm":
-        raise ValueError("Only the VM control backend is supported.")
+    if plan.target_backend not in {"vm", "real"}:
+        raise ValueError("Only VM and Real control backends are supported.")
     if not plan.writable_items or any(item.status != "ready" for item in plan.items):
         raise ValueError("Every selected transfer item must be ready.")
     for item in plan.writable_items:
@@ -112,8 +188,8 @@ def execute_transfer_plan(
     *,
     tolerance: float = 1.0e-6,
 ) -> tuple[AppliedSetpoint, ...]:
-    if plan.target_backend != "vm":
-        raise ValueError("Only the VM control backend is supported.")
+    if plan.target_backend not in {"vm", "real"}:
+        raise ValueError("Only VM and Real control backends are supported.")
     preflight_transfer_plan(plan, client)
 
     snapshot: dict[str, float] = {}

@@ -9,10 +9,13 @@ from half_linac.src.apps.setpoint_transfer.execution import (
     TransferExecutionError,
     append_execution_log,
     execute_transfer_plan,
+    execute_restore,
+    find_restore_conflicts,
     preflight_transfer_plan,
 )
 from half_linac.src.shared.machine_profile import MachineProfileError, load_profile
 from half_linac.src.shared.setpoint_transfer import (
+    backend_capabilities,
     DesignSetpoint,
     StagedSetpoint,
     build_transfer_plan,
@@ -66,14 +69,16 @@ def test_plan_maps_vm_k1_and_reports_unknown_element():
     assert "not present" in plan.diagnostics[0]
 
 
-def test_plan_rejects_missing_current_value_and_non_vm_target():
+def test_plan_rejects_missing_current_value_and_unknown_target():
     profile = load_profile("half")
     setpoint = DesignSetpoint("QL01", "quad", "K1", 1.5, Path("design.lte"))
     plan = build_transfer_plan(profile, (setpoint,))
     assert "Current VM value is unavailable" in plan.blockers[0].message
     assert "HALF:IN:AP:QUAD:QL01:K1:ao" in plan.blockers[0].message
-    with pytest.raises(MachineProfileError, match="only 'vm'"):
-        build_transfer_plan(profile, (setpoint,), target_backend="real")
+    real_plan = build_transfer_plan(profile, (setpoint,), target_backend="real")
+    assert real_plan.target_backend == "real"
+    with pytest.raises(MachineProfileError, match="use 'vm' or 'real'"):
+        build_transfer_plan(profile, (setpoint,), target_backend="offline")
 
 
 def test_target_workspace_round_trip_excludes_current_values(tmp_path):
@@ -87,6 +92,14 @@ def test_target_workspace_round_trip_excludes_current_values(tmp_path):
     assert "current_value" not in json.dumps(payload)
     assert payload["created_at"]
     assert load_target_workspace(path, expected_machine_id="half") == staged
+
+
+def test_backend_capabilities_enable_guarded_real_write():
+    assert backend_capabilities("vm").can_write
+    assert backend_capabilities("real").can_write
+    assert backend_capabilities("real").can_read
+    with pytest.raises(ValueError, match="Unsupported control backend"):
+        backend_capabilities("offline")
 
 
 def test_target_workspace_rejects_wrong_machine_and_nonfinite_value(tmp_path):
@@ -183,7 +196,7 @@ def test_twiss_preview_dialog_renders_overview_and_data_tabs():
     dialog.close()
 
 
-def test_plan_blocks_target_outside_profile_limit():
+def test_plan_clips_target_to_profile_limit():
     profile = load_profile("half")
     quad = profile.get_element("QL01")
     limited = replace(quad, limits={"K1": {"low": -1, "high": 1, "unit": "1/m^2"}})
@@ -199,8 +212,9 @@ def test_plan_blocks_target_outside_profile_limit():
         current_values={"QL01": 0.0},
         staged_setpoints=(StagedSetpoint("QL01", "K1", 2.0, "manual"),),
     )
-    assert plan.items[0].status == "blocked"
-    assert "outside machine limit" in plan.items[0].message
+    assert plan.items[0].status == "ready"
+    assert plan.items[0].target_value == pytest.approx(1.0)
+    assert "Clipped from 2 to 1" in plan.items[0].message
 
 
 class FakeClient:
@@ -243,6 +257,31 @@ def test_execute_writes_and_verifies_values():
     result = execute_transfer_plan(plan, client)
     assert [item.old_value for item in result] == [1.0, -2.0]
     assert [item.actual_value for item in result] == [1.5, -2.5]
+
+
+def test_execute_supports_real_plan_with_same_preflight_guards():
+    plan = replace(_ready_plan(), target_backend="real")
+    client = FakeClient({item.pv_name: item.current_value for item in plan.items})
+    result = execute_transfer_plan(plan, client)
+    assert [item.actual_value for item in result] == [1.5, -2.5]
+
+
+def test_restore_reverses_successful_apply_and_verifies_old_values():
+    plan = _ready_plan()
+    client = FakeClient({item.pv_name: item.current_value for item in plan.items})
+    applied = execute_transfer_plan(plan, client)
+    restored = execute_restore(applied, client)
+    assert [item.element_id for item in restored] == ["QL02", "QL01"]
+    assert [item.actual_value for item in restored] == [-2.0, 1.0]
+
+
+def test_restore_detects_external_change_before_confirmation():
+    plan = _ready_plan()
+    client = FakeClient({item.pv_name: item.current_value for item in plan.items})
+    applied = execute_transfer_plan(plan, client)
+    client.values[applied[0].pv_name] = 9.0
+    conflicts = find_restore_conflicts(applied, client)
+    assert conflicts[0][0] == "QL01"
 
 
 def test_preflight_reads_all_targets_before_write():

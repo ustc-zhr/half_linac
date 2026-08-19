@@ -20,6 +20,29 @@ from half_linac.src.virtual_machine.lattice_parser import lattice_parser
 
 
 @dataclass(frozen=True)
+class BackendCapabilities:
+    name: str
+    can_read: bool
+    can_write: bool
+    can_model_preview: bool
+    limits_required: bool = False
+
+
+BACKEND_CAPABILITIES = {
+    "vm": BackendCapabilities("vm", True, True, True),
+    "real": BackendCapabilities("real", True, True, True),
+}
+
+
+def backend_capabilities(backend: str) -> BackendCapabilities:
+    key = str(backend).strip().lower()
+    try:
+        return BACKEND_CAPABILITIES[key]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported control backend: {backend!r}.") from exc
+
+
+@dataclass(frozen=True)
 class DesignSetpoint:
     element_id: str
     kind: str
@@ -69,14 +92,16 @@ def save_target_workspace(
     path: str | Path,
     *,
     machine_id: str,
+    target_backend: str = "vm",
     staged_setpoints: Sequence[StagedSetpoint],
 ) -> None:
-    """Save staged VM Quad K1 targets without machine readback state."""
+    """Save staged control-backend Quad K1 targets without readback state."""
+    backend_capabilities(target_backend)
     destination = Path(path)
     payload = {
         "schema_version": "1",
         "machine": str(machine_id).strip(),
-        "target_backend": "vm",
+        "target_backend": str(target_backend).strip().lower(),
         "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "setpoints": [
             {
@@ -99,6 +124,7 @@ def load_target_workspace(
     path: str | Path,
     *,
     expected_machine_id: str,
+    expected_target_backend: str = "vm",
 ) -> tuple[StagedSetpoint, ...]:
     """Load and validate a VM Quad K1 target workspace."""
     source = Path(path)
@@ -113,8 +139,10 @@ def load_target_workspace(
         raise ValueError(
             f"Workspace machine {machine_id!r} does not match {expected_machine_id!r}."
         )
-    if str(payload.get("target_backend", "")).strip().lower() != "vm":
-        raise ValueError("Only VM target workspaces are supported.")
+    expected_backend = str(expected_target_backend).strip().lower()
+    backend_capabilities(expected_backend)
+    if str(payload.get("target_backend", "")).strip().lower() != expected_backend:
+        raise ValueError(f"Workspace target backend does not match {expected_backend!r}.")
     raw_setpoints = payload.get("setpoints")
     if not isinstance(raw_setpoints, list):
         raise ValueError("Workspace setpoints must be a list.")
@@ -192,11 +220,11 @@ def build_transfer_plan(
     current_values: Mapping[str, float | None] | None = None,
     staged_setpoints: Sequence[StagedSetpoint] = (),
 ) -> TransferPlan:
-    """Build a VM-only K1 plan from independent design, current, and target values."""
+    """Build a VM or Real K1 plan from independent design/current/target values."""
     backend = str(target_backend).strip().lower()
-    if backend != "vm":
+    if backend not in {"vm", "real"}:
         raise MachineProfileError(
-            f"Design setpoint transfer target {target_backend!r} is not implemented; only 'vm' is supported."
+            f"Design setpoint transfer target {target_backend!r} is not supported; use 'vm' or 'real'."
         )
     current_values = current_values or {}
     items: list[TransferItem] = []
@@ -259,7 +287,7 @@ def build_transfer_plan(
                     key[0], key[1], setpoint.value, current, None, None,
                     target.pv_name,
                     "1/m^2", "blocked",
-                    f"Current VM value is unavailable: {target.pv_name}",
+                    f"Current {backend.upper()} value is unavailable: {target.pv_name}",
                 )
             )
             continue
@@ -288,16 +316,14 @@ def build_transfer_plan(
                 )
             )
             continue
+        limit_message = ""
         if target.machine_limit and not target.machine_limit.contains(normalized_target):
-            items.append(
-                TransferItem(
-                    key[0], key[1], setpoint.value, normalized_current,
-                    normalized_target, origin or None, target.pv_name,
-                    target.unit or "1/m^2", "blocked",
-                    f"Target is outside machine limit {target.machine_limit.describe()}.",
-                )
+            requested_target = normalized_target
+            normalized_target = target.machine_limit.clip(normalized_target)
+            limit_message = (
+                f"Clipped from {requested_target:g} to {normalized_target:g} using "
+                f"machine limit {target.machine_limit.describe()}."
             )
-            continue
         if origin not in {"design", "current", "manual"}:
             items.append(
                 TransferItem(
@@ -312,7 +338,7 @@ def build_transfer_plan(
             TransferItem(
                 key[0], key[1], setpoint.value, normalized_current,
                 normalized_target, origin, target.pv_name,
-                target.unit or "1/m^2", "ready",
+                target.unit or "1/m^2", "ready", limit_message,
             )
         )
     return TransferPlan(backend, tuple(items), tuple(diagnostics))

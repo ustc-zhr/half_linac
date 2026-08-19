@@ -64,7 +64,8 @@ mkdir -p "$HOME/EPICS"
 cd "$HOME/EPICS"
 wget https://epics-controls.org/download/base/base-7.0.8.1.tar.gz
 tar -xvf base-7.0.8.1.tar.gz
-cd base-7.0.8.1
+mv base-7.0.8.1 epics-base
+cd epics-base
 make
 ```
 
@@ -192,7 +193,7 @@ conda install soliday::sdds
 
 - Energy Spectrum 代码中导入名是 `skimage`，实际安装包名是 `scikit-image`。
 - `sdds` 建议使用 Robert Soliday 维护的 conda 包：
-  <https://anaconda.org/soliday/sdds>。Anaconda 页面给出的安装命令是
+  [https://anaconda.org/soliday/sdds](https://anaconda.org/soliday/sdds)。Anaconda 页面给出的安装命令是
   `conda install soliday::sdds`。在 Linux 上 conda 会选择该 channel 中
   支持当前平台的版本。
 
@@ -251,7 +252,7 @@ python3 -c "import sdds; print('sdds OK')"
 ## 6. 克隆仓库
 
 ```bash
-git clone https://git.ustc.edu.cn/zhanghaoran/half_linac.git
+git clone https://github.com/ustc-zhr/half_linac.git
 cd half_linac
 ```
 

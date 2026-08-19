@@ -34,6 +34,7 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -50,13 +51,17 @@ from PyQt5.QtWidgets import (
 )
 
 from half_linac.src.shared.machine_profile import (
+    CONTROL_BACKEND_ENV,
+    LEGACY_CONTROL_BACKEND_ENV,
     MachineProfileError,
     RuntimeContextWidget,
     load_profile,
+    normalize_mode,
     resolve_machine_runtime,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.setpoint_transfer import (
+    backend_capabilities,
     StagedSetpoint,
     TransferPlan,
     build_transfer_plan,
@@ -66,9 +71,13 @@ from half_linac.src.shared.setpoint_transfer import (
 )
 from half_linac.src.shared.twiss_preview import TwissPreviewResult, build_twiss_preview
 from half_linac.src.apps.setpoint_transfer.execution import (
+    RestoreExecutionError,
     TransferExecutionError,
     append_execution_log,
     execute_transfer_plan,
+    execute_restore,
+    find_restore_conflicts,
+    save_transfer_transaction,
 )
 
 
@@ -239,14 +248,43 @@ class VmTransferWorker(QThread):
             self.failed.emit(str(exc), (), "")
 
 
+class RestoreWorker(QThread):
+    completed = pyqtSignal(object)
+    failed = pyqtSignal(str, object, str)
+
+    def __init__(self, result, parent=None):
+        super().__init__(parent)
+        self.result = tuple(result)
+
+    def run(self):
+        try:
+            self.completed.emit(execute_restore(self.result, EpicsPvClient()))
+        except RestoreExecutionError as exc:
+            self.failed.emit(str(exc), exc.completed, exc.failed_element_id)
+        except Exception as exc:
+            self.failed.emit(str(exc), (), "")
+
+
+class RestoreCheckWorker(QThread):
+    completed = pyqtSignal(object)
+
+    def __init__(self, result, parent=None):
+        super().__init__(parent)
+        self.result = tuple(result)
+
+    def run(self):
+        self.completed.emit(find_restore_conflicts(self.result, EpicsPvClient()))
+
+
 class VmPreviewWorker(QThread):
     completed = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, profile, design_setpoints, parent=None):
+    def __init__(self, profile, design_setpoints, control_backend="vm", parent=None):
         super().__init__(parent)
         self.profile = profile
         self.design_setpoints = design_setpoints
+        self.control_backend = control_backend
 
     def run(self):
         try:
@@ -261,7 +299,7 @@ class VmPreviewWorker(QThread):
                         self.profile,
                         setpoint.element_id,
                         quantity="K1",
-                        mode="vm",
+                        mode=self.control_backend,
                     )
                     resolved.append((setpoint.element_id, target.pv_name))
                 except Exception:
@@ -447,11 +485,19 @@ class TargetValueDelegate(QStyledItemDelegate):
 class MachineSetpointsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.control_backend = normalize_mode(
+            os.environ.get(CONTROL_BACKEND_ENV, "")
+            or os.environ.get(LEGACY_CONTROL_BACKEND_ENV, "")
+            or "vm", "control_backend"
+        )
+        self.backend_capabilities = backend_capabilities(self.control_backend)
         self.profile = load_profile()
         self.current_theme = resolve_initial_theme()
         self.runtime = resolve_machine_runtime(self.profile)
         self.plan: TransferPlan | None = None
         self.worker: VmTransferWorker | None = None
+        self.restore_worker: RestoreWorker | None = None
+        self.restore_check_worker: RestoreCheckWorker | None = None
         self.preview_worker: VmPreviewWorker | None = None
         self.twiss_worker: TwissPreviewWorker | None = None
         self.active_plan: TransferPlan | None = None
@@ -463,6 +509,7 @@ class MachineSetpointsWindow(QMainWindow):
         self.target_step = 0.1
         self.log_path = _ROOT / "logs" / "setpoint_transfer" / f"{self.profile.machine.id}.jsonl"
         self.workspace_dir = _ROOT / "logs" / "setpoint_transfer" / "workspaces"
+        self.transaction_dir = _ROOT / "logs" / "setpoint_transfer" / "transactions"
         self.setWindowTitle(f"{self.profile.machine.display_name} Machine Setpoints")
         self.resize(980, 650)
         self.setMinimumSize(760, 520)
@@ -482,7 +529,7 @@ class MachineSetpointsWindow(QMainWindow):
         self.runtime_context = RuntimeContextWidget(
             machine_id=self.profile.machine.id,
             machine_display_name=self.profile.machine.display_name,
-            control_backend="vm",
+            control_backend=self.control_backend,
             parent=central,
         )
         header_layout.addWidget(self.runtime_context)
@@ -554,7 +601,7 @@ class MachineSetpointsWindow(QMainWindow):
         layout.addLayout(target_layout)
         self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels(
-            ("Select", "Element", "Design", "Current VM", "Target", "Change", "Source", "Status")
+            ("Select", "Element", "Design", f"Current {self.control_backend.upper()}", "Target", "Change", "Source", "Status")
         )
         self.table.setEditTriggers(
             QAbstractItemView.DoubleClicked
@@ -576,16 +623,20 @@ class MachineSetpointsWindow(QMainWindow):
         self.preview_button = QPushButton("Refresh Current", central)
         self.twiss_button = QPushButton("Preview Twiss", central)
         self.apply_button = QPushButton("Apply Selected", central)
+        self.restore_button = QPushButton("Restore Last Apply", central)
+        self.restore_button.setEnabled(False)
         self.apply_button.setProperty("role", "primary")
         buttons.addButton(self.preview_button, QDialogButtonBox.ActionRole)
         buttons.addButton(self.twiss_button, QDialogButtonBox.ActionRole)
         buttons.addButton(self.apply_button, QDialogButtonBox.AcceptRole)
+        buttons.addButton(self.restore_button, QDialogButtonBox.ActionRole)
         buttons.rejected.connect(self.close)
         layout.addWidget(buttons)
         self.setCentralWidget(central)
         self.preview_button.clicked.connect(self.preview)
         self.twiss_button.clicked.connect(self.preview_twiss)
         self.apply_button.clicked.connect(self.apply)
+        self.restore_button.clicked.connect(self.restore_last_apply)
         self.select_ready_button.clicked.connect(self._select_all_ready)
         self.clear_selection_button.clicked.connect(self._clear_selection)
         self.load_design_button.clicked.connect(self._load_design)
@@ -602,6 +653,9 @@ class MachineSetpointsWindow(QMainWindow):
         self.status_filter.currentTextChanged.connect(self._apply_filters)
         self.table.itemChanged.connect(self._selection_changed)
         self.apply_button.setEnabled(False)
+        self.apply_button.setToolTip(
+            f"Apply selected setpoints to the {self.control_backend.upper()} control backend."
+        )
         self.twiss_button.setEnabled(False)
         self._load_source()
 
@@ -633,7 +687,10 @@ class MachineSetpointsWindow(QMainWindow):
             self.status_label.setText(f"Design source error: {exc}")
             self.preview_button.setEnabled(False)
             return
-        self.summary_label.setText(f"Quad K1 design values: {len(self.design_setpoints)}")
+        self.summary_label.setText(
+            f"Quad K1 design values: {len(self.design_setpoints)}   "
+            + f"{self.control_backend.upper()} transfer enabled"
+        )
         self.preview()
 
     def preview(self):
@@ -642,8 +699,10 @@ class MachineSetpointsWindow(QMainWindow):
         self.plan = None
         self.preview_button.setEnabled(False)
         self.apply_button.setEnabled(False)
-        self.status_label.setText("Reading VM setpoints...")
-        self.preview_worker = VmPreviewWorker(self.profile, self.design_setpoints, self)
+        self.status_label.setText(f"Reading {self.control_backend.upper()} setpoints...")
+        self.preview_worker = VmPreviewWorker(
+            self.profile, self.design_setpoints, self.control_backend, self
+        )
         self.preview_worker.completed.connect(self._preview_complete)
         self.preview_worker.failed.connect(self._preview_failed)
         self.preview_worker.finished.connect(lambda: self.preview_button.setEnabled(True))
@@ -661,7 +720,7 @@ class MachineSetpointsWindow(QMainWindow):
         self.plan = build_transfer_plan(
             self.profile,
             self.design_setpoints,
-            target_backend="vm",
+            target_backend=self.control_backend,
             current_values=self.current_values,
             staged_setpoints=tuple(self.staged_values.values()),
         )
@@ -893,7 +952,14 @@ class MachineSetpointsWindow(QMainWindow):
             f"{selected_count} selected / {staged_count} staged"
         )
         busy = self.worker is not None and self.worker.isRunning()
-        self.apply_button.setEnabled(all_ready and not busy)
+        restore_busy = self.restore_worker is not None and self.restore_worker.isRunning()
+        restore_check_busy = (
+            self.restore_check_worker is not None
+            and self.restore_check_worker.isRunning()
+        )
+        busy = busy or restore_busy or restore_check_busy
+        self.apply_button.setEnabled(self.backend_capabilities.can_write and all_ready and not busy)
+        self.restore_button.setEnabled(bool(self.last_result) and not busy)
         twiss_busy = self.twiss_worker is not None and self.twiss_worker.isRunning()
         self.twiss_button.setEnabled(bool(self.staged_values) and not busy and not twiss_busy)
         selected_operational = selected_count > 0 and all(
@@ -966,6 +1032,7 @@ class MachineSetpointsWindow(QMainWindow):
             save_target_workspace(
                 destination,
                 machine_id=self.profile.machine.id,
+                target_backend=self.control_backend,
                 staged_setpoints=staged,
             )
         except (OSError, ValueError) as exc:
@@ -988,6 +1055,7 @@ class MachineSetpointsWindow(QMainWindow):
             staged = load_target_workspace(
                 path,
                 expected_machine_id=self.profile.machine.id,
+                expected_target_backend=self.control_backend,
             )
             design_keys = {
                 (item.element_id.upper(), item.field.upper())
@@ -1098,7 +1166,7 @@ class MachineSetpointsWindow(QMainWindow):
         selected_plan = self._selected_plan()
         validation_error = self._plan_validation_error(selected_plan)
         if validation_error:
-            QMessageBox.warning(self, "Cannot apply VM setpoints", validation_error)
+            QMessageBox.warning(self, "Cannot apply setpoints", validation_error)
             return
         origin_counts = Counter(item.target_origin for item in selected_plan.writable_items)
         max_change = max(
@@ -1107,8 +1175,9 @@ class MachineSetpointsWindow(QMainWindow):
         )
         prompt = QMessageBox(self)
         prompt.setIcon(QMessageBox.Warning)
-        prompt.setWindowTitle("Confirm VM write")
-        prompt.setText("Write selected Quad K1 values to the VM control backend?")
+        backend_label = "Real Machine" if self.control_backend == "real" else "Virtual Machine"
+        prompt.setWindowTitle(f"Confirm {backend_label} write")
+        prompt.setText(f"Write selected Quad K1 values to the {backend_label} backend?")
         prompt.setInformativeText(
             f"Selected: {len(selected_plan.writable_items)}\n"
             f"Design: {origin_counts.get('design', 0)}  "
@@ -1121,7 +1190,17 @@ class MachineSetpointsWindow(QMainWindow):
         prompt.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         prompt.setDefaultButton(QMessageBox.No)
         if prompt.exec_() != QMessageBox.Yes:
+            self.status_label.setText("Restore cancelled.")
             return
+        if self.control_backend == "real":
+            confirmation, accepted = QInputDialog.getText(
+                self,
+                "Confirm Real Machine write",
+                "This operation writes live Real Machine PVs. Type REAL to continue:",
+            )
+            if not accepted or confirmation.strip().upper() != "REAL":
+                self.status_label.setText("Real Machine write cancelled.")
+                return
         self.preview_button.setEnabled(False)
         self.apply_button.setEnabled(False)
         self.status_label.setText("Applying...")
@@ -1136,6 +1215,7 @@ class MachineSetpointsWindow(QMainWindow):
         self.last_result = tuple(result)
         self.execution_states = {item.element_id: "applied" for item in result}
         append_execution_log(self.log_path, self.active_plan or self.plan, result)
+        self._save_transaction(result)
         self._update_current_from_result(result)
         self.status_label.setText(f"Applied and verified {len(result)} Quad K1 values.")
 
@@ -1160,6 +1240,8 @@ class MachineSetpointsWindow(QMainWindow):
             error=message,
             failed_element_id=failed_element_id,
         )
+        if completed:
+            self._save_transaction(completed)
         self._update_current_from_result(completed)
         self.status_label.setText(
             f"Apply stopped: {message} ({len(completed)} values already applied)"
@@ -1174,9 +1256,102 @@ class MachineSetpointsWindow(QMainWindow):
         self.preview_button.setEnabled(True)
         self._refresh_selection_state()
 
+    def _save_transaction(self, result):
+        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S")
+        path = self.transaction_dir / (
+            f"{self.profile.machine.id}_{self.control_backend}_{timestamp}.json"
+        )
+        try:
+            save_transfer_transaction(
+                path,
+                machine_id=self.profile.machine.id,
+                backend=self.control_backend,
+                result=result,
+            )
+        except OSError as exc:
+            self.status_label.setToolTip(f"Could not save transaction: {exc}")
+
+    def restore_last_apply(self):
+        if not self.last_result:
+            return
+        self.status_label.setText("Checking last Apply state...")
+        self.restore_check_worker = RestoreCheckWorker(self.last_result, self)
+        self.restore_check_worker.completed.connect(self._confirm_restore)
+        self.restore_check_worker.finished.connect(self._refresh_selection_state)
+        self.restore_check_worker.start()
+
+    def _confirm_restore(self, conflicts):
+        conflict_text = ""
+        if conflicts:
+            lines = [
+                f"{element_id}: {current if current is not None else reason}"
+                for element_id, current, reason in conflicts
+            ]
+            conflict_text = (
+                "\n\nThese PVs changed or could not be verified since Apply:\n"
+                + "\n".join(lines)
+            )
+        prompt = QMessageBox(self)
+        prompt.setIcon(QMessageBox.Warning)
+        prompt.setWindowTitle("Restore Last Apply")
+        prompt.setText(
+            f"Restore {len(self.last_result)} successfully applied Quad K1 values?"
+        )
+        prompt.setInformativeText(
+            "Values will be restored in reverse order and verified after each write."
+            + conflict_text
+        )
+        prompt.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        prompt.setDefaultButton(QMessageBox.No)
+        if prompt.exec_() != QMessageBox.Yes:
+            return
+        if self.control_backend == "real":
+            confirmation, accepted = QInputDialog.getText(
+                self,
+                "Confirm Real Machine restore",
+                "This operation writes live Real Machine PVs. Type REAL to continue:",
+            )
+            if not accepted or confirmation.strip().upper() != "REAL":
+                self.status_label.setText("Real Machine restore cancelled.")
+                return
+        self.status_label.setText("Restoring last Apply...")
+        self.restore_worker = RestoreWorker(self.last_result, self)
+        self.restore_worker.completed.connect(self._restore_complete)
+        self.restore_worker.failed.connect(self._restore_failed)
+        self.restore_worker.finished.connect(self._worker_finished)
+        self.restore_worker.start()
+
+    def _restore_complete(self, result):
+        for item in result:
+            self.current_values[item.element_id] = item.actual_value
+        self.last_result = ()
+        self.execution_states = {item.element_id: "restored" for item in result}
+        self._rebuild_plan()
+        self.status_label.setText(f"Restored and verified {len(result)} Quad K1 values.")
+
+    def _restore_failed(self, message, completed, failed_element_id):
+        for item in completed:
+            self.current_values[item.element_id] = item.actual_value
+        self.execution_states = {item.element_id: "restored" for item in completed}
+        restored_ids = {item.element_id for item in completed}
+        self.last_result = tuple(
+            item for item in self.last_result if item.element_id not in restored_ids
+        )
+        self._rebuild_plan()
+        self.status_label.setText(
+            f"Restore stopped: {message} ({len(completed)} values restored)"
+        )
+
     def closeEvent(self, event):
         if self.worker is not None and self.worker.isRunning():
-            QMessageBox.warning(self, "Machine Setpoints", "Wait for the VM write to finish before closing.")
+            QMessageBox.warning(self, "Machine Setpoints", "Wait for the control-backend write to finish before closing.")
+            event.ignore()
+            return
+        if self.restore_worker is not None and self.restore_worker.isRunning():
+            QMessageBox.warning(self, "Machine Setpoints", "Wait for Restore to finish before closing.")
+            event.ignore()
+            return
+        if self.restore_check_worker is not None and self.restore_check_worker.isRunning():
             event.ignore()
             return
         if self.preview_worker is not None and self.preview_worker.isRunning():

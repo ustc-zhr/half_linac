@@ -16,7 +16,7 @@ IRFEL 和后续机器通过同一套 profile 机制接入。
 推荐 Linux 或 WSL 环境。
 
 ```bash
-git clone https://git.ustc.edu.cn/zhanghaoran/half_linac.git
+git clone https://github.com/ustc-zhr/half_linac.git
 cd half_linac
 bash scripts/install_env.sh --check
 ```

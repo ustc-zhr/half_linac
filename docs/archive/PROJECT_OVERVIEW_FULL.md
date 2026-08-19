@@ -57,7 +57,7 @@
 先克隆仓库并进入项目根目录：
 
 ```bash
-git clone https://git.ustc.edu.cn/zhanghaoran/half_linac.git
+git clone https://github.com/ustc-zhr/half_linac.git
 cd half_linac
 ```
 
