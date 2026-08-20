@@ -1,0 +1,51 @@
+{
+  "schema_version": "1",
+  "machine": "half",
+  "kind": "solenoid",
+  "field_convention": {
+    "current_unit": "A",
+    "peak_field_unit": "T",
+    "integral_field_unit": "T*m",
+    "probe_sign": "absolute"
+  },
+  "calibrations": [
+    {
+      "element_id": "SS01",
+      "measurement": {"serial": "HERT-SN01", "date": "2025-04-11", "source": "references/solenoid/点测_短磁透镜SS01_HERT-SN01-检测单.xlsx"},
+      "curve": {"input_quantity": "current", "output_quantity": "peak_field", "points": [[0.001364505, 0.000649], [1.5053528115, 0.0123999], [3.009341118, 0.024424], [4.5133294245, 0.0364208181818], [6.017317731, 0.0483863636364], [7.5213060375, 0.060356], [8.4236990214, 0.0675533636363]]},
+      "reference": {"current": 7.5213060375, "integral_field": 0.0027289219151391},
+      "design": {"peak_field": 0.035}
+    },
+    {
+      "element_id": "SS02",
+      "measurement": {"serial": "HERT-SN02", "date": "2025-05-06/07", "source": "references/solenoid/点测_短磁透镜SS02_HERT-SN02-检测单.xlsx"},
+      "curve": {"input_quantity": "current", "output_quantity": "peak_field", "points": [[0.001364505, 0.0005855], [1.5053528115, 0.0124189], [3.009341118, 0.0248862], [4.5133294245, 0.0365694], [6.017317731, 0.0486405], [7.5213060375, 0.0607349], [8.4236990214, 0.0679808]]},
+      "reference": {"current": 7.5213060375, "integral_field": 0.002739369},
+      "design": {"peak_field": 0.041}
+    },
+    {
+      "element_id": "SM01",
+      "measurement": {"serial": "HERT-SN03", "date": "2025-04-16", "source": "references/solenoid/点测_中螺线管SM01_HERT-SN03-检测单.xlsx"},
+      "curve": {"input_quantity": "current", "output_quantity": "peak_field", "points": [[0.001364505, 0.0000939], [10.014259555, 0.0159403], [20.012032275, 0.03182], [30.009804995, 0.0477162], [40.007577715, 0.0636089], [50.005350435, 0.0795009], [63.502343607, 0.1009396], [74.000004963, 0.1176097]]},
+      "reference": {"current": 63.502343607, "integral_field": 0.0401376448565425},
+      "design": {"peak_field": 0.068}
+    },
+    {
+      "element_id": "SL01-1",
+      "measurement": {"serial": "HERT-SN01", "date": "2025-04-15", "source": "references/solenoid/点测_中螺线管SL01-1_HERT-SN01-检测单.xlsx"},
+      "curve": {"input_quantity": "current", "output_quantity": "peak_field", "points": [[0.001364505, 0.0000836], [10.014259555, 0.0159255], [20.012032275, 0.0317969], [30.009804995, 0.0476858], [40.007577715, 0.0635677], [50.005350435, 0.0794529], [63.502343607, 0.1008808065], [74.000004963, 0.1175385]]},
+      "reference": {"current": 63.502343607, "integral_field": 0.040139303846343},
+      "design": {"peak_field": 0.079}
+    },
+    {
+      "element_id": "SL01-2",
+      "measurement": {"serial": "HERT-SN05", "date": "2025-04-14", "source": "references/solenoid/点测_中螺线管SL01-2_HERT-SN05-检测单.xlsx"},
+      "curve": {"input_quantity": "current", "output_quantity": "peak_field", "points": [[0.001364505, 0.0000809090909], [10.014259555, 0.015906], [20.012032275, 0.031763], [30.009804995, 0.0476353636364], [40.007577715, 0.0635035454545], [50.005350435, 0.0793731818182], [63.502343607, 0.1007884545], [74.000004963, 0.1174244545]]},
+      "reference": {"current": 63.502343607, "integral_field": 0.0401333975979505},
+      "design": {"peak_field": 0.079}
+    }
+  ],
+  "composites": [
+    {"id": "SL", "display_name": "SL (SL01-1 + SL01-2)", "rule": "common_peak_scale", "members": ["SL01-1", "SL01-2"]}
+  ]
+}

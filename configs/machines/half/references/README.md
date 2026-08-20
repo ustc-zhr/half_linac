@@ -20,6 +20,10 @@ record the decision in review or commissioning notes.
 
 ## Local Source Material
 
+`solenoid/` contains original magnetic-measurement workbooks. The maintained runtime
+translation is `../calibrations/solenoids.json`; update it deliberately when a measurement
+is superseded, while retaining the source workbook for provenance.
+
 The following subdirectories are intentionally ignored by Git because this repository is public:
 
 - `control_system/`: original PV lists and interface documents supplied by the HALF control-system

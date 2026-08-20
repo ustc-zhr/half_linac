@@ -727,6 +727,17 @@ APP_DEFINITIONS = {
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/solenoid_centering",
     },
+    "solenoid_field_guide": {
+        "button_name": "solenoid_field_guide_button",
+        "category": "control",
+        "button_text": "Solenoid Field Guide",
+        "label": "Solenoid Field Guide",
+        "window_title_patterns": ("Solenoid Field Guide",),
+        "description": "Calculate HALF solenoid currents from measured field calibration.",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/solenoid_field_guide",
+        "machine_ids": ("half",),
+    },
     "emitmeasure": {
         "button_name": "emitmeasure",
         "category": "control",
@@ -971,6 +982,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pv_connection_check_button.setObjectName("pv_connection_check_button")
         self.setpoint_transfer_button = QPushButton(self.groupBox_3)
         self.setpoint_transfer_button.setObjectName("setpoint_transfer_button")
+        self.solenoid_field_guide_button = QPushButton(self.groupBox_3)
+        self.solenoid_field_guide_button.setObjectName("solenoid_field_guide_button")
 
         self.group_button_specs = [
             (
@@ -979,6 +992,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 [
                     self.vmbtn,
                     self.setpoint_transfer_button,
+                    self.solenoid_field_guide_button,
                     self.pv_connection_check_button,
                     self.online_opt,
                 ],
@@ -1043,6 +1057,14 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 supported = False
                 reason = spec.get("reserved_reason", "This launcher entry is reserved for future implementation.")
                 tooltip = f"{tooltip}\n\nReserved: {reason}"
+            allowed_machines = spec.get("machine_ids")
+            if supported and allowed_machines and self.machine_profile.machine.id not in allowed_machines:
+                supported = False
+                reason = (
+                    f"{spec['label']} is available only for machine profiles: "
+                    f"{', '.join(allowed_machines)}."
+                )
+                tooltip = f"{tooltip}\n\nUnavailable: {reason}"
             if key == "vm_manager":
                 supported, reason = self._refresh_vm_manager_launch_spec(spec)
                 if not supported and reason:

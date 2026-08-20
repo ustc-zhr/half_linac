@@ -21,6 +21,8 @@ configs/machines/<machine_id>/
     virtual_machine.json
   model_backends/
     simulation.elegant.json
+  calibrations/
+    solenoids.json
   references/
     README.md
     control_system/
@@ -121,6 +123,11 @@ app configs only for external controls that are not yet represented as machine e
 See [`docs/platform/APP_WORKFLOW_CONFIG_PRINCIPLES.md`](../../docs/platform/APP_WORKFLOW_CONFIG_PRINCIPLES.md)
 for the shared layout, scan, limit, derivation, and compatibility conventions used by
 these workflow files.
+
+`calibrations/*.json` contains tracked runtime calibration data that converts a physical
+quantity into a machine-native setpoint. Keep original measurements in `references/`; do not
+duplicate machine current limits in calibration files, because `machine.json` remains the
+source of truth for those limits.
 
 `model_backends/*.json` describes simulation or analysis model inputs used by
 model-driven apps. App workflow files may select one of these backends by name.
