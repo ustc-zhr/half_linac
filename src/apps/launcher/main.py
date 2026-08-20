@@ -1224,12 +1224,17 @@ class myWindow(QMainWindow, Ui_MainWindow):
             return
 
         self._notify(f"Launching {spec['label']}.")
+        child_environment = environment_with_initial_theme(self.current_theme)
+        child_environment[MACHINE_ID_ENV] = self.machine_profile.machine.id
+        child_environment[CONTROL_BACKEND_ENV] = self.control_backend
+        child_environment[LEGACY_MACHINE_ID_ENV] = self.machine_profile.machine.id
+        child_environment[LEGACY_CONTROL_BACKEND_ENV] = self.control_backend
         proc = self.process_manager.start_process(
             key=key,
             label=spec["label"],
             cmd=spec["cmd"],
             cwd=str(spec["cwd"]),
-            env=environment_with_initial_theme(self.current_theme),
+            env=child_environment,
         )
         if proc is not None:
             self._notify(f"{spec['label']} started.")

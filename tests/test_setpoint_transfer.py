@@ -333,6 +333,7 @@ def test_gui_allows_custom_ready_selection(monkeypatch):
     from half_linac.src.apps.setpoint_transfer import main
 
     monkeypatch.setenv("HALF_LINAC_MACHINE", "half")
+    monkeypatch.setenv("HALF_LINAC_CONTROL_BACKEND", "vm")
     monkeypatch.setattr(
         main.EpicsPvClient,
         "read_many",

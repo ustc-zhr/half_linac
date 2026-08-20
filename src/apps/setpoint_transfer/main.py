@@ -485,13 +485,13 @@ class TargetValueDelegate(QStyledItemDelegate):
 class MachineSetpointsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.profile = load_profile()
         self.control_backend = normalize_mode(
             os.environ.get(CONTROL_BACKEND_ENV, "")
             or os.environ.get(LEGACY_CONTROL_BACKEND_ENV, "")
-            or "vm", "control_backend"
+            or self.profile.machine.default_mode, "control_backend"
         )
         self.backend_capabilities = backend_capabilities(self.control_backend)
-        self.profile = load_profile()
         self.current_theme = resolve_initial_theme()
         self.runtime = resolve_machine_runtime(self.profile)
         self.plan: TransferPlan | None = None
