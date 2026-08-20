@@ -1319,7 +1319,7 @@
       "access": "rw",
       "limits": {
         "low": 0.0,
-        "high": 80.0
+        "high": 45.0
       },
       "step_hint": 2.0,
       "settle": {
@@ -1345,7 +1345,7 @@
       "access": "rw",
       "limits": {
         "low": 0.0,
-        "high": 80.0
+        "high": 45.0
       },
       "step_hint": 2.0,
       "settle": {

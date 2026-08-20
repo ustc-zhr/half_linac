@@ -977,7 +977,7 @@
         "legacy_import"
       ],
       "limits": {
-        "voltage_set": {"low": 0, "high": 80, "unit": "kV"}
+        "voltage_set": {"low": 0, "high": 45, "unit": "kV"}
       },
       "logical_channels": [
         "voltage_set",
@@ -995,7 +995,7 @@
         "legacy_import"
       ],
       "limits": {
-        "voltage_set": {"low": 0, "high": 80, "unit": "kV"}
+        "voltage_set": {"low": 0, "high": 45, "unit": "kV"}
       },
       "logical_channels": [
         "voltage_set",

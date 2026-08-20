@@ -2347,7 +2347,7 @@
       "display_name": "KLY01 Modulator HVDC",
       "order": 246,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2356,7 +2356,7 @@
       "display_name": "KLY02 Modulator HVDC",
       "order": 247,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2365,7 +2365,7 @@
       "display_name": "KLY03 Modulator HVDC",
       "order": 248,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2374,7 +2374,7 @@
       "display_name": "KLY04 Modulator HVDC",
       "order": 249,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2383,7 +2383,7 @@
       "display_name": "KLY05 Modulator HVDC",
       "order": 250,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2392,7 +2392,7 @@
       "display_name": "KLY06 Modulator HVDC",
       "order": 251,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2401,7 +2401,7 @@
       "display_name": "KLY07 Modulator HVDC",
       "order": 252,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2410,7 +2410,7 @@
       "display_name": "KLY08 Modulator HVDC",
       "order": 253,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2419,7 +2419,7 @@
       "display_name": "KLY09 Modulator HVDC",
       "order": 254,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2428,7 +2428,7 @@
       "display_name": "KLY10 Modulator HVDC",
       "order": 255,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2437,7 +2437,7 @@
       "display_name": "KLY11 Modulator HVDC",
       "order": 256,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2446,7 +2446,7 @@
       "display_name": "KLY12 Modulator HVDC",
       "order": 257,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2455,7 +2455,7 @@
       "display_name": "KLY13 Modulator HVDC",
       "order": 258,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2464,7 +2464,7 @@
       "display_name": "KLY14 Modulator HVDC",
       "order": 259,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2473,7 +2473,7 @@
       "display_name": "KLY15 Modulator HVDC",
       "order": 260,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2482,7 +2482,7 @@
       "display_name": "KLY16 Modulator HVDC",
       "order": 261,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2491,7 +2491,7 @@
       "display_name": "KLY17 Modulator HVDC",
       "order": 262,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2500,7 +2500,7 @@
       "display_name": "KLY18 Modulator HVDC",
       "order": 263,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2509,7 +2509,7 @@
       "display_name": "KLY19 Modulator HVDC",
       "order": 264,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     },
     {
@@ -2518,7 +2518,7 @@
       "display_name": "KLY20 Modulator HVDC",
       "order": 265,
       "tags": ["modulator", "hvdc"],
-      "limits": {"voltage_set": {"low": 0, "high": 100, "unit": "V"}},
+      "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
     }
   ]
