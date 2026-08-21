@@ -64,6 +64,7 @@ from half_linac.src.shared.machine_profile.loader import (
     _parse_solenoid_centering_preset,
     _validate_beam_monitor_workflow,
     _validate_energy_spectrum_workflow,
+    _validate_basic_app_support,
     load_bba_workflow,
     load_emit_measure_workflow,
 )
@@ -2365,6 +2366,25 @@ class MachineProfileTests(unittest.TestCase):
 
         with self.assertRaisesRegex(MachineProfileError, "auto_tune_objective"):
             _validate_energy_spectrum_workflow(profile, workflow)
+
+    def test_half_rf_phase_scan_rejects_invalid_tracking_windows(self):
+        profile = load_profile("half")
+        workflow = deepcopy(get_workflow(profile, "rf_phase_scan"))
+        workflow["scan"]["energy_tracking"]["tracking_half_window_mev"] = 120
+        workflow["scan"]["energy_tracking"]["fallback_half_window_mev"] = 100
+        profile.workflows["rf_phase_scan"] = workflow
+
+        with self.assertRaisesRegex(MachineProfileError, "energy tracking windows"):
+            _validate_basic_app_support(profile, "rf_phase_scan", "real")
+
+    def test_half_rf_phase_scan_rejects_ineligible_default_llrf(self):
+        profile = load_profile("half")
+        workflow = deepcopy(get_workflow(profile, "rf_phase_scan"))
+        workflow["default_element"] = "KLY01"
+        profile.workflows["rf_phase_scan"] = workflow
+
+        with self.assertRaisesRegex(MachineProfileError, "eligible LLRF"):
+            _validate_basic_app_support(profile, "rf_phase_scan", "real")
 
     def test_virtual_machine_segment_choices_fall_back_to_quad_and_flag_inference(self):
         machine_json = {

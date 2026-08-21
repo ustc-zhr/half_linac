@@ -696,6 +696,18 @@ APP_DEFINITIONS = {
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/energy_spectrum",
     },
+    "rf_phase_scan": {
+        "button_name": "rf_phase_scan_button",
+        "category": "diagnostic",
+        "button_text": "RF Phase Scan",
+        "label": "RF Phase Scan",
+        "window_title_patterns": ("RF Phase Scan",),
+        "description": "Scan one HALF linac LLRF phase while matching beam energy.",
+        "workflow_name": "rf_phase_scan",
+        "machine_ids": ("half",),
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/rf_phase_scan",
+    },
     "bba": {
         "button_name": "BBA",
         "category": "control",
@@ -788,6 +800,7 @@ PROFILE_MANAGED_APP_KEYS = {
     "beammonitor": "beam_monitor",
     "ct_monitor": "ct_monitor",
     "energy_spectrum": "energy_spectrum",
+    "rf_phase_scan": "rf_phase_scan",
     "bba": "bba",
     "orbit_correct": "orbit_correct",
     "solenoid_centering": "solenoid_centering",
@@ -984,6 +997,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.setpoint_transfer_button.setObjectName("setpoint_transfer_button")
         self.solenoid_field_guide_button = QPushButton(self.groupBox_3)
         self.solenoid_field_guide_button.setObjectName("solenoid_field_guide_button")
+        self.rf_phase_scan_button = QPushButton(self.groupBox_4)
+        self.rf_phase_scan_button.setObjectName("rf_phase_scan_button")
 
         self.group_button_specs = [
             (
@@ -1007,6 +1022,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                     self.ct_monitor_button,
                     self.energy_spectrum,
                     self.jitter_plot,
+                    self.rf_phase_scan_button,
                 ],
                 1,
             ),

@@ -1,0 +1,9 @@
+{
+  "control_backends": ["real"],
+  "write_control": {"vm": "blocked", "real": "allowed"},
+  "readback_verification": {
+    "tolerance_a": 0.01,
+    "timeout_s": 5.0,
+    "poll_interval_s": 0.1
+  }
+}

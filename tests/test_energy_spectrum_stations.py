@@ -91,7 +91,7 @@ class EnergySpectrumStationTests(unittest.TestCase):
         self.assertAlmostEqual(stations["prf02"]["design_eta_m"], -0.3280857973174453)
         self.assertEqual(
             resolve_channel(profile, "PRF02", "image", "real"),
-            "HALF:IN:FLAG:PRF02:image1:ArrayData",
+            "IN:BD:PRF02:image1:ArrayData",
         )
         self.assertEqual(
             resolve_channel(profile, "LINAC_ENERGY", "setpoint", "real"),

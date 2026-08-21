@@ -75,25 +75,9 @@ class MagnetRecommendation:
 
 
 @dataclass(frozen=True)
-class CombinedRecommendation:
-    target_integral_field: float
-    scale: float
-    magnets: tuple[MagnetRecommendation, ...]
-
-
-@dataclass(frozen=True)
-class CompositeCalibration:
-    id: str
-    display_name: str
-    rule: str
-    members: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class CalibrationCatalog:
     machine_id: str
     calibrations: dict[str, MagnetCalibration]
-    composites: dict[str, CompositeCalibration]
 
 
 def load_calibrations(
@@ -128,8 +112,7 @@ def load_calibrations(
         if not element_id or element_id in calibrations:
             raise CalibrationError(f"Invalid or duplicate calibration element_id: {element_id!r}.")
         calibrations[element_id] = _parse_calibration(profile, element_id, raw)
-    composites = _parse_composites(payload.get("composites", []), calibrations)
-    return CalibrationCatalog(machine_id, calibrations, composites)
+    return CalibrationCatalog(machine_id, calibrations)
 
 
 def default_calibration_path() -> Path:
@@ -152,30 +135,6 @@ def recommend_single(calibration: MagnetCalibration, target: float, quantity: st
         )
     peak = calibration.peak_from_current(current)
     return MagnetRecommendation(calibration.element_id, current, peak, calibration.integral_from_current(current))
-
-
-def recommend_combined(catalog: CalibrationCatalog, composite_id: str, target: float) -> CombinedRecommendation:
-    try:
-        composite = catalog.composites[composite_id]
-    except KeyError as exc:
-        raise CalibrationError(f"Unknown composite calibration: {composite_id}") from exc
-    if composite.rule != "common_peak_scale":
-        raise CalibrationError(f"Unsupported composite rule: {composite.rule}")
-    members = tuple(catalog.calibrations[element_id] for element_id in composite.members)
-    total_reference = sum(item.reference_integral_field for item in members)
-    if target <= 0:
-        raise CalibrationError("Target field must be greater than zero.")
-    scale = target / total_reference
-    recommendations = []
-    for calibration in members:
-        peak = scale * calibration.reference_peak_field
-        current = calibration.current_from_peak(peak)
-        if not calibration.machine_current_limit.contains(current):
-            raise CalibrationError(
-                f"{calibration.element_id}: recommended current exceeds machine limit."
-            )
-        recommendations.append(MagnetRecommendation(calibration.element_id, current, peak, calibration.integral_from_current(current)))
-    return CombinedRecommendation(target, scale, tuple(recommendations))
 
 
 def _parse_calibration(profile: MachineProfile, element_id: str, raw: Any) -> MagnetCalibration:
@@ -234,29 +193,6 @@ def _parse_calibration(profile: MachineProfile, element_id: str, raw: Any) -> Ma
         machine_limit,
         None if design_peak is None else float(design_peak),
     )
-
-
-def _parse_composites(raw_items: Any, calibrations: dict[str, MagnetCalibration]) -> dict[str, CompositeCalibration]:
-    if not isinstance(raw_items, list):
-        raise CalibrationError("composites must be a list.")
-    result = {}
-    for raw in raw_items:
-        if not isinstance(raw, dict):
-            raise CalibrationError("Composite calibration must be an object.")
-        composite_id = str(raw.get("id", "")).strip()
-        members = tuple(str(item).strip() for item in raw.get("members", []))
-        if not composite_id or composite_id in result or len(members) < 2:
-            raise CalibrationError(f"Invalid or duplicate composite: {composite_id!r}.")
-        missing = [item for item in members if item not in calibrations]
-        if missing:
-            raise CalibrationError(f"{composite_id}: unknown members: {', '.join(missing)}.")
-        result[composite_id] = CompositeCalibration(
-            composite_id,
-            str(raw.get("display_name") or composite_id),
-            str(raw.get("rule", "")).strip(),
-            members,
-        )
-    return result
 
 
 def _interpolate(value: float, x: tuple[float, ...], y: tuple[float, ...], label: str) -> float:

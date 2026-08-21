@@ -2219,7 +2219,7 @@
       "order": 232,
       "tags": ["energy_spectrum"],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [720, 270], "pixel_width_mm": 0.1756}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0439}},
+      "image_geometry": {"vm": {"shape": [720, 540], "pixel_width_mm": 0.0878}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0439}},
       "logical_channels": ["image", "exposure_time"]
     },
     {
@@ -2520,6 +2520,186 @@
       "tags": ["modulator", "hvdc"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": ["voltage_set", "voltage_readback"]
+    },
+    {
+      "id": "LLRF01",
+      "kind": "rf",
+      "display_name": "LLRF01 Phase",
+      "order": 266,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF02",
+      "kind": "rf",
+      "display_name": "LLRF02 Phase",
+      "order": 267,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF03",
+      "kind": "rf",
+      "display_name": "LLRF03 Phase",
+      "order": 268,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF04",
+      "kind": "rf",
+      "display_name": "LLRF04 Phase",
+      "order": 269,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF05",
+      "kind": "rf",
+      "display_name": "LLRF05 Phase",
+      "order": 270,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF06",
+      "kind": "rf",
+      "display_name": "LLRF06 Phase",
+      "order": 271,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF07",
+      "kind": "rf",
+      "display_name": "LLRF07 Phase",
+      "order": 272,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF08",
+      "kind": "rf",
+      "display_name": "LLRF08 Phase",
+      "order": 273,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF09",
+      "kind": "rf",
+      "display_name": "LLRF09 Phase",
+      "order": 274,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF10",
+      "kind": "rf",
+      "display_name": "LLRF10 Phase",
+      "order": 275,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF11",
+      "kind": "rf",
+      "display_name": "LLRF11 Phase",
+      "order": 276,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF12",
+      "kind": "rf",
+      "display_name": "LLRF12 Phase",
+      "order": 277,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF13",
+      "kind": "rf",
+      "display_name": "LLRF13 Phase",
+      "order": 278,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF14",
+      "kind": "rf",
+      "display_name": "LLRF14 Phase",
+      "order": 279,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF15",
+      "kind": "rf",
+      "display_name": "LLRF15 Phase",
+      "order": 280,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF16",
+      "kind": "rf",
+      "display_name": "LLRF16 Phase",
+      "order": 281,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF17",
+      "kind": "rf",
+      "display_name": "LLRF17 Phase",
+      "order": 282,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF18",
+      "kind": "rf",
+      "display_name": "LLRF18 Phase",
+      "order": 283,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF19",
+      "kind": "rf",
+      "display_name": "LLRF19 Phase",
+      "order": 284,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "LLRF20",
+      "kind": "rf",
+      "display_name": "LLRF20 Phase",
+      "order": 285,
+      "tags": ["rf", "llrf", "wrapped_phase"],
+      "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
+      "logical_channels": ["phase_set"]
     }
   ]
 }

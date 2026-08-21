@@ -1,0 +1,6 @@
+{
+  "control_backends": ["real"],
+  "enabled": false,
+  "write_control": {"vm": "blocked", "real": "blocked"},
+  "real_status": "not_supported"
+}

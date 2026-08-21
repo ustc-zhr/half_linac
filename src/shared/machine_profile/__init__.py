@@ -139,6 +139,7 @@ from .write_control import (
     workflow_write_policy,
     workflow_writes_allowed,
 )
+from .control_lock import ControlLockError, EnergyControlLock
 
 __all__ = [
     "AppContext",
@@ -205,6 +206,8 @@ __all__ = [
     "VirtualMachineUsedlineWorkflow",
     "WRITE_ALLOWED",
     "WRITE_BLOCKED",
+    "ControlLockError",
+    "EnergyControlLock",
     "WriteTarget",
     "MachineValidationCheck",
     "MachineValidationReport",

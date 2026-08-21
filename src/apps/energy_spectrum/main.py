@@ -89,6 +89,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_write_target,
     save_model_snapshot,
     workflow_writes_allowed,
+    EnergyControlLock,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 # 会使用到VM计算η和twiss (不具有一般性)
@@ -672,12 +673,19 @@ class ESAAutoTuneThread(QThread):
         self.app_context = app_context
 
     def run(self):
+        lock = None
         try:
             require_workflow_write_allowed(
                 self.app_context,
                 "energy_spectrum",
                 "ESA auto tune",
             )
+            if self.app_context.control_backend.name == "real":
+                lock = EnergyControlLock.for_machine(
+                    self.app_context.machine.id,
+                    {"app": "energy_spectrum", "operation": "ESA auto tune"},
+                )
+                lock.acquire()
             tuner = ESA_AutoTuner(
                 flag_pv_obj=self.flag_pv_obj,
                 flag_pixel=self.flag_pixel,
@@ -755,6 +763,9 @@ class ESAAutoTuneThread(QThread):
                     "error": str(exc),
                 }
             )
+        finally:
+            if lock is not None:
+                lock.release()
 
 class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     """

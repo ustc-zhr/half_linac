@@ -43,9 +43,11 @@ SUPPORTED_APP_NAMES = {
     "orbit_display",
     "beam_monitor",
     "energy_spectrum",
+    "rf_phase_scan",
     "bba",
     "emit_measure",
     "solenoid_centering",
+    "solenoid_field_guide",
     "dispersion_correction",
     "hv_feedback",
     "ct_monitor",
@@ -55,9 +57,11 @@ APP_WORKFLOW_FILES = {
     "orbit": "orbit_correct.json",
     "beam_monitor": "beam_monitor.json",
     "energy_spectrum": "energy_spectrum.json",
+    "rf_phase_scan": "rf_phase_scan.json",
     "bba": "bba.json",
     "emit_measure": "emit_measure.json",
     "solenoid_centering": "solenoid_centering.json",
+    "solenoid_field_guide": "solenoid_field_guide.json",
     "virtual_machine": "virtual_machine.json",
     "dispersion_correction": "dispersion_correction.json",
     "hv_feedback": "hv_feedback.json",
@@ -68,9 +72,11 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_display": ("orbit",),
     "beam_monitor": ("beam_monitor",),
     "energy_spectrum": ("energy_spectrum",),
+    "rf_phase_scan": ("rf_phase_scan",),
     "bba": ("bba",),
     "emit_measure": ("emit_measure",),
     "solenoid_centering": ("solenoid_centering",),
+    "solenoid_field_guide": ("solenoid_field_guide",),
     "dispersion_correction": ("dispersion_correction",),
     "hv_feedback": ("hv_feedback",),
     "ct_monitor": ("ct_monitor",),
@@ -750,6 +756,102 @@ def _validate_basic_app_support(
                 "energy_spectrum requires apps/energy_spectrum.json."
             )
         _validate_energy_spectrum_workflow(profile, workflow)
+        return
+
+    if app_name == "rf_phase_scan":
+        workflow = profile.workflows.get("rf_phase_scan")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError("rf_phase_scan requires apps/rf_phase_scan.json.")
+        if workflow.get("enabled", True) is False:
+            return
+        backends = tuple(normalize_mode(v, "workflows.rf_phase_scan.control_backends[]") for v in _expect_string_list(workflow.get("control_backends"), "workflows.rf_phase_scan.control_backends"))
+        if control_backend not in backends:
+            raise MachineProfileError(f"rf_phase_scan does not support backend {control_backend!r}.")
+        candidates = [e for e in profile.elements if e.kind == "rf" and "llrf" in e.tags and "wrapped_phase" in e.tags and all("phase_set" in e.channels and b in e.channels["phase_set"] for b in backends)]
+        if not candidates:
+            raise MachineProfileError("rf_phase_scan requires configured LLRF phase_set elements.")
+        if str(workflow.get("default_element", "")) not in {e.id for e in candidates}:
+            raise MachineProfileError("workflows.rf_phase_scan.default_element is not an eligible LLRF.")
+        diagnostics = _expect_mapping(workflow.get("diagnostics"), "workflows.rf_phase_scan.diagnostics")
+        flag_element = _expect_non_empty_string(diagnostics.get("flag_element"), "workflows.rf_phase_scan.diagnostics.flag_element")
+        flag_channel = _expect_non_empty_string(diagnostics.get("flag_image_channel"), "workflows.rf_phase_scan.diagnostics.flag_image_channel")
+        flag = profile.get_element(flag_element)
+        if flag_channel not in flag.channels or any(backend not in flag.channels[flag_channel] for backend in backends):
+            raise MachineProfileError("workflows.rf_phase_scan flag image channel is unavailable.")
+        energy_element = _expect_non_empty_string(workflow.get("energy_element"), "workflows.rf_phase_scan.energy_element")
+        energy_channel = _expect_non_empty_string(workflow.get("energy_set_channel"), "workflows.rf_phase_scan.energy_set_channel")
+        energy = profile.get_element(energy_element)
+        if energy_channel not in energy.channels or any(backend not in energy.channels[energy_channel] for backend in backends):
+            raise MachineProfileError("workflows.rf_phase_scan coordinated energy channel is unavailable.")
+        _expect_finite_number(diagnostics.get("x_reference_mm"), "workflows.rf_phase_scan.diagnostics.x_reference_mm")
+        if _expect_finite_number(diagnostics.get("design_eta_m"), "workflows.rf_phase_scan.diagnostics.design_eta_m") == 0:
+            raise MachineProfileError("workflows.rf_phase_scan.diagnostics.design_eta_m must not be zero.")
+        scan = _expect_mapping(workflow.get("scan"), "workflows.rf_phase_scan.scan")
+        phase_scan = _expect_mapping(scan.get("phase"), "workflows.rf_phase_scan.scan.phase")
+        phase_mode = str(phase_scan.get("mode", "")).strip().lower()
+        if phase_mode not in {"relative", "absolute"}:
+            raise MachineProfileError("workflows.rf_phase_scan.scan.phase.mode must be 'relative' or 'absolute'.")
+        if str(phase_scan.get("unit", "")).strip().lower() != "deg":
+            raise MachineProfileError("workflows.rf_phase_scan.scan.phase.unit must be 'deg'.")
+        phase_start = float(phase_scan.get("low", 0))
+        phase_stop = float(phase_scan.get("high", 0))
+        if phase_start >= phase_stop or phase_stop - phase_start > 360:
+            raise MachineProfileError("workflows.rf_phase_scan phase range is invalid.")
+        if int(phase_scan.get("steps", 0)) < 3:
+            raise MachineProfileError("workflows.rf_phase_scan.scan.phase.steps must be at least 3.")
+        tracking = _expect_mapping(scan.get("energy_tracking"), "workflows.rf_phase_scan.scan.energy_tracking")
+        tracking_window = float(tracking.get("tracking_half_window_mev", 0))
+        fallback_window = float(tracking.get("fallback_half_window_mev", 0))
+        if tracking_window <= 0 or fallback_window < tracking_window:
+            raise MachineProfileError("workflows.rf_phase_scan energy tracking windows are invalid.")
+        if int(tracking.get("max_consecutive_failures", 0)) < 1:
+            raise MachineProfileError("workflows.rf_phase_scan.scan.energy_tracking.max_consecutive_failures must be at least 1.")
+        sampling = _expect_mapping(scan.get("point_measurement"), "workflows.rf_phase_scan.scan.point_measurement")
+        samples = int(sampling.get("samples_per_point", 0))
+        min_valid = int(sampling.get("min_valid_samples", 0))
+        if samples < 1 or min_valid < 1 or min_valid > samples:
+            raise MachineProfileError("workflows.rf_phase_scan point measurement sample counts are invalid.")
+        if float(sampling.get("settle_time_s", -1)) < 0:
+            raise MachineProfileError("workflows.rf_phase_scan.scan.point_measurement.settle_time_s must not be negative.")
+        if float(sampling.get("sample_interval_s", -1)) < 0:
+            raise MachineProfileError("workflows.rf_phase_scan.scan.point_measurement.sample_interval_s must not be negative.")
+        energy_match = _expect_mapping(workflow.get("energy_match"), "workflows.rf_phase_scan.energy_match")
+        search = _expect_mapping(energy_match.get("search"), "workflows.rf_phase_scan.energy_match.search")
+        match_location = "workflows.rf_phase_scan.energy_match"
+        defaults_location = "workflows.rf_phase_scan.energy_match_defaults"
+        match_defaults = _expect_mapping(workflow.get("energy_match_defaults"), defaults_location)
+        match_low = _expect_finite_number(search.get("low"), f"{match_location}.search.low")
+        match_high = _expect_finite_number(search.get("high"), f"{match_location}.search.high")
+        if match_low >= match_high:
+            raise MachineProfileError(f"{match_location}.search.low must be less than high.")
+        if _expect_int(search.get("reacquire_steps"), f"{match_location}.search.reacquire_steps") < 2:
+            raise MachineProfileError(f"{match_location}.search.reacquire_steps must be at least 2.")
+        if _expect_finite_number(search.get("settle_time_s"), f"{match_location}.search.settle_time_s") < 0:
+            raise MachineProfileError(f"{match_location}.search.settle_time_s must not be negative.")
+        if str(search.get("unit", "")).strip().lower() != "mev":
+            raise MachineProfileError(f"{match_location}.search.unit must be 'MeV'.")
+        if str(search.get("mode", "")).strip().lower() != "absolute":
+            raise MachineProfileError(f"{match_location}.search.mode must be 'absolute'.")
+        if not isinstance(search.get("restore_initial_on_failure"), bool):
+            raise MachineProfileError(f"{match_location}.search.restore_initial_on_failure must be boolean.")
+        if str(match_defaults.get("profile_fit_method", "")).strip() not in {"Gauss fit", "Direct"}:
+            raise MachineProfileError(f"{defaults_location}.profile_fit_method must be 'Gauss fit' or 'Direct'.")
+        center_lock = _expect_mapping(match_defaults.get("center_lock"), f"{defaults_location}.center_lock")
+        for samples_key, minimum_key in (
+            ("frame_samples", "min_valid_frames"),
+            ("verification_frame_samples", "verification_min_valid_frames"),
+        ):
+            sample_count = _expect_int(center_lock.get(samples_key), f"{defaults_location}.center_lock.{samples_key}")
+            minimum_count = _expect_int(center_lock.get(minimum_key), f"{defaults_location}.center_lock.{minimum_key}")
+            if sample_count < 1 or minimum_count < 1 or minimum_count > sample_count:
+                raise MachineProfileError(f"{defaults_location}.center_lock {minimum_key} must be between 1 and {samples_key}.")
+        if _expect_finite_number(center_lock.get("frame_interval_s"), f"{defaults_location}.center_lock.frame_interval_s") < 0:
+            raise MachineProfileError(f"{defaults_location}.center_lock.frame_interval_s must not be negative.")
+        for key in ("max_correction_step_mev", "center_tolerance_mm"):
+            if _expect_finite_number(center_lock.get(key), f"{defaults_location}.center_lock.{key}") <= 0:
+                raise MachineProfileError(f"{defaults_location}.center_lock.{key} must be positive.")
+        if _expect_int(center_lock.get("max_iterations"), f"{defaults_location}.center_lock.max_iterations") < 1:
+            raise MachineProfileError(f"{defaults_location}.center_lock.max_iterations must be at least 1.")
         return
 
     if app_name == "solenoid_centering":

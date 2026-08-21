@@ -44,8 +44,5 @@
       "reference": {"current": 63.502343607, "integral_field": 0.0401333975979505},
       "design": {"peak_field": 0.079}
     }
-  ],
-  "composites": [
-    {"id": "SL", "display_name": "SL (SL01-1 + SL01-2)", "rule": "common_peak_scale", "members": ["SL01-1", "SL01-2"]}
   ]
 }
