@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from gotacc.configs.loader import load_task_config
+from gotacc.gui.services.pv_library import load_pv_library_file
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -24,3 +25,16 @@ def test_load_yaml_task_config_from_config_directory():
     assert cfg.meta.name == "irfel_bo_weighted_fel"
     assert cfg.backend.type == "epics"
     assert cfg.optimizer.name == "bo"
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted((REPO_ROOT / "config" / "pv_libraries").glob("*.json"))
+    + sorted((REPO_ROOT / "config" / "pv_libraries").glob("*.yaml"))
+    + sorted((REPO_ROOT / "config" / "pv_libraries").glob("*.yml")),
+)
+def test_load_bundled_pv_libraries(path):
+    doc = load_pv_library_file(path)
+
+    assert doc.machine
+    assert doc.knobs or doc.objectives

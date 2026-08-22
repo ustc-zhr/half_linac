@@ -322,7 +322,7 @@ class MainWindow(QMainWindow):
         shell_layout = QVBoxLayout(self.workspace_shell)
         self.workspace_shell_layout = shell_layout
         shell_layout.setContentsMargins(0, 0, 0, 0)
-        shell_layout.setSpacing(6)
+        shell_layout.setSpacing(0)
 
         self.ui.horizontalLayout_main.removeWidget(self.ui.splitter_main)
         self.ui.horizontalLayout_main.addWidget(self.workspace_shell)
@@ -355,7 +355,7 @@ class MainWindow(QMainWindow):
         self.log_toggle_button = QToolButton(self.frame_workspace_header)
         self.log_toggle_button.setObjectName("logToggleButton")
         self.log_toggle_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        self.log_toggle_button.setFixedSize(44, 32)
+        self.log_toggle_button.setFixedSize(40, 28)
         self.log_toggle_button.setText("Log")
         self.log_toggle_button.setToolTip("Show log panel.")
         self.log_toggle_button.clicked.connect(self._toggle_log_panel)
@@ -363,7 +363,7 @@ class MainWindow(QMainWindow):
         self.theme_toggle_button = QToolButton(self.frame_workspace_header)
         self.theme_toggle_button.setObjectName("themeToggleButton")
         self.theme_toggle_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        self.theme_toggle_button.setFixedSize(32, 32)
+        self.theme_toggle_button.setFixedSize(28, 28)
         self.theme_toggle_button.clicked.connect(self._toggle_gui_theme)
 
         header_layout.addWidget(title_column, 1)
@@ -386,7 +386,11 @@ class MainWindow(QMainWindow):
         self._add_status_strip_items(task_item, mode_item, algorithm_item, backend_item, best_item)
         outer_layout.addWidget(self.frame_workspace_status)
 
-        shell_layout.addWidget(self.frame_workspace_header)
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(8, 0, 8, 0)
+        header_row.setSpacing(0)
+        header_row.addWidget(self.frame_workspace_header)
+        shell_layout.addLayout(header_row)
         shell_layout.addWidget(self.ui.splitter_main, 1)
         self._promote_bottom_log_panel()
 
@@ -395,6 +399,7 @@ class MainWindow(QMainWindow):
         item.setObjectName("statusItem")
         item.setProperty("tone", "subtle")
         item.setMinimumWidth(102)
+        item.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         layout = QVBoxLayout(item)
         layout.setContentsMargins(10, 0, 8, 0)
         layout.setSpacing(2)
@@ -403,9 +408,9 @@ class MainWindow(QMainWindow):
         value_label = QLabel(value, item)
         value_label.setProperty("role", "value")
         value_label.setProperty("tone", "subtle")
-        value_label.setWordWrap(True)
+        value_label.setWordWrap(False)
         value_label.setMinimumWidth(40)
-        value_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        value_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         layout.addWidget(title_label)
         layout.addWidget(value_label)
         return item, value_label
@@ -543,15 +548,17 @@ class MainWindow(QMainWindow):
         self.state.last_test_read_detail = ""
 
     def _apply_half_linac_shell_conventions(self) -> None:
+        self._align_workspace_card_grid()
         self.ui.frame_leftNav.setMinimumWidth(220)
         self.ui.frame_leftNav.setMaximumWidth(250)
-        self.ui.verticalLayout_leftNav.setContentsMargins(8, 8, 8, 8)
+        self.ui.verticalLayout_leftNav.setContentsMargins(8, 8, 2, 8)
         self.ui.verticalLayout_leftNav.setSpacing(8)
-        self.ui.verticalLayout_primaryNav.setContentsMargins(8, 10, 8, 8)
+        self.ui.verticalLayout_primaryNav.setContentsMargins(10, 12, 10, 10)
         self.ui.verticalLayout_quickActions.setContentsMargins(10, 12, 10, 10)
         self.ui.verticalLayout_quickActions.setSpacing(8)
-        self.ui.verticalLayout_leftTools.setContentsMargins(0, 8, 0, 0)
+        self.ui.verticalLayout_leftTools.setContentsMargins(0, 0, 0, 0)
         self.ui.verticalLayout_leftTools.setSpacing(8)
+        self._balance_left_tool_cards()
         self.ui.gridLayout_runActions.setContentsMargins(10, 12, 10, 10)
         self.ui.gridLayout_runActions.setHorizontalSpacing(8)
         self.ui.gridLayout_runActions.setVerticalSpacing(8)
@@ -603,6 +610,44 @@ class MainWindow(QMainWindow):
         ):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
+
+    def _align_workspace_card_grid(self) -> None:
+        top_level_layouts = (
+            self.ui.verticalLayout_dashboard,
+            self.ui.verticalLayout_configureShell,
+            self.ui.verticalLayout_runShell,
+        )
+        for layout in top_level_layouts:
+            layout.setContentsMargins(2, 8, 8, 8)
+            layout.setSpacing(8)
+
+        embedded_page_layouts = (
+            self.ui.verticalLayout_resultsPage,
+            self.task_ui.verticalLayout_main,
+            self.machine_ui.verticalLayout_main,
+            self.offline_ui.verticalLayout_main,
+            self.run_ui.verticalLayout_main,
+        )
+        for layout in embedded_page_layouts:
+            layout.setContentsMargins(8, 8, 8, 8)
+            layout.setSpacing(8)
+
+    def _balance_left_tool_cards(self) -> None:
+        layout = self.ui.verticalLayout_leftTools
+        while layout.count() > 2:
+            item = layout.takeAt(layout.count() - 1)
+            if item.widget() is not None:
+                layout.addItem(item)
+                break
+
+        for index, card in enumerate(
+            (self.ui.groupBox_quickActions, self.ui.groupBox_runActions)
+        ):
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            layout.setStretch(index, 1)
+
+        self.ui.verticalLayout_quickActions.setAlignment(Qt.AlignTop)
+        self.ui.gridLayout_runActions.setAlignment(Qt.AlignTop)
 
     def _clarify_project_task_actions(self) -> None:
         self.ui.pushButton_newOfflineTask.setText("New Task")
@@ -1685,6 +1730,23 @@ class MainWindow(QMainWindow):
             self.label_workspace_algorithm.setText(self.ui.label_cardAlgorithmValue.text())
             self.label_workspace_backend.setText(self.ui.label_statusConnectionValue.text())
             self.label_workspace_best.setText(self.ui.label_statusBestValue.text())
+            self._resize_workspace_status_items()
+
+    def _resize_workspace_status_items(self) -> None:
+        value_labels = (
+            self.label_workspace_task,
+            self.label_workspace_mode,
+            self.label_workspace_algorithm,
+            self.label_workspace_backend,
+            self.label_workspace_best,
+        )
+        for value_label in value_labels:
+            item = value_label.parentWidget()
+            text_width = max(
+                label.sizeHint().width() for label in item.findChildren(QLabel)
+            )
+            item.setMinimumWidth(max(102, text_width + 18))
+            item.updateGeometry()
 
     def _summarize_x_values(self, x_values: dict | None) -> str:
         return self.results_controller.summarize_x_values(x_values)

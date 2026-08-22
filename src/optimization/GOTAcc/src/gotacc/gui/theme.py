@@ -45,16 +45,32 @@ QMainWindow, QDialog, QMenuBar, QMenu, QStatusBar, QDockWidget {
     background: $window_bg;
 }
 
+QLabel {
+    background: transparent;
+    border: none;
+}
+
 QFrame#frame_leftNav {
-    background: $panel_bg;
-    border: 1px solid $nav_border;
-    border-radius: 12px;
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+QScrollArea#scrollArea_leftTools,
+QScrollArea#scrollArea_leftTools QWidget#qt_scrollarea_viewport,
+QWidget#scrollAreaWidgetContents_leftTools {
+    background: transparent;
+    border: none;
 }
 
 QFrame#summaryPanel {
     background: $summary_panel_bg;
     border: 1px solid $summary_panel_border;
     border-radius: 14px;
+}
+
+QFrame#summaryPanel QWidget {
+    background: transparent;
 }
 
 QWidget#statusStrip,
@@ -178,25 +194,25 @@ QToolButton#themeToggleButton,
 QToolButton#logToggleButton {
     background: $button_bg;
     border: 1px solid $button_border;
-    border-radius: 11px;
+    border-radius: 8px;
     color: $button_text;
     padding: 0;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 700;
 }
 
 QToolButton#themeToggleButton {
-    min-width: 32px;
-    max-width: 32px;
-    min-height: 32px;
-    max-height: 32px;
+    min-width: 26px;
+    max-width: 26px;
+    min-height: 26px;
+    max-height: 26px;
 }
 
 QToolButton#logToggleButton {
-    min-width: 44px;
-    max-width: 44px;
-    min-height: 32px;
-    max-height: 32px;
+    min-width: 38px;
+    max-width: 38px;
+    min-height: 26px;
+    max-height: 26px;
 }
 
 QToolButton#themeToggleButton:hover,

@@ -4,6 +4,8 @@
 
 当前默认文件是 [irfel_pvlist.json](irfel_pvlist.json)。GUI 启动时会优先自动加载这个文件名，对应逻辑在 [main_window.py](../src/jitter_analysis/gui/main_window.py)。如果你在 `configs/` 里新增了其他 JSON 文件，也可以在 GUI 中手动加载。
 
+真机 HALF Linac 使用 [half_real_pvlist.json](half_real_pvlist.json)。其 PV 名称和磁铁/HV 限值来自 `half_linac/configs/machines/half/machine.json` 与 `control_backends/real.json`；原始相机图像数组不在默认列表中，保留了束斑尺寸、曝光时间等标量诊断量。
+
 ## 推荐流程
 
 1. 复制 [irfel_pvlist_v2.example.json](irfel_pvlist_v2.example.json) 或一份已经可用的现有配置。

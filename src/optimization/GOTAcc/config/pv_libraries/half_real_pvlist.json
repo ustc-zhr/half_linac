@@ -1,0 +1,3302 @@
+{
+  "machine": "HALF",
+  "description": "HALF linac real-machine PV library generated from half_linac configs/machines/half/control_backends/real.json",
+  "knobs": [
+    {
+      "name": "SM01-DX",
+      "pv_name": "IN:PS:LE07:SM01-DX:current:ao",
+      "readback": "IN:PS:LE07:SM01-DX:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "SM01-DY",
+      "pv_name": "IN:PS:LE07:SM01-DY:current:ao",
+      "readback": "IN:PS:LE07:SM01-DY:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "SL01-DX",
+      "pv_name": "IN:PS:LE07:SL01-DX:current:ao",
+      "readback": "IN:PS:LE07:SL01-DX:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "SL01-DY",
+      "pv_name": "IN:PS:LE07:SL01-DY:current:ao",
+      "readback": "IN:PS:LE07:SL01-DY:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "SM01",
+      "pv_name": "IN:PS:LE07:SM01:current:ao",
+      "readback": "IN:PS:LE07:SM01:current:ai",
+      "group": "solenoid"
+    },
+    {
+      "name": "SL01-1",
+      "pv_name": "IN:PS:LE07:SL01-1:current:ao",
+      "readback": "IN:PS:LE07:SL01-1:current:ai",
+      "group": "solenoid"
+    },
+    {
+      "name": "SL01-2",
+      "pv_name": "IN:PS:LE07:SL01-2:current:ao",
+      "readback": "IN:PS:LE07:SL01-2:current:ai",
+      "group": "solenoid"
+    },
+    {
+      "name": "SS01",
+      "pv_name": "IN:PS:LE07:SS01:current:ao",
+      "readback": "IN:PS:LE07:SS01:current:ai",
+      "group": "solenoid"
+    },
+    {
+      "name": "SS02",
+      "pv_name": "IN:PS:LE07:SS02:current:ao",
+      "readback": "IN:PS:LE07:SS02:current:ai",
+      "group": "solenoid"
+    },
+    {
+      "name": "XC00",
+      "pv_name": "IN:PS:LE07:XC00:current:ao",
+      "readback": "IN:PS:LE07:XC00:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC01",
+      "pv_name": "IN:PS:LE07:XC01:current:ao",
+      "readback": "IN:PS:LE07:XC01:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC02",
+      "pv_name": "IN:PS:LE07:XC02:current:ao",
+      "readback": "IN:PS:LE07:XC02:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC03",
+      "pv_name": "IN:PS:LE07:XC03:current:ao",
+      "readback": "IN:PS:LE07:XC03:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC04",
+      "pv_name": "IN:PS:LE07:XC04:current:ao",
+      "readback": "IN:PS:LE07:XC04:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC05",
+      "pv_name": "IN:PS:LE07:XC05:current:ao",
+      "readback": "IN:PS:LE07:XC05:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC06",
+      "pv_name": "IN:PS:LE07:XC06:current:ao",
+      "readback": "IN:PS:LE07:XC06:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC07",
+      "pv_name": "IN:PS:LE07:XC07:current:ao",
+      "readback": "IN:PS:LE07:XC07:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC08",
+      "pv_name": "IN:PS:LE07:XC08:current:ao",
+      "readback": "IN:PS:LE07:XC08:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC09",
+      "pv_name": "IN:PS:LE07:XC09:current:ao",
+      "readback": "IN:PS:LE07:XC09:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC10",
+      "pv_name": "IN:PS:LE07:XC10:current:ao",
+      "readback": "IN:PS:LE07:XC10:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC11",
+      "pv_name": "IN:PS:LE07:XC11:current:ao",
+      "readback": "IN:PS:LE07:XC11:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC12",
+      "pv_name": "IN:PS:LE07:XC12:current:ao",
+      "readback": "IN:PS:LE07:XC12:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC13",
+      "pv_name": "IN:PS:LE07:XC13:current:ao",
+      "readback": "IN:PS:LE07:XC13:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC14",
+      "pv_name": "IN:PS:LE07:XC14:current:ao",
+      "readback": "IN:PS:LE07:XC14:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC15",
+      "pv_name": "IN:PS:LE07:XC15:current:ao",
+      "readback": "IN:PS:LE07:XC15:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC16",
+      "pv_name": "IN:PS:LE07:XC16:current:ao",
+      "readback": "IN:PS:LE07:XC16:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC17",
+      "pv_name": "IN:PS:LE07:XC17:current:ao",
+      "readback": "IN:PS:LE07:XC17:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC18",
+      "pv_name": "IN:PS:LE07:XC18:current:ao",
+      "readback": "IN:PS:LE07:XC18:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC19",
+      "pv_name": "IN:PS:LE07:XC19:current:ao",
+      "readback": "IN:PS:LE07:XC19:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC20",
+      "pv_name": "IN:PS:LE07:XC20:current:ao",
+      "readback": "IN:PS:LE07:XC20:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC21",
+      "pv_name": "IN:PS:LE16:XC21:current:ao",
+      "readback": "IN:PS:LE16:XC21:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC22",
+      "pv_name": "IN:PS:LE16:XC22:current:ao",
+      "readback": "IN:PS:LE16:XC22:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC23",
+      "pv_name": "IN:PS:LE16:XC23:current:ao",
+      "readback": "IN:PS:LE16:XC23:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC24",
+      "pv_name": "IN:PS:LE16:XC24:current:ao",
+      "readback": "IN:PS:LE16:XC24:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC25",
+      "pv_name": "IN:PS:LE16:XC25:current:ao",
+      "readback": "IN:PS:LE16:XC25:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC26",
+      "pv_name": "IN:PS:LE16:XC26:current:ao",
+      "readback": "IN:PS:LE16:XC26:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC27",
+      "pv_name": "IN:PS:LE16:XC27:current:ao",
+      "readback": "IN:PS:LE16:XC27:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC28",
+      "pv_name": "IN:PS:LE16:XC28:current:ao",
+      "readback": "IN:PS:LE16:XC28:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC29",
+      "pv_name": "IN:PS:LE16:XC29:current:ao",
+      "readback": "IN:PS:LE16:XC29:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC30",
+      "pv_name": "IN:PS:LE16:XC30:current:ao",
+      "readback": "IN:PS:LE16:XC30:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC31",
+      "pv_name": "IN:PS:LE16:XC31:current:ao",
+      "readback": "IN:PS:LE16:XC31:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC32",
+      "pv_name": "IN:PS:LE16:XC32:current:ao",
+      "readback": "IN:PS:LE16:XC32:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC33",
+      "pv_name": "IN:PS:LE16:XC33:current:ao",
+      "readback": "IN:PS:LE16:XC33:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC34",
+      "pv_name": "IN:PS:LE16:XC34:current:ao",
+      "readback": "IN:PS:LE16:XC34:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC35",
+      "pv_name": "IN:PS:LE16:XC35:current:ao",
+      "readback": "IN:PS:LE16:XC35:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC36",
+      "pv_name": "IN:PS:LE16:XC36:current:ao",
+      "readback": "IN:PS:LE16:XC36:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC37",
+      "pv_name": "IN:PS:LE16:XC37:current:ao",
+      "readback": "IN:PS:LE16:XC37:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC38",
+      "pv_name": "IN:PS:LE16:XC38:current:ao",
+      "readback": "IN:PS:LE16:XC38:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC39",
+      "pv_name": "IN:PS:LE16:XC39:current:ao",
+      "readback": "IN:PS:LE16:XC39:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC40",
+      "pv_name": "IN:PS:LE16:XC40:current:ao",
+      "readback": "IN:PS:LE16:XC40:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC41",
+      "pv_name": "IN:PS:LE16:XC41:current:ao",
+      "readback": "IN:PS:LE16:XC41:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC42",
+      "pv_name": "IN:PS:LE16:XC42:current:ao",
+      "readback": "IN:PS:LE16:XC42:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "XC43",
+      "pv_name": "IN:PS:LE16:XC43:current:ao",
+      "readback": "IN:PS:LE16:XC43:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "YC00",
+      "pv_name": "IN:PS:LE07:YC00:current:ao",
+      "readback": "IN:PS:LE07:YC00:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC01",
+      "pv_name": "IN:PS:LE07:YC01:current:ao",
+      "readback": "IN:PS:LE07:YC01:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC02",
+      "pv_name": "IN:PS:LE07:YC02:current:ao",
+      "readback": "IN:PS:LE07:YC02:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC03",
+      "pv_name": "IN:PS:LE07:YC03:current:ao",
+      "readback": "IN:PS:LE07:YC03:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC04",
+      "pv_name": "IN:PS:LE07:YC04:current:ao",
+      "readback": "IN:PS:LE07:YC04:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC05",
+      "pv_name": "IN:PS:LE07:YC05:current:ao",
+      "readback": "IN:PS:LE07:YC05:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC06",
+      "pv_name": "IN:PS:LE07:YC06:current:ao",
+      "readback": "IN:PS:LE07:YC06:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC07",
+      "pv_name": "IN:PS:LE07:YC07:current:ao",
+      "readback": "IN:PS:LE07:YC07:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC08",
+      "pv_name": "IN:PS:LE07:YC08:current:ao",
+      "readback": "IN:PS:LE07:YC08:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC09",
+      "pv_name": "IN:PS:LE07:YC09:current:ao",
+      "readback": "IN:PS:LE07:YC09:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC10",
+      "pv_name": "IN:PS:LE07:YC10:current:ao",
+      "readback": "IN:PS:LE07:YC10:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC11",
+      "pv_name": "IN:PS:LE07:YC11:current:ao",
+      "readback": "IN:PS:LE07:YC11:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC12",
+      "pv_name": "IN:PS:LE07:YC12:current:ao",
+      "readback": "IN:PS:LE07:YC12:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC13",
+      "pv_name": "IN:PS:LE07:YC13:current:ao",
+      "readback": "IN:PS:LE07:YC13:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC14",
+      "pv_name": "IN:PS:LE07:YC14:current:ao",
+      "readback": "IN:PS:LE07:YC14:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC15",
+      "pv_name": "IN:PS:LE07:YC15:current:ao",
+      "readback": "IN:PS:LE07:YC15:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC16",
+      "pv_name": "IN:PS:LE07:YC16:current:ao",
+      "readback": "IN:PS:LE07:YC16:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC17",
+      "pv_name": "IN:PS:LE07:YC17:current:ao",
+      "readback": "IN:PS:LE07:YC17:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC18",
+      "pv_name": "IN:PS:LE07:YC18:current:ao",
+      "readback": "IN:PS:LE07:YC18:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC19",
+      "pv_name": "IN:PS:LE07:YC19:current:ao",
+      "readback": "IN:PS:LE07:YC19:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC20",
+      "pv_name": "IN:PS:LE07:YC20:current:ao",
+      "readback": "IN:PS:LE07:YC20:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC21",
+      "pv_name": "IN:PS:LE16:YC21:current:ao",
+      "readback": "IN:PS:LE16:YC21:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC22",
+      "pv_name": "IN:PS:LE16:YC22:current:ao",
+      "readback": "IN:PS:LE16:YC22:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC23",
+      "pv_name": "IN:PS:LE16:YC23:current:ao",
+      "readback": "IN:PS:LE16:YC23:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC24",
+      "pv_name": "IN:PS:LE16:YC24:current:ao",
+      "readback": "IN:PS:LE16:YC24:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC25",
+      "pv_name": "IN:PS:LE16:YC25:current:ao",
+      "readback": "IN:PS:LE16:YC25:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC26",
+      "pv_name": "IN:PS:LE16:YC26:current:ao",
+      "readback": "IN:PS:LE16:YC26:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC27",
+      "pv_name": "IN:PS:LE16:YC27:current:ao",
+      "readback": "IN:PS:LE16:YC27:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC28",
+      "pv_name": "IN:PS:LE16:YC28:current:ao",
+      "readback": "IN:PS:LE16:YC28:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC29",
+      "pv_name": "IN:PS:LE16:YC29:current:ao",
+      "readback": "IN:PS:LE16:YC29:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC30",
+      "pv_name": "IN:PS:LE16:YC30:current:ao",
+      "readback": "IN:PS:LE16:YC30:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC31",
+      "pv_name": "IN:PS:LE16:YC31:current:ao",
+      "readback": "IN:PS:LE16:YC31:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC32",
+      "pv_name": "IN:PS:LE16:YC32:current:ao",
+      "readback": "IN:PS:LE16:YC32:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC33",
+      "pv_name": "IN:PS:LE16:YC33:current:ao",
+      "readback": "IN:PS:LE16:YC33:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC34",
+      "pv_name": "IN:PS:LE16:YC34:current:ao",
+      "readback": "IN:PS:LE16:YC34:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC35",
+      "pv_name": "IN:PS:LE16:YC35:current:ao",
+      "readback": "IN:PS:LE16:YC35:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC36",
+      "pv_name": "IN:PS:LE16:YC36:current:ao",
+      "readback": "IN:PS:LE16:YC36:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC37",
+      "pv_name": "IN:PS:LE16:YC37:current:ao",
+      "readback": "IN:PS:LE16:YC37:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC38",
+      "pv_name": "IN:PS:LE16:YC38:current:ao",
+      "readback": "IN:PS:LE16:YC38:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC39",
+      "pv_name": "IN:PS:LE16:YC39:current:ao",
+      "readback": "IN:PS:LE16:YC39:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC40",
+      "pv_name": "IN:PS:LE16:YC40:current:ao",
+      "readback": "IN:PS:LE16:YC40:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC41",
+      "pv_name": "IN:PS:LE16:YC41:current:ao",
+      "readback": "IN:PS:LE16:YC41:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC42",
+      "pv_name": "IN:PS:LE16:YC42:current:ao",
+      "readback": "IN:PS:LE16:YC42:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "YC43",
+      "pv_name": "IN:PS:LE16:YC43:current:ao",
+      "readback": "IN:PS:LE16:YC43:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "BL01-A-CP",
+      "pv_name": "IN:PS:L001:BL01-A-CP:current:ao",
+      "readback": "IN:PS:L001:BL01-A-CP:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "XCA23",
+      "pv_name": "IN:PS:LE16:XCA23:current:ao",
+      "readback": "IN:PS:LE16:XCA23:current:ai",
+      "group": "steering-x"
+    },
+    {
+      "name": "YCA23",
+      "pv_name": "IN:PS:LE16:YCA23:current:ao",
+      "readback": "IN:PS:LE16:YCA23:current:ai",
+      "group": "steering-y"
+    },
+    {
+      "name": "BENY-CP",
+      "pv_name": "IN:PS:LE16:BENY-CP:current:ao",
+      "readback": "IN:PS:LE16:BENY-CP:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "QL01",
+      "pv_name": "IN:PS:LE07:QL01:current:ao",
+      "readback": "IN:PS:LE07:QL01:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL02",
+      "pv_name": "IN:PS:LE07:QL02:current:ao",
+      "readback": "IN:PS:LE07:QL02:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL03",
+      "pv_name": "IN:PS:LE07:QL03:current:ao",
+      "readback": "IN:PS:LE07:QL03:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL04",
+      "pv_name": "IN:PS:LE07:QL04:current:ao",
+      "readback": "IN:PS:LE07:QL04:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL05",
+      "pv_name": "IN:PS:LE07:QL05:current:ao",
+      "readback": "IN:PS:LE07:QL05:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL06",
+      "pv_name": "IN:PS:LE07:QL06:current:ao",
+      "readback": "IN:PS:LE07:QL06:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL07",
+      "pv_name": "IN:PS:LE07:QL07:current:ao",
+      "readback": "IN:PS:LE07:QL07:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL08",
+      "pv_name": "IN:PS:LE07:QL08:current:ao",
+      "readback": "IN:PS:LE07:QL08:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL09",
+      "pv_name": "IN:PS:LE07:QL09:current:ao",
+      "readback": "IN:PS:LE07:QL09:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL10",
+      "pv_name": "IN:PS:LE07:QL10:current:ao",
+      "readback": "IN:PS:LE07:QL10:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL11",
+      "pv_name": "IN:PS:LE07:QL11:current:ao",
+      "readback": "IN:PS:LE07:QL11:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL12",
+      "pv_name": "IN:PS:LE07:QL12:current:ao",
+      "readback": "IN:PS:LE07:QL12:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL13",
+      "pv_name": "IN:PS:LE07:QL13:current:ao",
+      "readback": "IN:PS:LE07:QL13:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL14",
+      "pv_name": "IN:PS:LE07:QL14:current:ao",
+      "readback": "IN:PS:LE07:QL14:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL15",
+      "pv_name": "IN:PS:LE07:QL15:current:ao",
+      "readback": "IN:PS:LE07:QL15:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL16",
+      "pv_name": "IN:PS:LE07:QL16:current:ao",
+      "readback": "IN:PS:LE07:QL16:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL17",
+      "pv_name": "IN:PS:LE07:QL17:current:ao",
+      "readback": "IN:PS:LE07:QL17:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL18",
+      "pv_name": "IN:PS:LE07:QL18:current:ao",
+      "readback": "IN:PS:LE07:QL18:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL19",
+      "pv_name": "IN:PS:LE07:QL19:current:ao",
+      "readback": "IN:PS:LE07:QL19:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL20",
+      "pv_name": "IN:PS:LE07:QL20:current:ao",
+      "readback": "IN:PS:LE07:QL20:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL21",
+      "pv_name": "IN:PS:LE07:QL21:current:ao",
+      "readback": "IN:PS:LE07:QL21:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL22",
+      "pv_name": "IN:PS:LE07:QL22:current:ao",
+      "readback": "IN:PS:LE07:QL22:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL23",
+      "pv_name": "IN:PS:LE07:QL23:current:ao",
+      "readback": "IN:PS:LE07:QL23:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL24",
+      "pv_name": "IN:PS:LE07:QL24:current:ao",
+      "readback": "IN:PS:LE07:QL24:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL25",
+      "pv_name": "IN:PS:LE07:QL25:current:ao",
+      "readback": "IN:PS:LE07:QL25:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL26",
+      "pv_name": "IN:PS:LE07:QL26:current:ao",
+      "readback": "IN:PS:LE07:QL26:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QL27",
+      "pv_name": "IN:PS:LE07:QL27:current:ao",
+      "readback": "IN:PS:LE07:QL27:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT01",
+      "pv_name": "IN:PS:LE16:QT01:current:ao",
+      "readback": "IN:PS:LE16:QT01:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT02",
+      "pv_name": "IN:PS:LE16:QT02:current:ao",
+      "readback": "IN:PS:LE16:QT02:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT03",
+      "pv_name": "IN:PS:LE16:QT03:current:ao",
+      "readback": "IN:PS:LE16:QT03:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT04",
+      "pv_name": "IN:PS:LE16:QT04:current:ao",
+      "readback": "IN:PS:LE16:QT04:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT05",
+      "pv_name": "IN:PS:LE16:QT05:current:ao",
+      "readback": "IN:PS:LE16:QT05:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT06",
+      "pv_name": "IN:PS:LE16:QT06:current:ao",
+      "readback": "IN:PS:LE16:QT06:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT07",
+      "pv_name": "IN:PS:LE16:QT07:current:ao",
+      "readback": "IN:PS:LE16:QT07:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT08",
+      "pv_name": "IN:PS:LE16:QT08:current:ao",
+      "readback": "IN:PS:LE16:QT08:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT09",
+      "pv_name": "IN:PS:LE16:QT09:current:ao",
+      "readback": "IN:PS:LE16:QT09:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT10",
+      "pv_name": "IN:PS:LE16:QT10:current:ao",
+      "readback": "IN:PS:LE16:QT10:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT11",
+      "pv_name": "IN:PS:LE16:QT11:current:ao",
+      "readback": "IN:PS:LE16:QT11:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT12",
+      "pv_name": "IN:PS:LE16:QT12:current:ao",
+      "readback": "IN:PS:LE16:QT12:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT13",
+      "pv_name": "IN:PS:LE16:QT13:current:ao",
+      "readback": "IN:PS:LE16:QT13:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT14",
+      "pv_name": "IN:PS:LE16:QT14:current:ao",
+      "readback": "IN:PS:LE16:QT14:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT15",
+      "pv_name": "IN:PS:LE16:QT15:current:ao",
+      "readback": "IN:PS:LE16:QT15:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT16",
+      "pv_name": "IN:PS:LE16:QT16:current:ao",
+      "readback": "IN:PS:LE16:QT16:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT17",
+      "pv_name": "IN:PS:LE16:QT17:current:ao",
+      "readback": "IN:PS:LE16:QT17:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT18",
+      "pv_name": "IN:PS:LE16:QT18:current:ao",
+      "readback": "IN:PS:LE16:QT18:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT19",
+      "pv_name": "IN:PS:LE16:QT19:current:ao",
+      "readback": "IN:PS:LE16:QT19:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT20",
+      "pv_name": "IN:PS:LE16:QT20:current:ao",
+      "readback": "IN:PS:LE16:QT20:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT21",
+      "pv_name": "IN:PS:LE16:QT21:current:ao",
+      "readback": "IN:PS:LE16:QT21:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT22",
+      "pv_name": "IN:PS:LE16:QT22:current:ao",
+      "readback": "IN:PS:LE16:QT22:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT23",
+      "pv_name": "IN:PS:LE16:QT23:current:ao",
+      "readback": "IN:PS:LE16:QT23:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT24",
+      "pv_name": "IN:PS:LE16:QT24:current:ao",
+      "readback": "IN:PS:LE16:QT24:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT25",
+      "pv_name": "IN:PS:LE16:QT25:current:ao",
+      "readback": "IN:PS:LE16:QT25:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT26",
+      "pv_name": "IN:PS:LE16:QT26:current:ao",
+      "readback": "IN:PS:LE16:QT26:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT27",
+      "pv_name": "IN:PS:LE16:QT27:current:ao",
+      "readback": "IN:PS:LE16:QT27:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT28",
+      "pv_name": "IN:PS:LE16:QT28:current:ao",
+      "readback": "IN:PS:LE16:QT28:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT29",
+      "pv_name": "IN:PS:LE16:QT29:current:ao",
+      "readback": "IN:PS:LE16:QT29:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT30",
+      "pv_name": "IN:PS:LE16:QT30:current:ao",
+      "readback": "IN:PS:LE16:QT30:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT31",
+      "pv_name": "IN:PS:LE16:QT31:current:ao",
+      "readback": "IN:PS:LE16:QT31:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT32",
+      "pv_name": "IN:PS:LE16:QT32:current:ao",
+      "readback": "IN:PS:LE16:QT32:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT33",
+      "pv_name": "IN:PS:LE16:QT33:current:ao",
+      "readback": "IN:PS:LE16:QT33:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT34",
+      "pv_name": "IN:PS:LE16:QT34:current:ao",
+      "readback": "IN:PS:LE16:QT34:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT35",
+      "pv_name": "IN:PS:LE16:QT35:current:ao",
+      "readback": "IN:PS:LE16:QT35:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QT36",
+      "pv_name": "IN:PS:LE16:QT36:current:ao",
+      "readback": "IN:PS:LE16:QT36:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QE01",
+      "pv_name": "IN:PS:LE16:QE01:current:ao",
+      "readback": "IN:PS:LE16:QE01:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QE02",
+      "pv_name": "IN:PS:LE16:QE02:current:ao",
+      "readback": "IN:PS:LE16:QE02:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QE03",
+      "pv_name": "IN:PS:LE16:QE03:current:ao",
+      "readback": "IN:PS:LE16:QE03:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QDU01",
+      "pv_name": "IN:PS:LE16:QDU01:current:ao",
+      "readback": "IN:PS:LE16:QDU01:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "QDU02",
+      "pv_name": "IN:PS:LE16:QDU02:current:ao",
+      "readback": "IN:PS:LE16:QDU02:current:ai",
+      "group": "quadrupole"
+    },
+    {
+      "name": "BL01A",
+      "pv_name": "IN:PS:LE07:BL01A:current:ao",
+      "readback": "IN:PS:LE07:BL01A:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "BL01B",
+      "pv_name": "IN:PS:LE07:BL01B:current:ao",
+      "readback": "IN:PS:LE07:BL01B:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "BH01",
+      "pv_name": "IN:PS:LE16:BH01:current:ao",
+      "readback": "IN:PS:LE16:BH01:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "BH02",
+      "pv_name": "IN:PS:LE16:BH02:current:ao",
+      "readback": "IN:PS:LE16:BH02:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "BH03",
+      "pv_name": "IN:PS:LE16:BH03:current:ao",
+      "readback": "IN:PS:LE16:BH03:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "BH04",
+      "pv_name": "IN:PS:LE16:BH04:current:ao",
+      "readback": "IN:PS:LE16:BH04:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "BV01",
+      "pv_name": "IN:PS:LE16:BV01:current:ao",
+      "readback": "IN:PS:LE16:BV01:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "BV02",
+      "pv_name": "IN:PS:LE16:BV02:current:ao",
+      "readback": "IN:PS:LE16:BV02:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "BENY",
+      "pv_name": "IN:PS:LE16:BENY:current:ao",
+      "readback": "IN:PS:LE16:BENY:current:ai",
+      "group": "bend"
+    },
+    {
+      "name": "PRF01_exposure",
+      "pv_name": "IN:BD:PRF01:cam1:AcquireTime",
+      "readback": "IN:BD:PRF01:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF02_exposure",
+      "pv_name": "IN:BD:PRF02:cam1:AcquireTime",
+      "readback": "IN:BD:PRF02:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF03_exposure",
+      "pv_name": "IN:BD:PRF03:cam1:AcquireTime",
+      "readback": "IN:BD:PRF03:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF04_exposure",
+      "pv_name": "IN:BD:PRF04:cam1:AcquireTime",
+      "readback": "IN:BD:PRF04:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF05_exposure",
+      "pv_name": "IN:BD:PRF05:cam1:AcquireTime",
+      "readback": "IN:BD:PRF05:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF06_exposure",
+      "pv_name": "IN:BD:PRF06:cam1:AcquireTime",
+      "readback": "IN:BD:PRF06:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF07_exposure",
+      "pv_name": "IN:BD:PRF07:cam1:AcquireTime",
+      "readback": "IN:BD:PRF07:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF08_exposure",
+      "pv_name": "IN:BD:PRF08:cam1:AcquireTime",
+      "readback": "IN:BD:PRF08:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF09_exposure",
+      "pv_name": "IN:BD:PRF09:cam1:AcquireTime",
+      "readback": "IN:BD:PRF09:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF10_exposure",
+      "pv_name": "IN:BD:PRF10:cam1:AcquireTime",
+      "readback": "IN:BD:PRF10:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF11_exposure",
+      "pv_name": "IN:BD:PRF11:cam1:AcquireTime",
+      "readback": "IN:BD:PRF11:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF12_exposure",
+      "pv_name": "IN:BD:PRF12:cam1:AcquireTime",
+      "readback": "IN:BD:PRF12:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF13_exposure",
+      "pv_name": "IN:BD:PRF13:cam1:AcquireTime",
+      "readback": "IN:BD:PRF13:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRF14_exposure",
+      "pv_name": "IN:BD:PRF14:cam1:AcquireTime",
+      "readback": "IN:BD:PRF14:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PRFD_exposure",
+      "pv_name": "IN:BD:PRFD:cam1:AcquireTime",
+      "readback": "IN:BD:PRFD:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "ENY_exposure",
+      "pv_name": "IN:BD:ENY:cam1:AcquireTime",
+      "readback": "IN:BD:ENY:cam1:AcquireTime",
+      "group": "profile-exposure"
+    },
+    {
+      "name": "PREINJECTOR_ENERGY",
+      "pv_name": "IN:L01:ENG",
+      "readback": "IN:L01:ENG",
+      "group": "energy-setpoint"
+    },
+    {
+      "name": "LINAC_ENERGY",
+      "pv_name": "IN:LA:ENG",
+      "readback": "IN:LA:ENG",
+      "group": "energy-setpoint"
+    },
+    {
+      "name": "TRANSPORT_ENERGY",
+      "pv_name": "IN:TL:ENG",
+      "readback": "IN:TL:ENG",
+      "group": "energy-setpoint"
+    },
+    {
+      "name": "KLY01_voltage",
+      "pv_name": "IN:PP:KLY01:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY01:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY02_voltage",
+      "pv_name": "IN:PP:KLY02:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY02:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY03_voltage",
+      "pv_name": "IN:PP:KLY03:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY03:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY04_voltage",
+      "pv_name": "IN:PP:KLY04:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY04:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY05_voltage",
+      "pv_name": "IN:PP:KLY05:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY05:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY06_voltage",
+      "pv_name": "IN:PP:KLY06:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY06:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY07_voltage",
+      "pv_name": "IN:PP:KLY07:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY07:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY08_voltage",
+      "pv_name": "IN:PP:KLY08:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY08:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY09_voltage",
+      "pv_name": "IN:PP:KLY09:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY09:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY10_voltage",
+      "pv_name": "IN:PP:KLY10:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY10:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY11_voltage",
+      "pv_name": "IN:PP:KLY11:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY11:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY12_voltage",
+      "pv_name": "IN:PP:KLY12:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY12:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY13_voltage",
+      "pv_name": "IN:PP:KLY13:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY13:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY14_voltage",
+      "pv_name": "IN:PP:KLY14:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY14:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY15_voltage",
+      "pv_name": "IN:PP:KLY15:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY15:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY16_voltage",
+      "pv_name": "IN:PP:KLY16:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY16:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY17_voltage",
+      "pv_name": "IN:PP:KLY17:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY17:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY18_voltage",
+      "pv_name": "IN:PP:KLY18:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY18:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY19_voltage",
+      "pv_name": "IN:PP:KLY19:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY19:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY20_voltage",
+      "pv_name": "IN:PP:KLY20:setVoltageHVDC:ao",
+      "readback": "IN:PP:KLY20:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "LLRF01_phase",
+      "pv_name": "HALF:IN-MW:LLRF01:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF01:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF02_phase",
+      "pv_name": "HALF:IN-MW:LLRF02:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF02:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF03_phase",
+      "pv_name": "HALF:IN-MW:LLRF03:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF03:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF04_phase",
+      "pv_name": "HALF:IN-MW:LLRF04:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF04:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF05_phase",
+      "pv_name": "HALF:IN-MW:LLRF05:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF05:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF06_phase",
+      "pv_name": "HALF:IN-MW:LLRF06:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF06:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF07_phase",
+      "pv_name": "HALF:IN-MW:LLRF07:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF07:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF08_phase",
+      "pv_name": "HALF:IN-MW:LLRF08:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF08:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF09_phase",
+      "pv_name": "HALF:IN-MW:LLRF09:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF09:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF10_phase",
+      "pv_name": "HALF:IN-MW:LLRF10:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF10:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF11_phase",
+      "pv_name": "HALF:IN-MW:LLRF11:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF11:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF12_phase",
+      "pv_name": "HALF:IN-MW:LLRF12:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF12:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF13_phase",
+      "pv_name": "HALF:IN-MW:LLRF13:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF13:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF14_phase",
+      "pv_name": "HALF:IN-MW:LLRF14:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF14:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF15_phase",
+      "pv_name": "HALF:IN-MW:LLRF15:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF15:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF16_phase",
+      "pv_name": "HALF:IN-MW:LLRF16:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF16:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF17_phase",
+      "pv_name": "HALF:IN-MW:LLRF17:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF17:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF18_phase",
+      "pv_name": "HALF:IN-MW:LLRF18:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF18:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF19_phase",
+      "pv_name": "HALF:IN-MW:LLRF19:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF19:SET_PHASE",
+      "group": "rf-phase"
+    },
+    {
+      "name": "LLRF20_phase",
+      "pv_name": "HALF:IN-MW:LLRF20:SET_PHASE",
+      "readback": "HALF:IN-MW:LLRF20:SET_PHASE",
+      "group": "rf-phase"
+    }
+  ],
+  "objectives": [
+    {
+      "name": "BPM01_x",
+      "pv_name": "IN:BD:LE05:DBPM:01:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:01:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM01_y",
+      "pv_name": "IN:BD:LE05:DBPM:01:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:01:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM02_x",
+      "pv_name": "IN:BD:LE05:DBPM:02:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:02:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM02_y",
+      "pv_name": "IN:BD:LE05:DBPM:02:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:02:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM03_x",
+      "pv_name": "IN:BD:LE05:DBPM:03:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:03:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM03_y",
+      "pv_name": "IN:BD:LE05:DBPM:03:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:03:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM04_x",
+      "pv_name": "IN:BD:LE05:DBPM:04:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:04:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM04_y",
+      "pv_name": "IN:BD:LE05:DBPM:04:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:04:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM05_x",
+      "pv_name": "IN:BD:LE05:DBPM:05:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:05:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM05_y",
+      "pv_name": "IN:BD:LE05:DBPM:05:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:05:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM06_x",
+      "pv_name": "IN:BD:LE05:DBPM:06:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:06:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM06_y",
+      "pv_name": "IN:BD:LE05:DBPM:06:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:06:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM07_x",
+      "pv_name": "IN:BD:LE05:DBPM:07:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:07:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM07_y",
+      "pv_name": "IN:BD:LE05:DBPM:07:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:07:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM08_x",
+      "pv_name": "IN:BD:LE05:DBPM:08:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:08:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM08_y",
+      "pv_name": "IN:BD:LE05:DBPM:08:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:08:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM09_x",
+      "pv_name": "IN:BD:LE05:DBPM:09:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:09:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM09_y",
+      "pv_name": "IN:BD:LE05:DBPM:09:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:09:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM10_x",
+      "pv_name": "IN:BD:LE05:DBPM:10:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:10:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM10_y",
+      "pv_name": "IN:BD:LE05:DBPM:10:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:10:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM11_x",
+      "pv_name": "IN:BD:LE05:DBPM:11:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:11:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM11_y",
+      "pv_name": "IN:BD:LE05:DBPM:11:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:11:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM12_x",
+      "pv_name": "IN:BD:LE05:DBPM:12:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:12:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM12_y",
+      "pv_name": "IN:BD:LE05:DBPM:12:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:12:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM13_x",
+      "pv_name": "IN:BD:LE05:DBPM:13:BPM_X",
+      "readback": "IN:BD:LE05:DBPM:13:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM13_y",
+      "pv_name": "IN:BD:LE05:DBPM:13:BPM_Y",
+      "readback": "IN:BD:LE05:DBPM:13:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM14_x",
+      "pv_name": "IN:BD:LE14:DBPM:14:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:14:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM14_y",
+      "pv_name": "IN:BD:LE14:DBPM:14:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:14:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM15_x",
+      "pv_name": "IN:BD:LE14:DBPM:15:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:15:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM15_y",
+      "pv_name": "IN:BD:LE14:DBPM:15:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:15:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM16_x",
+      "pv_name": "IN:BD:LE14:DBPM:16:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:16:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM16_y",
+      "pv_name": "IN:BD:LE14:DBPM:16:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:16:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM17_x",
+      "pv_name": "IN:BD:LE14:DBPM:17:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:17:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM17_y",
+      "pv_name": "IN:BD:LE14:DBPM:17:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:17:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM18_x",
+      "pv_name": "IN:BD:LE14:DBPM:18:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:18:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM18_y",
+      "pv_name": "IN:BD:LE14:DBPM:18:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:18:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM19_x",
+      "pv_name": "IN:BD:LE14:DBPM:19:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:19:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM19_y",
+      "pv_name": "IN:BD:LE14:DBPM:19:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:19:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM20_x",
+      "pv_name": "IN:BD:LE14:DBPM:20:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:20:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM20_y",
+      "pv_name": "IN:BD:LE14:DBPM:20:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:20:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM21_x",
+      "pv_name": "IN:BD:LE14:DBPM:21:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:21:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM21_y",
+      "pv_name": "IN:BD:LE14:DBPM:21:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:21:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM22_x",
+      "pv_name": "IN:BD:LE14:DBPM:22:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:22:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM22_y",
+      "pv_name": "IN:BD:LE14:DBPM:22:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:22:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM23_x",
+      "pv_name": "IN:BD:LE14:DBPM:23:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:23:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM23_y",
+      "pv_name": "IN:BD:LE14:DBPM:23:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:23:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM24_x",
+      "pv_name": "IN:BD:LE14:DBPM:24:BPM_X",
+      "readback": "IN:BD:LE14:DBPM:24:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM24_y",
+      "pv_name": "IN:BD:LE14:DBPM:24:BPM_Y",
+      "readback": "IN:BD:LE14:DBPM:24:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM25_x",
+      "pv_name": "IN:BD:LE20:DBPM:25:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:25:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM25_y",
+      "pv_name": "IN:BD:LE20:DBPM:25:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:25:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM26_x",
+      "pv_name": "IN:BD:LE20:DBPM:26:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:26:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM26_y",
+      "pv_name": "IN:BD:LE20:DBPM:26:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:26:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM27_x",
+      "pv_name": "IN:BD:LE20:DBPM:27:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:27:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM27_y",
+      "pv_name": "IN:BD:LE20:DBPM:27:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:27:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM28_x",
+      "pv_name": "IN:BD:LE20:DBPM:28:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:28:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM28_y",
+      "pv_name": "IN:BD:LE20:DBPM:28:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:28:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM29_x",
+      "pv_name": "IN:BD:LE20:DBPM:29:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:29:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM29_y",
+      "pv_name": "IN:BD:LE20:DBPM:29:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:29:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM30_x",
+      "pv_name": "IN:BD:LE20:DBPM:30:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:30:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM30_y",
+      "pv_name": "IN:BD:LE20:DBPM:30:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:30:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM31_x",
+      "pv_name": "IN:BD:LE20:DBPM:31:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:31:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM31_y",
+      "pv_name": "IN:BD:LE20:DBPM:31:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:31:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM32_x",
+      "pv_name": "IN:BD:LE20:DBPM:32:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:32:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM32_y",
+      "pv_name": "IN:BD:LE20:DBPM:32:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:32:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM33_x",
+      "pv_name": "IN:BD:LE20:DBPM:33:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:33:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM33_y",
+      "pv_name": "IN:BD:LE20:DBPM:33:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:33:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM34_x",
+      "pv_name": "IN:BD:LE20:DBPM:34:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:34:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM34_y",
+      "pv_name": "IN:BD:LE20:DBPM:34:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:34:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM35_x",
+      "pv_name": "IN:BD:LE20:DBPM:35:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:35:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM35_y",
+      "pv_name": "IN:BD:LE20:DBPM:35:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:35:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM36_x",
+      "pv_name": "IN:BD:LE20:DBPM:36:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:36:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM36_y",
+      "pv_name": "IN:BD:LE20:DBPM:36:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:36:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM37_x",
+      "pv_name": "IN:BD:LE20:DBPM:37:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:37:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM37_y",
+      "pv_name": "IN:BD:LE20:DBPM:37:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:37:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM38_x",
+      "pv_name": "IN:BD:LE20:DBPM:38:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:38:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM38_y",
+      "pv_name": "IN:BD:LE20:DBPM:38:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:38:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM39_x",
+      "pv_name": "IN:BD:LE20:DBPM:39:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:39:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM39_y",
+      "pv_name": "IN:BD:LE20:DBPM:39:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:39:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM40_x",
+      "pv_name": "IN:BD:LE20:DBPM:40:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:40:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM40_y",
+      "pv_name": "IN:BD:LE20:DBPM:40:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:40:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM41_x",
+      "pv_name": "IN:BD:LE20:DBPM:41:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:41:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM41_y",
+      "pv_name": "IN:BD:LE20:DBPM:41:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:41:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM42_x",
+      "pv_name": "IN:BD:LE20:DBPM:42:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:42:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM42_y",
+      "pv_name": "IN:BD:LE20:DBPM:42:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:42:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "BPM43_x",
+      "pv_name": "IN:BD:LE20:DBPM:43:BPM_X",
+      "readback": "IN:BD:LE20:DBPM:43:BPM_X",
+      "group": "BPM-x"
+    },
+    {
+      "name": "BPM43_y",
+      "pv_name": "IN:BD:LE20:DBPM:43:BPM_Y",
+      "readback": "IN:BD:LE20:DBPM:43:BPM_Y",
+      "group": "BPM-y"
+    },
+    {
+      "name": "QL01_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL01:K1",
+      "readback": "IN:MG:L002:QUAD:QL01:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL01_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL01:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL01:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL01_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL01:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL01:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL02_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL02:K1",
+      "readback": "IN:MG:L002:QUAD:QL02:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL02_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL02:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL02:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL02_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL02:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL02:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL03_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL03:K1",
+      "readback": "IN:MG:L002:QUAD:QL03:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL03_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL03:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL03:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL03_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL03:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL03:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL04_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL04:K1",
+      "readback": "IN:MG:L002:QUAD:QL04:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL04_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL04:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL04:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL04_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL04:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL04:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL05_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL05:K1",
+      "readback": "IN:MG:L002:QUAD:QL05:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL05_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL05:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL05:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL05_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL05:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL05:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL06_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL06:K1",
+      "readback": "IN:MG:L002:QUAD:QL06:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL06_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL06:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL06:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL06_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL06:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL06:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL07_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL07:K1",
+      "readback": "IN:MG:L002:QUAD:QL07:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL07_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL07:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL07:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL07_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL07:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL07:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL08_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL08:K1",
+      "readback": "IN:MG:L002:QUAD:QL08:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL08_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL08:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL08:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL08_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL08:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL08:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL09_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL09:K1",
+      "readback": "IN:MG:L002:QUAD:QL09:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL09_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL09:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL09:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL09_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL09:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL09:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL10_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL10:K1",
+      "readback": "IN:MG:L002:QUAD:QL10:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL10_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL10:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL10:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL10_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL10:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL10:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL11_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL11:K1",
+      "readback": "IN:MG:L002:QUAD:QL11:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL11_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL11:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL11:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL11_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL11:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL11:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL12_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL12:K1",
+      "readback": "IN:MG:L002:QUAD:QL12:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL12_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QL12:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QL12:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL12_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QL12:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QL12:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT01_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT01:K1",
+      "readback": "IN:MG:L002:QUAD:QT01:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT01_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT01:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT01:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT01_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT01:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT01:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT02_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT02:K1",
+      "readback": "IN:MG:L002:QUAD:QT02:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT02_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT02:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT02:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT02_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT02:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT02:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT03_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT03:K1",
+      "readback": "IN:MG:L002:QUAD:QT03:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT03_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT03:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT03:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT03_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT03:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT03:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT04_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT04:K1",
+      "readback": "IN:MG:L002:QUAD:QT04:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT04_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT04:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT04:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT04_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT04:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT04:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT05_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT05:K1",
+      "readback": "IN:MG:L002:QUAD:QT05:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT05_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT05:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT05:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT05_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT05:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT05:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT06_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT06:K1",
+      "readback": "IN:MG:L002:QUAD:QT06:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT06_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT06:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT06:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT06_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT06:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT06:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT07_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT07:K1",
+      "readback": "IN:MG:L002:QUAD:QT07:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT07_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT07:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT07:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT07_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT07:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT07:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT08_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT08:K1",
+      "readback": "IN:MG:L002:QUAD:QT08:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT08_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT08:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT08:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT08_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT08:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT08:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT09_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT09:K1",
+      "readback": "IN:MG:L002:QUAD:QT09:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT09_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT09:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT09:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT09_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT09:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT09:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT10_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT10:K1",
+      "readback": "IN:MG:L002:QUAD:QT10:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT10_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT10:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT10:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT10_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT10:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT10:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT11_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT11:K1",
+      "readback": "IN:MG:L002:QUAD:QT11:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT11_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT11:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT11:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT11_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT11:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT11:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT12_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT12:K1",
+      "readback": "IN:MG:L002:QUAD:QT12:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT12_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT12:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT12:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT12_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT12:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT12:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT13_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT13:K1",
+      "readback": "IN:MG:L002:QUAD:QT13:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT13_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT13:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT13:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT13_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT13:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT13:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT14_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT14:K1",
+      "readback": "IN:MG:L002:QUAD:QT14:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT14_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT14:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT14:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT14_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT14:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT14:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT15_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT15:K1",
+      "readback": "IN:MG:L002:QUAD:QT15:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT15_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT15:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT15:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT15_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT15:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT15:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT16_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT16:K1",
+      "readback": "IN:MG:L002:QUAD:QT16:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT16_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT16:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT16:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT16_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT16:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT16:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT17_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT17:K1",
+      "readback": "IN:MG:L002:QUAD:QT17:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT17_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT17:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT17:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT17_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT17:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT17:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT18_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT18:K1",
+      "readback": "IN:MG:L002:QUAD:QT18:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT18_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT18:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT18:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT18_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT18:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT18:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT19_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT19:K1",
+      "readback": "IN:MG:L002:QUAD:QT19:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT19_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT19:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT19:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT19_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT19:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT19:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT20_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT20:K1",
+      "readback": "IN:MG:L002:QUAD:QT20:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT20_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT20:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT20:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT20_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT20:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT20:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT21_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT21:K1",
+      "readback": "IN:MG:L002:QUAD:QT21:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT21_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT21:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT21:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT21_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT21:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT21:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT22_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT22:K1",
+      "readback": "IN:MG:L002:QUAD:QT22:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT22_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT22:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT22:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT22_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT22:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT22:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT23_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT23:K1",
+      "readback": "IN:MG:L002:QUAD:QT23:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT23_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT23:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT23:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT23_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT23:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT23:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT24_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT24:K1",
+      "readback": "IN:MG:L002:QUAD:QT24:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT24_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT24:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT24:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT24_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT24:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT24:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT25_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT25:K1",
+      "readback": "IN:MG:L002:QUAD:QT25:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT25_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT25:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT25:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT25_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT25:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT25:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT26_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT26:K1",
+      "readback": "IN:MG:L002:QUAD:QT26:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT26_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT26:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT26:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT26_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT26:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT26:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT27_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT27:K1",
+      "readback": "IN:MG:L002:QUAD:QT27:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT27_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT27:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT27:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT27_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT27:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT27:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT28_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT28:K1",
+      "readback": "IN:MG:L002:QUAD:QT28:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT28_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT28:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT28:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT28_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT28:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT28:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT29_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT29:K1",
+      "readback": "IN:MG:L002:QUAD:QT29:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT29_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT29:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT29:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT29_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT29:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT29:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT30_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT30:K1",
+      "readback": "IN:MG:L002:QUAD:QT30:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT30_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT30:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT30:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT30_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT30:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT30:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT31_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT31:K1",
+      "readback": "IN:MG:L002:QUAD:QT31:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT31_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT31:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT31:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT31_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT31:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT31:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT32_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT32:K1",
+      "readback": "IN:MG:L002:QUAD:QT32:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT32_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT32:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT32:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT32_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT32:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT32:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT33_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT33:K1",
+      "readback": "IN:MG:L002:QUAD:QT33:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT33_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT33:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT33:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT33_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT33:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT33:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT34_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT34:K1",
+      "readback": "IN:MG:L002:QUAD:QT34:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT34_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT34:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT34:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT34_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT34:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT34:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT35_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT35:K1",
+      "readback": "IN:MG:L002:QUAD:QT35:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT35_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT35:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT35:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT35_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT35:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT35:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT36_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT36:K1",
+      "readback": "IN:MG:L002:QUAD:QT36:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT36_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QT36:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QT36:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT36_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QT36:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QT36:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE01_K1",
+      "pv_name": "IN:MG:L002:QUAD:QE01:K1",
+      "readback": "IN:MG:L002:QUAD:QE01:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE01_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QE01:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QE01:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE01_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QE01:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QE01:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE02_K1",
+      "pv_name": "IN:MG:L002:QUAD:QE02:K1",
+      "readback": "IN:MG:L002:QUAD:QE02:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE02_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QE02:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QE02:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE02_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QE02:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QE02:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE03_K1",
+      "pv_name": "IN:MG:L002:QUAD:QE03:K1",
+      "readback": "IN:MG:L002:QUAD:QE03:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE03_K1_adj",
+      "pv_name": "IN:MG:L002:QUAD:QE03:K1:ADJ",
+      "readback": "IN:MG:L002:QUAD:QE03:K1:ADJ",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE03_K1_total",
+      "pv_name": "IN:MG:L002:QUAD:QE03:K1:TOTAL",
+      "readback": "IN:MG:L002:QUAD:QE03:K1:TOTAL",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QDU01_K1",
+      "pv_name": "IN:PS:LE16:QDU01:current:ao",
+      "readback": "IN:PS:LE16:QDU01:current:ao",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QDU02_K1",
+      "pv_name": "IN:PS:LE16:QDU02:current:ao",
+      "readback": "IN:PS:LE16:QDU02:current:ao",
+      "group": "magnet-model"
+    },
+    {
+      "name": "PRF01_sigx",
+      "pv_name": "IN:BD:PRF01:H:SIZE",
+      "readback": "IN:BD:PRF01:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF01_sigy",
+      "pv_name": "IN:BD:PRF01:V:SIZE",
+      "readback": "IN:BD:PRF01:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF01_image",
+      "pv_name": "IN:BD:PRF01:image1:ArrayData",
+      "readback": "IN:BD:PRF01:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF02_sigx",
+      "pv_name": "IN:BD:PRF02:H:SIZE",
+      "readback": "IN:BD:PRF02:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF02_sigy",
+      "pv_name": "IN:BD:PRF02:V:SIZE",
+      "readback": "IN:BD:PRF02:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF02_image",
+      "pv_name": "IN:BD:PRF02:image1:ArrayData",
+      "readback": "IN:BD:PRF02:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF03_sigx",
+      "pv_name": "IN:BD:PRF03:H:SIZE",
+      "readback": "IN:BD:PRF03:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF03_sigy",
+      "pv_name": "IN:BD:PRF03:V:SIZE",
+      "readback": "IN:BD:PRF03:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF03_image",
+      "pv_name": "IN:BD:PRF03:image1:ArrayData",
+      "readback": "IN:BD:PRF03:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF04_sigx",
+      "pv_name": "IN:BD:PRF04:H:SIZE",
+      "readback": "IN:BD:PRF04:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF04_sigy",
+      "pv_name": "IN:BD:PRF04:V:SIZE",
+      "readback": "IN:BD:PRF04:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF04_image",
+      "pv_name": "IN:BD:PRF04:image1:ArrayData",
+      "readback": "IN:BD:PRF04:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF05_sigx",
+      "pv_name": "IN:BD:PRF05:H:SIZE",
+      "readback": "IN:BD:PRF05:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF05_sigy",
+      "pv_name": "IN:BD:PRF05:V:SIZE",
+      "readback": "IN:BD:PRF05:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF05_image",
+      "pv_name": "IN:BD:PRF05:image1:ArrayData",
+      "readback": "IN:BD:PRF05:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF06_sigx",
+      "pv_name": "IN:BD:PRF06:H:SIZE",
+      "readback": "IN:BD:PRF06:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF06_sigy",
+      "pv_name": "IN:BD:PRF06:V:SIZE",
+      "readback": "IN:BD:PRF06:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF06_image",
+      "pv_name": "IN:BD:PRF06:image1:ArrayData",
+      "readback": "IN:BD:PRF06:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF07_sigx",
+      "pv_name": "IN:BD:PRF07:H:SIZE",
+      "readback": "IN:BD:PRF07:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF07_sigy",
+      "pv_name": "IN:BD:PRF07:V:SIZE",
+      "readback": "IN:BD:PRF07:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF07_image",
+      "pv_name": "IN:BD:PRF07:image1:ArrayData",
+      "readback": "IN:BD:PRF07:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF08_sigx",
+      "pv_name": "IN:BD:PRF08:H:SIZE",
+      "readback": "IN:BD:PRF08:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF08_sigy",
+      "pv_name": "IN:BD:PRF08:V:SIZE",
+      "readback": "IN:BD:PRF08:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF08_image",
+      "pv_name": "IN:BD:PRF08:image1:ArrayData",
+      "readback": "IN:BD:PRF08:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF09_sigx",
+      "pv_name": "IN:BD:PRF09:H:SIZE",
+      "readback": "IN:BD:PRF09:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF09_sigy",
+      "pv_name": "IN:BD:PRF09:V:SIZE",
+      "readback": "IN:BD:PRF09:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF09_image",
+      "pv_name": "IN:BD:PRF09:image1:ArrayData",
+      "readback": "IN:BD:PRF09:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF10_sigx",
+      "pv_name": "IN:BD:PRF10:H:SIZE",
+      "readback": "IN:BD:PRF10:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF10_sigy",
+      "pv_name": "IN:BD:PRF10:V:SIZE",
+      "readback": "IN:BD:PRF10:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF10_image",
+      "pv_name": "IN:BD:PRF10:image1:ArrayData",
+      "readback": "IN:BD:PRF10:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF11_sigx",
+      "pv_name": "IN:BD:PRF11:H:SIZE",
+      "readback": "IN:BD:PRF11:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF11_sigy",
+      "pv_name": "IN:BD:PRF11:V:SIZE",
+      "readback": "IN:BD:PRF11:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF11_image",
+      "pv_name": "IN:BD:PRF11:image1:ArrayData",
+      "readback": "IN:BD:PRF11:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF12_sigx",
+      "pv_name": "IN:BD:PRF12:H:SIZE",
+      "readback": "IN:BD:PRF12:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF12_sigy",
+      "pv_name": "IN:BD:PRF12:V:SIZE",
+      "readback": "IN:BD:PRF12:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF12_image",
+      "pv_name": "IN:BD:PRF12:image1:ArrayData",
+      "readback": "IN:BD:PRF12:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF13_sigx",
+      "pv_name": "IN:BD:PRF13:H:SIZE",
+      "readback": "IN:BD:PRF13:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF13_sigy",
+      "pv_name": "IN:BD:PRF13:V:SIZE",
+      "readback": "IN:BD:PRF13:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF13_image",
+      "pv_name": "IN:BD:PRF13:image1:ArrayData",
+      "readback": "IN:BD:PRF13:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRF14_sigx",
+      "pv_name": "IN:BD:PRF14:H:SIZE",
+      "readback": "IN:BD:PRF14:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRF14_sigy",
+      "pv_name": "IN:BD:PRF14:V:SIZE",
+      "readback": "IN:BD:PRF14:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRF14_image",
+      "pv_name": "IN:BD:PRF14:image1:ArrayData",
+      "readback": "IN:BD:PRF14:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "PRFD_sigx",
+      "pv_name": "IN:BD:PRFD:H:SIZE",
+      "readback": "IN:BD:PRFD:H:SIZE",
+      "group": "profile-size-x"
+    },
+    {
+      "name": "PRFD_sigy",
+      "pv_name": "IN:BD:PRFD:V:SIZE",
+      "readback": "IN:BD:PRFD:V:SIZE",
+      "group": "profile-size-y"
+    },
+    {
+      "name": "PRFD_image",
+      "pv_name": "IN:BD:PRFD:image1:ArrayData",
+      "readback": "IN:BD:PRFD:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "ENY_image",
+      "pv_name": "IN:BD:ENY:image1:ArrayData",
+      "readback": "IN:BD:ENY:image1:ArrayData",
+      "group": "profile-image"
+    },
+    {
+      "name": "KLY01_voltage_readback",
+      "pv_name": "IN:PP:KLY01:voltageHVDC:ai",
+      "readback": "IN:PP:KLY01:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY02_voltage_readback",
+      "pv_name": "IN:PP:KLY02:voltageHVDC:ai",
+      "readback": "IN:PP:KLY02:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY03_voltage_readback",
+      "pv_name": "IN:PP:KLY03:voltageHVDC:ai",
+      "readback": "IN:PP:KLY03:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY04_voltage_readback",
+      "pv_name": "IN:PP:KLY04:voltageHVDC:ai",
+      "readback": "IN:PP:KLY04:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY05_voltage_readback",
+      "pv_name": "IN:PP:KLY05:voltageHVDC:ai",
+      "readback": "IN:PP:KLY05:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY06_voltage_readback",
+      "pv_name": "IN:PP:KLY06:voltageHVDC:ai",
+      "readback": "IN:PP:KLY06:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY07_voltage_readback",
+      "pv_name": "IN:PP:KLY07:voltageHVDC:ai",
+      "readback": "IN:PP:KLY07:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY08_voltage_readback",
+      "pv_name": "IN:PP:KLY08:voltageHVDC:ai",
+      "readback": "IN:PP:KLY08:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY09_voltage_readback",
+      "pv_name": "IN:PP:KLY09:voltageHVDC:ai",
+      "readback": "IN:PP:KLY09:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY10_voltage_readback",
+      "pv_name": "IN:PP:KLY10:voltageHVDC:ai",
+      "readback": "IN:PP:KLY10:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY11_voltage_readback",
+      "pv_name": "IN:PP:KLY11:voltageHVDC:ai",
+      "readback": "IN:PP:KLY11:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY12_voltage_readback",
+      "pv_name": "IN:PP:KLY12:voltageHVDC:ai",
+      "readback": "IN:PP:KLY12:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY13_voltage_readback",
+      "pv_name": "IN:PP:KLY13:voltageHVDC:ai",
+      "readback": "IN:PP:KLY13:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY14_voltage_readback",
+      "pv_name": "IN:PP:KLY14:voltageHVDC:ai",
+      "readback": "IN:PP:KLY14:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY15_voltage_readback",
+      "pv_name": "IN:PP:KLY15:voltageHVDC:ai",
+      "readback": "IN:PP:KLY15:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY16_voltage_readback",
+      "pv_name": "IN:PP:KLY16:voltageHVDC:ai",
+      "readback": "IN:PP:KLY16:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY17_voltage_readback",
+      "pv_name": "IN:PP:KLY17:voltageHVDC:ai",
+      "readback": "IN:PP:KLY17:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY18_voltage_readback",
+      "pv_name": "IN:PP:KLY18:voltageHVDC:ai",
+      "readback": "IN:PP:KLY18:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY19_voltage_readback",
+      "pv_name": "IN:PP:KLY19:voltageHVDC:ai",
+      "readback": "IN:PP:KLY19:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "KLY20_voltage_readback",
+      "pv_name": "IN:PP:KLY20:voltageHVDC:ai",
+      "readback": "IN:PP:KLY20:voltageHVDC:ai",
+      "group": "klystron-voltage"
+    },
+    {
+      "name": "FCT1_peak_current",
+      "pv_name": "IN:BD:FCT1:I",
+      "readback": "IN:BD:FCT1:I",
+      "group": "current-transformer"
+    },
+    {
+      "name": "ICT01_charge",
+      "pv_name": "IN:BD:ICT1:C",
+      "readback": "IN:BD:ICT1:C",
+      "group": "charge"
+    },
+    {
+      "name": "ICT02_charge",
+      "pv_name": "IN:BD:ICT2:C",
+      "readback": "IN:BD:ICT2:C",
+      "group": "charge"
+    },
+    {
+      "name": "ICT03_charge",
+      "pv_name": "IN:BD:ICT3:C",
+      "readback": "IN:BD:ICT3:C",
+      "group": "charge"
+    },
+    {
+      "name": "ICT04_charge",
+      "pv_name": "IN:BD:ICT4:C",
+      "readback": "IN:BD:ICT4:C",
+      "group": "charge"
+    }
+  ]
+}
