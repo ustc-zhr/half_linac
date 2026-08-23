@@ -1,0 +1,22 @@
+{
+  "control_backends": ["real"],
+  "element_tag": "power_source_timing",
+  "default_element": "KLY01",
+  "devices": ["hv", "llrf", "ssa", "kly"],
+  "minimum_us": 0.0,
+  "readback_tolerance_us": 0.001,
+  "delay_step_us": 1,
+  "width_step_us": 1,
+  "step_choices_us": [0.001, 0.01, 0.1, 1.0],
+  "button_repeat_delay_ms": 300,
+  "button_repeat_interval_ms": 150,
+  "waveform_alignment": {
+    "reference_device": "llrf",
+    "default_display_mode": "normalized",
+    "default_threshold_fraction": 0.5,
+    "baseline_fraction": 0.1,
+    "refresh_interval_ms": 200,
+    "stale_after_s": 2.0
+  },
+  "write_control": {"vm": "blocked", "real": "allowed"}
+}

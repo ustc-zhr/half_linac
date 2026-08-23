@@ -51,6 +51,7 @@ SUPPORTED_APP_NAMES = {
     "dispersion_correction",
     "hv_feedback",
     "ct_monitor",
+    "power_source_timing",
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
 APP_WORKFLOW_FILES = {
@@ -66,6 +67,7 @@ APP_WORKFLOW_FILES = {
     "dispersion_correction": "dispersion_correction.json",
     "hv_feedback": "hv_feedback.json",
     "ct_monitor": "ct_monitor.json",
+    "power_source_timing": "power_source_timing.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
@@ -80,6 +82,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "dispersion_correction": ("dispersion_correction",),
     "hv_feedback": ("hv_feedback",),
     "ct_monitor": ("ct_monitor",),
+    "power_source_timing": ("power_source_timing",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",
@@ -917,6 +920,134 @@ def _validate_basic_app_support(
             _normalize_ct_monitor_workflow(workflow),
             control_backend,
         )
+        return
+
+    if app_name == "power_source_timing":
+        workflow = profile.workflows.get("power_source_timing")
+        if not isinstance(workflow, Mapping):
+            raise MachineProfileError(
+                "power_source_timing requires apps/power_source_timing.json."
+            )
+        configured_backends = tuple(
+            normalize_mode(value, "workflows.power_source_timing.control_backends[]")
+            for value in _expect_string_list(
+                workflow.get("control_backends"),
+                "workflows.power_source_timing.control_backends",
+            )
+        )
+        if control_backend not in configured_backends:
+            raise MachineProfileError(
+                f"power_source_timing does not support backend {control_backend!r}."
+            )
+        tag = _expect_non_empty_string(
+            workflow.get("element_tag"),
+            "workflows.power_source_timing.element_tag",
+        )
+        devices = tuple(
+            str(value).strip().lower()
+            for value in _expect_string_list(
+                workflow.get("devices"),
+                "workflows.power_source_timing.devices",
+            )
+        )
+        if devices != ("hv", "llrf", "ssa", "kly"):
+            raise MachineProfileError(
+                "workflows.power_source_timing.devices must be [hv, llrf, ssa, kly]."
+            )
+        required_channels = {
+            f"{device}_{suffix}"
+            for device in devices
+            for suffix in (
+                "delay_set",
+                "delay_readback",
+                "enable",
+                "width_set",
+                "width_readback",
+            )
+        }
+        candidates = [element for element in profile.elements if tag in element.tags]
+        if not candidates:
+            raise MachineProfileError(
+                "power_source_timing requires at least one tagged timing element."
+            )
+        for element in candidates:
+            missing = sorted(
+                channel
+                for channel in required_channels
+                if channel not in element.channels
+                or control_backend not in element.channels[channel]
+            )
+            if missing:
+                raise MachineProfileError(
+                    f"{element.id} is missing power-source timing channels: "
+                    + ", ".join(missing)
+                )
+        if str(workflow.get("default_element", "")) not in {
+            element.id for element in candidates
+        }:
+            raise MachineProfileError(
+                "workflows.power_source_timing.default_element is not eligible."
+            )
+        if _expect_finite_number(
+            workflow.get("minimum_us"),
+            "workflows.power_source_timing.minimum_us",
+        ) < 0:
+            raise MachineProfileError(
+                "workflows.power_source_timing.minimum_us must not be negative."
+            )
+        for key in ("readback_tolerance_us", "delay_step_us", "width_step_us"):
+            if _expect_finite_number(
+                workflow.get(key), f"workflows.power_source_timing.{key}"
+            ) <= 0:
+                raise MachineProfileError(
+                    f"workflows.power_source_timing.{key} must be positive."
+                )
+        alignment = _expect_mapping(
+            workflow.get("waveform_alignment", {}),
+            "workflows.power_source_timing.waveform_alignment",
+        )
+        if alignment:
+            reference = _expect_non_empty_string(
+                alignment.get("reference_device"),
+                "workflows.power_source_timing.waveform_alignment.reference_device",
+            ).lower()
+            if reference not in devices:
+                raise MachineProfileError(
+                    "power_source_timing waveform reference_device must be one of "
+                    "hv, llrf, ssa, or kly."
+                )
+            display_mode = _expect_non_empty_string(
+                alignment.get("default_display_mode"),
+                "workflows.power_source_timing.waveform_alignment.default_display_mode",
+            ).lower()
+            if display_mode not in {"raw", "normalized"}:
+                raise MachineProfileError(
+                    "power_source_timing waveform default_display_mode must be raw "
+                    "or normalized."
+                )
+            for key in ("default_threshold_fraction", "baseline_fraction"):
+                value = _expect_finite_number(
+                    alignment.get(key),
+                    f"workflows.power_source_timing.waveform_alignment.{key}",
+                )
+                if not 0.0 < value < 1.0:
+                    raise MachineProfileError(
+                        f"power_source_timing waveform {key} must be between 0 and 1."
+                    )
+            if _expect_int(
+                alignment.get("refresh_interval_ms"),
+                "workflows.power_source_timing.waveform_alignment.refresh_interval_ms",
+            ) <= 0:
+                raise MachineProfileError(
+                    "power_source_timing waveform refresh_interval_ms must be positive."
+                )
+            if _expect_finite_number(
+                alignment.get("stale_after_s"),
+                "workflows.power_source_timing.waveform_alignment.stale_after_s",
+            ) <= 0:
+                raise MachineProfileError(
+                    "power_source_timing waveform stale_after_s must be positive."
+                )
         return
 
 

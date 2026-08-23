@@ -76,18 +76,18 @@ GUI_SMOKE_SPECS = {
     "ct_monitor": GuiSmokeSpec(
         APP_ROOT / "ct_monitor" / "main.py",
         "CTMonitorWindow",
-        frozenset({"connection", "pairing"}),
+        frozenset({"monitor"}),
     ),
     "ct_monitor_real": GuiSmokeSpec(
         APP_ROOT / "ct_monitor" / "main.py",
         "CTMonitorWindow",
-        frozenset({"connection", "pairing"}),
+        frozenset({"monitor"}),
         control_backend="real",
     ),
     "ct_monitor_irfel_real": GuiSmokeSpec(
         APP_ROOT / "ct_monitor" / "main.py",
         "CTMonitorWindow",
-        frozenset({"connection", "pairing"}),
+        frozenset({"monitor"}),
         machine_id="irfel",
         control_backend="real",
     ),
@@ -433,14 +433,17 @@ def _run_child(app_name: str) -> None:
                 raise AssertionError("IRFEL CT current trend has the wrong axis label.")
             metric_cards = (
                 window.upstream_card,
-                window.downstream_card,
                 window.efficiency_card,
-                window.statistics_card,
+                window.downstream_card,
             )
             widths_before = [card.width() for card in metric_cards]
-            if max(widths_before) - min(widths_before) > 1:
+            if abs(widths_before[0] - widths_before[2]) > 1:
                 raise AssertionError(
-                    f"IRFEL CT metric cards are not equal width: {widths_before}."
+                    f"IRFEL CT endpoint cards are not equal width: {widths_before}."
+                )
+            if widths_before[1] <= widths_before[0]:
+                raise AssertionError(
+                    f"IRFEL CT transmission card is not emphasized: {widths_before}."
                 )
             window.efficiency_card.set_value(
                 "N/A",
@@ -482,7 +485,7 @@ def _run_child(app_name: str) -> None:
         window._refresh()
         if old_sample not in window.transmission_history:
             raise AssertionError("CT rolling history was incorrectly trimmed by trend span.")
-        if "n=9" not in window.statistics_card.detail_label.text():
+        if "Rolling 9:" not in window.efficiency_card.detail_label.text():
             raise AssertionError("CT rolling statistics did not use retained valid samples.")
         plotted_x = window.measurement_axis.lines[0].get_xdata()
         if any(value < -30.0 for value in plotted_x if math.isfinite(value)):
@@ -508,7 +511,7 @@ def _run_child(app_name: str) -> None:
         window._refresh()
         if len(window.transmission_history) != paused_count:
             raise AssertionError("CT monitor retained samples while paused.")
-        pairing_text = window.status_panel._items["pairing"][1].text()
+        pairing_text = window.status_panel._items["monitor"][1].text()
         if "Paused" not in pairing_text:
             raise AssertionError("CT monitor does not expose paused state in its compact badge.")
         if "discarded" not in window.statusBar().currentMessage():
@@ -517,6 +520,22 @@ def _run_child(app_name: str) -> None:
         window._swap_selection()
         if "Reverse order" not in window.selection_policy_label.text():
             raise AssertionError("CT monitor did not warn about a reverse-order CT pair.")
+        if window.fct_elements:
+            window.fct_waveform_elements = window.fct_elements[:1]
+            window._waveform_value_callback()(
+                value=[0.0, 1.0, 0.4, -0.1],
+                timestamp=time.time(),
+                units="A",
+            )
+            window._draw_plots(time.time())
+            fct_title = window.fct_axis.get_title(loc="left")
+            if "latest waveform" not in fct_title:
+                raise AssertionError(
+                    "CT monitor did not prefer an available FCT waveform: "
+                    f"{fct_title!r}."
+                )
+            if list(window.fct_axis.lines[0].get_ydata()) != [0.0, 1.0, 0.4, -0.1]:
+                raise AssertionError("CT monitor did not plot the latest FCT waveform values.")
 
     if app_name == "hv_feedback":
         required_buttons = (

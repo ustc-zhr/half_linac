@@ -771,6 +771,17 @@ APP_DEFINITIONS = {
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/dispersion_correction",
     },
+    "power_source_timing": {
+        "button_name": "power_source_timing_button",
+        "category": "control",
+        "button_text": "RF Power Source Timing",
+        "label": "RF Power Source Timing",
+        "window_title_patterns": ("RF Power Source Timing",),
+        "description": "Adjust HV, LLRF, SSA, and KLY RF timing together or individually.",
+        "workflow_name": "power_source_timing",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/power_source_timing",
+    },
     "energy_feedback": {
         "button_name": "energy_feedback_button",
         "category": "control",
@@ -807,6 +818,7 @@ PROFILE_MANAGED_APP_KEYS = {
     "emitmeasure": "emit_measure",
     "dispersion_correction": "dispersion_correction",
     "hv_feedback": "hv_feedback",
+    "power_source_timing": "power_source_timing",
 }
 
 
@@ -989,6 +1001,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.solenoid_centering_button.setObjectName("solenoid_centering_button")
         self.dispersion_correction_button = QPushButton(self.groupBox_5)
         self.dispersion_correction_button.setObjectName("dispersion_correction_button")
+        self.power_source_timing_button = QPushButton(self.groupBox_5)
+        self.power_source_timing_button.setObjectName("power_source_timing_button")
         self.ct_monitor_button = QPushButton(self.groupBox_4)
         self.ct_monitor_button.setObjectName("ct_monitor_button")
         self.pv_connection_check_button = QPushButton(self.groupBox_3)
@@ -1035,6 +1049,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                     self.BBA,
                     self.emitmeasure,
                     self.dispersion_correction_button,
+                    self.power_source_timing_button,
                 ],
                 1,
             ),

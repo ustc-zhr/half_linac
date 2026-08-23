@@ -78,6 +78,11 @@ Common logical channel meanings:
 | `current_readback` | A | read-only | `real` | power-supply current readback |
 | `voltage_set` | kV | writable | `vm`, `real` | modulator high-voltage setpoint |
 | `voltage_readback` | kV | read-only | `vm`, `real` | modulator high-voltage readback |
+| `{hv,llrf,ssa,kly}_delay_set` | us | writable | `real` | power-source trigger delay setpoint |
+| `{hv,llrf,ssa,kly}_delay_readback` | us | read-only | `real` | power-source trigger delay readback |
+| `{hv,llrf,ssa,kly}_width_set` | us | writable | `real` | power-source trigger pulse-width setpoint |
+| `{hv,llrf,ssa,kly}_width_readback` | us | read-only | `real` | power-source trigger pulse-width readback |
+| `{hv,llrf,ssa,kly}_enable` | boolean | writable | `real` | power-source trigger enable state |
 | `current` | A | read-only | `real` | beam current measured by an ICT in macro-pulse/micro-pulse operation |
 | `kick` | rad | writable | `vm` | corrector kick used by elegant `KICK` |
 | `angle` | rad | writable | `vm` | bend angle used by elegant `ANGLE` |

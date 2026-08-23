@@ -2346,180 +2346,240 @@
       "kind": "modulator",
       "display_name": "KLY01 Modulator HVDC",
       "order": 246,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY02",
       "kind": "modulator",
       "display_name": "KLY02 Modulator HVDC",
       "order": 247,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY03",
       "kind": "modulator",
       "display_name": "KLY03 Modulator HVDC",
       "order": 248,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY04",
       "kind": "modulator",
       "display_name": "KLY04 Modulator HVDC",
       "order": 249,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY05",
       "kind": "modulator",
       "display_name": "KLY05 Modulator HVDC",
       "order": 250,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY06",
       "kind": "modulator",
       "display_name": "KLY06 Modulator HVDC",
       "order": 251,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY07",
       "kind": "modulator",
       "display_name": "KLY07 Modulator HVDC",
       "order": 252,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY08",
       "kind": "modulator",
       "display_name": "KLY08 Modulator HVDC",
       "order": 253,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY09",
       "kind": "modulator",
       "display_name": "KLY09 Modulator HVDC",
       "order": 254,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY10",
       "kind": "modulator",
       "display_name": "KLY10 Modulator HVDC",
       "order": 255,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY11",
       "kind": "modulator",
       "display_name": "KLY11 Modulator HVDC",
       "order": 256,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY12",
       "kind": "modulator",
       "display_name": "KLY12 Modulator HVDC",
       "order": 257,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY13",
       "kind": "modulator",
       "display_name": "KLY13 Modulator HVDC",
       "order": 258,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY14",
       "kind": "modulator",
       "display_name": "KLY14 Modulator HVDC",
       "order": 259,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY15",
       "kind": "modulator",
       "display_name": "KLY15 Modulator HVDC",
       "order": 260,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY16",
       "kind": "modulator",
       "display_name": "KLY16 Modulator HVDC",
       "order": 261,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY17",
       "kind": "modulator",
       "display_name": "KLY17 Modulator HVDC",
       "order": 262,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY18",
       "kind": "modulator",
       "display_name": "KLY18 Modulator HVDC",
       "order": 263,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY19",
       "kind": "modulator",
       "display_name": "KLY19 Modulator HVDC",
       "order": 264,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "KLY20",
       "kind": "modulator",
       "display_name": "KLY20 Modulator HVDC",
       "order": 265,
-      "tags": ["modulator", "hvdc"],
+      "tags": ["modulator", "hvdc", "power_source_timing"],
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
-      "logical_channels": ["voltage_set", "voltage_readback"]
+      "logical_channels": [
+        "voltage_set", "voltage_readback",
+        "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
+      ]
     },
     {
       "id": "LLRF01",
