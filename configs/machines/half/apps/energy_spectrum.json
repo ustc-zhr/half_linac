@@ -29,6 +29,7 @@
       "start_element_tag": "esa_start",
       "default_start_element": "QT02",
       "model_lines": {"dispersion": "ESAlocal", "twiss": "ALL_ESA"},
+      "energy_slider_range_mev": [0, 2450],
       "energy0_default_mev": 2200,
       "design_eta_m": 0.7484210850804714
     },
@@ -42,6 +43,8 @@
       "start_elements": ["QL01", "QL02"],
       "default_start_element": "QL01",
       "model_lines": {"dispersion": "PRF02local", "twiss": "ALL_MAIN"},
+      "energy_range_mev": [0, 130],
+      "energy_slider_range_mev": [0, 130],
       "energy0_default_mev": 114.16,
       "design_eta_m": -0.3280857973174453
     }

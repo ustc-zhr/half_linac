@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 from epics import caget, caget_many, caput, caput_many, PV
 
-from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QApplication,
@@ -43,6 +43,8 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QStyle,
+    QStyleOptionSlider,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -910,6 +912,30 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             )
         return low, high
 
+    def _energy_slider_range(self):
+        control_low, control_high = self._energy_control_range()
+        configured = self.energy_config.get(
+            "energy_slider_range_mev",
+            (control_low, control_high),
+        )
+        if not isinstance(configured, (list, tuple)) or len(configured) != 2:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.energy_slider_range_mev must be [low, high]."
+            )
+        low, high = (float(configured[0]), float(configured[1]))
+        if (
+            not np.isfinite(low)
+            or not np.isfinite(high)
+            or low >= high
+            or low < control_low
+            or high > control_high
+        ):
+            raise MachineProfileError(
+                "workflows.energy_spectrum.energy_slider_range_mev must be finite, "
+                "in increasing order, and inside the configured energy control range."
+            )
+        return low, high
+
     def _energy_control_configured_for_backend(self):
         configured_backends = self.energy_config.get("energy_control_backends")
         if configured_backends is None:
@@ -1042,11 +1068,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _apply_station_controls(self):
         energy_low, energy_high = self._energy_control_range()
-        self.slider_energy.setRange(
-            math.ceil(energy_low * self._energy_slider_scale),
-            math.floor(energy_high * self._energy_slider_scale),
-        )
         self.target_energy_spin.setRange(energy_low, energy_high)
+        slider_low, slider_high = self._energy_slider_range()
+        self.slider_energy.setRange(
+            math.ceil(slider_low * self._energy_slider_scale),
+            math.floor(slider_high * self._energy_slider_scale),
+        )
+        default_nudge = float(
+            self.energy_config.get(
+                "energy_nudge_step_mev",
+                1.0 if slider_high - slider_low > 500 else 0.1,
+            )
+        )
+        default_nudge_index = self.energy_nudge_step_combo.findData(default_nudge)
+        if default_nudge_index >= 0:
+            self.energy_nudge_step_combo.setCurrentIndex(default_nudge_index)
         scan_low, scan_high = self._auto_tune_widget_range(energy_low, energy_high)
         for spin in (self.auto_tune_min_spin, self.auto_tune_max_spin):
             spin.setRange(scan_low, scan_high)
@@ -1242,8 +1278,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             source == "reference_pv"
             and hasattr(self, "target_energy_spin")
             and not self._auto_tune_is_running()
-            and not self.slider_energy.isSliderDown()
             and not self.target_energy_spin.hasFocus()
+            and not self.slider_energy.isSliderDown()
         ):
             self._set_target_energy_control(energy)
         return energy, source, source_pv
@@ -1604,13 +1640,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _configure_energy_tuning_controls(self):
         self._energy_slider_scale = 100  # 0.01 MeV per slider count.
         energy_low, energy_high = self._energy_control_range()
+        slider_low, slider_high = self._energy_slider_range()
 
         self.slider_energy.setRange(
-            math.ceil(energy_low * self._energy_slider_scale),
-            math.floor(energy_high * self._energy_slider_scale),
+            math.ceil(slider_low * self._energy_slider_scale),
+            math.floor(slider_high * self._energy_slider_scale),
         )
         self.slider_energy.setSingleStep(1)
         self.slider_energy.setPageStep(100)
+        self.slider_energy.installEventFilter(self)
 
         self.target_energy_spin = QDoubleSpinBox(self.groupBox_8)
         self.target_energy_spin.setObjectName("targetEnergySpinBox")
@@ -1620,10 +1658,50 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.target_energy_spin.setSuffix(" MeV")
         self.target_energy_spin.setKeyboardTracking(False)
         self.target_energy_spin.setProperty("dense", True)
+        self.target_energy_spin.setMinimumWidth(110)
+
+        self.apply_target_energy_button = QPushButton("Set", self.groupBox_8)
+        self.apply_target_energy_button.setObjectName("pushButton_applyTargetEnergy")
+        self.apply_target_energy_button.setProperty("tight", True)
+
+        self.energy_nudge_label = QLabel("Step", self.groupBox_8)
+        self.energy_nudge_label.setProperty("role", "field")
+        self.energy_nudge_step_combo = QComboBox(self.groupBox_8)
+        self.energy_nudge_step_combo.setObjectName("comboBox_energyNudgeStep")
+        self.energy_nudge_step_combo.setProperty("dense", True)
+        for step in (0.01, 0.1, 1.0):
+            self.energy_nudge_step_combo.addItem(f"{step:.2f} MeV", step)
+        default_nudge = 1.0 if energy_high - energy_low > 500 else 0.1
+        self.energy_nudge_step_combo.setCurrentIndex(
+            self.energy_nudge_step_combo.findData(default_nudge)
+        )
+
+        self.decrease_target_energy_button = QPushButton("←", self.groupBox_8)
+        self.decrease_target_energy_button.setObjectName("pushButton_decreaseTargetEnergy")
+        self.increase_target_energy_button = QPushButton("→", self.groupBox_8)
+        self.increase_target_energy_button.setObjectName("pushButton_increaseTargetEnergy")
+        for button in (
+            self.decrease_target_energy_button,
+            self.increase_target_energy_button,
+        ):
+            button.setProperty("tight", True)
+            button.setFixedWidth(38)
+
+        nudge_layout = QHBoxLayout()
+        nudge_layout.setContentsMargins(0, 0, 0, 0)
+        nudge_layout.setSpacing(6)
+        nudge_layout.addWidget(self.energy_nudge_step_combo, 1)
+        nudge_layout.addWidget(self.decrease_target_energy_button)
+        nudge_layout.addWidget(self.increase_target_energy_button)
 
         self.gridLayout_6.removeWidget(self.label_sliderenergy)
         self.label_sliderenergy.hide()
+        self.gridLayout_6.addWidget(self.slider_energy, 0, 1)
         self.gridLayout_6.addWidget(self.target_energy_spin, 0, 2)
+        self.gridLayout_6.addWidget(self.apply_target_energy_button, 0, 3)
+        self.gridLayout_6.addWidget(self.energy_nudge_label, 1, 0)
+        self.gridLayout_6.addLayout(nudge_layout, 1, 1, 1, 3)
+        self.gridLayout_6.setColumnStretch(1, 1)
 
         scan_config = self._auto_tune_scan_config()
         scan_low, scan_high = self._auto_tune_widget_range(energy_low, energy_high)
@@ -1997,7 +2075,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         energy = float(energy_mev)
         energy = min(max(energy, self.target_energy_spin.minimum()), self.target_energy_spin.maximum())
         slider_value = int(round(energy * self._energy_slider_scale))
-        slider_value = min(max(slider_value, self.slider_energy.minimum()), self.slider_energy.maximum())
+        slider_value = min(
+            max(slider_value, self.slider_energy.minimum()),
+            self.slider_energy.maximum(),
+        )
         slider_was_blocked = self.slider_energy.blockSignals(True)
         spin_was_blocked = self.target_energy_spin.blockSignals(True)
         try:
@@ -2072,7 +2153,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.label_3.setText("Refresh (s)")
         self.label_10.setText("Fit Method")
         self.label_4.setText("Energy (MeV)")
-        self.label_6.setText("Spread (%)")
+        self.label_6.setText("Spread")
         self.label_9.setText("Input @")
         self.label_11.setText("Target")
         self.label_14.setText("Energy setpoint")
@@ -2389,7 +2470,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.slider_energy.valueChanged.connect(self._update_energy_slider_label)
         self.slider_energy.sliderReleased.connect(self.set_bend_quad)
         self.target_energy_spin.valueChanged.connect(self._update_energy_slider_from_spin)
-        self.target_energy_spin.editingFinished.connect(self.set_bend_quad)
+        self.target_energy_spin.lineEdit().returnPressed.connect(self.set_bend_quad)
+        self.apply_target_energy_button.clicked.connect(self.set_bend_quad)
+        self.decrease_target_energy_button.clicked.connect(
+            lambda: self._nudge_target_energy(-1)
+        )
+        self.increase_target_energy_button.clicked.connect(
+            lambda: self._nudge_target_energy(1)
+        )
         self.auto_tune_objective_combo.currentIndexChanged.connect(
             self._sync_energy_control_state
         )
@@ -2412,7 +2500,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.comboBox_colormap: "Image color map selector",
             self.comboBox_fitmethod: "Spectrum fit method selector",
             self.label_energy: "Energy center readout",
-            self.label_energyspread: "Energy spread readout",
+            self.label_energyspread: "Relative and absolute energy spread readout",
             self.checkBox_emit: "Subtract emittance contribution toggle",
             self.checkBox_bg: "Subtract background image toggle",
             self.comboBox_start_element: "Optics input element selector",
@@ -2427,7 +2515,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.pushButton_cal_twiss_disp: "Update optics button",
             self.slider_energy: "Target energy slider",
             self.target_energy_spin: "Energy setpoint precise input",
-            self.label_sliderenergy: "Target energy value",
+            self.apply_target_energy_button: "Apply target energy",
+            self.energy_nudge_step_combo: "Energy adjustment step",
+            self.decrease_target_energy_button: "Decrease target energy by selected step",
+            self.increase_target_energy_button: "Increase target energy by selected step",
             self.auto_tune_min_spin: "Auto Find minimum energy",
             self.auto_tune_max_spin: "Auto Find maximum energy",
             self.auto_tune_coarse_steps_spin: "Auto Find coarse scan points",
@@ -2506,6 +2597,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.comboBox_colormap,
             self.comboBox_fitmethod,
             self.comboBox_start_element,
+            self.energy_nudge_step_combo,
             self.auto_tune_objective_combo,
         ):
             if not isinstance(combo.view(), QListView):
@@ -2533,30 +2625,59 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _sync_energy_control_state(self):
         writes_allowed = self._writes_allowed()
         auto_tune_configured = self._auto_tune_configured_for_backend()
-        slider_enabled = (
+        manual_energy_enabled = (
             self.control_backend == "real"
             and self.energy_set_pv is not None
             and self._energy_control_configured_for_backend()
             and not self._auto_tune_is_running()
             and writes_allowed
         )
-        self.slider_energy.setEnabled(slider_enabled)
-        self.target_energy_spin.setEnabled(slider_enabled)
+        manual_energy_controls = (
+            self.slider_energy,
+            self.target_energy_spin,
+            self.apply_target_energy_button,
+            self.energy_nudge_step_combo,
+            self.decrease_target_energy_button,
+            self.increase_target_energy_button,
+        )
+        for widget in manual_energy_controls:
+            widget.setEnabled(manual_energy_enabled)
         if self._auto_tune_is_running():
-            self.slider_energy.setToolTip("Disabled while bend scan is running.")
-        elif slider_enabled:
-            self.slider_energy.setToolTip(f"Release to write target energy to {self.energy_set_pv}.")
+            manual_tooltip = "Disabled while bend scan is running."
+        elif manual_energy_enabled:
+            manual_tooltip = f"Write target energy to {self.energy_set_pv}."
         elif self.control_backend == "real" and not writes_allowed:
-            self.slider_energy.setToolTip("Real-machine energy writes are blocked by machine profile.")
+            manual_tooltip = "Real-machine energy writes are blocked by machine profile."
         elif not self._energy_control_configured_for_backend():
-            self.slider_energy.setToolTip(
+            manual_tooltip = (
                 "Energy setpoint control is disabled for this station/backend."
             )
         elif self.control_backend == "vm":
-            self.slider_energy.setToolTip("VM backend does not support direct energy setpoint control.")
+            manual_tooltip = "VM backend does not support direct energy setpoint control."
         else:
-            self.slider_energy.setToolTip("No energy_set_pv configured for the real backend.")
-        self.target_energy_spin.setToolTip(self.slider_energy.toolTip())
+            manual_tooltip = "No energy_set_pv configured for the real backend."
+        self.target_energy_spin.setToolTip(
+            manual_tooltip + (" Press Enter or Set to apply." if manual_energy_enabled else "")
+        )
+        self.slider_energy.setToolTip(
+            manual_tooltip
+            + (
+                " Drag and release to apply; click either side of the handle to adjust by Step."
+                if manual_energy_enabled
+                else ""
+            )
+        )
+        self.apply_target_energy_button.setToolTip(manual_tooltip)
+        self.energy_nudge_step_combo.setToolTip("Select the amount applied by the arrow buttons.")
+        for button in (
+            self.decrease_target_energy_button,
+            self.increase_target_energy_button,
+        ):
+            button.setToolTip(
+                "Adjust the target by the selected step and apply it immediately."
+                if manual_energy_enabled
+                else manual_tooltip
+            )
 
         auto_tune_enabled = (
             self.control_backend == "real"
@@ -2823,7 +2944,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 self._readout_tooltip,
             )
         elif energy_text and energy_text != "N/A" and spread_text and spread_text != "N/A":
-            self.status_panel.set_item("readout", f"{energy_text} MeV / {spread_text}%", "success")
+            self.status_panel.set_item("readout", f"{energy_text} MeV / {spread_text}", "success")
         elif self._pv_available:
             self.status_panel.set_item("readout", "Waiting", "subtle")
         else:
@@ -2854,7 +2975,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _set_energy_outputs(self, energy_center, energy_spread):
         self._clear_readout_status()
         self.label_energy.setText("{:.4f}".format(energy_center))
-        self.label_energyspread.setText("{:.4f}".format(energy_spread * 1e2))
+        energy_spread_mev = abs(energy_center * energy_spread)
+        self.label_energyspread.setText(
+            "{:.4f}% / {:.4f} MeV".format(energy_spread * 1e2, energy_spread_mev)
+        )
         self._refresh_status()
 
     def _set_energy_unavailable(self, status_text=None, tooltip=None, *, energy_center=None):
@@ -2897,6 +3021,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "energy0_source": str(energy0_source),
             "energy_center_mev": float(energy_center_mev),
             "energy_spread_fraction": float(energy_spread),
+            "energy_spread_mev": float(abs(energy_center_mev * energy_spread)),
             "eta_m": float(self.eta_flag),
             "beta_m": float(self.beta_flag),
             "emittance_m": float(self.emi_flag),
@@ -3677,20 +3802,53 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.target_energy_spin.setValue(energy)
         finally:
             self.target_energy_spin.blockSignals(spin_was_blocked)
-        self.label_sliderenergy.setText(f"{energy:.2f}")
 
     def _update_energy_slider_from_spin(self, value):
         slider_value = int(round(float(value) * self._energy_slider_scale))
-        slider_value = min(max(slider_value, self.slider_energy.minimum()), self.slider_energy.maximum())
+        slider_value = min(
+            max(slider_value, self.slider_energy.minimum()),
+            self.slider_energy.maximum(),
+        )
         slider_was_blocked = self.slider_energy.blockSignals(True)
         try:
             self.slider_energy.setValue(slider_value)
         finally:
             self.slider_energy.blockSignals(slider_was_blocked)
 
+    def eventFilter(self, watched, event):
+        if (
+            watched is self.slider_energy
+            and event.type() == QEvent.MouseButtonPress
+            and event.button() == Qt.LeftButton
+        ):
+            option = QStyleOptionSlider()
+            self.slider_energy.initStyleOption(option)
+            handle_rect = self.slider_energy.style().subControlRect(
+                QStyle.CC_Slider,
+                option,
+                QStyle.SC_SliderHandle,
+                self.slider_energy,
+            )
+            if not handle_rect.contains(event.pos()):
+                direction = -1 if event.pos().x() < handle_rect.center().x() else 1
+                self._nudge_target_energy(direction)
+                event.accept()
+                return True
+        return super().eventFilter(watched, event)
+
+    def _nudge_target_energy(self, direction):
+        step = float(self.energy_nudge_step_combo.currentData())
+        target = self.target_energy_spin.value() + int(direction) * step
+        target = min(
+            max(target, self.target_energy_spin.minimum()),
+            self.target_energy_spin.maximum(),
+        )
+        self._set_target_energy_control(target)
+        self.set_bend_quad()
+
     def set_bend_quad(self):
         """
-        update the energy0 value according to slider position
+        Apply the selected target energy to the configured control PV.
         这里energy0是由ESA的弯铁强度决定的
         """
         target_energy = self.target_energy_spin.value()

@@ -1547,17 +1547,19 @@ def _validate_energy_spectrum_workflow(
                 "workflows.energy_spectrum.model_snapshot_source must select design or live data."
             )
 
-    energy_range = workflow.get("energy_range_mev")
-    if energy_range is not None:
+    for energy_range_key in ("energy_range_mev", "energy_slider_range_mev"):
+        energy_range = workflow.get(energy_range_key)
+        if energy_range is None:
+            continue
         if not isinstance(energy_range, list) or len(energy_range) != 2:
             raise MachineProfileError(
-                "workflows.energy_spectrum.energy_range_mev must be [low, high]."
+                f"workflows.energy_spectrum.{energy_range_key} must be [low, high]."
             )
         try:
             energy_low, energy_high = (float(energy_range[0]), float(energy_range[1]))
         except (TypeError, ValueError) as exc:
             raise MachineProfileError(
-                "workflows.energy_spectrum.energy_range_mev must be numeric."
+                f"workflows.energy_spectrum.{energy_range_key} must be numeric."
             ) from exc
         if (
             not math.isfinite(energy_low)
@@ -1565,7 +1567,7 @@ def _validate_energy_spectrum_workflow(
             or energy_low >= energy_high
         ):
             raise MachineProfileError(
-                "workflows.energy_spectrum.energy_range_mev requires finite low < high."
+                f"workflows.energy_spectrum.{energy_range_key} requires finite low < high."
             )
 
     design_eta = workflow.get("design_eta_m")

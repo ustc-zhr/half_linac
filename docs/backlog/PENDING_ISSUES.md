@@ -90,6 +90,32 @@
     - score
   - Keep this separate from the core tuner logic so the scan algorithm stays simple.
 
+### 2a. PRF02 Temporary Observation Optics
+
+- Status: open
+- Priority: medium
+- Background:
+  - PRF02 is a temporary preinjector energy-spectrum station using dispersion from BL01A.
+  - Offline first-order Elegant studies indicate that reducing `QL01.K1` from its
+    design value `6.345664 1/m^2` to approximately `4.86 1/m^2`, while keeping
+    `QL02.K1` at `-10.88725 1/m^2`, can increase the modeled PRF02 dispersion from
+    approximately `-0.328 m` to `-0.609 m` and reduce the horizontal beta at PRF02.
+  - Operators can temporarily apply the candidate with Machine Setpoint and then use
+    Energy Spectrum `Update eta`; no direct quadrupole write is currently needed in
+    the Energy Spectrum app.
+- Follow-up:
+  - Add an explicit `Apply PRF02 observation optics` operation.
+  - Before applying it, capture the actual entry setpoints and readbacks for QL01 and
+    QL02 instead of assuming they equal lattice design values.
+  - Add a paired `Restore entry optics` operation that restores that captured snapshot,
+    verifies both readbacks, and reports partial-write or timeout failures clearly.
+  - Ramp setpoints, apply configured limits and tolerances, log the transaction, and
+    warn before closing the app while observation optics remain active.
+  - Keep the actions unavailable for other stations and require an operator confirmation
+    showing current, target, and restore values.
+  - Confirm the authoritative real-machine control quantity (`current`, writable `K1`,
+    or `K1:ADJ`) and the K1-to-current calibration before enabling real writes.
+
 ### 3. IRFEL Energy Spectrum Real Bring-up
 
 - Status: open

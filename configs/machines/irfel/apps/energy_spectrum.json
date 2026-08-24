@@ -23,6 +23,8 @@
   "start_elements": ["QM12", "QM19"],
   "default_start_element": "QM12",
   "model_lines": {"dispersion": "ESAlocal", "twiss": "ALL_ESA"},
+  "energy_range_mev": [0, 65],
+  "energy_slider_range_mev": [0, 65],
   "optics_input_presets": {
     "QM12": {"alpha_x": -2.26, "beta_x_m": 10, "emittance_x_nm": 102.81183}
   },
