@@ -1166,9 +1166,9 @@
       "kly_enable": "IN:TM:KLY01:enable:bo",
       "kly_width_set": "IN:TM:KLY01:width:ao",
       "kly_width_readback": "IN:TM:KLY01:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF01:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF01:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF01:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF01:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF01:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF01:CH2_RAW"
     },
     "KLY02": {
       "voltage_set": "IN:PP:KLY02:setVoltageHVDC:ao",
@@ -1193,9 +1193,9 @@
       "kly_enable": "IN:TM:KLY02:enable:bo",
       "kly_width_set": "IN:TM:KLY02:width:ao",
       "kly_width_readback": "IN:TM:KLY02:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF02:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF02:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF02:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF02:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF02:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF02:CH2_RAW"
     },
     "KLY03": {
       "voltage_set": "IN:PP:KLY03:setVoltageHVDC:ao",
@@ -1220,9 +1220,9 @@
       "kly_enable": "IN:TM:KLY03:enable:bo",
       "kly_width_set": "IN:TM:KLY03:width:ao",
       "kly_width_readback": "IN:TM:KLY03:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF03:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF03:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF03:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF03:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF03:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF03:CH2_RAW"
     },
     "KLY04": {
       "voltage_set": "IN:PP:KLY04:setVoltageHVDC:ao",
@@ -1247,9 +1247,9 @@
       "kly_enable": "IN:TM:KLY04:enable:bo",
       "kly_width_set": "IN:TM:KLY04:width:ao",
       "kly_width_readback": "IN:TM:KLY04:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF04:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF04:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF04:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF04:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF04:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF04:CH2_RAW"
     },
     "KLY05": {
       "voltage_set": "IN:PP:KLY05:setVoltageHVDC:ao",
@@ -1274,9 +1274,9 @@
       "kly_enable": "IN:TM:KLY05:enable:bo",
       "kly_width_set": "IN:TM:KLY05:width:ao",
       "kly_width_readback": "IN:TM:KLY05:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF05:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF05:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF05:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF05:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF05:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF05:CH2_RAW"
     },
     "KLY06": {
       "voltage_set": "IN:PP:KLY06:setVoltageHVDC:ao",
@@ -1301,9 +1301,9 @@
       "kly_enable": "IN:TM:KLY06:enable:bo",
       "kly_width_set": "IN:TM:KLY06:width:ao",
       "kly_width_readback": "IN:TM:KLY06:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF06:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF06:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF06:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF06:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF06:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF06:CH2_RAW"
     },
     "KLY07": {
       "voltage_set": "IN:PP:KLY07:setVoltageHVDC:ao",
@@ -1328,9 +1328,9 @@
       "kly_enable": "IN:TM:KLY07:enable:bo",
       "kly_width_set": "IN:TM:KLY07:width:ao",
       "kly_width_readback": "IN:TM:KLY07:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF07:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF07:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF07:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF07:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF07:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF07:CH2_RAW"
     },
     "KLY08": {
       "voltage_set": "IN:PP:KLY08:setVoltageHVDC:ao",
@@ -1355,9 +1355,9 @@
       "kly_enable": "IN:TM:KLY08:enable:bo",
       "kly_width_set": "IN:TM:KLY08:width:ao",
       "kly_width_readback": "IN:TM:KLY08:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF08:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF08:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF08:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF08:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF08:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF08:CH2_RAW"
     },
     "KLY09": {
       "voltage_set": "IN:PP:KLY09:setVoltageHVDC:ao",
@@ -1382,9 +1382,9 @@
       "kly_enable": "IN:TM:KLY09:enable:bo",
       "kly_width_set": "IN:TM:KLY09:width:ao",
       "kly_width_readback": "IN:TM:KLY09:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF09:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF09:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF09:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF09:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF09:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF09:CH2_RAW"
     },
     "KLY10": {
       "voltage_set": "IN:PP:KLY10:setVoltageHVDC:ao",
@@ -1409,9 +1409,9 @@
       "kly_enable": "IN:TM:KLY10:enable:bo",
       "kly_width_set": "IN:TM:KLY10:width:ao",
       "kly_width_readback": "IN:TM:KLY10:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF10:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF10:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF10:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF10:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF10:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF10:CH2_RAW"
     },
     "KLY11": {
       "voltage_set": "IN:PP:KLY11:setVoltageHVDC:ao",
@@ -1436,9 +1436,9 @@
       "kly_enable": "IN:TM:KLY11:enable:bo",
       "kly_width_set": "IN:TM:KLY11:width:ao",
       "kly_width_readback": "IN:TM:KLY11:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF11:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF11:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF11:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF11:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF11:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF11:CH2_RAW"
     },
     "KLY12": {
       "voltage_set": "IN:PP:KLY12:setVoltageHVDC:ao",
@@ -1463,9 +1463,9 @@
       "kly_enable": "IN:TM:KLY12:enable:bo",
       "kly_width_set": "IN:TM:KLY12:width:ao",
       "kly_width_readback": "IN:TM:KLY12:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF12:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF12:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF12:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF12:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF12:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF12:CH2_RAW"
     },
     "KLY13": {
       "voltage_set": "IN:PP:KLY13:setVoltageHVDC:ao",
@@ -1490,9 +1490,9 @@
       "kly_enable": "IN:TM:KLY13:enable:bo",
       "kly_width_set": "IN:TM:KLY13:width:ao",
       "kly_width_readback": "IN:TM:KLY13:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF13:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF13:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF13:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF13:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF13:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF13:CH2_RAW"
     },
     "KLY14": {
       "voltage_set": "IN:PP:KLY14:setVoltageHVDC:ao",
@@ -1517,9 +1517,9 @@
       "kly_enable": "IN:TM:KLY14:enable:bo",
       "kly_width_set": "IN:TM:KLY14:width:ao",
       "kly_width_readback": "IN:TM:KLY14:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF14:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF14:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF14:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF14:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF14:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF14:CH2_RAW"
     },
     "KLY15": {
       "voltage_set": "IN:PP:KLY15:setVoltageHVDC:ao",
@@ -1544,9 +1544,9 @@
       "kly_enable": "IN:TM:KLY15:enable:bo",
       "kly_width_set": "IN:TM:KLY15:width:ao",
       "kly_width_readback": "IN:TM:KLY15:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF15:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF15:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF15:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF15:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF15:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF15:CH2_RAW"
     },
     "KLY16": {
       "voltage_set": "IN:PP:KLY16:setVoltageHVDC:ao",
@@ -1571,9 +1571,9 @@
       "kly_enable": "IN:TM:KLY16:enable:bo",
       "kly_width_set": "IN:TM:KLY16:width:ao",
       "kly_width_readback": "IN:TM:KLY16:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF16:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF16:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF16:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF16:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF16:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF16:CH2_RAW"
     },
     "KLY17": {
       "voltage_set": "IN:PP:KLY17:setVoltageHVDC:ao",
@@ -1598,9 +1598,9 @@
       "kly_enable": "IN:TM:KLY17:enable:bo",
       "kly_width_set": "IN:TM:KLY17:width:ao",
       "kly_width_readback": "IN:TM:KLY17:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF17:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF17:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF17:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF17:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF17:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF17:CH2_RAW"
     },
     "KLY18": {
       "voltage_set": "IN:PP:KLY18:setVoltageHVDC:ao",
@@ -1625,9 +1625,9 @@
       "kly_enable": "IN:TM:KLY18:enable:bo",
       "kly_width_set": "IN:TM:KLY18:width:ao",
       "kly_width_readback": "IN:TM:KLY18:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF18:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF18:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF18:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF18:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF18:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF18:CH2_RAW"
     },
     "KLY19": {
       "voltage_set": "IN:PP:KLY19:setVoltageHVDC:ao",
@@ -1652,9 +1652,9 @@
       "kly_enable": "IN:TM:KLY19:enable:bo",
       "kly_width_set": "IN:TM:KLY19:width:ao",
       "kly_width_readback": "IN:TM:KLY19:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF19:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF19:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF19:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF19:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF19:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF19:CH2_RAW"
     },
     "KLY20": {
       "voltage_set": "IN:PP:KLY20:setVoltageHVDC:ao",
@@ -1679,30 +1679,44 @@
       "kly_enable": "IN:TM:KLY20:enable:bo",
       "kly_width_set": "IN:TM:KLY20:width:ao",
       "kly_width_readback": "IN:TM:KLY20:width:ai",
-      "llrf_waveform": "HALF:IN-MW:LLRF20:CH8_RAW",
-      "ssa_waveform": "HALF:IN-MW:LLRF20:CH1_RAW",
-      "kly_waveform": "HALF:IN-MW:LLRF20:CH2_RAW"
+      "llrf_waveform": "IN:MW:LLRF20:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF20:CH1_RAW",
+      "kly_waveform": "IN:MW:LLRF20:CH2_RAW"
     },
-    "LLRF01": {"phase_set": "HALF:IN-MW:LLRF01:SET_PHASE"},
-    "LLRF02": {"phase_set": "HALF:IN-MW:LLRF02:SET_PHASE"},
-    "LLRF03": {"phase_set": "HALF:IN-MW:LLRF03:SET_PHASE"},
-    "LLRF04": {"phase_set": "HALF:IN-MW:LLRF04:SET_PHASE"},
-    "LLRF05": {"phase_set": "HALF:IN-MW:LLRF05:SET_PHASE"},
-    "LLRF06": {"phase_set": "HALF:IN-MW:LLRF06:SET_PHASE"},
-    "LLRF07": {"phase_set": "HALF:IN-MW:LLRF07:SET_PHASE"},
-    "LLRF08": {"phase_set": "HALF:IN-MW:LLRF08:SET_PHASE"},
-    "LLRF09": {"phase_set": "HALF:IN-MW:LLRF09:SET_PHASE"},
-    "LLRF10": {"phase_set": "HALF:IN-MW:LLRF10:SET_PHASE"},
-    "LLRF11": {"phase_set": "HALF:IN-MW:LLRF11:SET_PHASE"},
-    "LLRF12": {"phase_set": "HALF:IN-MW:LLRF12:SET_PHASE"},
-    "LLRF13": {"phase_set": "HALF:IN-MW:LLRF13:SET_PHASE"},
-    "LLRF14": {"phase_set": "HALF:IN-MW:LLRF14:SET_PHASE"},
-    "LLRF15": {"phase_set": "HALF:IN-MW:LLRF15:SET_PHASE"},
-    "LLRF16": {"phase_set": "HALF:IN-MW:LLRF16:SET_PHASE"},
-    "LLRF17": {"phase_set": "HALF:IN-MW:LLRF17:SET_PHASE"},
-    "LLRF18": {"phase_set": "HALF:IN-MW:LLRF18:SET_PHASE"},
-    "LLRF19": {"phase_set": "HALF:IN-MW:LLRF19:SET_PHASE"},
-    "LLRF20": {"phase_set": "HALF:IN-MW:LLRF20:SET_PHASE"},
+    "PREBUNCHER": {
+      "llrf_delay_set": "IN:TM:LLRF00:delay:ao",
+      "llrf_delay_readback": "IN:TM:LLRF00:delay:ai",
+      "llrf_enable": "IN:TM:LLRF00:enable:bo",
+      "llrf_width_set": "IN:TM:LLRF00:width:ao",
+      "llrf_width_readback": "IN:TM:LLRF00:width:ai",
+      "ssa_delay_set": "IN:TM:SSA00:delay:ao",
+      "ssa_delay_readback": "IN:TM:SSA00:delay:ai",
+      "ssa_enable": "IN:TM:SSA00:enable:bo",
+      "ssa_width_set": "IN:TM:SSA00:width:ao",
+      "ssa_width_readback": "IN:TM:SSA00:width:ai",
+      "llrf_waveform": "IN:MW:LLRF00:CH8_RAW",
+      "ssa_waveform": "IN:MW:LLRF00:CH1_RAW"
+    },
+    "LLRF01": {"phase_set": "IN:MW:LLRF01:SET_PHASE"},
+    "LLRF02": {"phase_set": "IN:MW:LLRF02:SET_PHASE"},
+    "LLRF03": {"phase_set": "IN:MW:LLRF03:SET_PHASE"},
+    "LLRF04": {"phase_set": "IN:MW:LLRF04:SET_PHASE"},
+    "LLRF05": {"phase_set": "IN:MW:LLRF05:SET_PHASE"},
+    "LLRF06": {"phase_set": "IN:MW:LLRF06:SET_PHASE"},
+    "LLRF07": {"phase_set": "IN:MW:LLRF07:SET_PHASE"},
+    "LLRF08": {"phase_set": "IN:MW:LLRF08:SET_PHASE"},
+    "LLRF09": {"phase_set": "IN:MW:LLRF09:SET_PHASE"},
+    "LLRF10": {"phase_set": "IN:MW:LLRF10:SET_PHASE"},
+    "LLRF11": {"phase_set": "IN:MW:LLRF11:SET_PHASE"},
+    "LLRF12": {"phase_set": "IN:MW:LLRF12:SET_PHASE"},
+    "LLRF13": {"phase_set": "IN:MW:LLRF13:SET_PHASE"},
+    "LLRF14": {"phase_set": "IN:MW:LLRF14:SET_PHASE"},
+    "LLRF15": {"phase_set": "IN:MW:LLRF15:SET_PHASE"},
+    "LLRF16": {"phase_set": "IN:MW:LLRF16:SET_PHASE"},
+    "LLRF17": {"phase_set": "IN:MW:LLRF17:SET_PHASE"},
+    "LLRF18": {"phase_set": "IN:MW:LLRF18:SET_PHASE"},
+    "LLRF19": {"phase_set": "IN:MW:LLRF19:SET_PHASE"},
+    "LLRF20": {"phase_set": "IN:MW:LLRF20:SET_PHASE"},
     "FCT1": {
       "peak_current": "IN:BD:FCT1:I"
     },

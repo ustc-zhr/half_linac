@@ -2,7 +2,6 @@
   "control_backends": ["real"],
   "element_tag": "power_source_timing",
   "default_element": "KLY01",
-  "devices": ["hv", "llrf", "ssa", "kly"],
   "minimum_us": 0.0,
   "readback_tolerance_us": 0.001,
   "delay_step_us": 1,
@@ -11,6 +10,8 @@
   "button_repeat_delay_ms": 300,
   "button_repeat_interval_ms": 150,
   "waveform_alignment": {
+    "sample_rate_mhz": 105.78,
+    "shared_time_origin": false,
     "reference_device": "llrf",
     "default_display_mode": "normalized",
     "default_threshold_fraction": 0.5,

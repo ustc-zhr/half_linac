@@ -20,10 +20,22 @@ def _finite(value: float, name: str) -> float:
 @dataclass
 class TimingValues:
     minimum_us: float = 0.0
+    devices: tuple[str, ...] = DEVICES
     target: dict[ValueKey, float] = field(default_factory=dict)
     setpoint: dict[ValueKey, float] = field(default_factory=dict)
     readback: dict[ValueKey, float] = field(default_factory=dict)
     enabled: dict[str, bool] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        normalized = tuple(str(device).strip().lower() for device in self.devices)
+        if not normalized:
+            raise ValueError("At least one timing device is required.")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("Timing devices must be unique.")
+        unsupported = [device for device in normalized if device not in DEVICES]
+        if unsupported:
+            raise ValueError(f"Unsupported timing device: {unsupported[0]!r}.")
+        self.devices = normalized
 
     def sync_setpoint(
         self,
@@ -74,7 +86,9 @@ class TimingValues:
         return self.request_value(device, quantity, self.target[key] + float(delta_us))
 
     def shift_group_delay(self, delta_us: float) -> dict[ValueKey, float]:
-        missing = [device for device in DEVICES if (device, "delay") not in self.target]
+        missing = [
+            device for device in self.devices if (device, "delay") not in self.target
+        ]
         if missing:
             raise ValueError(
                 "Delay targets are not available yet: "
@@ -82,7 +96,7 @@ class TimingValues:
             )
         targets = {
             (device, "delay"): self.target[(device, "delay")] + float(delta_us)
-            for device in DEVICES
+            for device in self.devices
         }
         below = {
             device: value
@@ -103,14 +117,16 @@ class TimingValues:
             return None
         return abs(self.readback[key] - self.target[key]) <= float(tolerance_us)
 
-    @staticmethod
-    def _validate_device(device: str) -> None:
+    def _validate_device(self, device: str) -> None:
         if device not in DEVICES:
             raise ValueError(f"Unsupported timing device: {device!r}.")
+        if device not in self.devices:
+            raise ValueError(
+                f"Timing device {device!r} is not available in the selected group."
+            )
 
-    @classmethod
-    def _validate_key(cls, device: str, quantity: str) -> None:
-        cls._validate_device(device)
+    def _validate_key(self, device: str, quantity: str) -> None:
+        self._validate_device(device)
         if quantity not in QUANTITIES:
             raise ValueError(f"Unsupported timing quantity: {quantity!r}.")
 

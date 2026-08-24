@@ -124,6 +124,7 @@ QSplitter::handle {{ background: {palette['border']}; height: 3px; }}
 
 @dataclass
 class ChannelWidgets:
+    channel_label: QLabel
     enable: QPushButton
     delay_target: "RequestSpinBox"
     delay_setpoint: QLabel
@@ -236,6 +237,7 @@ class TimingWindow(QMainWindow):
         selector_grid.setVerticalSpacing(6)
         self.group_button_group = QButtonGroup(self)
         self.group_button_group.setExclusive(True)
+        selector_columns = min(11, max(1, math.ceil(len(self.runtime.groups) / 2)))
         for index, group in enumerate(self.runtime.groups):
             button = QPushButton(group.element_id, selector_panel)
             button.setCheckable(True)
@@ -244,7 +246,11 @@ class TimingWindow(QMainWindow):
             button.clicked.connect(
                 lambda _checked=False, element_id=group.element_id: self._select_group(element_id)
             )
-            selector_grid.addWidget(button, index // 10, index % 10)
+            selector_grid.addWidget(
+                button,
+                index // selector_columns,
+                index % selector_columns,
+            )
             self.group_button_group.addButton(button)
             self.group_buttons[group.element_id] = button
         selector_layout.addLayout(selector_grid)
@@ -260,7 +266,8 @@ class TimingWindow(QMainWindow):
         controls = QFrame(root)
         controls.setObjectName("panel")
         controls.setToolTip(
-            "Four-channel adjustment changes delay only. Disabled channels still accept "
+            "Linked adjustment changes delay only for the selected RF chain. "
+            "Disabled channels still accept "
             f"delay/width presets. Set/readback tolerance: "
             f"{self.runtime.readback_tolerance_us:g} μs."
         )
@@ -292,7 +299,7 @@ class TimingWindow(QMainWindow):
             widgets = self._build_channel_row(device, controls)
             self.channel_widgets[device] = widgets
             row_widgets = (
-                QLabel(DEVICE_LABELS[device], controls),
+                widgets.channel_label,
                 widgets.enable,
                 widgets.delay_target,
                 widgets.delay_advance,
@@ -309,13 +316,13 @@ class TimingWindow(QMainWindow):
             for column, widget in enumerate(row_widgets):
                 table.addWidget(widget, row, column)
         group_row = 2 + len(DEVICES)
-        group_label = self._field_label("Four-Channel Delay")
-        group_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        table.addWidget(group_label, group_row, 0, 1, 3)
+        self.linked_delay_label = self._field_label("Linked Delay")
+        self.linked_delay_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        table.addWidget(self.linked_delay_label, group_row, 0, 1, 3)
         self.group_advance = self._repeat_button("◀")
         self.group_delay = self._repeat_button("▶")
-        self.group_advance.setToolTip("Move all four delays earlier")
-        self.group_delay.setToolTip("Move all four delays later")
+        self.group_advance.setToolTip("Move all linked delays earlier")
+        self.group_delay.setToolTip("Move all linked delays later")
         self.group_advance.clicked.connect(lambda: self._shift_group_by_step(-1.0))
         self.group_delay.clicked.connect(lambda: self._shift_group_by_step(1.0))
         table.addWidget(self.group_advance, group_row, 3)
@@ -363,6 +370,7 @@ class TimingWindow(QMainWindow):
         self.waveform_view.apply_theme(palette)
 
     def _build_channel_row(self, device: str, parent: QWidget) -> ChannelWidgets:
+        channel_label = QLabel(DEVICE_LABELS[device], parent)
         enable = QPushButton("Unavailable", parent)
         enable.setCheckable(True)
         enable.setMinimumWidth(96)
@@ -400,6 +408,7 @@ class TimingWindow(QMainWindow):
             lambda _checked=False, name=device: self._shift_one_by_step(name, "width", 1.0)
         )
         return ChannelWidgets(
+            channel_label=channel_label,
             enable=enable,
             delay_target=delay_target,
             delay_setpoint=self._value_label(),
@@ -475,7 +484,10 @@ class TimingWindow(QMainWindow):
             return
         group = self.groups[element_id]
         self.current_group = group
-        self.values = TimingValues(minimum_us=self.runtime.minimum_us)
+        self.values = TimingValues(
+            minimum_us=self.runtime.minimum_us,
+            devices=group.devices,
+        )
         self.connected.clear()
         self.failed_devices.clear()
         self.failed_trigger_devices.clear()
@@ -483,6 +495,10 @@ class TimingWindow(QMainWindow):
         self.external_resync_keys.clear()
         for device in DEVICES:
             self._clear_row(device)
+            self._set_channel_row_visible(device, device in group.devices)
+        self.linked_delay_label.setText(
+            f"Linked Delay ({len(group.devices)} channels)"
+        )
         self._refresh_adjustment_controls()
         with QSignalBlocker(self.group_buttons[element_id]):
             self.group_buttons[element_id].setChecked(True)
@@ -511,6 +527,25 @@ class TimingWindow(QMainWindow):
         ):
             label.setText("—")
         self._set_status(row.status, "Waiting for connection", "warning")
+
+    def _set_channel_row_visible(self, device: str, visible: bool) -> None:
+        row = self.channel_widgets[device]
+        for widget in (
+            row.channel_label,
+            row.enable,
+            row.delay_target,
+            row.delay_setpoint,
+            row.delay_readback,
+            row.delay_advance,
+            row.delay_delay,
+            row.width_target,
+            row.width_setpoint,
+            row.width_readback,
+            row.width_decrease,
+            row.width_increase,
+            row.status,
+        ):
+            widget.setVisible(visible)
 
     def _on_connection(self, device: str, field: str, connected: bool) -> None:
         self.connected[(device, field)] = connected
@@ -624,7 +659,8 @@ class TimingWindow(QMainWindow):
 
     def _group_delay_ready(self) -> bool:
         return self.current_group is not None and all(
-            self._quantity_ready(device, "delay") for device in DEVICES
+            self._quantity_ready(device, "delay")
+            for device in self.current_group.devices
         )
 
     def _refresh_adjustment_controls(self) -> None:
@@ -666,7 +702,7 @@ class TimingWindow(QMainWindow):
             key for key in self.queue.pending if not self._write_key_connected(key)
         }
         if any(quantity == "delay" for _device, quantity in unavailable):
-            # A queued four-channel move must not degrade into a partial move.
+            # A queued linked move must not degrade into a partial move.
             unavailable.update(
                 key for key in self.queue.pending if key[1] == "delay"
             )
@@ -801,7 +837,7 @@ class TimingWindow(QMainWindow):
     def _shift_group(self, delta_us: float) -> None:
         if not self._group_delay_ready():
             self.statusBar().showMessage(
-                "All four delay Set channels must be connected and initialized"
+                "All linked delay Set channels must be connected and initialized"
             )
             return
         try:

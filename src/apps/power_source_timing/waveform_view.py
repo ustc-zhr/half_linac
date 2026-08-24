@@ -73,9 +73,14 @@ class WaveformAlignmentWidget(QFrame):
 
         toolbar = QHBoxLayout()
         toolbar.setSpacing(7)
-        title = QLabel("Waveform Alignment", self)
-        title.setProperty("role", "sectionTitle")
-        toolbar.addWidget(title)
+        self.title_label = QLabel(
+            "Waveform Alignment"
+            if self.config.shared_time_origin
+            else "Waveform Inspection",
+            self,
+        )
+        self.title_label.setProperty("role", "sectionTitle")
+        toolbar.addWidget(self.title_label)
         toolbar.addStretch(1)
         toolbar.addWidget(self._field("View"))
         self.display_mode = QComboBox(self)
@@ -84,10 +89,15 @@ class WaveformAlignmentWidget(QFrame):
         self._select_combo(self.display_mode, self.config.default_display_mode)
         self.display_mode.currentIndexChanged.connect(self.refresh_now)
         toolbar.addWidget(self.display_mode)
-        toolbar.addWidget(self._field("Reference"))
+        self.reference_label = self._field("Reference")
         self.reference_combo = QComboBox(self)
         self.reference_combo.currentIndexChanged.connect(self.refresh_now)
-        toolbar.addWidget(self.reference_combo)
+        if self.config.shared_time_origin:
+            toolbar.addWidget(self.reference_label)
+            toolbar.addWidget(self.reference_combo)
+        else:
+            self.reference_label.hide()
+            self.reference_combo.hide()
         toolbar.addWidget(self._field("Threshold"))
         self.threshold_spin = QDoubleSpinBox(self)
         self.threshold_spin.setRange(5.0, 95.0)
@@ -156,7 +166,12 @@ class WaveformAlignmentWidget(QFrame):
         self.plot = pg.PlotWidget(self)
         self.plot.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.plot.setMinimumHeight(230)
-        self.plot.setLabel("bottom", "Sample Index")
+        self.plot.setLabel(
+            "bottom",
+            "Sample Index"
+            if self.config.shared_time_origin
+            else "Local Sample Index (independent origins)",
+        )
         self.plot.setLabel("left", "Normalized Amplitude")
         self.plot.showGrid(x=True, y=True, alpha=0.18)
         self.plot.setDownsampling(auto=True, mode="peak")
@@ -221,8 +236,21 @@ class WaveformAlignmentWidget(QFrame):
         self.info_label.setText(
             "Waveforms not configured"
             if configured_count == 0
-            else f"{configured_count} waveform channel(s) configured · Sample Index timebase"
+            else self._timebase_summary(configured_count)
         )
+
+    def _timebase_summary(self, configured_count: int) -> str:
+        rate = (
+            "Unknown sample rate"
+            if self.config.sample_rate_mhz is None
+            else f"{self.config.sample_rate_mhz:g} MHz"
+        )
+        origin = (
+            "shared time origin"
+            if self.config.shared_time_origin
+            else "independent channel origins · cross-channel Δ unavailable"
+        )
+        return f"{configured_count} waveform channel(s) configured · {rate} · {origin}"
 
     def refresh_now(self, *_args: object) -> None:
         if self.freeze_button.isChecked() or self.current_group is None:
@@ -340,7 +368,8 @@ class WaveformAlignmentWidget(QFrame):
         reference = str(self.reference_combo.currentData() or "")
         reference_analysis = analyses.get(reference)
         reference_usable = (
-            reference in usable
+            self.config.shared_time_origin
+            and reference in usable
             and self.trace_widgets.get(reference) is not None
             and self.trace_widgets[reference].visible.isChecked()
             and reference_analysis is not None
@@ -357,17 +386,27 @@ class WaveformAlignmentWidget(QFrame):
             ):
                 result.setText("Unavailable")
                 continue
+            edge_text = f"Edge {analysis.edge_position:.3f} samples"
+            if self.config.sample_rate_mhz is not None:
+                local_time_us = analysis.edge_position / self.config.sample_rate_mhz
+                edge_text += f" · {local_time_us:.6f} μs local"
+            if not self.config.shared_time_origin:
+                result.setText(edge_text)
+                continue
             if not reference_usable or reference_analysis is None:
-                result.setText(f"Edge {analysis.edge_position:.3f} · Δ unavailable")
+                result.setText(f"{edge_text} · Δ unavailable")
                 continue
             offset = analysis.edge_position - float(reference_analysis.edge_position)
             if device == reference:
-                result.setText(f"Edge {analysis.edge_position:.3f} · 0.000 samples")
+                result.setText(f"{edge_text} · Δ 0.000 samples")
             else:
                 direction = "Later" if offset > 0.0 else "Earlier" if offset < 0.0 else "Aligned"
-                result.setText(
-                    f"Edge {analysis.edge_position:.3f} · Δ {offset:+.3f} · {direction}"
-                )
+                offset_text = f"Δ {offset:+.3f} samples"
+                if self.config.sample_rate_mhz is not None:
+                    offset_text += (
+                        f" / {offset / self.config.sample_rate_mhz:+.6f} μs"
+                    )
+                result.setText(f"{edge_text} · {offset_text} · {direction}")
 
     def roi_bounds(self) -> tuple[int, int | None]:
         if self.roi is None or not self._roi_initialized:

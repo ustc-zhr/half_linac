@@ -943,44 +943,43 @@ def _validate_basic_app_support(
             workflow.get("element_tag"),
             "workflows.power_source_timing.element_tag",
         )
-        devices = tuple(
-            str(value).strip().lower()
-            for value in _expect_string_list(
-                workflow.get("devices"),
-                "workflows.power_source_timing.devices",
-            )
+        devices = ("hv", "llrf", "ssa", "kly")
+        timing_suffixes = (
+            "delay_set",
+            "delay_readback",
+            "enable",
+            "width_set",
+            "width_readback",
         )
-        if devices != ("hv", "llrf", "ssa", "kly"):
-            raise MachineProfileError(
-                "workflows.power_source_timing.devices must be [hv, llrf, ssa, kly]."
-            )
-        required_channels = {
-            f"{device}_{suffix}"
-            for device in devices
-            for suffix in (
-                "delay_set",
-                "delay_readback",
-                "enable",
-                "width_set",
-                "width_readback",
-            )
-        }
         candidates = [element for element in profile.elements if tag in element.tags]
         if not candidates:
             raise MachineProfileError(
                 "power_source_timing requires at least one tagged timing element."
             )
         for element in candidates:
-            missing = sorted(
-                channel
-                for channel in required_channels
-                if channel not in element.channels
-                or control_backend not in element.channels[channel]
-            )
-            if missing:
+            configured_devices: list[str] = []
+            for device in devices:
+                device_channels = tuple(
+                    f"{device}_{suffix}" for suffix in timing_suffixes
+                )
+                if not any(channel in element.channels for channel in device_channels):
+                    continue
+                configured_devices.append(device)
+                missing = sorted(
+                    channel
+                    for channel in device_channels
+                    if channel not in element.channels
+                    or control_backend not in element.channels[channel]
+                )
+                if not missing:
+                    continue
                 raise MachineProfileError(
-                    f"{element.id} is missing power-source timing channels: "
+                    f"{element.id} has an incomplete {device.upper()} timing device: "
                     + ", ".join(missing)
+                )
+            if not configured_devices:
+                raise MachineProfileError(
+                    f"{element.id} has no complete power-source timing device."
                 )
         if str(workflow.get("default_element", "")) not in {
             element.id for element in candidates
@@ -1007,6 +1006,19 @@ def _validate_basic_app_support(
             "workflows.power_source_timing.waveform_alignment",
         )
         if alignment:
+            if "sample_rate_mhz" in alignment and _expect_finite_number(
+                alignment.get("sample_rate_mhz"),
+                "workflows.power_source_timing.waveform_alignment.sample_rate_mhz",
+            ) <= 0:
+                raise MachineProfileError(
+                    "power_source_timing waveform sample_rate_mhz must be positive."
+                )
+            if "shared_time_origin" in alignment and not isinstance(
+                alignment.get("shared_time_origin"), bool
+            ):
+                raise MachineProfileError(
+                    "power_source_timing waveform shared_time_origin must be a boolean."
+                )
             reference = _expect_non_empty_string(
                 alignment.get("reference_device"),
                 "workflows.power_source_timing.waveform_alignment.reference_device",

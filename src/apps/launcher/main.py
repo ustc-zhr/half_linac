@@ -777,7 +777,7 @@ APP_DEFINITIONS = {
         "button_text": "RF Power Source Timing",
         "label": "RF Power Source Timing",
         "window_title_patterns": ("RF Power Source Timing",),
-        "description": "Adjust HV, LLRF, SSA, and KLY RF timing together or individually.",
+        "description": "Adjust linked RF power-source timing channels together or individually.",
         "workflow_name": "power_source_timing",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/power_source_timing",

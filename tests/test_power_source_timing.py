@@ -32,7 +32,7 @@ from half_linac.src.shared.machine_profile import MachineProfileError, load_app_
 
 
 class PowerSourceTimingConfigTests(unittest.TestCase):
-    def test_half_real_profile_has_twenty_complete_timing_groups(self):
+    def test_half_real_profile_has_klystron_and_prebuncher_timing_groups(self):
         with patch.dict(
             os.environ,
             {
@@ -42,10 +42,15 @@ class PowerSourceTimingConfigTests(unittest.TestCase):
         ):
             runtime = load_timing_runtime()
 
-        self.assertEqual(len(runtime.groups), 20)
-        for index, group in enumerate(runtime.groups, start=1):
+        self.assertEqual(len(runtime.groups), 21)
+        self.assertEqual(runtime.groups[0].element_id, "PREBUNCHER")
+        self.assertEqual(runtime.waveform_alignment.sample_rate_mhz, 105.78)
+        self.assertFalse(runtime.waveform_alignment.shared_time_origin)
+        groups = {group.element_id: group for group in runtime.groups}
+        for index in range(1, 21):
             number = f"{index:02d}"
-            self.assertEqual(group.element_id, f"KLY{number}")
+            group = groups[f"KLY{number}"]
+            self.assertEqual(group.devices, DEVICES)
             for device in DEVICES:
                 prefix = device.upper()
                 fields = group.channels[device]
@@ -67,12 +72,41 @@ class PowerSourceTimingConfigTests(unittest.TestCase):
             self.assertEqual(
                 group.waveforms,
                 {
-                    "llrf": f"HALF:IN-MW:LLRF{number}:CH8_RAW",
-                    "ssa": f"HALF:IN-MW:LLRF{number}:CH1_RAW",
-                    "kly": f"HALF:IN-MW:LLRF{number}:CH2_RAW",
+                    "llrf": f"IN:MW:LLRF{number}:CH8_RAW",
+                    "ssa": f"IN:MW:LLRF{number}:CH1_RAW",
+                    "kly": f"IN:MW:LLRF{number}:CH2_RAW",
                 },
             )
             self.assertNotIn("hv", group.waveforms)
+
+        prebuncher = groups["PREBUNCHER"]
+        self.assertEqual(prebuncher.devices, ("llrf", "ssa"))
+        self.assertEqual(
+            prebuncher.channels,
+            {
+                "llrf": {
+                    "delay_set": "IN:TM:LLRF00:delay:ao",
+                    "delay_readback": "IN:TM:LLRF00:delay:ai",
+                    "enable": "IN:TM:LLRF00:enable:bo",
+                    "width_set": "IN:TM:LLRF00:width:ao",
+                    "width_readback": "IN:TM:LLRF00:width:ai",
+                },
+                "ssa": {
+                    "delay_set": "IN:TM:SSA00:delay:ao",
+                    "delay_readback": "IN:TM:SSA00:delay:ai",
+                    "enable": "IN:TM:SSA00:enable:bo",
+                    "width_set": "IN:TM:SSA00:width:ao",
+                    "width_readback": "IN:TM:SSA00:width:ai",
+                },
+            },
+        )
+        self.assertEqual(
+            prebuncher.waveforms,
+            {
+                "llrf": "IN:MW:LLRF00:CH8_RAW",
+                "ssa": "IN:MW:LLRF00:CH1_RAW",
+            },
+        )
 
     def test_timing_channels_have_no_vm_mapping(self):
         with patch.dict(
@@ -151,6 +185,7 @@ class PowerSourceTimingConfigTests(unittest.TestCase):
 
         self.assertEqual(runtime.context.machine.id, "site-a")
         self.assertEqual(runtime.groups[0].element_id, "RF-STATION-A")
+        self.assertEqual(runtime.groups[0].devices, DEVICES)
         self.assertEqual(runtime.groups[0].waveforms, {})
         self.assertEqual(
             runtime.groups[0].channels["hv"]["delay_set"],
@@ -205,6 +240,18 @@ class TimingValuesTests(unittest.TestCase):
         self.assertTrue(self.values.matches("kly", "delay", 0.001))
         self.values.sync_readback("kly", "delay", 1.0011)
         self.assertFalse(self.values.matches("kly", "delay", 0.001))
+
+    def test_linked_shift_uses_only_selected_group_devices(self):
+        values = TimingValues(minimum_us=0.0, devices=("llrf", "ssa"))
+        values.sync_setpoint("llrf", "delay", 3.0, follow_target=True)
+        values.sync_setpoint("ssa", "delay", 4.0, follow_target=True)
+        changed = values.shift_group_delay(0.25)
+        self.assertEqual(
+            changed,
+            {("llrf", "delay"): 3.25, ("ssa", "delay"): 4.25},
+        )
+        with self.assertRaisesRegex(ValueError, "not available"):
+            values.request_value("kly", "delay", 1.0)
 
 
 class WriteQueueTests(unittest.TestCase):
@@ -352,7 +399,8 @@ class TimingWindowSmokeTests(unittest.TestCase):
         ):
             window = TimingWindow(runtime)
         try:
-            self.assertEqual(len(window.group_buttons), 20)
+            self.assertEqual(len(window.group_buttons), 21)
+            self.assertEqual(next(iter(window.group_buttons)), "PREBUNCHER")
             self.assertEqual(set(window.channel_widgets), set(DEVICES))
             self.assertEqual(window.current_group.element_id, "KLY01")
             self.assertEqual(
@@ -460,11 +508,19 @@ class TimingWindowSmokeTests(unittest.TestCase):
                     window.waveform_view.display_mode.findData("raw")
                 )
                 self.assertEqual(window.waveform_view.display_mode.currentData(), "raw")
-                self.assertIn(
-                    "Later", window.waveform_view.trace_widgets["ssa"].result.text()
+                ssa_result = window.waveform_view.trace_widgets["ssa"].result.text()
+                kly_result = window.waveform_view.trace_widgets["kly"].result.text()
+                self.assertIn("μs local", ssa_result)
+                self.assertIn("μs local", kly_result)
+                self.assertNotIn("Δ", ssa_result)
+                self.assertNotIn("Earlier", kly_result)
+                self.assertTrue(window.waveform_view.reference_combo.isHidden())
+                self.assertEqual(
+                    window.waveform_view.title_label.text(), "Waveform Inspection"
                 )
                 self.assertIn(
-                    "Earlier", window.waveform_view.trace_widgets["kly"].result.text()
+                    "independent channel origins",
+                    window.waveform_view.info_label.text(),
                 )
                 window.waveform_view.trace_widgets["ssa"].visible.setChecked(False)
                 self.assertEqual(
@@ -502,6 +558,39 @@ class TimingWindowSmokeTests(unittest.TestCase):
                     window.waveform_view.trace_widgets["kly"].result.text(),
                     "Unavailable",
                 )
+            with patch.object(window.monitor, "bind"), patch.object(
+                window.waveform_view.monitor, "bind"
+            ):
+                window._select_group("PREBUNCHER")
+            window._resume_adjust_buttons()
+            self.assertEqual(window.current_group.element_id, "PREBUNCHER")
+            self.assertEqual(window.values.devices, ("llrf", "ssa"))
+            self.assertEqual(
+                window.linked_delay_label.text(), "Linked Delay (2 channels)"
+            )
+            self.assertTrue(window.channel_widgets["hv"].channel_label.isHidden())
+            self.assertFalse(window.channel_widgets["llrf"].channel_label.isHidden())
+            self.assertFalse(window.channel_widgets["ssa"].channel_label.isHidden())
+            self.assertTrue(window.channel_widgets["kly"].channel_label.isHidden())
+            self.assertEqual(
+                window.waveform_view.current_group.waveforms,
+                {
+                    "llrf": "IN:MW:LLRF00:CH8_RAW",
+                    "ssa": "IN:MW:LLRF00:CH1_RAW",
+                },
+            )
+            self.assertFalse(window.group_advance.isEnabled())
+            for index, device in enumerate(("llrf", "ssa")):
+                window._on_connection(device, "delay_set", True)
+                window._on_pv_value(device, "delay_set", 5.0 + index)
+            self.assertTrue(window.group_advance.isEnabled())
+            with patch.object(window, "_start_next_write"):
+                window._shift_group(0.25)
+            self.assertEqual(
+                window.queue.pending,
+                {("llrf", "delay"): 5.25, ("ssa", "delay"): 6.25},
+            )
+            window.queue.clear()
         finally:
             window.close()
 

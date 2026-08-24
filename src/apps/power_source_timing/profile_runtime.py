@@ -30,6 +30,10 @@ class TimingGroup:
     channels: Mapping[str, Mapping[str, str]]
     waveforms: Mapping[str, str]
 
+    @property
+    def devices(self) -> tuple[str, ...]:
+        return tuple(device for device in DEVICES if device in self.channels)
+
     def pv(self, device: str, field: str) -> str:
         try:
             return self.channels[device][field]
@@ -41,6 +45,8 @@ class TimingGroup:
 
 @dataclass(frozen=True)
 class WaveformAlignmentConfig:
+    sample_rate_mhz: float | None
+    shared_time_origin: bool
     reference_device: str
     default_display_mode: str
     default_threshold_fraction: float
@@ -81,6 +87,9 @@ def load_timing_runtime() -> TimingRuntime:
     for element in candidates:
         channels: dict[str, dict[str, str]] = {}
         for device in DEVICES:
+            logical_channels = [f"{device}_{suffix}" for suffix in FIELD_SUFFIXES]
+            if not any(logical in element.channels for logical in logical_channels):
+                continue
             device_channels: dict[str, str] = {}
             for suffix in FIELD_SUFFIXES:
                 logical = f"{device}_{suffix}"
@@ -91,16 +100,19 @@ def load_timing_runtime() -> TimingRuntime:
                         f"{element.id} is missing {backend!r} channel {logical!r}."
                     ) from exc
             channels[device] = device_channels
+        if not channels:
+            raise MachineProfileError(
+                f"{element.id} has no complete power-source timing device channels."
+            )
         waveforms = {
             device: element.channels[f"{device}_waveform"][backend]
-            for device in DEVICES
+            for device in channels
             if f"{device}_waveform" in element.channels
             and backend in element.channels[f"{device}_waveform"]
         }
         groups.append(
             TimingGroup(element.id, element.display_name, channels, waveforms)
         )
-    groups.sort(key=lambda group: group.element_id)
     if not groups:
         raise MachineProfileError("No power-source timing groups are configured.")
 
@@ -125,6 +137,18 @@ def load_timing_runtime() -> TimingRuntime:
             "power_source_timing waveform display mode must be raw or normalized."
         )
     alignment = WaveformAlignmentConfig(
+        sample_rate_mhz=(
+            _positive(
+                alignment_raw.get("sample_rate_mhz"),
+                "waveform_alignment.sample_rate_mhz",
+            )
+            if alignment_raw.get("sample_rate_mhz") is not None
+            else None
+        ),
+        shared_time_origin=_boolean(
+            alignment_raw.get("shared_time_origin", False),
+            "waveform_alignment.shared_time_origin",
+        ),
         reference_device=reference_device,
         default_display_mode=display_mode,
         default_threshold_fraction=_fraction(
@@ -173,6 +197,12 @@ def _number(value: Any, name: str) -> float:
     if not math.isfinite(number):
         raise MachineProfileError(f"power_source_timing.{name} must be finite.")
     return number
+
+
+def _boolean(value: Any, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise MachineProfileError(f"{name} must be a boolean.")
+    return value
 
 
 def _positive(value: Any, name: str) -> float:

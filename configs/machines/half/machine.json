@@ -2760,6 +2760,19 @@
       "tags": ["rf", "llrf", "wrapped_phase"],
       "limits": {"phase_set": {"low": -180, "high": 180, "unit": "deg"}},
       "logical_channels": ["phase_set"]
+    },
+    {
+      "id": "PREBUNCHER",
+      "kind": "rf",
+      "display_name": "PREBUNCHER RF Power Source",
+      "order": 245,
+      "tags": ["rf", "prebuncher", "power_source_timing"],
+      "limits": {},
+      "logical_channels": [
+        "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback",
+        "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback",
+        "llrf_waveform", "ssa_waveform"
+      ]
     }
   ]
 }
