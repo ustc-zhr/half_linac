@@ -49,6 +49,7 @@ TRACE_COLORS = {
 
 @dataclass
 class TraceWidgets:
+    summary: QWidget
     visible: QCheckBox
     status: QLabel
     result: QLabel
@@ -149,7 +150,7 @@ class WaveformAlignmentWidget(QFrame):
             trace_grid.addWidget(summary, 0, column)
             trace_grid.addWidget(result, 1, column)
             trace_grid.setColumnStretch(column, 1)
-            self.trace_widgets[device] = TraceWidgets(visible, status, result)
+            self.trace_widgets[device] = TraceWidgets(summary, visible, status, result)
         layout.addLayout(trace_grid)
 
         self.info_label = QLabel("Waiting for waveform configuration", self)
@@ -175,9 +176,7 @@ class WaveformAlignmentWidget(QFrame):
         self.plot.setMinimumHeight(230)
         self.plot.setLabel(
             "bottom",
-            "Sample Index"
-            if self.config.shared_time_origin
-            else "Local Sample Index (independent origins)",
+            self._horizontal_axis_label(),
         )
         self.plot.setLabel("left", "Normalized Amplitude")
         self.plot.showGrid(x=True, y=True, alpha=0.18)
@@ -198,7 +197,7 @@ class WaveformAlignmentWidget(QFrame):
         self.roi.setBrush(pg.mkBrush(69, 208, 188, 18))
         self.roi.setHoverBrush(pg.mkBrush(69, 208, 188, 32))
         self.roi.setZValue(10)
-        self.roi.sigRegionChangeFinished.connect(self.refresh_now)
+        self.roi.sigRegionChangeFinished.connect(self._on_roi_change_finished)
         self.plot.addItem(self.roi)
         layout.addWidget(self.plot, 1)
 
@@ -224,6 +223,8 @@ class WaveformAlignmentWidget(QFrame):
             for device in WAVEFORM_DEVICES:
                 widgets = self.trace_widgets[device]
                 configured = device in group.waveforms
+                widgets.summary.setVisible(configured)
+                widgets.result.setVisible(configured)
                 was_enabled = widgets.visible.isEnabled()
                 with QSignalBlocker(widgets.visible):
                     if not configured:
@@ -279,7 +280,9 @@ class WaveformAlignmentWidget(QFrame):
         if max_length > 1:
             self._latest_length = max_length
             if self.roi is not None and not self._roi_initialized:
-                self.roi.setRegion((0.0, float(max_length - 1)))
+                self.roi.setRegion(
+                    (0.0, self._sample_position_to_axis(float(max_length - 1)))
+                )
                 self._roi_initialized = True
         roi_start, roi_stop = self.roi_bounds()
         now = time.monotonic()
@@ -358,13 +361,16 @@ class WaveformAlignmentWidget(QFrame):
             marker.hide()
             return
         y_values = analysis.raw if display_mode == "raw" else analysis.normalized
-        curve.setData(np.arange(y_values.size, dtype=float), y_values)
+        x_values = np.arange(y_values.size, dtype=float)
+        if self.config.sample_rate_mhz is not None:
+            x_values /= self.config.sample_rate_mhz
+        curve.setData(x_values, y_values)
         curve.setPen(pg.mkPen(TRACE_COLORS[device], width=2 if active else 1))
         curve.setOpacity(1.0 if active else 0.28)
         if analysis.edge_position is None or not active:
             marker.hide()
         else:
-            marker.setValue(analysis.edge_position)
+            marker.setValue(self._sample_position_to_axis(analysis.edge_position))
             marker.show()
 
     def _render_results(
@@ -419,14 +425,53 @@ class WaveformAlignmentWidget(QFrame):
         if self.roi is None or not self._roi_initialized:
             return 0, None
         low, high = sorted(float(value) for value in self.roi.getRegion())
-        return max(0, int(math.floor(low))), max(1, int(math.floor(high)) + 1)
+        low_sample = self._axis_to_sample_position(low)
+        high_sample = self._axis_to_sample_position(high)
+        return (
+            max(0, int(math.floor(low_sample + 1e-9))),
+            max(1, int(math.floor(high_sample + 1e-9)) + 1),
+        )
 
     def reset_roi(self) -> None:
         if self.roi is None or self._latest_length < 2:
             return
-        self.roi.setRegion((0.0, float(self._latest_length - 1)))
+        self.roi.setRegion(
+            (0.0, self._sample_position_to_axis(float(self._latest_length - 1)))
+        )
         self._roi_initialized = True
         self.refresh_now()
+
+    def _on_roi_change_finished(self) -> None:
+        self.refresh_now()
+        if self.plot is None or self.roi is None:
+            return
+        low, high = sorted(float(value) for value in self.roi.getRegion())
+        if not math.isfinite(low) or not math.isfinite(high) or high <= low:
+            return
+        self.plot.setXRange(low, high, padding=0.03)
+
+    def _horizontal_axis_label(self) -> str:
+        if self.config.sample_rate_mhz is None:
+            return (
+                "Sample Index"
+                if self.config.shared_time_origin
+                else "Local Sample Index (independent origins)"
+            )
+        return (
+            "Time (μs)"
+            if self.config.shared_time_origin
+            else "Local Time (μs, independent origins)"
+        )
+
+    def _sample_position_to_axis(self, sample_position: float) -> float:
+        if self.config.sample_rate_mhz is None:
+            return float(sample_position)
+        return float(sample_position) / self.config.sample_rate_mhz
+
+    def _axis_to_sample_position(self, axis_position: float) -> float:
+        if self.config.sample_rate_mhz is None:
+            return float(axis_position)
+        return float(axis_position) * self.config.sample_rate_mhz
 
     def fit_view(self) -> None:
         if self.plot is not None:

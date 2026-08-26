@@ -435,6 +435,12 @@ class TimingWindowSmokeTests(unittest.TestCase):
                 window.waveform_view.trace_widgets["hv"].status.text(),
                 "Not configured",
             )
+            self.assertTrue(
+                window.waveform_view.trace_widgets["pickup"].summary.isHidden()
+            )
+            self.assertFalse(
+                window.waveform_view.trace_widgets["kly"].summary.isHidden()
+            )
             self.assertTrue(window.group_advance.autoRepeat())
             self.assertEqual(window.group_advance.autoRepeatDelay(), 300)
             self.assertEqual(window.group_advance.autoRepeatInterval(), 150)
@@ -540,6 +546,26 @@ class TimingWindowSmokeTests(unittest.TestCase):
                     roi_start, roi_stop = window.waveform_view.roi_bounds()
                     self.assertEqual(roi_start, 0)
                     self.assertGreaterEqual(roi_stop, 4)
+                    x_values, _y_values = window.waveform_view.curves["llrf"].getData()
+                    self.assertAlmostEqual(x_values[-1], 3.0 / 105.78)
+                    self.assertEqual(
+                        window.waveform_view.plot.getAxis("bottom").labelText,
+                        "Local Time (μs, independent origins)",
+                    )
+                    full_low, full_high = window.waveform_view.roi.getRegion()
+                    selected_low = full_low + (full_high - full_low) * 0.25
+                    selected_high = full_low + (full_high - full_low) * 0.75
+                    window.waveform_view.roi.setRegion(
+                        (selected_low, selected_high)
+                    )
+                    window.waveform_view._on_roi_change_finished()
+                    view_low, view_high = window.waveform_view.plot.viewRange()[0]
+                    self.assertLess(view_low, selected_low)
+                    self.assertGreater(view_high, selected_high)
+                    self.assertLess(view_high - view_low, full_high - full_low)
+                    self.assertFalse(
+                        window.waveform_view.plot.getViewBox().state["autoRange"][0]
+                    )
                 original_theme = window._theme
                 window._toggle_theme()
                 self.assertNotEqual(window._theme, original_theme)
@@ -587,6 +613,12 @@ class TimingWindowSmokeTests(unittest.TestCase):
             )
             self.assertTrue(
                 window.waveform_view.trace_widgets["pickup"].visible.isEnabled()
+            )
+            self.assertFalse(
+                window.waveform_view.trace_widgets["pickup"].summary.isHidden()
+            )
+            self.assertTrue(
+                window.waveform_view.trace_widgets["kly"].summary.isHidden()
             )
             self.assertFalse(window.group_advance.isEnabled())
             for index, device in enumerate(("llrf", "ssa")):
