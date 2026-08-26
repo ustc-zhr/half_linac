@@ -45,6 +45,9 @@ TRACE_COLORS = {
     "kly": "#d987e8",
     "pickup": "#f28c6f",
 }
+FOCUS_THRESHOLD_FRACTION = 0.1
+FOCUS_PADDING_FRACTION = 0.1
+FOCUS_MIN_PADDING_SAMPLES = 4
 
 
 @dataclass
@@ -115,10 +118,17 @@ class WaveformAlignmentWidget(QFrame):
         self.threshold_spin.setValue(self.config.default_threshold_fraction * 100.0)
         self.threshold_spin.valueChanged.connect(self.refresh_now)
         toolbar.addWidget(self.threshold_spin)
+        self.focus_pulse_button = QPushButton("Focus Pulse", self)
+        self.focus_pulse_button.setToolTip(
+            "Fit the ROI and horizontal view to fresh, visible pulse waveforms"
+        )
+        self.focus_pulse_button.clicked.connect(self.focus_pulse)
+        toolbar.addWidget(self.focus_pulse_button)
         self.full_roi_button = QPushButton("Full ROI", self)
         self.full_roi_button.clicked.connect(self.reset_roi)
         toolbar.addWidget(self.full_roi_button)
-        self.fit_button = QPushButton("Fit View", self)
+        self.fit_button = QPushButton("Full View", self)
+        self.fit_button.setToolTip("Restore the full waveform view")
         self.fit_button.clicked.connect(self.fit_view)
         toolbar.addWidget(self.fit_button)
         self.freeze_button = QPushButton("Freeze", self)
@@ -167,6 +177,7 @@ class WaveformAlignmentWidget(QFrame):
             )
             unavailable.setProperty("tone", "warning")
             layout.addWidget(unavailable, 1)
+            self.focus_pulse_button.setEnabled(False)
             self.full_roi_button.setEnabled(False)
             self.fit_button.setEnabled(False)
             return
@@ -241,6 +252,7 @@ class WaveformAlignmentWidget(QFrame):
             self._select_combo(self.reference_combo, self.config.reference_device)
         configured_count = len(group.waveforms)
         self.reference_combo.setEnabled(configured_count > 0)
+        self.focus_pulse_button.setEnabled(configured_count > 0 and self.plot is not None)
         self.info_label.setText(
             "Waveforms not configured"
             if configured_count == 0
@@ -440,6 +452,70 @@ class WaveformAlignmentWidget(QFrame):
         )
         self._roi_initialized = True
         self.refresh_now()
+
+    def focus_pulse(self) -> None:
+        if self.plot is None or self.roi is None or self.current_group is None:
+            return
+        now = time.monotonic()
+        snapshots = self.monitor.snapshots()
+        starts: list[int] = []
+        stops: list[int] = []
+        max_length = 0
+        for device in WAVEFORM_DEVICES:
+            if device not in self.current_group.waveforms:
+                continue
+            widgets = self.trace_widgets[device]
+            if not widgets.visible.isChecked():
+                continue
+            snapshot = snapshots.get(
+                device, WaveformSnapshot(None, False, None, None)
+            )
+            if (
+                not snapshot.connected
+                or snapshot.value is None
+                or snapshot.received_monotonic is None
+                or now - snapshot.received_monotonic > self.config.stale_after_s
+            ):
+                continue
+            analysis = self._analyze_snapshot(snapshot, 0, None)
+            if analysis is None:
+                continue
+            active = np.flatnonzero(
+                analysis.normalized >= FOCUS_THRESHOLD_FRACTION
+            )
+            if active.size == 0:
+                continue
+            starts.append(int(active[0]))
+            stops.append(int(active[-1]))
+            max_length = max(max_length, int(analysis.raw.size))
+        if not starts or max_length < 2:
+            self.info_label.setText(
+                "No fresh visible pulse is available for automatic focus."
+            )
+            return
+        start = min(starts)
+        stop = max(stops)
+        width = max(1, stop - start + 1)
+        padding = max(
+            FOCUS_MIN_PADDING_SAMPLES,
+            int(math.ceil(width * FOCUS_PADDING_FRACTION)),
+        )
+        start = max(0, start - padding)
+        stop = min(max_length - 1, stop + padding)
+        if stop <= start:
+            return
+        with QSignalBlocker(self.roi):
+            self.roi.setRegion(
+                (
+                    self._sample_position_to_axis(float(start)),
+                    self._sample_position_to_axis(float(stop)),
+                )
+            )
+        self._roi_initialized = True
+        self._on_roi_change_finished()
+        self.info_label.setText(
+            f"Focused visible pulse region: samples {start}–{stop}."
+        )
 
     def _on_roi_change_finished(self) -> None:
         self.refresh_now()

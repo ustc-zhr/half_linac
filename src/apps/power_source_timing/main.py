@@ -52,7 +52,10 @@ from half_linac.src.apps.power_source_timing.profile_runtime import (
     TimingRuntime,
     load_timing_runtime,
 )
-from half_linac.src.apps.power_source_timing.waveform_view import WaveformAlignmentWidget
+from half_linac.src.apps.power_source_timing.waveform_view import (
+    TRACE_COLORS,
+    WaveformAlignmentWidget,
+)
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import RuntimeContextWidget
 
@@ -371,6 +374,9 @@ class TimingWindow(QMainWindow):
 
     def _build_channel_row(self, device: str, parent: QWidget) -> ChannelWidgets:
         channel_label = QLabel(DEVICE_LABELS[device], parent)
+        channel_label.setStyleSheet(
+            f"color: {TRACE_COLORS[device]}; font-weight: 700;"
+        )
         enable = QPushButton("Unavailable", parent)
         enable.setCheckable(True)
         enable.setMinimumWidth(96)

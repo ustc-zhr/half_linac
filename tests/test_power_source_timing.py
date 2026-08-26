@@ -28,6 +28,7 @@ from half_linac.src.apps.power_source_timing.profile_runtime import (
     TimingGroup,
     load_timing_runtime,
 )
+from half_linac.src.apps.power_source_timing.waveform_view import TRACE_COLORS
 from half_linac.src.apps.power_source_timing.waveform import analyze_waveform
 from half_linac.src.shared.machine_profile import MachineProfileError, load_app_context
 
@@ -407,6 +408,12 @@ class TimingWindowSmokeTests(unittest.TestCase):
             self.assertEqual(
                 set(window.waveform_view.trace_widgets), set(WAVEFORM_DEVICES)
             )
+            self.assertEqual(window.waveform_view.fit_button.text(), "Full View")
+            for device in DEVICES:
+                self.assertIn(
+                    TRACE_COLORS[device],
+                    window.channel_widgets[device].channel_label.styleSheet(),
+                )
             self.assertEqual(window.current_group.element_id, "KLY01")
             self.assertEqual(
                 window.windowTitle(), "HALF Linac · RF Power Source Timing"
@@ -510,7 +517,7 @@ class TimingWindowSmokeTests(unittest.TestCase):
                 window.waveform_view.monitor,
                 "snapshots",
                 return_value=snapshots,
-            ):
+            ) as waveform_snapshots:
                 window.waveform_view.refresh_now()
                 self.assertEqual(
                     window.waveform_view.reference_combo.currentData(), "llrf"
@@ -565,6 +572,26 @@ class TimingWindowSmokeTests(unittest.TestCase):
                     self.assertLess(view_high - view_low, full_high - full_low)
                     self.assertFalse(
                         window.waveform_view.plot.getViewBox().state["autoRange"][0]
+                    )
+                    focus_snapshots = {}
+                    for device, pulse_bounds in {
+                        "llrf": (30, 40),
+                        "ssa": (45, 55),
+                        "kly": (60, 70),
+                    }.items():
+                        values = np.zeros(100)
+                        values[slice(*pulse_bounds)] = 1.0
+                        focus_snapshots[device] = WaveformSnapshot(
+                            values, True, 1.0, now
+                        )
+                    waveform_snapshots.return_value = focus_snapshots
+                    window.waveform_view.trace_widgets["ssa"].visible.setChecked(True)
+                    window.waveform_view.refresh_now()
+                    window.waveform_view.focus_pulse_button.click()
+                    self.assertEqual(window.waveform_view.roi_bounds(), (26, 74))
+                    self.assertIn(
+                        "Focused visible pulse region",
+                        window.waveform_view.info_label.text(),
                     )
                 original_theme = window._theme
                 window._toggle_theme()
