@@ -72,9 +72,9 @@ class PowerSourceTimingConfigTests(unittest.TestCase):
             self.assertEqual(
                 group.waveforms,
                 {
-                    "llrf": f"IN:MW:LLRF{number}:CH8_RAW",
-                    "ssa": f"IN:MW:LLRF{number}:CH1_RAW",
-                    "kly": f"IN:MW:LLRF{number}:CH2_RAW",
+                    "llrf": f"IN:MW:LLRF{number}:CH8_WFAMP",
+                    "ssa": f"IN:MW:LLRF{number}:CH1_WFAMP",
+                    "kly": f"IN:MW:LLRF{number}:CH2_WFAMP",
                 },
             )
             self.assertNotIn("hv", group.waveforms)
@@ -103,8 +103,8 @@ class PowerSourceTimingConfigTests(unittest.TestCase):
         self.assertEqual(
             prebuncher.waveforms,
             {
-                "llrf": "IN:MW:LLRF00:CH8_RAW",
-                "ssa": "IN:MW:LLRF00:CH1_RAW",
+                "llrf": "IN:MW:LLRF00:CH8_WFAMP",
+                "ssa": "IN:MW:LLRF00:CH1_WFAMP",
             },
         )
 
@@ -575,8 +575,8 @@ class TimingWindowSmokeTests(unittest.TestCase):
             self.assertEqual(
                 window.waveform_view.current_group.waveforms,
                 {
-                    "llrf": "IN:MW:LLRF00:CH8_RAW",
-                    "ssa": "IN:MW:LLRF00:CH1_RAW",
+                    "llrf": "IN:MW:LLRF00:CH8_WFAMP",
+                    "ssa": "IN:MW:LLRF00:CH1_WFAMP",
                 },
             )
             self.assertFalse(window.group_advance.isEnabled())
