@@ -2771,7 +2771,7 @@
       "logical_channels": [
         "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback",
         "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback",
-        "llrf_waveform", "ssa_waveform"
+        "llrf_waveform", "ssa_waveform", "pickup_waveform"
       ]
     }
   ]

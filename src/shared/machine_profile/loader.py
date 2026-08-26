@@ -938,12 +938,13 @@ def _validate_basic_app_support(
         if control_backend not in configured_backends:
             raise MachineProfileError(
                 f"power_source_timing does not support backend {control_backend!r}."
-            )
+        )
         tag = _expect_non_empty_string(
             workflow.get("element_tag"),
             "workflows.power_source_timing.element_tag",
         )
         devices = ("hv", "llrf", "ssa", "kly")
+        waveform_devices = devices + ("pickup",)
         timing_suffixes = (
             "delay_set",
             "delay_readback",
@@ -1023,10 +1024,10 @@ def _validate_basic_app_support(
                 alignment.get("reference_device"),
                 "workflows.power_source_timing.waveform_alignment.reference_device",
             ).lower()
-            if reference not in devices:
+            if reference not in waveform_devices:
                 raise MachineProfileError(
                     "power_source_timing waveform reference_device must be one of "
-                    "hv, llrf, ssa, or kly."
+                    "hv, llrf, ssa, kly, or pickup."
                 )
             display_mode = _expect_non_empty_string(
                 alignment.get("default_display_mode"),

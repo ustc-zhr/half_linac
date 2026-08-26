@@ -11,7 +11,7 @@ from half_linac.src.shared.machine_profile import (
     require_workflow_write_allowed,
 )
 
-from .model import DEVICES
+from .model import DEVICES, WAVEFORM_DEVICES
 
 
 FIELD_SUFFIXES = (
@@ -106,7 +106,7 @@ def load_timing_runtime() -> TimingRuntime:
             )
         waveforms = {
             device: element.channels[f"{device}_waveform"][backend]
-            for device in channels
+            for device in WAVEFORM_DEVICES
             if f"{device}_waveform" in element.channels
             and backend in element.channels[f"{device}_waveform"]
         }
@@ -125,9 +125,10 @@ def load_timing_runtime() -> TimingRuntime:
     reference_device = str(
         alignment_raw.get("reference_device", "llrf")
     ).strip().lower()
-    if reference_device not in DEVICES:
+    if reference_device not in WAVEFORM_DEVICES:
         raise MachineProfileError(
-            "power_source_timing.waveform reference_device must be a timing device."
+            "power_source_timing.waveform reference_device must be a supported "
+            "waveform channel."
         )
     display_mode = str(
         alignment_raw.get("default_display_mode", "normalized")

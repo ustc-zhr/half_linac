@@ -1695,7 +1695,8 @@
       "ssa_width_set": "IN:TM:SSA00:width:ao",
       "ssa_width_readback": "IN:TM:SSA00:width:ai",
       "llrf_waveform": "IN:MW:LLRFPB:CH8_WFAMP",
-      "ssa_waveform": "IN:MW:LLRFPB:CH1_WFAMP"
+      "ssa_waveform": "IN:MW:LLRFPB:CH1_WFAMP",
+      "pickup_waveform": "IN:MW:LLRFPB:CH2_WFAMP"
     },
     "LLRF01": {"phase_set": "IN:MW:LLRF01:SET_PHASE"},
     "LLRF02": {"phase_set": "IN:MW:LLRF02:SET_PHASE"},

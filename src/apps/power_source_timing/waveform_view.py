@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
 )
 
 from .epics_client import WaveformMonitor, WaveformSnapshot
-from .model import DEVICES
+from .model import WAVEFORM_DEVICES
 from .profile_runtime import TimingGroup, WaveformAlignmentConfig
 from .waveform import WaveformAnalysis, analyze_waveform
 
@@ -31,12 +31,19 @@ except ImportError:  # pragma: no cover - project environment declares pyqtgraph
     pg = None
 
 
-DEVICE_LABELS = {"hv": "HV", "llrf": "LLRF", "ssa": "SSA", "kly": "KLY"}
+DEVICE_LABELS = {
+    "hv": "HV",
+    "llrf": "LLRF",
+    "ssa": "SSA",
+    "kly": "KLY",
+    "pickup": "Pickup",
+}
 TRACE_COLORS = {
     "hv": "#e7a64a",
     "llrf": "#49b6ff",
     "ssa": "#58cf8b",
     "kly": "#d987e8",
+    "pickup": "#f28c6f",
 }
 
 
@@ -123,7 +130,7 @@ class WaveformAlignmentWidget(QFrame):
         trace_grid.setContentsMargins(0, 0, 0, 0)
         trace_grid.setHorizontalSpacing(14)
         trace_grid.setVerticalSpacing(2)
-        for column, device in enumerate(DEVICES):
+        for column, device in enumerate(WAVEFORM_DEVICES):
             visible = QCheckBox(DEVICE_LABELS[device], self)
             visible.setChecked(True)
             visible.setStyleSheet(f"color: {TRACE_COLORS[device]}; font-weight: 700;")
@@ -176,7 +183,7 @@ class WaveformAlignmentWidget(QFrame):
         self.plot.showGrid(x=True, y=True, alpha=0.18)
         self.plot.setDownsampling(auto=True, mode="peak")
         self.plot.setClipToView(True)
-        for device in DEVICES:
+        for device in WAVEFORM_DEVICES:
             curve = self.plot.plot([], [], pen=pg.mkPen(TRACE_COLORS[device], width=2))
             marker = pg.InfiniteLine(
                 angle=90,
@@ -214,7 +221,7 @@ class WaveformAlignmentWidget(QFrame):
         self._clear_plot()
         with QSignalBlocker(self.reference_combo):
             self.reference_combo.clear()
-            for device in DEVICES:
+            for device in WAVEFORM_DEVICES:
                 widgets = self.trace_widgets[device]
                 configured = device in group.waveforms
                 was_enabled = widgets.visible.isEnabled()
@@ -279,7 +286,7 @@ class WaveformAlignmentWidget(QFrame):
         analyses: dict[str, WaveformAnalysis] = {}
         usable: set[str] = set()
 
-        for device in DEVICES:
+        for device in WAVEFORM_DEVICES:
             widgets = self.trace_widgets[device]
             if device not in self.current_group.waveforms:
                 self._hide_trace(device)
@@ -375,7 +382,7 @@ class WaveformAlignmentWidget(QFrame):
             and reference_analysis is not None
             and reference_analysis.edge_position is not None
         )
-        for device in DEVICES:
+        for device in WAVEFORM_DEVICES:
             result = self.trace_widgets[device].result
             analysis = analyses.get(device)
             if (
@@ -436,7 +443,7 @@ class WaveformAlignmentWidget(QFrame):
             self.edge_markers[device].hide()
 
     def _clear_plot(self) -> None:
-        for device in DEVICES:
+        for device in WAVEFORM_DEVICES:
             self._hide_trace(device)
             self.trace_widgets[device].result.setText("Unavailable")
 

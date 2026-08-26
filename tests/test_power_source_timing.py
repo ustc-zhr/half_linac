@@ -20,6 +20,7 @@ from half_linac.src.apps.power_source_timing.epics_client import (
 from half_linac.src.apps.power_source_timing.main import TimingWindow
 from half_linac.src.apps.power_source_timing.model import (
     DEVICES,
+    WAVEFORM_DEVICES,
     CoalescingWriteQueue,
     TimingValues,
 )
@@ -103,8 +104,9 @@ class PowerSourceTimingConfigTests(unittest.TestCase):
         self.assertEqual(
             prebuncher.waveforms,
             {
-                "llrf": "IN:MW:LLRF00:CH8_WFAMP",
-                "ssa": "IN:MW:LLRF00:CH1_WFAMP",
+                "llrf": "IN:MW:LLRFPB:CH8_WFAMP",
+                "ssa": "IN:MW:LLRFPB:CH1_WFAMP",
+                "pickup": "IN:MW:LLRFPB:CH2_WFAMP",
             },
         )
 
@@ -402,6 +404,9 @@ class TimingWindowSmokeTests(unittest.TestCase):
             self.assertEqual(len(window.group_buttons), 21)
             self.assertEqual(next(iter(window.group_buttons)), "PREBUNCHER")
             self.assertEqual(set(window.channel_widgets), set(DEVICES))
+            self.assertEqual(
+                set(window.waveform_view.trace_widgets), set(WAVEFORM_DEVICES)
+            )
             self.assertEqual(window.current_group.element_id, "KLY01")
             self.assertEqual(
                 window.windowTitle(), "HALF Linac · RF Power Source Timing"
@@ -575,9 +580,13 @@ class TimingWindowSmokeTests(unittest.TestCase):
             self.assertEqual(
                 window.waveform_view.current_group.waveforms,
                 {
-                    "llrf": "IN:MW:LLRF00:CH8_WFAMP",
-                    "ssa": "IN:MW:LLRF00:CH1_WFAMP",
+                    "llrf": "IN:MW:LLRFPB:CH8_WFAMP",
+                    "ssa": "IN:MW:LLRFPB:CH1_WFAMP",
+                    "pickup": "IN:MW:LLRFPB:CH2_WFAMP",
                 },
+            )
+            self.assertTrue(
+                window.waveform_view.trace_widgets["pickup"].visible.isEnabled()
             )
             self.assertFalse(window.group_advance.isEnabled())
             for index, device in enumerate(("llrf", "ssa")):

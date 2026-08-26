@@ -6,6 +6,7 @@ from typing import Mapping
 
 
 DEVICES = ("hv", "llrf", "ssa", "kly")
+WAVEFORM_DEVICES = DEVICES + ("pickup",)
 QUANTITIES = ("delay", "width")
 ValueKey = tuple[str, str]
 
