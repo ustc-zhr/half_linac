@@ -137,19 +137,23 @@ class WaveformAlignmentWidget(QFrame):
         toolbar.addWidget(self.freeze_button)
         layout.addLayout(toolbar)
 
-        trace_grid = QGridLayout()
-        trace_grid.setContentsMargins(0, 0, 0, 0)
-        trace_grid.setHorizontalSpacing(14)
-        trace_grid.setVerticalSpacing(2)
+        self.trace_grid = QGridLayout()
+        self.trace_grid.setContentsMargins(0, 0, 0, 0)
+        self.trace_grid.setHorizontalSpacing(18)
+        self.trace_grid.setVerticalSpacing(2)
         for column, device in enumerate(WAVEFORM_DEVICES):
             visible = QCheckBox(DEVICE_LABELS[device], self)
+            visible.setFixedWidth(72)
             visible.setChecked(True)
             visible.setStyleSheet(f"color: {TRACE_COLORS[device]}; font-weight: 700;")
             visible.toggled.connect(self.refresh_now)
             status = QLabel("Not configured", self)
             status.setProperty("role", "field")
+            status.setFixedWidth(150)
             result = QLabel("Unavailable", self)
             result.setProperty("role", "value")
+            result.setMinimumWidth(0)
+            result.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
             summary = QWidget(self)
             summary_layout = QHBoxLayout(summary)
             summary_layout.setContentsMargins(0, 0, 0, 0)
@@ -157,11 +161,11 @@ class WaveformAlignmentWidget(QFrame):
             summary_layout.addWidget(visible)
             summary_layout.addWidget(status)
             summary_layout.addStretch(1)
-            trace_grid.addWidget(summary, 0, column)
-            trace_grid.addWidget(result, 1, column)
-            trace_grid.setColumnStretch(column, 1)
+            self.trace_grid.addWidget(summary, 0, column)
+            self.trace_grid.addWidget(result, 1, column)
+            self.trace_grid.setColumnStretch(column, 1)
             self.trace_widgets[device] = TraceWidgets(summary, visible, status, result)
-        layout.addLayout(trace_grid)
+        layout.addLayout(self.trace_grid)
 
         self.info_label = QLabel("Waiting for waveform configuration", self)
         self.info_label.setProperty("role", "field")
@@ -231,6 +235,18 @@ class WaveformAlignmentWidget(QFrame):
         self._clear_plot()
         with QSignalBlocker(self.reference_combo):
             self.reference_combo.clear()
+            configured_devices = [
+                device for device in WAVEFORM_DEVICES if device in group.waveforms
+            ]
+            for column in range(len(WAVEFORM_DEVICES)):
+                self.trace_grid.setColumnStretch(column, 0)
+            for column, device in enumerate(configured_devices):
+                widgets = self.trace_widgets[device]
+                self.trace_grid.removeWidget(widgets.summary)
+                self.trace_grid.removeWidget(widgets.result)
+                self.trace_grid.addWidget(widgets.summary, 0, column)
+                self.trace_grid.addWidget(widgets.result, 1, column)
+                self.trace_grid.setColumnStretch(column, 1)
             for device in WAVEFORM_DEVICES:
                 widgets = self.trace_widgets[device]
                 configured = device in group.waveforms

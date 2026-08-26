@@ -97,6 +97,8 @@ QFrame#panel {{ background: {palette['panel']}; border: 1px solid {palette['bord
 QLabel {{ background: transparent; border: none; }}
 QLabel#title {{ font-size: 22px; font-weight: 700; }}
 QLabel[role="sectionTitle"] {{ font-size: 13px; font-weight: 700; }}
+QLabel[role="controlGroup"] {{ color: {palette['text']}; font-size: 12px;
+  font-weight: 700; padding-bottom: 2px; }}
 QLabel[role="field"] {{ color: {palette['muted']}; font-size: 11px; font-weight: 700; }}
 QLabel[role="value"] {{ font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; }}
 QLabel[tone="success"] {{ color: {palette['accent']}; }}
@@ -122,6 +124,7 @@ QCheckBox {{ background: transparent; spacing: 6px; }}
 QHeaderView::section {{ background: {palette['panel']}; }}
 QStatusBar {{ background: {palette['panel']}; color: {palette['muted']}; }}
 QSplitter::handle {{ background: {palette['border']}; height: 3px; }}
+QFrame#timingGroupSeparator {{ background: {palette['border']}; border: none; }}
 """
 
 
@@ -282,21 +285,23 @@ class TimingWindow(QMainWindow):
         controls_layout.addWidget(controls_title)
 
         table = QGridLayout()
+        self.controls_table = table
         table.setHorizontalSpacing(6)
         table.setVerticalSpacing(4)
         table.addWidget(self._field_label("Channel"), 0, 0, 2, 1)
         table.addWidget(self._field_label("Trigger"), 0, 1, 2, 1)
         delay_header = self._field_label("Delay")
+        delay_header.setProperty("role", "controlGroup")
         delay_header.setAlignment(Qt.AlignCenter)
         table.addWidget(delay_header, 0, 2, 1, 5)
         width_header = self._field_label("Width")
+        width_header.setProperty("role", "controlGroup")
         width_header.setAlignment(Qt.AlignCenter)
-        table.addWidget(width_header, 0, 7, 1, 5)
-        table.addWidget(self._field_label("Status"), 0, 12, 2, 1)
-        for column, text in enumerate(
-            ("Request", "", "", "Set", "Readback", "Request", "", "", "Set", "Readback"),
-            start=2,
-        ):
+        table.addWidget(width_header, 0, 8, 1, 5)
+        table.addWidget(self._field_label("Status"), 0, 13, 2, 1)
+        for column, text in enumerate(("Request", "", "", "Set", "Readback"), start=2):
+            table.addWidget(self._field_label(text), 1, column)
+        for column, text in enumerate(("Request", "", "", "Set", "Readback"), start=8):
             table.addWidget(self._field_label(text), 1, column)
         for row, device in enumerate(DEVICES, start=2):
             widgets = self._build_channel_row(device, controls)
@@ -309,6 +314,7 @@ class TimingWindow(QMainWindow):
                 widgets.delay_delay,
                 widgets.delay_setpoint,
                 widgets.delay_readback,
+                None,
                 widgets.width_target,
                 widgets.width_decrease,
                 widgets.width_increase,
@@ -317,7 +323,8 @@ class TimingWindow(QMainWindow):
                 widgets.status,
             )
             for column, widget in enumerate(row_widgets):
-                table.addWidget(widget, row, column)
+                if widget is not None:
+                    table.addWidget(widget, row, column)
         group_row = 2 + len(DEVICES)
         self.linked_delay_label = self._field_label("Linked Delay")
         self.linked_delay_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -341,12 +348,24 @@ class TimingWindow(QMainWindow):
 
         width_step_label = self._field_label("Width Step")
         width_step_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        table.addWidget(width_step_label, step_row, 7)
+        table.addWidget(width_step_label, step_row, 8)
         self.width_step = self._step_combo(self.runtime.width_step_us)
-        table.addWidget(self.width_step, step_row, 8, 1, 2)
-        table.addWidget(self._field_label("μs"), step_row, 10)
+        table.addWidget(self.width_step, step_row, 9, 1, 2)
+        table.addWidget(self._field_label("μs"), step_row, 11)
 
-        table.setColumnStretch(12, 1)
+        self.timing_group_separator = QFrame(controls)
+        self.timing_group_separator.setObjectName("timingGroupSeparator")
+        self.timing_group_separator.setFixedWidth(1)
+        table.setColumnMinimumWidth(7, 19)
+        table.addWidget(
+            self.timing_group_separator,
+            0,
+            7,
+            step_row + 1,
+            1,
+            Qt.AlignHCenter,
+        )
+        table.setColumnStretch(13, 1)
         controls_layout.addLayout(table)
 
         self.splitter.addWidget(controls)

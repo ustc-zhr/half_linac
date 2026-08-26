@@ -414,6 +414,44 @@ class TimingWindowSmokeTests(unittest.TestCase):
                     TRACE_COLORS[device],
                     window.channel_widgets[device].channel_label.styleSheet(),
                 )
+            hv_widgets = window.channel_widgets["hv"]
+            controls_table = window.controls_table
+            self.assertEqual(
+                controls_table.getItemPosition(
+                    controls_table.indexOf(hv_widgets.delay_target)
+                )[1],
+                2,
+            )
+            self.assertEqual(
+                controls_table.getItemPosition(
+                    controls_table.indexOf(hv_widgets.delay_readback)
+                )[1],
+                6,
+            )
+            self.assertEqual(
+                controls_table.getItemPosition(
+                    controls_table.indexOf(window.timing_group_separator)
+                )[1],
+                7,
+            )
+            self.assertEqual(
+                controls_table.getItemPosition(
+                    controls_table.indexOf(hv_widgets.width_target)
+                )[1],
+                8,
+            )
+            self.assertEqual(
+                controls_table.getItemPosition(
+                    controls_table.indexOf(hv_widgets.width_readback)
+                )[1],
+                12,
+            )
+            self.assertEqual(
+                controls_table.getItemPosition(
+                    controls_table.indexOf(hv_widgets.status)
+                )[1],
+                13,
+            )
             self.assertEqual(window.current_group.element_id, "KLY01")
             self.assertEqual(
                 window.windowTitle(), "HALF Linac · RF Power Source Timing"
@@ -448,6 +486,22 @@ class TimingWindowSmokeTests(unittest.TestCase):
             self.assertFalse(
                 window.waveform_view.trace_widgets["kly"].summary.isHidden()
             )
+            for expected_column, device in enumerate(("llrf", "ssa", "kly")):
+                trace_grid = window.waveform_view.trace_grid
+                self.assertEqual(
+                    trace_grid.getItemPosition(
+                        trace_grid.indexOf(
+                            window.waveform_view.trace_widgets[device].summary
+                        )
+                    )[1],
+                    expected_column,
+                )
+                self.assertEqual(
+                    window.waveform_view.trace_widgets[device].visible.width(), 72
+                )
+                self.assertEqual(
+                    window.waveform_view.trace_widgets[device].status.width(), 150
+                )
             self.assertTrue(window.group_advance.autoRepeat())
             self.assertEqual(window.group_advance.autoRepeatDelay(), 300)
             self.assertEqual(window.group_advance.autoRepeatInterval(), 150)
@@ -647,6 +701,16 @@ class TimingWindowSmokeTests(unittest.TestCase):
             self.assertTrue(
                 window.waveform_view.trace_widgets["kly"].summary.isHidden()
             )
+            for expected_column, device in enumerate(("llrf", "ssa", "pickup")):
+                trace_grid = window.waveform_view.trace_grid
+                self.assertEqual(
+                    trace_grid.getItemPosition(
+                        trace_grid.indexOf(
+                            window.waveform_view.trace_widgets[device].summary
+                        )
+                    )[1],
+                    expected_column,
+                )
             self.assertFalse(window.group_advance.isEnabled())
             for index, device in enumerate(("llrf", "ssa")):
                 window._on_connection(device, "delay_set", True)
