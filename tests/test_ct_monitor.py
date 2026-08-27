@@ -17,6 +17,7 @@ from half_linac.src.apps.ct_monitor.model import (
     MonitorStore,
     ShotPairer,
     SignalSample,
+    TransmissionMapPairer,
     TransmissionSample,
     calculate_efficiency,
     downsample_scalar_points,
@@ -259,6 +260,52 @@ class CTMonitorPairingTests(unittest.TestCase):
         self.assertEqual(len(result.samples), 1)
         self.assertEqual(result.mismatched_samples, 1)
         self.assertAlmostEqual(result.samples[0].efficiency_percent, 50.0)
+
+    def test_n_channel_map_pairs_one_shot_and_calculates_adjacent_segments(self):
+        queues = {
+            "ICT01": (self._sample(1.0, 10.00),),
+            "ICT02": (self._sample(0.8, 10.05),),
+            "ICT03": (self._sample(0.4, 10.10),),
+            "ICT04": (self._sample(0.3, 10.15),),
+        }
+        result = TransmissionMapPairer().pair_queued(
+            queues,
+            {key: values[-1] for key, values in queues.items()},
+            ("ICT01", "ICT02", "ICT03", "ICT04"),
+            now=10.2,
+            scale_to_display_unit=1.0,
+            tolerance_s=0.2,
+            stale_timeout_s=3.0,
+            minimum_upstream_value=0.01,
+        )
+
+        self.assertEqual(result.status, "valid")
+        self.assertEqual(len(result.samples), 1)
+        for actual, expected in zip(
+            [segment.efficiency_percent for segment in result.samples[0].segments],
+            [80.0, 50.0, 75.0],
+        ):
+            self.assertAlmostEqual(actual, expected)
+
+    def test_n_channel_map_discards_oldest_mismatch_and_keeps_next_shot(self):
+        queues = {
+            "ICT01": (self._sample(1.0, 9.0), self._sample(1.0, 10.0)),
+            "ICT02": (self._sample(0.8, 10.02),),
+            "ICT03": (self._sample(0.7, 10.04),),
+        }
+        result = TransmissionMapPairer().pair_queued(
+            queues,
+            {key: values[-1] for key, values in queues.items()},
+            ("ICT01", "ICT02", "ICT03"),
+            now=10.1,
+            scale_to_display_unit=1.0,
+            tolerance_s=0.2,
+            stale_timeout_s=3.0,
+            minimum_upstream_value=0.01,
+        )
+
+        self.assertEqual(len(result.samples), 1)
+        self.assertEqual(result.mismatched_samples, 1)
 
 
 class CTMonitorProfileTests(unittest.TestCase):

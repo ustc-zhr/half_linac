@@ -1,0 +1,18 @@
+{
+  "status": "provisional",
+  "note": "Initial commissioning draft. Confirm against power-supply resolution and steady-state noise before operational acceptance.",
+  "backends": {
+    "real": {
+      "settle_s": 0.3,
+      "timeout_s": 5.0,
+      "tolerance_by_kind_channel": {
+        "corr/current_set": 0.01,
+        "quad/current_set": 0.05,
+        "bend/current_set": 0.05,
+        "solenoid/current_set": 0.01,
+        "modulator/voltage_set": 20.0
+      },
+      "tolerance_by_point": {}
+    }
+  }
+}

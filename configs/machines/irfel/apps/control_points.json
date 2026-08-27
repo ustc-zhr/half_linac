@@ -1,0 +1,10 @@
+{
+  "backends": {
+    "real": {
+      "settle_s": 0.0,
+      "timeout_s": 2.0,
+      "tolerance_by_kind_channel": {},
+      "tolerance_by_point": {}
+    }
+  }
+}

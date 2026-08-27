@@ -585,7 +585,10 @@ def _validate_app(profile: MachineProfile, app_name: str) -> list[MachineValidat
     if app_name in MODEL_VALIDATED_APP_NAMES and contexts:
         checks.append(_validate_elegant_model_backend(app_name, contexts[0]))
 
-    if profile.machine.id == "irfel":
+    if (
+        profile.machine.id == "irfel"
+        and app_name not in INTRINSIC_READ_ONLY_APP_NAMES
+    ):
         checks.append(_validate_real_commissioning_status(profile, app_name))
 
     return checks
@@ -626,6 +629,7 @@ def _validate_real_commissioning_status(
 MODEL_VALIDATED_APP_NAMES = frozenset(
     {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
 )
+INTRINSIC_READ_ONLY_APP_NAMES = frozenset({"machine_snapshot"})
 
 
 def describe_app_model_support(machine_id: str | None, app_name: str) -> tuple[bool, str | None]:

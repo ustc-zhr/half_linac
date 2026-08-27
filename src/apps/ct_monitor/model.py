@@ -39,6 +39,28 @@ class PairingBatch:
     mismatched_samples: int = 0
 
 
+@dataclass(frozen=True)
+class TransmissionMapSegment:
+    upstream_key: str
+    downstream_key: str
+    efficiency_percent: float | None
+    status: str
+
+
+@dataclass(frozen=True)
+class TransmissionMapSample:
+    timestamp: float
+    station_values: tuple[tuple[str, float], ...]
+    segments: tuple[TransmissionMapSegment, ...]
+
+
+@dataclass(frozen=True)
+class TransmissionMapBatch:
+    status: str
+    samples: tuple[TransmissionMapSample, ...] = ()
+    mismatched_samples: int = 0
+
+
 class MonitorStore:
     """Thread-safe latest-value and bounded event queues for pyepics callbacks."""
 
@@ -206,7 +228,7 @@ def downsample_scalar_points(
     return [points[index] for index in sorted(selected)]
 
 
-class ShotPairer:
+class _ShotPairerBase:
     def __init__(self) -> None:
         self._consumed_timestamps: dict[str, float] = {}
 
@@ -296,6 +318,171 @@ class ShotPairer:
             ),
         )
 
+
+class TransmissionMapPairer:
+    """Pair ordered N-channel samples without weakening source timestamp semantics."""
+
+    def __init__(self) -> None:
+        self._consumed_timestamps: dict[str, float] = {}
+
+    def reset(self) -> None:
+        self._consumed_timestamps.clear()
+
+    def pair_queued(
+        self,
+        queues: Mapping[str, Sequence[SignalSample]],
+        latest: Mapping[str, SignalSample],
+        ordered_keys: Sequence[str],
+        *,
+        now: float,
+        scale_to_display_unit: float,
+        tolerance_s: float,
+        stale_timeout_s: float | None,
+        minimum_upstream_value: float,
+    ) -> TransmissionMapBatch:
+        keys = tuple(ordered_keys)
+        if len(keys) < 2:
+            raise ValueError("A transmission map requires at least two channels")
+        latest_status = self._latest_status(
+            latest, keys, now=now, stale_timeout_s=stale_timeout_s
+        )
+        if latest_status != "ready":
+            return TransmissionMapBatch(latest_status)
+
+        pending = {key: self._unconsumed(queues.get(key, ()), key) for key in keys}
+        if any(not pending[key] for key in keys):
+            return TransmissionMapBatch("waiting for paired update")
+
+        paired: list[TransmissionMapSample] = []
+        mismatched = 0
+        last_rejection: str | None = None
+        while all(pending[key] for key in keys):
+            current = {key: pending[key][0] for key in keys}
+            timestamps = {key: sample.timestamp for key, sample in current.items()}
+            assert all(timestamp is not None for timestamp in timestamps.values())
+            oldest = min(timestamps.values())
+            newest = max(timestamps.values())
+            if newest - oldest > tolerance_s:
+                for key, timestamp in timestamps.items():
+                    if timestamp == oldest:
+                        self._consumed_timestamps[key] = timestamp
+                        pending[key].pop(0)
+                mismatched += 1
+                continue
+
+            for key, sample in current.items():
+                assert sample.timestamp is not None
+                self._consumed_timestamps[key] = sample.timestamp
+                pending[key].pop(0)
+            result = self._build_sample(
+                current,
+                keys,
+                now=now,
+                scale_to_display_unit=scale_to_display_unit,
+                stale_timeout_s=stale_timeout_s,
+                minimum_upstream_value=minimum_upstream_value,
+            )
+            if isinstance(result, TransmissionMapSample):
+                paired.append(result)
+            else:
+                last_rejection = result
+
+        if paired:
+            status = "partial" if any(
+                segment.status != "valid"
+                for sample in paired
+                for segment in sample.segments
+            ) else "valid"
+            return TransmissionMapBatch(status, tuple(paired), mismatched)
+        if last_rejection is not None:
+            return TransmissionMapBatch(last_rejection, mismatched_samples=mismatched)
+        if mismatched:
+            return TransmissionMapBatch("timestamp mismatch", mismatched_samples=mismatched)
+        return TransmissionMapBatch("waiting for paired update")
+
+    def _unconsumed(self, samples: Sequence[SignalSample], key: str) -> list[SignalSample]:
+        consumed = self._consumed_timestamps.get(key, float("-inf"))
+        return sorted(
+            (
+                sample
+                for sample in samples
+                if sample.timestamp is not None
+                and math.isfinite(sample.timestamp)
+                and sample.timestamp > consumed
+            ),
+            key=lambda sample: sample.timestamp,
+        )
+
+    @staticmethod
+    def _latest_status(
+        samples: Mapping[str, SignalSample],
+        keys: Sequence[str],
+        *,
+        now: float,
+        stale_timeout_s: float | None,
+    ) -> str:
+        for key in keys:
+            sample = samples.get(key)
+            if sample is None:
+                return "waiting for data"
+            if not sample.connected:
+                return "PV disconnected"
+            if sample.value is None or not math.isfinite(sample.value):
+                return "invalid value"
+            if (sample.severity or 0) >= 2:
+                return "PV alarm"
+            if sample.timestamp is None or not math.isfinite(sample.timestamp):
+                return "missing timestamp"
+            if stale_timeout_s is not None and now - sample.timestamp > stale_timeout_s:
+                return "stale data"
+        return "ready"
+
+    @staticmethod
+    def _build_sample(
+        samples: Mapping[str, SignalSample],
+        keys: Sequence[str],
+        *,
+        now: float,
+        scale_to_display_unit: float,
+        stale_timeout_s: float | None,
+        minimum_upstream_value: float,
+    ) -> TransmissionMapSample | str:
+        for sample in samples.values():
+            if sample.value is None or not math.isfinite(sample.value):
+                return "invalid value"
+            if (sample.severity or 0) >= 2:
+                return "PV alarm"
+            assert sample.timestamp is not None
+            if stale_timeout_s is not None and now - sample.timestamp > stale_timeout_s:
+                return "stale data"
+        values = tuple(
+            (key, samples[key].value * scale_to_display_unit)
+            for key in keys
+        )
+        value_by_key = dict(values)
+        segments = []
+        for upstream, downstream in zip(keys, keys[1:]):
+            efficiency = calculate_efficiency(
+                value_by_key[upstream],
+                value_by_key[downstream],
+                minimum_upstream_value,
+            )
+            segments.append(
+                TransmissionMapSegment(
+                    upstream,
+                    downstream,
+                    efficiency,
+                    "valid" if efficiency is not None else "upstream below threshold",
+                )
+            )
+        return TransmissionMapSample(
+            max(samples[key].timestamp for key in keys),
+            values,
+            tuple(segments),
+        )
+
+
+class ShotPairer(_ShotPairerBase):
     def pair_queued(
         self,
         queues: Mapping[str, Sequence[SignalSample]],

@@ -33,12 +33,18 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from half_linac.src.shared.app_theme import resolve_initial_theme
+from half_linac.src.shared.control_point import (
+    WatchdogStatus,
+    collect_control_points,
+    sample_watchdog,
+)
 from half_linac.src.shared.machine_profile import (
     RuntimeContextWidget,
     load_profile,
@@ -79,6 +85,10 @@ LIGHT = {
     "danger": "#b44141",
     "pending": "#966312",
 }
+
+
+def _display_number(value) -> str:
+    return "" if value is None else f"{value:g}"
 
 
 def build_theme(colors: dict[str, str]) -> str:
@@ -190,13 +200,13 @@ class StatusStrip(QFrame):
         item_layout.addWidget(title_label)
         item_layout.addWidget(value_label)
         self._layout.addWidget(item)
-        self._items[key] = (item, value_label)
+        self._items[key] = (item, title_label, value_label)
 
     def finish(self):
         self._layout.addStretch(1)
 
     def set_item(self, key: str, value: str, tone: str = "subtle", tooltip: str = ""):
-        item, value_label = self._items[key]
+        item, _title_label, value_label = self._items[key]
         item.setProperty("tone", tone)
         value_label.setProperty("tone", tone)
         value_label.setText(value)
@@ -206,6 +216,10 @@ class StatusStrip(QFrame):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             widget.update()
+
+    def set_title(self, key: str, title: str):
+        _item, title_label, _value_label = self._items[key]
+        title_label.setText(title)
 
 
 class ConnectionWorker(QThread):
@@ -237,8 +251,39 @@ class ConnectionWorker(QThread):
         self.scan_finished.emit(cancelled)
 
 
+class WatchdogWorker(QThread):
+    scan_finished = pyqtSignal(object, bool)
+    scan_failed = pyqtSignal(str)
+
+    def __init__(self, points, timeout_s: float, parent=None):
+        super().__init__(parent)
+        self.points = tuple(points)
+        self.timeout_s = timeout_s
+        self._stop_requested = threading.Event()
+
+    def request_stop(self):
+        self._stop_requested.set()
+
+    def run(self):
+        try:
+            import epics
+
+            results = sample_watchdog(
+                self.points,
+                lambda pv_name: epics.caget(pv_name, timeout=self.timeout_s),
+                stop_requested=self._stop_requested.is_set,
+            )
+        except Exception as exc:
+            self.scan_failed.emit(f"{type(exc).__name__}: {exc}")
+            return
+        self.scan_finished.emit(results, self._stop_requested.is_set())
+
+
 class PvConnectionWindow(QMainWindow):
     COLUMN_NAMES = ("Backend", "Element", "Type", "Channel", "PV", "Status", "Detail")
+    WATCHDOG_COLUMNS = (
+        "Element", "Type", "Setpoint PV", "Readback PV", "SP", "RB", "RB - SP", "Tolerance", "Status", "Detail"
+    )
 
     def __init__(self):
         super().__init__()
@@ -250,7 +295,11 @@ class PvConnectionWindow(QMainWindow):
         self.current_theme = resolve_initial_theme()
         self.endpoints: tuple[PvEndpoint, ...] = ()
         self.results: dict[str, PvConnectionResult] = {}
-        self.worker: ConnectionWorker | None = None
+        self.control_points = collect_control_points(
+            self.machine_profile, self.control_backend
+        )
+        self.watchdog_results = {}
+        self.worker: ConnectionWorker | WatchdogWorker | None = None
         self.scan_state = "Idle"
         self._build_ui()
         self._apply_theme()
@@ -258,7 +307,7 @@ class PvConnectionWindow(QMainWindow):
         install_qt_window_raise_handler(self)
 
     def _build_ui(self):
-        self.setWindowTitle(f"{self.machine_profile.machine.display_name} PV Connection Check")
+        self.setWindowTitle(f"{self.machine_profile.machine.display_name} PV Diagnostics")
         self.resize(1120, 720)
         self.setMinimumSize(780, 520)
 
@@ -277,7 +326,7 @@ class PvConnectionWindow(QMainWindow):
         self.header_grid.setContentsMargins(0, 0, 0, 0)
         self.header_grid.setHorizontalSpacing(8)
         self.header_grid.setVerticalSpacing(6)
-        self.header_title = QLabel("PV Connection Check", header_panel)
+        self.header_title = QLabel("PV Diagnostics", header_panel)
         self.header_title.setObjectName("title")
         self.timeout_spin = QDoubleSpinBox(header_panel)
         self.timeout_spin.setRange(0.1, 10.0)
@@ -356,7 +405,16 @@ class PvConnectionWindow(QMainWindow):
             header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.Stretch)
         header.setSectionResizeMode(6, QHeaderView.Stretch)
-        layout.addWidget(self.table, 1)
+        self.watchdog_table = QTableWidget(0, len(self.WATCHDOG_COLUMNS), root)
+        self.watchdog_table.setHorizontalHeaderLabels(self.WATCHDOG_COLUMNS)
+        self.watchdog_table.setAlternatingRowColors(True)
+        self.watchdog_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.watchdog_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.watchdog_table.verticalHeader().setVisible(False)
+        self.tabs = QTabWidget(root)
+        self.tabs.addTab(self.table, "Connection")
+        self.tabs.addTab(self.watchdog_table, "SP/RB Watchdog")
+        layout.addWidget(self.tabs, 1)
         self.setCentralWidget(root)
         self._update_responsive_layouts()
 
@@ -365,6 +423,7 @@ class PvConnectionWindow(QMainWindow):
         self.check_button.clicked.connect(self._start_scan)
         self.stop_button.clicked.connect(self._stop_scan)
         self.export_button.clicked.connect(self._export_report)
+        self.tabs.currentChanged.connect(self._switch_view)
 
     def _load_endpoints(self):
         self.endpoints = collect_pv_endpoints(
@@ -373,6 +432,37 @@ class PvConnectionWindow(QMainWindow):
         )
         self.results.clear()
         self._populate_table()
+        self._populate_watchdog_table()
+
+    def _watchdog_points(self):
+        return tuple(point for point in self.control_points if point.readback_pv)
+
+    def _populate_watchdog_table(self):
+        points = self._watchdog_points()
+        self.watchdog_table.setSortingEnabled(False)
+        self.watchdog_table.setRowCount(len(points))
+        for row, point in enumerate(points):
+            result = self.watchdog_results.get(point.key)
+            values = (
+                point.element_id,
+                point.element_kind,
+                point.setpoint_pv,
+                point.readback_pv or "",
+                _display_number(result.setpoint_value if result else None),
+                _display_number(result.readback_value if result else None),
+                _display_number(result.difference if result else None),
+                _display_number(point.tolerance),
+                result.status.value if result else "not_checked",
+                result.detail if result else "",
+            )
+            for column, value in enumerate(values):
+                self.watchdog_table.setItem(row, column, QTableWidgetItem(value))
+        self.watchdog_table.setSortingEnabled(True)
+        header = self.watchdog_table.horizontalHeader()
+        for column in (0, 1, 4, 5, 6, 7, 8):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        for column in (2, 3, 9):
+            header.setSectionResizeMode(column, QHeaderView.Stretch)
 
     def _populate_table(self):
         self.table.setSortingEnabled(False)
@@ -399,6 +489,9 @@ class PvConnectionWindow(QMainWindow):
     def _start_scan(self):
         if self.worker and self.worker.isRunning():
             return
+        if self.tabs.currentIndex() == 1:
+            self._start_watchdog()
+            return
         pv_names = unique_pv_names(self.endpoints)
         if not pv_names:
             return
@@ -411,6 +504,30 @@ class PvConnectionWindow(QMainWindow):
         self.worker.scan_finished.connect(self._finish_scan)
         self.worker.start()
         self._update_summary("Checking")
+
+    def _start_watchdog(self):
+        points = self._watchdog_points()
+        if not points:
+            return
+        self.watchdog_results.clear()
+        self._set_scan_controls(True)
+        self.worker = WatchdogWorker(points, self.timeout_spin.value(), self)
+        self.worker.scan_finished.connect(self._finish_watchdog)
+        self.worker.scan_failed.connect(self._fail_watchdog)
+        self.worker.start()
+        self._update_watchdog_summary("Checking")
+
+    def _finish_watchdog(self, results, cancelled: bool):
+        self.watchdog_results = {result.point.key: result for result in results}
+        self._set_scan_controls(False)
+        self._populate_watchdog_table()
+        self._apply_filters()
+        self._update_watchdog_summary("Stopped" if cancelled else "Complete")
+
+    def _fail_watchdog(self, detail: str):
+        self._set_scan_controls(False)
+        self.statusBar().showMessage(f"Watchdog failed: {detail}", 6000)
+        self._update_watchdog_summary("Failed")
 
     def _stop_scan(self):
         if self.worker and self.worker.isRunning():
@@ -459,13 +576,41 @@ class PvConnectionWindow(QMainWindow):
     def _apply_filters(self, *_args):
         needle = self.search_edit.text().strip().lower()
         wanted_status = self.status_combo.currentText()
-        for row in range(self.table.rowCount()):
+        active_table = self.watchdog_table if self.tabs.currentIndex() == 1 else self.table
+        text_columns = 4 if active_table is self.watchdog_table else 5
+        status_column = 8 if active_table is self.watchdog_table else 5
+        for row in range(active_table.rowCount()):
             text_match = not needle or any(
-                needle in self.table.item(row, column).text().lower() for column in range(5)
+                needle in active_table.item(row, column).text().lower() for column in range(text_columns)
             )
-            status = self.table.item(row, 5).text()
-            status_match = wanted_status == "All statuses" or status == wanted_status
-            self.table.setRowHidden(row, not (text_match and status_match))
+            status = active_table.item(row, status_column).text()
+            status_match = wanted_status == "All statuses" or status.casefold() == wanted_status.casefold()
+            active_table.setRowHidden(row, not (text_match and status_match))
+
+    def _switch_view(self, index: int):
+        watchdog = index == 1
+        self.table_title.setText("SP/RB Watchdog" if watchdog else "PV Inventory")
+        self.status_combo.clear()
+        self.status_combo.addItems(
+            ("All statuses", "match", "mismatch", "unavailable", "not_configured", "not_checked")
+            if watchdog
+            else ("All statuses", "Connected", "Unavailable", "Not checked")
+        )
+        self._apply_filters()
+        if watchdog:
+            self.status_panel.set_title("mappings", "SP/RB Pairs")
+            self.status_panel.set_title("unique", "PV Reads")
+            self.status_panel.set_title("connected", "Matched")
+            self.status_panel.set_title("unavailable", "Problems")
+            self.status_panel.set_title("remaining", "Unconfigured")
+            self._update_watchdog_summary("Idle")
+        else:
+            self.status_panel.set_title("mappings", "Mappings")
+            self.status_panel.set_title("unique", "Unique PVs")
+            self.status_panel.set_title("connected", "Connected")
+            self.status_panel.set_title("unavailable", "Unavailable")
+            self.status_panel.set_title("remaining", "Not Checked")
+            self._update_summary("Idle")
 
     def _update_summary(self, prefix: str | None = None):
         if prefix is not None:
@@ -488,18 +633,27 @@ class PvConnectionWindow(QMainWindow):
             str(connected),
             "success" if connected else "subtle",
         )
-        self.status_panel.set_item(
-            "unavailable",
-            str(unavailable),
-            "danger" if unavailable else "subtle",
-        )
-        self.status_panel.set_item(
-            "remaining",
-            str(pending),
-            "warning" if self.scan_state in {"Checking", "Stopping"} and pending else "subtle",
-        )
+
+    def _update_watchdog_summary(self, prefix: str | None = None):
+        if prefix is not None:
+            self.scan_state = prefix
+        counts = {status: 0 for status in WatchdogStatus}
+        for result in self.watchdog_results.values():
+            counts[result.status] += 1
+        pending = len(self._watchdog_points()) - len(self.watchdog_results)
+        self.status_panel.set_item("scan", self.scan_state)
+        self.status_panel.set_item("mappings", str(len(self._watchdog_points())))
+        self.status_panel.set_item("unique", str(len(self._watchdog_points()) * 2))
+        self.status_panel.set_item("connected", str(counts[WatchdogStatus.MATCH]), "success" if counts[WatchdogStatus.MATCH] else "subtle")
+        problems = counts[WatchdogStatus.MISMATCH] + counts[WatchdogStatus.UNAVAILABLE]
+        self.status_panel.set_item("unavailable", str(problems), "danger" if problems else "subtle")
+        unconfigured = counts[WatchdogStatus.NOT_CONFIGURED]
+        self.status_panel.set_item("remaining", str(unconfigured or pending), "warning" if unconfigured or pending else "subtle")
 
     def _export_report(self):
+        if self.tabs.currentIndex() == 1:
+            self._export_watchdog_report()
+            return
         machine_id = self.machine_profile.machine.id
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         default_name = (
@@ -518,6 +672,20 @@ class PvConnectionWindow(QMainWindow):
                     (machine_id,)
                     + tuple(self.table.item(row, column).text() for column in range(len(self.COLUMN_NAMES)))
                 )
+        self.statusBar().showMessage(f"Report exported to {filename}", 6000)
+
+    def _export_watchdog_report(self):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export SP/RB watchdog report", f"{self.machine_profile.machine.id}_{self.control_backend}_watchdog_{timestamp}.csv", "CSV files (*.csv)"
+        )
+        if not filename:
+            return
+        with Path(filename).open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(("machine", "backend") + tuple(name.lower() for name in self.WATCHDOG_COLUMNS))
+            for row in range(self.watchdog_table.rowCount()):
+                writer.writerow((self.machine_profile.machine.id, self.control_backend) + tuple(self.watchdog_table.item(row, column).text() for column in range(len(self.WATCHDOG_COLUMNS))))
         self.statusBar().showMessage(f"Report exported to {filename}", 6000)
 
     def _toggle_theme(self):

@@ -52,9 +52,11 @@ SUPPORTED_APP_NAMES = {
     "hv_feedback",
     "ct_monitor",
     "power_source_timing",
+    "machine_snapshot",
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
 APP_WORKFLOW_FILES = {
+    "control_points": "control_points.json",
     "orbit": "orbit_correct.json",
     "beam_monitor": "beam_monitor.json",
     "energy_spectrum": "energy_spectrum.json",
@@ -83,6 +85,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "hv_feedback": ("hv_feedback",),
     "ct_monitor": ("ct_monitor",),
     "power_source_timing": ("power_source_timing",),
+    "machine_snapshot": ("control_points",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -22,15 +21,19 @@ from matplotlib.figure import Figure
 from PyQt5.QtCore import QPointF, Qt, QTimer
 from PyQt5.QtGui import QIntValidator, QPainter, QPalette, QPen
 from PyQt5.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMainWindow,
     QPushButton,
     QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -40,8 +43,9 @@ from model import (
     MonitorStore,
     ShotPairer,
     SignalSample,
+    TransmissionMapPairer,
+    TransmissionMapSample,
     TransmissionSample,
-    downsample_scalar_points,
     downsample_transmission_samples,
     parse_bounded_integer_input,
     rolling_statistics,
@@ -130,6 +134,12 @@ QComboBox::down-arrow {{ image: none; width: 0px; height: 0px; }}
 QComboBox QAbstractItemView {{ background: {palette['input']}; color: {palette['text']};
   border: 1px solid {palette['border']}; border-radius: 8px; padding: 4px;
   outline: 0; selection-background-color: {palette['accent']}; }}
+QTableWidget {{ background: {palette['panel']}; alternate-background-color: {palette['input']};
+  color: {palette['text']}; border: none; gridline-color: {palette['border']};
+  selection-background-color: {palette['accent']}; selection-color: {palette['window']}; }}
+QHeaderView::section {{ background: {palette['input']}; color: {palette['muted']};
+  border: none; border-bottom: 1px solid {palette['border']}; padding: 5px;
+  font-size: 11px; font-weight: 700; }}
 QStatusBar {{ background: {palette['panel']}; color: {palette['muted']}; }}
 """
 
@@ -267,29 +277,12 @@ class CTMonitorWindow(QMainWindow):
             logical_channel=self.measurement_channel,
             control_backend=self.backend,
         )
-        self.fct_elements = list_elements(
-            self.app_context,
-            kind="ct",
-            logical_channel="peak_current",
-            control_backend=self.backend,
-        )
-        self.fct_waveform_elements = list_elements(
-            self.app_context,
-            kind="ct",
-            logical_channel="waveform",
-            control_backend=self.backend,
-        )[:1]
         self.sample_noun = "samples" if self.backend == "vm" else "shots"
         self.store = MonitorStore(queue_size=self.event_queue_size)
         self.pairer = ShotPairer()
+        self.map_pairer = TransmissionMapPairer()
         self.transmission_history: list[TransmissionSample] = []
-        self.fct_history: list[tuple[float, float]] = []
-        self._last_fct_timestamp = float("-inf")
-        self._fct_waveform_lock = threading.Lock()
-        self._fct_waveform: tuple[float, ...] = ()
-        self._fct_waveform_timestamp: float | None = None
-        self._fct_waveform_connected = False
-        self._fct_waveform_units = ""
+        self._last_map_sample: TransmissionMapSample | None = None
         self._pvs: dict[str, PV] = {}
         self._pv_error: str | None = None
         self._paused = False
@@ -302,6 +295,9 @@ class CTMonitorWindow(QMainWindow):
         self._measurement_display_names = {
             element.id: element.display_name for element in self.measurement_elements
         }
+        self._map_element_ids = tuple(
+            element.id for element in sorted(self.measurement_elements, key=lambda item: item.order)
+        )
 
         self._build_ui()
         self._apply_theme()
@@ -312,7 +308,7 @@ class CTMonitorWindow(QMainWindow):
         self._refresh()
 
     def _build_ui(self) -> None:
-        self.setWindowTitle(f"{self.profile.machine.display_name} CT Monitor")
+        self.setWindowTitle(f"{self.profile.machine.display_name} ICT Monitor")
         self.resize(1280, 900)
         self.setMinimumSize(980, 720)
         central = QWidget(self)
@@ -325,7 +321,7 @@ class CTMonitorWindow(QMainWindow):
         header.setObjectName("panel")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(14, 10, 14, 10)
-        title = QLabel("CT Transmission Monitor", header)
+        title = QLabel("ICT Transmission Monitor", header)
         title.setObjectName("title")
         header_layout.addWidget(title)
         header_layout.addStretch(1)
@@ -404,6 +400,47 @@ class CTMonitorWindow(QMainWindow):
         self.upstream_combo.currentIndexChanged.connect(self._selection_changed)
         self.downstream_combo.currentIndexChanged.connect(self._selection_changed)
         self._update_selection_policy()
+
+        map_panel = QFrame(central)
+        map_panel.setObjectName("panel")
+        map_layout = QVBoxLayout(map_panel)
+        map_layout.setContentsMargins(12, 8, 12, 10)
+        map_layout.setSpacing(6)
+        map_title = QLabel("Transmission map", map_panel)
+        map_title.setObjectName("sectionTitle")
+        map_layout.addWidget(map_title)
+        self.map_table = QTableWidget(max(0, len(self._map_element_ids) - 1), 6, map_panel)
+        self.map_table.setHorizontalHeaderLabels(
+            ("UPSTREAM", self.measurement_unit, "TRANSMISSION", "DOWNSTREAM", self.measurement_unit, "STATUS")
+        )
+        self.map_table.verticalHeader().hide()
+        self.map_table.setAlternatingRowColors(True)
+        self.map_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.map_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.map_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.map_table.setShowGrid(False)
+        self.map_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.map_table.setFixedHeight(
+            self.map_table.horizontalHeader().height() + self.map_table.rowCount() * 31 + 4
+        )
+        for row, (upstream, downstream) in enumerate(
+            zip(self._map_element_ids, self._map_element_ids[1:])
+        ):
+            values = (
+                self._measurement_display_names.get(upstream, upstream),
+                "—",
+                "—",
+                self._measurement_display_names.get(downstream, downstream),
+                "—",
+                "Waiting for data",
+            )
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, (upstream, downstream))
+                self.map_table.setItem(row, column, item)
+        self.map_table.cellClicked.connect(self._select_map_segment)
+        map_layout.addWidget(self.map_table)
+        root.addWidget(map_panel)
 
         self.trend_window_combo = CleanComboBox(central)
         self.trend_window_combo.setEditable(True)
@@ -486,10 +523,6 @@ class CTMonitorWindow(QMainWindow):
         self.plot_title_label = QLabel("CT trends", plot_panel)
         self.plot_title_label.setObjectName("sectionTitle")
         plot_toolbar.addWidget(self.plot_title_label)
-        if self.fct_elements or self.fct_waveform_elements:
-            fct_mode = "FCT waveform" if self.fct_waveform_elements else "FCT peak history"
-            self.fct_mode_label = self._field_label(f"· {fct_mode}", plot_panel)
-            plot_toolbar.addWidget(self.fct_mode_label)
         plot_toolbar.addStretch(1)
         plot_toolbar.addWidget(self._field_label("ROLLING", plot_panel))
         plot_toolbar.addWidget(self.rolling_window_combo)
@@ -502,15 +535,8 @@ class CTMonitorWindow(QMainWindow):
         self.figure = Figure(figsize=(11, 7), tight_layout=True)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        if self.fct_elements or self.fct_waveform_elements:
-            grid = self.figure.add_gridspec(3, 1, height_ratios=(1, 1, 1.25))
-            self.measurement_axis = self.figure.add_subplot(grid[0, 0])
-            self.efficiency_axis = self.figure.add_subplot(grid[1, 0])
-            self.fct_axis = self.figure.add_subplot(grid[2, 0])
-        else:
-            self.measurement_axis = self.figure.add_subplot(2, 1, 1)
-            self.efficiency_axis = self.figure.add_subplot(2, 1, 2)
-            self.fct_axis = None
+        self.measurement_axis = self.figure.add_subplot(2, 1, 1)
+        self.efficiency_axis = self.figure.add_subplot(2, 1, 2)
         plot_layout.addWidget(self.canvas)
         root.addWidget(plot_panel, 1)
         self._update_selection_labels()
@@ -558,9 +584,6 @@ class CTMonitorWindow(QMainWindow):
             (element, self.measurement_channel)
             for element in self.measurement_elements
         ]
-        channel_elements.extend(
-            (element, "peak_current") for element in self.fct_elements
-        )
         for element, channel in channel_elements:
             key = element.id
             pv_name = resolve_channel(self.app_context, key, channel)
@@ -575,23 +598,6 @@ class CTMonitorWindow(QMainWindow):
                 self._pvs[key] = pv
                 pv.add_callback(
                     self._value_callback(key, channel),
-                    with_ctrlvars=False,
-                )
-            except Exception as exc:
-                self._pv_error = str(exc)
-        for element in self.fct_waveform_elements:
-            pv_key = f"{element.id}:waveform"
-            pv_name = resolve_channel(self.app_context, element.id, "waveform")
-            try:
-                pv = PV(
-                    pv_name,
-                    form="time",
-                    connection_callback=self._waveform_connection_callback(),
-                    auto_monitor=True,
-                )
-                self._pvs[pv_key] = pv
-                pv.add_callback(
-                    self._waveform_value_callback(),
                     with_ctrlvars=False,
                 )
             except Exception as exc:
@@ -625,38 +631,6 @@ class CTMonitorWindow(QMainWindow):
 
         return callback
 
-    def _waveform_connection_callback(self):
-        def callback(conn=False, **_kwargs):
-            with self._fct_waveform_lock:
-                self._fct_waveform_connected = bool(conn)
-                if not conn:
-                    self._fct_waveform = ()
-                    self._fct_waveform_timestamp = None
-            self._plots_dirty = True
-
-        return callback
-
-    def _waveform_value_callback(self):
-        def callback(value=None, timestamp=None, **kwargs):
-            if self._paused or value is None:
-                return
-            try:
-                waveform = tuple(float(item) for item in value)
-            except (TypeError, ValueError):
-                return
-            try:
-                sample_timestamp = float(timestamp)
-            except (TypeError, ValueError):
-                sample_timestamp = time.time()
-            with self._fct_waveform_lock:
-                self._fct_waveform = waveform
-                self._fct_waveform_timestamp = sample_timestamp
-                self._fct_waveform_connected = True
-                self._fct_waveform_units = str(kwargs.get("units") or "")
-            self._plots_dirty = True
-
-        return callback
-
     def _selected_ids(self) -> tuple[str, str]:
         return str(self.upstream_combo.currentData()), str(self.downstream_combo.currentData())
 
@@ -675,6 +649,65 @@ class CTMonitorWindow(QMainWindow):
         self._update_selection_policy()
         self._update_selection_labels()
         self._plots_dirty = True
+
+    def _select_map_segment(self, row: int, _column: int) -> None:
+        if row < 0 or row >= self.map_table.rowCount():
+            return
+        pair = self.map_table.item(row, 0).data(Qt.UserRole)
+        if not pair:
+            return
+        upstream, downstream = pair
+        self.upstream_combo.blockSignals(True)
+        self.downstream_combo.blockSignals(True)
+        self._select_combo_data(self.upstream_combo, upstream)
+        self._select_combo_data(self.downstream_combo, downstream)
+        self.upstream_combo.blockSignals(False)
+        self.downstream_combo.blockSignals(False)
+        self._selection_changed()
+
+    def _update_transmission_map(self, batch, now: float) -> None:
+        if batch.samples and not self._paused:
+            self._last_map_sample = batch.samples[-1]
+        sample = self._last_map_sample
+        values = dict(sample.station_values) if sample is not None else {}
+        global_error = batch.status if batch.status in {
+            "PV disconnected",
+            "PV alarm",
+            "invalid value",
+            "missing timestamp",
+            "stale data",
+            "timestamp mismatch",
+        } else None
+        for row, (upstream, downstream) in enumerate(
+            zip(self._map_element_ids, self._map_element_ids[1:])
+        ):
+            segment = (
+                sample.segments[row]
+                if sample is not None and row < len(sample.segments)
+                else None
+            )
+            upstream_value = values.get(upstream)
+            downstream_value = values.get(downstream)
+            status = "Paused" if self._paused else (
+                global_error or (segment.status if segment is not None else batch.status)
+            )
+            cells = (
+                self._measurement_display_names.get(upstream, upstream),
+                f"{upstream_value:.4g} {self.measurement_unit}"
+                if upstream_value is not None else "—",
+                f"{segment.efficiency_percent:.2f}%"
+                if segment is not None and segment.efficiency_percent is not None
+                else "N/A",
+                self._measurement_display_names.get(downstream, downstream),
+                f"{downstream_value:.4g} {self.measurement_unit}"
+                if downstream_value is not None else "—",
+                status,
+            )
+            for column, value in enumerate(cells):
+                self.map_table.item(row, column).setText(value)
+        self.map_table.setToolTip(
+            f"{batch.status}; {self._age_text(sample, now) if sample is not None else 'waiting for data'}"
+        )
 
     def _update_selection_labels(self) -> None:
         upstream_id, downstream_id = self._selected_ids()
@@ -720,14 +753,10 @@ class CTMonitorWindow(QMainWindow):
         self.pause_button.setProperty("paused", self._paused)
         self.pause_button.style().unpolish(self.pause_button)
         self.pause_button.style().polish(self.pause_button)
-        upstream, downstream = self._selected_ids()
-        self.store.clear_queues(upstream, downstream)
+        self.store.clear_queues(*self._map_element_ids)
         self.pairer.reset()
-        snapshot = self.store.snapshot()
-        if self.fct_elements:
-            fct = snapshot.get(self.fct_elements[0].id)
-            if fct is not None and fct.timestamp is not None:
-                self._last_fct_timestamp = fct.timestamp
+        self.map_pairer.reset()
+        self._last_map_sample = None
         message = (
             "Acquisition paused; incoming samples are discarded."
             if self._paused
@@ -736,20 +765,12 @@ class CTMonitorWindow(QMainWindow):
         self.statusBar().showMessage(message, 3000)
 
     def _clear_history(self) -> None:
-        snapshot = self.store.snapshot()
-        upstream, downstream = self._selected_ids()
         self.transmission_history.clear()
-        self.fct_history.clear()
-        with self._fct_waveform_lock:
-            self._fct_waveform = ()
-            self._fct_waveform_timestamp = None
         self._last_valid_sample = None
         self.pairer.reset()
-        self.store.clear_queues(upstream, downstream)
-        if self.fct_elements:
-            fct = snapshot.get(self.fct_elements[0].id)
-            if fct is not None and fct.timestamp is not None:
-                self._last_fct_timestamp = fct.timestamp
+        self.map_pairer.reset()
+        self._last_map_sample = None
+        self.store.clear_queues(*self._map_element_ids)
         self._plots_dirty = True
 
     def _refresh(self) -> None:
@@ -768,6 +789,16 @@ class CTMonitorWindow(QMainWindow):
             stale_timeout_s=self.stale_timeout_s,
             minimum_upstream_value=self.minimum_upstream_value,
         )
+        map_result = self.map_pairer.pair_queued(
+            queued,
+            snapshot,
+            self._map_element_ids,
+            now=now,
+            scale_to_display_unit=self.scale_to_display_unit,
+            tolerance_s=self.pair_tolerance_s,
+            stale_timeout_s=self.stale_timeout_s,
+            minimum_upstream_value=self.minimum_upstream_value,
+        )
 
         if not self._paused and result.samples:
             self.transmission_history.extend(result.samples)
@@ -776,11 +807,7 @@ class CTMonitorWindow(QMainWindow):
                 del self.transmission_history[:overflow]
             self._last_valid_sample = result.samples[-1]
             self._plots_dirty = True
-        if (
-            self.transmission_history
-            or self.fct_history
-            or self.fct_waveform_elements
-        ) and now - self._last_plot_draw >= 1.0:
+        if self.transmission_history and now - self._last_plot_draw >= 1.0:
             self._plots_dirty = True
         pairing_status = self._pairing_display_status(
             result.status,
@@ -788,8 +815,8 @@ class CTMonitorWindow(QMainWindow):
             result.mismatched_samples,
         )
         self._update_measurement_cards(snapshot, upstream_id, downstream_id, now)
+        self._update_transmission_map(map_result, now)
         self._update_efficiency_cards(pairing_status, now)
-        self._update_fct(queued, now)
         self._update_status(snapshot, pairing_status)
         if self._plots_dirty:
             self._draw_plots(now)
@@ -904,36 +931,6 @@ class CTMonitorWindow(QMainWindow):
                 warning,
             )
 
-    def _update_fct(
-        self,
-        queued: dict[str, tuple[SignalSample, ...]],
-        now: float,
-    ) -> None:
-        if not self.fct_elements:
-            return
-        element = self.fct_elements[0]
-        if not self._paused:
-            new_samples = [
-                event
-                for event in queued.get(element.id, ())
-                if event.timestamp is not None
-                and math.isfinite(event.timestamp)
-                and event.timestamp > self._last_fct_timestamp
-                and event.value is not None
-                and math.isfinite(event.value)
-                and (event.severity or 0) < 2
-            ]
-            new_samples.sort(key=lambda event: event.timestamp)
-            self.fct_history.extend(
-                (event.timestamp, event.value) for event in new_samples
-            )
-            if new_samples:
-                self._last_fct_timestamp = new_samples[-1].timestamp
-            cutoff = now - self.max_trend_window_s
-            self.fct_history[:] = [point for point in self.fct_history if point[0] >= cutoff]
-            if new_samples:
-                self._plots_dirty = True
-
     def _update_status(
         self,
         snapshot: dict[str, SignalSample],
@@ -941,19 +938,11 @@ class CTMonitorWindow(QMainWindow):
     ) -> None:
         upstream_id, downstream_id = self._selected_ids()
         active_scalar_ids = [upstream_id, downstream_id]
-        if self.fct_elements:
-            active_scalar_ids.append(self.fct_elements[0].id)
         connected = sum(
             bool(snapshot.get(element_id) and snapshot[element_id].connected)
             for element_id in active_scalar_ids
         )
-        if self.fct_waveform_elements:
-            with self._fct_waveform_lock:
-                connected += int(self._fct_waveform_connected)
-        total = (
-            len(active_scalar_ids)
-            + len(self.fct_waveform_elements)
-        )
+        total = len(active_scalar_ids)
         if self._paused:
             tone = "neutral"
             status = "Paused"
@@ -1017,27 +1006,6 @@ class CTMonitorWindow(QMainWindow):
             previous_timestamp = sample.timestamp
         return x, upstream, downstream, efficiency
 
-    def _scalar_plot_series(
-        self,
-        points: list[tuple[float, float]],
-        now: float,
-    ) -> tuple[list[float], list[float]]:
-        x: list[float] = []
-        values: list[float] = []
-        previous_timestamp: float | None = None
-        for timestamp, value in points:
-            if (
-                previous_timestamp is not None
-                and self.trend_gap_s is not None
-                and timestamp - previous_timestamp > self.trend_gap_s
-            ):
-                x.append((previous_timestamp + timestamp) / 2.0 - now)
-                values.append(float("nan"))
-            x.append(timestamp - now)
-            values.append(value)
-            previous_timestamp = timestamp
-        return x, values
-
     @staticmethod
     def _set_zero_inclusive_ylim(axis, values: list[float]) -> None:
         finite = [value for value in values if math.isfinite(value)]
@@ -1056,8 +1024,6 @@ class CTMonitorWindow(QMainWindow):
     def _draw_plots(self, now: float) -> None:
         palette = DARK if self.current_theme == "dark" else LIGHT
         axes = [self.measurement_axis, self.efficiency_axis]
-        if self.fct_axis is not None:
-            axes.append(self.fct_axis)
         for axis in axes:
             axis.clear()
             axis.set_facecolor(palette["panel"])
@@ -1140,65 +1106,6 @@ class CTMonitorWindow(QMainWindow):
         self.measurement_axis.set_xlim(-self.trend_window_s, 0.0)
         self.efficiency_axis.set_xlim(-self.trend_window_s, 0.0)
 
-        if self.fct_axis is not None:
-            if self.fct_waveform_elements:
-                with self._fct_waveform_lock:
-                    waveform = self._fct_waveform
-                    waveform_timestamp = self._fct_waveform_timestamp
-                    waveform_units = self._fct_waveform_units
-                waveform_points = downsample_scalar_points(
-                    [(float(index), value) for index, value in enumerate(waveform)],
-                    self.max_plot_points,
-                )
-                waveform_x = [point[0] for point in waveform_points]
-                waveform_y = [point[1] for point in waveform_points]
-                self.fct_axis.plot(
-                    waveform_x,
-                    waveform_y,
-                    color=palette["upstream"],
-                    linewidth=1.7,
-                )
-                self._set_zero_inclusive_ylim(self.fct_axis, waveform_y)
-                self.fct_axis.set_ylabel(
-                    waveform_units or "Signal",
-                    color=palette["text"],
-                )
-                self.fct_axis.set_xlabel("Sample index", color=palette["text"])
-                element = self.fct_waveform_elements[0]
-                age = self._age_text(
-                    SignalSample(None, waveform_timestamp, True)
-                    if waveform_timestamp is not None
-                    else None,
-                    now,
-                )
-                self.fct_axis.set_title(
-                    f"{element.display_name} latest waveform · {age}",
-                    color=palette["text"],
-                    loc="left",
-                    fontweight="bold",
-                )
-            else:
-                recent_fct = [point for point in self.fct_history if point[0] >= cutoff]
-                plot_fct = downsample_scalar_points(recent_fct, self.max_plot_points)
-                fct_x, fct_y = self._scalar_plot_series(plot_fct, now)
-                self.fct_axis.plot(
-                    fct_x,
-                    fct_y,
-                    color=palette["upstream"],
-                    linewidth=1.7,
-                )
-                self._set_zero_inclusive_ylim(self.fct_axis, fct_y)
-                self.fct_axis.set_ylabel("Peak current", color=palette["text"])
-                self.fct_axis.set_xlabel("Time from now (s)", color=palette["text"])
-                element = self.fct_elements[0]
-                self.fct_axis.set_title(
-                    f"{element.display_name} peak-current history",
-                    color=palette["text"],
-                    loc="left",
-                    fontweight="bold",
-                )
-                self.fct_axis.set_xlim(-self.trend_window_s, 0.0)
-
         self.figure.patch.set_facecolor(palette["panel"])
         self.canvas.draw_idle()
 
@@ -1237,3 +1144,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+    QHeaderView,

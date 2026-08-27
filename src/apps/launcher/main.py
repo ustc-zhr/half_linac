@@ -608,10 +608,10 @@ APP_DEFINITIONS = {
     "pv_connection_check": {
         "button_name": "pv_connection_check_button",
         "category": "core",
-        "button_text": "PV Connection Check",
-        "label": "PV Connection Check",
-        "window_title_patterns": ("PV Connection Check",),
-        "description": "Check read-only EPICS connectivity for configured VM and real-machine PVs.",
+        "button_text": "PV Diagnostics",
+        "label": "PV Diagnostics",
+        "window_title_patterns": ("PV Diagnostics",),
+        "description": "Inspect EPICS connectivity and setpoint/readback agreement without writing PVs.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/pv_connection_check",
     },
@@ -634,6 +634,16 @@ APP_DEFINITIONS = {
         "description": "Compare design Quad K1 values with the VM control backend and apply them after confirmation.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/setpoint_transfer",
+    },
+    "machine_snapshot": {
+        "button_name": "machine_snapshot_button",
+        "category": "core",
+        "button_text": "Machine Snapshot",
+        "label": "Machine Snapshot",
+        "window_title_patterns": ("Machine Snapshot",),
+        "description": "Capture and compare read-only scalar machine state for the selected backend.",
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/machine_snapshot",
     },
     "optimization": {
         "button_name": "online_opt",
@@ -1009,6 +1019,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pv_connection_check_button.setObjectName("pv_connection_check_button")
         self.setpoint_transfer_button = QPushButton(self.groupBox_3)
         self.setpoint_transfer_button.setObjectName("setpoint_transfer_button")
+        self.machine_snapshot_button = QPushButton(self.groupBox_3)
+        self.machine_snapshot_button.setObjectName("machine_snapshot_button")
         self.solenoid_field_guide_button = QPushButton(self.groupBox_3)
         self.solenoid_field_guide_button.setObjectName("solenoid_field_guide_button")
         self.rf_phase_scan_button = QPushButton(self.groupBox_4)
@@ -1021,6 +1033,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 [
                     self.vmbtn,
                     self.setpoint_transfer_button,
+                    self.machine_snapshot_button,
                     self.solenoid_field_guide_button,
                     self.pv_connection_check_button,
                     self.online_opt,

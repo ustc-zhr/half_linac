@@ -10,7 +10,7 @@
 
 - Virtual Accelerator
 - Machine Setpoints
-- PV Connection Check
+- PV Diagnostics（原 PV Connection Check）
 - Orbit Display
 - Beam Monitor
 - CT Monitor
@@ -67,7 +67,7 @@
 
 负责系统和环境层：
 
-- PV Connection Check
+- PV Diagnostics（Connection + SP/RB Watchdog）
 - IOC / VM / Backend 状态
 - Runtime / Machine Profile
 - Process / App 状态
@@ -204,7 +204,7 @@
 
 ### 目的
 
-`PV Connection Check` 解决的是：
+`PV Diagnostics` 的 `Connection` 页解决的是：
 
 > PV 能不能连上？
 
@@ -1284,7 +1284,7 @@ Online model calibration
 - RF Phase Scan
 - Solenoid Centering
 - Orbit Correction
-- PV Connection Check
+- PV Diagnostics（Connection + SP/RB Watchdog）
 - Machine Profile
 - Runtime backend
 - App launcher
