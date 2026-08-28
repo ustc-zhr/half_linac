@@ -42,10 +42,8 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_actions">
         <item><widget class="QPushButton" name="pushButton_start"><property name="text"><string>Start</string></property></widget></item>
-        <item><widget class="QPushButton" name="pushButton_pause"><property name="text"><string>Pause</string></property></widget></item>
-        <item><widget class="QPushButton" name="pushButton_resume"><property name="text"><string>Resume</string></property></widget></item>
         <item><widget class="QPushButton" name="pushButton_stop"><property name="text"><string>Stop</string></property></widget></item>
-        <item><widget class="QPushButton" name="pushButton_abortRestore"><property name="text"><string>Abort &amp; Restore</string></property></widget></item>
+        <item><widget class="QPushButton" name="pushButton_abortRestore"><property name="text"><string>Abort &amp;&amp; Restore</string></property></widget></item>
         <item><widget class="QPushButton" name="pushButton_restoreInitial"><property name="text"><string>Restore Initial</string></property></widget></item>
         <item><widget class="QPushButton" name="pushButton_setBest"><property name="text"><string>Set Best to Machine</string></property></widget></item>
         <item><spacer name="horizontalSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
@@ -91,7 +89,7 @@
        </layout>
       </widget>
       <widget class="QGroupBox" name="groupBox_table">
-       <property name="title"><string>Recent Evaluations</string></property>
+       <property name="title"><string>Evaluation History</string></property>
        <layout class="QVBoxLayout" name="verticalLayout_table">
         <item><widget class="QTableWidget" name="tableWidget_recent"><column><property name="text"><string>Eval ID</string></property></column><column><property name="text"><string>Timestamp</string></property></column><column><property name="text"><string>Status</string></property></column><column><property name="text"><string>X Summary</string></property></column><column><property name="text"><string>Y Summary</string></property></column><column><property name="text"><string>Constraint Summary</string></property></column></widget></item>
        </layout>

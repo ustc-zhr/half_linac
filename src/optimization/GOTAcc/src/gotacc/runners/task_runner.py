@@ -99,6 +99,7 @@ def build_optimizer(task_cfg: TaskConfig, objective_callable, bounds: np.ndarray
 
     if name in {"rcds"}:
         from gotacc.algorithms.single_objective.rcds import RCDSOptimizer
+        kwargs.setdefault("maximize", True)
         return RCDSOptimizer(func=objective_callable, bounds=bounds, **kwargs)
 
     if name in {"smggpo", "mggpo_so", "single_objective_mggpo", "single_objective_mg-gpo"}:

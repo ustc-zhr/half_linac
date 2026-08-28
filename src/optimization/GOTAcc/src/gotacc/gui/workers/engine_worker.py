@@ -65,6 +65,7 @@ class EngineWorker(QObject):
         super().__init__(parent)
         self.task = task
         self._stop_requested = False
+        self._restore_requested = False
         self._pause_requested = False
         self._is_running = False
 
@@ -78,6 +79,13 @@ class EngineWorker(QObject):
         self._task_name = str(task.get("task_name", "untitled_task"))
         self._algorithm = str(task.get("algorithm", "BO"))
         self._mode = str(task.get("mode", "Offline"))
+        self._optimizer = None
+        self._optimizer_name = ""
+        self._population_multi_objective = False
+        self._live_objectives: list[np.ndarray] = []
+        self._live_feasible: list[bool] = []
+        self._live_hv_history_len = 0
+        self._live_hv_warning_emitted = False
 
     # ------------------------------------------------------------------
     # Main execution
@@ -115,6 +123,7 @@ class EngineWorker(QObject):
 
             backend_task_cfg = TaskService.make_backend_build_ready_config(task_cfg)
             backend = build_backend(backend_task_cfg)
+            self._attach_policy_event_sink(backend)
             x0 = np.asarray(backend.init_knob_value(), dtype=float).reshape(-1)
             bounds = resolve_bounds(task_cfg, x0)
             self._variable_names = list(task_cfg.backend.kwargs.get("variable_names", [])) or [f"x{i}" for i in range(len(x0))]
@@ -122,6 +131,7 @@ class EngineWorker(QObject):
 
             objective_count = max(1, len(TaskService._enabled_rows(self.task.get("objectives", []))))
             optimizer_name = str(task_cfg.optimizer.name).lower()
+            self._optimizer_name = optimizer_name
             self._single_objective = optimizer_name in {
                 "bo",
                 "bayesopt",
@@ -179,21 +189,57 @@ class EngineWorker(QObject):
                 evaluate_fn = backend.evaluate_with_constraints
             wrapped_callable = self._make_objective_wrapper(evaluate_fn)
             optimizer = build_optimizer(task_cfg=task_cfg, objective_callable=wrapped_callable, bounds=bounds)
+            self._optimizer = optimizer
+            self._population_multi_objective = optimizer_name in {
+                "mggpo",
+                "consmggpo",
+                "constrained_mggpo",
+                "constrained_mg-gpo",
+                "mopso",
+                "nsga2",
+                "nsga-ii",
+            }
 
             out_stream = _SignalStream(self.sig_log.emit)
             try:
                 with redirect_stdout(out_stream), redirect_stderr(out_stream):
                     optimize_result = optimizer.optimize()
             except WorkerStopRequested:
-                if task_cfg.runtime.restore_initial_on_keyboard_interrupt:
-                    restore_initial_if_possible(backend, verbose=False)
+                restore_state = "not_requested"
+                restore_error = None
+                if self._restore_requested:
+                    self.sig_status.emit(
+                        {
+                            "state": "Restoring",
+                            "elapsed_seconds": int(time.time() - self._start_ts),
+                            "eval_count": self._eval_count,
+                            "best_value": self._best_value,
+                        }
+                    )
+                    try:
+                        restore_initial_if_possible(backend, verbose=False)
+                    except Exception as exc:
+                        restore_state = "failed"
+                        restore_error = str(exc)
+                        self.sig_warning.emit(f"Restore initial failed after abort: {exc}")
+                    else:
+                        restore_state = "restored"
+                        self.sig_log.emit("Initial machine state restored after abort.")
+                if restore_state == "failed":
+                    final_state = "Restore Failed"
+                elif self._restore_requested:
+                    final_state = "Aborted"
+                else:
+                    final_state = "Stopped"
                 self.sig_finished.emit(
                     {
-                        "state": "Aborted",
+                        "state": final_state,
                         "elapsed_seconds": int(time.time() - self._start_ts),
                         "eval_count": self._eval_count,
                         "best_value": self._best_value,
                         "best_x": self._best_x_dict(),
+                        "restore_state": restore_state,
+                        "restore_error": restore_error,
                     }
                 )
                 return
@@ -287,12 +333,26 @@ class EngineWorker(QObject):
 
     @pyqtSlot()
     def request_stop(self) -> None:
+        self._restore_requested = False
         self._stop_requested = True
         self.sig_log.emit("Stop requested.")
+
+    @pyqtSlot()
+    def request_abort_restore(self) -> None:
+        self._restore_requested = True
+        self._stop_requested = True
+        self.sig_log.emit("Abort and restore requested.")
 
     # ------------------------------------------------------------------
     # Objective wrapper / live reporting
     # ------------------------------------------------------------------
+    def _attach_policy_event_sink(self, backend: Any) -> None:
+        for attribute in ("objective_policy", "constraint_policy"):
+            policy = getattr(backend, attribute, None)
+            setter = getattr(policy, "set_event_sink", None)
+            if callable(setter):
+                setter(self.sig_log.emit)
+
     def _make_objective_wrapper(self, evaluate_fn):
         def wrapped(x):
             arr = np.asarray(x, dtype=float)
@@ -330,6 +390,10 @@ class EngineWorker(QObject):
             self._feasible_count += 1
 
         objective_values = normalized["objective_values"]
+        if not self._single_objective:
+            self._live_objectives.append(objective_values.astype(float, copy=True))
+            self._live_feasible.append(bool(normalized["feasible"]))
+        hypervolume_updates = self._live_hypervolume_updates()
         scalar_for_display = objective_values[0] if objective_values.size > 0 else None
         best_changed = False
         if self._single_objective and scalar_for_display is not None and normalized["feasible"]:
@@ -348,9 +412,11 @@ class EngineWorker(QObject):
             "objective_values": objective_values.tolist(),
             "objective_summary": normalized["objective_summary"],
             "best_value": self._best_value,
+            "constraint_values": normalized["constraint_values"].tolist(),
             "constraint_summary": normalized["constraint_summary"],
             "feasibility_ratio": self._safe_feasibility_ratio(after_increment=True),
             "best_changed": best_changed,
+            "hypervolume_updates": hypervolume_updates,
         }
         self.sig_evaluation.emit(payload)
         self.sig_status.emit(
@@ -363,6 +429,47 @@ class EngineWorker(QObject):
             }
         )
         return raw
+
+    def _live_hypervolume_updates(self) -> list[float]:
+        if self._single_objective or self._optimizer is None:
+            return []
+        if self._population_multi_objective:
+            history = getattr(self._optimizer, "hypervolume_history", None)
+            if history is None:
+                return []
+            try:
+                values = np.asarray(history, dtype=float).reshape(-1).tolist()
+            except (TypeError, ValueError):
+                return []
+            updates = values[self._live_hv_history_len :]
+            self._live_hv_history_len = len(values)
+            return [float(value) for value in updates if np.isfinite(value)]
+
+        ref_point = getattr(self._optimizer, "ref_point", None)
+        if ref_point is None:
+            return []
+        feasible_points = [
+            point
+            for point, feasible in zip(self._live_objectives, self._live_feasible)
+            if feasible
+        ]
+        if not feasible_points:
+            return [0.0]
+        try:
+            import torch
+            from botorch.utils.multi_objective.hypervolume import Hypervolume
+            from botorch.utils.multi_objective.pareto import is_non_dominated
+
+            points = torch.as_tensor(np.asarray(feasible_points), dtype=torch.float64)
+            reference = torch.as_tensor(np.asarray(ref_point), dtype=torch.float64)
+            pareto = points[is_non_dominated(points)]
+            value = float(Hypervolume(ref_point=reference).compute(pareto))
+        except Exception as exc:
+            if not self._live_hv_warning_emitted:
+                self.sig_warning.emit(f"Live hypervolume update skipped: {exc}")
+                self._live_hv_warning_emitted = True
+            return []
+        return [value] if np.isfinite(value) else []
 
     def _normalize_output(self, raw: Any) -> Dict[str, Any]:
         if isinstance(raw, dict):
@@ -398,6 +505,7 @@ class EngineWorker(QObject):
 
         return {
             "objective_values": obj,
+            "constraint_values": cons,
             "status": status,
             "feasible": feasible,
             "objective_summary": objective_summary,

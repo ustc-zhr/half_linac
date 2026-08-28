@@ -191,28 +191,38 @@
                <string>Run Controls</string>
               </property>
               <layout class="QGridLayout" name="gridLayout_runActions">
-               <item row="0" column="0">
-                <widget class="QPushButton" name="pushButton_validateTask">
+               <item row="0" column="0" colspan="2">
+                <widget class="QLabel" name="label_validationStatus">
                  <property name="text">
-                  <string>Validate</string>
+                  <string>Not validated</string>
+                 </property>
+                 <property name="toolTip">
+                  <string>The current task has not been validated.</string>
                  </property>
                 </widget>
                </item>
-               <item row="0" column="1">
+               <item row="1" column="0">
+                <widget class="QPushButton" name="pushButton_preview">
+                 <property name="text">
+                  <string>Preview Task</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QPushButton" name="pushButton_validateTask">
+                 <property name="text">
+                  <string>Validate Task</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
                 <widget class="QPushButton" name="pushButton_startRun">
                  <property name="text">
                   <string>Start</string>
                  </property>
                 </widget>
                </item>
-               <item row="1" column="0">
-                <widget class="QPushButton" name="pushButton_pauseRun">
-                 <property name="text">
-                  <string>Pause</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="1">
+               <item row="2" column="1">
                 <widget class="QPushButton" name="pushButton_stopRun">
                  <property name="text">
                   <string>Stop</string>
@@ -280,7 +290,7 @@
           <item>
            <widget class="QGroupBox" name="groupBox_dashboardSummary">
             <property name="title">
-             <string>Task Snapshot</string>
+             <string>Run Readiness</string>
             </property>
             <layout class="QGridLayout" name="gridLayout_dashboardSummary">
              <item row="0" column="0">
@@ -289,8 +299,8 @@
                 <enum>QFrame::StyledPanel</enum>
                </property>
                <layout class="QVBoxLayout" name="verticalLayout_cardCurrentTask">
-                <item><widget class="QLabel" name="label_cardCurrentTaskTitle"><property name="text"><string>Current Task</string></property></widget></item>
-                <item><widget class="QLabel" name="label_cardCurrentTaskValue"><property name="text"><string>Not loaded</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardCurrentTaskTitle"><property name="text"><string>Task Readiness</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardCurrentTaskValue"><property name="text"><string>Not validated</string></property></widget></item>
                </layout>
               </widget>
              </item>
@@ -298,8 +308,8 @@
               <widget class="QFrame" name="frame_cardMode">
                <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
                <layout class="QVBoxLayout" name="verticalLayout_cardMode">
-                <item><widget class="QLabel" name="label_cardModeTitle"><property name="text"><string>Mode</string></property></widget></item>
-                <item><widget class="QLabel" name="label_cardModeValue"><property name="text"><string>Offline</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardModeTitle"><property name="text"><string>Run Plan</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardModeValue"><property name="text"><string>--</string></property></widget></item>
                </layout>
               </widget>
              </item>
@@ -307,8 +317,8 @@
               <widget class="QFrame" name="frame_cardAlgorithm">
                <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
                <layout class="QVBoxLayout" name="verticalLayout_cardAlgorithm">
-                <item><widget class="QLabel" name="label_cardAlgorithmTitle"><property name="text"><string>Algorithm</string></property></widget></item>
-                <item><widget class="QLabel" name="label_cardAlgorithmValue"><property name="text"><string>Not selected</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardAlgorithmTitle"><property name="text"><string>Backend Readiness</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardAlgorithmValue"><property name="text"><string>Offline benchmark</string></property></widget></item>
                </layout>
               </widget>
              </item>
@@ -316,8 +326,8 @@
               <widget class="QFrame" name="frame_cardStatus">
                <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
                <layout class="QVBoxLayout" name="verticalLayout_cardStatus">
-                <item><widget class="QLabel" name="label_cardStatusTitle"><property name="text"><string>Status</string></property></widget></item>
-                <item><widget class="QLabel" name="label_cardStatusValue"><property name="text"><string>Idle</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardStatusTitle"><property name="text"><string>Last Outcome</string></property></widget></item>
+                <item><widget class="QLabel" name="label_cardStatusValue"><property name="text"><string>No run yet</string></property></widget></item>
                </layout>
               </widget>
              </item>
@@ -898,6 +908,7 @@
        </widget>
       </widget>
      </widget>
+    </widget>
     </item>
    </layout>
   </widget>
@@ -955,7 +966,6 @@
     <property name="title"><string>Run</string></property>
     <addaction name="actionValidate"/>
     <addaction name="actionStart"/>
-    <addaction name="actionPause"/>
     <addaction name="actionStop"/>
     <addaction name="actionRestoreMachine"/>
    </widget>
@@ -996,7 +1006,6 @@
   <action name="actionExit"><property name="text"><string>Exit</string></property></action>
   <action name="actionValidate"><property name="text"><string>Validate Task</string></property></action>
   <action name="actionStart"><property name="text"><string>Start Run</string></property></action>
-  <action name="actionPause"><property name="text"><string>Pause Run</string></property></action>
   <action name="actionStop"><property name="text"><string>Stop Run</string></property></action>
   <action name="actionRestoreMachine"><property name="text"><string>Restore Machine</string></property></action>
   <action name="actionEnvironmentCheck"><property name="text"><string>Environment Check</string></property></action>

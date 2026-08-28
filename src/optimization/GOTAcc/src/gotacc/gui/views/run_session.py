@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Callable, Optional, Protocol
 
 from PyQt5.QtCore import QThread
 
@@ -32,8 +32,9 @@ class RunSessionEvents(Protocol):
 
 
 class RunSession:
-    def __init__(self, parent) -> None:
+    def __init__(self, parent, *, on_idle: Callable[[], None] | None = None) -> None:
         self.parent = parent
+        self._on_idle = on_idle
         self._thread: Optional[QThread] = None
         self._worker: Optional[EngineWorker] = None
 
@@ -69,6 +70,10 @@ class RunSession:
         if self._worker is not None:
             self._worker.request_stop()
 
+    def request_abort_restore(self) -> None:
+        if self._worker is not None:
+            self._worker.request_abort_restore()
+
     def start(self, task: dict, *, events: RunSessionEvents) -> None:
         self.cleanup_if_idle()
         if self.is_running():
@@ -103,6 +108,8 @@ class RunSession:
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._clear_finished_session)
+        if self._on_idle is not None:
+            thread.finished.connect(self._on_idle)
 
     def _clear_finished_session(self) -> None:
         self._worker = None

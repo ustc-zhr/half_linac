@@ -8,7 +8,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 class RuntimeStatusController:
-    ACTIVE_PHASES = {"Running", "Paused", "Stopping"}
+    ACTIVE_PHASES = {"Running", "Stopping", "Abort Requested", "Restoring"}
 
     def __init__(self, window: "MainWindow") -> None:
         self.window = window
@@ -20,10 +20,17 @@ class RuntimeStatusController:
         mm = (run.elapsed_seconds % 3600) // 60
         ss = run.elapsed_seconds % 60
         self.window.run_ui.label_elapsedValue.setText(f"{hh:02d}:{mm:02d}:{ss:02d}")
-        self.window.run_ui.label_evalValue.setText(str(run.eval_count))
-        self.window.run_ui.label_bestValue.setText(
-            "--" if run.best_value is None else f"{run.best_value:.6f}"
-        )
+        self.update_evaluation_label()
+        task = self._task_for_run_workspace()
+        multi = self._is_multi_objective_task(task)
+        self.window.run_ui.label_bestTitle.setText("Hypervolume" if multi else "Best Objective")
+        if multi:
+            hv = self.window.state.hypervolume_history
+            self.window.run_ui.label_bestValue.setText("--" if not hv else f"{hv[-1]:.6g}")
+        else:
+            self.window.run_ui.label_bestValue.setText(
+                "--" if run.best_value is None else f"{run.best_value:.6f}"
+            )
         self.window.run_ui.label_feasibilityValue.setText(f"{run.feasibility_ratio:.2f}")
         self.window.ui.label_statusBestValue.setText(
             "--" if run.best_value is None else f"{run.best_value:.6f}"
@@ -35,13 +42,25 @@ class RuntimeStatusController:
             )
         self.sync_status_panels()
 
-    def set_run_buttons_enabled(self, *, start: bool, pause: bool, resume: bool, stop: bool) -> None:
+    def update_evaluation_label(self) -> None:
+        state = self.window.state
+        task = state.latest_task_snapshot
+        if not task:
+            try:
+                task = self.view.current_task()
+            except Exception:
+                task = {}
+        try:
+            budget = int(task.get("max_evaluations", 0) or 0)
+        except (TypeError, ValueError):
+            budget = 0
+        budget_text = str(budget) if budget > 0 else "--"
+        self.window.run_ui.label_evalValue.setText(f"{state.run.eval_count}/{budget_text}")
+
+    def set_run_buttons_enabled(self, *, start: bool, stop: bool) -> None:
         self.window.ui.pushButton_startRun.setEnabled(start)
-        self.window.ui.pushButton_pauseRun.setEnabled(pause)
         self.window.ui.pushButton_stopRun.setEnabled(stop)
         self.window.run_ui.pushButton_start.setEnabled(start)
-        self.window.run_ui.pushButton_pause.setEnabled(pause)
-        self.window.run_ui.pushButton_resume.setEnabled(resume)
         self.window.run_ui.pushButton_stop.setEnabled(stop)
         self.window.run_ui.pushButton_abortRestore.setEnabled(not start)
         if hasattr(self.window.run_ui, "pushButton_restoreInitial"):
@@ -53,8 +72,11 @@ class RuntimeStatusController:
 
     def set_run_phase(self, text: str) -> None:
         self.window.run_ui.label_phaseValue.setText(text)
-        self.window.ui.label_cardStatusValue.setText(text)
+        self._sync_phase_tone(text)
         self._sync_run_action_visibility()
+        self.window._sync_workspace_status()
+        self.window._refresh_overview_cards()
+        self.window.results_controller.refresh_result_source()
 
     def append_run_history(self, status: str) -> None:
         task_name = self.window.task_ui.lineEdit_taskName.text().strip() or "untitled_task"
@@ -81,7 +103,7 @@ class RuntimeStatusController:
 
     def sync_status_panels(self) -> None:
         run = self.window.state.run
-        self.window.ui.label_cardStatusValue.setText(run.phase)
+        self._sync_phase_tone(run.phase)
         self.window.ui.label_statusBestValue.setText(
             "--" if run.best_value is None else f"{run.best_value:.6f}"
         )
@@ -93,9 +115,28 @@ class RuntimeStatusController:
         self.window.run_ui.pushButton_setBest.setEnabled(run.best_value is not None)
         if hasattr(self.window.run_ui, "pushButton_restoreInitial"):
             self.window.run_ui.pushButton_restoreInitial.setEnabled(
-                bool(run.phase not in {"Running", "Paused", "Stopping"} and self.window.state.latest_initial_x)
+                bool(run.phase not in {"Running", "Stopping"} and self.window.state.latest_initial_x)
             )
         self.sync_run_workspace()
+        self.window._sync_workspace_status()
+        self.window._refresh_overview_cards()
+        self.window.results_controller.refresh_result_source()
+
+    def _sync_phase_tone(self, phase: str) -> None:
+        tone = {
+            "Running": "success",
+            "Completed": "success",
+            "Stopping": "warning",
+            "Restoring": "warning",
+            "Abort Requested": "danger",
+            "Failed": "danger",
+        }.get(str(phase), "subtle")
+        frame = self.window.run_ui.frame_phase
+        if frame.property("tone") == tone:
+            return
+        frame.setProperty("tone", tone)
+        frame.style().unpolish(frame)
+        frame.style().polish(frame)
 
     def sync_run_workspace(self, task: dict[str, Any] | None = None) -> None:
         """Keep Run page controls and plot tabs aligned with the active task."""
@@ -115,38 +156,41 @@ class RuntimeStatusController:
             return state.latest_task_snapshot or {}
 
     def _sync_run_action_visibility(self, task: dict[str, Any] | None = None) -> None:
+        task = self._task_for_run_workspace(task)
         run = self.window.state.run
         phase = run.phase
-        active = phase in self.ACTIVE_PHASES
-        paused = phase == "Paused"
+        phase_active = phase in self.ACTIVE_PHASES
+        thread_active = self.window.run_session.is_running()
+        active = phase_active or thread_active
         running = phase == "Running"
         stopping = phase == "Stopping"
 
         start_visible = not active
-        pause_visible = running
-        resume_visible = paused
-        stop_visible = running or paused
-        abort_visible = running or paused or stopping
-
+        stop_visible = running
         online_task = self._is_online_task(task)
+        multi_objective = self._is_multi_objective_task(task)
+        archived = self.window.state.viewing_archived_run
+        abort_visible = phase_active and online_task
+        abort_enabled = online_task and (running or stopping)
         restore_visible = (
             not active
             and online_task
+            and not archived
             and bool(self.window.state.latest_initial_x)
         )
         set_best_visible = (
             not active
             and online_task
+            and not archived
+            and not multi_objective
             and bool(self.window.state.latest_best_x)
         )
 
         primary_actions_in_sidebar = bool(getattr(self.window, "_run_primary_actions_in_sidebar", False))
         action_states = (
             (self.window.run_ui.pushButton_start, start_visible and not primary_actions_in_sidebar, start_visible),
-            (self.window.run_ui.pushButton_pause, pause_visible and not primary_actions_in_sidebar, pause_visible),
-            (self.window.run_ui.pushButton_resume, resume_visible and not primary_actions_in_sidebar, resume_visible),
-            (self.window.run_ui.pushButton_stop, stop_visible and not primary_actions_in_sidebar, stop_visible),
-            (self.window.run_ui.pushButton_abortRestore, abort_visible, abort_visible),
+            (self.window.run_ui.pushButton_stop, stop_visible, stop_visible),
+            (self.window.run_ui.pushButton_abortRestore, abort_visible, abort_enabled),
             (
                 self.window.run_ui.pushButton_restoreInitial,
                 restore_visible,
@@ -161,19 +205,26 @@ class RuntimeStatusController:
         for button, visible, enabled in action_states:
             button.setVisible(visible)
             button.setEnabled(enabled)
-        advanced_visible = any(
-            button.isVisible()
-            for button in (
-                self.window.run_ui.pushButton_abortRestore,
-                self.window.run_ui.pushButton_restoreInitial,
-                self.window.run_ui.pushButton_setBest,
-            )
-        )
-        self.window.run_ui.groupBox_actions.setVisible(advanced_visible)
+        if phase == "Restoring":
+            abort_text = "Restoring..."
+        elif phase == "Abort Requested":
+            abort_text = "Abort Requested"
+        else:
+            abort_text = "Abort && Restore"
+        self.window.run_ui.pushButton_abortRestore.setText(abort_text)
+        self.window.run_ui.groupBox_actions.setVisible(False)
 
     def _sync_plot_tab_visibility(self, task: dict[str, Any]) -> None:
         has_constraints = bool(self._enabled_rows(task.get("constraints", [])))
         is_multi_objective = self._is_multi_objective_task(task)
+        objective_index = self.window.run_ui.tabWidget_plots.indexOf(self.window.run_ui.tab_obj)
+        if objective_index >= 0:
+            self.window.run_ui.tabWidget_plots.setTabText(
+                objective_index, "Hypervolume" if is_multi_objective else "Objective"
+            )
+        self.window.run_ui.label_bestTitle.setText(
+            "Hypervolume" if is_multi_objective else "Best Objective"
+        )
 
         self._set_tab_visible(
             self.window.run_ui.tabWidget_plots,

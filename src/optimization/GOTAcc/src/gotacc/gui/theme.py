@@ -73,6 +73,27 @@ QFrame#summaryPanel QWidget {
     background: transparent;
 }
 
+QFrame#mappingDetailPanel {
+    background: $panel_bg;
+    border: 1px solid $panel_border;
+    border-radius: 10px;
+}
+
+QFrame#mappingDetailPanel QGroupBox {
+    background: transparent;
+}
+
+QLabel#mappingDetailTitle {
+    color: $hero_text;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+QLabel#mappingDetailSubtitle {
+    color: $card_title;
+    font-size: 11px;
+}
+
 QWidget#statusStrip,
 QFrame#statusStrip {
     background: transparent;
@@ -117,6 +138,25 @@ QLabel[role="title"] {
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.8px;
+}
+
+QLabel#label_validationStatus {
+    background: transparent;
+    border-left: 3px solid $status_item_idle_bar;
+    color: $status_tone_subtle_fg;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+}
+
+QLabel#label_validationStatus[tone="success"] {
+    border-left-color: $status_tone_success_bar;
+    color: $status_tone_success_fg;
+}
+
+QLabel#label_validationStatus[tone="danger"] {
+    border-left-color: $status_tone_danger_bar;
+    color: $status_tone_danger_fg;
 }
 
 QLabel[role="value"][tone="subtle"] {
@@ -313,7 +353,7 @@ QGroupBox#groupBox_primaryNav {
 }
 
 QGroupBox#groupBox_primaryNav::title {
-    color: $nav_subtitle;
+    color: $panel_title;
     font-weight: 700;
 }
 
@@ -340,6 +380,60 @@ QFrame#frame_phase {
     border-radius: 12px;
 }
 
+QFrame#frame_cardCurrentTask,
+QFrame#frame_cardMode,
+QFrame#frame_cardAlgorithm,
+QFrame#frame_cardStatus {
+    border-top-left-radius: 0px;
+    border-bottom-left-radius: 0px;
+}
+
+QFrame#frame_cardCurrentTask[tone="info"],
+QFrame#frame_cardMode[tone="info"],
+QFrame#frame_cardAlgorithm[tone="info"],
+QFrame#frame_cardStatus[tone="info"] {
+    border-left: 3px solid $status_tone_info_bar;
+}
+
+QFrame#frame_cardCurrentTask[tone="success"],
+QFrame#frame_cardMode[tone="success"],
+QFrame#frame_cardAlgorithm[tone="success"],
+QFrame#frame_cardStatus[tone="success"] {
+    border-left: 3px solid $status_tone_success_bar;
+}
+
+QFrame#frame_cardCurrentTask[tone="warning"],
+QFrame#frame_cardMode[tone="warning"],
+QFrame#frame_cardAlgorithm[tone="warning"],
+QFrame#frame_cardStatus[tone="warning"] {
+    border-left: 3px solid $status_tone_warning_bar;
+}
+
+QFrame#frame_cardCurrentTask[tone="danger"],
+QFrame#frame_cardMode[tone="danger"],
+QFrame#frame_cardAlgorithm[tone="danger"],
+QFrame#frame_cardStatus[tone="danger"] {
+    border-left: 3px solid $status_tone_danger_bar;
+}
+
+QLabel#label_cardCurrentTaskValue[tone="success"],
+QLabel#label_cardAlgorithmValue[tone="success"],
+QLabel#label_cardStatusValue[tone="success"] {
+    color: $status_tone_success_fg;
+}
+
+QLabel#label_cardCurrentTaskValue[tone="warning"],
+QLabel#label_cardAlgorithmValue[tone="warning"],
+QLabel#label_cardStatusValue[tone="warning"] {
+    color: $status_tone_warning_fg;
+}
+
+QLabel#label_cardCurrentTaskValue[tone="danger"],
+QLabel#label_cardAlgorithmValue[tone="danger"],
+QLabel#label_cardStatusValue[tone="danger"] {
+    color: $status_tone_danger_fg;
+}
+
 QFrame#frame_variablesToolbar {
     background: $panel_bg;
     border: 1px solid $panel_border;
@@ -350,6 +444,47 @@ QFrame#frame_pvPresetLibrary {
     background: transparent;
     border: none;
     border-radius: 0px;
+}
+
+QGroupBox#groupBox_guard {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+    margin-top: 0px;
+    padding-top: 0px;
+}
+
+QGroupBox#groupBox_runtime,
+QGroupBox#groupBox_actions,
+QGroupBox#groupBox_livePlots,
+QGroupBox#groupBox_events,
+QGroupBox#groupBox_table,
+QGroupBox#groupBox_runList,
+QGroupBox#groupBox_recentEvaluations,
+QGroupBox#groupBox_paretoSolutions {
+    border-radius: 8px;
+}
+
+QFrame[plotHost="true"] {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+QGroupBox[plotPanel="true"] {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+    margin-top: 0px;
+    padding-top: 0px;
+}
+
+QPushButton[machineWrite="true"] {
+    border-color: $danger_button_bg;
+    color: $danger_button_bg;
+    padding: 2px 10px;
+    min-height: 22px;
+    max-height: 28px;
 }
 
 QLabel#label_dashboardHeroTitle,
@@ -458,6 +593,13 @@ QPushButton:pressed {
 
 QPushButton[compact="true"] {
     padding: 3px 10px;
+    min-height: 22px;
+    max-height: 26px;
+    font-size: 11px;
+}
+
+QPushButton[runControl="true"] {
+    padding: 3px 2px;
     min-height: 22px;
     max-height: 26px;
     font-size: 11px;
@@ -640,9 +782,116 @@ QTabWidget#tabWidget_configure QTabBar::tab {
 
 QTabWidget#tabWidget_bottomOutput QTabBar::tab,
 QTabWidget#tabWidget_resultsViews QTabBar::tab,
-QTabWidget#tabWidget_machine QTabBar::tab,
-QTabWidget#tabWidget_machineAdvanced QTabBar::tab {
+QTabWidget#tabWidget_machine QTabBar::tab {
     min-width: 132px;
+}
+
+QTabWidget#tabWidget_machineAdvanced::pane {
+    background: transparent;
+    border: none;
+    border-top: 1px solid $input_border;
+    border-radius: 0px;
+}
+
+QTabWidget#tabWidget_machineAdvanced QTabBar::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0px;
+    color: $hero_text;
+    margin-right: 4px;
+    min-width: 124px;
+    padding: 8px 12px;
+}
+
+QTabWidget#tabWidget_machineAdvanced QTabBar::tab:selected {
+    color: $hero_title;
+    border-bottom-color: $nav_item_selected_bg;
+}
+
+QTabWidget#tabWidget_machineAdvanced QTabBar::tab:hover:!selected {
+    background: $button_hover_bg;
+}
+
+QTabWidget#tabWidget_plots::pane {
+    background: transparent;
+    border: none;
+    border-top: 1px solid $input_border;
+    border-radius: 0px;
+}
+
+QTabWidget#tabWidget_plots QTabBar::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0px;
+    color: $hero_text;
+    margin-right: 4px;
+    min-width: 104px;
+    padding: 7px 12px;
+}
+
+QTabWidget#tabWidget_plots QTabBar::tab:selected {
+    color: $hero_title;
+    border-bottom-color: $nav_item_selected_bg;
+}
+
+QTabWidget#tabWidget_plots QTabBar::tab:hover:!selected {
+    background: $button_hover_bg;
+}
+
+QTabWidget#tabWidget_resultsViews::pane {
+    background: transparent;
+    border: none;
+    border-top: 1px solid $input_border;
+    border-radius: 0px;
+}
+
+QTabWidget#tabWidget_resultsViews QTabBar::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0px;
+    color: $hero_text;
+    margin-right: 4px;
+    min-width: 124px;
+    padding: 8px 12px;
+}
+
+QTabWidget#tabWidget_resultsViews QTabBar::tab:selected {
+    color: $hero_title;
+    border-bottom-color: $nav_item_selected_bg;
+}
+
+QTabWidget#tabWidget_resultsViews QTabBar::tab:hover:!selected {
+    background: $button_hover_bg;
+}
+
+QTabWidget#tabWidget_tables::pane {
+    background: transparent;
+    border: none;
+    border-top: 1px solid $input_border;
+    border-radius: 0px;
+}
+
+QTabWidget#tabWidget_tables QTabBar::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0px;
+    color: $hero_text;
+    margin-right: 4px;
+    min-width: 124px;
+    padding: 8px 12px;
+}
+
+QTabWidget#tabWidget_tables QTabBar::tab:selected {
+    color: $hero_title;
+    border-bottom-color: $nav_item_selected_bg;
+}
+
+QTabWidget#tabWidget_tables QTabBar::tab:hover:!selected {
+    background: $button_hover_bg;
 }
 
 QTabWidget#tabWidget_tables QTabBar::tab {

@@ -1,6 +1,9 @@
-"""Algorithm package for GOTAcc."""
-from . import single_objective
-from . import multi_objective
+"""Algorithm package for GOTAcc.
+
+Subpackages are intentionally not imported eagerly so lightweight optimizers can
+be used without importing optional heavy dependencies required by other
+algorithms.
+"""
 
 __all__ = [
     "single_objective",

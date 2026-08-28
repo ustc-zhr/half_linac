@@ -38,3 +38,8 @@ def test_load_bundled_pv_libraries(path):
 
     assert doc.machine
     assert doc.knobs or doc.objectives
+    for items in (doc.knobs, doc.objectives):
+        names = [item.name for item in items]
+        pv_names = [item.pv_name for item in items]
+        assert len(names) == len(set(names)), f"duplicate names in {path.name}"
+        assert len(pv_names) == len(set(pv_names)), f"duplicate PVs in {path.name}"

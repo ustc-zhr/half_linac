@@ -23,17 +23,14 @@ import numpy as np
 from gotacc.configs.schema import TaskConfig
 from gotacc.interfaces.base import ObjectiveBackend
 from gotacc.interfaces.epics import (
-    BPMGuardConstraintPolicy,
     BaseConstraintPolicy,
     BaseObjectivePolicy,
     BaseWritePolicy,
     CompositeConstraintPolicy,
     CompositeObjectivePolicy,
     EpicsObjective,
-    FelEnergyGuardPolicy,
-    EqualWritePolicy,
-    ZeroGuardPolicy,
 )
+from gotacc.interfaces.policies import POLICY_REGISTRY
 
 
 # =============================================================================
@@ -131,12 +128,7 @@ def build_write_policy(
     if name in {"none"}:
         return None
 
-    if name in {"equal", "xiaosesan_symmetry"}:
-        return EqualWritePolicy(
-            extra_links=kwargs.get("pvlinks", None),
-        )
-
-    raise ValueError(f"Unknown write policy: {name!r}")
+    return POLICY_REGISTRY.build("write", name, kwargs)
 
 
 # =============================================================================
@@ -160,23 +152,7 @@ def _normalize_policy_names(x: str | Sequence[str] | None) -> list[str]:
     )
 
 def _build_one_objective_policy(name: str, kwargs: dict[str, Any]) -> BaseObjectivePolicy:
-    lname = str(name).lower()
-
-    if lname == "fel_energy_guard":
-        return FelEnergyGuardPolicy(
-            target_col=kwargs.get("target_col", 0),
-            large_threshold=kwargs.get("large_threshold", 1e6),
-            change_threshold=kwargs.get("change_threshold", 1e-6),
-        )
-
-    if lname in {"zero_guard", "xiaosesan_zero_guard"}:
-        return ZeroGuardPolicy(
-            target_col=kwargs.get("target_col", 1),
-            zero_atol=kwargs.get("zero_atol", 1e-12),
-            offset=kwargs.get("offset", 100.0),
-        )
-
-    raise ValueError(f"Unknown objective policy: {name!r}")
+    return POLICY_REGISTRY.build("objective", name, kwargs)
 
 def build_objective_policies(policy_specs):
     if policy_specs is None:
@@ -209,18 +185,7 @@ def build_objective_policies(policy_specs):
 # constraint policy builder
 # =============================================================================
 def _build_one_constraint_policy(name: str, kwargs: dict[str, Any]) -> BaseConstraintPolicy:
-    lname = str(name).lower()
-
-    if lname in {"bpm_guard", "bpm_zero_guard"}:
-        return BPMGuardConstraintPolicy(
-            target_col=kwargs.get("target_col", 0),
-            zero_atol=kwargs.get("zero_atol", 1e-9),
-            delta_ratio=kwargs.get("delta_ratio", 0.1),
-            delta_min=kwargs.get("delta_min", 1e-6),
-            scale_floor=kwargs.get("scale_floor", 1.0),
-        )
-
-    raise ValueError(f"Unknown constraint policy: {name!r}")
+    return POLICY_REGISTRY.build("constraint", name, kwargs)
 
 
 def build_constraint_policies(policy_specs):
@@ -277,19 +242,7 @@ def build_constraint_policy(
         if lname in {"none"}:
             continue
 
-        if lname in {"bpm_guard", "bpm_zero_guard"}:
-            built.append(
-                BPMGuardConstraintPolicy(
-                    target_col=kwargs.get("target_col", 0),
-                    zero_atol=kwargs.get("zero_atol", 1e-9),
-                    delta_ratio=kwargs.get("delta_ratio", 0.1),
-                    delta_min=kwargs.get("delta_min", 1e-6),
-                    scale_floor=kwargs.get("scale_floor", 1.0),
-                )
-            )
-            continue
-
-        raise ValueError(f"Unknown constraint policy: {name!r}")
+        built.append(_build_one_constraint_policy(lname, kwargs))
 
     if len(built) == 0:
         return None
@@ -328,27 +281,7 @@ def build_objective_policy(
         if lname in {"none"}:
             continue
 
-        if lname == "fel_energy_guard":
-            built.append(
-                FelEnergyGuardPolicy(
-                    target_col=kwargs.get("target_col", 0),
-                    large_threshold=kwargs.get("large_threshold", 1e6),
-                    change_threshold=kwargs.get("change_threshold", 1e-6),
-                )
-            )
-            continue
-
-        if lname in {"zero_guard", "xiaosesan_zero_guard"}:
-            built.append(
-                ZeroGuardPolicy(
-                    target_col=kwargs.get("target_col", 1),
-                    zero_atol=kwargs.get("zero_atol", 1e-12),
-                    offset=kwargs.get("offset", 100.0),
-                )
-            )
-            continue
-
-        raise ValueError(f"Unknown objective policy: {name!r}")
+        built.append(_build_one_objective_policy(lname, kwargs))
 
     if len(built) == 0:
         return None
@@ -449,10 +382,12 @@ def _build_epics_backend(task_cfg: TaskConfig) -> ObjectiveBackend:
         knobs_pvnames = kwargs.pop("knobs_pvnames")
         knob_readback_pvnames = kwargs.pop("knob_readback_pvnames", None)
         obj_pvnames = kwargs.pop("obj_pvnames")
+        objective_names = kwargs.pop("objective_names", None)
         obj_weights = kwargs.pop("obj_weights")
         obj_samples = kwargs.pop("obj_samples")
         obj_math = kwargs.pop("obj_math")
         constraint_pvnames = kwargs.pop("constraint_pvnames", [])
+        constraint_names = kwargs.pop("constraint_names", None)
         constraint_math = kwargs.pop("constraint_math", [])
         constraint_bounds = kwargs.pop("constraint_bounds", [])
         set_interval = kwargs.pop("set_interval")
@@ -472,10 +407,12 @@ def _build_epics_backend(task_cfg: TaskConfig) -> ObjectiveBackend:
         knobs_pvnames=knobs_pvnames,
         knob_readback_pvnames=knob_readback_pvnames,
         obj_pvnames=obj_pvnames,
+        objective_names=objective_names,
         obj_weights=obj_weights,
         obj_samples=obj_samples,
         obj_math=obj_math,
         constraint_pvnames=constraint_pvnames,
+        constraint_names=constraint_names,
         constraint_math=constraint_math,
         constraint_bounds=constraint_bounds,
         set_interval=set_interval,

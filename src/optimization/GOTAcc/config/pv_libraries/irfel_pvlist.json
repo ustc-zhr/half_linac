@@ -1,6 +1,6 @@
 {
   "machine": "IRFEL",
-  "description": "IRFEL control-room PV library",
+  "description": "Canonical IRFEL control-room PV library",
   "knobs": [
     {
       "name": "HC01",
@@ -145,6 +145,156 @@
       "pv_name": "IRFEL:PS:SS02:current:ao",
       "readback": "IRFEL:PS:SS02:current:aI",
       "group": "sol"
+    },
+    {
+      "name": "QM01",
+      "pv_name": "IRFEL:PS:QM01:current:ao",
+      "readback": "IRFEL:PS:QM01:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM02",
+      "pv_name": "IRFEL:PS:QM02:current:ao",
+      "readback": "IRFEL:PS:QM02:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM03",
+      "pv_name": "IRFEL:PS:QM03:current:ao",
+      "readback": "IRFEL:PS:QM03:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM04",
+      "pv_name": "IRFEL:PS:QM04:current:ao",
+      "readback": "IRFEL:PS:QM04:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM05",
+      "pv_name": "IRFEL:PS:QM05:current:ao",
+      "readback": "IRFEL:PS:QM05:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM06",
+      "pv_name": "IRFEL:PS:QM06:current:ao",
+      "readback": "IRFEL:PS:QM06:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM07",
+      "pv_name": "IRFEL:PS:QM07:current:ao",
+      "readback": "IRFEL:PS:QM07:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM08",
+      "pv_name": "IRFEL:PS:QM08:current:ao",
+      "readback": "IRFEL:PS:QM08:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM09",
+      "pv_name": "IRFEL:PS:QM09:current:ao",
+      "readback": "IRFEL:PS:QM09:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM10",
+      "pv_name": "IRFEL:PS:QM10:current:ao",
+      "readback": "IRFEL:PS:QM10:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM11",
+      "pv_name": "IRFEL:PS:QM11:current:ao",
+      "readback": "IRFEL:PS:QM11:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM12",
+      "pv_name": "IRFEL:PS:QM12:current:ao",
+      "readback": "IRFEL:PS:QM12:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM13",
+      "pv_name": "IRFEL:PS:QM13:current:ao",
+      "readback": "IRFEL:PS:QM13:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM14",
+      "pv_name": "IRFEL:PS:QM14:current:ao",
+      "readback": "IRFEL:PS:QM14:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM15",
+      "pv_name": "IRFEL:PS:QM15:current:ao",
+      "readback": "IRFEL:PS:QM15:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM16",
+      "pv_name": "IRFEL:PS:QM16:current:ao",
+      "readback": "IRFEL:PS:QM16:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM17",
+      "pv_name": "IRFEL:PS:QM17:current:ao",
+      "readback": "IRFEL:PS:QM17:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM18",
+      "pv_name": "IRFEL:PS:QM18:current:ao",
+      "readback": "IRFEL:PS:QM18:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM19",
+      "pv_name": "IRFEL:PS:QM19:current:ao",
+      "readback": "IRFEL:PS:QM19:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "QM20",
+      "pv_name": "IRFEL:PS:QM20:current:ao",
+      "readback": "IRFEL:PS:QM20:current:ai",
+      "group": "QM"
+    },
+    {
+      "name": "BM01",
+      "pv_name": "IRFEL:PS:BM01:current:ao",
+      "readback": "IRFEL:PS:BM01:current:ai",
+      "group": "BM"
+    },
+    {
+      "name": "BM02",
+      "pv_name": "IRFEL:PS:BM02:current:ao",
+      "readback": "IRFEL:PS:BM02:current:ai",
+      "group": "BM"
+    },
+    {
+      "name": "BM03",
+      "pv_name": "IRFEL:PS:BM03:current:ao",
+      "readback": "IRFEL:PS:BM03:current:ai",
+      "group": "BM"
+    },
+    {
+      "name": "modulator_HV1",
+      "pv_name": "IRFEL:modulator1:HV:set:ao",
+      "readback": "IRFEL:modulator1:HV:ai",
+      "group": "modulator"
+    },
+    {
+      "name": "modulator_HV2",
+      "pv_name": "IRFEL:modulator2:HV:set:ao",
+      "readback": "IRFEL:modulator2:HV:ai",
+      "group": "modulator"
     }
   ],
   "objectives": [
@@ -291,6 +441,162 @@
       "pv_name": "IRFEL-BI:BPM10:BPM_PY2",
       "readback": "IRFEL-BI:BPM10:BPM_PY2",
       "group": "BPM-y"
+    },
+    {
+      "name": "SHB_REF_amp",
+      "pv_name": "IRFEL:IN-MW:SHB:GET_CH7_AMP",
+      "readback": "IRFEL:IN-MW:SHB:GET_CH7_AMP",
+      "group": "SHB"
+    },
+    {
+      "name": "SHB_REF_pha",
+      "pv_name": "IRFEL:IN-MW:SHB:GET_CH7_PHASE",
+      "readback": "IRFEL:IN-MW:SHB:GET_CH7_PHASE",
+      "group": "SHB"
+    },
+    {
+      "name": "SHB_VM_amp",
+      "pv_name": "IRFEL:IN-MW:SHB:GET_CH8_AMP",
+      "readback": "IRFEL:IN-MW:SHB:GET_CH8_AMP",
+      "group": "SHB"
+    },
+    {
+      "name": "SHB_VM_pha",
+      "pv_name": "IRFEL:IN-MW:SHB:GET_CH8_PHASE",
+      "readback": "IRFEL:IN-MW:SHB:GET_CH8_PHASE",
+      "group": "SHB"
+    },
+    {
+      "name": "SHB_PPLUS_amp",
+      "pv_name": "IRFEL:IN-MW:SHB:GET_CH4_AMP",
+      "readback": "IRFEL:IN-MW:SHB:GET_CH4_AMP",
+      "group": "SHB"
+    },
+    {
+      "name": "SHB_PPLUS_pha",
+      "pv_name": "IRFEL:IN-MW:SHB:GET_CH4_PHASE",
+      "readback": "IRFEL:IN-MW:SHB:GET_CH4_PHASE",
+      "group": "SHB"
+    },
+    {
+      "name": "SHB_PC_amp",
+      "pv_name": "IRFEL:IN-MW:SHB:GET_CH3_AMP",
+      "readback": "IRFEL:IN-MW:SHB:GET_CH3_AMP",
+      "group": "SHB"
+    },
+    {
+      "name": "SHB_PC_pha",
+      "pv_name": "IRFEL:IN-MW:SHB:GET_CH3_PHASE",
+      "readback": "IRFEL:IN-MW:SHB:GET_CH3_PHASE",
+      "group": "SHB"
+    },
+    {
+      "name": "KLY1_PC_amp",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH7_AMP",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH7_AMP",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_REF_pha",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH7_PHASE",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH7_PHASE",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_VM_amp",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH8_AMP",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH8_AMP",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_VM_pha",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH8_PHASE",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH8_PHASE",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_SSA_amp",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH1_AMP",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH1_AMP",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_SSA_pha",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH1_PHASE",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH1_PHASE",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_FOR_amp",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH2_AMP",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH2_AMP",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_FOR_pha",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH2_PHASE",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH2_PHASE",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_ACC1_amp",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH6_AMP",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH6_AMP",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_ACC1_pha",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH6_PHASE",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH6_PHASE",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_ACC1LOAD_amp",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH4_AMP",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH4_AMP",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_ACC1LOAD_pha",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH4_PHASE",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH4_PHASE",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_BC_amp",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH5_AMP",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH5_AMP",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_BC_pha",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH5_PHASE",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH5_PHASE",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_BCLOAD_amp",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH3_AMP",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH3_AMP",
+      "group": "KLY1"
+    },
+    {
+      "name": "KLY1_BCLOAD_pha",
+      "pv_name": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE",
+      "readback": "IRFEL:IN-MW:KLY1:GET_CH3_PHASE",
+      "group": "KLY1"
+    },
+    {
+      "name": "BEAM_ENERGY",
+      "pv_name": "IRFEL:BD:ESA:H:E",
+      "readback": "IRFEL:BD:ESA:H:E",
+      "group": "ESA"
+    },
+    {
+      "name": "BEAM_ES",
+      "pv_name": "IRFEL:BD:ESA:H:Sigma:Centroid",
+      "readback": "IRFEL:BD:ESA:H:Sigma:Centroid",
+      "group": "ESA"
     }
   ]
 }

@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 
 pytest.importorskip("PyQt5")
 
@@ -43,6 +44,14 @@ class _FailingOptimizer:
         raise RuntimeError("optimizer failed")
 
 
+class _EvaluatingOptimizer:
+    def __init__(self, objective_callable):
+        self.objective_callable = objective_callable
+
+    def optimize(self):
+        return self.objective_callable(np.asarray([0.0]))
+
+
 class _FakeBackend:
     def __init__(self, *, fail_restore=False):
         self.fail_restore = fail_restore
@@ -62,6 +71,51 @@ class _FakeBackend:
 
     def close(self):
         self.close_called = True
+
+
+def test_engine_worker_routes_policy_events_to_run_log_signal(tmp_path):
+    class EventPolicy:
+        def set_event_sink(self, sink):
+            self.sink = sink
+
+    policy = EventPolicy()
+    backend = type(
+        "Backend",
+        (),
+        {"objective_policy": policy, "constraint_policy": None},
+    )()
+    worker = EngineWorker(_offline_task(tmp_path))
+    messages = []
+    worker.sig_log.connect(messages.append)
+
+    worker._attach_policy_event_sink(backend)
+    policy.sink("Policy triggered for beam_current [replace]: 5 → 0")
+
+    assert messages == ["Policy triggered for beam_current [replace]: 5 → 0"]
+
+
+def test_engine_worker_preserves_numeric_constraints_for_live_plots(tmp_path):
+    worker = EngineWorker(_offline_task(tmp_path))
+
+    normalized = worker._normalize_output(([1.25], [-0.2, 0.4]))
+
+    np.testing.assert_allclose(normalized["constraint_values"], [-0.2, 0.4])
+    assert normalized["constraint_summary"] == "c0=-0.200000, c1=0.400000"
+
+
+def test_population_live_hypervolume_emits_only_new_generations(tmp_path):
+    worker = EngineWorker(_offline_task(tmp_path))
+    optimizer = type("PopulationOptimizer", (), {"hypervolume_history": [0.1]})()
+    worker._single_objective = False
+    worker._population_multi_objective = True
+    worker._optimizer = optimizer
+
+    assert worker._live_hypervolume_updates() == [0.1]
+    assert worker._live_hypervolume_updates() == []
+
+    optimizer.hypervolume_history.append(0.25)
+    assert worker._live_hypervolume_updates() == [0.25]
+    assert worker._live_hypervolume_updates() == []
 
 
 @pytest.fixture
@@ -119,3 +173,63 @@ def test_engine_worker_reports_restore_failure_after_run_error(tmp_path, worker_
     assert warnings == ["Restore initial failed after run error: restore failed"]
     assert created_backends[0].restore_called
     assert created_backends[0].close_called
+
+
+def test_engine_worker_stop_does_not_restore(tmp_path, worker_patches, monkeypatch):
+    patch_backend, created_backends = worker_patches
+    patch_backend(fail_restore=False)
+    monkeypatch.setattr(
+        "gotacc.runners.task_runner.build_optimizer",
+        lambda **kwargs: _EvaluatingOptimizer(kwargs["objective_callable"]),
+    )
+    worker = EngineWorker(_offline_task(tmp_path))
+    finished = []
+    worker.sig_finished.connect(finished.append)
+    worker.request_stop()
+
+    worker.run()
+
+    assert finished[0]["state"] == "Stopped"
+    assert finished[0]["restore_state"] == "not_requested"
+    assert not created_backends[0].restore_called
+
+
+@pytest.mark.parametrize(
+    ("fail_restore", "expected_state", "expected_restore_state"),
+    [
+        (False, "Aborted", "restored"),
+        (True, "Restore Failed", "failed"),
+    ],
+)
+def test_engine_worker_reports_abort_restore_outcome(
+    tmp_path,
+    worker_patches,
+    monkeypatch,
+    fail_restore,
+    expected_state,
+    expected_restore_state,
+):
+    patch_backend, created_backends = worker_patches
+    patch_backend(fail_restore=fail_restore)
+    monkeypatch.setattr(
+        "gotacc.runners.task_runner.build_optimizer",
+        lambda **kwargs: _EvaluatingOptimizer(kwargs["objective_callable"]),
+    )
+    worker = EngineWorker(_offline_task(tmp_path))
+    statuses = []
+    finished = []
+    warnings = []
+    worker.sig_status.connect(statuses.append)
+    worker.sig_finished.connect(finished.append)
+    worker.sig_warning.connect(warnings.append)
+    worker.request_abort_restore()
+
+    worker.run()
+
+    assert finished[0]["state"] == expected_state
+    assert finished[0]["restore_state"] == expected_restore_state
+    assert created_backends[0].restore_called
+    assert created_backends[0].close_called
+    assert any(payload.get("state") == "Restoring" for payload in statuses)
+    if fail_restore:
+        assert warnings == ["Restore initial failed after abort: restore failed"]

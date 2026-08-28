@@ -5,15 +5,33 @@ import time
 from datetime import datetime
 
 
+class _RCDSEvaluationLimit(Exception):
+    pass
+
+
 class RCDSOptimizer:
-    def __init__(self, func, vrange,
-                 x0, Dmat0, step, noise = 0,
-                 tol=1e-6, maxIt=100, maxEval=15000):
+    def __init__(
+        self,
+        func,
+        vrange=None,
+        x0=None,
+        Dmat0=None,
+        step=0.2,
+        noise=0,
+        tol=1e-6,
+        maxIt=100,
+        maxEval=15000,
+        *,
+        bounds=None,
+        random_state=None,
+        verbose=True,
+        maximize=False,
+    ):
         """
         参数:
         func: 目标函数
         x0: 初始点 (numpy数组)
-        vrange: 初始信赖域半径
+        vrange/bounds: 变量绝对边界，shape=(dim, 2)
         step: 初始扫描步长
         Dmat0: 初始方向集合
         tol: 收敛容差
@@ -22,25 +40,62 @@ class RCDSOptimizer:
         """
         # 输入参数
         self.func = func
-        self.vrange = vrange
+        if vrange is None:
+            vrange = bounds
+        if vrange is None:
+            raise TypeError("RCDSOptimizer requires either vrange or bounds.")
+        self.vrange = np.asarray(vrange, dtype=float)
+        if self.vrange.ndim != 2 or self.vrange.shape[1] != 2:
+            raise ValueError("RCDSOptimizer bounds/vrange must have shape (dim, 2).")
+        self.dim = self.vrange.shape[0]
+        self.verbose = bool(verbose)
+        self.maximize = bool(maximize)
+        self.random_state = random_state
 
-        self.x0 = x0
-        self.Dmat0 = Dmat0
-        self.step = step
+        self.x0 = np.full(self.dim, 0.5, dtype=float) if x0 is None else np.asarray(x0, dtype=float)
+        if self.x0.shape != (self.dim,):
+            raise ValueError(f"RCDSOptimizer x0 must have shape ({self.dim},).")
+        self.x0 = np.clip(self.x0, 0.0, 1.0)
+        self.Dmat0 = np.eye(self.dim, dtype=float) if Dmat0 is None else np.asarray(Dmat0, dtype=float)
+        if self.Dmat0.shape != (self.dim, self.dim):
+            raise ValueError(f"RCDSOptimizer Dmat0 must have shape ({self.dim}, {self.dim}).")
+        self.step = float(step)
         self.noise = noise # 目标函数值的噪声
         
         self.tol = tol
-        self.maxIt = maxIt
-        self.maxEval = maxEval
+        self.maxIt = int(maxIt)
+        self.maxEval = max(1, int(maxEval))
 
         # 
         self.cnt = 0# 用于记录目标函数评估次数
         self.history = []# 用于记录所有评估目标函数的数据
+        self.history_X = []
+        self.history_Y = []
+        self.best_x = None
+        self.best_y = None
+
+    @staticmethod
+    def _as_scalar(value):
+        arr = np.asarray(value, dtype=float)
+        return float(arr.reshape(-1)[0])
+
+    def _log(self, *args, **kwargs):
+        if self.verbose:
+            print(*args, **kwargs)
         
 
     def _record_data(self, x, obj_val):
         """记录优化过程中的数据"""
         self.history.append(np.concatenate((x, [obj_val])))
+        self.history_X.append(np.asarray(x, dtype=float).copy())
+        self.history_Y.append(float(obj_val))
+        is_better = (
+            self.best_y is None
+            or (obj_val > self.best_y if self.maximize else obj_val < self.best_y)
+        )
+        if is_better:
+            self.best_y = float(obj_val)
+            self.best_x = np.asarray(x, dtype=float).copy()
         self.cnt += 1
 
     def optimize(self):
@@ -48,11 +103,14 @@ class RCDSOptimizer:
         Nvar = len(self.x0)
         
         def _wrapped_func(x_norm):#将归一化变量反归一化后进行目标函数评估
+            if self.cnt >= self.maxEval:
+                raise _RCDSEvaluationLimit
+            x_norm = np.clip(np.asarray(x_norm, dtype=float), 0.0, 1.0)
             x = self.vrange[:, 0] + (self.vrange[:, 1] - self.vrange[:, 0]) * x_norm
-            obj_val = self.func(x)
+            obj_val = self._as_scalar(self.func(x))
             # obj_val *=(1+0.1*np.random.normal(0, 1)) # 添加随机量以作噪声测试
             self._record_data(x, obj_val)
-            return obj_val
+            return -obj_val if self.maximize else obj_val
         
         # 初始化当前最优解
         f0 = _wrapped_func(self.x0)
@@ -63,81 +121,84 @@ class RCDSOptimizer:
         Dmat = self.Dmat0.copy()
         Npmin = 6# 线性扫描时的点数
         
-        while it < self.maxIt:
-            t0 = time.time()
-            print('iter:', it, 'f(x)=:', fm)
-            it += 1
-            self.step /= 1.2 # 每次迭代步长缩小
-            
-            k = 0
-            delt = 0.0
-            
-            for ii in range(Nvar):
-                dv = Dmat[:, ii]
-                x_start = xm.copy()
-                f_start = fm
-                
-                # 括号搜索
-                x1, f1, a1, a2, xflist = self._bracketmin(_wrapped_func, x_start, f_start, dv, self.step)
-                
-                # 线性扫描
-                x1, f1 = self._linescan(_wrapped_func, x1, f1, dv, a1, a2, Npmin, xflist) # 返回的是拟合的最小值
-                
-                # 更新最大改进方向
-                if fm - f1 > delt:
-                    delt = fm - f1
-                    k = ii
-                
-                fm = f1
-                xm = x1.copy()
-            
-            # 生成共轭方向
-            xt = 2*xm - self.x0
-            ft = _wrapped_func(xt)
-            
-            # 方向替换条件
-            if f0 <= ft or 2*(f0-2*fm+ft)*((f0-fm-delt)/(ft-f0))**2 >= delt:
-                pass
-            else:
-                ndv = (xm - self.x0) / np.linalg.norm(xm - self.x0)
-                dotp = np.zeros(Nvar)
-                for jj in range(Nvar):
-                    dotp[jj] = abs(np.dot(ndv, Dmat[:, jj]))
-                
-                if np.max(dotp) < 0.9:# 新方向足够不同
-                    # 替换方向
-                    if k < Nvar - 1:
-                        Dmat[:, k:Nvar-1] = Dmat[:, k+1:Nvar]
-                    Dmat[:, -1] = ndv
-                    
-                    # 在新方向搜索
-                    dv = Dmat[:, -1]
+        try:
+            while it < self.maxIt:
+                t0 = time.time()
+                self._log('iter:', it, 'f(x)=:', -fm if self.maximize else fm)
+                it += 1
+                self.step /= 1.2 # 每次迭代步长缩小
+
+                k = 0
+                delt = 0.0
+
+                for ii in range(Nvar):
+                    dv = Dmat[:, ii]
                     x_start = xm.copy()
                     f_start = fm
+
+                    # 括号搜索
                     x1, f1, a1, a2, xflist = self._bracketmin(_wrapped_func, x_start, f_start, dv, self.step)
 
-                    x1, f1 = self._linescan(_wrapped_func, x1, f1, dv, a1, a2, Npmin, xflist)
+                    # 线性扫描
+                    x1, f1 = self._linescan(_wrapped_func, x1, f1, dv, a1, a2, Npmin, xflist) # 返回的是拟合的最小值
+
+                    # 更新最大改进方向
+                    if fm - f1 > delt:
+                        delt = fm - f1
+                        k = ii
 
                     fm = f1
                     xm = x1.copy()
-            
-            # 终止条件检查
-            if self.cnt > self.maxEval:
-                print(f'terminated, reaching function evaluation limit: {self.cnt} > {self.maxEval}')
-                break
-            
-            if self.tol > 0 and 2.0*abs(f0-fm) < self.tol*(abs(f0)+abs(fm)):
-                print(f'terminated: f0={f0:.2e}, fm={fm:.2e}, f0-fm={f0-fm:.2e}')
-                break
-            
-            #更新初始点 以便下次迭代
-            f0 = fm
-            self.x0 = xm.copy()
-        
-        # 打印进度
-            t1 = time.time()
-            print(f"iter {it+1:02d}: f(x)={fm:.4f}, time: {t1-t0:.2f}s")
-        return xm, fm
+
+                # 生成共轭方向
+                xt = 2*xm - self.x0
+                ft = _wrapped_func(xt)
+
+                # 方向替换条件
+                if f0 <= ft or 2*(f0-2*fm+ft)*((f0-fm-delt)/(ft-f0))**2 >= delt:
+                    pass
+                else:
+                    ndv = (xm - self.x0) / np.linalg.norm(xm - self.x0)
+                    dotp = np.zeros(Nvar)
+                    for jj in range(Nvar):
+                        dotp[jj] = abs(np.dot(ndv, Dmat[:, jj]))
+
+                    if np.max(dotp) < 0.9:# 新方向足够不同
+                        # 替换方向
+                        if k < Nvar - 1:
+                            Dmat[:, k:Nvar-1] = Dmat[:, k+1:Nvar]
+                        Dmat[:, -1] = ndv
+
+                        # 在新方向搜索
+                        dv = Dmat[:, -1]
+                        x_start = xm.copy()
+                        f_start = fm
+                        x1, f1, a1, a2, xflist = self._bracketmin(_wrapped_func, x_start, f_start, dv, self.step)
+
+                        x1, f1 = self._linescan(_wrapped_func, x1, f1, dv, a1, a2, Npmin, xflist)
+
+                        fm = f1
+                        xm = x1.copy()
+
+                # 终止条件检查
+                if self.cnt >= self.maxEval:
+                    self._log(f'terminated, reaching function evaluation limit: {self.cnt} >= {self.maxEval}')
+                    break
+
+                if self.tol > 0 and 2.0*abs(f0-fm) < self.tol*(abs(f0)+abs(fm)):
+                    self._log(f'terminated: f0={f0:.2e}, fm={fm:.2e}, f0-fm={f0-fm:.2e}')
+                    break
+
+                #更新初始点 以便下次迭代
+                f0 = fm
+                self.x0 = xm.copy()
+
+            # 打印进度
+                t1 = time.time()
+                self._log(f"iter {it+1:02d}: f(x)={-fm if self.maximize else fm:.4f}, time: {t1-t0:.2f}s")
+        except _RCDSEvaluationLimit:
+            self._log(f'terminated, reaching function evaluation limit: {self.cnt} >= {self.maxEval}')
+        return xm, -fm if self.maximize else fm
 
     def _bracketmin(self, func, x0, f0, dv, step):
 
@@ -181,7 +242,7 @@ class RCDSOptimizer:
             
             if np.isnan(f1):
                 alpha /= (1.0 + gold_r)
-                print('bracketmin: f1=NaN')
+                self._log('bracketmin: f1=NaN')
                 break
             
             if f1 < fm:
@@ -221,7 +282,7 @@ class RCDSOptimizer:
                 
                 if np.isnan(f2):
                     alpha /= (1.0 + gold_r)
-                    print('bracketmin: f2=NaN')
+                    self._log('bracketmin: f2=NaN')
                     break
                 
                 if f2 < fm:
@@ -255,7 +316,7 @@ class RCDSOptimizer:
         
         # 确保有效区间
         if alo >= ahi:
-            print(f"warning of linescan: alo({alo}) >= ahi({ahi}), the default value [-0.1 0.1] is used")
+            self._log(f"warning of linescan: alo({alo}) >= ahi({ahi}), the default value [-0.1 0.1] is used")
             alo, ahi = -0.1, 0.1
         
         # 创建计划要评估的扫描点
@@ -314,7 +375,7 @@ class RCDSOptimizer:
             
             # 如果有异常值，重新拟合
             if len(outlier_indices) > 0:
-                print(f"检测到 {len(outlier_indices)} 个异常值，重新拟合")
+                self._log(f"检测到 {len(outlier_indices)} 个异常值，重新拟合")
                 clean_alphas = all_alphas[inlier_indices]
                 clean_flist = all_flist[inlier_indices]
                 
@@ -350,7 +411,7 @@ class RCDSOptimizer:
                 plt.show()
 
         except (np.linalg.LinAlgError, ValueError) as e:
-            print(f"二次拟合失败({str(e)})，改用线性插值")
+            self._log(f"二次拟合失败({str(e)})，改用线性插值")
             # 拟合失败时使用线性插值
             av = np.linspace(np.min(all_alphas), np.max(all_alphas), 101)
             yv = np.interp(av, all_alphas, all_flist)

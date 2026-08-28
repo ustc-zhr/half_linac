@@ -14,21 +14,9 @@ class RunSessionPresenter:
     def prepare_for_start(self, *, objective_dim: int) -> None:
         self.window.state.reset_for_run_start(objective_dim)
         self.view.update_runtime_labels()
-        self.view.set_run_buttons_enabled(start=False, pause=True, resume=False, stop=True)
+        self.view.set_run_buttons_enabled(start=False, stop=True)
         self.view.set_run_phase("Running")
         self.view.set_run_progress(0)
-        self.view.sync_status_panels()
-
-    def mark_paused(self) -> None:
-        self.window.state.run.phase = "Paused"
-        self.view.set_run_buttons_enabled(start=False, pause=False, resume=True, stop=True)
-        self.view.set_run_phase("Paused")
-        self.view.sync_status_panels()
-
-    def mark_running(self) -> None:
-        self.window.state.run.phase = "Running"
-        self.view.set_run_buttons_enabled(start=False, pause=True, resume=False, stop=True)
-        self.view.set_run_phase("Running")
         self.view.sync_status_panels()
 
     def mark_stopping(self) -> None:
@@ -36,15 +24,15 @@ class RunSessionPresenter:
         self.view.set_run_phase("Stopping")
         self.view.sync_status_panels()
 
-    def mark_aborted(self) -> None:
-        self.window.state.run.phase = "Aborted"
-        self.view.set_run_phase("Aborted")
-        self.view.set_run_buttons_enabled(start=True, pause=False, resume=False, stop=False)
+    def mark_abort_requested(self) -> None:
+        self.window.state.run.phase = "Abort Requested"
+        self.view.set_run_phase("Abort Requested")
+        self.view.set_run_buttons_enabled(start=False, stop=False)
         self.view.sync_status_panels()
 
     def mark_error(self) -> None:
         self.window.state.run.phase = "Error"
-        self.view.set_run_buttons_enabled(start=True, pause=False, resume=False, stop=False)
+        self.view.set_run_buttons_enabled(start=False, stop=False)
         self.view.set_run_phase("Error")
         self.view.sync_status_panels()
 
@@ -62,7 +50,7 @@ class RunSessionPresenter:
         if isinstance(initial_x, dict) and initial_x:
             self.window.state.latest_initial_x = dict(initial_x)
 
-        if state in {"Running", "Paused"}:
+        if state in {"Running", "Abort Requested", "Restoring"}:
             run.phase = state
         self.view.update_runtime_labels()
         self.view.set_run_phase(run.phase)
@@ -90,7 +78,7 @@ class RunSessionPresenter:
 
         self.view.update_runtime_labels()
         self.view.set_run_phase(run.phase)
-        self.view.set_run_buttons_enabled(start=True, pause=False, resume=False, stop=False)
+        self.view.set_run_buttons_enabled(start=False, stop=False)
         if run.phase == "Finished":
             self.view.set_run_progress(100)
         self.view.append_run_history(run.phase)

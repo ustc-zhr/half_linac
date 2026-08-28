@@ -12,6 +12,10 @@ class RunResultsPresenter:
         self.view = window.view_adapter
 
     def apply_evaluation_payload(self, payload: dict[str, Any]) -> None:
+        try:
+            self.window.results_controller.archive_evaluation(payload)
+        except Exception as exc:
+            self.view.log_warning(f"Evaluation archive write failed: {exc}")
         self._append_objective_snapshot(payload)
         self.view.append_recent_eval(payload)
         self._update_solution_inspector(payload)
@@ -40,6 +44,10 @@ class RunResultsPresenter:
             state.pareto_points.append(
                 (float(objective_values[0]), float(objective_values[1]))
             )
+        updates = payload.get("hypervolume_updates") or []
+        if updates:
+            state.hypervolume_history.extend(float(value) for value in updates)
+            self.view.update_runtime_labels()
 
     def _update_solution_inspector(self, payload: dict[str, Any]) -> None:
         inspector = getattr(self.window.ui, "tableWidget_solutionInspector", None)
@@ -80,7 +88,7 @@ class RunResultsPresenter:
         else:
             y_val = None
 
-        c_val = payload.get("constraint_summary", None)
+        c_val = payload.get("constraint_values") or payload.get("constraint_summary", None)
 
         state.eval_history.append((x_dict, y_val, c_val))
         state.eval_x_history.append(x_list)

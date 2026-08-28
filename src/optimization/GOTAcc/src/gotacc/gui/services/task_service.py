@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import copy
 import json
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Tuple
 
 import numpy as np
+
+from gotacc.interfaces.policies import POLICY_REGISTRY
 
 
 # -----------------------------------------------------------------------------
@@ -45,7 +49,7 @@ def _ackley_vectorized(X: np.ndarray) -> np.ndarray:
     return val.reshape(-1, 1)
 
 
-def _two_objective_tradeoff(X: np.ndarray) -> np.ndarray:
+def _two_objective_tradeoff(X: np.ndarray, n_objectives: int = 2) -> np.ndarray:
     """Simple smooth multi-objective test function for GUI use.
 
     The optimizer will maximize both outputs when `maximize=True` is passed in
@@ -54,11 +58,59 @@ def _two_objective_tradeoff(X: np.ndarray) -> np.ndarray:
     """
     X = np.atleast_2d(np.asarray(X, dtype=float))
     dim = X.shape[1]
-    c1 = np.full(dim, 0.2, dtype=float)
-    c2 = np.full(dim, 0.8, dtype=float)
-    f1 = -np.sum((X - c1) ** 2, axis=1)
-    f2 = -np.sum((X - c2) ** 2, axis=1)
-    return np.column_stack([f1, f2])
+    centers = np.linspace(0.2, 0.8, max(2, int(n_objectives)))
+    values = [-np.sum((X - center) ** 2, axis=1) for center in centers]
+    return np.column_stack(values)
+
+
+def _zdt1_vectorized(X: np.ndarray, n_objectives: int = 2) -> np.ndarray:
+    """ZDT1 on the unit hypercube, returned in GOTAcc maximize convention."""
+    if int(n_objectives) != 2:
+        raise ValueError("ZDT1 requires exactly two objectives.")
+    X = np.atleast_2d(np.asarray(X, dtype=float))
+    if X.shape[1] < 2:
+        raise ValueError("ZDT1 requires at least two variables.")
+    f1 = X[:, 0]
+    g = 1.0 + 9.0 * np.mean(X[:, 1:], axis=1)
+    f2 = g * (1.0 - np.sqrt(np.clip(f1 / g, 0.0, None)))
+    return -np.column_stack([f1, f2])
+
+
+def _zdt2_vectorized(X: np.ndarray, n_objectives: int = 2) -> np.ndarray:
+    """ZDT2 on the unit hypercube, returned in GOTAcc maximize convention."""
+    if int(n_objectives) != 2:
+        raise ValueError("ZDT2 requires exactly two objectives.")
+    X = np.atleast_2d(np.asarray(X, dtype=float))
+    if X.shape[1] < 2:
+        raise ValueError("ZDT2 requires at least two variables.")
+    f1 = X[:, 0]
+    g = 1.0 + 9.0 * np.mean(X[:, 1:], axis=1)
+    f2 = g * (1.0 - (f1 / g) ** 2)
+    return -np.column_stack([f1, f2])
+
+
+def _dtlz2_vectorized(X: np.ndarray, n_objectives: int = 2) -> np.ndarray:
+    """DTLZ2 on the unit hypercube, returned in GOTAcc maximize convention."""
+    X = np.atleast_2d(np.asarray(X, dtype=float))
+    n_objectives = max(2, int(n_objectives))
+    if X.shape[1] < n_objectives:
+        raise ValueError("DTLZ2 requires at least as many variables as objectives.")
+    g = np.sum((X[:, n_objectives - 1 :] - 0.5) ** 2, axis=1)
+    values: list[np.ndarray] = []
+    for objective_index in range(n_objectives):
+        value = 1.0 + g
+        n_cos = n_objectives - objective_index - 1
+        if n_cos:
+            value = value * np.prod(
+                np.cos(0.5 * np.pi * X[:, :n_cos]),
+                axis=1,
+            )
+        if objective_index:
+            value = value * np.sin(
+                0.5 * np.pi * X[:, n_objectives - objective_index - 1]
+            )
+        values.append(-value)
+    return np.column_stack(values)
 
 
 SINGLE_OBJECTIVE_FUNCTIONS: dict[str, Callable[[np.ndarray], Any]] = {
@@ -67,10 +119,90 @@ SINGLE_OBJECTIVE_FUNCTIONS: dict[str, Callable[[np.ndarray], Any]] = {
     "ackley": _ackley_vectorized,
 }
 
+MULTI_OBJECTIVE_FUNCTIONS: dict[str, Callable[[np.ndarray, int], np.ndarray]] = {
+    "tradeoff": _two_objective_tradeoff,
+    "zdt1": _zdt1_vectorized,
+    "zdt2": _zdt2_vectorized,
+    "dtlz2": _dtlz2_vectorized,
+}
+
+
+def _benchmark_variables(
+    count: int,
+    lower: float,
+    upper: float,
+    initial: float,
+) -> list[dict[str, str]]:
+    return [
+        {
+            "Enable": "Y",
+            "Name": f"x{index}",
+            "Lower": format(lower, "g"),
+            "Upper": format(upper, "g"),
+            "Initial": format(initial, "g"),
+            "Group": "benchmark",
+        }
+        for index in range(count)
+    ]
+
+
+def _benchmark_objectives(names: tuple[str, ...]) -> list[dict[str, str]]:
+    return [
+        {
+            "Enable": "Y",
+            "Name": name,
+            "Direction": "maximize",
+            "Weight": "1",
+            "Samples": "1",
+            "Math": "mean",
+        }
+        for name in names
+    ]
+
+
+OFFLINE_BENCHMARK_TEMPLATES: dict[str, dict[str, Any]] = {
+    "sphere": {
+        "objective_type": "Single Objective",
+        "variables": _benchmark_variables(2, -5.12, 5.12, 0.0),
+        "objectives": _benchmark_objectives(("sphere",)),
+    },
+    "rosenbrock": {
+        "objective_type": "Single Objective",
+        "variables": _benchmark_variables(2, -2.0, 2.0, 0.0),
+        "objectives": _benchmark_objectives(("rosenbrock",)),
+    },
+    "ackley": {
+        "objective_type": "Single Objective",
+        "variables": _benchmark_variables(2, -5.0, 5.0, 0.0),
+        "objectives": _benchmark_objectives(("ackley",)),
+    },
+    "tradeoff": {
+        "objective_type": "Multi Objective",
+        "variables": _benchmark_variables(2, 0.0, 1.0, 0.5),
+        "objectives": _benchmark_objectives(("f1", "f2")),
+    },
+    "zdt1": {
+        "objective_type": "Multi Objective",
+        "variables": _benchmark_variables(3, 0.0, 1.0, 0.5),
+        "objectives": _benchmark_objectives(("f1", "f2")),
+    },
+    "zdt2": {
+        "objective_type": "Multi Objective",
+        "variables": _benchmark_variables(3, 0.0, 1.0, 0.5),
+        "objectives": _benchmark_objectives(("f1", "f2")),
+    },
+    "dtlz2": {
+        "objective_type": "Multi Objective",
+        "variables": _benchmark_variables(3, 0.0, 1.0, 0.5),
+        "objectives": _benchmark_objectives(("f1", "f2")),
+    },
+}
+
 SUPPORTED_GUI_OPTIMIZERS = {
     "bo",
     "consbo",
     "turbo",
+    "rcds",
     "mggpo_so",
     "consmggpo_so",
     "mobo",
@@ -294,6 +426,19 @@ class TaskService:
         return "rosenbrock"
 
     @staticmethod
+    def offline_test_function_names(objective_type: str) -> tuple[str, ...]:
+        if str(objective_type or "").strip().lower() == "multi objective":
+            return tuple(MULTI_OBJECTIVE_FUNCTIONS)
+        return tuple(SINGLE_OBJECTIVE_FUNCTIONS)
+
+    @staticmethod
+    def offline_benchmark_template(name: str) -> Dict[str, Any]:
+        normalized = str(name or "").strip().lower()
+        if normalized not in OFFLINE_BENCHMARK_TEMPLATES:
+            raise ValueError(f"Unknown offline benchmark template: {normalized!r}.")
+        return copy.deepcopy(OFFLINE_BENCHMARK_TEMPLATES[normalized])
+
+    @staticmethod
     def _direction_multiplier(direction: Any) -> float:
         text = str(direction or "").strip().lower()
         if text in {"min", "minimize", "minimization", "minimise"}:
@@ -417,6 +562,13 @@ class TaskService:
                 "verbose": verbose,
                 "device": device,
             }
+        elif algorithm == "rcds":
+            kwargs = {
+                "maxEval": max_evals,
+                "random_state": seed,
+                "verbose": verbose,
+                "maximize": bool(dyn.get("maximize", True)),
+            }
         elif algorithm in {"mggpo", "consmggpo", "mggpo_so", "consmggpo_so"}:
             pop_size, evals_per_gen, n_generations = TaskService._mggpo_budget_params(task, dyn)
             kwargs = {
@@ -477,6 +629,10 @@ class TaskService:
             "failure_tolerance",
             "length_init",
             "length_min",
+            "step",
+            "noise",
+            "tol",
+            "maxIt",
         ]:
             if key in dyn:
                 kwargs[key] = dyn[key]
@@ -631,6 +787,13 @@ class TaskService:
             else ""
         )
 
+        mapping_fields = ("Role", "Name", "PV Name", "Readback", "Group", "Note")
+        mapping_rows = [
+            {field: row.get(field, "") for field in mapping_fields}
+            for row in TaskService.table_to_records(machine_ui.tableWidget_mapping)
+            if any(str(row.get(field, "")).strip() for field in mapping_fields)
+        ]
+
         task: Dict[str, Any] = {
             "task_name": task_name,
             "mode": mode_text,
@@ -647,7 +810,6 @@ class TaskService:
             "algorithm_params": TaskService.table_to_records(task_ui.tableWidget_dynamicParams),
             "machine": {
                 "ca_address": machine_ui.lineEdit_caAddress.text().strip(),
-                "confirm_before_write": machine_ui.checkBox_confirm.isChecked(),
                 "restore_on_abort": machine_ui.checkBox_restore.isChecked(),
                 "readback_check": machine_ui.checkBox_readbackCheck.isChecked(),
                 "readback_tol": machine_ui.doubleSpinBox_readbackTol.value(),
@@ -655,9 +817,16 @@ class TaskService:
                 "sample_interval": machine_ui.doubleSpinBox_sampleInterval.value(),
                 "write_timeout": machine_ui.doubleSpinBox_timeout.value(),
                 "write_policy": machine_ui.comboBox_policy.currentText(),
-                "objective_policies": TaskService.table_to_records(machine_ui.tableWidget_objectivePolicies),
-                "constraint_policies": TaskService.table_to_records(machine_ui.tableWidget_constraintPolicies),
-                "mapping": TaskService.table_to_records(machine_ui.tableWidget_mapping),
+                "profile": copy.deepcopy(
+                    getattr(machine_ui, "machine_profile", {})
+                ),
+                "policy_bindings": copy.deepcopy(
+                    getattr(machine_ui, "policy_bindings", [])
+                ),
+                "policy_presets": copy.deepcopy(
+                    getattr(machine_ui, "policy_presets", [])
+                ),
+                "mapping": mapping_rows,
                 "write_links": TaskService.table_to_records(machine_ui.tableWidget_writeLinks),
             },
         }
@@ -788,9 +957,12 @@ class TaskService:
     @staticmethod
     def _build_objective_policy_specs(task: Dict[str, Any]) -> List[Dict[str, Any]]:
         machine = task.get("machine", {}) or {}
+        binding_specs = TaskService._build_policy_binding_specs(task, "objective")
+        if binding_specs is not None:
+            return binding_specs
         rows = machine.get("objective_policies", []) or []
         specs: List[Dict[str, Any]] = []
-        supported = {"fel_energy_guard", "zero_guard"}
+        supported = set(POLICY_REGISTRY.names("objective", include_aliases=True))
         for idx, row in enumerate(rows, start=1):
             enabled_text = row.get("Enabled", "")
             if enabled_text and not TaskService._is_enabled(enabled_text):
@@ -803,6 +975,7 @@ class TaskService:
                     f"Unsupported objective policy in row {idx}: {name!r}. "
                     f"Use one of: {', '.join(sorted(supported))}."
                 )
+            name = POLICY_REGISTRY.resolve("objective", name).name
             kwargs = TaskService._parse_json_text(row.get("Kwargs JSON", ""))
             target_text = kwargs.get("target_col", 0)
             try:
@@ -816,15 +989,19 @@ class TaskService:
                     f"Objective policy row {idx} must have target_col >= 0 in Kwargs JSON."
                 )
             kwargs["target_col"] = target_col
+            POLICY_REGISTRY.validate("objective", name, kwargs)
             specs.append({"name": name, "kwargs": kwargs})
         return specs
 
     @staticmethod
     def _build_constraint_policy_specs(task: Dict[str, Any]) -> List[Dict[str, Any]]:
         machine = task.get("machine", {}) or {}
+        binding_specs = TaskService._build_policy_binding_specs(task, "constraint")
+        if binding_specs is not None:
+            return binding_specs
         rows = machine.get("constraint_policies", []) or []
         specs: List[Dict[str, Any]] = []
-        supported = {"bpm_guard", "bpm_zero_guard"}
+        supported = set(POLICY_REGISTRY.names("constraint", include_aliases=True))
         for idx, row in enumerate(rows, start=1):
             enabled_text = row.get("Enabled", "")
             if enabled_text and not TaskService._is_enabled(enabled_text):
@@ -838,6 +1015,7 @@ class TaskService:
                     f"Use one of: {', '.join(sorted(supported))}."
                 )
 
+            name = POLICY_REGISTRY.resolve("constraint", name).name
             kwargs = TaskService._parse_json_text(row.get("Kwargs JSON", ""))
             target_text = kwargs.get("target_col", 0)
             try:
@@ -866,9 +1044,173 @@ class TaskService:
                         f"Constraint policy row {idx} must have {key} >= 0 in Kwargs JSON."
                     )
 
-            normalized_name = "bpm_guard" if name == "bpm_zero_guard" else name
-            specs.append({"name": normalized_name, "kwargs": kwargs})
+            POLICY_REGISTRY.validate("constraint", name, kwargs)
+            specs.append({"name": name, "kwargs": kwargs})
         return specs
+
+    @staticmethod
+    def _build_policy_binding_specs(
+        task: Dict[str, Any],
+        kind: str,
+    ) -> List[Dict[str, Any]] | None:
+        """Compile canonical machine policy bindings for the backend.
+
+        ``None`` means the canonical field is absent, so callers may still load
+        the legacy table-shaped fields. An explicitly empty binding list is
+        authoritative and therefore compiles to no policies.
+        """
+        machine = task.get("machine", {}) or {}
+        if "policy_bindings" not in machine:
+            return None
+        raw_bindings = machine.get("policy_bindings", []) or []
+        if not isinstance(raw_bindings, list):
+            raise ValueError("machine.policy_bindings must be a list.")
+
+        specs: List[Dict[str, Any]] = []
+        for index, binding in enumerate(raw_bindings, start=1):
+            if not isinstance(binding, Mapping):
+                raise ValueError(f"Policy binding {index} must be a mapping.")
+            if str(binding.get("kind", "")).strip().lower() != kind:
+                continue
+            enabled = binding.get("enabled", True)
+            if not (enabled if isinstance(enabled, bool) else TaskService._is_enabled(enabled)):
+                continue
+            specs.append(
+                TaskService._compile_policy_binding(machine, binding, kind, index)
+            )
+        return specs
+
+    @staticmethod
+    def _compile_policy_binding(
+        machine: Mapping[str, Any],
+        binding: Mapping[str, Any],
+        kind: str,
+        index: int,
+    ) -> Dict[str, Any]:
+        """Validate one canonical binding and compile its stable target name."""
+        policy = binding.get("policy", {}) or {}
+        target_hint = str(binding.get("target", "")).strip()
+        prefix = f"{kind.title()} policy"
+        if target_hint:
+            prefix += f" for {target_hint!r}"
+        if not isinstance(policy, Mapping):
+            raise ValueError(f"{prefix}: invalid policy definition.")
+
+        name = str(policy.get("name", "")).strip().lower()
+        supported = set(POLICY_REGISTRY.names(kind, include_aliases=True))
+        if name not in supported:
+            raise ValueError(
+                f"{prefix}: unsupported policy {name!r}; "
+                f"use one of: {', '.join(sorted(supported))}."
+            )
+        name = POLICY_REGISTRY.resolve(kind, name).name
+        kwargs = copy.deepcopy(policy.get("kwargs", {}) or {})
+        if not isinstance(kwargs, dict):
+            raise ValueError(f"{prefix}: kwargs must be a mapping.")
+
+        target = str(binding.get("target") or kwargs.get("target") or "").strip()
+        if not target:
+            raise ValueError(f"Policy binding {index}: choose a target signal.")
+        prefix = f"{kind.title()} policy for {target!r}"
+        mapping_names = [
+            str(row.get("Name", "")).strip()
+            for row in machine.get("mapping", []) or []
+            if isinstance(row, Mapping)
+            and str(row.get("Role", "")).strip().lower() == kind
+            and str(row.get("Name", "")).strip()
+        ]
+        if target not in mapping_names:
+            raise ValueError(
+                f"{prefix}: add or restore the matching {kind} PV Mapping row."
+            )
+        kwargs["target"] = target
+        kwargs["target_col"] = mapping_names.index(target)
+        try:
+            POLICY_REGISTRY.validate(kind, name, kwargs)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{prefix}: {exc}") from exc
+        return {"name": name, "kwargs": kwargs}
+
+    @staticmethod
+    def policy_binding_issues(task: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        """Return actionable issues for enabled machine policy bindings.
+
+        This is intentionally side-effect free so Rule saving, Mapping sync and
+        run validation can share the same result without touching EPICS.
+        """
+        machine = task.get("machine", {}) or {}
+        raw_bindings = machine.get("policy_bindings", []) or []
+        if not isinstance(raw_bindings, list):
+            return [
+                {
+                    "binding_index": None,
+                    "kind": "",
+                    "target": "",
+                    "message": "Machine policies must be stored as a list.",
+                }
+            ]
+
+        constraint_rows = {
+            str(row.get("Name", "")).strip(): row
+            for row in TaskService._enabled_rows(task.get("constraints", []) or [])
+            if isinstance(row, Mapping) and str(row.get("Name", "")).strip()
+        }
+        issues: List[Dict[str, Any]] = []
+        for offset, binding in enumerate(raw_bindings):
+            if not isinstance(binding, Mapping):
+                issues.append(
+                    {
+                        "binding_index": offset,
+                        "kind": "",
+                        "target": "",
+                        "message": f"Policy binding {offset + 1} is invalid.",
+                    }
+                )
+                continue
+            enabled = binding.get("enabled", True)
+            if not (enabled if isinstance(enabled, bool) else TaskService._is_enabled(enabled)):
+                continue
+            kind = str(binding.get("kind", "")).strip().lower()
+            policy = binding.get("policy", {}) or {}
+            kwargs = policy.get("kwargs", {}) if isinstance(policy, Mapping) else {}
+            target = str(
+                binding.get("target")
+                or (kwargs.get("target") if isinstance(kwargs, Mapping) else "")
+                or ""
+            ).strip()
+            if kind not in {"objective", "constraint"}:
+                message = f"Policy binding {offset + 1}: choose objective or constraint."
+            else:
+                try:
+                    TaskService._compile_policy_binding(
+                        machine, binding, kind, offset + 1
+                    )
+                    message = ""
+                except (TypeError, ValueError) as exc:
+                    message = str(exc)
+
+            if not message and kind == "constraint" and target in constraint_rows:
+                action = kwargs.get("action", {}) if isinstance(kwargs, Mapping) else {}
+                if isinstance(action, Mapping) and action.get("type") == "violate_bound":
+                    try:
+                        TaskService._constraint_bounds_from_rows(
+                            [constraint_rows[target]]
+                        )
+                    except (TypeError, ValueError):
+                        message = (
+                            f"Constraint policy for {target!r}: Mark infeasible "
+                            "requires Lower or Upper in Task Builder."
+                        )
+            if message:
+                issues.append(
+                    {
+                        "binding_index": offset,
+                        "kind": kind,
+                        "target": target,
+                        "message": message,
+                    }
+                )
+        return issues
 
     @staticmethod
     def validate_task_data(task: Dict[str, Any]) -> Tuple[bool, List[str]]:
@@ -898,6 +1240,22 @@ class TaskService:
         enabled_objectives = TaskService._enabled_rows(objectives)
         if not enabled_objectives:
             errors.append("At least one enabled objective is required.")
+        if objective_type == "Multi Objective" and len(enabled_objectives) < 2:
+            errors.append("Multi Objective tasks require at least two enabled objectives.")
+
+        for label, rows in (
+            ("variable", enabled_variables),
+            ("objective", enabled_objectives),
+            ("constraint", TaskService._enabled_rows(task.get("constraints", []))),
+        ):
+            names = [str(row.get("Name", "")).strip() for row in rows]
+            if any(not name for name in names):
+                errors.append(f"Every enabled {label} row must have a Name.")
+            duplicates = sorted({name for name in names if name and names.count(name) > 1})
+            if duplicates:
+                errors.append(
+                    f"Duplicate enabled {label} name(s): {', '.join(duplicates)}."
+                )
 
         deprecated_keys = TaskService._deprecated_dynamic_params(task.get("algorithm_params", []))
         if deprecated_keys:
@@ -957,6 +1315,63 @@ class TaskService:
                 errors.append(f"Variable row {idx} initial value is out of bounds.")
 
         if mode.lower() == "online epics":
+            mapping_rows = [
+                row
+                for row in (task.get("machine", {}).get("mapping", []) or [])
+                if any(str(value).strip() for value in row.values())
+            ]
+            seen_mapping_keys: set[tuple[str, str]] = set()
+            mapping_names_by_role = {
+                "knob": set(),
+                "objective": set(),
+                "constraint": set(),
+            }
+            names_to_roles: dict[str, str] = {}
+            knob_pvs: dict[str, str] = {}
+            for idx, row in enumerate(mapping_rows, start=1):
+                role = str(row.get("Role", "")).strip().lower()
+                name = str(row.get("Name", "")).strip()
+                pv_name = str(row.get("PV Name", "")).strip()
+                if role not in mapping_names_by_role:
+                    errors.append(f"PV Mapping row {idx} has an invalid Role.")
+                    continue
+                if not name:
+                    errors.append(f"PV Mapping row {idx} has no Name.")
+                    continue
+                if not pv_name:
+                    errors.append(f"PV Mapping row {idx} ({name}) has no PV Name.")
+                key = (role, name)
+                if key in seen_mapping_keys:
+                    errors.append(f"Duplicate PV Mapping for {role} {name!r}.")
+                seen_mapping_keys.add(key)
+                mapping_names_by_role[role].add(name)
+                previous_role = names_to_roles.get(name)
+                if previous_role is not None and previous_role != role:
+                    errors.append(
+                        f"PV Mapping name {name!r} is used as both {previous_role} and {role}."
+                    )
+                names_to_roles[name] = role
+                if role == "knob" and pv_name:
+                    previous_name = knob_pvs.get(pv_name)
+                    if previous_name is not None and previous_name != name:
+                        errors.append(
+                            f"Knobs {previous_name!r} and {name!r} share Setpoint PV {pv_name!r}."
+                        )
+                    knob_pvs[pv_name] = name
+
+            enabled_names_by_role = {
+                "knob": {str(row.get("Name", "")).strip() for row in enabled_variables},
+                "objective": {str(row.get("Name", "")).strip() for row in enabled_objectives},
+                "constraint": {
+                    str(row.get("Name", "")).strip() for row in enabled_constraints
+                },
+            }
+            for role, mapped_names in mapping_names_by_role.items():
+                if mapped_names != enabled_names_by_role[role]:
+                    errors.append(
+                        f"PV Mapping has pending {role} changes. Sync Mapping To Task before validation."
+                    )
+
             try:
                 TaskService._resolve_online_knob_pvs(task, enabled_variables)
             except Exception as exc:
@@ -990,20 +1405,33 @@ class TaskService:
                 )
 
             write_policy = str(task.get("machine", {}).get("write_policy", "none")).strip().lower()
-            if write_policy not in {"none", "equal"}:
+            supported_write_policies = {
+                "none",
+                *POLICY_REGISTRY.names("write", include_aliases=True),
+            }
+            if write_policy not in supported_write_policies:
                 errors.append(
                     f"Unsupported write policy for current GUI flow: {write_policy!r}"
                 )
 
-            try:
-                TaskService._build_objective_policy_specs(task)
-            except Exception as exc:
-                errors.append(str(exc))
-            if algorithm in constrained_algorithms:
+            machine = task.get("machine", {}) or {}
+            if "policy_bindings" in machine:
+                errors.extend(
+                    issue["message"]
+                    for issue in TaskService.policy_binding_issues(task)
+                )
+            else:
+                # Keep validation behavior for projects that are migrated from
+                # the former table-shaped policy fields on load.
                 try:
-                    TaskService._build_constraint_policy_specs(task)
+                    TaskService._build_objective_policy_specs(task)
                 except Exception as exc:
                     errors.append(str(exc))
+                if algorithm in constrained_algorithms:
+                    try:
+                        TaskService._build_constraint_policy_specs(task)
+                    except Exception as exc:
+                        errors.append(str(exc))
             for idx, row in enumerate(enabled_objectives, start=1):
                 math_op = str(row.get("Math", "mean")).strip().lower() or "mean"
                 if math_op not in {"mean", "std"}:
@@ -1025,6 +1453,33 @@ class TaskService:
                     "Offline single-objective tasks require test_function to be one of: "
                     + ", ".join(sorted(SINGLE_OBJECTIVE_FUNCTIONS))
                 )
+        else:
+            test_function = str(task.get("test_function", "")).strip().lower() or "tradeoff"
+            if test_function not in MULTI_OBJECTIVE_FUNCTIONS:
+                errors.append(
+                    "Offline multi-objective tasks require test_function to be one of: "
+                    + ", ".join(sorted(MULTI_OBJECTIVE_FUNCTIONS))
+                )
+            elif test_function in {"zdt1", "zdt2"}:
+                if len(enabled_objectives) != 2:
+                    errors.append(f"{test_function.upper()} requires exactly two enabled objectives.")
+                if len(enabled_variables) < 2:
+                    errors.append(f"{test_function.upper()} requires at least two enabled variables.")
+            elif test_function == "dtlz2" and len(enabled_variables) < len(enabled_objectives):
+                errors.append("DTLZ2 requires at least as many enabled variables as objectives.")
+            if test_function in {"zdt1", "zdt2", "dtlz2"}:
+                try:
+                    has_nonstandard_bounds = any(
+                        not np.isclose(float(row.get("Lower", "")), 0.0)
+                        or not np.isclose(float(row.get("Upper", "")), 1.0)
+                        for row in enabled_variables
+                    )
+                except (TypeError, ValueError):
+                    has_nonstandard_bounds = False
+                if has_nonstandard_bounds:
+                    errors.append(
+                        f"{test_function.upper()} requires every variable to use bounds [0, 1]."
+                    )
 
         return len(errors) == 0, errors
 
@@ -1053,6 +1508,46 @@ class TaskService:
         serialized = TaskService._dump_serialized_payload(task_cfg.to_dict())
         with open(path, "w", encoding="utf-8") as f:
             f.write(serialized)
+
+    @staticmethod
+    def create_run_archive(task: Mapping[str, Any]) -> Dict[str, Any]:
+        """Freeze one GUI run into a unique, self-contained output directory."""
+        archived = TaskService.prepare_run_archive(task)
+        TaskService.materialize_run_archive(archived)
+        return archived
+
+    @staticmethod
+    def prepare_run_archive(task: Mapping[str, Any]) -> Dict[str, Any]:
+        """Add immutable archive metadata without touching the filesystem."""
+        archived = copy.deepcopy(dict(task))
+        base_dir = Path(str(archived.get("workdir") or Path.cwd())).expanduser().resolve()
+        raw_name = str(archived.get("task_name") or "task").strip()
+        task_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", raw_name).strip("._") or "task"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        run_dir = base_dir / task_name / timestamp
+
+        archived["project_workdir"] = str(base_dir)
+        archived["run_archive_dir"] = str(run_dir)
+        archived["run_id"] = timestamp
+        archived["workdir"] = str(run_dir)
+        return archived
+
+    @staticmethod
+    def materialize_run_archive(archived: Mapping[str, Any]) -> None:
+        """Create a prepared archive and write its frozen TaskConfig."""
+        run_dir_text = str(archived.get("run_archive_dir") or "").strip()
+        if not run_dir_text:
+            raise ValueError("Prepared run archive has no run_archive_dir.")
+        run_dir = Path(run_dir_text)
+        run_dir.mkdir(parents=True, exist_ok=False)
+        (run_dir / "evaluations.jsonl").touch()
+        task_cfg = TaskService.build_task_config(archived)
+        TaskService.ensure_runtime_directories(task_cfg)
+        config_path = run_dir / "task_config.yaml"
+        config_path.write_text(
+            TaskService._dump_serialized_payload(task_cfg.to_dict()),
+            encoding="utf-8",
+        )
 
     @staticmethod
     def extract_machine_pvs(task: Dict[str, Any]) -> list[dict[str, str]]:
@@ -1128,7 +1623,18 @@ class TaskService:
 
         if algorithm in {"mobo", "mopso", "nsga2"} or objective_type == "multi objective":
             n_objectives = max(2, len(objectives))
-            func = TaskService._wrap_objective_with_directions(_two_objective_tradeoff, direction_multipliers)
+            func_name = str(task.get("test_function", "")).strip().lower() or "tradeoff"
+            if func_name not in MULTI_OBJECTIVE_FUNCTIONS:
+                raise ValueError(f"Unknown offline multi-objective test function: {func_name!r}.")
+            benchmark = MULTI_OBJECTIVE_FUNCTIONS[func_name]
+
+            def selected_benchmark(X, _benchmark=benchmark, _n_objectives=n_objectives):
+                return _benchmark(X, _n_objectives)
+
+            func = TaskService._wrap_objective_with_directions(
+                selected_benchmark,
+                direction_multipliers,
+            )
         else:
             func_name = TaskService._guess_offline_test_function(task)
             func = TaskService._wrap_objective_with_directions(
@@ -1230,7 +1736,10 @@ class TaskService:
             "constraint_bounds": constraint_bounds,
             "set_interval": float(machine.get("set_interval", 1.0)),
             "sample_interval": float(machine.get("sample_interval", 0.2)),
-            "log_path": str(Path(task.get("workdir", Path.cwd())) / "save" / f"{task.get('task_name', 'task')}.opt"),
+            "log_path": str(
+                Path(task.get("workdir", Path.cwd()))
+                / ("machine.opt" if task.get("run_archive_dir") else f"save/{task.get('task_name', 'task')}.opt")
+            ),
             "readback_check": readback_check,
             "readback_tol": readback_tol,
             "combine_mode": combine_mode,
@@ -1346,16 +1855,21 @@ class TaskService:
             )
 
         workdir = Path(task.get("workdir", Path.cwd()))
-        save_dir = workdir / "save"
+        is_run_archive = bool(task.get("run_archive_dir"))
+        save_dir = workdir if is_run_archive else workdir / "save"
 
         runtime = RuntimeConfig(
             save_history=True,
-            history_path=str(save_dir / f"{task.get('task_name', 'task')}_history.dat"),
+            history_path=str(
+                save_dir / ("history.dat" if is_run_archive else f"{task.get('task_name', 'task')}_history.dat")
+            ),
             plot_convergence=False,
             plot_path=str(save_dir / f"{task.get('task_name', 'task')}_plot.png"),
             set_best=False,
             restore_initial_on_error=True,
-            restore_initial_on_keyboard_interrupt=True,
+            restore_initial_on_keyboard_interrupt=bool(
+                task.get("machine", {}).get("restore_on_abort", True)
+            ),
             verbose=True,
         )
 
@@ -1379,6 +1893,27 @@ class TaskService:
             runtime=runtime,
         )
         return cfg
+
+    @staticmethod
+    def normalized_task_identity(task: Mapping[str, Any]) -> Dict[str, Any]:
+        """Return stable, comparable data for a GUI run task."""
+        task_copy = copy.deepcopy(dict(task))
+        if task_copy.get("project_workdir"):
+            task_copy["workdir"] = task_copy["project_workdir"]
+        for key in ("project_workdir", "run_archive_dir", "run_id"):
+            task_copy.pop(key, None)
+        task_cfg = TaskService.build_task_config(task_copy)
+        plain = TaskService._plain_data(task_cfg.to_dict())
+        if not isinstance(plain, dict):  # pragma: no cover - TaskConfig always serializes to dict
+            raise TypeError("Normalized task identity must be a dictionary.")
+        variables = TaskService._enabled_rows(task_copy.get("variables", []))
+        machine = task_copy.get("machine", {}) or {}
+        plain["gui_run_contract"] = {
+            "initial_values": [float(row.get("Initial", 0.0)) for row in variables],
+            "restore_on_abort": bool(machine.get("restore_on_abort", True)),
+            "write_timeout": float(machine.get("write_timeout", 2.0)),
+        }
+        return plain
 
     @staticmethod
     def ensure_runtime_directories(task_cfg) -> None:
@@ -1411,9 +1946,8 @@ class TaskService:
             kwargs.pop("variable_names", None)
             kwargs.pop("objective_names", None)
         elif str(cfg.backend.type).lower() == "epics":
-            # GUI helper metadata should not be consumed by the strict EPICS factory.
+            # Variable names are GUI-only. Objective/constraint names are consumed
+            # by the backend so policies can target stable task names instead of columns.
             kwargs.pop("variable_names", None)
-            kwargs.pop("objective_names", None)
-            kwargs.pop("constraint_names", None)
         cfg.backend.kwargs = kwargs
         return cfg

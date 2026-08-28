@@ -75,42 +75,31 @@
         <item row="2" column="0"><widget class="QLabel" name="label_maxEval"><property name="text"><string>Max Evaluations</string></property></widget></item>
         <item row="2" column="1"><widget class="QSpinBox" name="spinBox_maxEval"><property name="toolTip"><string>Target cap for total objective evaluations. The exact mapping to iterations or generations depends on the selected algorithm.</string></property><property name="maximum"><number>1000000</number></property><property name="value"><number>100</number></property></widget></item>
         <item row="3" column="0"><widget class="QLabel" name="label_testFunction"><property name="text"><string>Offline Test Function</string></property></widget></item>
-        <item row="3" column="1"><widget class="QComboBox" name="comboBox_testFunction"><property name="toolTip"><string>Offline benchmark function. Only used for offline tasks; online EPICS tasks ignore this setting.</string></property><item><property name="text"><string>rosenbrock</string></property></item><item><property name="text"><string>ackley</string></property></item><item><property name="text"><string>sphere</string></property></item><item><property name="text"><string>tradeoff</string></property></item></widget></item>
-        <item row="4" column="0"><widget class="QLabel" name="label_algorithmDetail"><property name="text"><string>Algorithm Detail</string></property></widget></item>
+        <item row="3" column="1"><widget class="QComboBox" name="comboBox_testFunction"><property name="toolTip"><string>Offline benchmark function. Only used for offline tasks; online EPICS tasks ignore this setting.</string></property><item><property name="text"><string>rosenbrock</string></property></item><item><property name="text"><string>ackley</string></property></item><item><property name="text"><string>sphere</string></property></item><item><property name="text"><string>tradeoff</string></property></item><item><property name="text"><string>zdt1</string></property></item><item><property name="text"><string>zdt2</string></property></item><item><property name="text"><string>dtlz2</string></property></item></widget></item>
+        <item row="4" column="0"><widget class="QLabel" name="label_algorithmDetail"><property name="text"><string>Algorithm Setup</string></property></widget></item>
         <item row="4" column="1">
          <layout class="QHBoxLayout" name="horizontalLayout_algorithmDetail">
           <item>
            <widget class="QLabel" name="label_algorithmDetailSummary">
             <property name="text">
-             <string>BO · 0 field(s)</string>
+            <string>BO · Recommended</string>
             </property>
             <property name="wordWrap">
-             <bool>true</bool>
+             <bool>false</bool>
             </property>
            </widget>
           </item>
           <item>
-           <spacer name="horizontalSpacer_algorithmDetail">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-           <property name="sizeHint" stdset="0">
-             <size>
-              <width>40</width>
-              <height>20</height>
-             </size>
-            </property>
-          </spacer>
-          </item>
-          <item>
            <widget class="QPushButton" name="pushButton_openAlgorithmDetail">
             <property name="text">
-             <string>Open...</string>
+            <string>Configure...</string>
             </property>
            </widget>
           </item>
          </layout>
         </item>
+        <item row="5" column="0"><widget class="QLabel" name="label_budgetPlan"><property name="text"><string>Budget Plan</string></property></widget></item>
+        <item row="5" column="1"><widget class="QLabel" name="label_budgetHint"><property name="text"><string>Budget is calculated from the current algorithm setup.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
        </layout>
       </widget>
      </item>
@@ -256,44 +245,6 @@
       </layout>
      </widget>
     </widget>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_actionBar">
-     <item>
-      <widget class="QPushButton" name="pushButton_preview">
-       <property name="text">
-        <string>Preview</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-     <widget class="QPushButton" name="pushButton_validate">
-       <property name="text">
-        <string>Validate</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButton_export">
-       <property name="text">
-        <string>Export TaskConfig</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
    </item>
   </layout>
  </widget>

@@ -27,7 +27,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 
@@ -176,6 +176,19 @@ class BaseObjectivePolicy:
         """
         return None
 
+    def validate_backend(self, backend: "EpicsObjective") -> None:
+        """Validate policy/backend compatibility before any evaluation writes."""
+        return None
+
+    def set_event_sink(self, sink: Callable[[str], None] | None) -> None:
+        """Attach an optional runtime event sink without changing policy behavior."""
+        self._event_sink = sink
+
+    def emit_event(self, message: str) -> None:
+        sink = getattr(self, "_event_sink", None)
+        if sink is not None:
+            sink(str(message))
+
 
 class CompositeObjectivePolicy(BaseObjectivePolicy):
     """
@@ -219,6 +232,14 @@ class CompositeObjectivePolicy(BaseObjectivePolicy):
             if idx is not None:
                 return idx
         return None
+
+    def validate_backend(self, backend: "EpicsObjective") -> None:
+        for policy in self.policies:
+            policy.validate_backend(backend)
+
+    def set_event_sink(self, sink: Callable[[str], None] | None) -> None:
+        for policy in self.policies:
+            policy.set_event_sink(sink)
 
 
 class FelEnergyGuardPolicy(BaseObjectivePolicy):
@@ -351,6 +372,19 @@ class BaseConstraintPolicy:
     ) -> np.ndarray:
         return results
 
+    def validate_backend(self, backend: "EpicsObjective") -> None:
+        """Validate policy/backend compatibility before any evaluation writes."""
+        return None
+
+    def set_event_sink(self, sink: Callable[[str], None] | None) -> None:
+        """Attach an optional runtime event sink without changing policy behavior."""
+        self._event_sink = sink
+
+    def emit_event(self, message: str) -> None:
+        sink = getattr(self, "_event_sink", None)
+        if sink is not None:
+            sink(str(message))
+
 
 class CompositeConstraintPolicy(BaseConstraintPolicy):
     """
@@ -374,6 +408,14 @@ class CompositeConstraintPolicy(BaseConstraintPolicy):
         for p in self.policies:
             results = p.post_reduce(results, total, backend)
         return results
+
+    def validate_backend(self, backend: "EpicsObjective") -> None:
+        for policy in self.policies:
+            policy.validate_backend(backend)
+
+    def set_event_sink(self, sink: Callable[[str], None] | None) -> None:
+        for policy in self.policies:
+            policy.set_event_sink(sink)
 
 
 class BPMGuardConstraintPolicy(BaseConstraintPolicy):
@@ -527,10 +569,12 @@ class EpicsObjective(ObjectiveBackend):
         knobs_pvnames: Sequence[str] | None = None,
         knob_readback_pvnames: Sequence[str] | None = None,
         obj_pvnames: Sequence[str] | None = None,
+        objective_names: Sequence[str] | None = None,
         obj_weights: Sequence[float] | None = None,
         obj_samples: int | None = None,
         obj_math: Sequence[str] | None = None,
         constraint_pvnames: Sequence[str] | None = None,
+        constraint_names: Sequence[str] | None = None,
         constraint_math: Sequence[str] | None = None,
         constraint_bounds: Sequence[tuple[float | None, float | None]] | None = None,
         set_interval: float | None = None,
@@ -553,10 +597,18 @@ class EpicsObjective(ObjectiveBackend):
             list(knob_readback_pvnames) if knob_readback_pvnames is not None else list(self.knobs_pvnames)
         )
         self.obj_pvnames = list(obj_pvnames) if obj_pvnames is not None else []
+        self.objective_names = (
+            list(objective_names) if objective_names is not None else list(self.obj_pvnames)
+        )
         self.obj_weights = np.asarray(obj_weights if obj_weights is not None else [], dtype=float)
         self.obj_samples = int(obj_samples) if obj_samples is not None else 1
         self.obj_math = list(obj_math) if obj_math is not None else []
         self.constraint_pvnames = list(constraint_pvnames) if constraint_pvnames is not None else []
+        self.constraint_names = (
+            list(constraint_names)
+            if constraint_names is not None
+            else list(self.constraint_pvnames)
+        )
         self.constraint_math = list(constraint_math) if constraint_math is not None else []
         self.constraint_bounds = list(constraint_bounds) if constraint_bounds is not None else []
         self.set_interval = float(set_interval) if set_interval is not None else 0.0
@@ -601,11 +653,17 @@ class EpicsObjective(ObjectiveBackend):
         if len(self.obj_weights) != len(self.obj_pvnames):
             raise ValueError("obj_weights length must match obj_pvnames")
 
+        if len(self.objective_names) != len(self.obj_pvnames):
+            raise ValueError("objective_names length must match obj_pvnames")
+
         if len(self.obj_math) != len(self.obj_pvnames):
             raise ValueError("obj_math length must match obj_pvnames")
 
         if len(self.constraint_math) != len(self.constraint_pvnames):
             raise ValueError("constraint_math length must match constraint_pvnames")
+
+        if len(self.constraint_names) != len(self.constraint_pvnames):
+            raise ValueError("constraint_names length must match constraint_pvnames")
 
         if self.constraint_bounds and len(self.constraint_bounds) != len(self.constraint_pvnames):
             raise ValueError("constraint_bounds length must match constraint_pvnames")
@@ -624,6 +682,11 @@ class EpicsObjective(ObjectiveBackend):
                 f"Unsupported combine_mode={self.combine_mode!r}, "
                 "must be 'weighted_sum' or 'vector'"
             )
+
+        if self.objective_policy is not None:
+            self.objective_policy.validate_backend(self)
+        if self.constraint_policy is not None:
+            self.constraint_policy.validate_backend(self)
 
     # -------------------------------------------------------------------------
     # 基础工具函数

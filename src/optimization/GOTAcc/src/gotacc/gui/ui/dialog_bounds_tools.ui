@@ -3,164 +3,86 @@
  <class>BoundsToolsDialog</class>
  <widget class="QDialog" name="BoundsToolsDialog">
   <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>760</width>
-    <height>260</height>
-   </rect>
+   <rect><x>0</x><y>0</y><width>820</width><height>440</height></rect>
   </property>
-  <property name="windowTitle">
-   <string>Bounds Tools</string>
+  <property name="minimumSize">
+   <size><width>700</width><height>360</height></size>
   </property>
+  <property name="windowTitle"><string>Bounds Tools</string></property>
   <layout class="QVBoxLayout" name="verticalLayout_main">
+   <property name="spacing"><number>10</number></property>
    <item>
-    <layout class="QGridLayout" name="gridLayout_boundsTools">
-     <item row="0" column="0">
-      <widget class="QLabel" name="label_boundsSource">
-       <property name="text">
-        <string>Source</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
-      <widget class="QComboBox" name="comboBox_boundsSource">
-       <item>
-        <property name="text">
-         <string>Current machine readback</string>
-        </property>
-       </item>
-       <item>
-        <property name="text">
-         <string>Initial values</string>
-        </property>
-       </item>
-      </widget>
-     </item>
-     <item row="0" column="2">
-      <widget class="QLabel" name="label_boundsMode">
-       <property name="text">
-        <string>Mode</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="3">
-      <widget class="QComboBox" name="comboBox_boundsMode">
-       <item>
-        <property name="text">
-         <string>± absolute delta</string>
-        </property>
-       </item>
-       <item>
-        <property name="text">
-         <string>± percent</string>
-        </property>
-       </item>
-       <item>
-        <property name="text">
-         <string>Fixed lower / upper</string>
-        </property>
-       </item>
-      </widget>
-     </item>
-     <item row="0" column="4">
-      <widget class="QCheckBox" name="checkBox_boundsSelectedOnly">
-       <property name="text">
-        <string>Selected rows only</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="5">
-      <widget class="QCheckBox" name="checkBox_boundsUpdateInitial">
-       <property name="text">
-        <string>Set Initial from source</string>
-       </property>
-       <property name="checked">
-        <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label_boundsPrimary">
-       <property name="text">
-        <string>Delta</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QDoubleSpinBox" name="doubleSpinBox_boundsPrimary">
-       <property name="decimals">
-        <number>6</number>
-       </property>
-       <property name="minimum">
-        <double>-1000000000.000000000000000</double>
-       </property>
-       <property name="maximum">
-        <double>1000000000.000000000000000</double>
-       </property>
-       <property name="value">
-        <double>0.100000000000000</double>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="2">
-      <widget class="QLabel" name="label_boundsSecondary">
-       <property name="text">
-        <string>Upper</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="3">
-      <widget class="QDoubleSpinBox" name="doubleSpinBox_boundsSecondary">
-       <property name="decimals">
-        <number>6</number>
-       </property>
-       <property name="minimum">
-        <double>-1000000000.000000000000000</double>
-       </property>
-       <property name="maximum">
-        <double>1000000000.000000000000000</double>
-       </property>
-       <property name="value">
-        <double>1.000000000000000</double>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="4">
-      <widget class="QPushButton" name="pushButton_previewBounds">
-       <property name="text">
-        <string>Preview</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="5">
-      <widget class="QPushButton" name="pushButton_applyBounds">
-       <property name="text">
-        <string>Apply Bounds</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
+    <widget class="QGroupBox" name="groupBox_boundsDefinition">
+     <property name="title"><string>Bounds Definition</string></property>
+     <layout class="QGridLayout" name="gridLayout_boundsTools">
+      <property name="horizontalSpacing"><number>10</number></property>
+      <property name="verticalSpacing"><number>8</number></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_boundsSource"><property name="text"><string>Source</string></property></widget></item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="comboBox_boundsSource">
+        <item><property name="text"><string>Current machine readback</string></property></item>
+        <item><property name="text"><string>Initial values</string></property></item>
+       </widget>
+      </item>
+      <item row="0" column="2"><widget class="QLabel" name="label_boundsMode"><property name="text"><string>Mode</string></property></widget></item>
+      <item row="0" column="3">
+       <widget class="QComboBox" name="comboBox_boundsMode">
+        <item><property name="text"><string>± absolute delta</string></property></item>
+        <item><property name="text"><string>± percent</string></property></item>
+        <item><property name="text"><string>Fixed lower / upper</string></property></item>
+       </widget>
+      </item>
+      <item row="1" column="0"><widget class="QLabel" name="label_boundsScope"><property name="text"><string>Scope</string></property></widget></item>
+      <item row="1" column="1"><widget class="QCheckBox" name="checkBox_boundsSelectedOnly"><property name="text"><string>Only selected variables</string></property></widget></item>
+      <item row="1" column="2"><widget class="QLabel" name="label_boundsInitial"><property name="text"><string>Initial</string></property></widget></item>
+      <item row="1" column="3"><widget class="QCheckBox" name="checkBox_boundsUpdateInitial"><property name="text"><string>Update initial value from source</string></property><property name="checked"><bool>true</bool></property></widget></item>
+      <item row="2" column="0"><widget class="QLabel" name="label_boundsPrimary"><property name="text"><string>Delta</string></property></widget></item>
+      <item row="2" column="1">
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_boundsPrimary">
+        <property name="decimals"><number>6</number></property>
+        <property name="minimum"><double>-1000000000.000000000000000</double></property>
+        <property name="maximum"><double>1000000000.000000000000000</double></property>
+        <property name="value"><double>0.100000000000000</double></property>
+       </widget>
+      </item>
+      <item row="2" column="2"><widget class="QLabel" name="label_boundsSecondary"><property name="text"><string>Upper</string></property></widget></item>
+      <item row="2" column="3">
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_boundsSecondary">
+        <property name="decimals"><number>6</number></property>
+        <property name="minimum"><double>-1000000000.000000000000000</double></property>
+        <property name="maximum"><double>1000000000.000000000000000</double></property>
+        <property name="value"><double>1.000000000000000</double></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item>
     <widget class="QLabel" name="label_boundsToolSummary">
-     <property name="text">
-      <string>Generate Lower / Upper for enabled knob rows.</string>
-     </property>
-     <property name="wordWrap">
-      <bool>true</bool>
-     </property>
+     <property name="text"><string>Choose the source and bounds mode, then preview the exact values before applying.</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
     </widget>
    </item>
    <item>
-    <widget class="QDialogButtonBox" name="buttonBox">
-     <property name="orientation">
-      <enum>Qt::Horizontal</enum>
-     </property>
-     <property name="standardButtons">
-      <set>QDialogButtonBox::Close</set>
-     </property>
+    <widget class="QTableWidget" name="tableWidget_boundsPreview">
+     <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+     <property name="alternatingRowColors"><bool>true</bool></property>
+     <property name="selectionMode"><enum>QAbstractItemView::NoSelection</enum></property>
+     <property name="showGrid"><bool>true</bool></property>
+     <column><property name="text"><string>Variable</string></property></column>
+     <column><property name="text"><string>Source</string></property></column>
+     <column><property name="text"><string>Lower</string></property></column>
+     <column><property name="text"><string>Upper</string></property></column>
+     <column><property name="text"><string>Initial</string></property></column>
     </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_actions">
+     <item><spacer name="horizontalSpacer_actions"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+     <item><widget class="QPushButton" name="pushButton_previewBounds"><property name="text"><string>Preview</string></property></widget></item>
+     <item><widget class="QPushButton" name="pushButton_applyBounds"><property name="text"><string>Apply Bounds</string></property><property name="enabled"><bool>false</bool></property></widget></item>
+     <item><widget class="QDialogButtonBox" name="buttonBox"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="standardButtons"><set>QDialogButtonBox::Close</set></property></widget></item>
+    </layout>
    </item>
   </layout>
  </widget>

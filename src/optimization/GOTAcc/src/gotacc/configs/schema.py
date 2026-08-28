@@ -62,6 +62,7 @@ class BackendConfig:
         例如 EPICS backend 常见字段：
             knobs_pvnames
             obj_pvnames
+            objective_names
             obj_weights
             obj_samples
             obj_math
@@ -78,6 +79,7 @@ class BackendConfig:
             constraint_policy_kwargs
             constraint_policies
             constraint_bounds
+            constraint_names
             write_policy
             write_policy_kwargs
             best_selector_mode
