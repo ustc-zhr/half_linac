@@ -22,8 +22,7 @@ if QtWidgets is not None:
             super().__init__(parent)
             layout = QtWidgets.QVBoxLayout(self)
             self._curves = {}
-            self._x_data = {}
-            self._y_data = {}
+            self._grouped_data = {}
             if pg is not None:
                 self.plot_widget = pg.PlotWidget(title="Response")
                 self.plot_widget.addLegend()
@@ -37,8 +36,7 @@ if QtWidgets is not None:
 
         def reset_channels(self, knob_name: str, knob_unit: str, objects) -> None:
             self._curves = {}
-            self._x_data = {}
-            self._y_data = {}
+            self._grouped_data = {}
             if self.plot_widget is None:
                 return
 
@@ -61,11 +59,10 @@ if QtWidgets is not None:
                     name=obj.name,
                 )
                 self._curves[obj.id] = curve
-                self._x_data[obj.id] = []
-                self._y_data[obj.id] = []
+                self._grouped_data[obj.id] = {}
             style_plot_widget(self.plot_widget)
 
-        def append_step(self, knob_value: float, samples) -> None:
+        def append_step(self, knob_value: float, samples, group_key: float | None = None) -> None:
             if self.plot_widget is None:
                 return
 
@@ -78,9 +75,23 @@ if QtWidgets is not None:
                 if not clean or pv_id not in self._curves:
                     continue
                 mean_value = sum(clean) / len(clean)
-                self._x_data[pv_id].append(knob_value)
-                self._y_data[pv_id].append(mean_value)
-                self._curves[pv_id].setData(self._x_data[pv_id], self._y_data[pv_id])
+                key = float(knob_value if group_key is None else group_key)
+                groups = self._grouped_data.setdefault(pv_id, {})
+                entry = groups.setdefault(key, {"x": [], "y": []})
+                entry["x"].append(float(knob_value))
+                entry["y"].append(float(mean_value))
+                plotted_rows = sorted(
+                    (
+                        sum(entry["x"]) / len(entry["x"]),
+                        sum(entry["y"]) / len(entry["y"]),
+                    )
+                    for entry in groups.values()
+                    if entry["x"] and entry["y"]
+                )
+                self._curves[pv_id].setData(
+                    [row[0] for row in plotted_rows],
+                    [row[1] for row in plotted_rows],
+                )
 
 else:
 

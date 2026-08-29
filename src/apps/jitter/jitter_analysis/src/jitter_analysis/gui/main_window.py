@@ -2386,7 +2386,11 @@ class MainWindow(_MainWindowBase):
             axis_value = self._single_knob_step_axis_value(step)
             if axis_value is None or not math.isfinite(axis_value):
                 continue
-            self.response_plot.append_step(float(axis_value), step.samples)
+            self.response_plot.append_step(
+                float(axis_value),
+                step.samples,
+                group_key=float(step.target_value),
+            )
 
     def _on_single_knob_axis_changed(self) -> None:
         axis_source = str(self.analysis_axis_combo.currentData() or "readback")
@@ -3227,7 +3231,11 @@ class MainWindow(_MainWindowBase):
         self.run_service.append_step(step_record)
         axis_value = self._single_knob_step_axis_value(step_record)
         if axis_value is not None and math.isfinite(axis_value):
-            self.response_plot.append_step(float(axis_value), step_samples)
+            self.response_plot.append_step(
+                float(axis_value),
+                step_samples,
+                group_key=float(step_record.target_value),
+            )
         self.status_panel.set_step(
             f"{step_index + 1}/{total_steps}",
             tone=self._progress_tone(step_index + 1, total_steps),
@@ -3546,7 +3554,7 @@ class MainWindow(_MainWindowBase):
 
     def _clear_sensitivity_table(self) -> None:
         self.sensitivity_plot.clear_data(
-            "Single Knob sensitivity fits the mean read PV response versus the selected knob axis for each step."
+            "Single Knob sensitivity fits grouped knob-position means versus the selected knob axis."
         )
         self._set_sensitivity_available(False)
 
@@ -3714,6 +3722,7 @@ class MainWindow(_MainWindowBase):
                     "unit": object_unit,
                     "slope_unit": slope_unit,
                     "point_count": stats.point_count,
+                    "raw_point_count": stats.raw_point_count,
                     "knob_span": stats.knob_span,
                     "response_span": stats.response_span,
                     "slope": stats.slope,
@@ -3723,6 +3732,8 @@ class MainWindow(_MainWindowBase):
                     "step_indices": list(stats.step_indices),
                     "knob_values": list(stats.knob_values),
                     "response_values": list(stats.response_values),
+                    "response_std_values": list(stats.response_std_values),
+                    "repeat_counts": list(stats.repeat_counts),
                 }
             )
 

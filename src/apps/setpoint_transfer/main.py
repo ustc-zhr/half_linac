@@ -1192,15 +1192,6 @@ class MachineSetpointsWindow(QMainWindow):
         if prompt.exec_() != QMessageBox.Yes:
             self.status_label.setText("Restore cancelled.")
             return
-        if self.control_backend == "real":
-            confirmation, accepted = QInputDialog.getText(
-                self,
-                "Confirm Real Machine write",
-                "This operation writes live Real Machine PVs. Type REAL to continue:",
-            )
-            if not accepted or confirmation.strip().upper() != "REAL":
-                self.status_label.setText("Real Machine write cancelled.")
-                return
         self.preview_button.setEnabled(False)
         self.apply_button.setEnabled(False)
         self.status_label.setText("Applying...")

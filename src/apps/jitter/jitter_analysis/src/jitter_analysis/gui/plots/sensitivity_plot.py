@@ -26,14 +26,25 @@ if QtWidgets is not None:
             layout = QtWidgets.QVBoxLayout(self)
 
             self.summary_label = QtWidgets.QLabel(
-                "Single Knob sensitivity fits the mean read PV response versus the selected knob axis for each step."
+                "Single Knob sensitivity fits grouped knob-position means versus the selected knob axis."
             )
             self.summary_label.setWordWrap(True)
             layout.addWidget(self.summary_label)
 
-            self.table = QtWidgets.QTableWidget(0, 9, self)
+            self.table = QtWidgets.QTableWidget(0, 10, self)
             self.table.setHorizontalHeaderLabels(
-                ["PV", "Points", "Knob Span", "Resp Span", "Slope", "Intercept", "r", "R^2", "Unit"]
+                [
+                    "PV",
+                    "Knob Points",
+                    "Steps",
+                    "Knob Span",
+                    "Resp Span",
+                    "Slope",
+                    "Intercept",
+                    "r",
+                    "R^2",
+                    "Unit",
+                ]
             )
             self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
             self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -43,7 +54,9 @@ if QtWidgets is not None:
             self.table.horizontalHeader().setStretchLastSection(True)
             layout.addWidget(self.table, 1)
 
-            self.detail_label = QtWidgets.QLabel("Select a PV row and hover a point to inspect the sensitivity fit.")
+            self.detail_label = QtWidgets.QLabel(
+                "Select a PV row and hover a point to inspect the sensitivity fit."
+            )
             self.detail_label.setWordWrap(True)
             layout.addWidget(self.detail_label)
 
@@ -63,7 +76,9 @@ if QtWidgets is not None:
             self._rows = []
             self._axis_summary_text = ""
             self.summary_label.setText(message)
-            self.detail_label.setText("Select a PV row and hover a point to inspect the sensitivity fit.")
+            self.detail_label.setText(
+                "Select a PV row and hover a point to inspect the sensitivity fit."
+            )
             self.table.clearContents()
             self.table.setRowCount(0)
             self._scatter_item = None
@@ -73,7 +88,13 @@ if QtWidgets is not None:
                 self.plot_widget.setLabel("bottom", self._knob_axis_label)
                 self.plot_widget.setLabel("left", "Mean Read PV Value")
 
-        def set_rows(self, rows, knob_name: str = "", knob_unit: str = "", axis_summary_text: str = "") -> None:
+        def set_rows(
+            self,
+            rows,
+            knob_name: str = "",
+            knob_unit: str = "",
+            axis_summary_text: str = "",
+        ) -> None:
             self._rows = list(rows)
             axis_label = knob_name.strip() or "Knob Value"
             if knob_unit.strip():
@@ -85,7 +106,7 @@ if QtWidgets is not None:
             self.table.setRowCount(len(self._rows))
             if not self._rows:
                 self.clear_data(
-                    "Need at least two valid Single Knob step points per read PV to fit sensitivity."
+                    "Need at least two valid Single Knob knob-position points per read PV to fit sensitivity."
                 )
                 return
 
@@ -95,6 +116,7 @@ if QtWidgets is not None:
                 values = [
                     str(row["name"]),
                     str(row["point_count"]),
+                    str(row.get("raw_point_count", row["point_count"])),
                     f"{float(row['knob_span']):.6g}",
                     f"{float(row['response_span']):.6g}",
                     f"{float(row['slope']):.6g}",
@@ -127,7 +149,13 @@ if QtWidgets is not None:
                 del blockers
             self._show_row(strongest_row_index)
 
-        def _on_current_cell_changed(self, current_row: int, _current_col: int, _old_row: int, _old_col: int) -> None:
+        def _on_current_cell_changed(
+            self,
+            current_row: int,
+            _current_col: int,
+            _old_row: int,
+            _old_col: int,
+        ) -> None:
             self._show_row(current_row)
 
         def _show_row(self, row_index: int) -> None:
@@ -137,6 +165,8 @@ if QtWidgets is not None:
             step_indices = list(row["step_indices"])
             knob_values = list(row["knob_values"])
             response_values = list(row["response_values"])
+            response_std_values = list(row.get("response_std_values", []))
+            repeat_counts = list(row.get("repeat_counts", []))
             correlation_value = float(row["correlation"])
             correlation_text = "--" if math.isnan(correlation_value) else f"{correlation_value:.4g}"
             slope_unit = str(row["slope_unit"])
@@ -145,7 +175,9 @@ if QtWidgets is not None:
                 slope_text = f"{slope_text} {slope_unit}"
             self.detail_label.setText(
                 f"{row['name']}: slope={slope_text}, intercept={float(row['intercept']):.6g}, "
-                f"r={correlation_text}, R^2={float(row['r_squared']):.4g}, points={int(row['point_count'])}."
+                f"r={correlation_text}, R^2={float(row['r_squared']):.4g}, "
+                f"knob points={int(row['point_count'])}, "
+                f"steps={int(row.get('raw_point_count', row['point_count']))}."
             )
 
             if self.plot_widget is None:
@@ -169,6 +201,14 @@ if QtWidgets is not None:
                         "response_value": float(response_value),
                         "pv_name": str(row["name"]),
                         "point_index": index,
+                        "response_std": (
+                            float(response_std_values[index])
+                            if index < len(response_std_values)
+                            else 0.0
+                        ),
+                        "repeat_count": (
+                            int(repeat_counts[index]) if index < len(repeat_counts) else 1
+                        ),
                     }
                 )
             self._scatter_item = pg.ScatterPlotItem(
@@ -186,6 +226,15 @@ if QtWidgets is not None:
                 tip=self._point_tip,
             )
             self.plot_widget.addItem(self._scatter_item)
+            if response_std_values:
+                error_item = pg.ErrorBarItem(
+                    x=knob_values,
+                    y=response_values,
+                    height=[2.0 * float(value) for value in response_std_values],
+                    beam=0.0,
+                    pen=pg.mkPen("#8a929a", width=1),
+                )
+                self.plot_widget.addItem(error_item)
             if len(knob_values) >= 2:
                 x_min = float(min(knob_values))
                 x_max = float(max(knob_values))
@@ -205,7 +254,9 @@ if QtWidgets is not None:
             return (
                 f"Step {int(data['step_index']) + 1}\n"
                 f"Knob = {float(data['knob_value']):.6g}\n"
-                f"Mean response = {float(data['response_value']):.6g}"
+                f"Mean response = {float(data['response_value']):.6g}\n"
+                f"Std = {float(data.get('response_std', 0.0)):.6g}, "
+                f"repeats = {int(data.get('repeat_count', 1))}"
             )
 
 else:

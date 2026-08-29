@@ -387,6 +387,64 @@ def test_gui_allows_custom_ready_selection(monkeypatch):
     window.close()
 
 
+def test_gui_real_apply_requires_only_message_box_confirmation(monkeypatch):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PyQt5")
+    from PyQt5.QtWidgets import QApplication
+    from half_linac.src.apps.setpoint_transfer import main
+
+    class FakeSignal:
+        def connect(self, _callback):
+            pass
+
+    class FakeTransferWorker:
+        def __init__(self, plan, parent=None):
+            self.plan = plan
+            self.parent = parent
+            self.completed = FakeSignal()
+            self.failed = FakeSignal()
+            self.finished = FakeSignal()
+            self.started = False
+
+        def start(self):
+            self.started = True
+
+        def isRunning(self):
+            return False
+
+    monkeypatch.setenv("HALF_LINAC_MACHINE", "half")
+    monkeypatch.setenv("HALF_LINAC_CONTROL_BACKEND", "real")
+    monkeypatch.setattr(
+        main.EpicsPvClient,
+        "read_many",
+        lambda self, names: [0.0] * len(names),
+    )
+    monkeypatch.setattr(main.EpicsPvClient, "read", lambda self, name: 0.0)
+    monkeypatch.setattr(main.QMessageBox, "exec_", lambda self: main.QMessageBox.Yes)
+    monkeypatch.setattr(
+        main.QInputDialog,
+        "getText",
+        lambda *args, **kwargs: pytest.fail("Apply must not request typed REAL confirmation"),
+    )
+    monkeypatch.setattr(main, "VmTransferWorker", FakeTransferWorker)
+
+    app = QApplication.instance() or QApplication([])
+    window = main.MachineSetpointsWindow()
+    while window.preview_worker.isRunning():
+        app.processEvents()
+    app.processEvents()
+
+    first_element = window.plan.items[0].element_id
+    window.selection_checkboxes[first_element].setChecked(True)
+    window._load_design()
+    window.apply()
+
+    assert window.worker.started
+    assert window.active_plan.target_backend == "real"
+    assert len(window.active_plan.items) == 1
+    window.close()
+
+
 def test_gui_workspace_load_replaces_targets_without_selecting(monkeypatch, tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     pytest.importorskip("PyQt5")
