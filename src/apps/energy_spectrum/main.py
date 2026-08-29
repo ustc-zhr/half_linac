@@ -1468,6 +1468,24 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             lines.append(f"{field.element_id}.{field.field_name} = {field.value:g}{pv_text}")
         return "\n".join(lines)
 
+    def _print_energy_model_inputs(self, snapshot):
+        inputs = []
+        for field in snapshot.fields:
+            value = field.source_value if field.source_value is not None else field.value
+            unit = field.source_unit or field.model_unit or ""
+            source = field.source_pv or field.source
+            inputs.append(
+                f"{field.element_id}.{field.field_name}={value:.12g} {unit} from {source}"
+            )
+
+        energy, energy_source, energy_pv = self._read_reference_energy_mev()
+        source = energy_pv or energy_source
+        inputs.append(f"energy={energy:.12g} MeV from {source}")
+        print(
+            f"Model inputs for {self.energy_config['flag_element']}: "
+            + "; ".join(inputs)
+        )
+
     def _twiss_target_element(self):
         """Return the model element where ESA optics/readout values are reported."""
         for key in ("twiss_target_element", "flag_element"):
@@ -3675,6 +3693,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             # 采用elegant计算
 
             snapshot = self._build_esa_quad_model_snapshot()
+            self._print_energy_model_inputs(snapshot)
 
             line_name = self._energy_model_line("dispersion")
             self.eta_flag = self.model_backend.get_energy_dispersion(
