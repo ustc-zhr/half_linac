@@ -1484,7 +1484,7 @@
       "order": 152,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL14",
@@ -1493,7 +1493,7 @@
       "order": 153,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL15",
@@ -1502,7 +1502,7 @@
       "order": 154,
       "tags": ["bba", "emit", "esa_start"],
       "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL16",
@@ -1511,7 +1511,7 @@
       "order": 155,
       "tags": ["bba", "emit", "esa_start"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL17",
@@ -1520,7 +1520,7 @@
       "order": 156,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL18",
@@ -1529,7 +1529,7 @@
       "order": 157,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL19",
@@ -1538,7 +1538,7 @@
       "order": 158,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL20",
@@ -1547,7 +1547,7 @@
       "order": 159,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL21",
@@ -1556,7 +1556,7 @@
       "order": 160,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL22",
@@ -1565,7 +1565,7 @@
       "order": 161,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL23",
@@ -1574,7 +1574,7 @@
       "order": 162,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL24",
@@ -1583,7 +1583,7 @@
       "order": 163,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL25",
@@ -1592,7 +1592,7 @@
       "order": 164,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL26",
@@ -1601,7 +1601,7 @@
       "order": 165,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QL27",
@@ -1610,7 +1610,7 @@
       "order": 166,
       "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
-      "logical_channels": ["K1", "current_set", "current_readback"]
+      "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
       "id": "QT01",
