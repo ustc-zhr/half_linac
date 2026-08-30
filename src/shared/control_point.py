@@ -20,6 +20,7 @@ _READBACK_CHANNELS = {
     "current_set": "current_readback",
     "setpoint": "readback",
     "phase_set": "phase_readback",
+    "amplitude_set": "amplitude_readback",
     "delay_set": "delay_readback",
     "width_set": "width_readback",
     "voltage_set": "voltage_readback",

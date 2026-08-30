@@ -328,6 +328,18 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(profile.machine.default_mode, "real")
         self.assertEqual(profile.schema_version, "1")
 
+    def test_half_llrf_display_names_and_limits_support_manual_control(self):
+        profile = load_profile("half")
+        for index in range(1, 21):
+            element = profile.get_element(f"LLRF{index:02d}")
+            self.assertEqual(element.display_name, element.id)
+            self.assertEqual(
+                element.limits_for("amplitude_set"),
+                {"low": 0, "high": 100, "unit": "%"},
+            )
+        prebuncher = profile.get_element("LLRFPB")
+        self.assertEqual(prebuncher.display_name, "Prebuncher LLRF")
+
     def test_half_vm_pvs_are_covered_by_softioc_contract(self):
         report = validate_machine_profile("half")
         check = report.get_check("vm_softioc_contract")
@@ -1262,6 +1274,41 @@ class MachineProfileTests(unittest.TestCase):
 
         with self.assertRaisesRegex(MachineProfileError, "Unknown element id: SL01"):
             profile.get_element("SL01")
+
+    def test_half_llrf_phase_and_amplitude_channels_are_complete(self):
+        profile = load_profile("half")
+        llrf_ids = [f"LLRF{number:02d}" for number in range(1, 21)] + ["LLRFPB"]
+
+        for element_id in llrf_ids:
+            with self.subTest(element_id=element_id):
+                element = profile.get_element(element_id)
+                self.assertEqual(element.kind, "rf")
+                self.assertEqual(
+                    set(element.channels),
+                    {
+                        "phase_set",
+                        "phase_readback",
+                        "amplitude_set",
+                        "amplitude_readback",
+                    },
+                )
+                prefix = f"IN:MW:{element_id}"
+                self.assertEqual(
+                    resolve_channel(profile, element_id, "phase_set", "real"),
+                    f"{prefix}:SET_PHASE",
+                )
+                self.assertEqual(
+                    resolve_channel(profile, element_id, "phase_readback", "real"),
+                    f"{prefix}:GET_PHASE",
+                )
+                self.assertEqual(
+                    resolve_channel(profile, element_id, "amplitude_set", "real"),
+                    f"{prefix}:SET_AMP",
+                )
+                self.assertEqual(
+                    resolve_channel(profile, element_id, "amplitude_readback", "real"),
+                    f"{prefix}:GET_AMP",
+                )
 
     def test_vm_backend_uses_softioc_alias_naming_for_magnets(self):
         profile = load_profile("half")

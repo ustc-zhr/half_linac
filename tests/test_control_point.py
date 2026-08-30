@@ -27,6 +27,16 @@ def test_control_points_do_not_guess_missing_safety_parameters() -> None:
     assert not any(point.logical_channel.endswith("_readback") for point in real)
 
 
+def test_half_llrf_control_points_use_phase_and_amplitude_readbacks() -> None:
+    points = {
+        point.key: point
+        for point in collect_control_points(load_profile("half"), "real")
+    }
+
+    assert points["LLRFPB/phase_set"].readback_pv == "IN:MW:LLRFPB:GET_PHASE"
+    assert points["LLRFPB/amplitude_set"].readback_pv == "IN:MW:LLRFPB:GET_AMP"
+
+
 def test_watchdog_uses_configured_tolerance_inclusively() -> None:
     point = next(
         point

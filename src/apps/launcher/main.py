@@ -792,6 +792,18 @@ APP_DEFINITIONS = {
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/power_source_timing",
     },
+    "llrf_control": {
+        "button_name": "llrf_control_button",
+        "category": "control",
+        "button_text": "LLRF Amplitude & Phase",
+        "label": "LLRF Amplitude & Phase",
+        "window_title_patterns": ("LLRF Amplitude & Phase",),
+        "description": "Adjust the selected HALF LLRF phase and amplitude setpoints.",
+        "workflow_name": "llrf_control",
+        "machine_ids": ("half",),
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/llrf_control",
+    },
     "energy_feedback": {
         "button_name": "energy_feedback_button",
         "category": "control",
@@ -829,6 +841,7 @@ PROFILE_MANAGED_APP_KEYS = {
     "dispersion_correction": "dispersion_correction",
     "hv_feedback": "hv_feedback",
     "power_source_timing": "power_source_timing",
+    "llrf_control": "llrf_control",
 }
 
 
@@ -1013,6 +1026,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.dispersion_correction_button.setObjectName("dispersion_correction_button")
         self.power_source_timing_button = QPushButton(self.groupBox_5)
         self.power_source_timing_button.setObjectName("power_source_timing_button")
+        self.llrf_control_button = QPushButton(self.groupBox_5)
+        self.llrf_control_button.setObjectName("llrf_control_button")
         self.ct_monitor_button = QPushButton(self.groupBox_4)
         self.ct_monitor_button.setObjectName("ct_monitor_button")
         self.pv_connection_check_button = QPushButton(self.groupBox_3)
@@ -1063,6 +1078,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                     self.emitmeasure,
                     self.dispersion_correction_button,
                     self.power_source_timing_button,
+                    self.llrf_control_button,
                 ],
                 1,
             ),
