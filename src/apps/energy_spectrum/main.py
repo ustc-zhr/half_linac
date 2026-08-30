@@ -1080,9 +1080,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 1.0 if slider_high - slider_low > 500 else 0.1,
             )
         )
-        default_nudge_index = self.energy_nudge_step_combo.findData(default_nudge)
-        if default_nudge_index >= 0:
-            self.energy_nudge_step_combo.setCurrentIndex(default_nudge_index)
+        self.energy_nudge_step_spin.setRange(
+            0.01,
+            max(0.01, slider_high - slider_low),
+        )
+        self.energy_nudge_step_spin.setValue(default_nudge)
         scan_low, scan_high = self._auto_tune_widget_range(energy_low, energy_high)
         for spin in (self.auto_tune_min_spin, self.auto_tune_max_spin):
             spin.setRange(scan_low, scan_high)
@@ -1684,15 +1686,19 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         self.energy_nudge_label = QLabel("Step", self.groupBox_8)
         self.energy_nudge_label.setProperty("role", "field")
-        self.energy_nudge_step_combo = QComboBox(self.groupBox_8)
-        self.energy_nudge_step_combo.setObjectName("comboBox_energyNudgeStep")
-        self.energy_nudge_step_combo.setProperty("dense", True)
-        for step in (0.01, 0.1, 1.0):
-            self.energy_nudge_step_combo.addItem(f"{step:.2f} MeV", step)
-        default_nudge = 1.0 if energy_high - energy_low > 500 else 0.1
-        self.energy_nudge_step_combo.setCurrentIndex(
-            self.energy_nudge_step_combo.findData(default_nudge)
+        self.energy_nudge_step_spin = QDoubleSpinBox(self.groupBox_8)
+        self.energy_nudge_step_spin.setObjectName("energyNudgeStepSpinBox")
+        self.energy_nudge_step_spin.setDecimals(2)
+        self.energy_nudge_step_spin.setSingleStep(0.01)
+        self.energy_nudge_step_spin.setRange(
+            0.01,
+            max(0.01, slider_high - slider_low),
         )
+        self.energy_nudge_step_spin.setSuffix(" MeV")
+        self.energy_nudge_step_spin.setKeyboardTracking(False)
+        self.energy_nudge_step_spin.setProperty("dense", True)
+        default_nudge = 1.0 if energy_high - energy_low > 500 else 0.1
+        self.energy_nudge_step_spin.setValue(default_nudge)
 
         self.decrease_target_energy_button = QPushButton("←", self.groupBox_8)
         self.decrease_target_energy_button.setObjectName("pushButton_decreaseTargetEnergy")
@@ -1708,7 +1714,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         nudge_layout = QHBoxLayout()
         nudge_layout.setContentsMargins(0, 0, 0, 0)
         nudge_layout.setSpacing(6)
-        nudge_layout.addWidget(self.energy_nudge_step_combo, 1)
+        nudge_layout.addWidget(self.energy_nudge_step_spin, 1)
         nudge_layout.addWidget(self.decrease_target_energy_button)
         nudge_layout.addWidget(self.increase_target_energy_button)
 
@@ -2534,7 +2540,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.slider_energy: "Target energy slider",
             self.target_energy_spin: "Energy setpoint precise input",
             self.apply_target_energy_button: "Apply target energy",
-            self.energy_nudge_step_combo: "Energy adjustment step",
+            self.energy_nudge_step_spin: "Energy adjustment step input",
             self.decrease_target_energy_button: "Decrease target energy by selected step",
             self.increase_target_energy_button: "Increase target energy by selected step",
             self.auto_tune_min_spin: "Auto Find minimum energy",
@@ -2615,7 +2621,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.comboBox_colormap,
             self.comboBox_fitmethod,
             self.comboBox_start_element,
-            self.energy_nudge_step_combo,
             self.auto_tune_objective_combo,
         ):
             if not isinstance(combo.view(), QListView):
@@ -2654,7 +2659,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.slider_energy,
             self.target_energy_spin,
             self.apply_target_energy_button,
-            self.energy_nudge_step_combo,
+            self.energy_nudge_step_spin,
             self.decrease_target_energy_button,
             self.increase_target_energy_button,
         )
@@ -2686,7 +2691,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             )
         )
         self.apply_target_energy_button.setToolTip(manual_tooltip)
-        self.energy_nudge_step_combo.setToolTip("Select the amount applied by the arrow buttons.")
+        self.energy_nudge_step_spin.setToolTip(
+            "Enter the amount applied by the arrow buttons."
+        )
         for button in (
             self.decrease_target_energy_button,
             self.increase_target_energy_button,
@@ -3856,7 +3863,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         return super().eventFilter(watched, event)
 
     def _nudge_target_energy(self, direction):
-        step = float(self.energy_nudge_step_combo.currentData())
+        step = float(self.energy_nudge_step_spin.value())
         target = self.target_energy_spin.value() + int(direction) * step
         target = min(
             max(target, self.target_energy_spin.minimum()),
