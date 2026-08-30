@@ -161,6 +161,20 @@ def test_twiss_preview_requires_staged_overrides():
         run_twiss_preview(FakeTwissBackend(), overrides={})
 
 
+def test_twiss_preview_line_selection_supports_esa_quads_and_rejects_mixed_branches():
+    pytest.importorskip("PyQt5")
+    from half_linac.src.apps.setpoint_transfer.main import _select_twiss_line
+
+    lines = {
+        "ALL_MAIN": {"QL01", "QT07"},
+        "ALL_ESA": {"QL01", "QE01", "QE02", "QE03"},
+    }
+    assert _select_twiss_line({"QL01"}, lines, "ALL_MAIN") == "ALL_MAIN"
+    assert _select_twiss_line({"QL01", "QE01"}, lines, "ALL_MAIN") == "ALL_ESA"
+    with pytest.raises(ValueError, match="span model branches"):
+        _select_twiss_line({"QT07", "QE01"}, lines, "ALL_MAIN")
+
+
 def test_twiss_preview_dialog_renders_overview_and_data_tabs():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     pytest.importorskip("PyQt5")
@@ -348,6 +362,10 @@ def test_gui_allows_custom_ready_selection(monkeypatch):
 
     assert window.theme_toggle_button.text() in {"☀", "☾"}
     assert not window.plan.blockers
+    assert {"QE01", "QE02", "QE03"} <= {
+        item.element_id for item in window.plan.items
+    }
+    assert window.design_line_elements["ALL_ESA"] >= {"QE01", "QE02", "QE03"}
     assert window.selection_label.text() == "0 selected / 0 staged"
     assert not window.twiss_button.isEnabled()
     window._clear_selection()

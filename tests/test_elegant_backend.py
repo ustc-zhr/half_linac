@@ -26,6 +26,7 @@ from half_linac.src.shared.elegant_backend import (
     build_vm_publish_plan,
 )
 from half_linac.src.shared.machine_profile import (
+    MachineProfileError,
     build_model_backend,
     load_app_context,
     load_profile,
@@ -34,6 +35,7 @@ from half_linac.src.shared.machine_profile import (
 from half_linac.src.shared.machine_profile.model_backend import (
     ElegantModelBackend,
     _exclusive_model_workspace,
+    _load_matrix,
 )
 from half_linac.src.shared.machine_profile.models import ModelBackendConfig
 from half_linac.src.shared.runtime_state import read_runtime_state
@@ -52,6 +54,47 @@ class ElegantBackendTests(unittest.TestCase):
         self.elegant_dir = REPO_ROOT / "src/virtual_machine/half_elegant/elegant"
         self.lattice_file = self.elegant_dir / "lattice_ini.lte"
         self.ele_file = self.elegant_dir / "one_ini.ele"
+
+    def test_matrix_loader_uses_named_columns_across_elegant_versions(self):
+        required = [f"R{row}{column}" for row in range(1, 7) for column in range(1, 7)]
+        expected = np.asarray(
+            [float(row * 10 + column) for row in range(1, 7) for column in range(1, 7)]
+        ).reshape(6, 6)
+
+        for metadata_columns in (
+            ["s", "ElementName", "ElementOccurence", "ElementType"],
+            ["s", "pCentral", "ElementName", "ElementOccurence", "ElementType"],
+        ):
+            with self.subTest(metadata_columns=metadata_columns):
+                matrix_file = SimpleNamespace(
+                    columnName=[*metadata_columns, *required],
+                    columnData=(
+                        [[[0.0]]] * len(metadata_columns)
+                        + [[[value]] for value in expected.flat]
+                    ),
+                    load=lambda _path: None,
+                )
+                with patch(
+                    "half_linac.src.shared.machine_profile.model_backend.sdds.SDDS",
+                    return_value=matrix_file,
+                ):
+                    matrix = _load_matrix("matrix.mat")
+
+                np.testing.assert_array_equal(matrix, expected)
+
+    def test_matrix_loader_reports_missing_named_columns(self):
+        required = [f"R{row}{column}" for row in range(1, 7) for column in range(1, 7)]
+        required.remove("R16")
+        matrix_file = SimpleNamespace(
+            columnName=required,
+            columnData=[[[float(index)]] for index in range(len(required))],
+            load=lambda _path: None,
+        )
+        with patch(
+            "half_linac.src.shared.machine_profile.model_backend.sdds.SDDS",
+            return_value=matrix_file,
+        ), self.assertRaisesRegex(MachineProfileError, "missing columns: R16"):
+            _load_matrix("matrix.mat")
 
     def test_model_workspace_lock_times_out_and_releases_after_error(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -270,7 +313,10 @@ class ElegantBackendTests(unittest.TestCase):
     def test_model_backend_skips_unmatched_error_element_for_quad_to_flag_map(self):
         class FakeSdds:
             def __init__(self, _index):
-                self.columnData = [[[float(index)]] for index in range(48)]
+                self.columnName = [
+                    f"R{row}{column}" for row in range(1, 7) for column in range(1, 7)
+                ]
+                self.columnData = [[[float(index)]] for index in range(36)]
 
             def load(self, _path):
                 return None
@@ -356,7 +402,10 @@ class ElegantBackendTests(unittest.TestCase):
     def test_model_backend_applies_field_level_lattice_overrides(self):
         class FakeSdds:
             def __init__(self, _index):
-                self.columnData = [[[float(index)]] for index in range(48)]
+                self.columnName = [
+                    f"R{row}{column}" for row in range(1, 7) for column in range(1, 7)
+                ]
+                self.columnData = [[[float(index)]] for index in range(36)]
 
             def load(self, _path):
                 return None
@@ -518,7 +567,10 @@ class ElegantBackendTests(unittest.TestCase):
                 if not lock_state["active"]:
                     raise AssertionError(f"SDDS output was read without a workspace lock: {path}")
                 if str(path).endswith(".mat"):
-                    self.columnData = [[[float(index)]] for index in range(48)]
+                    self.columnName = [
+                        f"R{row}{column}" for row in range(1, 7) for column in range(1, 7)
+                    ]
+                    self.columnData = [[[float(index)]] for index in range(12, 48)]
                     return
                 self.columnName = ["s", "betax", "alphax", "x", "etax"]
                 self.columnData = [
@@ -781,8 +833,8 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertEqual(len(eny_specs), 1)
         self.assertEqual(eny_specs[0].logical_channel, "image")
         self.assertEqual(eny_specs[0].pv_name, "HALF:IN:FLAG:ENY:image1:ArrayData:vm")
-        self.assertEqual(eny_specs[0].pixel_shape, (720, 270))
-        self.assertEqual(eny_specs[0].pixel_width_mm, 0.1756)
+        self.assertEqual(eny_specs[0].pixel_shape, (720, 540))
+        self.assertEqual(eny_specs[0].pixel_width_mm, 0.0878)
 
     def test_shared_publisher_uses_plan_pvs_for_bpm_updates(self):
         publisher = VmPublisher()

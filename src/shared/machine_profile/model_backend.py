@@ -943,7 +943,17 @@ def _require_config_alias(
 def _load_matrix(path: Path | str) -> np.ndarray:
     matrix_file = sdds.SDDS(0)
     matrix_file.load(str(path))
-    values = [matrix_file.columnData[index][0][0] for index in range(12, 48)]
+    columns = {
+        name: matrix_file.columnData[index][0][0]
+        for index, name in enumerate(matrix_file.columnName)
+    }
+    required = [f"R{row}{column}" for row in range(1, 7) for column in range(1, 7)]
+    missing = [name for name in required if name not in columns]
+    if missing:
+        raise MachineProfileError(
+            f"Elegant matrix output {path} is missing columns: {', '.join(missing)}"
+        )
+    values = [columns[name] for name in required]
     return np.asarray(values, dtype=float).reshape(6, 6)
 
 

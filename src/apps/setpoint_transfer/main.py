@@ -57,6 +57,7 @@ from half_linac.src.shared.machine_profile import (
     RuntimeContextWidget,
     load_profile,
     normalize_mode,
+    resolve_virtual_machine_usedline_workflow,
     resolve_machine_runtime,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
@@ -321,18 +322,45 @@ class VmPreviewWorker(QThread):
             self.failed.emit(str(exc))
 
 
+def _select_twiss_line(
+    element_ids: set[str],
+    line_elements: dict[str, set[str]],
+    default_line: str,
+) -> str:
+    candidates = [
+        line_name
+        for line_name, members in line_elements.items()
+        if element_ids <= members
+    ]
+    if default_line in candidates:
+        return default_line
+    if candidates:
+        return candidates[0]
+    raise ValueError(
+        "Staged Target values span model branches that cannot be previewed "
+        "together. Preview main-line and ESA-line targets separately."
+    )
+
+
 class TwissPreviewWorker(QThread):
     completed = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, profile, overrides, parent=None):
+    def __init__(self, profile, overrides, line_name, parent=None):
         super().__init__(parent)
         self.profile = profile
         self.overrides = overrides
+        self.line_name = line_name
 
     def run(self):
         try:
-            self.completed.emit(build_twiss_preview(self.profile, self.overrides))
+            self.completed.emit(
+                build_twiss_preview(
+                    self.profile,
+                    self.overrides,
+                    line_name=self.line_name,
+                )
+            )
         except Exception as exc:
             self.failed.emit(str(exc))
 
@@ -503,6 +531,7 @@ class MachineSetpointsWindow(QMainWindow):
         self.active_plan: TransferPlan | None = None
         self.current_values: dict[str, float | None] = {}
         self.staged_values: dict[tuple[str, str], StagedSetpoint] = {}
+        self.design_line_elements: dict[str, set[str]] = {}
         self.selection_checkboxes: dict[str, QCheckBox] = {}
         self.last_result = ()
         self.execution_states: dict[str, str] = {}
@@ -682,7 +711,27 @@ class MachineSetpointsWindow(QMainWindow):
         self.source_label.setText(f"Design source: {source.name}")
         self.source_label.setToolTip(str(source))
         try:
-            self.design_setpoints = extract_design_setpoints(source, line_name=self.runtime.vm.line_name)
+            workflow = resolve_virtual_machine_usedline_workflow(self.profile)
+            line_names = [self.runtime.vm.line_name]
+            line_names.extend(
+                choice.id
+                for choice in workflow.predefined_usedlines
+                if choice.role == "energy_spectrum" and choice.id not in line_names
+            )
+            merged = []
+            seen = set()
+            self.design_line_elements = {}
+            for line_name in line_names:
+                line_setpoints = extract_design_setpoints(source, line_name=line_name)
+                self.design_line_elements[line_name] = {
+                    item.element_id for item in line_setpoints
+                }
+                for item in line_setpoints:
+                    key = (item.element_id, item.field)
+                    if key not in seen:
+                        seen.add(key)
+                        merged.append(item)
+            self.design_setpoints = tuple(merged)
         except Exception as exc:
             self.status_label.setText(f"Design source error: {exc}")
             self.preview_button.setEnabled(False)
@@ -1111,9 +1160,20 @@ class MachineSetpointsWindow(QMainWindow):
             element_id: {field: staged.target_value}
             for (element_id, field), staged in self.staged_values.items()
         }
+        try:
+            line_name = _select_twiss_line(
+                set(overrides),
+                self.design_line_elements,
+                self.runtime.vm.line_name,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Twiss Model Preview", str(exc))
+            return
         self.twiss_button.setEnabled(False)
-        self.status_label.setText("Running Twiss model preview...")
-        self.twiss_worker = TwissPreviewWorker(self.profile, overrides, self)
+        self.status_label.setText(f"Running Twiss model preview for {line_name}...")
+        self.twiss_worker = TwissPreviewWorker(
+            self.profile, overrides, line_name, self
+        )
         self.twiss_worker.completed.connect(self._twiss_complete)
         self.twiss_worker.failed.connect(self._twiss_failed)
         self.twiss_worker.finished.connect(self._twiss_finished)

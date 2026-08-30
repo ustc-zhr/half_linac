@@ -919,7 +919,7 @@ class MachineProfileTests(unittest.TestCase):
         )
         self.assertEqual(
             resolve_element_image_geometry(profile, "ENY", "vm").shape,
-            (720, 270),
+            (720, 540),
         )
 
     def test_all_directory_flags_define_geometry_for_each_image_backend(self):

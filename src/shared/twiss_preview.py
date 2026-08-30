@@ -95,7 +95,8 @@ def build_twiss_preview(
     overrides: Mapping[str, Mapping[str, float]],
     *,
     model_backend: str = "simulation",
+    line_name: str | None = None,
 ) -> TwissPreviewResult:
     context = load_model_context(profile.machine.id, model_backend=model_backend)
-    backend = build_model_backend(context)
+    backend = build_model_backend(context, line_name=line_name)
     return run_twiss_preview(backend, overrides=overrides, machine_id=profile.machine.id)
