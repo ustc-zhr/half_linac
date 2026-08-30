@@ -566,12 +566,12 @@
       "current_readback": "IN:PS:L001:BL01-A-CP:current:ai"
     },
     "XCA23": {
-      "current_set": "IN:PS:LE16:XCA23:current:ao",
-      "current_readback": "IN:PS:LE16:XCA23:current:ai"
+      "current_set": "IN:PS:LE16:XC23A:current:ao",
+      "current_readback": "IN:PS:LE16:XC23A:current:ai"
     },
     "YCA23": {
-      "current_set": "IN:PS:LE16:YCA23:current:ao",
-      "current_readback": "IN:PS:LE16:YCA23:current:ai"
+      "current_set": "IN:PS:LE16:YC23A:current:ao",
+      "current_readback": "IN:PS:LE16:YC23A:current:ai"
     },
     "BENY-CP": {
       "current_set": "IN:PS:LE16:BENY-CP:current:ao",

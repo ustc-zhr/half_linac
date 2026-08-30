@@ -1224,8 +1224,8 @@ class MachineProfileTests(unittest.TestCase):
             "SL01-1": "IN:PS:LE07:SL01-1:current:ao",
             "SL01-2": "IN:PS:LE07:SL01-2:current:ao",
             "BL01-A-CP": "IN:PS:L001:BL01-A-CP:current:ao",
-            "XCA23": "IN:PS:LE16:XCA23:current:ao",
-            "YCA23": "IN:PS:LE16:YCA23:current:ao",
+            "XCA23": "IN:PS:LE16:XC23A:current:ao",
+            "YCA23": "IN:PS:LE16:YC23A:current:ao",
             "BENY-CP": "IN:PS:LE16:BENY-CP:current:ao",
         }
         for element_id, set_pv in expected_set_pvs.items():

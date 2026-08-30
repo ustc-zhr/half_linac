@@ -592,14 +592,14 @@
     },
     {
       "name": "XCA23",
-      "pv_name": "IN:PS:LE16:XCA23:current:ao",
-      "readback": "IN:PS:LE16:XCA23:current:ai",
+      "pv_name": "IN:PS:LE16:XC23A:current:ao",
+      "readback": "IN:PS:LE16:XC23A:current:ai",
       "group": "steering-x"
     },
     {
       "name": "YCA23",
-      "pv_name": "IN:PS:LE16:YCA23:current:ao",
-      "readback": "IN:PS:LE16:YCA23:current:ai",
+      "pv_name": "IN:PS:LE16:YC23A:current:ao",
+      "readback": "IN:PS:LE16:YC23A:current:ai",
       "group": "steering-y"
     },
     {
