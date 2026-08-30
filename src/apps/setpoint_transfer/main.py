@@ -540,8 +540,8 @@ class MachineSetpointsWindow(QMainWindow):
         self.workspace_dir = _ROOT / "logs" / "setpoint_transfer" / "workspaces"
         self.transaction_dir = _ROOT / "logs" / "setpoint_transfer" / "transactions"
         self.setWindowTitle(f"{self.profile.machine.display_name} Machine Setpoints")
-        self.resize(980, 650)
-        self.setMinimumSize(760, 520)
+        self.resize(1120, 720)
+        self.setMinimumSize(880, 560)
         self._apply_theme()
 
         central = QWidget(self)
@@ -578,8 +578,8 @@ class MachineSetpointsWindow(QMainWindow):
         context_layout.setContentsMargins(0, 0, 0, 0)
         context_layout.setSpacing(12)
         context_layout.addWidget(self.source_label, 1)
+        context_layout.addWidget(self.summary_label, 0, Qt.AlignRight)
         layout.addLayout(context_layout)
-        layout.addWidget(self.summary_label)
         filter_layout = QHBoxLayout()
         filter_layout.setSpacing(7)
         self.search_input = QLineEdit(central)
@@ -590,23 +590,33 @@ class MachineSetpointsWindow(QMainWindow):
         self.clear_visible_button = QPushButton("Clear Visible", central)
         filter_layout.addWidget(self.search_input, 1)
         filter_layout.addWidget(self.status_filter)
-        filter_layout.addWidget(self.select_visible_button)
-        filter_layout.addWidget(self.clear_visible_button)
         layout.addLayout(filter_layout)
         self.table = QTableWidget(central)
         selection_layout = QHBoxLayout()
         target_layout = QHBoxLayout()
+        selection_group_label = QLabel("Selection", central)
+        selection_group_label.setProperty("role", "field")
+        target_group_label = QLabel("Target", central)
+        target_group_label.setProperty("role", "field")
+        step_group_label = QLabel("Step", central)
+        step_group_label.setProperty("role", "field")
+        for label in (selection_group_label, target_group_label):
+            label.setFixedWidth(58)
+        step_group_label.setFixedWidth(34)
+        step_group_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.select_ready_button = QPushButton("Select Ready", central)
-        self.clear_selection_button = QPushButton("Clear Selection", central)
-        self.load_design_button = QPushButton("Load Design", central)
-        self.load_current_button = QPushButton("Load Current", central)
-        self.clear_target_button = QPushButton("Clear Target", central)
+        self.clear_selection_button = QPushButton("Clear", central)
+        self.load_design_button = QPushButton("Use Design", central)
+        self.load_current_button = QPushButton("Use Current", central)
+        self.clear_target_button = QPushButton("Clear", central)
         self.absolute_target_button = QPushButton("Abs Target", central)
         self.absolute_target_button.setToolTip(
             "Replace staged Target values on selected rows with their absolute values."
         )
-        self.nudge_down_button = QPushButton("- Step", central)
-        self.nudge_up_button = QPushButton("+ Step", central)
+        self.nudge_down_button = QPushButton(f"-{self.target_step:g}", central)
+        self.nudge_up_button = QPushButton(f"+{self.target_step:g}", central)
+        self.nudge_down_button.setToolTip("Decrease selected Target values by one step.")
+        self.nudge_up_button.setToolTip("Increase selected Target values by one step.")
         self.workspace_button = QToolButton(central)
         self.workspace_button.setText("Workspace")
         self.workspace_button.setPopupMode(QToolButton.InstantPopup)
@@ -616,26 +626,45 @@ class MachineSetpointsWindow(QMainWindow):
         workspace_menu.addSeparator()
         self.clear_workspace_action = workspace_menu.addAction("Clear Workspace")
         self.workspace_button.setMenu(workspace_menu)
+        for button in (
+            self.select_visible_button,
+            self.clear_visible_button,
+            self.select_ready_button,
+            self.clear_selection_button,
+            self.load_design_button,
+            self.load_current_button,
+            self.clear_target_button,
+            self.absolute_target_button,
+            self.workspace_button,
+        ):
+            button.setFixedWidth(104)
+        self.nudge_down_button.setFixedWidth(54)
+        self.nudge_up_button.setFixedWidth(54)
         self.selection_label = QLabel("0 selected", central)
         self.selection_label.setMinimumWidth(110)
         self.selection_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        selection_layout.addWidget(selection_group_label)
+        selection_layout.addWidget(self.select_visible_button)
+        selection_layout.addWidget(self.clear_visible_button)
         selection_layout.addWidget(self.select_ready_button)
         selection_layout.addWidget(self.clear_selection_button)
         selection_layout.addStretch(1)
         selection_layout.addWidget(self.selection_label)
+        target_layout.addWidget(target_group_label)
         target_layout.addWidget(self.load_design_button)
         target_layout.addWidget(self.load_current_button)
         target_layout.addWidget(self.clear_target_button)
         target_layout.addWidget(self.absolute_target_button)
         target_layout.addWidget(self.workspace_button)
         target_layout.addStretch(1)
+        target_layout.addWidget(step_group_label)
         target_layout.addWidget(self.nudge_down_button)
         target_layout.addWidget(self.nudge_up_button)
         layout.addLayout(selection_layout)
         layout.addLayout(target_layout)
         self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels(
-            ("Select", "Element", "Design", f"Current {self.control_backend.upper()}", "Target", "Change", "Source", "Status")
+            ("Select", "Element", "Design K1", f"Current {self.control_backend.upper()}", "Target K1", "Delta", "Source", "Status")
         )
         self.table.setEditTriggers(
             QAbstractItemView.DoubleClicked
@@ -648,6 +677,8 @@ class MachineSetpointsWindow(QMainWindow):
         self.table.verticalHeader().setDefaultSectionSize(27)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.Stretch)
+        self.table.setColumnWidth(0, 64)
+        self.table.setColumnWidth(4, 120)
         self.table.setItemDelegateForColumn(4, TargetValueDelegate(self.table))
         layout.addWidget(self.table)
         self.status_label = QLabel("Ready", central)
@@ -659,6 +690,14 @@ class MachineSetpointsWindow(QMainWindow):
         self.apply_button = QPushButton("Apply Selected", central)
         self.restore_button = QPushButton("Restore Last Apply", central)
         self.restore_button.setEnabled(False)
+        for button in (
+            self.apply_button,
+            self.preview_button,
+            self.twiss_button,
+            self.restore_button,
+        ):
+            button.setFixedWidth(148)
+        buttons.button(QDialogButtonBox.Close).setFixedWidth(72)
         self.apply_button.setProperty("role", "primary")
         buttons.addButton(self.preview_button, QDialogButtonBox.ActionRole)
         buttons.addButton(self.twiss_button, QDialogButtonBox.ActionRole)
@@ -743,8 +782,8 @@ class MachineSetpointsWindow(QMainWindow):
             self.preview_button.setEnabled(False)
             return
         self.summary_label.setText(
-            f"Quad K1 design values: {len(self.design_setpoints)}   "
-            + f"{self.control_backend.upper()} transfer enabled"
+            f"{len(self.design_setpoints)} quadrupoles   "
+            + f"{self.control_backend.upper()} write enabled"
         )
         self.preview()
 
@@ -805,6 +844,16 @@ class MachineSetpointsWindow(QMainWindow):
             checkbox_layout.addStretch(1)
             self.table.setCellWidget(row, 0, container)
             self.selection_checkboxes[item.element_id] = checkbox
+            execution_state = self.execution_states.get(item.element_id)
+            status_text = (
+                execution_state.title()
+                if execution_state
+                else {
+                    "ready": "Ready",
+                    "blocked": "Blocked",
+                    "not_staged": "Not staged",
+                }.get(item.status, item.status.replace("_", " ").title())
+            )
             values = (
                 item.element_id,
                 "" if item.design_value is None else f"{item.design_value:.7g}",
@@ -812,15 +861,11 @@ class MachineSetpointsWindow(QMainWindow):
                 "" if item.target_value is None else f"{item.target_value:.12g}",
                 "" if item.target_value is None or item.current_value is None else f"{item.target_value - item.current_value:.7g}",
                 item.target_origin.title() if item.target_origin else "",
-                self.execution_states.get(
-                    item.element_id,
-                    item.status if not item.message else f"{item.status}: {item.message}",
-                ),
+                status_text,
             )
             for column, value in enumerate(values, start=1):
                 cell = QTableWidgetItem(value)
                 if column == 7:
-                    execution_state = self.execution_states.get(item.element_id)
                     color = "#2d7f6d" if item.status == "ready" else "#b44141"
                     if execution_state == "applied":
                         color = "#2d7f6d"
@@ -829,6 +874,8 @@ class MachineSetpointsWindow(QMainWindow):
                     elif item.status == "not_staged":
                         color = "#746c62"
                     cell.setForeground(QColor(color))
+                    if item.message:
+                        cell.setToolTip(item.message)
                 if column == 5 and item.target_value is not None and item.current_value is not None:
                     change = abs(item.target_value - item.current_value)
                     if change > LARGE_CHANGE_THRESHOLD:
@@ -841,8 +888,9 @@ class MachineSetpointsWindow(QMainWindow):
                 self.table.setItem(row, column, cell)
         self.table.blockSignals(False)
         self.status_label.setText(
-            f"{sum(item.status == 'ready' for item in plan.items)} ready, "
-            f"{sum(item.status == 'blocked' for item in plan.items)} blocked, "
+            f"{len(plan.items)} quadrupoles   "
+            f"{sum(item.status == 'ready' for item in plan.items)} ready   "
+            f"{sum(item.status == 'blocked' for item in plan.items)} blocked   "
             f"{sum(item.status == 'not_staged' for item in plan.items)} not staged"
         )
         if plan.diagnostics:

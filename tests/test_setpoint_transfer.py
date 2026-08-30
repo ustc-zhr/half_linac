@@ -366,6 +366,17 @@ def test_gui_allows_custom_ready_selection(monkeypatch):
         item.element_id for item in window.plan.items
     }
     assert window.design_line_elements["ALL_ESA"] >= {"QE01", "QE02", "QE03"}
+    assert window.table.horizontalHeaderItem(4).text() == "Target K1"
+    assert window.table.item(0, 7).text() == "Not staged"
+    assert "Target is not staged" in window.table.item(0, 7).toolTip()
+    assert len({
+        window.load_design_button.width(),
+        window.load_current_button.width(),
+        window.clear_target_button.width(),
+        window.absolute_target_button.width(),
+        window.workspace_button.width(),
+    }) == 1
+    assert window.restore_button.sizeHint().width() <= window.restore_button.width()
     assert window.selection_label.text() == "0 selected / 0 staged"
     assert not window.twiss_button.isEnabled()
     window._clear_selection()
