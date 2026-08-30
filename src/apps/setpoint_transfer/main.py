@@ -601,6 +601,10 @@ class MachineSetpointsWindow(QMainWindow):
         self.load_design_button = QPushButton("Load Design", central)
         self.load_current_button = QPushButton("Load Current", central)
         self.clear_target_button = QPushButton("Clear Target", central)
+        self.absolute_target_button = QPushButton("Abs Target", central)
+        self.absolute_target_button.setToolTip(
+            "Replace staged Target values on selected rows with their absolute values."
+        )
         self.nudge_down_button = QPushButton("- Step", central)
         self.nudge_up_button = QPushButton("+ Step", central)
         self.workspace_button = QToolButton(central)
@@ -622,6 +626,7 @@ class MachineSetpointsWindow(QMainWindow):
         target_layout.addWidget(self.load_design_button)
         target_layout.addWidget(self.load_current_button)
         target_layout.addWidget(self.clear_target_button)
+        target_layout.addWidget(self.absolute_target_button)
         target_layout.addWidget(self.workspace_button)
         target_layout.addStretch(1)
         target_layout.addWidget(self.nudge_down_button)
@@ -671,6 +676,7 @@ class MachineSetpointsWindow(QMainWindow):
         self.load_design_button.clicked.connect(self._load_design)
         self.load_current_button.clicked.connect(self._load_current)
         self.clear_target_button.clicked.connect(self._clear_target)
+        self.absolute_target_button.clicked.connect(self._absolute_selected_targets)
         self.save_workspace_action.triggered.connect(self._save_workspace)
         self.load_workspace_action.triggered.connect(self._load_workspace)
         self.clear_workspace_action.triggered.connect(self._clear_workspace)
@@ -956,6 +962,24 @@ class MachineSetpointsWindow(QMainWindow):
         if changed:
             self._rebuild_plan()
 
+    def _absolute_selected_targets(self):
+        selected_plan = self._selected_plan()
+        if selected_plan is None:
+            return
+        changed = False
+        for item in selected_plan.items:
+            if item.target_value is None:
+                continue
+            self.staged_values[(item.element_id, item.field)] = StagedSetpoint(
+                item.element_id,
+                item.field,
+                abs(float(item.target_value)),
+                "manual",
+            )
+            changed = True
+        if changed:
+            self._rebuild_plan()
+
     def _apply_filters(self):
         query = self.search_input.text().strip().casefold()
         selected = self._checked_ids()
@@ -1018,6 +1042,7 @@ class MachineSetpointsWindow(QMainWindow):
         self.load_design_button.setEnabled(selected_operational and not busy)
         self.load_current_button.setEnabled(selected_operational and not busy)
         self.clear_target_button.setEnabled(selected_count > 0 and not busy)
+        self.absolute_target_button.setEnabled(staged_count > 0 and not busy)
         visible_selected = any(
             not self.table.isRowHidden(row)
             and self.table.item(row, 1).text() in self._checked_ids()

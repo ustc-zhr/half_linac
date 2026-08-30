@@ -399,6 +399,14 @@ def test_gui_allows_custom_ready_selection(monkeypatch):
     window._load_design()
     window._nudge_selected(0.1)
     assert window.plan.items[0].target_value == pytest.approx(window.design_setpoints[0].value + 0.1)
+    window.staged_values[(first_element, "K1")] = StagedSetpoint(
+        first_element, "K1", -1.25, "manual"
+    )
+    window._rebuild_plan()
+    assert window.absolute_target_button.isEnabled()
+    window._absolute_selected_targets()
+    assert window.plan.items[0].target_value == pytest.approx(1.25)
+    assert window.plan.items[0].target_origin == "manual"
     selected_plan = window._selected_plan()
     assert "QL" in window._write_details(selected_plan)
     assert window._plan_validation_error(selected_plan) == ""
