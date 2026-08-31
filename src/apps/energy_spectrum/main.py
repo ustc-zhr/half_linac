@@ -75,6 +75,7 @@ from half_linac.src.apps.energy_spectrum.stations import (
     LEGACY_STATION_ID,
     resolve_energy_spectrum_stations,
 )
+from half_linac.src.shared.beam_diagnostics import ROIControl, configured_roi
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
@@ -303,8 +304,8 @@ QPushButton {{
     border: 1px solid {button_border};
     border-radius: 12px;
     color: {button_fg};
-    padding: 8px 12px;
-    min-height: 38px;
+    padding: 5px 12px;
+    min-height: 30px;
     font-size: 12px;
     font-weight: 700;
 }}
@@ -324,8 +325,8 @@ QPushButton:disabled {{
 }}
 
 QPushButton[compact="true"] {{
-    padding: 5px 10px;
-    min-height: 28px;
+    padding: 4px 10px;
+    min-height: 26px;
     font-size: 11px;
 }}
 
@@ -663,6 +664,7 @@ class ESAAutoTuneThread(QThread):
         bg_image,
         bend_scan,
         app_context,
+        roi=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -673,6 +675,7 @@ class ESAAutoTuneThread(QThread):
         self.bg_image = bg_image
         self.bend_scan = dict(bend_scan)
         self.app_context = app_context
+        self.roi = roi
 
     def run(self):
         lock = None
@@ -695,6 +698,7 @@ class ESAAutoTuneThread(QThread):
                 progress_callback=self.progress.emit,
                 remove_bg=self.remove_bg,
                 bg_image=self.bg_image,
+                roi=self.roi,
                 settle_time_s=float(self.bend_scan.get("settle_time_s", 0.5)),
                 restore_initial_on_failure=bool(self.bend_scan.get("restore_initial_on_failure", True)),
                 cancel_requested=self.isInterruptionRequested,
@@ -842,6 +846,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         # initialize flag PV according to real machine or VM
         self.init_ESAflag()
+        self._init_roi_control()
         self._build_shell()
 
         # refresh plot with timer (the default frequency: 1Hz)
@@ -887,6 +892,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if not isinstance(workflow["esa_quads"], list) or not workflow["esa_quads"]:
             raise MachineProfileError("workflows.energy_spectrum.esa_quads must be a non-empty list.")
         return workflow
+
+    def _init_roi_control(self):
+        self.roi_control = ROIControl(
+            image_shape=(self.flag_pixel[1], self.flag_pixel[0]),
+            runtime_path=self._runtime_paths()["latest_dir"] / "roi" / f"{self.energy_config['flag_element']}.json",
+            configured=configured_roi(self.energy_config.get("roi"), self.control_backend, self.energy_config["flag_element"]),
+        )
+        self.roi_control.warningRaised.connect(lambda message: self.statusBar().showMessage(message, 8000))
 
     def _runtime_paths(self):
         station_id = None
@@ -1034,6 +1047,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_unit = self.auto_tune_target.unit or "a.u."
         self.auto_tune_mode = self._load_auto_tune_scan_mode()
         self.init_ESAflag()
+        self.roi_control.reconfigure(
+            image_shape=(self.flag_pixel[1], self.flag_pixel[0]),
+            runtime_path=self._runtime_paths()["latest_dir"] / "roi" / f"{self.energy_config['flag_element']}.json",
+            configured=configured_roi(self.energy_config.get("roi"), self.control_backend, self.energy_config["flag_element"]),
+        )
         self._sync_exposure_control_state()
         self._apply_station_controls()
 
@@ -1498,7 +1516,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} Energy Spectrum")
-        self.resize(1260, 960)
+        self.resize(1500, 1040)
         self.setMinimumSize(1024, 780)
         self.menuBar().hide()
         self.statusBar().hide()
@@ -2438,6 +2456,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.verticalLayout_12.addWidget(self.checkBox_bg)
         self.verticalLayout_12.addWidget(self.background_status_label)
         self.verticalLayout_12.addWidget(self.background_settings_button)
+        self.verticalLayout_12.addWidget(self.roi_control)
         self.groupBox_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self._sync_energy_control_state()
 
@@ -2490,6 +2509,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.pushButton_load_latest_bg.clicked.connect(self._load_latest_background)
         self.background_settings_button.clicked.connect(self._show_background_dialog)
         self.checkBox_bg.clicked.connect(lambda: self.bg_removeornot(self.checkBox_bg.isChecked()))
+        self.roi_control.roiChanged.connect(lambda _roi, _enabled: self.ESA_running(write_latest=False) if self._pv_available and not self._auto_tune_is_running() else None)
 
         self.slider_energy.valueChanged.connect(self._update_energy_slider_label)
         self.slider_energy.sliderReleased.connect(self.set_bend_quad)
@@ -3051,6 +3071,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "beta_m": float(self.beta_flag),
             "emittance_m": float(self.emi_flag),
             "include_emit": bool(self.with_emit),
+            "roi_enabled": self.roi_control.use_roi.isChecked(),
+            "roi": self.roi_control.roi().as_dict(),
         }
         if energy0_source_pv:
             metadata["energy0_source_pv"] = str(energy0_source_pv)
@@ -3501,13 +3523,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.ESAflag_image.axes.imshow(data,cmap=colormap,origin="lower",extent=self.extent,aspect="auto")
         self.ESAflag_image.axes.set_xlim(self.xlim)
         self.ESAflag_image.axes.set_ylim(self.ylim)
+        self.roi_control.attach_axes(self.ESAflag_image.axes, extent=self.extent)
 
         #  density stat 
         #------------------------
 
         # sample out only the selected region data
         try:
-            projection = project_image_profiles(data, self.flag_pixel_width_mm)
+            projection = project_image_profiles(data, self.flag_pixel_width_mm, self.roi_control.active_roi())
         except SpectrumProfileError as exc:
             self.sigx = None
             self.sigy = None
@@ -3936,6 +3959,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "settle_time_s": bend_scan.get("settle_time_s"),
             "center_step_mev": bend_scan.get("center_step"),
             "center_tolerance_mm": bend_scan.get("center_tolerance_mm"),
+            "roi_enabled": self.roi_control.use_roi.isChecked(),
+            "roi": self.roi_control.roi().as_dict(),
         }
         try:
             self._auto_tune_run_log = ESAAutoTuneRunLog.create(
@@ -4041,6 +4066,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 bg_image=self.bg_image,
                 bend_scan=bend_scan,
                 app_context=self.app_context,
+                roi=self.roi_control.active_roi(),
                 parent=self,
             )
             self.auto_tune_thread.progress.connect(self._handle_auto_tune_progress)

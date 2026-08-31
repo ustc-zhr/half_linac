@@ -19,13 +19,10 @@ if QtWidgets is not None:
             layout.setContentsMargins(12, 10, 12, 10)
             layout.setSpacing(0)
 
-            self.connection_value = self._add_item(layout, "connection", "EPICS", "Not checked", 124)
-            self.mode_value = self._add_item(layout, "mode", "MODE", "Idle", 132)
-            self.sample_value = self._add_item(layout, "sample", "SAMPLES", "-", 96)
-            self.step_value = self._add_item(layout, "step", "STEP", "-", 90)
-            self.current_pv_value = self._add_item(layout, "current", "CURRENT PV", "--", 168)
-            self.timestamp_value = self._add_item(layout, "time", "TIME", "--", 126)
-            layout.addStretch(1)
+            self.run_id_value = self._add_item(layout, "run_id", "RUN ID", "--", 260)
+            self.sample_value = self._add_item(layout, "sample", "SAMPLES", "-", 120)
+            self.step_value = self._add_item(layout, "step", "STEP", "-", 110)
+            self.elapsed_value = self._add_item(layout, "elapsed", "ELAPSED", "--", 140)
 
         def add_trailing_widget(self, widget) -> None:
             self._layout.addWidget(widget, 0)
@@ -52,7 +49,7 @@ if QtWidgets is not None:
             value_label.setWordWrap(True)
             inner.addWidget(title_label)
             inner.addWidget(value_label)
-            layout.addWidget(container)
+            layout.addWidget(container, 2 if key == "run_id" else 1)
             self._items[key] = (container, value_label)
             return value_label
 
@@ -74,11 +71,8 @@ if QtWidgets is not None:
             value_label.setText(text)
             self._apply_tone(container, value_label, tone)
 
-        def set_connection(self, text: str, tone: str = "subtle") -> None:
-            self.set_item("connection", text, tone=tone)
-
-        def set_mode(self, text: str, tone: str = "subtle") -> None:
-            self.set_item("mode", text, tone=tone)
+        def set_run_id(self, text: str, tone: str = "subtle") -> None:
+            self.set_item("run_id", text, tone=tone)
 
         def set_sample(self, text: str, tone: str = "subtle") -> None:
             self.set_item("sample", text, tone=tone)
@@ -86,11 +80,8 @@ if QtWidgets is not None:
         def set_step(self, text: str, tone: str = "subtle") -> None:
             self.set_item("step", text, tone=tone)
 
-        def set_current(self, text: str, tone: str = "subtle") -> None:
-            self.set_item("current", text, tone=tone)
-
-        def set_time(self, text: str, tone: str = "subtle") -> None:
-            self.set_item("time", text, tone=tone)
+        def set_elapsed(self, text: str, tone: str = "subtle") -> None:
+            self.set_item("elapsed", text, tone=tone)
 
 else:
 

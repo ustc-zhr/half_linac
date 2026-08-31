@@ -19,8 +19,8 @@
     },
     "scan": {
       "settle_mode": "readback_tolerance",
-      "settle_delay_sec": 0.5,
-      "sample_count_per_step": 20,
+      "settle_delay_sec": 1.5,
+      "sample_count_per_step": 5,
       "restore_initial_value": true,
       "max_wait_sec": 5
     },

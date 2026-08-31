@@ -187,7 +187,7 @@ if QtWidgets is not None:
                 "timed_acquisition": "Monitor",
                 "knob_scan": "Single Knob",
                 "single_knob_scan": "Single Knob",
-                "multi_knob_random": "Random Multi-Knob",
+                "multi_knob_random": "Multi-Knob",
             }
             token = str(mode or "").strip()
             return labels.get(token, token.replace("_", " ").title() if token else "--")

@@ -47,6 +47,7 @@ class ESA_AutoTuner:
                  progress_callback=None,
                  remove_bg=False,
                  bg_image=None,
+                 roi=None,
                  settle_time_s=0.5,
                  restore_initial_on_failure=True,
                  cancel_requested=None,
@@ -98,6 +99,7 @@ class ESA_AutoTuner:
         self.progress_callback = progress_callback
         self.remove_bg = remove_bg
         self.bg_image = bg_image
+        self.roi = roi
         self.settle_time_s = float(settle_time_s)
         self.restore_initial_on_failure = bool(restore_initial_on_failure)
         self.cancel_requested = cancel_requested
@@ -661,7 +663,7 @@ class ESA_AutoTuner:
             image = self._get_flag_image()
             self._raise_if_cancelled()
             try:
-                projection = project_image_profiles(image, self.pixel_width_mm)
+                projection = project_image_profiles(image, self.pixel_width_mm, self.roi)
                 profile_fit = fit_projection_profile(
                     projection.x_mm,
                     projection.density_x,

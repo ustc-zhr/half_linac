@@ -6,14 +6,12 @@
   "phase": {
     "default_step": 5,
     "step_choices": [0.1, 0.5, 1, 2, 5, 10],
-    "readback_tolerance": 0.1,
-    "settle_s": 2
+    "readback_tolerance": 0.1
   },
   "amplitude": {
     "default_step": 2,
     "step_choices": [0.1, 0.5, 1, 2, 5, 10],
-    "readback_tolerance": 1,
-    "settle_s": 2
+    "readback_tolerance": 1
   },
   "write_control": {"vm": "blocked", "real": "allowed"}
 }

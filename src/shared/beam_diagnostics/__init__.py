@@ -14,6 +14,8 @@ from .image_fit import (
 )
 from .display import BEAM_IMAGE_COLORMAPS, DEFAULT_BEAM_IMAGE_COLORMAP
 from .profile_runtime import resolve_beam_background_paths
+from .roi import ImageROI, ROIError, clamp_roi, crop_image, full_frame_roi, load_roi, resolve_roi, roi_extent, save_roi
+from .roi_widget import ROIControl, configured_roi
 
 __all__ = [
     "BackgroundStoreError",
@@ -29,4 +31,15 @@ __all__ = [
     "save_background",
     "subtract_background",
     "validate_background_image",
+    "ImageROI",
+    "ROIError",
+    "clamp_roi",
+    "crop_image",
+    "full_frame_roi",
+    "load_roi",
+    "resolve_roi",
+    "roi_extent",
+    "save_roi",
+    "ROIControl",
+    "configured_roi",
 ]

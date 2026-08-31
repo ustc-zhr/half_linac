@@ -31,18 +31,13 @@ if QtWidgets is not None:
             self.summary_label.setWordWrap(True)
             layout.addWidget(self.summary_label)
 
-            self.table = QtWidgets.QTableWidget(0, 10, self)
+            self.table = QtWidgets.QTableWidget(0, 5, self)
             self.table.setHorizontalHeaderLabels(
                 [
                     "PV",
-                    "Knob Points",
-                    "Steps",
-                    "Knob Span",
-                    "Resp Span",
                     "Slope",
-                    "Intercept",
-                    "r",
                     "R^2",
+                    "Resp Span",
                     "Unit",
                 ]
             )
@@ -51,7 +46,11 @@ if QtWidgets is not None:
             self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
             self.table.setAlternatingRowColors(True)
             self.table.verticalHeader().setVisible(False)
-            self.table.horizontalHeader().setStretchLastSection(True)
+            header = self.table.horizontalHeader()
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+            for column in range(1, 5):
+                header.setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeToContents)
             layout.addWidget(self.table, 1)
 
             self.detail_label = QtWidgets.QLabel(
@@ -115,14 +114,9 @@ if QtWidgets is not None:
             for row_index, row in enumerate(self._rows):
                 values = [
                     str(row["name"]),
-                    str(row["point_count"]),
-                    str(row.get("raw_point_count", row["point_count"])),
-                    f"{float(row['knob_span']):.6g}",
-                    f"{float(row['response_span']):.6g}",
                     f"{float(row['slope']):.6g}",
-                    f"{float(row['intercept']):.6g}",
-                    "--" if math.isnan(float(row["correlation"])) else f"{float(row['correlation']):.4g}",
                     f"{float(row['r_squared']):.4g}",
+                    f"{float(row['response_span']):.6g}",
                     str(row["slope_unit"]),
                 ]
                 slope_abs = abs(float(row["slope"]))
@@ -132,7 +126,6 @@ if QtWidgets is not None:
                 for col_index, value in enumerate(values):
                     self.table.setItem(row_index, col_index, QtWidgets.QTableWidgetItem(value))
 
-            self.table.resizeColumnsToContents()
             strongest_row = self._rows[strongest_row_index]
             direction = "positive" if float(strongest_row["slope"]) >= 0.0 else "negative"
             summary = (
@@ -176,6 +169,8 @@ if QtWidgets is not None:
             self.detail_label.setText(
                 f"{row['name']}: slope={slope_text}, intercept={float(row['intercept']):.6g}, "
                 f"r={correlation_text}, R^2={float(row['r_squared']):.4g}, "
+                f"knob span={float(row['knob_span']):.6g}, "
+                f"response span={float(row['response_span']):.6g}, "
                 f"knob points={int(row['point_count'])}, "
                 f"steps={int(row.get('raw_point_count', row['point_count']))}."
             )

@@ -36,8 +36,8 @@ def test_half_runtime_discovers_all_llrfs_with_limits_and_steps() -> None:
         amplitude = group.quantities["amplitude"]
         assert (phase.low, phase.high, phase.unit, phase.default_step) == (-180, 180, "deg", 5)
         assert (amplitude.low, amplitude.high, amplitude.unit, amplitude.default_step) == (0, 100, "%", 2)
-        assert (phase.readback_tolerance, phase.settle_s) == (0.1, 2)
-        assert (amplitude.readback_tolerance, amplitude.settle_s) == (0.1, 2)
+        assert phase.readback_tolerance == 0.1
+        assert amplitude.readback_tolerance == 1
         assert phase.setpoint_pv == f"IN:MW:{group.element_id}:SET_PHASE"
         assert phase.readback_pv == f"IN:MW:{group.element_id}:GET_PHASE"
         assert amplitude.setpoint_pv == f"IN:MW:{group.element_id}:SET_AMP"

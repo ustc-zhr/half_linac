@@ -29,7 +29,6 @@ class QuantityConfig:
     default_step: float
     step_choices: tuple[float, ...]
     readback_tolerance: float
-    settle_s: float
 
 
 @dataclass(frozen=True)
@@ -126,10 +125,6 @@ def _load_quantity(element, backend: str, workflow: Mapping[str, Any], name: str
         raw_quantity.get("readback_tolerance"),
         f"llrf_control.{name}.readback_tolerance",
     )
-    settle_s = _non_negative(
-        raw_quantity.get("settle_s"),
-        f"llrf_control.{name}.settle_s",
-    )
     return QuantityConfig(
         name=name,
         label=name.title(),
@@ -143,7 +138,6 @@ def _load_quantity(element, backend: str, workflow: Mapping[str, Any], name: str
         default_step=default_step,
         step_choices=step_choices,
         readback_tolerance=readback_tolerance,
-        settle_s=settle_s,
     )
 
 
@@ -161,11 +155,4 @@ def _positive(value: object, location: str) -> float:
     number = _finite(value, location)
     if number <= 0:
         raise MachineProfileError(f"{location} must be positive.")
-    return number
-
-
-def _non_negative(value: object, location: str) -> float:
-    number = _finite(value, location)
-    if number < 0:
-        raise MachineProfileError(f"{location} must not be negative.")
     return number

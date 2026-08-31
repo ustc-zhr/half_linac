@@ -1,16 +1,7 @@
 from __future__ import annotations
 
 import random
-
-
-def resolve_random_seed(seed_text: str, default_seed: int) -> tuple[int, bool]:
-    text = str(seed_text).strip()
-    if not text:
-        return int(default_seed), True
-    try:
-        return int(text), False
-    except ValueError as exc:
-        raise ValueError("Seed must be an integer.") from exc
+from itertools import product
 
 
 def collect_random_knob_ranges(selected_knobs, rows):
@@ -45,7 +36,7 @@ def collect_random_knob_ranges(selected_knobs, rows):
             }
         )
     if not knob_ranges:
-        raise ValueError("Enable at least one knob row for multi-knob random sampling.")
+        raise ValueError("Enable at least one control PV row for Multi-Knob sampling.")
     return knob_ranges
 
 
@@ -97,6 +88,8 @@ def generate_values_by_points(start: float, stop: float, num_points: int) -> lis
 def generate_random_targets(knob_ranges, distribution: str, num_points: int, seed: int):
     if num_points <= 0:
         raise ValueError("Num points must be positive.")
+    if distribution != "uniform":
+        raise ValueError(f"Unsupported random distribution: {distribution}")
     rng = random.Random(seed)
     target_steps = []
     for _ in range(num_points):
@@ -107,21 +100,72 @@ def generate_random_targets(knob_ranges, distribution: str, num_points: int, see
             high = float(spec["high"])
             if low == high:
                 value = low
-            elif distribution == "uniform":
-                value = rng.uniform(low, high)
-            elif distribution == "normal_clipped":
-                center = (low + high) / 2.0
-                sigma = abs(high - low) / 6.0
-                raw_value = center if sigma <= 0 else rng.gauss(center, sigma)
-                value = min(max(raw_value, low), high)
             else:
-                raise ValueError(f"Unsupported random distribution: {distribution}")
+                value = rng.uniform(low, high)
             step_targets[knob.id] = value
         target_steps.append(step_targets)
     return target_steps
 
 
-def random_preview_payload(knob_ranges, target_steps, distribution: str, seed: int, preview_limit: int = 20):
+def grid_point_count(knob_ranges, levels_per_knob: int) -> int:
+    if levels_per_knob < 2:
+        raise ValueError("Levels / Knob must be at least 2.")
+    count = 1
+    for spec in knob_ranges:
+        count *= 1 if float(spec["low"]) == float(spec["high"]) else int(levels_per_knob)
+    return count
+
+
+def generate_grid_targets(
+    knob_ranges,
+    levels_per_knob: int,
+    seed: int,
+    *,
+    max_points: int = 1000,
+):
+    varying_count = sum(float(spec["low"]) != float(spec["high"]) for spec in knob_ranges)
+    if varying_count > 3:
+        raise ValueError("Grid supports at most 3 control PVs with changing ranges.")
+    point_count = grid_point_count(knob_ranges, levels_per_knob)
+    if point_count > max_points:
+        raise ValueError(
+            f"Grid would generate {point_count} points; reduce Levels / Knob or use Uniform Random "
+            f"(maximum {max_points} grid points)."
+        )
+
+    value_lists = []
+    for spec in knob_ranges:
+        low = float(spec["low"])
+        high = float(spec["high"])
+        value_lists.append(
+            [low] if low == high else generate_values_by_points(low, high, int(levels_per_knob))
+        )
+    target_steps = [
+        {
+            spec["knob"].id: float(value)
+            for spec, value in zip(knob_ranges, combination)
+        }
+        for combination in product(*value_lists)
+    ]
+    random.Random(seed).shuffle(target_steps)
+    return target_steps
+
+
+def generate_multi_knob_targets(
+    knob_ranges,
+    sampling_method: str,
+    num_points: int,
+    levels_per_knob: int,
+    seed: int,
+):
+    if sampling_method == "uniform_random":
+        return generate_random_targets(knob_ranges, "uniform", num_points, seed)
+    if sampling_method == "grid":
+        return generate_grid_targets(knob_ranges, levels_per_knob, seed)
+    raise ValueError(f"Unsupported sampling method: {sampling_method}")
+
+
+def random_preview_payload(knob_ranges, target_steps, sampling_method: str, preview_limit: int = 20):
     preview_count = min(len(target_steps), int(preview_limit))
     lines = []
     for index in range(preview_count):
@@ -134,10 +178,8 @@ def random_preview_payload(knob_ranges, target_steps, distribution: str, seed: i
     if len(target_steps) > preview_count:
         lines.append(f"... {len(target_steps) - preview_count} more point(s)")
 
-    summary = (
-        f"{len(target_steps)} random point(s) across {len(knob_ranges)} knob(s)"
-        f"  |  distribution={distribution}  |  seed={seed}"
-    )
+    method_label = "Uniform Random" if sampling_method == "uniform_random" else "Grid"
+    summary = f"{len(target_steps)} point(s) across {len(knob_ranges)} knob(s)  |  {method_label}"
     detail = ", ".join(
         f"{spec['knob'].name}[{spec['low']:.6g}, {spec['high']:.6g}]"
         for spec in knob_ranges

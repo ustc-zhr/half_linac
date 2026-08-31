@@ -25,7 +25,7 @@ def mode_display_name(mode: str | None) -> str:
     labels = {
         "timed_acquisition": "Monitor",
         "single_knob_scan": "Single Knob",
-        "multi_knob_random": "Random Multi-Knob",
+        "multi_knob_random": "Multi-Knob",
     }
     return labels.get(mode, mode.replace("_", " ").title() if mode else "Idle")
 
@@ -37,10 +37,19 @@ def mode_help_text(mode: str) -> str:
             "Single Knob changes one active control PV while all other selected control PVs stay fixed."
         ),
         "multi_knob_random": (
-            "Random Multi-Knob changes all enabled control PVs together at each random point."
+            "Multi-Knob changes all enabled control PVs together using the selected sampling method."
         ),
     }
     return messages.get(mode, "")
+
+
+def start_action_text(mode: str) -> str:
+    labels = {
+        "timed_acquisition": "Start Monitor",
+        "single_knob_scan": "Start Single-Knob Scan",
+        "multi_knob_random": "Start Multi-Knob Scan",
+    }
+    return labels.get(mode, "Start")
 
 
 def progress_tone(completed: int, total: int) -> str:
@@ -136,7 +145,7 @@ def mode_ready_state(
         return False, "Select at least one read PV."
     if not random_ranges_valid:
         return False, "Configure at least one valid control PV range."
-    return True, "Ready to start Random Multi-Knob."
+    return True, "Ready to start Multi-Knob."
 
 
 def single_knob_axis_name(axis_source: str, knob_name: str = "") -> str:

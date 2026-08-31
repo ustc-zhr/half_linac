@@ -45,6 +45,7 @@ class RFPhaseEnergyMatcher:
         progress_callback=None,
         remove_bg=False,
         bg_image=None,
+        roi=None,
         settle_time_s=1,
         restore_initial_on_failure=True,
         cancel_requested=None,
@@ -60,6 +61,7 @@ class RFPhaseEnergyMatcher:
         center_tolerance_mm=0.2,
         max_iterations=6,
         max_correction_step_mev=25,
+        objective="profile_lock",
     ):
         if pixel_width_mm is None:
             raise ValueError("pixel_width_mm is required for energy matching.")
@@ -73,6 +75,7 @@ class RFPhaseEnergyMatcher:
             tuple(flag_pixel),
             self.pixel_width_mm,
             background=bg_image if remove_bg else None,
+            roi=roi,
         )
         self.progress_callback = progress_callback
         self.settle_time_s = float(settle_time_s)
@@ -89,6 +92,9 @@ class RFPhaseEnergyMatcher:
         self.center_tolerance_mm = float(center_tolerance_mm)
         self.max_iterations = int(max_iterations)
         self.max_correction_step_mev = float(max_correction_step_mev)
+        self.objective = str(objective).strip()
+        if self.objective not in {"profile_lock", "brightness_then_profile_lock"}:
+            raise ValueError("Unsupported energy-match objective.")
         if not 1 <= self.min_valid_frames <= self.frame_samples:
             raise ValueError("min_valid_frames must be between 1 and frame_samples.")
         if not 1 <= self.verification_min_valid_frames <= self.verification_frame_samples:
@@ -213,9 +219,17 @@ class RFPhaseEnergyMatcher:
             measurement = self._at(energy, "reacquire")
             if measurement is not None:
                 candidates.append(measurement)
-                if abs(measurement["offset_mm"]) <= self.center_tolerance_mm:
+                if (
+                    self.objective != "brightness_then_profile_lock"
+                    and abs(measurement["offset_mm"]) <= self.center_tolerance_mm
+                ):
                     break
-        return min(candidates, key=lambda item: abs(item["offset_mm"])) if candidates else None
+        if not candidates:
+            return None
+        if self.objective == "brightness_then_profile_lock":
+            # Use the brightest reliable beam as the seed, then lock its fitted center.
+            return max(candidates, key=lambda item: item["brightness"])
+        return min(candidates, key=lambda item: abs(item["offset_mm"]))
 
     def _track_center(self, seed, low, high):
         measurements = [seed]
@@ -260,7 +274,7 @@ class RFPhaseEnergyMatcher:
         }
         return float(verified["energy"])
 
-    def run(self, B_min, B_max, *, start_energy, reacquire_steps=16):
+    def run(self, B_min, B_max, *, start_energy, tracking_reacquire_points=9):
         low, high = float(B_min), float(B_max)
         if low >= high:
             raise ValueError("Energy Match bounds must contain low < high.")
@@ -275,9 +289,12 @@ class RFPhaseEnergyMatcher:
         self.initial_energy = float(initial)
         center = float(np.clip(float(start_energy), low, high))
         try:
-            seed = self._at(center, "track")
-            if seed is None:
-                seed = self._reacquire(low, high, center, reacquire_steps)
+            if self.objective == "brightness_then_profile_lock":
+                seed = self._reacquire(low, high, center, tracking_reacquire_points)
+            else:
+                seed = self._at(center, "track")
+                if seed is None:
+                    seed = self._reacquire(low, high, center, tracking_reacquire_points)
             if seed is None:
                 self.last_message = "No valid beam profile was found in the Energy Match window."
                 raise RuntimeError(self.last_message)

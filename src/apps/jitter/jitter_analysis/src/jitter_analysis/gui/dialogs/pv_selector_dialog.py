@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 try:
-    from PyQt5 import QtWidgets
+    from PyQt5 import QtCore, QtWidgets
 except ImportError:  # pragma: no cover - optional runtime dependency
+    QtCore = None
     QtWidgets = None
 
 
@@ -33,6 +34,7 @@ if QtWidgets is not None:
             self._search_boxes: dict[str, QtWidgets.QLineEdit] = {}
             self._group_boxes: dict[str, QtWidgets.QComboBox] = {}
             self._status_labels: dict[str, QtWidgets.QLabel] = {}
+            self._select_visible_buttons: dict[str, QtWidgets.QPushButton] = {}
             self._entries = {
                 "knob": self._knobs,
                 "object": self._objects,
@@ -88,8 +90,12 @@ if QtWidgets is not None:
             clear_button = QtWidgets.QPushButton("Clear Selection", tab)
             clear_button.setProperty("role", "danger")
             clear_button.setMinimumHeight(40)
+            select_visible_button = QtWidgets.QPushButton("Select Visible", tab)
+            select_visible_button.setProperty("role", "diagnostic")
+            select_visible_button.setMinimumHeight(40)
             filters.addWidget(search, 1)
             filters.addWidget(group_box)
+            filters.addWidget(select_visible_button)
             filters.addWidget(clear_button)
             layout.addLayout(filters)
 
@@ -99,8 +105,8 @@ if QtWidgets is not None:
                 table.setHorizontalHeaderLabels(["Name", "Write PV", "Readback", "Group"])
                 table.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
             else:
-                table.setColumnCount(5)
-                table.setHorizontalHeaderLabels(["Name", "Read PV", "Group", "Unit", "Tags"])
+                table.setColumnCount(6)
+                table.setHorizontalHeaderLabels(["Name", "Read PV", "Group", "Unit", "Type", "Tags"])
                 table.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
             table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
             table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
@@ -116,10 +122,17 @@ if QtWidgets is not None:
             self._group_boxes[role] = group_box
             self._tables[role] = table
             self._status_labels[role] = status
+            self._select_visible_buttons[role] = select_visible_button
 
             search.textChanged.connect(lambda _text, target=role: self._apply_filters(target))
             group_box.currentIndexChanged.connect(lambda _index, target=role: self._apply_filters(target))
             table.itemSelectionChanged.connect(lambda target=role: self._update_status(target))
+            table.doubleClicked.connect(
+                lambda index, target=role: self._toggle_row_selection(target, index.row())
+            )
+            select_visible_button.clicked.connect(
+                lambda _checked=False, target=role: self._select_visible(target)
+            )
             clear_button.clicked.connect(lambda _checked=False, target=role: self._clear_selection(target))
 
             self._populate_table(role)
@@ -147,7 +160,15 @@ if QtWidgets is not None:
             group_label = self._group_labels.get(entry.group, entry.group)
             if role == "knob":
                 return [entry.name, entry.write_pv, entry.readback_pv, group_label]
-            return [entry.name, entry.read_pv, group_label, entry.unit, ", ".join(entry.tags)]
+            capture_mode = str(getattr(entry, "capture_mode", "scalar") or "scalar").lower()
+            tags = list(getattr(entry, "tags", []))
+            if capture_mode == "waveform":
+                type_label = "Waveform · Monitor only"
+            elif "knob_readback" in tags:
+                type_label = "Derived"
+            else:
+                type_label = "Scalar"
+            return [entry.name, entry.read_pv, group_label, entry.unit, type_label, ", ".join(tags)]
 
         def _entry_search_text(self, role: str, entry) -> str:
             values = self._row_values(role, entry)
@@ -179,6 +200,32 @@ if QtWidgets is not None:
         def _clear_selection(self, role: str) -> None:
             table = self._tables[role]
             table.clearSelection()
+            self._update_status(role)
+
+        def _select_visible(self, role: str) -> None:
+            table = self._tables[role]
+            selection_model = table.selectionModel()
+            model = table.model()
+            if selection_model is None or model is None:
+                return
+            for row in range(table.rowCount()):
+                if not table.isRowHidden(row):
+                    selection_model.select(
+                        model.index(row, 0),
+                        QtCore.QItemSelectionModel.Select | QtCore.QItemSelectionModel.Rows,
+                    )
+            self._update_status(role)
+
+        def _toggle_row_selection(self, role: str, row: int) -> None:
+            table = self._tables[role]
+            selection_model = table.selectionModel()
+            model = table.model()
+            if selection_model is None or model is None or row < 0:
+                return
+            selection_model.select(
+                model.index(row, 0),
+                QtCore.QItemSelectionModel.Toggle | QtCore.QItemSelectionModel.Rows,
+            )
             self._update_status(role)
 
         def selected_entries(self, role: str):

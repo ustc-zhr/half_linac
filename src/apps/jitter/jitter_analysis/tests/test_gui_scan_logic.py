@@ -13,11 +13,13 @@ if str(SRC) not in sys.path:
 from jitter_analysis.gui.scan_logic import (
     collect_random_knob_ranges,
     generate_random_targets,
+    generate_grid_targets,
+    generate_multi_knob_targets,
+    grid_point_count,
     generate_values_by_points,
     generate_values_by_step,
     parse_manual_scan_values,
     random_preview_payload,
-    resolve_random_seed,
     single_knob_preview_payload,
 )
 
@@ -33,20 +35,6 @@ class _Knob:
     id: str
     name: str = "K1"
     limits: _Limits = field(default_factory=_Limits)
-
-
-def test_resolve_random_seed_uses_default_for_empty_text():
-    assert resolve_random_seed("", 123) == (123, True)
-    assert resolve_random_seed("  ", 123) == (123, True)
-
-
-def test_resolve_random_seed_parses_explicit_integer():
-    assert resolve_random_seed("42", 123) == (42, False)
-
-
-def test_resolve_random_seed_rejects_non_integer_text():
-    with pytest.raises(ValueError, match="Seed must be an integer"):
-        resolve_random_seed("4.2", 123)
 
 
 def test_collect_random_knob_ranges_returns_enabled_selected_rows_as_floats():
@@ -73,7 +61,7 @@ def test_collect_random_knob_ranges_rejects_invalid_rows():
         collect_random_knob_ranges([knob], {"k1": {"enabled": True, "low_text": "1", "high_text": "0"}})
     with pytest.raises(ValueError, match="must stay within"):
         collect_random_knob_ranges([knob], {"k1": {"enabled": True, "low_text": "-2", "high_text": "0"}})
-    with pytest.raises(ValueError, match="Enable at least one knob row"):
+    with pytest.raises(ValueError, match="Enable at least one control PV row"):
         collect_random_knob_ranges([knob], {"k1": {"enabled": False, "low_text": "-1", "high_text": "1"}})
 
 
@@ -98,19 +86,49 @@ def test_generate_values_by_points_handles_single_and_multiple_points():
     assert generate_values_by_points(1.0, 2.0, 3) == [1.0, 1.5, 2.0]
 
 
-def test_generate_random_targets_is_seeded_and_clips_normal_values():
+def test_generate_random_targets_is_seeded_and_uniform():
     knob_ranges = [
         {"knob": _Knob("k1"), "low": -1.0, "high": 1.0},
         {"knob": _Knob("k2"), "low": 2.0, "high": 2.0},
     ]
 
-    first = generate_random_targets(knob_ranges, "normal_clipped", 3, 123)
-    second = generate_random_targets(knob_ranges, "normal_clipped", 3, 123)
+    first = generate_random_targets(knob_ranges, "uniform", 3, 123)
+    second = generate_random_targets(knob_ranges, "uniform", 3, 123)
 
     assert first == second
     assert len(first) == 3
     assert all(-1.0 <= row["k1"] <= 1.0 for row in first)
     assert all(row["k2"] == 2.0 for row in first)
+
+
+def test_generate_grid_targets_builds_cartesian_grid_and_shuffles_deterministically():
+    knob_ranges = [
+        {"knob": _Knob("k1"), "low": -1.0, "high": 1.0},
+        {"knob": _Knob("k2"), "low": 2.0, "high": 4.0},
+        {"knob": _Knob("fixed"), "low": 7.0, "high": 7.0},
+    ]
+
+    first = generate_grid_targets(knob_ranges, 3, 123)
+    second = generate_multi_knob_targets(knob_ranges, "grid", 999, 3, 123)
+
+    assert first == second
+    assert grid_point_count(knob_ranges, 3) == 9
+    assert len(first) == 9
+    assert {(row["k1"], row["k2"]) for row in first} == {
+        (x, y) for x in (-1.0, 0.0, 1.0) for y in (2.0, 3.0, 4.0)
+    }
+    assert all(row["fixed"] == 7.0 for row in first)
+
+
+def test_generate_grid_targets_enforces_dimension_and_point_limits():
+    four_ranges = [
+        {"knob": _Knob(f"k{index}"), "low": 0.0, "high": 1.0}
+        for index in range(4)
+    ]
+    with pytest.raises(ValueError, match="at most 3"):
+        generate_grid_targets(four_ranges, 2, 1)
+    with pytest.raises(ValueError, match="maximum 1000"):
+        generate_grid_targets(four_ranges[:3], 11, 1)
 
 
 def test_generate_random_targets_rejects_invalid_inputs():
@@ -135,8 +153,7 @@ def test_random_preview_payload_formats_preview_lines_summary_and_detail():
     payload = random_preview_payload(
         knob_ranges,
         target_steps,
-        distribution="uniform",
-        seed=42,
+        sampling_method="uniform_random",
         preview_limit=2,
     )
 
@@ -145,7 +162,7 @@ def test_random_preview_payload_formats_preview_lines_summary_and_detail():
         "002: K1=-0.5, K2=2.75",
         "... 1 more point(s)",
     ]
-    assert payload["summary"] == "3 random point(s) across 2 knob(s)  |  distribution=uniform  |  seed=42"
+    assert payload["summary"] == "3 point(s) across 2 knob(s)  |  Uniform Random"
     assert payload["detail"] == "K1[-1, 1], K2[2, 3]"
 
 

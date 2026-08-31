@@ -169,13 +169,17 @@ def loaded_run_parameter_updates(details: dict[str, object], mode: RunMode | Non
         updates["sample_count_per_point"] = int(details["sample_count_per_point"])
     if "num_points" in details:
         updates["num_points"] = int(details["num_points"])
-    if "seed" in details:
-        updates["seed"] = str(details["seed"])
+    if "levels_per_knob" in details:
+        updates["levels_per_knob"] = int(details["levels_per_knob"])
     if "restore_initial_values" in details:
         updates["restore_initial_values"] = bool(details["restore_initial_values"])
-    distribution = str(details.get("distribution", "")).strip()
-    if distribution:
-        updates["distribution"] = distribution
+    sampling_method = str(details.get("sampling_method", "")).strip()
+    if sampling_method:
+        updates["sampling_method"] = sampling_method
+    elif str(details.get("distribution", "")).strip():
+        # Older runs only stored a distribution. Both historical choices reopen
+        # as the single supported random method.
+        updates["sampling_method"] = "uniform_random"
 
     knob_ranges = details.get("knob_ranges", [])
     if isinstance(knob_ranges, list) and knob_ranges:

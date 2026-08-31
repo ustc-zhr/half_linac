@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,7 +14,7 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-from PyQt5.QtCore import QSignalBlocker, QTimer
+from PyQt5.QtCore import QSignalBlocker
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import (
     QAbstractSpinBox,
@@ -143,7 +142,6 @@ class LlrfControlWindow(QMainWindow):
         self.queue = CoalescingWriteQueue()
         self.dirty_targets: set[str] = set()
         self.failed_quantities: set[str] = set()
-        self.last_write_completed: dict[str, float] = {}
         self._worker: WriteWorker | None = None
         self._theme = resolve_initial_theme()
         self.group_buttons: dict[str, QPushButton] = {}
@@ -151,10 +149,6 @@ class LlrfControlWindow(QMainWindow):
         self.monitor = LlrfMonitor(self)
         self.monitor.value_changed.connect(self._on_value)
         self.monitor.connection_changed.connect(self._on_connection)
-        self.status_timer = QTimer(self)
-        self.status_timer.setInterval(250)
-        self.status_timer.timeout.connect(self._refresh_all_quantities)
-        self.status_timer.start()
 
         self.setWindowTitle(
             f"{runtime.context.machine.display_name} - LLRF Amplitude & Phase"
@@ -337,7 +331,6 @@ class LlrfControlWindow(QMainWindow):
         self.queue.clear()
         self.dirty_targets.clear()
         self.failed_quantities.clear()
-        self.last_write_completed.clear()
         for widgets in self.quantity_widgets.values():
             with QSignalBlocker(widgets.target):
                 widgets.target.clear_target()
@@ -424,20 +417,14 @@ class LlrfControlWindow(QMainWindow):
         elif name in self.failed_quantities:
             self._set_status(widgets.status, "Write failed", "danger")
         elif ready and readback is not None:
-            difference = abs(readback - setpoint)
-            if difference <= spec.readback_tolerance:
-                self._set_status(widgets.status, "Matched", "success")
-            elif (
-                name in self.last_write_completed
-                and time.monotonic() - self.last_write_completed[name] < spec.settle_s
-            ):
-                self._set_status(widgets.status, "Following", "warning")
+            if abs(readback - widgets.target.value()) <= spec.readback_tolerance:
+                self._set_status(widgets.status, "Set/readback matched", "success")
             else:
-                self._set_status(widgets.status, "Mismatch", "danger")
+                self._set_status(widgets.status, "Readback following", "warning")
         elif not self.connected.get(spec.set_channel, False) or not self.connected.get(spec.readback_channel, False):
             self._set_status(widgets.status, "Disconnected", "danger")
         else:
-            self._set_status(widgets.status, "Waiting", "warning")
+            self._set_status(widgets.status, "Waiting for readback", "warning")
 
     @staticmethod
     def _set_controls_enabled(widgets: QuantityWidgets, enabled: bool) -> None:
@@ -511,7 +498,6 @@ class LlrfControlWindow(QMainWindow):
         self.queue.finish()
         self._worker = None
         if success:
-            self.last_write_completed[name] = time.monotonic()
             self.failed_quantities.discard(name)
             current = self.values.get(self.current_group.quantities[name].set_channel)
             if current is not None:

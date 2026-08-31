@@ -225,7 +225,8 @@ def test_loaded_run_parameter_updates_for_random_multi_knob():
             "num_points": "9",
             "seed": 123,
             "restore_initial_values": False,
-            "distribution": " uniform ",
+            "sampling_method": " grid ",
+            "levels_per_knob": "3",
             "knob_ranges": [
                 {"knob_id": " k1 ", "low": "-1", "high": "1"},
                 {"knob_id": "", "low": 0, "high": 1},
@@ -241,9 +242,9 @@ def test_loaded_run_parameter_updates_for_random_multi_knob():
         "shot_interval_sec": 0.1,
         "sample_count_per_point": 4,
         "num_points": 9,
-        "seed": "123",
         "restore_initial_values": False,
-        "distribution": "uniform",
+        "sampling_method": "grid",
+        "levels_per_knob": 3,
         "knob_state": {
             "k1": {"enabled": True, "low": -1.0, "high": 1.0},
             "k2": {"enabled": True, "low": 0.0, "high": 0.0},

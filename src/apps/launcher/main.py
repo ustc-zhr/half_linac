@@ -14,17 +14,19 @@ from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QPalette, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QFrame,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QToolButton,
     QVBoxLayout,
@@ -127,6 +129,16 @@ DARK_THEME = {
     "toggle_fg": "#edf3f7",
     "toggle_hover_bg": "#18242c",
     "toggle_pressed_bg": "#0c1217",
+    "sidebar_bg": "#11191f",
+    "sidebar_border": "#24343f",
+    "nav_active_bg": "#22383d",
+    "nav_active_fg": "#7dd7c5",
+    "card_description_fg": "#99a9b5",
+    "badge_bg": "#24343f",
+    "badge_fg": "#c8d2da",
+    "tooltip_bg": "#25343d",
+    "tooltip_border": "#557080",
+    "tooltip_fg": "#f3f7fa",
 }
 
 LIGHT_THEME = {
@@ -176,6 +188,16 @@ LIGHT_THEME = {
     "toggle_fg": "#2c3942",
     "toggle_hover_bg": "#efe6d9",
     "toggle_pressed_bg": "#e3d8c8",
+    "sidebar_bg": "#f7f1e8",
+    "sidebar_border": "#ddd2c4",
+    "nav_active_bg": "#dcede3",
+    "nav_active_fg": "#2d7f6d",
+    "card_description_fg": "#746c62",
+    "badge_bg": "#ece4d8",
+    "badge_fg": "#625b52",
+    "tooltip_bg": "#fffdf9",
+    "tooltip_border": "#b9aea0",
+    "tooltip_fg": "#25323a",
 }
 
 
@@ -268,29 +290,6 @@ QTextEdit#textEdit {{
     font-size: 12px;
 }}
 
-QGroupBox {{
-    background-color: {group_bg};
-    border: 1px solid {group_border};
-    border-radius: 10px;
-    margin-top: 0px;
-    padding-top: 30px;
-    font-size: 14px;
-    font-weight: 700;
-}}
-
-QGroupBox::title {{
-    subcontrol-origin: padding;
-    subcontrol-position: top left;
-    left: 16px;
-    top: 7px;
-    padding: 0px;
-    background-color: transparent;
-    color: {group_title_accent_fg};
-    border: none;
-    font-size: 15px;
-    font-weight: 800;
-}}
-
 QPushButton {{
     background-color: {button_bg};
     border: 1px solid {button_border};
@@ -309,6 +308,136 @@ QPushButton[compact="true"] {{
     max-height: {header_action_height}px;
     border-radius: 11px;
     font-size: 11px;
+}}
+
+QFrame#appBrowser {{
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+}}
+
+QWidget#appSidebar {{
+    background-color: {sidebar_bg};
+    border: 1px solid {sidebar_border};
+    border-radius: 10px;
+}}
+
+QLabel#sidebarTitle, QLabel#browserTitle {{
+    background: transparent;
+    border: none;
+    color: {title_fg};
+    font-size: 15px;
+    font-weight: 800;
+}}
+
+QLabel#resultCount {{
+    background: transparent;
+    border: none;
+    color: {subtitle_fg};
+    font-size: 11px;
+    font-weight: 600;
+}}
+
+QPushButton[nav="true"] {{
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: {subtitle_fg};
+    min-height: 36px;
+    padding: 0px 10px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+}}
+
+QPushButton[nav="true"]:hover {{
+    background-color: {button_hover_bg};
+}}
+
+QPushButton[nav="true"]:checked {{
+    background-color: {nav_active_bg};
+    color: {nav_active_fg};
+}}
+
+QLineEdit#appSearch {{
+    background-color: {textedit_bg};
+    border: 1px solid {textedit_border};
+    border-radius: 10px;
+    color: {window_fg};
+    min-height: 36px;
+    padding: 0px 12px;
+    font-size: 12px;
+}}
+
+QLineEdit#appSearch:focus {{
+    border-color: {button_running_border};
+}}
+
+QToolTip {{
+    background-color: {tooltip_bg};
+    border: 1px solid {tooltip_border};
+    border-radius: 5px;
+    color: {tooltip_fg};
+    padding: 5px 7px;
+    font-size: 11px;
+    font-weight: 500;
+}}
+
+QScrollArea#appScroll {{
+    background-color: {window_bg};
+    border: none;
+}}
+
+QWidget#appScrollViewport, QWidget#appGridHost {{
+    background-color: {window_bg};
+    border: none;
+}}
+
+QPushButton[appCard="true"] {{
+    min-height: 104px;
+    max-height: 104px;
+    padding: 0px;
+    text-align: left;
+}}
+
+QLabel[cardRole="title"] {{
+    background: transparent;
+    border: none;
+    color: {button_fg};
+    font-size: 13px;
+    font-weight: 800;
+}}
+
+QLabel[cardRole="description"] {{
+    background: transparent;
+    border: none;
+    color: {card_description_fg};
+    font-size: 11px;
+    font-weight: 500;
+}}
+
+QLabel[cardRole="badge"] {{
+    background-color: {badge_bg};
+    border: none;
+    border-radius: 7px;
+    color: {badge_fg};
+    padding: 2px 7px;
+    font-size: 9px;
+    font-weight: 800;
+}}
+
+QLabel[cardRole="badge"][tone="running"] {{
+    background-color: {button_running_bg};
+    color: {metric_active_fg};
+}}
+
+QLabel[cardRole="badge"][tone="warning"] {{
+    color: {metric_warning_fg};
+}}
+
+QPushButton[appCard="true"]:disabled QLabel[cardRole="title"],
+QPushButton[appCard="true"]:disabled QLabel[cardRole="description"] {{
+    color: {button_disabled_fg};
 }}
 
 QPushButton:hover {{
@@ -604,10 +733,145 @@ class LauncherStatusStrip(QWidget):
         container.update()
         value_label.update()
 
+
+class LauncherAppButton(QPushButton):
+    """A launch button that keeps purpose and safety state visible."""
+
+    def __init__(self, title, description, parent=None):
+        super().__init__(parent)
+        self.setProperty("appCard", True)
+        self._palette = DARK_THEME
+        self.setCursor(Qt.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setFixedHeight(104)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 12, 14, 11)
+        outer.setSpacing(7)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+        self.title_label = QLabel(title, self)
+        self.title_label.setProperty("cardRole", "title")
+        self.title_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        header.addWidget(self.title_label, 1)
+
+        self.badge_label = QLabel("READY", self)
+        self.badge_label.setProperty("cardRole", "badge")
+        self.badge_label.setProperty("tone", "neutral")
+        self.badge_label.setAlignment(Qt.AlignCenter)
+        self.badge_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        header.addWidget(self.badge_label, 0, Qt.AlignTop)
+
+        self.description_label = QLabel(description, self)
+        self.description_label.setProperty("cardRole", "description")
+        self.description_label.setWordWrap(True)
+        self.description_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.description_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+        outer.addLayout(header)
+        outer.addWidget(self.description_label, 1)
+        super().setText("")
+
+    def setText(self, text):
+        if hasattr(self, "title_label"):
+            self.title_label.setText(text)
+            return
+        super().setText(text)
+
+    def set_badge(self, text, tone="neutral"):
+        self.badge_label.setText(text)
+        self.badge_label.setProperty("tone", tone)
+        self.badge_label.style().unpolish(self.badge_label)
+        self.badge_label.style().polish(self.badge_label)
+        self.badge_label.update()
+        self.apply_palette(self._palette)
+
+    def apply_palette(self, palette):
+        self._palette = palette
+        if not self.isEnabled():
+            background = palette["button_disabled_bg"]
+            border = palette["button_disabled_border"]
+            title = palette["button_disabled_fg"]
+            description = palette["button_disabled_fg"]
+        elif self.property("running"):
+            background = palette["button_running_bg"]
+            border = palette["button_running_border"]
+            title = palette["button_running_fg"]
+            description = palette["card_description_fg"]
+        else:
+            background = palette["button_bg"]
+            border = palette["button_border"]
+            title = palette["button_fg"]
+            description = palette["card_description_fg"]
+
+        self.setStyleSheet(
+            "QPushButton {"
+            f"background-color: {background}; border: 1px solid {border};"
+            "border-radius: 10px; padding: 0px; text-align: left;"
+            "}"
+            "QPushButton:hover {"
+            f"background-color: {palette['button_hover_bg']};"
+            "}"
+            "QPushButton:pressed {"
+            f"background-color: {palette['button_pressed_bg']};"
+            "}"
+        )
+        self.title_label.setStyleSheet(
+            f"background: transparent; border: none; color: {title};"
+            "font-size: 13px; font-weight: 800;"
+        )
+        self.description_label.setStyleSheet(
+            f"background: transparent; border: none; color: {description};"
+            "font-size: 11px; font-weight: 500;"
+        )
+        badge_color = (
+            palette["metric_active_fg"]
+            if self.badge_label.property("tone") == "running"
+            else palette["metric_warning_fg"]
+            if self.badge_label.property("tone") == "warning"
+            else palette["badge_fg"]
+        )
+        self.badge_label.setStyleSheet(
+            f"background-color: {palette['badge_bg']}; color: {badge_color};"
+            "border: none; border-radius: 7px; padding: 2px 7px;"
+            "font-size: 9px; font-weight: 800;"
+        )
+
+
+APP_CATEGORIES = {
+    "all": "All Apps",
+    "monitoring": "Monitoring & Diagnostics",
+    "measurement": "Measurement & Correction",
+    "rf": "RF",
+    "feedback": "Feedback",
+    "simulation": "Simulation & Optimization",
+    "tools": "Machine & Tools",
+}
+
+APP_CATEGORY_NAV_LABELS = {
+    "all": "All Apps",
+    "monitoring": "Monitoring",
+    "measurement": "Measurement",
+    "rf": "RF",
+    "feedback": "Feedback",
+    "simulation": "Simulation & Optimization",
+    "tools": "Machine & Tools",
+}
+
+APP_ACCESS_LABELS = {
+    "read": "READ ONLY",
+    "write": "WRITE",
+    "tool": "TOOL",
+}
+
+
 APP_DEFINITIONS = {
     "pv_connection_check": {
         "button_name": "pv_connection_check_button",
-        "category": "core",
+        "category": "tools",
+        "access": "read",
         "button_text": "PV Diagnostics",
         "label": "PV Diagnostics",
         "window_title_patterns": ("PV Diagnostics",),
@@ -617,7 +881,8 @@ APP_DEFINITIONS = {
     },
     "vm_manager": {
         "button_name": "vmbtn",
-        "category": "core",
+        "category": "simulation",
+        "access": "tool",
         "button_text": "Virtual Accelerator",
         "label": "Virtual Accelerator",
         "window_title_patterns": ("VM Control", "Virtual Machine"),
@@ -627,7 +892,8 @@ APP_DEFINITIONS = {
     },
     "setpoint_transfer": {
         "button_name": "setpoint_transfer_button",
-        "category": "core",
+        "category": "tools",
+        "access": "write",
         "button_text": "Machine Setpoints",
         "label": "Machine Setpoints",
         "window_title_patterns": ("Machine Setpoints",),
@@ -637,17 +903,19 @@ APP_DEFINITIONS = {
     },
     "machine_snapshot": {
         "button_name": "machine_snapshot_button",
-        "category": "core",
+        "category": "tools",
+        "access": "write",
         "button_text": "Machine Snapshot",
         "label": "Machine Snapshot",
         "window_title_patterns": ("Machine Snapshot",),
-        "description": "Capture and compare read-only scalar machine state for the selected backend.",
+        "description": "Save, compare, and restore machine setpoints.",
         "cmd": ["python3", "main.py"],
         "cwd": ROOT / "src/apps/machine_snapshot",
     },
     "optimization": {
         "button_name": "online_opt",
-        "category": "core",
+        "category": "simulation",
+        "access": "tool",
         "button_text": "Optimization",
         "label": "Optimization",
         "window_title_patterns": ("GOTAcc Studio", "Optimization"),
@@ -657,7 +925,8 @@ APP_DEFINITIONS = {
     },
     "orbitdisplay": {
         "button_name": "orbitdisplay",
-        "category": "diagnostic",
+        "category": "monitoring",
+        "access": "read",
         "button_text": "Orbit Display",
         "label": "Orbit Display",
         "window_title_patterns": ("Orbit Display",),
@@ -667,7 +936,8 @@ APP_DEFINITIONS = {
     },
     "beammonitor": {
         "button_name": "beammonitor",
-        "category": "diagnostic",
+        "category": "monitoring",
+        "access": "read",
         "button_text": "Beam Monitor",
         "label": "Beam Monitor",
         "window_title_patterns": ("Beam Monitor",),
@@ -677,7 +947,8 @@ APP_DEFINITIONS = {
     },
     "ct_monitor": {
         "button_name": "ct_monitor_button",
-        "category": "diagnostic",
+        "category": "monitoring",
+        "access": "read",
         "button_text": "CT Monitor",
         "label": "CT Monitor",
         "window_title_patterns": ("CT Monitor", "CT Transmission Monitor"),
@@ -688,7 +959,8 @@ APP_DEFINITIONS = {
     },
     "jitter": {
         "button_name": "jitter_plot",
-        "category": "diagnostic",
+        "category": "simulation",
+        "access": "write",
         "button_text": "Jitter Analysis",
         "label": "Jitter Analysis",
         "window_title_patterns": ("Jitter Analysis",),
@@ -698,7 +970,8 @@ APP_DEFINITIONS = {
     },
     "energy_spectrum": {
         "button_name": "energy_spectrum",
-        "category": "diagnostic",
+        "category": "monitoring",
+        "access": "write",
         "button_text": "Energy Spectrum",
         "label": "Energy Spectrum",
         "window_title_patterns": ("Energy Spectrum",),
@@ -708,7 +981,8 @@ APP_DEFINITIONS = {
     },
     "rf_phase_scan": {
         "button_name": "rf_phase_scan_button",
-        "category": "diagnostic",
+        "category": "rf",
+        "access": "write",
         "button_text": "RF Phase Scan",
         "label": "RF Phase Scan",
         "window_title_patterns": ("RF Phase Scan",),
@@ -720,7 +994,8 @@ APP_DEFINITIONS = {
     },
     "bba": {
         "button_name": "BBA",
-        "category": "control",
+        "category": "measurement",
+        "access": "write",
         "button_text": "BBA",
         "label": "BBA",
         "window_title_patterns": ("BBA",),
@@ -730,7 +1005,8 @@ APP_DEFINITIONS = {
     },
     "orbit_correct": {
         "button_name": "orbit_correct",
-        "category": "control",
+        "category": "measurement",
+        "access": "write",
         "button_text": "Orbit Correct",
         "label": "Orbit Correct",
         "window_title_patterns": ("Orbit Correction", "Orbit Correct"),
@@ -740,7 +1016,8 @@ APP_DEFINITIONS = {
     },
     "solenoid_centering": {
         "button_name": "solenoid_centering_button",
-        "category": "control",
+        "category": "measurement",
+        "access": "write",
         "button_text": "Solenoid Centering",
         "label": "Solenoid Centering",
         "window_title_patterns": ("Solenoid Centering",),
@@ -751,7 +1028,8 @@ APP_DEFINITIONS = {
     },
     "solenoid_field_guide": {
         "button_name": "solenoid_field_guide_button",
-        "category": "control",
+        "category": "tools",
+        "access": "tool",
         "button_text": "Solenoid Field Guide",
         "label": "Solenoid Field Guide",
         "window_title_patterns": ("Solenoid Field Guide",),
@@ -762,7 +1040,8 @@ APP_DEFINITIONS = {
     },
     "emitmeasure": {
         "button_name": "emitmeasure",
-        "category": "control",
+        "category": "measurement",
+        "access": "write",
         "button_text": "Emittance",
         "label": "Emittance",
         "window_title_patterns": ("Emittance Measurement", "Emittance & Twiss"),
@@ -772,7 +1051,8 @@ APP_DEFINITIONS = {
     },
     "dispersion_correction": {
         "button_name": "dispersion_correction_button",
-        "category": "control",
+        "category": "measurement",
+        "access": "write",
         "button_text": "Dispersion Correction",
         "label": "Dispersion Correction",
         "window_title_patterns": ("Dispersion Correction",),
@@ -783,7 +1063,8 @@ APP_DEFINITIONS = {
     },
     "power_source_timing": {
         "button_name": "power_source_timing_button",
-        "category": "control",
+        "category": "rf",
+        "access": "write",
         "button_text": "RF Power Source Timing",
         "label": "RF Power Source Timing",
         "window_title_patterns": ("RF Power Source Timing",),
@@ -794,7 +1075,8 @@ APP_DEFINITIONS = {
     },
     "llrf_control": {
         "button_name": "llrf_control_button",
-        "category": "control",
+        "category": "rf",
+        "access": "write",
         "button_text": "LLRF Amplitude & Phase",
         "label": "LLRF Amplitude & Phase",
         "window_title_patterns": ("LLRF Amplitude & Phase",),
@@ -806,7 +1088,8 @@ APP_DEFINITIONS = {
     },
     "energy_feedback": {
         "button_name": "energy_feedback_button",
-        "category": "control",
+        "category": "feedback",
+        "access": "write",
         "button_text": "Energy Feedback",
         "label": "Energy Feedback",
         "description": "Reserved launcher entry for energy feedback control.",
@@ -817,7 +1100,8 @@ APP_DEFINITIONS = {
     },
     "hv_feedback": {
         "button_name": "hv_feedback_button",
-        "category": "control",
+        "category": "feedback",
+        "access": "write",
         "button_text": "HV Feedback",
         "label": "HV Feedback",
         "window_title_patterns": ("HV Feedback",),
@@ -863,17 +1147,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.managed_buttons = {}
         self.app_support_status = {}
         self.app_real_status = {}
-        self.group_button_specs = []
+        self.current_app_category = "all"
 
         self._configure_window()
         self._build_summary_panel()
-        self._configure_groups()
-        self._configure_group_panel()
-        self._configure_group_layouts()
+        self._build_app_browser()
         self._configure_app_buttons()
         self._refresh_machine_capabilities()
         self._configure_session_buttons()
-        self._schedule_group_button_layout_update()
+        self._apply_theme()
+        self._update_app_filter()
         self._reset_activity_log()
 
         self.refresh_timer = QTimer(self)
@@ -917,14 +1200,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
         outer_layout.setContentsMargins(14, 12, 14, 12)
         outer_layout.setSpacing(8)
 
-        header_layout = QHBoxLayout()
+        header_layout = QGridLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(12)
+        header_layout.setHorizontalSpacing(12)
+        header_layout.setVerticalSpacing(8)
+        self.summary_header_layout = header_layout
 
         self.summary_title = QLabel(f"{self.machine_profile.machine.display_name} Control Room", panel)
         self.summary_title.setObjectName("summaryTitle")
-        header_layout.addWidget(self.summary_title)
-        header_layout.addStretch(1)
+        self.summary_title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         self.runtime_selector = RuntimeSelectorWidget(
             current_machine_id=self.machine_profile.machine.id,
@@ -935,7 +1219,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             parent=panel,
         )
         self.runtime_selector.apply_requested.connect(self._apply_runtime_selection)
-        header_layout.addWidget(self.runtime_selector)
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -958,9 +1241,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.shutdown_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.shutdown_button.setMinimumWidth(132)
         self.shutdown_button.setFixedHeight(HEADER_ACTION_HEIGHT)
-        header_layout.addWidget(self.logs_button)
-        header_layout.addWidget(self.shutdown_button)
-        header_layout.addWidget(self.theme_toggle_button)
+        self._update_summary_layout()
 
         outer_layout.addLayout(header_layout)
 
@@ -977,124 +1258,106 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.verticalLayout.removeWidget(self.textEdit)
         self.verticalLayout.insertWidget(1, self.textEdit)
 
-    def _configure_groups(self):
-        self.groupBox_4.setTitle("Diagnostics")
-        self.groupBox_5.setTitle("Beam Tuning")
-        self.groupBox_3.setTitle("System Tools")
-        self.feedback_group = QGroupBox("Feedback", self.frame_2)
-        self.feedback_group.setObjectName("feedback_group")
-        self.feedback_outer_layout = QVBoxLayout(self.feedback_group)
-        self.feedback_layout = QGridLayout()
-        self.feedback_outer_layout.addLayout(self.feedback_layout)
+    def _build_app_browser(self):
+        old_panel = self.frame_2
+        panel_index = self.verticalLayout.indexOf(old_panel)
+        self.verticalLayout.removeWidget(old_panel)
+        old_panel.hide()
+        old_panel.deleteLater()
 
-    def _configure_group_panel(self):
-        self.frame_2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.verticalLayout_5.setContentsMargins(0, 6, 0, 0)
-        self.verticalLayout_5.setSpacing(12)
+        self.app_browser = QFrame(self.frame)
+        self.app_browser.setObjectName("appBrowser")
+        self.app_browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        browser_layout = QHBoxLayout(self.app_browser)
+        browser_layout.setContentsMargins(0, 4, 0, 0)
+        browser_layout.setSpacing(12)
 
-        while self.verticalLayout_5.count():
-            self.verticalLayout_5.takeAt(0)
+        self.app_sidebar = QWidget(self.app_browser)
+        self.app_sidebar.setObjectName("appSidebar")
+        self.app_sidebar.setFixedWidth(190)
+        sidebar_layout = QVBoxLayout(self.app_sidebar)
+        sidebar_layout.setContentsMargins(10, 12, 10, 12)
+        sidebar_layout.setSpacing(4)
 
-        self.group_panel_grid = QGridLayout()
-        self.group_panel_grid.setContentsMargins(0, 4, 0, 0)
-        self.group_panel_grid.setHorizontalSpacing(12)
-        self.group_panel_grid.setVerticalSpacing(12)
-        self.group_panel_grid.setColumnStretch(0, 1)
-        self.group_panel_grid.setColumnStretch(1, 1)
+        sidebar_title = QLabel("Applications", self.app_sidebar)
+        sidebar_title.setObjectName("sidebarTitle")
+        sidebar_layout.addWidget(sidebar_title)
+        sidebar_layout.addSpacing(6)
 
-        self.verticalLayout_5.addLayout(self.group_panel_grid)
-        self.verticalLayout_5.addStretch(1)
-        self._update_group_panel_layout()
+        self.category_button_group = QButtonGroup(self)
+        self.category_button_group.setExclusive(True)
+        self.category_buttons = {}
+        for category, label in APP_CATEGORIES.items():
+            count = len(APP_DEFINITIONS) if category == "all" else sum(
+                spec["category"] == category for spec in APP_DEFINITIONS.values()
+            )
+            nav_label = APP_CATEGORY_NAV_LABELS[category]
+            button = QPushButton(f"{nav_label.replace('&', '&&')}  {count}", self.app_sidebar)
+            button.setCheckable(True)
+            button.setProperty("nav", True)
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(
+                lambda _checked=False, selected=category: self._select_app_category(selected)
+            )
+            self.category_button_group.addButton(button)
+            self.category_buttons[category] = button
+            sidebar_layout.addWidget(button)
+        self.category_buttons["all"].setChecked(True)
+        sidebar_layout.addStretch(1)
 
-    def _configure_group_layouts(self):
-        for group_box in (
-            self.groupBox_3,
-            self.groupBox_4,
-            self.groupBox_5,
-            self.feedback_group,
-        ):
-            group_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-            group_box.layout().setContentsMargins(10, 12, 10, 10)
+        content = QWidget(self.app_browser)
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
 
-        self.energy_feedback_button = QPushButton(self.feedback_group)
-        self.energy_feedback_button.setObjectName("energy_feedback_button")
-        self.hv_feedback_button = QPushButton(self.feedback_group)
-        self.hv_feedback_button.setObjectName("hv_feedback_button")
-        self.solenoid_centering_button = QPushButton(self.groupBox_5)
-        self.solenoid_centering_button.setObjectName("solenoid_centering_button")
-        self.dispersion_correction_button = QPushButton(self.groupBox_5)
-        self.dispersion_correction_button.setObjectName("dispersion_correction_button")
-        self.power_source_timing_button = QPushButton(self.groupBox_5)
-        self.power_source_timing_button.setObjectName("power_source_timing_button")
-        self.llrf_control_button = QPushButton(self.groupBox_5)
-        self.llrf_control_button.setObjectName("llrf_control_button")
-        self.ct_monitor_button = QPushButton(self.groupBox_4)
-        self.ct_monitor_button.setObjectName("ct_monitor_button")
-        self.pv_connection_check_button = QPushButton(self.groupBox_3)
-        self.pv_connection_check_button.setObjectName("pv_connection_check_button")
-        self.setpoint_transfer_button = QPushButton(self.groupBox_3)
-        self.setpoint_transfer_button.setObjectName("setpoint_transfer_button")
-        self.machine_snapshot_button = QPushButton(self.groupBox_3)
-        self.machine_snapshot_button.setObjectName("machine_snapshot_button")
-        self.solenoid_field_guide_button = QPushButton(self.groupBox_3)
-        self.solenoid_field_guide_button.setObjectName("solenoid_field_guide_button")
-        self.rf_phase_scan_button = QPushButton(self.groupBox_4)
-        self.rf_phase_scan_button.setObjectName("rf_phase_scan_button")
+        browser_header = QHBoxLayout()
+        browser_header.setContentsMargins(0, 0, 0, 0)
+        self.browser_title = QLabel(APP_CATEGORIES["all"], content)
+        self.browser_title.setObjectName("browserTitle")
+        browser_header.addWidget(self.browser_title)
+        self.result_count = QLabel("", content)
+        self.result_count.setObjectName("resultCount")
+        browser_header.addWidget(self.result_count)
+        browser_header.addStretch(1)
+        self.app_search = QLineEdit(content)
+        self.app_search.setObjectName("appSearch")
+        self.app_search.setPlaceholderText("Search applications...")
+        self.app_search.setClearButtonEnabled(True)
+        self.app_search.setMaximumWidth(310)
+        self.app_search.textChanged.connect(self._update_app_filter)
+        browser_header.addWidget(self.app_search)
+        content_layout.addLayout(browser_header)
 
-        self.group_button_specs = [
-            (
-                self.gridLayout_3,
-                self.groupBox_3,
-                [
-                    self.vmbtn,
-                    self.setpoint_transfer_button,
-                    self.machine_snapshot_button,
-                    self.solenoid_field_guide_button,
-                    self.pv_connection_check_button,
-                    self.online_opt,
-                ],
-                1,
-            ),
-            (
-                self.gridLayout_2,
-                self.groupBox_4,
-                [
-                    self.beammonitor,
-                    self.orbitdisplay,
-                    self.ct_monitor_button,
-                    self.energy_spectrum,
-                    self.jitter_plot,
-                    self.rf_phase_scan_button,
-                ],
-                1,
-            ),
-            (
-                self.gridLayout_4,
-                self.groupBox_5,
-                [
-                    self.orbit_correct,
-                    self.solenoid_centering_button,
-                    self.BBA,
-                    self.emitmeasure,
-                    self.dispersion_correction_button,
-                    self.power_source_timing_button,
-                    self.llrf_control_button,
-                ],
-                1,
-            ),
-            (
-                self.feedback_layout,
-                self.feedback_group,
-                [self.energy_feedback_button, self.hv_feedback_button],
-                1,
-            ),
-        ]
-        self._schedule_group_button_layout_update()
+        self.app_scroll = QScrollArea(content)
+        self.app_scroll.setObjectName("appScroll")
+        self.app_scroll.setWidgetResizable(True)
+        self.app_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.app_scroll.viewport().setObjectName("appScrollViewport")
+        self.app_scroll.viewport().setAttribute(Qt.WA_StyledBackground, True)
+        self.app_grid_host = QWidget(self.app_scroll)
+        self.app_grid_host.setObjectName("appGridHost")
+        self.app_grid_host.setAttribute(Qt.WA_StyledBackground, True)
+        self.app_grid = QGridLayout(self.app_grid_host)
+        self.app_grid.setContentsMargins(0, 0, 8, 0)
+        self.app_grid.setHorizontalSpacing(10)
+        self.app_grid.setVerticalSpacing(10)
+        self.app_grid.setAlignment(Qt.AlignTop)
+        self.app_scroll.setWidget(self.app_grid_host)
+        content_layout.addWidget(self.app_scroll, 1)
+
+        browser_layout.addWidget(self.app_sidebar)
+        browser_layout.addWidget(content, 1)
+        self.verticalLayout.insertWidget(max(panel_index, 0), self.app_browser, 1)
 
     def _configure_app_buttons(self):
         for key, spec in APP_DEFINITIONS.items():
-            button = getattr(self, spec["button_name"])
-            button.setText(self._button_display_text(key))
+            button = LauncherAppButton(
+                self._button_display_text(key),
+                spec["description"],
+                self.app_grid_host,
+            )
+            button.setObjectName(spec["button_name"])
+            setattr(self, spec["button_name"], button)
             button.setToolTip(spec["description"])
             button.setProperty("category", spec["category"])
             button.setProperty("running", False)
@@ -1186,6 +1449,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             button.setText(self._button_display_text(key))
             button.setProperty("realStatus", self.app_real_status.get(key, "none"))
             button.setToolTip(tooltip)
+            self._refresh_app_badge(key)
             self._refresh_widget_style(button)
 
     def _append_real_commissioning_tooltip(self, tooltip, app_name):
@@ -1212,9 +1476,68 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _button_display_text(self, key, running=False):
         spec = APP_DEFINITIONS[key]
-        if running:
-            return f"{spec['button_text']}\nrunning"
         return spec["button_text"]
+
+    def _refresh_app_badge(self, key):
+        button = self.managed_buttons.get(key)
+        if button is None:
+            return
+        spec = APP_DEFINITIONS[key]
+        if self.process_manager.is_running(key):
+            button.set_badge("RUNNING", "running")
+            return
+        if spec.get("reserved"):
+            button.set_badge("PLANNED", "warning")
+            return
+        supported, _reason = self.app_support_status.get(key, (True, None))
+        if not supported:
+            button.set_badge("UNAVAILABLE", "warning")
+            return
+        real_status = self.app_real_status.get(key)
+        if real_status:
+            button.set_badge(real_commissioning_status_label(real_status).upper())
+            return
+        button.set_badge(APP_ACCESS_LABELS.get(spec.get("access"), "READY"))
+
+    def _select_app_category(self, category):
+        if category not in APP_CATEGORIES:
+            return
+        self.current_app_category = category
+        self.browser_title.setText(APP_CATEGORIES[category])
+        self._update_app_filter()
+
+    def _update_app_filter(self, *_args):
+        if not hasattr(self, "app_grid"):
+            return
+
+        query = self.app_search.text().strip().casefold()
+        visible_keys = []
+        for key, spec in APP_DEFINITIONS.items():
+            in_category = (
+                self.current_app_category == "all"
+                or spec["category"] == self.current_app_category
+            )
+            searchable = " ".join(
+                (key, spec["button_text"], spec["label"], spec["description"])
+            ).casefold()
+            visible = in_category and (not query or query in searchable)
+            self.managed_buttons[key].setVisible(visible)
+            if visible:
+                visible_keys.append(key)
+
+        while self.app_grid.count():
+            self.app_grid.takeAt(0)
+
+        viewport_width = self.app_scroll.viewport().width()
+        columns = 3 if viewport_width >= 880 else 2 if viewport_width >= 570 else 1
+        for column in range(3):
+            self.app_grid.setColumnStretch(column, int(column < columns))
+        for index, key in enumerate(visible_keys):
+            row, column = divmod(index, columns)
+            self.app_grid.addWidget(self.managed_buttons[key], row, column)
+
+        count_text = f"{len(visible_keys)} of {len(APP_DEFINITIONS)}" if query else str(len(visible_keys))
+        self.result_count.setText(count_text)
 
     def _configure_session_buttons(self):
         self.shutdown_button.setText("Shutdown Apps")
@@ -1228,6 +1551,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.setStyleSheet(build_launcher_theme(palette))
         if hasattr(self, "status_panel"):
             self.status_panel.apply_theme(palette)
+        if hasattr(self, "app_scroll"):
+            browser_background = palette["window_bg"]
+            for widget in (self.app_scroll.viewport(), self.app_grid_host):
+                widget_palette = widget.palette()
+                widget_palette.setColor(QPalette.Window, QColor(browser_background))
+                widget.setPalette(widget_palette)
+                widget.setAutoFillBackground(True)
+                widget.setStyleSheet(
+                    f"background-color: {browser_background}; border: none;"
+                )
+        for button in getattr(self, "managed_buttons", {}).values():
+            button.apply_palette(palette)
         self._update_theme_toggle_button()
 
     def _update_theme_toggle_button(self):
@@ -1479,6 +1814,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             button.setProperty("running", running)
             button.setProperty("realStatus", self.app_real_status.get(key, "none"))
             button.setText(self._button_display_text(key, running=running))
+            self._refresh_app_badge(key)
             self._refresh_widget_style(button)
 
         active_count = len(running_keys)
@@ -1503,69 +1839,43 @@ class myWindow(QMainWindow, Ui_MainWindow):
         style.polish(widget)
         widget.update()
 
-    def _schedule_group_button_layout_update(self):
-        QTimer.singleShot(0, self._update_group_button_layouts)
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_summary_layout()
-        self._update_group_panel_layout()
-        self._schedule_group_button_layout_update()
+        QTimer.singleShot(0, self._update_app_filter)
 
     def _update_summary_layout(self):
-        return
-
-    def _update_group_panel_layout(self):
-        if not hasattr(self, "group_panel_grid"):
+        if not hasattr(self, "summary_header_layout"):
             return
 
-        groups = [
-            self.groupBox_3,
-            self.groupBox_4,
-            self.groupBox_5,
-            self.feedback_group,
-        ]
+        layout = self.summary_header_layout
+        while layout.count():
+            layout.takeAt(0)
+        for column in range(5):
+            layout.setColumnStretch(column, 0)
 
-        while self.group_panel_grid.count():
-            self.group_panel_grid.takeAt(0)
-
-        if self.width() < 860:
-            columns = 1
-        elif self.width() < 1180:
-            columns = 2
-        else:
-            columns = 4
-
-        for column in range(4):
-            self.group_panel_grid.setColumnStretch(column, int(column < columns))
-        for index, group_box in enumerate(groups):
-            row, column = divmod(index, columns)
-            self.group_panel_grid.addWidget(group_box, row, column, Qt.AlignTop)
-
-    def _update_group_button_layouts(self):
-        if not self.group_button_specs:
+        if self.width() < 1000:
+            for label in self.runtime_selector.findChildren(QLabel):
+                if label.property("role") == "field":
+                    label.hide()
+            layout.addWidget(self.summary_title, 0, 0, 1, 3)
+            layout.addWidget(self.theme_toggle_button, 0, 3, Qt.AlignRight)
+            layout.addWidget(self.runtime_selector, 1, 0, Qt.AlignLeft)
+            layout.setColumnStretch(1, 1)
+            layout.addWidget(self.logs_button, 1, 2)
+            layout.addWidget(self.shutdown_button, 1, 3)
             return
 
-        for layout, container, buttons, preferred_columns in self.group_button_specs:
-            while layout.count():
-                layout.takeAt(0)
-
-            columns = preferred_columns
-
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.setHorizontalSpacing(10)
-            layout.setVerticalSpacing(8)
-
-            for column in range(columns):
-                layout.setColumnStretch(column, 1)
-
-            for index, button in enumerate(buttons):
-                row = index // columns
-                column = index % columns
-                button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                button.setMinimumHeight(52)
-                button.setMaximumWidth(16777215)
-                layout.addWidget(button, row, column)
+        for label in self.runtime_selector.findChildren(QLabel):
+            if label.property("role") == "field":
+                label.show()
+                self._refresh_widget_style(label)
+        layout.addWidget(self.summary_title, 0, 0)
+        layout.setColumnStretch(0, 1)
+        layout.addWidget(self.runtime_selector, 0, 1)
+        layout.addWidget(self.logs_button, 0, 2)
+        layout.addWidget(self.shutdown_button, 0, 3)
+        layout.addWidget(self.theme_toggle_button, 0, 4)
 
     def closeEvent(self, event):
         self.process_manager.shutdown()

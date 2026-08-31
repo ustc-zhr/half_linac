@@ -89,8 +89,11 @@ def resolve_energy_spectrum_auto_tune(
     if actuator is not None:
         resolved["actuator"] = actuator
     scan = station.get(
-        "scan",
-        workflow.get("auto_tune_scan", workflow.get("bend_scan")),
+        "energy_search",
+        station.get(
+            "scan",
+            workflow.get("energy_search", workflow.get("auto_tune_scan", workflow.get("bend_scan"))),
+        ),
     )
     if scan is not None:
         resolved["scan"] = scan

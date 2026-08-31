@@ -394,6 +394,34 @@ QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
     border: none;
     width: 20px;
 }}
+QComboBox#activeKnobCombo {{
+    border-top-right-radius: 0px;
+    border-bottom-right-radius: 0px;
+}}
+QComboBox#activeKnobCombo::drop-down {{
+    border: none;
+    width: 0px;
+}}
+QToolButton#activeKnobDropdownButton {{
+    background: {spec.input_bg};
+    border: 1px solid {spec.border};
+    border-left: none;
+    border-top-left-radius: 0px;
+    border-bottom-left-radius: 0px;
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 32px;
+    max-height: 32px;
+    padding: 0px;
+}}
+QToolButton#activeKnobDropdownButton:hover {{
+    background: {spec.button_hover};
+}}
+QToolButton#activeKnobDropdownButton:pressed {{
+    background: {spec.subtle_bg};
+}}
 QComboBox QAbstractItemView {{
     background: {spec.input_bg};
     color: {spec.text_primary};
@@ -495,10 +523,17 @@ QPushButton[role="statusAction"][tone="info"], QToolButton[role="statusAction"][
     color: {info_color};
 }}
 QPushButton[role="statusAction"][tone="control"], QToolButton[role="statusAction"][tone="control"] {{
-    color: {success_color};
+    background: {spec.primary_bg};
+    border-color: {spec.primary_border};
+    color: {spec.primary_text};
 }}
 QPushButton[role="statusAction"][tone="danger"], QToolButton[role="statusAction"][tone="danger"] {{
     color: {danger_color};
+}}
+QPushButton[role="statusAction"]:disabled, QToolButton[role="statusAction"]:disabled {{
+    background: transparent;
+    border-color: {spec.border_soft};
+    color: {spec.text_disabled};
 }}
 QToolButton#themeToggleButton, QToolButton#logToggleButton {{
     background: {spec.subtle_bg};
@@ -631,15 +666,16 @@ QCheckBox::indicator:checked {{
 QWidget#appShell {{
     background: {spec.window_bg};
 }}
-QFrame#appHeader {{
-    background: {hero_bg};
-    border: 1px solid {spec.section_border};
-    border-radius: 14px;
+QFrame#globalStatusBar {{
+    background: {status_bg};
+    border: 1px solid {status_border};
+    border-radius: 8px;
 }}
 QLabel#appTitle {{
     color: {hero_title};
     background: transparent;
-    font-size: 23px;
+    border: none;
+    font-size: 15px;
     font-weight: 700;
 }}
 QLabel#appSubtitle {{
@@ -677,9 +713,37 @@ QWidget#statusStrip {{
     border: 1px solid {status_border};
     border-radius: 10px;
 }}
-QWidget#runStatusControls {{
+QWidget#globalRunControls {{
     background: transparent;
     border: none;
+}}
+QLabel[role="globalStatus"] {{
+    background: transparent;
+    border: none;
+    color: {spec.text_muted};
+    padding: 0px 2px;
+    font-size: 11px;
+    font-weight: 700;
+}}
+QLabel[role="globalStatus"][tone="info"] {{
+    color: {info_color};
+}}
+QLabel[role="globalStatus"][tone="success"] {{
+    color: {success_color};
+}}
+QLabel[role="globalStatus"][tone="warning"] {{
+    color: {warning_color};
+}}
+QLabel[role="globalStatus"][tone="danger"] {{
+    color: {danger_color};
+}}
+QFrame#globalStatusSeparator {{
+    background: {spec.border};
+    border: none;
+    min-width: 1px;
+    max-width: 1px;
+    min-height: 20px;
+    max-height: 20px;
 }}
 QFrame#statusItem {{
     background: transparent;
@@ -819,6 +883,50 @@ QFrame#modeStatusBanner[tone="warning"] {{
 }}
 QFrame#modeStatusBanner[tone="danger"] {{
     border-color: {danger_color};
+}}
+QFrame#runCompletionBanner {{
+    background: {status_bg};
+    border: 1px solid {success_color};
+    border-radius: 10px;
+}}
+QFrame#runCompletionBanner[tone="warning"] {{
+    border-color: {warning_color};
+}}
+QFrame#runCompletionBanner[tone="danger"] {{
+    border-color: {danger_color};
+}}
+QFrame#runCompletionBanner QLabel {{
+    background: transparent;
+    border: none;
+    color: {spec.text_primary};
+}}
+QFrame#singleKnobForm, QFrame#randomKnobForm {{
+    background: transparent;
+    border: none;
+}}
+QLabel[role="formSectionTitle"] {{
+    background: transparent;
+    border: none;
+    color: {spec.section_title};
+    font-size: 14px;
+    font-weight: 800;
+}}
+QFrame#singleFormSeparator {{
+    background: {spec.border_soft};
+    border: none;
+    min-height: 1px;
+    max-height: 1px;
+}}
+QFrame#singlePreviewSummary, QFrame#randomPreviewSummary, QFrame#randomPointContext {{
+    background: {status_bg};
+    border: 1px solid {status_border};
+    border-radius: 9px;
+}}
+QFrame#singlePreviewSummary QLabel, QFrame#randomPreviewSummary QLabel,
+QFrame#randomPointContext QLabel {{
+    background: transparent;
+    border: none;
+    color: {spec.text_primary};
 }}
 QFrame#modeStatusBanner QLabel[role="message"] {{
     color: {spec.text_primary};

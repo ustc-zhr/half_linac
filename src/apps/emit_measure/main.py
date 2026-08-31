@@ -66,6 +66,9 @@ from half_linac.src.shared.beam_diagnostics import (
     load_background,
     resolve_beam_background_paths,
     save_background,
+    ROIControl,
+    configured_roi,
+    roi_extent,
 )
 from half_linac.src.shared.machine_profile import (
     METADATA_FILENAME,
@@ -185,7 +188,7 @@ def _projection_measurement_quality(projection):
     return payload
 
 
-def _read_flag_image_fit(image_pv, pixel_shape, extent, *, background=None):
+def _read_flag_image_fit(image_pv, pixel_shape, extent, *, background=None, roi=None):
     raw_image = epics.caget(image_pv)
     if raw_image is None:
         raise RuntimeError(f"Failed to read flag image PV: {image_pv}.")
@@ -201,7 +204,9 @@ def _read_flag_image_fit(image_pv, pixel_shape, extent, *, background=None):
         )
 
     raw_image = np.reshape(flat_image, (pixel_shape[1], pixel_shape[0]))
-    return analyze_beam_image(raw_image, extent=extent, background=background)
+    return analyze_beam_image(
+        raw_image, extent=extent, background=background, roi=roi
+    )
 
 
 def _read_optional_scalar_pv(pv_name):
@@ -960,6 +965,9 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_background_status = "Off"
         self._applying_emit_preset = False
         self.background_dialog = None
+        self.roi_dialog = None
+        self.roi_control = None
+        self.roi_status_label = None
         self.background_sample_button = None
         self.background_preview = None
         self.background_image = None
@@ -1023,6 +1031,7 @@ class myWindow(QWidget,Ui_Form):
         # self.pushButton_7.clicked.connect(self.full_VM)
 
         self._configure_machine_profile()
+        self._reconfigure_roi()
         self._refresh_model_controls()
         self._apply_theme()
         self._draw_placeholder_plots()
@@ -1237,6 +1246,7 @@ class myWindow(QWidget,Ui_Form):
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         layout = QVBoxLayout(card)
+        self.beam_image_card_layout = layout
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
@@ -1280,6 +1290,15 @@ class myWindow(QWidget,Ui_Form):
         self.preview_fit_button.setProperty("compact", True)
         self.preview_fit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.preview_fit_button.clicked.connect(lambda: self.refresh_current_beam_image_fit())
+
+        self.roi_status_label = QLabel("ROI: Off", card)
+        self.roi_status_label.setProperty("role", "field")
+        self.roi_button = QPushButton("ROI…", card)
+        self.roi_button.setProperty("compact", True)
+        self.roi_button.clicked.connect(self._show_roi_dialog)
+        self.roi_button.hide()
+        header.addWidget(self.roi_status_label)
+        header.addWidget(self.roi_button)
 
         header.addWidget(self.beam_image_auto_refresh_checkbox)
         header.addWidget(self.preview_fit_button)
@@ -2333,6 +2352,12 @@ class myWindow(QWidget,Ui_Form):
             return
         if extent is None:
             extent = self._current_flag_image_extent(flag_name)
+            active_roi = self.roi_control.active_roi() if self.roi_control is not None else None
+            if active_roi is not None:
+                geometry = self._current_flag_pixel_geometry(flag_name)
+                extent = roi_extent(
+                    extent, active_roi, (geometry.shape[1], geometry.shape[0])
+                )
         palette = self._palette()
         widget = self.beam_image_widget
         widget.axes.clear()
@@ -2402,6 +2427,12 @@ class myWindow(QWidget,Ui_Form):
             "Cross-check" if size_sigx is not None or size_sigy is not None else "Unavailable"
         )
         self.beam_background_status_label.setText(background_status)
+        if self.roi_control is not None:
+            self.roi_control.attach_axes(
+                self.beam_image_widget.axes,
+                extent=self._current_flag_image_extent(flag_name),
+            )
+            self.beam_image_widget.canvas.draw_idle()
         self._refresh_status()
 
     def _refresh_status(self):
@@ -2794,6 +2825,9 @@ class myWindow(QWidget,Ui_Form):
                 "extent_mm": list(paras.flag_image_extent),
             },
         }
+        roi = getattr(paras, "roi", None)
+        metadata["roi_enabled"] = roi is not None
+        metadata["roi"] = roi.as_dict() if roi is not None else None
         if paras.scan_strategy == "adaptive_quality":
             metadata["quality_limits"] = {
                 "min_sigma_pixels": QUALITY_MIN_SIGMA_PIXELS,
@@ -3868,6 +3902,60 @@ class myWindow(QWidget,Ui_Form):
             self.machine_type,
         )
 
+    def _reconfigure_roi(self, flag_name=None):
+        flag_name = flag_name or self.comboBox_4.currentText()
+        geometry = self._current_flag_pixel_geometry(flag_name)
+        configured = configured_roi(
+            self.beam_monitor_config.get("roi"), self.machine_type, flag_name
+        )
+        runtime_path = self._scan_latest_dir() / "roi" / f"{flag_name}.json"
+        if self.roi_control is None:
+            self.roi_control = ROIControl(
+                image_shape=(geometry.shape[1], geometry.shape[0]),
+                runtime_path=runtime_path,
+                configured=configured,
+            )
+            self.roi_control.warningRaised.connect(
+                lambda _message: self._refresh_status()
+            )
+            self.roi_control.roiChanged.connect(self._update_roi_status)
+            self.beam_image_card_layout.addWidget(self.roi_control)
+        else:
+            self.roi_control.reconfigure(
+                image_shape=(geometry.shape[1], geometry.shape[0]),
+                runtime_path=runtime_path,
+                configured=configured,
+            )
+        self._update_roi_status()
+
+    def _update_roi_status(self, *_args):
+        if self.roi_status_label is None or self.roi_control is None:
+            return
+        roi = self.roi_control.roi()
+        text = f"ROI: {roi.width} × {roi.height} px" if self.roi_control.use_roi.isChecked() else "ROI: Off"
+        self.roi_status_label.setText(text)
+
+    def _show_roi_dialog(self):
+        if self.roi_control is None:
+            self._reconfigure_roi()
+        if self.roi_dialog is None:
+            self.roi_dialog = QDialog(self)
+            self.roi_dialog.setWindowTitle("Software ROI")
+            self.roi_dialog.setMinimumWidth(340)
+            layout = QVBoxLayout(self.roi_dialog)
+            note = QLabel("Configure the image region used for PRF image fitting. Changes are ready for the next fit.", self.roi_dialog)
+            note.setWordWrap(True)
+            note.setProperty("role", "field")
+            layout.addWidget(note)
+            layout.addWidget(self.roi_control)
+            close_button = QPushButton("Close", self.roi_dialog)
+            close_button.setProperty("compact", True)
+            close_button.clicked.connect(self.roi_dialog.hide)
+            layout.addWidget(close_button)
+        self.roi_dialog.show()
+        self.roi_dialog.raise_()
+        self.roi_dialog.activateWindow()
+
     def _current_flag_image_extent(self, flag_name=None):
         return _image_extent_from_geometry(self._current_flag_pixel_geometry(flag_name))
 
@@ -4020,6 +4108,7 @@ class myWindow(QWidget,Ui_Form):
         self.custom_k1_unit = scan.unit or "1/m^2"
 
     def _handle_emit_flag_changed(self, index):
+        self._reconfigure_roi()
         del index
         if self._applying_emit_preset:
             return
@@ -4063,6 +4152,7 @@ class myWindow(QWidget,Ui_Form):
             geometry = self._current_flag_pixel_geometry(para.flag_name)
             para.flag_pixel_shape = geometry.shape
             para.flag_image_extent = _image_extent_from_geometry(geometry)
+            para.roi = self.roi_control.active_roi()
             para.background_image = None
             para.background_status = "Off"
             para.background_image_path = None
@@ -4178,6 +4268,7 @@ class myWindow(QWidget,Ui_Form):
                 paras.flag_pixel_shape,
                 paras.flag_image_extent,
                 background=paras.background_image,
+                roi=getattr(paras, "roi", None),
             )
         except RuntimeError as exc:
             self._draw_beam_image_placeholder("PRF image unavailable")
@@ -4185,9 +4276,19 @@ class myWindow(QWidget,Ui_Form):
                 self._warn(str(exc))
             return False
 
+        display_image = image
+        if getattr(paras, "roi", None) is not None:
+            try:
+                raw = np.asarray(epics.caget(paras.flagImagePV), dtype=float)
+                display_image = np.reshape(
+                    raw, (paras.flag_pixel_shape[1], paras.flag_pixel_shape[0])
+                )
+            except (TypeError, ValueError):
+                display_image = image
+
         self._display_beam_image_fit(
             paras.flag_name,
-            image,
+            display_image,
             fit_result,
             extent=paras.flag_image_extent,
             size_pv=_read_optional_size_pvs(paras.flagSigxPV, paras.flagSigyPV),
@@ -5066,6 +5167,11 @@ class myWindow(QWidget,Ui_Form):
                 fontsize=10,
             )
         widget.canvas.draw()
+        if self.roi_control is not None:
+            self.roi_control.attach_axes(
+                widget.axes,
+                extent=self._current_flag_image_extent(flag_name),
+            )
 
         if result.get("status") == "valid":
             for field, key in zip(fields, ("ex", "beta", "alpha", "gamma", "exn")):
@@ -5427,6 +5533,7 @@ class scanThread(QThread):
                         self.flag_pixel_shape,
                         self.flag_image_extent,
                         background=self.background_image,
+                        roi=self.roi_control.active_roi(),
                     )
                 except RuntimeError as exc:
                     if not adaptive or retry >= self.adaptive_config.max_retries:

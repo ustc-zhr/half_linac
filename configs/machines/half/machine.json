@@ -2273,7 +2273,9 @@
       "display_name": "Preinjector Coordinated Energy",
       "order": 238,
       "tags": ["preinjector", "energy_spectrum", "coordinated_control"],
-      "limits": {},
+      "limits": {
+        "setpoint": {"low": 0, "high": 240, "unit": "MeV"}
+      },
       "logical_channels": ["setpoint"]
     },
     {
@@ -2293,7 +2295,9 @@
       "display_name": "Transport Line Coordinated Energy",
       "order": 240,
       "tags": ["transport_line", "coordinated_control"],
-      "limits": {},
+      "limits": {
+        "setpoint": {"low": 0, "high": 2450, "unit": "MeV"}
+      },
       "logical_channels": ["setpoint"]
     },
     {

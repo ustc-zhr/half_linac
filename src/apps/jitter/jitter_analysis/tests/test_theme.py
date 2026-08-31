@@ -52,6 +52,13 @@ def test_stylesheet_sets_file_dialog_tool_button_icon_size():
     assert "qproperty-iconSize: 18px 18px" in stylesheet
 
 
+def test_stylesheet_contains_compact_global_status_bar_rules():
+    stylesheet = build_app_stylesheet("night_shift")
+    assert "QFrame#globalStatusBar" in stylesheet
+    assert 'QLabel[role="globalStatus"]' in stylesheet
+    assert "QFrame#globalStatusSeparator" in stylesheet
+
+
 def test_plot_theme_background_tracks_gui_theme():
     assert plot_theme_spec("night_shift").background == "#11181e"
     assert plot_theme_spec("control_room").background == "#fffdf8"

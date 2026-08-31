@@ -12,5 +12,4 @@ class AppState:
     selected_object_ids: list[str] = field(default_factory=list)
     selected_knob_ids: list[str] = field(default_factory=list)
     active_knob_id: str | None = None
-    active_preset_id: str | None = None
     run_status: RunStatus = RunStatus.IDLE

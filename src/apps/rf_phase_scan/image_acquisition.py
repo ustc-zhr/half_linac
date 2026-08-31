@@ -10,11 +10,12 @@ from .spectrum_profile import SpectrumProfileError, fit_projection_profile, proj
 class RFImageAcquisition:
     """RF scan-local FLAG image reader used by tuning, point samples, and backgrounds."""
 
-    def __init__(self, image_pv, image_shape, pixel_width_mm, *, background=None):
+    def __init__(self, image_pv, image_shape, pixel_width_mm, *, background=None, roi=None):
         self.image_pv = image_pv
         self.image_shape = tuple(image_shape)
         self.pixel_width_mm = float(pixel_width_mm)
         self.background = None if background is None else np.asarray(background, dtype=float)
+        self.roi = roi
         expected_shape = (self.image_shape[1], self.image_shape[0])
         if self.background is not None and self.background.shape != expected_shape:
             raise ValueError(f"Background shape {self.background.shape} does not match image shape {expected_shape}.")
@@ -44,6 +45,7 @@ class RFImageAcquisition:
                 projection = project_image_profiles(
                     np.maximum(raw - self.background, 0) if self.background is not None else raw,
                     self.pixel_width_mm,
+                    self.roi,
                 )
                 profile = fit_projection_profile(projection.x_mm, projection.density_x, fit_method)
             except SpectrumProfileError:

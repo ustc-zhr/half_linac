@@ -31,23 +31,17 @@ if QtWidgets is not None:
             self._knob_specs_by_id = {knob.id: knob for knob in self._knobs}
 
             layout = QtWidgets.QVBoxLayout(self)
-            intro = QtWidgets.QLabel(
-                "Choose which control PVs participate in random sampling, then set Low/High for each enabled row."
-            )
-            intro.setWordWrap(True)
-            layout.addWidget(intro)
-
             helper_row = QtWidgets.QHBoxLayout()
-            self.fetch_current_button = QtWidgets.QPushButton("Fetch Current Values")
-            self.use_limits_button = QtWidgets.QPushButton("Use Limits For Enabled")
-            self.apply_step_hint_button = QtWidgets.QPushButton("Apply +/- Step Hint x")
+            self.fetch_current_button = QtWidgets.QPushButton("Fetch Current")
+            self.apply_step_hint_button = QtWidgets.QPushButton("Apply ± Step Hint ×")
+            self.more_button = QtWidgets.QPushButton("More")
             self.fetch_current_button.setProperty("role", "diagnostic")
-            self.use_limits_button.setProperty("role", "control")
             self.apply_step_hint_button.setProperty("role", "control")
+            self.more_button.setProperty("role", "diagnostic")
             for button in (
                 self.fetch_current_button,
-                self.use_limits_button,
                 self.apply_step_hint_button,
+                self.more_button,
             ):
                 button.setMinimumHeight(40)
             self.step_hint_factor_spin = QtWidgets.QDoubleSpinBox()
@@ -55,15 +49,18 @@ if QtWidgets is not None:
             self.step_hint_factor_spin.setDecimals(3)
             self.step_hint_factor_spin.setValue(3.0)
             helper_row.addWidget(self.fetch_current_button)
-            helper_row.addWidget(self.use_limits_button)
             helper_row.addWidget(self.apply_step_hint_button)
             helper_row.addWidget(self.step_hint_factor_spin)
             helper_row.addStretch(1)
+            self.more_menu = QtWidgets.QMenu(self.more_button)
+            self.use_limits_action = self.more_menu.addAction("Use Full Limits for Enabled")
+            self.more_button.setMenu(self.more_menu)
+            helper_row.addWidget(self.more_button)
             layout.addLayout(helper_row)
 
-            self.table = QtWidgets.QTableWidget(0, 8, self)
+            self.table = QtWidgets.QTableWidget(0, 5, self)
             self.table.setHorizontalHeaderLabels(
-                ["Use", "Name", "Group", "Current", "Low", "High", "Step Hint", "Limits"]
+                ["Use", "Control PV", "Current", "Low", "High"]
             )
             self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
             self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
@@ -81,9 +78,6 @@ if QtWidgets is not None:
             header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
             header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeToContents)
             header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(5, QtWidgets.QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(6, QtWidgets.QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(7, QtWidgets.QHeaderView.ResizeToContents)
             layout.addWidget(self.table, 1)
 
             self.status_label = QtWidgets.QLabel()
@@ -107,7 +101,7 @@ if QtWidgets is not None:
             layout.addWidget(buttons)
 
             self.fetch_current_button.clicked.connect(self.fetch_current_values)
-            self.use_limits_button.clicked.connect(self.apply_ranges_from_limits)
+            self.use_limits_action.triggered.connect(self.apply_ranges_from_limits)
             self.apply_step_hint_button.clicked.connect(self.apply_ranges_from_step_hint)
             self.table.itemChanged.connect(self._update_status)
 
@@ -139,16 +133,19 @@ if QtWidgets is not None:
 
                 for col, value in (
                     (1, knob.name),
-                    (2, group_label),
-                    (3, current_text),
-                    (4, low_text),
-                    (5, high_text),
-                    (6, f"{float(knob.step_hint):.6g}"),
-                    (7, limits),
+                    (2, current_text),
+                    (3, low_text),
+                    (4, high_text),
                 ):
                     item = QtWidgets.QTableWidgetItem(str(value))
-                    if col in {1, 2, 3, 6, 7}:
+                    if col in {1, 2}:
                         item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                    if col == 1:
+                        item.setToolTip(
+                            f"Group: {group_label}\n"
+                            f"Step hint: {float(knob.step_hint):.6g}\n"
+                            f"Limits: {limits}"
+                        )
                     self.table.setItem(row, col, item)
             del blocker
             self._update_status()
@@ -157,9 +154,9 @@ if QtWidgets is not None:
             state = {}
             for row, knob_id in enumerate(self._knob_row_ids):
                 enabled_item = self.table.item(row, 0)
-                current_item = self.table.item(row, 3)
-                low_item = self.table.item(row, 4)
-                high_item = self.table.item(row, 5)
+                current_item = self.table.item(row, 2)
+                low_item = self.table.item(row, 3)
+                high_item = self.table.item(row, 4)
                 state[knob_id] = {
                     "enabled": enabled_item.checkState() == QtCore.Qt.Checked if enabled_item else True,
                     "current_text": current_item.text().strip() if current_item else "",
@@ -190,7 +187,7 @@ if QtWidgets is not None:
                         connected += 1
                     except (TypeError, ValueError):
                         value_text = "--"
-                self.table.item(row, 3).setText(value_text)
+                self.table.item(row, 2).setText(value_text)
             del blocker
             self.status_label.setText(
                 f"Fetched current values for {connected}/{len(self._knobs)} knob(s)."
@@ -202,8 +199,8 @@ if QtWidgets is not None:
                 enabled_item = self.table.item(row, 0)
                 if enabled_item is not None and enabled_item.checkState() != QtCore.Qt.Checked:
                     continue
-                self.table.item(row, 4).setText(f"{float(knob.limits.low):.6g}")
-                self.table.item(row, 5).setText(f"{float(knob.limits.high):.6g}")
+                self.table.item(row, 3).setText(f"{float(knob.limits.low):.6g}")
+                self.table.item(row, 4).setText(f"{float(knob.limits.high):.6g}")
             del blocker
             self.status_label.setText("Applied configured knob limits to enabled rows.")
 
@@ -216,7 +213,7 @@ if QtWidgets is not None:
                 enabled_item = self.table.item(row, 0)
                 if enabled_item is not None and enabled_item.checkState() != QtCore.Qt.Checked:
                     continue
-                current_text = self.table.item(row, 3).text().strip()
+                current_text = self.table.item(row, 2).text().strip()
                 try:
                     center = float(current_text)
                 except (TypeError, ValueError):
@@ -225,8 +222,8 @@ if QtWidgets is not None:
                 delta = abs(float(knob.step_hint)) * max(factor, 0.0)
                 low = max(float(knob.limits.low), center - delta)
                 high = min(float(knob.limits.high), center + delta)
-                self.table.item(row, 4).setText(f"{low:.6g}")
-                self.table.item(row, 5).setText(f"{high:.6g}")
+                self.table.item(row, 3).setText(f"{low:.6g}")
+                self.table.item(row, 4).setText(f"{high:.6g}")
                 applied += 1
             del blocker
             self.status_label.setText(
@@ -238,7 +235,7 @@ if QtWidgets is not None:
             state = self.selected_state()
             enabled = sum(1 for row in state.values() if row["enabled"])
             self.status_label.setText(
-                f"{enabled}/{len(self._knobs)} knob(s) enabled for random sampling."
+                f"{enabled}/{len(self._knobs)} control PV(s) enabled for Multi-Knob sampling."
             )
 
 else:

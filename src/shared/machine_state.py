@@ -18,6 +18,10 @@ SNAPSHOT_SCHEMA_VERSION = "1"
 CAPTURE_GROUP_SETTINGS = "settings"
 CAPTURE_GROUP_READBACKS = "readbacks"
 CAPTURE_GROUP_OBSERVATIONS = "observations"
+CAPTURE_GROUP_MAGNETS = "magnets"
+CAPTURE_GROUP_HIGH_VOLTAGE = "high_voltage"
+CAPTURE_GROUP_LLRF = "llrf"
+CAPTURE_GROUP_TIMING = "timing"
 DEFAULT_CAPTURE_GROUPS = frozenset(
     {CAPTURE_GROUP_SETTINGS, CAPTURE_GROUP_READBACKS}
 )
@@ -26,6 +30,10 @@ ALL_CAPTURE_GROUPS = frozenset(
         CAPTURE_GROUP_SETTINGS,
         CAPTURE_GROUP_READBACKS,
         CAPTURE_GROUP_OBSERVATIONS,
+        CAPTURE_GROUP_MAGNETS,
+        CAPTURE_GROUP_HIGH_VOLTAGE,
+        CAPTURE_GROUP_LLRF,
+        CAPTURE_GROUP_TIMING,
     }
 )
 
@@ -194,6 +202,24 @@ def capture_group_for(state_class: StateClass) -> str:
     return CAPTURE_GROUP_READBACKS
 
 
+def subsystem_capture_group(element_kind: str, logical_channel: str) -> str | None:
+    """Return the first-edition restore/capture scope for a channel."""
+    channel = str(logical_channel).casefold()
+    if channel.endswith("_enable"):
+        return None
+    if element_kind in {"quad", "corr", "bend", "solenoid"}:
+        return CAPTURE_GROUP_MAGNETS
+    if channel.startswith("voltage_"):
+        return CAPTURE_GROUP_HIGH_VOLTAGE
+    if channel in {"phase_set", "phase_readback", "amplitude_set", "amplitude_readback"}:
+        return CAPTURE_GROUP_LLRF
+    if channel.endswith("_delay_set") or channel.endswith("_width_set"):
+        return CAPTURE_GROUP_TIMING
+    if channel.endswith("_delay_readback") or channel.endswith("_width_readback"):
+        return CAPTURE_GROUP_TIMING
+    return None
+
+
 def build_profile_signature(profile: MachineProfile, backend: str) -> str:
     endpoints = collect_pv_endpoints(profile, (backend,))
     records = []
@@ -233,8 +259,40 @@ def build_capture_plan(
     for endpoint in collect_pv_endpoints(profile, (backend,)):
         element = profile.get_element(endpoint.element_id)
         state_class = classify_channel(element.kind, endpoint.logical_channel)
-        capture_group = capture_group_for(state_class)
-        if capture_group not in selected_groups:
+        capture_group = subsystem_capture_group(element.kind, endpoint.logical_channel)
+        if capture_group is None:
+            capture_group = capture_group_for(state_class)
+        if state_class == StateClass.SETTING and endpoint.logical_channel.casefold().endswith("_enable"):
+            continue
+        subsystem_groups = {
+            CAPTURE_GROUP_MAGNETS,
+            CAPTURE_GROUP_HIGH_VOLTAGE,
+            CAPTURE_GROUP_LLRF,
+            CAPTURE_GROUP_TIMING,
+        }
+        if capture_group in subsystem_groups and state_class not in {
+            StateClass.SETTING,
+            StateClass.READBACK,
+        }:
+            continue
+        if selected_groups & {
+            CAPTURE_GROUP_MAGNETS,
+            CAPTURE_GROUP_HIGH_VOLTAGE,
+            CAPTURE_GROUP_LLRF,
+            CAPTURE_GROUP_TIMING,
+        } and capture_group in {
+            CAPTURE_GROUP_MAGNETS,
+            CAPTURE_GROUP_HIGH_VOLTAGE,
+            CAPTURE_GROUP_LLRF,
+            CAPTURE_GROUP_TIMING,
+        }:
+            pass
+        legacy_match = (
+            (state_class == StateClass.SETTING and CAPTURE_GROUP_SETTINGS in selected_groups)
+            or (state_class == StateClass.READBACK and CAPTURE_GROUP_READBACKS in selected_groups)
+            or (state_class == StateClass.OBSERVATION and CAPTURE_GROUP_OBSERVATIONS in selected_groups)
+        )
+        if capture_group not in selected_groups and not legacy_match:
             continue
         points.append(
             CapturePoint(

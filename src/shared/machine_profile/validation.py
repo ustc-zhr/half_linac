@@ -629,7 +629,8 @@ def _validate_real_commissioning_status(
 MODEL_VALIDATED_APP_NAMES = frozenset(
     {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
 )
-INTRINSIC_READ_ONLY_APP_NAMES = frozenset({"machine_snapshot"})
+COMMISSIONING_VALIDATION_EXEMPT_APP_NAMES = frozenset({"machine_snapshot"})
+INTRINSIC_READ_ONLY_APP_NAMES = COMMISSIONING_VALIDATION_EXEMPT_APP_NAMES
 
 
 def describe_app_model_support(machine_id: str | None, app_name: str) -> tuple[bool, str | None]:

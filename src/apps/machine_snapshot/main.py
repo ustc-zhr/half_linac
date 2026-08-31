@@ -52,11 +52,17 @@ from half_linac.src.apps.machine_snapshot.storage import (
     export_snapshot_json,
     list_snapshot_history,
     save_capture_snapshot,
+    save_restore_result,
 )
+from half_linac.src.apps.machine_snapshot.restore import build_restore_candidates, RestoreWorker
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import RuntimeContextWidget, load_app_context
 from half_linac.src.shared.machine_profile.app_runtime import make_runtime_run_id
 from half_linac.src.shared.machine_state import (
+    CAPTURE_GROUP_HIGH_VOLTAGE,
+    CAPTURE_GROUP_LLRF,
+    CAPTURE_GROUP_MAGNETS,
+    CAPTURE_GROUP_TIMING,
     CAPTURE_GROUP_OBSERVATIONS,
     CAPTURE_GROUP_READBACKS,
     CAPTURE_GROUP_SETTINGS,
@@ -167,17 +173,16 @@ class CaptureDialog(QDialog):
         form.addRow("Operator note", self.note_edit)
         layout.addLayout(form)
 
-        self.settings_check = QCheckBox("Machine settings", self)
-        self.settings_check.setChecked(True)
-        self.readbacks_check = QCheckBox("Device readbacks / status", self)
-        self.readbacks_check.setChecked(True)
+        self.magnets_check = QCheckBox("Magnets", self)
+        self.high_voltage_check = QCheckBox("High voltage", self)
+        self.llrf_check = QCheckBox("LLRF", self)
+        self.timing_check = QCheckBox("Timing", self)
+        # Compatibility aliases for callers of the original capture dialog.
+        self.settings_check = self.magnets_check
+        self.readbacks_check = self.high_voltage_check
         self.observations_check = QCheckBox("Beam observations", self)
-        self.observation_note = QLabel("Best effort · values are not guaranteed to come from the same shot", self)
-        self.observation_note.setWordWrap(True)
-        layout.addWidget(self.settings_check)
-        layout.addWidget(self.readbacks_check)
-        layout.addWidget(self.observations_check)
-        layout.addWidget(self.observation_note)
+        for checkbox in (self.magnets_check, self.high_voltage_check, self.llrf_check, self.timing_check):
+            checkbox.setChecked(True); layout.addWidget(checkbox)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
         buttons.accepted.connect(self._accept_if_valid)
         buttons.rejected.connect(self.reject)
@@ -191,18 +196,36 @@ class CaptureDialog(QDialog):
 
     def selected_groups(self) -> tuple[str, ...]:
         groups = []
-        if self.settings_check.isChecked():
-            groups.append(CAPTURE_GROUP_SETTINGS)
-        if self.readbacks_check.isChecked():
-            groups.append(CAPTURE_GROUP_READBACKS)
-        if self.observations_check.isChecked():
-            groups.append(CAPTURE_GROUP_OBSERVATIONS)
+        for checkbox, group in ((self.magnets_check, CAPTURE_GROUP_MAGNETS), (self.high_voltage_check, CAPTURE_GROUP_HIGH_VOLTAGE), (self.llrf_check, CAPTURE_GROUP_LLRF), (self.timing_check, CAPTURE_GROUP_TIMING)):
+            if checkbox.isChecked(): groups.append(group)
         return tuple(groups)
 
     def snapshot_name(self) -> str:
         return self.name_edit.text().strip() or datetime.now().astimezone().strftime(
             "Snapshot %Y-%m-%d %H:%M:%S"
         )
+
+
+class RestoreDialog(QDialog):
+    def __init__(self, snapshot, context, parent=None):
+        super().__init__(parent); self.snapshot = snapshot; self.context = context
+        self.setWindowTitle(f"Restore {snapshot.name}"); self.resize(900, 520)
+        layout = QVBoxLayout(self); self.table = QTableWidget(0, 7, self)
+        self.table.setHorizontalHeaderLabels(("Select", "Subsystem", "Device", "Parameter", "Saved", "Current", "PV")); layout.addWidget(self.table)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self); buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject); layout.addWidget(buttons)
+        try:
+            from epics import caget
+        except Exception:
+            caget = lambda _pv: None
+        self.candidates = list(build_restore_candidates(snapshot, context.profile, context.control_backend.name, caget)); self.table.setRowCount(len(self.candidates))
+        for row, candidate in enumerate(self.candidates):
+            check = QTableWidgetItem(); check.setCheckState(Qt.Checked if candidate.selected else Qt.Unchecked); self.table.setItem(row, 0, check)
+            values = ((candidate.entry.element_kind.title()), candidate.entry.display_name, candidate.entry.logical_channel, _format_value(candidate.entry), "—" if candidate.current_value is None else f"{candidate.current_value:.9g}", candidate.pv_name or "—")
+            for col, value in enumerate(values, 1): self.table.setItem(row, col, QTableWidgetItem(str(value)))
+
+    def selected_candidates(self):
+        for row, candidate in enumerate(self.candidates): candidate.selected = self.table.item(row, 0).checkState() == Qt.Checked
+        return tuple(candidate for candidate in self.candidates if candidate.selected)
 
 
 class CaptureWorker(QThread):
@@ -319,6 +342,8 @@ class MachineSnapshotWindow(QMainWindow):
         self.stop_button.setObjectName("stopButton")
         self.stop_button.setEnabled(False)
         self.open_button = QPushButton("Open External", toolbar)
+        self.restore_button = QPushButton("Restore…", toolbar)
+        self.restore_button.setEnabled(False)
         self.export_json_button = QPushButton("Export Snapshot JSON", toolbar)
         self.export_csv_button = QPushButton("Export Comparison CSV", toolbar)
         self.export_json_button.setEnabled(False)
@@ -326,6 +351,7 @@ class MachineSnapshotWindow(QMainWindow):
         toolbar_layout.addWidget(self.capture_button)
         toolbar_layout.addWidget(self.stop_button)
         toolbar_layout.addWidget(self.open_button)
+        toolbar_layout.addWidget(self.restore_button)
         toolbar_layout.addWidget(self.export_json_button)
         toolbar_layout.addWidget(self.export_csv_button)
         toolbar_layout.addStretch(1)
@@ -422,6 +448,7 @@ class MachineSnapshotWindow(QMainWindow):
         self.capture_button.clicked.connect(self._start_capture)
         self.stop_button.clicked.connect(self._stop_capture)
         self.open_button.clicked.connect(self._open_external)
+        self.restore_button.clicked.connect(self._restore_selected)
         self.export_json_button.clicked.connect(self._export_json)
         self.export_csv_button.clicked.connect(self._export_csv)
         self.use_a_button.clicked.connect(lambda: self._use_history("a"))
@@ -593,6 +620,29 @@ class MachineSnapshotWindow(QMainWindow):
         self.export_csv_button.setEnabled(
             self.snapshot_a is not None and self.snapshot_b is not None
         )
+        self.restore_button.setEnabled(snapshot is not None)
+
+    def _restore_selected(self):
+        snapshot = self.snapshot_b or self.snapshot_a
+        if snapshot is None:
+            QMessageBox.information(self, "Machine Snapshot", "Select a history item first.")
+            return
+        dialog = RestoreDialog(snapshot, self.context, self)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        candidates = dialog.selected_candidates()
+        if not candidates:
+            return
+        prompt = f"Restore {len(candidates)} setpoints on {self.context.profile.machine.display_name} ({self.context.control_backend.name.upper()})?"
+        if QMessageBox.question(self, "Confirm restore", prompt, QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        self.restore_worker = RestoreWorker(self.context, candidates, self)
+        self.restore_worker.finished_result.connect(lambda result: self._restore_finished(result, snapshot))
+        self.restore_worker.start()
+
+    def _restore_finished(self, result, snapshot):
+        save_restore_result(self.app_dir, self.context, result, snapshot.snapshot_id)
+        self.statusBar().showMessage(f"Restore complete: {result.success_count} succeeded, {result.failed_count} failed, {result.skipped_count} skipped", 10000)
 
     def _update_banner(self):
         messages = []

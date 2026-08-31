@@ -50,7 +50,9 @@ def test_single_knob_sensitivity_groups_repeated_knob_positions_before_fit():
     assert row.knob_values.tolist() == pytest.approx([0.0, 1.0, 2.01])
     assert row.response_values.tolist() == pytest.approx([1.1, 3.2, 5.0])
     assert row.repeat_counts.tolist() == [2, 2, 1]
-    assert row.response_std_values.tolist() == pytest.approx([0.141421, 0.282843, 0.0])
+    assert row.response_std_values.tolist() == pytest.approx(
+        [0.02 ** 0.5, 0.08 ** 0.5, 0.0]
+    )
 
 
 def test_single_knob_sensitivity_uses_target_values_for_target_axis_groups():

@@ -5,8 +5,9 @@ import math
 from .theme import style_plot_widget
 
 try:
-    from PyQt5 import QtWidgets
+    from PyQt5 import QtCore, QtWidgets
 except ImportError:  # pragma: no cover - optional runtime dependency
+    QtCore = None
     QtWidgets = None
 
 try:
@@ -18,11 +19,27 @@ except ImportError:  # pragma: no cover - optional runtime dependency
 if QtWidgets is not None:
 
     class ResponsePlot(QtWidgets.QWidget):
-        def __init__(self, parent=None) -> None:
+        def __init__(self, parent=None, *, show_channel_selector: bool = False) -> None:
             super().__init__(parent)
             layout = QtWidgets.QVBoxLayout(self)
             self._curves = {}
+            self._error_items = {}
             self._grouped_data = {}
+            self._show_channel_selector = bool(show_channel_selector)
+
+            self.channel_controls = QtWidgets.QWidget()
+            controls = QtWidgets.QHBoxLayout(self.channel_controls)
+            controls.setContentsMargins(0, 0, 0, 0)
+            controls.setSpacing(8)
+            channel_label = QtWidgets.QLabel("Response PV")
+            channel_label.setProperty("role", "field")
+            self.channel_combo = QtWidgets.QComboBox()
+            self.channel_combo.setMinimumWidth(240)
+            controls.addWidget(channel_label)
+            controls.addWidget(self.channel_combo)
+            controls.addStretch(1)
+            self.channel_controls.setVisible(self._show_channel_selector)
+            layout.addWidget(self.channel_controls)
             if pg is not None:
                 self.plot_widget = pg.PlotWidget(title="Response")
                 self.plot_widget.addLegend()
@@ -33,10 +50,21 @@ if QtWidgets is not None:
             else:
                 self.plot_widget = None
                 layout.addWidget(QtWidgets.QLabel("pyqtgraph is not installed"))
+            self.channel_combo.currentIndexChanged.connect(self._update_channel_visibility)
 
         def reset_channels(self, knob_name: str, knob_unit: str, objects) -> None:
+            objects = list(objects)
             self._curves = {}
+            self._error_items = {}
             self._grouped_data = {}
+            selected_id = self.channel_combo.currentData()
+            blocker = QtCore.QSignalBlocker(self.channel_combo)
+            self.channel_combo.clear()
+            for obj in objects:
+                self.channel_combo.addItem(obj.name, obj.id)
+            selected_index = self.channel_combo.findData(selected_id)
+            self.channel_combo.setCurrentIndex(selected_index if selected_index >= 0 else 0)
+            del blocker
             if self.plot_widget is None:
                 return
 
@@ -58,9 +86,19 @@ if QtWidgets is not None:
                     symbolSize=6,
                     name=obj.name,
                 )
+                error_item = pg.ErrorBarItem(
+                    x=[],
+                    y=[],
+                    height=[],
+                    beam=0.0,
+                    pen=pg.mkPen(color=color, width=1),
+                )
+                self.plot_widget.addItem(error_item)
                 self._curves[obj.id] = curve
+                self._error_items[obj.id] = error_item
                 self._grouped_data[obj.id] = {}
             style_plot_widget(self.plot_widget)
+            self._update_channel_visibility()
 
         def append_step(self, knob_value: float, samples, group_key: float | None = None) -> None:
             if self.plot_widget is None:
@@ -74,24 +112,47 @@ if QtWidgets is not None:
                 clean = [value for value in values if not math.isnan(value)]
                 if not clean or pv_id not in self._curves:
                     continue
-                mean_value = sum(clean) / len(clean)
                 key = float(knob_value if group_key is None else group_key)
                 groups = self._grouped_data.setdefault(pv_id, {})
-                entry = groups.setdefault(key, {"x": [], "y": []})
+                entry = groups.setdefault(key, {"x": [], "values": []})
                 entry["x"].append(float(knob_value))
-                entry["y"].append(float(mean_value))
+                entry["values"].extend(float(value) for value in clean)
                 plotted_rows = sorted(
                     (
                         sum(entry["x"]) / len(entry["x"]),
-                        sum(entry["y"]) / len(entry["y"]),
+                        sum(entry["values"]) / len(entry["values"]),
+                        self._sample_std(entry["values"]),
                     )
                     for entry in groups.values()
-                    if entry["x"] and entry["y"]
+                    if entry["x"] and entry["values"]
                 )
                 self._curves[pv_id].setData(
                     [row[0] for row in plotted_rows],
                     [row[1] for row in plotted_rows],
                 )
+                self._error_items[pv_id].setData(
+                    x=[row[0] for row in plotted_rows],
+                    y=[row[1] for row in plotted_rows],
+                    height=[2.0 * row[2] for row in plotted_rows],
+                    beam=0.0,
+                )
+
+        def _update_channel_visibility(self) -> None:
+            selected_id = self.channel_combo.currentData()
+            for pv_id, curve in self._curves.items():
+                visible = not self._show_channel_selector or pv_id == selected_id
+                curve.setVisible(visible)
+                error_item = self._error_items.get(pv_id)
+                if error_item is not None:
+                    error_item.setVisible(visible)
+
+        @staticmethod
+        def _sample_std(values) -> float:
+            if len(values) < 2:
+                return 0.0
+            mean_value = sum(values) / len(values)
+            variance = sum((value - mean_value) ** 2 for value in values) / (len(values) - 1)
+            return math.sqrt(max(variance, 0.0))
 
 else:
 

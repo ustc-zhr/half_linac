@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import curve_fit
+from half_linac.src.shared.beam_diagnostics.roi import ImageROI, crop_image
 
 
 class SpectrumProfileError(ValueError):
@@ -28,13 +29,22 @@ class ProfileFit:
     fallback_error: str | None = None
 
 
-def project_image_profiles(image, pixel_width_mm):
+def project_image_profiles(image, pixel_width_mm, roi: ImageROI | None = None):
     image = np.asarray(image, dtype=float)
     if image.ndim != 2 or min(image.shape) < 3 or not np.all(np.isfinite(image)):
         raise SpectrumProfileError("ESA image must be a finite two-dimensional array of at least 3x3.")
     pixel_width_mm = float(pixel_width_mm)
     if not np.isfinite(pixel_width_mm) or pixel_width_mm <= 0:
         raise SpectrumProfileError("ESA pixel width must be positive and finite.")
+    if roi is not None:
+        original_ny, original_nx = image.shape
+        image, selected, _ = crop_image(image, roi)
+        origin_x, origin_y = selected.x, selected.y
+        # ROI axes remain in the full-frame physical coordinate system.
+        ny, nx = image.shape
+        x_full = ((np.arange(nx) + origin_x) - original_nx / 2) * pixel_width_mm
+        y_full = ((np.arange(ny) + origin_y) - original_ny / 2) * pixel_width_mm
+        return ProjectedProfiles(x_full, y_full, image, image.sum(axis=0), image.sum(axis=1))
     ny, nx = image.shape
     width_mm = nx * pixel_width_mm
     height_mm = ny * pixel_width_mm

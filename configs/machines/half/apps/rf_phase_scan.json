@@ -11,15 +11,16 @@
       "mode": "relative"
     },
     "energy_tracking": {
-      "tracking_half_window_mev": 25,
+      "tracking_half_window_mev": 50,
       "fallback_half_window_mev": 100,
+      "tracking_reacquire_points": 9,
       "max_consecutive_failures": 3
     },
     "point_measurement": {
       "samples_per_point": 5,
       "settle_time_s": 1,
       "sample_interval_s": 0.2,
-      "min_valid_samples": 1
+      "min_valid_samples": 2
     }
   },
   "energy_element": "LINAC_ENERGY",
@@ -28,7 +29,12 @@
     "flag_element": "ENY",
     "flag_image_channel": "image",
     "x_reference_mm": 0,
-    "design_eta_m": 0.7484210850804714
+    "design_eta_m": 0.7484210850804714,
+    "roi": {
+      "real": {
+        "ENY": {"x": 0, "y": 0, "width": 1440, "height": 1080}
+      }
+    }
   },
   "energy_match_defaults": {
     "profile_fit_method": "Gauss fit",
@@ -38,16 +44,22 @@
       "verification_frame_samples": 5,
       "verification_min_valid_frames": 3,
       "frame_interval_s": 0.2,
+      "center_step_mev": 10,
+      "max_total_offset_mev": 100,
       "center_tolerance_mm": 0.2,
-      "max_iterations": 6,
-      "max_correction_step_mev": 25
+      "max_iterations": 10,
+      "max_correction_step_mev": 20
     }
   },
   "energy_match": {
-    "search": {
+    "initial_objective": "brightness_then_profile_lock",
+    "tracking_objective": "profile_lock",
+    "fallback_objective": "brightness_then_profile_lock",
+    "range": {
       "low": 0,
       "high": 2450,
-      "reacquire_steps": 16,
+      "coarse_points": 16,
+      "fine_points": 31,
       "settle_time_s": 1,
       "unit": "MeV",
       "mode": "absolute",

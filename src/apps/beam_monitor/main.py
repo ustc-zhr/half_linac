@@ -50,6 +50,9 @@ from half_linac.src.shared.beam_diagnostics import (
     analyze_beam_image,
     load_background,
     save_background,
+    ROIControl,
+    configured_roi,
+    roi_extent,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
@@ -58,6 +61,7 @@ from half_linac.src.shared.machine_profile import (
     get_workflow,
     list_elements,
     load_app_context,
+    resolve_app_runtime_paths,
     require_workflow_write_allowed,
     resolve_channel,
     resolve_element_image_geometry,
@@ -68,6 +72,7 @@ from half_linac.src.shared.window_activation import install_qt_window_raise_hand
 
 
 HEADER_ACTION_HEIGHT = 32
+APP_DIR = Path(__file__).resolve().parent
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -485,6 +490,9 @@ class myWindow(QWidget, Ui_Form):
         self.background_dialog = None
         self.background_preview = None
         self.display_settings_dialog = None
+        self.roi_dialog = None
+        self.roi_control = None
+        self.roi_status_label = None
 
         self.h = None
         self.colorbar = None
@@ -773,6 +781,14 @@ class myWindow(QWidget, Ui_Form):
         self.background_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._refresh_widget_style(self.background_button)
 
+        self.roi_status_label = QLabel("ROI: Off", self.profile_card)
+        self.roi_status_label.setProperty("role", "field")
+        self.roi_button = QPushButton("ROI…", self.profile_card)
+        self.roi_button.setProperty("compact", True)
+        self.roi_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._refresh_widget_style(self.roi_button)
+        self.roi_button.hide()
+
         analysis_grid = QGridLayout()
         analysis_grid.setHorizontalSpacing(8)
         analysis_grid.setVerticalSpacing(6)
@@ -780,6 +796,11 @@ class myWindow(QWidget, Ui_Form):
         analysis_grid.addWidget(self.profile_method_combo, 0, 1)
         analysis_grid.setColumnStretch(1, 1)
         layout.addLayout(analysis_grid)
+        roi_row = QHBoxLayout()
+        roi_row.setContentsMargins(0, 0, 0, 0)
+        roi_row.addWidget(self.roi_status_label, 1)
+        roi_row.addWidget(self.roi_button)
+        layout.addLayout(roi_row)
 
         self.label_6.hide()
         self.label_7.hide()
@@ -909,6 +930,7 @@ class myWindow(QWidget, Ui_Form):
         self._update_exposure_edit_hint()
         self._read_exposure_time()
         self._load_latest_background(silent=True)
+        self._reconfigure_roi(self.tmppv)
 
     def _pick_default_flag_id(self):
         default_flag = str(self.beam_monitor_config.get("default_flag", "")).strip()
@@ -956,10 +978,73 @@ class myWindow(QWidget, Ui_Form):
         self._update_exposure_edit_hint()
         self._read_exposure_time()
         self._load_latest_background(silent=True)
+        self._reconfigure_roi(flag_id)
         if self.background_dialog is not None:
             self.background_dialog.setWindowTitle(f"Background Reference — {flag_id}")
         self._draw_placeholder_plot("Beam Profile")
         self._refresh_status()
+
+    def _roi_runtime_path(self, flag_id=None):
+        paths = resolve_app_runtime_paths(APP_DIR, self.app_context)
+        return paths["latest_dir"] / "roi" / f"{flag_id or self.tmppv}.json"
+
+    def _reconfigure_roi(self, flag_id=None):
+        geometry = resolve_element_image_geometry(
+            self.app_context,
+            flag_id or self.tmppv,
+            self.control_backend,
+        )
+        configured = configured_roi(
+            self.beam_monitor_config.get("roi"),
+            self.control_backend,
+            flag_id or self.tmppv,
+        )
+        if self.roi_control is None:
+            self.roi_control = ROIControl(
+                image_shape=(geometry.shape[1], geometry.shape[0]),
+                runtime_path=self._roi_runtime_path(flag_id),
+                configured=configured,
+            )
+            self.roi_control.warningRaised.connect(
+                lambda message: self._set_profile_status(message, "warning")
+            )
+            self.roi_control.roiChanged.connect(self._update_roi_status)
+            self.profile_card.layout().addWidget(self.roi_control)
+        else:
+            self.roi_control.reconfigure(
+                image_shape=(geometry.shape[1], geometry.shape[0]),
+                runtime_path=self._roi_runtime_path(flag_id),
+                configured=configured,
+            )
+        self._update_roi_status()
+
+    def _update_roi_status(self, *_args):
+        if self.roi_status_label is None or self.roi_control is None:
+            return
+        roi = self.roi_control.roi()
+        text = f"ROI: {roi.width} × {roi.height} px" if self.roi_control.use_roi.isChecked() else "ROI: Off"
+        self.roi_status_label.setText(text)
+
+    def _show_roi_dialog(self):
+        if self.roi_control is None:
+            self._reconfigure_roi(self.tmppv)
+        if self.roi_dialog is None:
+            self.roi_dialog = QDialog(self)
+            self.roi_dialog.setWindowTitle("Software ROI")
+            self.roi_dialog.setMinimumWidth(340)
+            layout = QVBoxLayout(self.roi_dialog)
+            note = QLabel("Configure the image region used by the monitor. Changes are ready for the next ROI processing step.", self.roi_dialog)
+            note.setWordWrap(True)
+            note.setProperty("role", "field")
+            layout.addWidget(note)
+            layout.addWidget(self.roi_control)
+            close_button = QPushButton("Close", self.roi_dialog)
+            close_button.setProperty("compact", True)
+            close_button.clicked.connect(self.roi_dialog.hide)
+            layout.addWidget(close_button)
+        self.roi_dialog.show()
+        self.roi_dialog.raise_()
+        self.roi_dialog.activateWindow()
 
     def _handle_profile_method_changed(self, _method):
         self._set_profile_status(self.profile_method_combo.currentText(), "subtle")
@@ -1860,13 +1945,22 @@ class myWindow(QWidget, Ui_Form):
             )
 
         try:
+            active_roi = self.roi_control.active_roi()
+            analysis_extent = (
+                roi_extent(self.extent, active_roi, raw_data.shape)
+                if active_roi is not None
+                else self.extent
+            )
+            analysis_xlim = analysis_extent[:2] if active_roi is not None else self.xlim
+            analysis_ylim = analysis_extent[2:] if active_roi is not None else self.ylim
             data, fit_result = analyze_beam_image(
                 raw_data,
                 extent=self.extent,
                 background=self.background_image if self.subtract_background_enabled else None,
-                xlim=self.xlim,
-                ylim=self.ylim,
+                xlim=analysis_xlim,
+                ylim=analysis_ylim,
                 method=self.profile_method_combo.currentText(),
+                roi=active_roi,
             )
         except BackgroundStoreError as exc:
             self.subtract_background_enabled = False
@@ -1885,12 +1979,14 @@ class myWindow(QWidget, Ui_Form):
         vnorm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
         colormap = self.comboBox_2.currentText()
 
+        display_data = raw_data if active_roi is not None else data
+        display_extent = self.extent if active_roi is not None else analysis_extent
         self.h = self.widget.axes.imshow(
-            data,
+            display_data,
             cmap=colormap,
             norm=vnorm,
             origin="lower",
-            extent=self.extent,
+            extent=display_extent,
             aspect="auto",
         )
         self.colorbar = self.widget.fig.colorbar(self.h)
@@ -1909,11 +2005,12 @@ class myWindow(QWidget, Ui_Form):
         )
         self.widget.axes.set_xlabel("x (mm)")
         self.widget.axes.set_ylabel("y (mm)")
-        self.widget.axes.set_xlim(self.xlim)
-        self.widget.axes.set_ylim(self.ylim)
+        self.widget.axes.set_xlim(self.xlim if active_roi is not None else analysis_xlim)
+        self.widget.axes.set_ylim(self.ylim if active_roi is not None else analysis_ylim)
+        self.roi_control.attach_axes(self.widget.axes, extent=self.extent)
 
-        height = abs(self.ylim[1] - self.ylim[0])
-        width = abs(self.xlim[1] - self.xlim[0])
+        height = abs(analysis_ylim[1] - analysis_ylim[0])
+        width = abs(analysis_xlim[1] - analysis_xlim[0])
 
         if not fit_result.has_signal:
             self._set_profile_status("Low signal", "warning")
@@ -1924,8 +2021,8 @@ class myWindow(QWidget, Ui_Form):
         norm_denx = fit_result.x_projection.normalized_projection
         norm_deny = fit_result.y_projection.normalized_projection
         if norm_denx is not None and norm_deny is not None:
-            denx = norm_denx * height * 0.3 + self.ylim[0] * 0.98
-            deny = norm_deny * width * 0.3 + self.xlim[0] * 0.98
+            denx = norm_denx * height * 0.3 + analysis_ylim[0] * 0.98
+            deny = norm_deny * width * 0.3 + analysis_xlim[0] * 0.98
             self.widget.axes.plot(fit_result.x_axis, denx, "--c")
             self.widget.axes.plot(deny, fit_result.y_axis, "--c")
 
@@ -1933,7 +2030,7 @@ class myWindow(QWidget, Ui_Form):
             if fit_result.x_projection.fitted_projection is not None:
                 fit_denx = (
                     fit_result.x_projection.fitted_projection * height * 0.3
-                    + self.ylim[0] * 0.98
+                    + analysis_ylim[0] * 0.98
                 )
                 self.widget.axes.plot(fit_result.x_axis, fit_denx, "--r")
             self.sigx = round(fit_result.sigx_mm, 3)
@@ -1942,7 +2039,7 @@ class myWindow(QWidget, Ui_Form):
             if fit_result.y_projection.fitted_projection is not None:
                 fit_deny = (
                     fit_result.y_projection.fitted_projection * width * 0.3
-                    + self.xlim[0] * 0.98
+                    + analysis_xlim[0] * 0.98
                 )
                 self.widget.axes.plot(
                     fit_deny,

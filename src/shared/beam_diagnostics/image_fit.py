@@ -168,11 +168,16 @@ def analyze_beam_image(
     xlim: Sequence[float] | None = None,
     ylim: Sequence[float] | None = None,
     method: str = "Gaussian fit",
+    roi=None,
 ) -> tuple[np.ndarray, BeamImageFitResult]:
     """Prepare one camera frame and run the shared beam-profile analysis."""
     image_array = np.asarray(image, dtype=float)
     if background is not None:
         image_array = subtract_background(image_array, background)
+    if roi is not None:
+        from .roi import crop_image, roi_extent
+        image_array, selected, _warnings = crop_image(image_array, roi)
+        extent = roi_extent(extent, selected, np.asarray(image).shape)
     result = fit_beam_image(
         image_array,
         extent=extent,

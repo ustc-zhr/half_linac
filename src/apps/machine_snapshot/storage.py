@@ -17,6 +17,7 @@ from half_linac.src.shared.runtime_state import write_runtime_state
 
 
 SNAPSHOT_FILENAME = "snapshot.json"
+RESTORE_RESULT_FILENAME = "restore_result.json"
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,25 @@ def list_snapshot_history(
 
 def export_snapshot_json(path: Path | str, snapshot: MachineStateSnapshot) -> None:
     save_snapshot(path, snapshot)
+
+
+def save_restore_result(app_dir: Path, context: AppContext, result, source_snapshot_id: str,
+                        before_snapshot_id: str | None = None) -> Path:
+    """Persist a compact audit record alongside the latest runtime metadata."""
+    paths = resolve_app_runtime_paths(app_dir, context)
+    destination = paths["runtime_dir"] / RESTORE_RESULT_FILENAME
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    import json
+    payload = {
+        "source_snapshot_id": source_snapshot_id,
+        "before_snapshot_id": before_snapshot_id,
+        "backend": result.backend,
+        "started_at": result.started_at,
+        "finished_at": result.finished_at,
+        "items": [item.__dict__ for item in result.items],
+    }
+    destination.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return destination
 
 
 def export_comparison_csv(

@@ -813,6 +813,8 @@ def _validate_basic_app_support(
         fallback_window = float(tracking.get("fallback_half_window_mev", 0))
         if tracking_window <= 0 or fallback_window < tracking_window:
             raise MachineProfileError("workflows.rf_phase_scan energy tracking windows are invalid.")
+        if int(tracking.get("tracking_reacquire_points", 0)) < 2:
+            raise MachineProfileError("workflows.rf_phase_scan.scan.energy_tracking.tracking_reacquire_points must be at least 2.")
         if int(tracking.get("max_consecutive_failures", 0)) < 1:
             raise MachineProfileError("workflows.rf_phase_scan.scan.energy_tracking.max_consecutive_failures must be at least 1.")
         sampling = _expect_mapping(scan.get("point_measurement"), "workflows.rf_phase_scan.scan.point_measurement")
@@ -825,22 +827,24 @@ def _validate_basic_app_support(
         if float(sampling.get("sample_interval_s", -1)) < 0:
             raise MachineProfileError("workflows.rf_phase_scan.scan.point_measurement.sample_interval_s must not be negative.")
         energy_match = _expect_mapping(workflow.get("energy_match"), "workflows.rf_phase_scan.energy_match")
-        search = _expect_mapping(energy_match.get("search"), "workflows.rf_phase_scan.energy_match.search")
+        search = _expect_mapping(energy_match.get("range"), "workflows.rf_phase_scan.energy_match.range")
         match_location = "workflows.rf_phase_scan.energy_match"
         defaults_location = "workflows.rf_phase_scan.energy_match_defaults"
         match_defaults = _expect_mapping(workflow.get("energy_match_defaults"), defaults_location)
-        match_low = _expect_finite_number(search.get("low"), f"{match_location}.search.low")
-        match_high = _expect_finite_number(search.get("high"), f"{match_location}.search.high")
+        match_low = _expect_finite_number(search.get("low"), f"{match_location}.range.low")
+        match_high = _expect_finite_number(search.get("high"), f"{match_location}.range.high")
         if match_low >= match_high:
-            raise MachineProfileError(f"{match_location}.search.low must be less than high.")
-        if _expect_int(search.get("reacquire_steps"), f"{match_location}.search.reacquire_steps") < 2:
-            raise MachineProfileError(f"{match_location}.search.reacquire_steps must be at least 2.")
-        if _expect_finite_number(search.get("settle_time_s"), f"{match_location}.search.settle_time_s") < 0:
-            raise MachineProfileError(f"{match_location}.search.settle_time_s must not be negative.")
+            raise MachineProfileError(f"{match_location}.range.low must be less than high.")
+        if _expect_int(search.get("coarse_points"), f"{match_location}.range.coarse_points") < 2:
+            raise MachineProfileError(f"{match_location}.range.coarse_points must be at least 2.")
+        if _expect_int(search.get("fine_points"), f"{match_location}.range.fine_points") < 2:
+            raise MachineProfileError(f"{match_location}.range.fine_points must be at least 2.")
+        if _expect_finite_number(search.get("settle_time_s"), f"{match_location}.range.settle_time_s") < 0:
+            raise MachineProfileError(f"{match_location}.range.settle_time_s must not be negative.")
         if str(search.get("unit", "")).strip().lower() != "mev":
-            raise MachineProfileError(f"{match_location}.search.unit must be 'MeV'.")
+            raise MachineProfileError(f"{match_location}.range.unit must be 'MeV'.")
         if str(search.get("mode", "")).strip().lower() != "absolute":
-            raise MachineProfileError(f"{match_location}.search.mode must be 'absolute'.")
+            raise MachineProfileError(f"{match_location}.range.mode must be 'absolute'.")
         if not isinstance(search.get("restore_initial_on_failure"), bool):
             raise MachineProfileError(f"{match_location}.search.restore_initial_on_failure must be boolean.")
         if str(match_defaults.get("profile_fit_method", "")).strip() not in {"Gauss fit", "Direct"}:
