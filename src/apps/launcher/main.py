@@ -573,6 +573,40 @@ QStatusBar {{
 """.format_map(theme_values)
 
 
+def build_app_scrollbar_theme(palette):
+    return """
+QScrollBar:vertical {{
+    background: {window_bg};
+    border: none;
+    width: 10px;
+    margin: 0px;
+}}
+
+QScrollBar::handle:vertical {{
+    background-color: {button_border};
+    border: 2px solid {window_bg};
+    border-radius: 5px;
+    min-height: 44px;
+}}
+
+QScrollBar::handle:vertical:hover {{
+    background-color: {button_running_border};
+}}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {{
+    background: transparent;
+    border: none;
+    height: 0px;
+}}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {{
+    background: transparent;
+}}
+""".format_map(palette)
+
+
 def build_status_strip_theme(palette):
     theme_values = dict(
         palette,
@@ -1561,6 +1595,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 widget.setStyleSheet(
                     f"background-color: {browser_background}; border: none;"
                 )
+            app_scrollbar = self.app_scroll.verticalScrollBar()
+            app_scrollbar.setStyleSheet(build_app_scrollbar_theme(palette))
+            self._refresh_widget_style(app_scrollbar)
         for button in getattr(self, "managed_buttons", {}).values():
             button.apply_palette(palette)
         self._update_theme_toggle_button()

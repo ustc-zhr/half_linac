@@ -587,7 +587,7 @@ class SpectrumStatusStrip(QWidget):
         layout.setSpacing(0)
         self._layout = layout
 
-    def add_item(self, key, title, value):
+    def add_item(self, key, title, value, *, min_width=120, stretch=0):
         if self._items:
             separator = QFrame(self)
             separator.setObjectName("statusSeparator")
@@ -598,7 +598,11 @@ class SpectrumStatusStrip(QWidget):
         container = QFrame(self)
         container.setObjectName("statusItem")
         container.setProperty("tone", "subtle")
-        container.setMinimumWidth(120)
+        container.setMinimumWidth(min_width)
+        container.setSizePolicy(
+            QSizePolicy.Expanding if stretch else QSizePolicy.Fixed,
+            QSizePolicy.Preferred,
+        )
 
         inner = QVBoxLayout(container)
         inner.setContentsMargins(10, 0, 8, 0)
@@ -609,11 +613,12 @@ class SpectrumStatusStrip(QWidget):
         value_label = QLabel(value, container)
         value_label.setProperty("role", "value")
         value_label.setProperty("tone", "subtle")
-        value_label.setWordWrap(True)
+        value_label.setWordWrap(False)
+        value_label.setMinimumWidth(0)
 
         inner.addWidget(title_label)
         inner.addWidget(value_label)
-        self._layout.addWidget(container)
+        self._layout.addWidget(container, stretch)
         self._items[key] = (container, value_label)
 
     def finish(self):
@@ -1623,9 +1628,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.status_panel.add_item("connection", "CONNECTION", "Waiting")
         self.status_panel.add_item("fit", "FIT", self.comboBox_fitmethod.currentText())
-        self.status_panel.add_item("model", "MODEL", "Waiting")
+        self.status_panel.add_item("model", "MODEL", "Waiting", min_width=180)
         self.status_panel.add_item("tune", "AUTO FIND", "Idle")
-        self.status_panel.add_item("readout", "READOUT", "Waiting")
+        self.status_panel.add_item("readout", "READOUT", "Waiting", min_width=300, stretch=1)
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
