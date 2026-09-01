@@ -3228,7 +3228,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         for i in range(n_samples):
             if i > 0 and sample_interval_s > 0:
                 time.sleep(sample_interval_s)
-            tmp = self.flag_pv_obj.get(timeout=IMAGE_PV_GET_TIMEOUT_S)
+            tmp = self.flag_pv_obj.get(
+                timeout=IMAGE_PV_GET_TIMEOUT_S,
+                use_monitor=False,
+            )
             if tmp is None:
                 self._mark_pv_unavailable(RuntimeError(f"{self.flag_pv} returned no background data"))
                 print("background sampling failed: flag image PV returned no data")
@@ -3492,7 +3495,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         colormap = self.comboBox_colormap.currentText()  
         fit_method = self.comboBox_fitmethod.currentText()  
         # get flag image data from PV
-        tmp = self.flag_pv_obj.get(timeout=IMAGE_PV_GET_TIMEOUT_S)
+        tmp = self.flag_pv_obj.get(
+            timeout=IMAGE_PV_GET_TIMEOUT_S,
+            use_monitor=False,
+        )
         if tmp is None:
             self.sigx = None
             self.sigy = None
@@ -4045,7 +4051,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._refresh_status()
 
         try:
-            preview = self.flag_pv_obj.get(timeout=IMAGE_PV_GET_TIMEOUT_S)
+            preview = self.flag_pv_obj.get(
+                timeout=IMAGE_PV_GET_TIMEOUT_S,
+                use_monitor=False,
+            )
             if preview is None:
                 self._mark_pv_unavailable(RuntimeError(f"{self.flag_pv} returned no image data"))
                 print("ESA auto tune requires a live flag image PV.")

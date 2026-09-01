@@ -1359,7 +1359,10 @@ class myWindow(QWidget, Ui_Form):
             for index in range(sample_count):
                 if index > 0 and interval_s > 0:
                     time.sleep(interval_s)
-                raw = self._image_pv.get(timeout=IMAGE_PV_GET_TIMEOUT_S)
+                raw = self._image_pv.get(
+                    timeout=IMAGE_PV_GET_TIMEOUT_S,
+                    use_monitor=False,
+                )
                 if raw is None:
                     raise BackgroundStoreError(
                         f"{self.pv} returned no image data during background sampling."
@@ -1879,7 +1882,10 @@ class myWindow(QWidget, Ui_Form):
         self._read_size_pv()
 
         try:
-            tmp = self._image_pv.get(timeout=IMAGE_PV_GET_TIMEOUT_S)
+            tmp = self._image_pv.get(
+                timeout=IMAGE_PV_GET_TIMEOUT_S,
+                use_monitor=False,
+            )
             self._mark_pv_available()
         except Exception as exc:
             self._mark_pv_unavailable(exc)
