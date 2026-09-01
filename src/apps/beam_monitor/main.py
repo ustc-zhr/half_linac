@@ -1,6 +1,7 @@
 import sys
 import time
 import math
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -479,6 +480,10 @@ class myWindow(QWidget, Ui_Form):
         self._pixel_geometry_flag_id = None
         self._image_pv = None
         self._image_pv_name = None
+        self._image_cache_lock = threading.Lock()
+        self._image_cache_value = None
+        self._image_cache_time = None
+        self._image_cache_pv_name = None
         self._size_pvs = (None, None)
         self._size_pv_names = (None, None)
         self.size_pv_sigx = None
@@ -1359,10 +1364,7 @@ class myWindow(QWidget, Ui_Form):
             for index in range(sample_count):
                 if index > 0 and interval_s > 0:
                     time.sleep(interval_s)
-                raw = self._image_pv.get(
-                    timeout=IMAGE_PV_GET_TIMEOUT_S,
-                    use_monitor=False,
-                )
+                raw = self._latest_image_frame()
                 if raw is None:
                     raise BackgroundStoreError(
                         f"{self.pv} returned no image data during background sampling."
@@ -1679,6 +1681,7 @@ class myWindow(QWidget, Ui_Form):
         self._reset_view_limits()
         self._image_pv = None
         self._image_pv_name = None
+        self._clear_image_cache()
 
     def _reset_view_limits(self):
         self.xlim = (-0.5 * self.width, 0.5 * self.width)
@@ -1739,6 +1742,43 @@ class myWindow(QWidget, Ui_Form):
             self.widget.canvas.draw()
         self._refresh_status()
 
+    def _clear_image_cache(self):
+        with self._image_cache_lock:
+            self._image_cache_value = None
+            self._image_cache_time = None
+            self._image_cache_pv_name = None
+
+    def _cache_image_frame(self, value=None, pvname=None, **_kwargs):
+        if value is None:
+            return
+        if pvname is not None and pvname != self._image_pv_name:
+            return
+        try:
+            frame = np.asarray(value).copy()
+        except (TypeError, ValueError):
+            return
+        with self._image_cache_lock:
+            self._image_cache_value = frame
+            self._image_cache_time = time.monotonic()
+            self._image_cache_pv_name = pvname or self._image_pv_name
+
+    def _latest_image_frame(self):
+        with self._image_cache_lock:
+            cached = self._image_cache_value
+            cached_pv = self._image_cache_pv_name
+        if cached is not None and cached_pv == self._image_pv_name:
+            return cached.copy()
+
+        if self._image_pv is None:
+            return None
+        frame = self._image_pv.get(
+            timeout=IMAGE_PV_GET_TIMEOUT_S,
+            use_monitor=False,
+        )
+        if frame is not None:
+            self._cache_image_frame(value=frame, pvname=self._image_pv_name)
+        return frame
+
     def _configure_active_channels(self):
         mode = self._current_mode()
         self.pv = resolve_channel(self.app_context, self.tmppv, "image")
@@ -1757,8 +1797,10 @@ class myWindow(QWidget, Ui_Form):
             print("Error, usage: python main.py [real|vm]")
             return False
         if self.pv != self._image_pv_name:
-            self._image_pv = PV(self.pv)
+            self._clear_image_cache()
+            self._image_pv = PV(self.pv, auto_monitor=True)
             self._image_pv_name = self.pv
+            self._image_pv.add_callback(self._cache_image_frame)
         size_names = (
             self._resolve_optional_channel(self.tmppv, "sigx"),
             self._resolve_optional_channel(self.tmppv, "sigy"),
@@ -1882,10 +1924,7 @@ class myWindow(QWidget, Ui_Form):
         self._read_size_pv()
 
         try:
-            tmp = self._image_pv.get(
-                timeout=IMAGE_PV_GET_TIMEOUT_S,
-                use_monitor=False,
-            )
+            tmp = self._latest_image_frame()
             self._mark_pv_available()
         except Exception as exc:
             self._mark_pv_unavailable(exc)

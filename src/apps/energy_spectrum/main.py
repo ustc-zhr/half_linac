@@ -1,6 +1,7 @@
 
 import sys
 import time
+import threading
 import numpy as np
 import os
 import math
@@ -790,6 +791,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.x_reference_mm = self._load_x_reference_mm()
         self._pv_available = False
         self._pv_error = None
+        self._flag_image_cache_lock = threading.Lock()
+        self._flag_image_cache_value = None
+        self._flag_image_cache_time = None
+        self._flag_image_cache_pv_name = None
         self._model_error = None
         self._model_text = "Waiting"
         self._model_tone = "subtle"
@@ -2942,6 +2947,43 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._pv_error = error_text
             print("PV connection unavailable. Energy Spectrum is in offline shell mode.")
 
+    def _clear_flag_image_cache(self):
+        with self._flag_image_cache_lock:
+            self._flag_image_cache_value = None
+            self._flag_image_cache_time = None
+            self._flag_image_cache_pv_name = None
+
+    def _cache_flag_image_frame(self, value=None, pvname=None, **_kwargs):
+        if value is None:
+            return
+        if pvname is not None and pvname != self.flag_pv:
+            return
+        try:
+            frame = np.asarray(value).copy()
+        except (TypeError, ValueError):
+            return
+        with self._flag_image_cache_lock:
+            self._flag_image_cache_value = frame
+            self._flag_image_cache_time = time.monotonic()
+            self._flag_image_cache_pv_name = pvname or self.flag_pv
+
+    def _latest_flag_image_frame(self):
+        with self._flag_image_cache_lock:
+            cached = self._flag_image_cache_value
+            cached_pv = self._flag_image_cache_pv_name
+        if cached is not None and cached_pv == self.flag_pv:
+            return cached.copy()
+
+        if self.flag_pv_obj is None:
+            return None
+        frame = self.flag_pv_obj.get(
+            timeout=IMAGE_PV_GET_TIMEOUT_S,
+            use_monitor=False,
+        )
+        if frame is not None:
+            self._cache_flag_image_frame(value=frame, pvname=self.flag_pv)
+        return frame
+
     def _update_model_status(self, text, tone, tooltip=None):
         self._model_text = text
         self._model_tone = tone
@@ -3228,10 +3270,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         for i in range(n_samples):
             if i > 0 and sample_interval_s > 0:
                 time.sleep(sample_interval_s)
-            tmp = self.flag_pv_obj.get(
-                timeout=IMAGE_PV_GET_TIMEOUT_S,
-                use_monitor=False,
-            )
+            tmp = self._latest_flag_image_frame()
             if tmp is None:
                 self._mark_pv_unavailable(RuntimeError(f"{self.flag_pv} returned no background data"))
                 print("background sampling failed: flag image PV returned no data")
@@ -3421,8 +3460,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         else:
             self.lineEdit_expotime.setText("--")
 
+        self._clear_flag_image_cache()
         try:
-            self.flag_pv_obj = PV(self.flag_pv)
+            self.flag_pv_obj = PV(self.flag_pv, auto_monitor=True)
+            self.flag_pv_obj.add_callback(self._cache_flag_image_frame)
         except Exception as exc:
             self.flag_pv_obj = NullPV(self.flag_pv)
             self._mark_pv_unavailable(exc)
@@ -3488,17 +3529,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._update_fit_status(self.fit_method)
         self._clear_readout_status()
 
-        # clear previous image
-        self.ESAflag_image.axes.clear()
-        self._style_axes(self.ESAflag_image, "x (mm)", "y (mm)")
         # get colormap
         colormap = self.comboBox_colormap.currentText()  
         fit_method = self.comboBox_fitmethod.currentText()  
         # get flag image data from PV
-        tmp = self.flag_pv_obj.get(
-            timeout=IMAGE_PV_GET_TIMEOUT_S,
-            use_monitor=False,
-        )
+        tmp = self._latest_flag_image_frame()
         if tmp is None:
             self.sigx = None
             self.sigy = None
@@ -3527,6 +3562,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             data[data<0] = 0  # 防止负值出现
 
         # plot the image
+        self.ESAflag_image.axes.clear()
+        self._style_axes(self.ESAflag_image, "x (mm)", "y (mm)")
         self.ESAflag_image.axes.imshow(data,cmap=colormap,origin="lower",extent=self.extent,aspect="auto")
         self.ESAflag_image.axes.set_xlim(self.xlim)
         self.ESAflag_image.axes.set_ylim(self.ylim)
@@ -4051,10 +4088,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._refresh_status()
 
         try:
-            preview = self.flag_pv_obj.get(
-                timeout=IMAGE_PV_GET_TIMEOUT_S,
-                use_monitor=False,
-            )
+            preview = self._latest_flag_image_frame()
             if preview is None:
                 self._mark_pv_unavailable(RuntimeError(f"{self.flag_pv} returned no image data"))
                 print("ESA auto tune requires a live flag image PV.")
