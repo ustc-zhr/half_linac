@@ -393,12 +393,17 @@ class PvConnectionWindow(QMainWindow):
         self.search_edit.setPlaceholderText("Filter element, channel, or PV")
         self.status_combo = QComboBox(table_toolbar)
         self.status_combo.addItems(("All statuses", "Connected", "Unavailable", "Not checked"))
+        self.duplicate_button = QToolButton(table_toolbar)
+        self.duplicate_button.setText("Duplicate PVs")
+        self.duplicate_button.setCheckable(True)
+        self.duplicate_button.setToolTip("Show mappings that share the same PV name.")
         self.table_title = table_title
         self.timeout_label = timeout_label
         self.table_toolbar_widgets = (
             self.table_title,
             self.search_edit,
             self.status_combo,
+            self.duplicate_button,
             self.timeout_label,
             self.timeout_spin,
             self.export_button,
@@ -433,6 +438,7 @@ class PvConnectionWindow(QMainWindow):
 
         self.search_edit.textChanged.connect(self._apply_filters)
         self.status_combo.currentTextChanged.connect(self._apply_filters)
+        self.duplicate_button.toggled.connect(self._apply_filters)
         self.check_button.clicked.connect(self._start_scan)
         self.stop_button.clicked.connect(self._stop_scan)
         self.export_button.clicked.connect(self._export_report)
@@ -449,6 +455,12 @@ class PvConnectionWindow(QMainWindow):
 
     def _watchdog_points(self):
         return tuple(point for point in self.control_points if point.readback_pv)
+
+    def _duplicate_pv_names(self) -> set[str]:
+        counts = {}
+        for endpoint in self.endpoints:
+            counts[endpoint.pv_name] = counts.get(endpoint.pv_name, 0) + 1
+        return {pv_name for pv_name, count in counts.items() if count > 1}
 
     def _populate_watchdog_table(self):
         points = self._watchdog_points()
@@ -596,6 +608,11 @@ class PvConnectionWindow(QMainWindow):
         active_table = self.watchdog_table if self.tabs.currentIndex() == 1 else self.table
         text_columns = 4 if active_table is self.watchdog_table else 5
         status_column = 8 if active_table is self.watchdog_table else 5
+        duplicate_pvs = (
+            self._duplicate_pv_names()
+            if active_table is self.table and self.duplicate_button.isChecked()
+            else set()
+        )
         for row in range(active_table.rowCount()):
             text_match = not needle or any(
                 needle in active_table.item(row, column).text().lower() for column in range(text_columns)
@@ -605,11 +622,17 @@ class PvConnectionWindow(QMainWindow):
                 wanted_status == "All statuses"
                 or _status_filter_key(status) == _status_filter_key(wanted_status)
             )
-            active_table.setRowHidden(row, not (text_match and status_match))
+            duplicate_match = (
+                not duplicate_pvs or active_table.item(row, 4).text() in duplicate_pvs
+            )
+            active_table.setRowHidden(row, not (text_match and status_match and duplicate_match))
 
     def _switch_view(self, index: int):
         watchdog = index == 1
         self.table_title.setText("SP/RB Watchdog" if watchdog else "PV Inventory")
+        self.duplicate_button.setEnabled(not watchdog)
+        if watchdog:
+            self.duplicate_button.setChecked(False)
         self.status_combo.clear()
         self.status_combo.addItems(
             ("All statuses", "Match", "Mismatch", "Unavailable", "Not configured", "Not checked")
@@ -756,6 +779,7 @@ class PvConnectionWindow(QMainWindow):
             self.table_toolbar_grid.addWidget(self.table_title, 0, 0)
             self.table_toolbar_grid.addWidget(self.search_edit, 0, 1)
             self.table_toolbar_grid.addWidget(self.status_combo, 0, 2)
+            self.table_toolbar_grid.addWidget(self.duplicate_button, 0, 3)
             self.table_toolbar_grid.setColumnStretch(1, 1)
             self.table_toolbar_grid.addWidget(self.timeout_label, 1, 0)
             self.table_toolbar_grid.addWidget(self.timeout_spin, 1, 1, Qt.AlignLeft)
