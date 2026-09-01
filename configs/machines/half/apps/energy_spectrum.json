@@ -24,6 +24,7 @@
         "real": {"ENY": {"x": 0, "y": 0, "width": 1440, "height": 1080}}
       },
       "flag_element": "ENY",
+      "image_flip_y": true,
       "x_reference_mm": 0,
       "bend_element": "BENY",
       "energy_element": "LINAC_ENERGY",

@@ -43,6 +43,7 @@ class ESA_AutoTuner:
                  flag_pv_obj,
                  flag_pixel,
                  bend_pv,
+                 flip_y=False,
                  mode="find_beam",
                  progress_callback=None,
                  remove_bg=False,
@@ -81,6 +82,7 @@ class ESA_AutoTuner:
         self.flag_pv_obj = flag_pv_obj
         self.flag_pixel = flag_pixel
         self.bend_pv = bend_pv
+        self.flip_y = bool(flip_y)
 
         self.mode = str(mode).strip()
         if self.mode not in {
@@ -217,6 +219,8 @@ class ESA_AutoTuner:
             list(map(float, tmp)),
             (self.flag_pixel[1], self.flag_pixel[0])
         )
+        if self.flip_y:
+            img = np.flipud(img)
 
         if self.remove_bg and self.bg_image is not None:
             img = img - self.bg_image

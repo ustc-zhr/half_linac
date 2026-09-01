@@ -661,6 +661,7 @@ class ESAAutoTuneThread(QThread):
         *,
         flag_pv_obj,
         flag_pixel,
+        flip_y,
         bend_pv,
         remove_bg,
         bg_image,
@@ -672,6 +673,7 @@ class ESAAutoTuneThread(QThread):
         super().__init__(parent)
         self.flag_pv_obj = flag_pv_obj
         self.flag_pixel = tuple(flag_pixel)
+        self.flip_y = bool(flip_y)
         self.bend_pv = bend_pv
         self.remove_bg = remove_bg
         self.bg_image = bg_image
@@ -696,6 +698,7 @@ class ESAAutoTuneThread(QThread):
             tuner = ESA_AutoTuner(
                 flag_pv_obj=self.flag_pv_obj,
                 flag_pixel=self.flag_pixel,
+                flip_y=self.flip_y,
                 bend_pv=self.bend_pv,
                 progress_callback=self.progress.emit,
                 remove_bg=self.remove_bg,
@@ -3278,6 +3281,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 return
             data_ini = list(map(float, tmp))
             data = np.reshape(data_ini,(self.flag_pixel[1],self.flag_pixel[0])) # 注意shape顺序，先y后x
+            data = self._apply_flag_image_orientation(data)
             bg_images.append(data)
         self._mark_pv_available()
         self.bg_image = np.mean(bg_images, axis=0)
@@ -3432,6 +3436,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.flag_pixel = geometry.shape
         self.flag_pixel_width_mm = geometry.pixel_width_mm
+        self.flag_image_flip_y = bool(self.energy_config.get("image_flip_y", False))
 
         self.flag_expotime_pv = None
         self.flag_exposure_target = None
@@ -3473,6 +3478,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.xlim = (-0.5*self.width , 0.5*self.width  )
         self.ylim = (-0.5*self.height, 0.5*self.height ) 
         self.extent = self.xlim +self.ylim
+
+    def _apply_flag_image_orientation(self, image):
+        if self.flag_image_flip_y:
+            return np.flipud(image)
+        return image
   
     def setup_timer(self):
         # refreah the figure at 1 Hz
@@ -3547,6 +3557,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         data_ini = list(map(float, tmp))
         try:
             data = np.reshape(data_ini,(self.flag_pixel[1],self.flag_pixel[0])) # 注意shape顺序，先y后x
+            data = self._apply_flag_image_orientation(data)
         except ValueError as exc:
             self.sigx = None
             self.sigy = None
@@ -4105,6 +4116,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_thread = ESAAutoTuneThread(
                 flag_pv_obj=self.flag_pv_obj,
                 flag_pixel=self.flag_pixel,
+                flip_y=self.flag_image_flip_y,
                 bend_pv=self.auto_tune_pv,
                 remove_bg=self.remove_bg,
                 bg_image=self.bg_image,
