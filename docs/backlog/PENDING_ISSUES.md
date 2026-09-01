@@ -116,6 +116,48 @@
   - Confirm the authoritative real-machine control quantity (`current`, writable `K1`,
     or `K1:ADJ`) and the K1-to-current calibration before enabling real writes.
 
+### 2b. HALF ENY Image PV Monitor Performance
+
+- Status: open
+- Priority: medium
+- Background:
+  - During HALF real-machine testing, `IN:BD:ENY:image1:ArrayData` and
+    `IN:BD:PRFD:image1:ArrayData` both reported the expected `1555200`-point image
+    length, the same as `PRF10/PRF11`.
+  - Manual timing showed `PRF10/PRF11` synchronous `PV.get()` calls usually completed
+    within roughly `0.1-0.2 s`, while `PRFD` often took roughly `0.7-1.1 s` and
+    `ENY` often took roughly `0.8-1.3 s`.
+  - Default `PV.get()` could return `None` for ENY; setting an explicit timeout made
+    ENY readable but did not make it fast.
+  - `camonitor` and the site beam-monitor display appeared to refresh ENY normally,
+    suggesting the PV is live and that the issue is most visible in synchronous
+    full-array `get` usage from the GUI.
+- Current mitigation:
+  - `scripts/common.sh` now sets `EPICS_CA_MAX_ARRAY_BYTES` to at least `10000000`
+    unless the environment already provides a value.
+  - Beam Monitor and Energy Spectrum image PV reads now use an explicit timeout.
+  - Beam Monitor and Energy Spectrum now register image PV monitor callbacks and cache
+    the latest frame so normal GUI refresh can consume the cached frame instead of
+    synchronously requesting a full array every timer tick.
+- Problem:
+  - The monitor-cache change still needs site validation on ENY.
+  - It may improve GUI responsiveness and reduce false offline states, but it cannot
+    make ENY publish frames faster than the camera/IOC/plugin chain actually produces.
+  - Background sampling may reuse the latest cached frame if the sampling interval is
+    shorter than the real image update period.
+- Follow-up:
+  - Test ENY in Beam Monitor and Energy Spectrum with `0.5 s`, `1 s`, and `5 s`
+    refresh settings after the monitor-cache change.
+  - Compare GUI perceived refresh with `camonitor IN:BD:ENY:image1:ArrayData` and, if
+    available, ENY camera frame counter/timestamp PVs.
+  - Add lightweight timing diagnostics if ENY is still slow, splitting frame age,
+    cache wait/get fallback, reshape, projection/fit, and matplotlib draw time.
+  - Consider showing frame age/stale status in the GUI before treating cached-frame
+    display as final behavior.
+  - If ENY remains much slower than PRF screens, inspect areaDetector settings such as
+    acquisition period, plugin queue/load, ROI/binning/thumbnail options, and the IOC
+    host/network path.
+
 ### 3. IRFEL Energy Spectrum Real Bring-up
 
 - Status: open
