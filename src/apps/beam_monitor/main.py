@@ -73,6 +73,7 @@ from half_linac.src.shared.window_activation import install_qt_window_raise_hand
 
 HEADER_ACTION_HEIGHT = 32
 APP_DIR = Path(__file__).resolve().parent
+IMAGE_PV_GET_TIMEOUT_S = 3.0
 
 DARK_THEME = {
     "window_bg": "#0f1519",
@@ -1358,7 +1359,7 @@ class myWindow(QWidget, Ui_Form):
             for index in range(sample_count):
                 if index > 0 and interval_s > 0:
                     time.sleep(interval_s)
-                raw = self._image_pv.get()
+                raw = self._image_pv.get(timeout=IMAGE_PV_GET_TIMEOUT_S)
                 if raw is None:
                     raise BackgroundStoreError(
                         f"{self.pv} returned no image data during background sampling."
@@ -1878,7 +1879,7 @@ class myWindow(QWidget, Ui_Form):
         self._read_size_pv()
 
         try:
-            tmp = self._image_pv.get()
+            tmp = self._image_pv.get(timeout=IMAGE_PV_GET_TIMEOUT_S)
             self._mark_pv_available()
         except Exception as exc:
             self._mark_pv_unavailable(exc)
