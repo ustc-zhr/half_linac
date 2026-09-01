@@ -91,6 +91,19 @@ def _display_number(value) -> str:
     return "" if value is None else f"{value:g}"
 
 
+def _status_filter_key(value: str) -> str:
+    return value.strip().casefold().replace(" ", "_").replace("-", "_")
+
+
+WATCHDOG_STATUS_LABELS = {
+    "match": "Match",
+    "mismatch": "Mismatch",
+    "unavailable": "Unavailable",
+    "not_configured": "Not configured",
+    "not_checked": "Not checked",
+}
+
+
 def build_theme(colors: dict[str, str]) -> str:
     return f"""
 QMainWindow, QWidget {{
@@ -452,7 +465,7 @@ class PvConnectionWindow(QMainWindow):
                 _display_number(result.readback_value if result else None),
                 _display_number(result.difference if result else None),
                 _display_number(point.tolerance),
-                result.status.value if result else "not_checked",
+                WATCHDOG_STATUS_LABELS[result.status.value] if result else "Not checked",
                 result.detail if result else "",
             )
             for column, value in enumerate(values):
@@ -553,6 +566,10 @@ class PvConnectionWindow(QMainWindow):
             for row in range(self.table.rowCount()):
                 if self.table.item(row, 5).text() == "Checking":
                     self._set_status_item(row, "Not checked", "Scan stopped")
+        else:
+            for row in range(self.table.rowCount()):
+                if self.table.item(row, 5).text() == "Checking":
+                    self._set_status_item(row, "Not checked", "No result returned")
         self._apply_filters()
         self._update_summary("Stopped" if cancelled else "Complete")
 
@@ -584,7 +601,10 @@ class PvConnectionWindow(QMainWindow):
                 needle in active_table.item(row, column).text().lower() for column in range(text_columns)
             )
             status = active_table.item(row, status_column).text()
-            status_match = wanted_status == "All statuses" or status.casefold() == wanted_status.casefold()
+            status_match = (
+                wanted_status == "All statuses"
+                or _status_filter_key(status) == _status_filter_key(wanted_status)
+            )
             active_table.setRowHidden(row, not (text_match and status_match))
 
     def _switch_view(self, index: int):
@@ -592,7 +612,7 @@ class PvConnectionWindow(QMainWindow):
         self.table_title.setText("SP/RB Watchdog" if watchdog else "PV Inventory")
         self.status_combo.clear()
         self.status_combo.addItems(
-            ("All statuses", "match", "mismatch", "unavailable", "not_configured", "not_checked")
+            ("All statuses", "Match", "Mismatch", "Unavailable", "Not configured", "Not checked")
             if watchdog
             else ("All statuses", "Connected", "Unavailable", "Not checked")
         )
@@ -632,6 +652,16 @@ class PvConnectionWindow(QMainWindow):
             "connected",
             str(connected),
             "success" if connected else "subtle",
+        )
+        self.status_panel.set_item(
+            "unavailable",
+            str(unavailable),
+            "danger" if unavailable else "subtle",
+        )
+        self.status_panel.set_item(
+            "remaining",
+            str(pending),
+            "warning" if pending else "subtle",
         )
 
     def _update_watchdog_summary(self, prefix: str | None = None):
