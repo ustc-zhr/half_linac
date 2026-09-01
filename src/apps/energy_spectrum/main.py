@@ -21,6 +21,8 @@ ensure_repo_import_path(__file__)
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 from scipy.interpolate import UnivariateSpline
 from epics import caget, caget_many, caput, caput_many, PV
 
@@ -840,6 +842,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.colorbar = None
         self.sigx = None
         self.sigy = None
+        self.energy_stability_history = []
         self.bg_image = None
         self.bg_metadata = {}
         self.bg_image_path = None
@@ -1076,6 +1079,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.checkBox_bg.blockSignals(False)
         self._update_background_status()
         self._load_latest_background(silent=True)
+        self._clear_energy_stability_history()
 
         self.latest_model_snapshot_metadata = None
         self.latest_model_snapshot_path = None
@@ -1643,11 +1647,26 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.flag_plot_title.setObjectName("panelTitle")
         self.spectrum_plot_title = QLabel("Energy Spectrum", self.frame_3)
         self.spectrum_plot_title.setObjectName("panelTitle")
+        self.stability_plot_title = QLabel("Energy Stability", self.frame_3)
+        self.stability_plot_title.setObjectName("panelTitle")
+        self.stability_plot = QWidget(self.frame_3)
+        self.stability_plot.fig = Figure(figsize=(4, 1.2))
+        self.stability_plot.axes = self.stability_plot.fig.add_subplot(111)
+        self.stability_plot.canvas = FigureCanvas(self.stability_plot.fig)
+        stability_layout = QVBoxLayout(self.stability_plot)
+        stability_layout.setContentsMargins(0, 0, 0, 0)
+        stability_layout.setSpacing(0)
+        stability_layout.addWidget(self.stability_plot.canvas)
+        self.stability_plot.setMinimumHeight(86)
+        self.stability_plot.setMaximumHeight(130)
 
         self.verticalLayout_5.insertWidget(0, self.flag_plot_title)
         self.verticalLayout_5.insertWidget(2, self.spectrum_plot_title)
-        self.verticalLayout_5.setStretch(1, 1)
-        self.verticalLayout_5.setStretch(3, 1)
+        self.verticalLayout_5.addWidget(self.stability_plot_title)
+        self.verticalLayout_5.addWidget(self.stability_plot)
+        self.verticalLayout_5.setStretch(1, 5)
+        self.verticalLayout_5.setStretch(3, 4)
+        self.verticalLayout_5.setStretch(5, 2)
 
         self.verticalLayout_3.removeWidget(self.groupBox_4)
         self.verticalLayout_3.removeWidget(self.groupBox_5)
@@ -2252,6 +2271,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             label.setProperty("role", "focusField")
         for label in (self.label_energy, self.label_energyspread):
             label.setStyleSheet("")
+        self._configure_energy_stability_controls()
 
         self._sync_exposure_control_state()
         self.lineEdit_alpha_ESAflag.setReadOnly(True)
@@ -2888,6 +2908,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         for widget, xlabel, ylabel in (
             (self.ESAflag_image, "x (mm)", "y (mm)"),
             (self.energy_plot, "E (MeV)", "Spectrum (arb. units)"),
+            (self.stability_plot, "Frame", "E (MeV)"),
             (self.background_plot, "x (mm)", "y (mm)"),
         ):
             self._style_axes(widget, xlabel, ylabel)
@@ -2920,6 +2941,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "Spectrum (arb. units)",
             note=note,
         )
+        self._update_energy_stability_view()
         self._refresh_background_preview()
 
     def _refresh_background_preview(self):
@@ -3007,6 +3029,82 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._readout_tone = None
         self._readout_tooltip = None
 
+    def _configure_energy_stability_controls(self):
+        self.stability_window_label = QLabel("Stability frames", self.groupBox_5)
+        self.stability_window_label.setProperty("role", "field")
+        self.stability_window_spin = QSpinBox(self.groupBox_5)
+        self.stability_window_spin.setRange(2, 10000)
+        self.stability_window_spin.setValue(100)
+        self.stability_window_spin.setSingleStep(10)
+        self.stability_window_spin.setFixedWidth(86)
+        self.stability_window_spin.setProperty("dense", True)
+        self.stability_rms_label = QLabel("RMS: N/A", self.groupBox_5)
+        self.stability_rms_label.setObjectName("metricValue")
+        self.stability_rms_label.setMinimumWidth(156)
+        self.stability_clear_button = QPushButton("Clear", self.groupBox_5)
+        self.stability_clear_button.setProperty("compact", True)
+        self.stability_clear_button.setFixedWidth(72)
+        self.horizontalLayout_6.addWidget(self.stability_window_label)
+        self.horizontalLayout_6.addWidget(self.stability_window_spin)
+        self.horizontalLayout_6.addWidget(self.stability_rms_label)
+        self.horizontalLayout_6.addWidget(self.stability_clear_button)
+        self.stability_window_spin.valueChanged.connect(self._update_energy_stability_view)
+        self.stability_clear_button.clicked.connect(self._clear_energy_stability_history)
+
+    def _clear_energy_stability_history(self):
+        self.energy_stability_history.clear()
+        self._update_energy_stability_view()
+
+    def _record_energy_stability(self, energy_center):
+        try:
+            value = float(energy_center)
+        except (TypeError, ValueError):
+            return
+        if not np.isfinite(value):
+            return
+        self.energy_stability_history.append(value)
+        if len(self.energy_stability_history) > 10000:
+            del self.energy_stability_history[:-10000]
+        self._update_energy_stability_view()
+
+    def _update_energy_stability_view(self, *_args):
+        if not hasattr(self, "stability_plot"):
+            return
+        window = self.stability_window_spin.value() if hasattr(self, "stability_window_spin") else 100
+        values = np.asarray(self.energy_stability_history[-window:], dtype=float)
+        self.stability_plot.axes.clear()
+        self._style_axes(self.stability_plot, "Frame", "E (MeV)")
+        if values.size < 2:
+            if hasattr(self, "stability_rms_label"):
+                self.stability_rms_label.setText("RMS: N/A")
+            self.stability_plot.axes.text(
+                0.5,
+                0.5,
+                "Waiting",
+                transform=self.stability_plot.axes.transAxes,
+                ha="center",
+                va="center",
+                color=self._palette()["muted_fg"],
+                fontsize=9,
+            )
+            self.stability_plot.canvas.draw_idle()
+            return
+        mean = float(np.mean(values))
+        rms = float(np.std(values))
+        relative = abs(rms / mean * 100.0) if not np.isclose(mean, 0.0) else float("nan")
+        if hasattr(self, "stability_rms_label"):
+            self.stability_rms_label.setText(
+                f"{values.size}/{window}: {rms:.4f} MeV / {relative:.4f}%"
+            )
+        x = np.arange(1, values.size + 1)
+        palette = self._palette()
+        self.stability_plot.axes.plot(x, values, color=palette["plot_energy"], linewidth=1.2)
+        self.stability_plot.axes.axhline(mean, color=palette["plot_fit"], linewidth=1.0, alpha=0.8)
+        padding = max(float(np.ptp(values)) * 0.15, 1e-6)
+        self.stability_plot.axes.set_xlim(1, max(values.size, 2))
+        self.stability_plot.axes.set_ylim(float(np.min(values)) - padding, float(np.max(values)) + padding)
+        self.stability_plot.canvas.draw_idle()
+
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
@@ -3070,6 +3168,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.label_energyspread.setText(
             "{:.4f}% / {:.4f} MeV".format(energy_spread * 1e2, energy_spread_mev)
         )
+        self._record_energy_stability(energy_center)
         self._refresh_status()
 
     def _set_energy_unavailable(self, status_text=None, tooltip=None, *, energy_center=None):
