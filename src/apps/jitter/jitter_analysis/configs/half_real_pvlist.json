@@ -5234,6 +5234,573 @@
         "hvdc"
       ],
       "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf01_phase_set",
+      "name": "LLRF01 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF01:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF01:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf02_phase_set",
+      "name": "LLRF02 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF02:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF02:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf03_phase_set",
+      "name": "LLRF03 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF03:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF03:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf04_phase_set",
+      "name": "LLRF04 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF04:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF04:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf05_phase_set",
+      "name": "LLRF05 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF05:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF05:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf06_phase_set",
+      "name": "LLRF06 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF06:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF06:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf07_phase_set",
+      "name": "LLRF07 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF07:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF07:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf08_phase_set",
+      "name": "LLRF08 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF08:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF08:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf09_phase_set",
+      "name": "LLRF09 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF09:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF09:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf10_phase_set",
+      "name": "LLRF10 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF10:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF10:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf11_phase_set",
+      "name": "LLRF11 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF11:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF11:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf12_phase_set",
+      "name": "LLRF12 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF12:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF12:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf13_phase_set",
+      "name": "LLRF13 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF13:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF13:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf14_phase_set",
+      "name": "LLRF14 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF14:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF14:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf15_phase_set",
+      "name": "LLRF15 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF15:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF15:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf16_phase_set",
+      "name": "LLRF16 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF16:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF16:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf17_phase_set",
+      "name": "LLRF17 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF17:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF17:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf18_phase_set",
+      "name": "LLRF18 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF18:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF18:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf19_phase_set",
+      "name": "LLRF19 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF19:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF19:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrf20_phase_set",
+      "name": "LLRF20 phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRF20:SET_PHASE",
+      "readback_pv": "IN:MW:LLRF20:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
+    },
+    {
+      "id": "llrfpb_phase_set",
+      "name": "Prebuncher LLRF phase setpoint",
+      "group": "rf_phase",
+      "write_pv": "IN:MW:LLRFPB:SET_PHASE",
+      "readback_pv": "IN:MW:LLRFPB:GET_PHASE",
+      "unit": "deg",
+      "access": "rw",
+      "limits": {
+        "low": -180,
+        "high": 180
+      },
+      "step_hint": 1.0,
+      "settle": {
+        "mode": "readback_tolerance",
+        "delay_sec": 0.5,
+        "readback_tolerance": 0.1,
+        "max_wait_sec": 5
+      },
+      "tags": [
+        "rf",
+        "llrf",
+        "wrapped_phase",
+        "phase"
+      ],
+      "note": "PV and operating limits are imported from half_linac real control backend and machine definition; confirm the working point before writing."
     }
   ],
   "objects": [
@@ -7804,7 +8371,7 @@
     },
     {
       "id": "llrf01_phase",
-      "name": "LLRF01 phase setpoint",
+      "name": "LLRF01 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF01:GET_PHASE",
       "unit": "deg",
@@ -7824,7 +8391,7 @@
     },
     {
       "id": "llrf02_phase",
-      "name": "LLRF02 phase setpoint",
+      "name": "LLRF02 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF02:GET_PHASE",
       "unit": "deg",
@@ -7844,7 +8411,7 @@
     },
     {
       "id": "llrf03_phase",
-      "name": "LLRF03 phase setpoint",
+      "name": "LLRF03 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF03:GET_PHASE",
       "unit": "deg",
@@ -7864,7 +8431,7 @@
     },
     {
       "id": "llrf04_phase",
-      "name": "LLRF04 phase setpoint",
+      "name": "LLRF04 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF04:GET_PHASE",
       "unit": "deg",
@@ -7884,7 +8451,7 @@
     },
     {
       "id": "llrf05_phase",
-      "name": "LLRF05 phase setpoint",
+      "name": "LLRF05 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF05:GET_PHASE",
       "unit": "deg",
@@ -7904,7 +8471,7 @@
     },
     {
       "id": "llrf06_phase",
-      "name": "LLRF06 phase setpoint",
+      "name": "LLRF06 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF06:GET_PHASE",
       "unit": "deg",
@@ -7924,7 +8491,7 @@
     },
     {
       "id": "llrf07_phase",
-      "name": "LLRF07 phase setpoint",
+      "name": "LLRF07 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF07:GET_PHASE",
       "unit": "deg",
@@ -7944,7 +8511,7 @@
     },
     {
       "id": "llrf08_phase",
-      "name": "LLRF08 phase setpoint",
+      "name": "LLRF08 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF08:GET_PHASE",
       "unit": "deg",
@@ -7964,7 +8531,7 @@
     },
     {
       "id": "llrf09_phase",
-      "name": "LLRF09 phase setpoint",
+      "name": "LLRF09 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF09:GET_PHASE",
       "unit": "deg",
@@ -7984,7 +8551,7 @@
     },
     {
       "id": "llrf10_phase",
-      "name": "LLRF10 phase setpoint",
+      "name": "LLRF10 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF10:GET_PHASE",
       "unit": "deg",
@@ -8004,7 +8571,7 @@
     },
     {
       "id": "llrf11_phase",
-      "name": "LLRF11 phase setpoint",
+      "name": "LLRF11 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF11:GET_PHASE",
       "unit": "deg",
@@ -8024,7 +8591,7 @@
     },
     {
       "id": "llrf12_phase",
-      "name": "LLRF12 phase setpoint",
+      "name": "LLRF12 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF12:GET_PHASE",
       "unit": "deg",
@@ -8044,7 +8611,7 @@
     },
     {
       "id": "llrf13_phase",
-      "name": "LLRF13 phase setpoint",
+      "name": "LLRF13 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF13:GET_PHASE",
       "unit": "deg",
@@ -8064,7 +8631,7 @@
     },
     {
       "id": "llrf14_phase",
-      "name": "LLRF14 phase setpoint",
+      "name": "LLRF14 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF14:GET_PHASE",
       "unit": "deg",
@@ -8084,7 +8651,7 @@
     },
     {
       "id": "llrf15_phase",
-      "name": "LLRF15 phase setpoint",
+      "name": "LLRF15 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF15:GET_PHASE",
       "unit": "deg",
@@ -8104,7 +8671,7 @@
     },
     {
       "id": "llrf16_phase",
-      "name": "LLRF16 phase setpoint",
+      "name": "LLRF16 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF16:GET_PHASE",
       "unit": "deg",
@@ -8124,7 +8691,7 @@
     },
     {
       "id": "llrf17_phase",
-      "name": "LLRF17 phase setpoint",
+      "name": "LLRF17 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF17:GET_PHASE",
       "unit": "deg",
@@ -8144,7 +8711,7 @@
     },
     {
       "id": "llrf18_phase",
-      "name": "LLRF18 phase setpoint",
+      "name": "LLRF18 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF18:GET_PHASE",
       "unit": "deg",
@@ -8164,7 +8731,7 @@
     },
     {
       "id": "llrf19_phase",
-      "name": "LLRF19 phase setpoint",
+      "name": "LLRF19 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF19:GET_PHASE",
       "unit": "deg",
@@ -8184,7 +8751,7 @@
     },
     {
       "id": "llrf20_phase",
-      "name": "LLRF20 phase setpoint",
+      "name": "LLRF20 phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRF20:GET_PHASE",
       "unit": "deg",
@@ -8299,7 +8866,7 @@
     },
     {
       "id": "llrfpb_phase",
-      "name": "Prebuncher LLRF phase",
+      "name": "Prebuncher LLRF phase readback",
       "group": "rf_phase",
       "read_pv": "IN:MW:LLRFPB:GET_PHASE",
       "unit": "deg",

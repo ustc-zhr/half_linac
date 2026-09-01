@@ -6,6 +6,26 @@
 
 真机 HALF Linac 使用 [half_real_pvlist.json](half_real_pvlist.json)。其 PV 名称和磁铁/HV 限值来自 `half_linac/configs/machines/half/machine.json` 与 `control_backends/real.json`；原始相机图像数组不在默认列表中，保留了束斑尺寸、曝光时间等标量诊断量。
 
+## 同步 HALF 真机 PV 配置
+
+当 `half_linac/configs/machines/half` 里的机器配置或真机 PV backend 更新后，在仓库根目录执行：
+
+```bash
+python scripts/sync_half_real_pvlist.py
+```
+
+脚本默认读取相邻目录 `../half_linac/configs/machines/half/machine.json` 和 `../half_linac/configs/machines/half/control_backends/real.json`，并更新 [half_real_pvlist.json](half_real_pvlist.json)。如果两个仓库不在默认相邻位置，可以显式指定：
+
+```bash
+python scripts/sync_half_real_pvlist.py --half-linac-root /path/to/half_linac
+```
+
+提交前可用 `--check` 检查当前文件是否已经同步：
+
+```bash
+python scripts/sync_half_real_pvlist.py --check
+```
+
 ## 推荐流程
 
 1. 复制 [irfel_pvlist_v2.example.json](irfel_pvlist_v2.example.json) 或一份已经可用的现有配置。
