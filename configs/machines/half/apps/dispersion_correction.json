@@ -1,5 +1,6 @@
 {
   "control_backends": ["vm", "real"],
+  "bpm_position_scale_to_mm": {"real": 0.001, "default": 1},
   "quadrupole_control": {"vm": "K1", "real": "K1"},
   "measurement": {"plane": "x", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1},
   "solver": {
