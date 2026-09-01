@@ -6,6 +6,7 @@ REPO_PARENT="$(dirname "$REPO_ROOT")"
 
 export HALF_LINAC_ROOT="$REPO_ROOT"
 export halflinac_ROOT="$REPO_ROOT"
+export EPICS_CA_MAX_ARRAY_BYTES="${EPICS_CA_MAX_ARRAY_BYTES:-10000000}"
 
 case ":${PYTHONPATH:-}:" in
   *":$REPO_PARENT:"*) ;;
