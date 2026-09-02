@@ -557,6 +557,11 @@ class RFPhaseScanWindow(QMainWindow):
             0,
             10,
         )
+        self.auto_tune_min_fit_r_squared = QDoubleSpinBox()
+        self.auto_tune_min_fit_r_squared.setRange(0.0, 1.0)
+        self.auto_tune_min_fit_r_squared.setDecimals(2)
+        self.auto_tune_min_fit_r_squared.setSingleStep(0.05)
+        self.auto_tune_min_fit_r_squared.setValue(self.min_fit_r_squared)
         self.auto_tune_center_tolerance = self._spin(float(auto_center_lock["center_tolerance_mm"]), 0.01, 10)
         self.auto_tune_max_offset = self._spin(float(auto_center_lock["max_correction_step_mev"]), 0.01, 1000)
         self.auto_tune_fine_steps = QSpinBox()
@@ -893,6 +898,7 @@ class RFPhaseScanWindow(QMainWindow):
                 ("Verification frames", self.auto_tune_verification_samples),
                 ("Verification minimum", self.auto_tune_verification_min_valid),
                 ("Frame gap", self.auto_tune_frame_interval),
+                ("Minimum fit R²", self.auto_tune_min_fit_r_squared),
             ),
         )
         add_group(
@@ -930,6 +936,7 @@ class RFPhaseScanWindow(QMainWindow):
             "verification_frame_samples": self.auto_tune_verification_samples.value(),
             "verification_min_valid_frames": self.auto_tune_verification_min_valid.value(),
             "frame_interval_s": self.auto_tune_frame_interval.value(),
+            "min_fit_r_squared": self.auto_tune_min_fit_r_squared.value(),
             "center_tolerance_mm": self.auto_tune_center_tolerance.value(),
             "max_correction_step_mev": self.auto_tune_max_offset.value(),
             "center_step_mev": self.auto_tune_center_step.value(),
@@ -950,6 +957,7 @@ class RFPhaseScanWindow(QMainWindow):
             (self.auto_tune_verification_samples, "verification_frame_samples"),
             (self.auto_tune_verification_min_valid, "verification_min_valid_frames"),
             (self.auto_tune_frame_interval, "frame_interval_s"),
+            (self.auto_tune_min_fit_r_squared, "min_fit_r_squared"),
             (self.auto_tune_center_tolerance, "center_tolerance_mm"),
             (self.auto_tune_max_offset, "max_correction_step_mev"),
             (self.auto_tune_center_step, "center_step_mev"),
@@ -957,6 +965,7 @@ class RFPhaseScanWindow(QMainWindow):
         )
         for widget, key in controls:
             widget.setValue(values[key])
+        self.min_fit_r_squared = self.auto_tune_min_fit_r_squared.value()
         self.auto_tune_fit_method.setText(
             f"Gauss fit · R2 >= {self.min_fit_r_squared:.2f}"
         )
@@ -986,6 +995,10 @@ class RFPhaseScanWindow(QMainWindow):
             QMessageBox.warning(self, "Energy Match Settings", str(exc))
             self._set_auto_tune_settings_values(previous)
             return
+        self.min_fit_r_squared = self.auto_tune_min_fit_r_squared.value()
+        self.auto_tune_fit_method.setText(
+            f"Gauss fit · R2 >= {self.min_fit_r_squared:.2f}"
+        )
         self._update_auto_tune_settings_summary()
 
     def _update_auto_tune_settings_summary(self):
@@ -1005,7 +1018,8 @@ class RFPhaseScanWindow(QMainWindow):
             f"{pipeline_label} · {self.auto_tune_min.value():g}-{self.auto_tune_max.value():g} MeV · "
             f"{self.auto_tune_coarse_steps.value()} candidate energy pts · "
             f"step <= {self.auto_tune_max_offset.value():g} MeV · "
-            f"tol {self.auto_tune_center_tolerance.value():g} mm"
+            f"tol {self.auto_tune_center_tolerance.value():g} mm · "
+            f"R2 >= {self.auto_tune_min_fit_r_squared.value():.2f}"
         )
 
     def _resolved_auto_tune_settings(self, geometry):
