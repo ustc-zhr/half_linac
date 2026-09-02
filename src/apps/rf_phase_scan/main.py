@@ -25,12 +25,12 @@ from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.apps.rf_phase_scan.energy_match_tuner import (
     RFPhaseEnergyMatcher, reference_x_pixel,
 )
-from half_linac.src.apps.energy_spectrum.esa_auto_tuner import ESA_AutoTuner
 from half_linac.src.apps.rf_phase_scan.image_acquisition import RFImageAcquisition
 from half_linac.src.apps.rf_phase_scan.mplwidget import MplWidget
 from half_linac.src.apps.rf_phase_scan.spectrum_profile import (
     SpectrumProfileError, fit_projection_profile, project_image_profiles,
 )
+from half_linac.src.shared.energy_tuning import normalize_pipeline
 from half_linac.src.shared.beam_diagnostics.background_store import (
     BackgroundStoreError, load_background, save_background,
 )
@@ -43,14 +43,14 @@ PALETTES = {
         "summary": "#1b262d", "text": "#e6edf2", "muted": "#90a1ad",
         "input": "#10171c", "button": "#11191f", "button_hover": "#18242c",
         "accent": "#45d0bc", "warning": "#e4b86f", "plot": "#11181e",
-        "grid": "#2a3943", "trace": "#6cb6ff",
+        "grid": "#2a3943", "trace": "#6cb6ff", "fit": "#ff5f6d",
     },
     "light": {
         "window": "#f2ede5", "panel": "#fffdf9", "border": "#d7cec1",
         "summary": "#fcf9f3", "text": "#2c3942", "muted": "#7c7368",
         "input": "#fffdf9", "button": "#f8f3eb", "button_hover": "#efe6d9",
         "accent": "#2d7f6d", "warning": "#a97118", "plot": "#fffdf8",
-        "grid": "#ddd4c7", "trace": "#2f7dc5",
+        "grid": "#ddd4c7", "trace": "#2f7dc5", "fit": "#d93645",
     },
 }
 
@@ -177,7 +177,7 @@ from half_linac.src.shared.machine_profile.app_runtime import resolve_app_runtim
 from half_linac.src.shared.machine_profile import (
     MachineProfileError, RuntimeContextWidget, get_workflow, list_elements, load_app_context,
     require_workflow_write_allowed, resolve_channel, resolve_element_image_geometry,
-    resolve_write_target, EnergyControlLock,
+    resolve_write_target, workflow_writes_allowed, EnergyControlLock,
 )
 
 
@@ -187,6 +187,7 @@ def _factory(*, image_pv, image_shape, pixel_width_mm, bend_pv, scan, progress, 
         flag_pv_obj=image_pv, flag_pixel=image_shape, bend_pv=bend_pv,
         design_eta_m=float(scan["design_eta_m"]),
         progress_callback=progress, remove_bg=remove_bg, bg_image=bg_image, roi=roi,
+        flip_y=bool(scan.get("image_flip_y", False)),
         settle_time_s=float(scan.get("settle_time_s", 1)),
         restore_initial_on_failure=bool(scan.get("restore_initial_on_failure", True)),
         cancel_requested=cancel,
@@ -198,17 +199,19 @@ def _factory(*, image_pv, image_shape, pixel_width_mm, bend_pv, scan, progress, 
         frame_interval_s=float(scan.get("frame_interval_s", 0.2)),
         pixel_width_mm=float(pixel_width_mm),
         profile_fit_method=str(scan.get("profile_fit_method", "Gauss fit")),
+        min_fit_r_squared=float(scan.get("min_fit_r_squared", 0.7)),
         x_reference_mm=float(scan.get("x_reference_mm", 0.0)),
         center_tolerance_mm=float(scan.get("center_tolerance_mm", 0.2)),
         max_iterations=int(scan.get("max_iterations", 6)),
         max_correction_step_mev=float(scan.get("max_correction_step_mev", 25)),
         objective=str(scan.get("objective", "profile_lock")),
+        pipeline=scan.get("pipeline"),
     )
 
 
 class ScanThread(QThread):
     point = pyqtSignal(dict)
-    diagnostic = pyqtSignal(object, float)
+    diagnostic = pyqtSignal(object, float, dict)
     done = pyqtSignal(dict)
     state = pyqtSignal(str)
     progress = pyqtSignal(int, int)
@@ -230,6 +233,7 @@ class ScanThread(QThread):
             pixel_width_mm,
             background=bg_image if remove_bg else None,
             roi=roi,
+            flip_y=bool(self.scan.get("image_flip_y", False)),
         )
         self.background_metadata = dict(background_metadata or {})
         self.point_measurement = dict(point_measurement)
@@ -239,54 +243,49 @@ class ScanThread(QThread):
         scan = dict(self.scan)
         scan.update(min=float(low), max=float(high), start_energy=float(center))
         if self._match_count == 0:
-            objective_key = "initial_objective"
+            pipeline_name = "initial"
         elif int(attempt) > 1:
-            objective_key = "fallback_objective"
+            pipeline_name = "fallback"
         else:
-            objective_key = "tracking_objective"
-        scan["objective"] = str(self.scan.get(objective_key, "profile_lock"))
+            pipeline_name = "tracking"
+        configured_pipelines = self.scan.get("pipelines", {})
+        scan["pipeline"] = configured_pipelines.get(pipeline_name)
+        # Accept the old flat keys while profiles migrate to ``pipelines``.
+        if scan["pipeline"] is None:
+            scan["pipeline"] = self.scan.get(f"{pipeline_name}_pipeline")
+        scan["objective"] = str(
+            self.scan.get(f"{pipeline_name}_objective", "profile_lock")
+        )
         self._match_count += 1
-        if scan["objective"] == "brightness_then_profile_lock":
-            tuner = ESA_AutoTuner(
-                flag_pv_obj=self.image_pv, flag_pixel=self.image_shape,
-                bend_pv=self.energy_pv, mode="brightness_then_profile_lock",
-                progress_callback=self.match_state.emit, remove_bg=self.remove_bg,
-                bg_image=self.bg_image, roi=self.acquisition.roi,
-                settle_time_s=float(scan.get("settle_time_s", 1)),
-                restore_initial_on_failure=bool(scan.get("restore_initial_on_failure", True)),
-                cancel_requested=self.isInterruptionRequested,
-                target_x_pixel=float(scan["target_x_pixel"]),
-                frame_samples=int(scan.get("frame_samples", 3)),
-                min_valid_frames=int(scan.get("min_valid_frames", 2)),
-                verification_frame_samples=int(scan.get("verification_frame_samples", 5)),
-                verification_min_valid_frames=int(scan.get("verification_min_valid_frames", 3)),
-                frame_interval_s=float(scan.get("frame_interval_s", 0.2)),
-                pixel_width_mm=float(self.pixel_width_mm),
-                profile_fit_method=str(scan.get("profile_fit_method", "Gauss fit")),
-                x_reference_mm=float(scan.get("x_reference_mm", 0.0)),
-                center_step=float(scan.get("center_step_mev", 10.0)),
-                center_max_total_offset=float(scan.get("max_total_offset_mev", 100.0)),
-                center_tolerance_mm=float(scan.get("center_tolerance_mm", 0.2)),
-            )
-            best = tuner.run(
-                B_min=float(low), B_max=float(high),
-                coarse_steps=int(scan.get("coarse_points", 16)),
-                fine_steps=int(scan.get("fine_points", 31)),
-            )
-            info = tuner.center_lock_result or {}
-            if best is None:
-                return EnergyMatchResult(False, tuner.get_last_status(), message=tuner.get_last_message(),
-                    center_offset_mm=info.get("final_offset_mm"), brightness=info.get("brightness"),
-                    valid_frames=info.get("valid_frames"), fit_method=info.get("fit_method"),
-                    fit_r_squared=info.get("fit_r_squared"))
-        else:
-            tuner = _factory(image_pv=self.image_pv, image_shape=self.image_shape,
-                             pixel_width_mm=self.pixel_width_mm, bend_pv=self.energy_pv,
-                             scan=scan, progress=self.match_state.emit,
-                             cancel=self.isInterruptionRequested, remove_bg=self.remove_bg,
-                             bg_image=self.bg_image, roi=self.acquisition.roi)
-            best = tuner.run(B_min=float(low), B_max=float(high), start_energy=float(center),
-                             tracking_reacquire_points=int(scan.get("tracking_reacquire_points", 9)))
+        scan["pipeline"] = normalize_pipeline(
+            scan.get("pipeline"), legacy_objective=scan["objective"]
+        )
+        tuner = _factory(
+            image_pv=self.image_pv,
+            image_shape=self.image_shape,
+            pixel_width_mm=self.pixel_width_mm,
+            bend_pv=self.energy_pv,
+            scan=scan,
+            progress=self.match_state.emit,
+            cancel=self.isInterruptionRequested,
+            remove_bg=self.remove_bg,
+            bg_image=self.bg_image,
+            roi=self.acquisition.roi,
+        )
+        best = tuner.run(
+            B_min=float(low),
+            B_max=float(high),
+            start_energy=float(center),
+            tracking_reacquire_points=int(
+                scan.get("reacquire_points", scan.get("tracking_reacquire_points", 9))
+            ),
+            brightness_peak_config=dict(
+                scan.get("stages", {}).get("brightness_peak", scan.get("brightness_peak", {}))
+            ),
+            center_lock_config=dict(
+                scan.get("stages", {}).get("center_lock", scan.get("center_lock", {}))
+            ),
+        )
         info = tuner.center_lock_result or {}
         if best is not None:
             samples = int(self.point_measurement["samples"])
@@ -299,6 +298,8 @@ class ScanThread(QThread):
                     interval_s=interval_s,
                     fit_method=str(scan.get("profile_fit_method", "Gauss fit")),
                     cancel_requested=self.isInterruptionRequested,
+                    allow_direct_fallback=False,
+                    min_fit_r_squared=float(scan.get("min_fit_r_squared", 0.7)),
                 )
             except InterruptedError:
                 return EnergyMatchResult(False, "CANCELLED", message="Point measurement cancelled.")
@@ -308,7 +309,15 @@ class ScanThread(QThread):
                     message=f"Point measurement did not retain the required {min_valid}/{samples} valid frames.",
                     valid_frames=0,
                 )
-            self.diagnostic.emit(measurement["raw_image"], float(best))
+            self.diagnostic.emit(
+                measurement["raw_image"],
+                float(best),
+                {
+                    "valid_frames": int(measurement["valid_frames"]),
+                    "total_frames": samples,
+                    "fit_r_squared": measurement["fit_r_squared"],
+                },
+            )
             return EnergyMatchResult(
                 ok=True, status=tuner.get_last_status(), energy_mev=float(best),
                 message=tuner.get_last_message(),
@@ -332,10 +341,10 @@ class ScanThread(QThread):
         result = None
         try:
             self.state.emit("Preparing")
-            require_workflow_write_allowed(self.context, "rf_phase_scan", "RF phase scan")
+            require_workflow_write_allowed(self.context, "rf_phase_scan", "RF Crest & Gain")
             lock = EnergyControlLock.for_machine(
                 self.context.machine.id,
-                {"app": "rf_phase_scan", "operation": "RF phase scan"},
+                {"app": "rf_phase_scan", "operation": "RF Crest & Gain"},
             )
             lock.acquire()
             initial_phase, initial_energy = caget(self.phase_pv), caget(self.energy_pv)
@@ -422,12 +431,20 @@ class RFPhaseScanWindow(QMainWindow):
         self.resize(1500, 1040)
         self.context = load_app_context("rf_phase_scan")
         self.current_theme = resolve_initial_theme()
-        self.setWindowTitle(f"{self.context.machine.display_name} RF Phase Scan")
+        self.setWindowTitle(
+            f"{self.context.machine.display_name} RF Phase-Energy Gain Scan"
+        )
         self.config = dict(get_workflow(self.context.profile, "rf_phase_scan"))
         self.station = self.config
         self.diagnostics = dict(self.config["diagnostics"])
+        self.image_flip_y = bool(self.diagnostics.get("image_flip_y", False))
+        self.preview_energy_mev = float(self.config.get("preview_energy_mev", 2200.0))
+        self.scan_enabled = workflow_writes_allowed(
+            self.context,
+            "rf_phase_scan",
+        )
         self.targets = []
-        if self.context.control_backend.name == "real" and self.config.get("enabled", True):
+        if self.scan_enabled and self.config.get("enabled", True):
             for element in list_elements(self.context, kind="rf"):
                 if "llrf" in element.tags and "wrapped_phase" in element.tags:
                     try: self.targets.append(resolve_write_target(self.context, element.id, logical_channel="phase_set", unit="deg"))
@@ -464,16 +481,37 @@ class RFPhaseScanWindow(QMainWindow):
         self.measurement_interval = self._spin(float(sampling_config.get("sample_interval_s", 0.2)), 0, 60)
         self.auto_tune_config = dict(self.config["energy_match"])
         self.auto_tune_defaults = dict(self.config["energy_match_defaults"])
+        self.auto_tune_stages = dict(self.auto_tune_defaults.get("stages", {}))
+        if not self.auto_tune_stages:
+            self.auto_tune_stages = {
+                name: dict(self.auto_tune_defaults.get(name, {}))
+                for name in ("brightness_peak", "center_lock")
+                if self.auto_tune_defaults.get(name) is not None
+            }
+        self.auto_tune_pipelines = dict(
+            self.auto_tune_config.get("pipelines", {})
+        )
+        for name in ("initial", "tracking", "fallback"):
+            self.auto_tune_pipelines.setdefault(
+                name, self.auto_tune_config.get(f"{name}_pipeline")
+            )
         auto_scan = dict(self.auto_tune_config["range"])
-        auto_center_lock = dict(self.auto_tune_defaults["center_lock"])
+        auto_center_lock = dict(self.auto_tune_stages.get("center_lock", {}))
+        auto_center_lock.update(self.auto_tune_config.get("center_lock", {}))
+        auto_measurement = dict(self.auto_tune_defaults.get("measurement", {}))
+        auto_measurement.update(self.auto_tune_config.get("measurement", {}))
+        auto_brightness_peak = dict(self.auto_tune_stages.get("brightness_peak", {}))
+        auto_brightness_peak.update(self.auto_tune_config.get("brightness_peak", {}))
+        self.min_fit_r_squared = float(
+            auto_measurement.get("min_fit_r_squared", auto_center_lock.get("min_fit_r_squared", 0.7))
+        )
         self.auto_tune_min = self._spin(float(auto_scan["low"]), 0, 10000)
         self.auto_tune_max = self._spin(float(auto_scan["high"]), 0, 10000)
         self.auto_tune_coarse_steps = QSpinBox()
         self.auto_tune_coarse_steps.setRange(2, 2000)
-        self.auto_tune_coarse_steps.setValue(int(auto_scan.get("coarse_points", auto_scan.get("reacquire_steps", 16))))
-        self.auto_tune_fine_points = QSpinBox()
-        self.auto_tune_fine_points.setRange(2, 2000)
-        self.auto_tune_fine_points.setValue(int(auto_scan.get("fine_points", 31)))
+        self.auto_tune_coarse_steps.setValue(
+            int(auto_brightness_peak.get("reacquire_points", 16))
+        )
         self.auto_tune_settle = self._spin(float(auto_scan["settle_time_s"]), 0, 60)
         self.auto_tune_frame_samples = QSpinBox()
         self.auto_tune_min_valid_frames = QSpinBox()
@@ -486,11 +524,11 @@ class RFPhaseScanWindow(QMainWindow):
             self.auto_tune_verification_min_valid,
         ):
             spin.setRange(1, 100)
-        self.auto_tune_frame_samples.setValue(int(auto_center_lock["frame_samples"]))
-        self.auto_tune_min_valid_frames.setValue(int(auto_center_lock["min_valid_frames"]))
-        self.auto_tune_verification_samples.setValue(int(auto_center_lock["verification_frame_samples"]))
-        self.auto_tune_verification_min_valid.setValue(int(auto_center_lock["verification_min_valid_frames"]))
-        self.auto_tune_frame_interval = self._spin(float(auto_center_lock["frame_interval_s"]), 0, 10)
+        self.auto_tune_frame_samples.setValue(int(auto_measurement.get("frame_samples", auto_center_lock["frame_samples"])))
+        self.auto_tune_min_valid_frames.setValue(int(auto_measurement.get("min_valid_frames", auto_center_lock["min_valid_frames"])))
+        self.auto_tune_verification_samples.setValue(int(auto_measurement.get("verification_frame_samples", auto_center_lock["verification_frame_samples"])))
+        self.auto_tune_verification_min_valid.setValue(int(auto_measurement.get("verification_min_valid_frames", auto_center_lock["verification_min_valid_frames"])))
+        self.auto_tune_frame_interval = self._spin(float(auto_measurement.get("frame_interval_s", auto_center_lock["frame_interval_s"])), 0, 10)
         self.auto_tune_center_tolerance = self._spin(float(auto_center_lock["center_tolerance_mm"]), 0.01, 10)
         self.auto_tune_max_offset = self._spin(float(auto_center_lock["max_correction_step_mev"]), 0.01, 1000)
         self.auto_tune_fine_steps = QSpinBox()
@@ -498,10 +536,10 @@ class RFPhaseScanWindow(QMainWindow):
         self.auto_tune_fine_steps.setValue(int(auto_center_lock["max_iterations"]))
         self.auto_tune_center_step = self._spin(float(auto_center_lock.get("center_step_mev", 10)), 0.01, 1000)
         self.auto_tune_max_total_offset = self._spin(float(auto_center_lock.get("max_total_offset_mev", 100)), 0.01, 2000)
-        self.auto_tune_fit_method = QComboBox()
-        self.auto_tune_fit_method.addItems(["Gauss fit", "Direct"])
-        fit_index = self.auto_tune_fit_method.findText(str(self.auto_tune_defaults["profile_fit_method"]))
-        self.auto_tune_fit_method.setCurrentIndex(max(fit_index, 0))
+        self.auto_tune_fit_method = QLabel(
+            f"Gauss fit · R2 >= {self.min_fit_r_squared:.2f}"
+        )
+        self.auto_tune_fit_method.setProperty("role", "field")
         self.auto_tune_settings_button = QPushButton("Settings...")
         self.auto_tune_settings_summary = QLabel()
         self.auto_tune_settings_summary.setProperty("role", "muted")
@@ -512,7 +550,10 @@ class RFPhaseScanWindow(QMainWindow):
         self.use_background = QCheckBox("Use background")
         self.load_background_button = QPushButton("Load File")
         self.capture_background_button = QPushButton("Sample BG")
-        self.background_status = QLabel("Background disabled")
+        self.background_status = QLabel("BG: None")
+        self.background_status.setProperty("role", "field")
+        self.background_settings_button = QPushButton("Manage...")
+        self.background_settings_button.clicked.connect(self._show_background_dialog)
         self.background_image = None
         self.background_metadata = {}
         self.background_image_path = None
@@ -526,12 +567,25 @@ class RFPhaseScanWindow(QMainWindow):
             configured=configured_roi(self.diagnostics.get("roi"), self.context.control_backend.name, self.diagnostics["flag_element"]),
         )
         self.roi_control.warningRaised.connect(lambda message: self.statusBar().showMessage(message, 8000))
-        self.roi_control.roiChanged.connect(lambda _roi, _enabled: self._refresh_latest_diagnostic())
+        self.roi_control.roiChanged.connect(self._roi_changed)
+        self.roi_dialog = None
+        self.roi_status_label = QLabel("ROI: Off")
+        self.roi_status_label.setProperty("role", "field")
+        self.roi_button = QPushButton("Edit...")
+        self.roi_button.clicked.connect(self._show_roi_dialog)
+        self.preview_button = QPushButton("Preview")
+        self.preview_button.clicked.connect(self.preview_current_diagnostic)
+        self.fit_status_label = QLabel("Fit: Gaussian · waiting")
+        self.fit_status_label.setProperty("role", "field")
         self.progress = QProgressBar()
         self.progress.setRange(0, self.points.value())
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
-        self.result = QLabel("Machine state unchanged")
+        self.result = QLabel(
+            "Machine state unchanged"
+            if self.scan_enabled
+            else f"Preview only · nominal energy {self.preview_energy_mev:g} MeV"
+        )
         self.result.setProperty("role", "muted")
         self.result.setWordWrap(True)
         self.plot = MplWidget()
@@ -575,7 +629,7 @@ class RFPhaseScanWindow(QMainWindow):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(12)
-        title = QLabel("RF Phase Scan")
+        title = QLabel("RF Phase-Energy Gain Scan")
         title.setObjectName("summaryTitle")
         runtime_context = RuntimeContextWidget(
             machine_id=self.context.machine.id,
@@ -597,9 +651,15 @@ class RFPhaseScanWindow(QMainWindow):
         self.status_panel.add_item("device", "Device", self.combo.currentText() or "No LLRF")
         self.status_panel.add_item("station", "Station", str(self.diagnostics["flag_element"]))
         self.status_panel.add_item(
-            "scan", "Scan", "Ready" if self.targets else "Unavailable"
+            "scan",
+            "Scan",
+            "Ready" if self.targets else "Preview only",
         )
-        self.status_panel.add_item("restore", "Restore", "Not run")
+        self.status_panel.add_item(
+            "restore",
+            "Restore",
+            "Not run" if self.scan_enabled else "Not applicable",
+        )
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         summary_layout.addWidget(self.status_panel)
@@ -655,32 +715,16 @@ class RFPhaseScanWindow(QMainWindow):
         action_layout.addWidget(self.stop)
         controls_layout.addLayout(action_layout)
         controls_layout.addWidget(self.progress)
+        scan_card.setEnabled(bool(self.targets))
 
-        background_card = QFrame()
-        background_card.setObjectName("backgroundCard")
-        background_card.setFixedWidth(360)
-        background_layout = QVBoxLayout(background_card)
-        background_layout.setContentsMargins(12, 10, 12, 11)
-        background_layout.setSpacing(7)
-        background_layout.addWidget(self._section_title("Background Reference"))
-        self.use_background.setText("Subtract background")
-        background_layout.addWidget(self.use_background)
-        self.background_status.setProperty("role", "field")
-        self.background_status.setWordWrap(True)
-        background_layout.addWidget(self.background_status)
-        self.background_settings_button = QPushButton("Background...")
-        self.background_settings_button.clicked.connect(self._show_background_dialog)
-        background_layout.addWidget(self.background_settings_button)
-        background_layout.addWidget(self.roi_control)
         control_column.addWidget(scan_card, 1)
-        control_column.addWidget(background_card)
 
         plot_card = QFrame()
         plot_card.setObjectName("plotCard")
         plot_layout = QVBoxLayout(plot_card)
         plot_layout.setContentsMargins(14, 13, 14, 12)
         plot_layout.setSpacing(8)
-        plot_layout.addWidget(self._section_title("Phase - Energy"))
+        plot_layout.addWidget(self._section_title("Phase-Energy"))
         plot_layout.addWidget(self.plot, 2)
         diagnostic_header = QHBoxLayout()
         diagnostic_header.setContentsMargins(0, 0, 0, 0)
@@ -690,6 +734,19 @@ class RFPhaseScanWindow(QMainWindow):
         diagnostic_header.addStretch(1)
         diagnostic_header.addWidget(self.spectrum_summary)
         plot_layout.addLayout(diagnostic_header)
+        diagnostic_controls = QHBoxLayout()
+        diagnostic_controls.setContentsMargins(0, 0, 0, 0)
+        diagnostic_controls.setSpacing(7)
+        diagnostic_controls.addWidget(self.fit_status_label)
+        diagnostic_controls.addStretch(1)
+        diagnostic_controls.addWidget(self.roi_status_label)
+        diagnostic_controls.addWidget(self.roi_button)
+        diagnostic_controls.addWidget(self.background_status)
+        diagnostic_controls.addWidget(self.background_settings_button)
+        self.use_background.setText("Apply BG")
+        diagnostic_controls.addWidget(self.use_background)
+        diagnostic_controls.addWidget(self.preview_button)
+        plot_layout.addLayout(diagnostic_controls)
         plot_layout.addWidget(self.image_plot, 2)
         plot_layout.addWidget(self.result)
         workspace.addLayout(control_column)
@@ -708,7 +765,9 @@ class RFPhaseScanWindow(QMainWindow):
         self._redraw_plot()
         self._draw_diagnostic_placeholders()
         self._build_background_dialog()
+        self._update_roi_status()
         self._load_latest_background(silent=True)
+        self.start.setEnabled(bool(self.targets))
 
         for widget in (self.low, self.high):
             widget.setSuffix(" deg")
@@ -776,19 +835,18 @@ class RFPhaseScanWindow(QMainWindow):
             layout.addWidget(group)
 
         add_group(
-            "Brightness Search",
+            "Brightness Peak",
             (
                 ("Minimum", self.auto_tune_min),
                 ("Maximum", self.auto_tune_max),
-                ("Coarse points", self.auto_tune_coarse_steps),
-                ("Fine points", self.auto_tune_fine_points),
+                ("Reacquire points", self.auto_tune_coarse_steps),
                 ("Settle time", self.auto_tune_settle),
             ),
         )
         add_group(
             "Sampling",
             (
-                ("Fine/center frames", self.auto_tune_frame_samples),
+                ("Measurement frames", self.auto_tune_frame_samples),
                 ("Minimum valid frames", self.auto_tune_min_valid_frames),
                 ("Verification frames", self.auto_tune_verification_samples),
                 ("Verification minimum", self.auto_tune_verification_min_valid),
@@ -799,10 +857,10 @@ class RFPhaseScanWindow(QMainWindow):
             "Center Tracking",
             (
                 ("Center tolerance", self.auto_tune_center_tolerance),
-                ("Profile-lock iterations", self.auto_tune_fine_steps),
-                ("Profile-lock step limit", self.auto_tune_max_offset),
-                ("Brightness-lock step", self.auto_tune_center_step),
-                ("Brightness-lock range", self.auto_tune_max_total_offset),
+                ("Center-lock iterations", self.auto_tune_fine_steps),
+                ("Center-lock correction limit", self.auto_tune_max_offset),
+                ("Center-lock probe step", self.auto_tune_center_step),
+                ("Center-lock search range", self.auto_tune_max_total_offset),
                 ("Profile fit", self.auto_tune_fit_method),
             ),
         )
@@ -822,9 +880,7 @@ class RFPhaseScanWindow(QMainWindow):
         return {
             "minimum": self.auto_tune_min.value(),
             "maximum": self.auto_tune_max.value(),
-            "coarse_points": self.auto_tune_coarse_steps.value(),
-            "coarse_points": self.auto_tune_coarse_steps.value(),
-            "fine_points": self.auto_tune_fine_points.value(),
+            "reacquire_points": self.auto_tune_coarse_steps.value(),
             "max_iterations": self.auto_tune_fine_steps.value(),
             "settle_time_s": self.auto_tune_settle.value(),
             "frame_samples": self.auto_tune_frame_samples.value(),
@@ -836,15 +892,15 @@ class RFPhaseScanWindow(QMainWindow):
             "max_correction_step_mev": self.auto_tune_max_offset.value(),
             "center_step_mev": self.auto_tune_center_step.value(),
             "max_total_offset_mev": self.auto_tune_max_total_offset.value(),
-            "profile_fit_method": self.auto_tune_fit_method.currentText(),
+            "profile_fit_method": "Gauss fit",
         }
 
     def _set_auto_tune_settings_values(self, values):
         controls = (
             (self.auto_tune_min, "minimum"),
             (self.auto_tune_max, "maximum"),
-            (self.auto_tune_coarse_steps, "coarse_points"),
-            (self.auto_tune_fine_points, "fine_points"),
+            (self.auto_tune_coarse_steps, "reacquire_points"),
+            (self.auto_tune_fine_steps, "max_iterations"),
             (self.auto_tune_fine_steps, "max_iterations"),
             (self.auto_tune_settle, "settle_time_s"),
             (self.auto_tune_frame_samples, "frame_samples"),
@@ -859,8 +915,9 @@ class RFPhaseScanWindow(QMainWindow):
         )
         for widget, key in controls:
             widget.setValue(values[key])
-        fit_index = self.auto_tune_fit_method.findText(str(values["profile_fit_method"]))
-        self.auto_tune_fit_method.setCurrentIndex(max(fit_index, 0))
+        self.auto_tune_fit_method.setText(
+            f"Gauss fit · R2 >= {self.min_fit_r_squared:.2f}"
+        )
 
     def _reset_auto_tune_settings(self):
         self._set_auto_tune_settings_values(self._auto_tune_default_values)
@@ -890,9 +947,21 @@ class RFPhaseScanWindow(QMainWindow):
         self._update_auto_tune_settings_summary()
 
     def _update_auto_tune_settings_summary(self):
+        pipeline_labels = {
+            "brightness_peak": "brightness peak",
+            "center_lock": "center lock",
+        }
+        initial_pipeline = self.auto_tune_pipelines.get("initial")
+        if initial_pipeline:
+            pipeline_label = " + ".join(
+                pipeline_labels.get(str(stage), str(stage))
+                for stage in initial_pipeline
+            )
+        else:
+            pipeline_label = "configured pipeline"
         self.auto_tune_settings_summary.setText(
-            f"{self.auto_tune_min.value():g}-{self.auto_tune_max.value():g} MeV · "
-            f"{self.auto_tune_coarse_steps.value()}/{self.auto_tune_fine_points.value()} coarse/fine pts · "
+            f"{pipeline_label} · {self.auto_tune_min.value():g}-{self.auto_tune_max.value():g} MeV · "
+            f"{self.auto_tune_coarse_steps.value()} reacquire pts · "
             f"step <= {self.auto_tune_max_offset.value():g} MeV · "
             f"tol {self.auto_tune_center_tolerance.value():g} mm"
         )
@@ -908,11 +977,34 @@ class RFPhaseScanWindow(QMainWindow):
         scan["pixel_width_mm"] = float(geometry.pixel_width_mm)
         scan["x_reference_mm"] = float(self.diagnostics.get("x_reference_mm", 0.0))
         scan["design_eta_m"] = float(self.diagnostics["design_eta_m"])
-        for key in ("initial_objective", "tracking_objective", "fallback_objective"):
-            scan[key] = str(self.auto_tune_config.get(key, "profile_lock"))
-        scan["coarse_points"] = int(self.auto_tune_coarse_steps.value())
-        scan["fine_points"] = int(self.auto_tune_fine_points.value())
-        center_lock = dict(self.auto_tune_defaults.get("center_lock", {}))
+        scan["image_flip_y"] = self.image_flip_y
+        scan["min_fit_r_squared"] = self.min_fit_r_squared
+        for key in ("initial", "tracking", "fallback"):
+            configured = self.auto_tune_pipelines.get(key)
+            if configured is not None:
+                scan.setdefault("pipelines", {})[key] = list(configured)
+        scan["stages"] = {
+            "brightness_peak": {
+            "strategy": str(
+                dict(self.auto_tune_stages.get("brightness_peak", {}), **self.auto_tune_config.get("brightness_peak", {})).get(
+                    "strategy", "center_outward"
+                )
+            ),
+            "points": int(self.auto_tune_coarse_steps.value()),
+            },
+            "center_lock": {
+            "strategy": str(
+                dict(self.auto_tune_stages.get("center_lock", {}), **self.auto_tune_config.get("center_lock", {})).get(
+                    "strategy", "secant_dispersion"
+                )
+            )
+            },
+        }
+        scan["brightness_peak"] = scan["stages"]["brightness_peak"]
+        scan["center_lock"] = scan["stages"]["center_lock"]
+        scan["reacquire_points"] = int(self.auto_tune_coarse_steps.value())
+        scan["max_iterations"] = int(self.auto_tune_fine_steps.value())
+        center_lock = dict(self.auto_tune_stages.get("center_lock", {}))
         scan["center_step_mev"] = float(self.auto_tune_center_step.value())
         scan["max_total_offset_mev"] = float(self.auto_tune_max_total_offset.value())
         scan["target_x_pixel"] = reference_x_pixel(
@@ -965,9 +1057,108 @@ class RFPhaseScanWindow(QMainWindow):
         if self.latest_diagnostic is None:
             self._draw_diagnostic_placeholders()
         else:
-            image, reference_energy = self.latest_diagnostic
-            self._update_diagnostics(image, reference_energy)
+            image, reference_energy, quality = self.latest_diagnostic
+            self._update_diagnostics(image, reference_energy, quality)
         self._refresh_background_preview()
+
+    def _update_roi_status(self):
+        if self.roi_control.use_roi.isChecked():
+            roi = self.roi_control.roi()
+            text = f"ROI: {roi.width} × {roi.height} px"
+        else:
+            text = "ROI: Off"
+        self.roi_status_label.setText(text)
+
+    def _roi_changed(self, _roi, _enabled):
+        self._update_roi_status()
+        self._refresh_latest_diagnostic()
+
+    def _show_roi_dialog(self):
+        if self.thread is not None:
+            return
+        if self.roi_dialog is None:
+            dialog = QDialog(self)
+            dialog.setWindowTitle(
+                f"Software ROI — {self.diagnostics['flag_element']}"
+            )
+            dialog.setMinimumWidth(340)
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(self.roi_control)
+            buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
+            buttons.rejected.connect(dialog.hide)
+            layout.addWidget(buttons)
+            self.roi_dialog = dialog
+        self.roi_dialog.show()
+        self.roi_dialog.raise_()
+        self.roi_dialog.activateWindow()
+
+    def _diagnostic_channels(self):
+        flag_element = self.diagnostics["flag_element"]
+        image_pv = PV(
+            resolve_channel(
+                self.context,
+                flag_element,
+                self.diagnostics["flag_image_channel"],
+            )
+        )
+        try:
+            energy_pv = resolve_channel(
+                self.context,
+                str(self.config["energy_element"]),
+                self.config["energy_set_channel"],
+            )
+        except MachineProfileError:
+            energy_pv = None
+        return image_pv, energy_pv
+
+    def preview_current_diagnostic(self, _checked=False, *, show_warning=True):
+        if self.thread is not None:
+            return False
+        try:
+            if self.use_background.isChecked() and self._background_exposure_mismatch():
+                raise SpectrumProfileError(
+                    "Saved background exposure differs from the current ENY exposure."
+                )
+            image_pv, energy_pv = self._diagnostic_channels()
+            geometry = resolve_element_image_geometry(
+                self.context,
+                self.diagnostics["flag_element"],
+                self.context.control_backend.name,
+            )
+            acquisition = RFImageAcquisition(
+                image_pv,
+                geometry.shape,
+                geometry.pixel_width_mm,
+                flip_y=self.image_flip_y,
+            )
+            reference_energy = caget(energy_pv) if energy_pv else None
+            reference_source = "channel"
+            if reference_energy is None:
+                reference_energy = self.preview_energy_mev
+                reference_source = "nominal"
+            valid = self._update_diagnostics(
+                acquisition.read_raw(),
+                float(reference_energy),
+                {"reference_source": reference_source},
+            )
+        except (MachineProfileError, SpectrumProfileError, TypeError, ValueError) as exc:
+            valid = False
+            self.fit_status_label.setText("Fit: Gaussian · unavailable")
+            self._set_scan_status("Preview failed", str(exc))
+            if show_warning:
+                QMessageBox.warning(self, "PRF Preview", str(exc))
+        else:
+            self._set_scan_status(
+                "Ready" if valid else "Preview fit unavailable"
+            )
+            if not valid and show_warning:
+                QMessageBox.warning(
+                    self,
+                    "PRF Preview",
+                    "The ENY image did not provide a valid Gaussian fit. "
+                    "Check beam, ROI, and background settings before scanning.",
+                )
+        return valid
 
     def _style_axes(self, axes, xlabel, ylabel):
         palette = PALETTES.get(self.current_theme, PALETTES["dark"])
@@ -986,24 +1177,45 @@ class RFPhaseScanWindow(QMainWindow):
         self._remove_energy_axis()
         self.image_plot.axes.clear()
         self._style_axes(self.image_plot.axes, "x (mm)", "y (mm)")
+        self._place_position_axis_on_top()
         self.image_plot.axes.text(
             0.5, 0.5, "Waiting for matched beam",
             ha="center", va="center", color=palette["muted"],
             transform=self.image_plot.axes.transAxes,
         )
         self.image_plot.fig.tight_layout()
+        self.image_plot.fig.subplots_adjust(
+            left=0.09, right=0.97, bottom=0.14, top=0.80
+        )
         self.image_plot.canvas.draw_idle()
         self.spectrum_summary.setText("Energy N/A  |  Spread N/A  |  Fit waiting")
+        self.fit_status_label.setText("Fit: Gaussian · waiting")
 
     def _remove_energy_axis(self):
         if self.energy_axis is not None:
             self.energy_axis.remove()
             self.energy_axis = None
 
-    def _update_diagnostics(self, raw_image, reference_energy_mev):
+    def _place_position_axis_on_top(self):
+        axes = self.image_plot.axes
+        axes.xaxis.set_label_position("top")
+        axes.xaxis.tick_top()
+        axes.tick_params(
+            axis="x",
+            labeltop=True,
+            labelbottom=False,
+            colors=PALETTES.get(self.current_theme, PALETTES["dark"])["muted"],
+        )
+
+    def _update_diagnostics(self, raw_image, reference_energy_mev, quality=None):
         palette = PALETTES.get(self.current_theme, PALETTES["dark"])
         image = np.asarray(raw_image, dtype=float)
-        self.latest_diagnostic = (image.copy(), float(reference_energy_mev))
+        quality = dict(quality or {})
+        self.latest_diagnostic = (
+            image.copy(),
+            float(reference_energy_mev),
+            quality,
+        )
         geometry = resolve_element_image_geometry(
             self.context,
             self.diagnostics["flag_element"],
@@ -1016,26 +1228,41 @@ class RFPhaseScanWindow(QMainWindow):
         self._remove_energy_axis()
         self.image_plot.axes.clear()
         self._style_axes(self.image_plot.axes, "x (mm)", "y (mm)")
+        self._place_position_axis_on_top()
         self.image_plot.axes.grid(False)
-        self.image_plot.axes.imshow(
-            image, origin="lower", cmap="viridis", extent=extent, aspect="auto",
-        )
-        self.roi_control.attach_axes(self.image_plot.axes, extent=extent)
         analysis_image = image.copy()
         if self.use_background.isChecked() and self.background_image is not None:
             analysis_image -= self.background_image
             analysis_image[analysis_image < 0] = 0
+        self.image_plot.axes.imshow(
+            analysis_image,
+            origin="lower",
+            cmap="viridis",
+            extent=extent,
+            aspect="auto",
+        )
+        self.roi_control.attach_axes(self.image_plot.axes, extent=extent)
         try:
             projection = project_image_profiles(analysis_image, geometry.pixel_width_mm, self.roi_control.active_roi())
             profile_fit = fit_projection_profile(
                 projection.x_mm,
                 projection.density_x,
                 "Gauss fit",
+                allow_direct_fallback=False,
             )
+            if (
+                profile_fit.r_squared is None
+                or profile_fit.r_squared < self.min_fit_r_squared
+            ):
+                raise SpectrumProfileError(
+                    f"Gaussian fit R2 {profile_fit.r_squared!r} is below "
+                    f"{self.min_fit_r_squared:.3f}."
+                )
             eta_m = float(self.diagnostics["design_eta_m"])
             x_reference_mm = float(self.diagnostics.get("x_reference_mm", 0.0))
+            center_offset_mm = profile_fit.center_mm - x_reference_mm
             energy_center = float(reference_energy_mev) * (
-                1.0 + (profile_fit.center_mm - x_reference_mm) * 1e-3 / eta_m
+                1.0 + center_offset_mm * 1e-3 / eta_m
             )
             spread_percent = abs(
                 profile_fit.sigma_mm * 1e-3 / eta_m
@@ -1051,11 +1278,11 @@ class RFPhaseScanWindow(QMainWindow):
             self.image_plot.axes.plot(
                 projection.x_mm,
                 projection_base + profile_fit.fitted_density * projection_height,
-                "-", color=palette["accent"], linewidth=1.3,
+                "-", color=palette["fit"], linewidth=1.3,
                 label=profile_fit.method,
             )
             self.energy_axis = self.image_plot.axes.secondary_xaxis(
-                "top",
+                "bottom",
                 functions=(
                     lambda x: float(reference_energy_mev)
                     * (1.0 + (x - x_reference_mm) * 1e-3 / eta_m),
@@ -1064,6 +1291,12 @@ class RFPhaseScanWindow(QMainWindow):
                 ),
             )
             self.energy_axis.set_xlabel("Energy (MeV)", color=palette["muted"])
+            reference_is_nominal = quality.get("reference_source") == "nominal"
+            if reference_is_nominal:
+                self.energy_axis.set_xlabel(
+                    "Energy (MeV · nominal reference)",
+                    color=palette["muted"],
+                )
             self.energy_axis.tick_params(colors=palette["muted"], labelsize=8)
             legend = self.image_plot.axes.legend(
                 frameon=False, fontsize=8, loc="upper right",
@@ -1074,24 +1307,41 @@ class RFPhaseScanWindow(QMainWindow):
                 "N/A" if profile_fit.r_squared is None
                 else f"{profile_fit.r_squared:.3f}"
             )
-            self.spectrum_summary.setText(
-                f"Energy {energy_center:.2f} MeV  |  "
-                f"Spread {spread_percent:.3f}%  |  R2 {fit_quality}"
+            valid_frames = quality.get("valid_frames")
+            total_frames = quality.get("total_frames")
+            frames_text = (
+                f"  |  Frames {int(valid_frames)}/{int(total_frames)}"
+                if valid_frames is not None and total_frames is not None
+                else ""
             )
+            self.spectrum_summary.setText(
+                f"{'Nominal' if reference_is_nominal else 'Matched'} "
+                f"{float(reference_energy_mev):.2f} MeV  |  "
+                f"dx {center_offset_mm:+.3f} mm{frames_text}  |  "
+                f"R2 {fit_quality}  |  Spread {spread_percent:.3f}%"
+            )
+            self.fit_status_label.setText("Fit: Gaussian · valid")
+            diagnostic_ok = True
         except (KeyError, SpectrumProfileError, TypeError, ValueError, ZeroDivisionError) as exc:
             self.spectrum_summary.setText("Energy N/A  |  Spread N/A  |  Fit unavailable")
+            self.fit_status_label.setText("Fit: Gaussian · unavailable")
             self.image_plot.axes.text(
                 0.02, 0.04, f"Spectrum unavailable: {exc}",
                 ha="left", va="bottom", color=palette["muted"],
                 transform=self.image_plot.axes.transAxes,
             )
+            diagnostic_ok = False
         self.image_plot.fig.tight_layout()
+        self.image_plot.fig.subplots_adjust(
+            left=0.09, right=0.97, bottom=0.20, top=0.80
+        )
         self.image_plot.canvas.draw_idle()
+        return diagnostic_ok
 
     def _refresh_latest_diagnostic(self):
         if self.latest_diagnostic is not None and self.thread is None:
-            image, energy = self.latest_diagnostic
-            self._update_diagnostics(image, energy)
+            image, energy, quality = self.latest_diagnostic
+            self._update_diagnostics(image, energy, quality)
 
     def _redraw_plot(self, fit=None, initial_phase=None):
         palette = PALETTES.get(self.current_theme, PALETTES["dark"])
@@ -1166,6 +1416,9 @@ class RFPhaseScanWindow(QMainWindow):
                 text.set_color(palette["text"])
         self._apply_theme()
         self.plot.fig.tight_layout()
+        self.plot.fig.subplots_adjust(
+            left=0.09, right=0.97, bottom=0.18, top=0.95
+        )
         self.plot.canvas.draw_idle()
 
     def _build_background_dialog(self):
@@ -1262,14 +1515,22 @@ class RFPhaseScanWindow(QMainWindow):
 
     def _update_background_status(self):
         if self.background_image is None:
-            summary = "Background: None"
+            summary = "BG: None"
             detail = "No background loaded"
         else:
             created = str(self.background_metadata.get("created_at", "unknown time"))
             filename = self.background_image_path.name if self.background_image_path else "in memory"
-            summary = f"Background: {filename} · {created}"
-            detail = str(self.background_image_path or "Sampled background is not saved")
+            if self._background_exposure_mismatch():
+                state = "exposure mismatch"
+            else:
+                state = "applied" if self.use_background.isChecked() else "off"
+            summary = f"BG: Ready · {state}"
+            detail = (
+                f"{self.background_image_path or 'Sampled background is not saved'}"
+                f"\nCreated: {created}\nFile: {filename}"
+            )
         self.background_status.setText(summary)
+        self.background_status.setToolTip(detail)
         if hasattr(self, "background_path_label"):
             self.background_path_label.setText(detail)
 
@@ -1291,18 +1552,50 @@ class RFPhaseScanWindow(QMainWindow):
             geometry = resolve_element_image_geometry(self.context, self.diagnostics["flag_element"], self.context.control_backend.name)
             image, metadata = load_background(path, self.runtime_paths["background_metadata_path"], expected_shape=(geometry.shape[1], geometry.shape[0]))
             self._set_background(image, metadata, path)
-        except BackgroundStoreError as exc:
+        except (BackgroundStoreError, ValueError) as exc:
             if not silent:
                 QMessageBox.warning(self, "Background", str(exc))
             return False
         return True
 
     def _set_background(self, image, metadata, path):
+        metadata = dict(metadata)
+        expected_flag = self.diagnostics["flag_element"]
+        if metadata.get("flag_element") not in (None, expected_flag):
+            raise ValueError(
+                f"Background belongs to {metadata['flag_element']}, not {expected_flag}."
+            )
+        expected_backend = self.context.control_backend.name
+        if metadata.get("backend") not in (None, expected_backend):
+            raise ValueError(
+                f"Background backend is {metadata['backend']}, not {expected_backend}."
+            )
         self.background_image = image
-        self.background_metadata = dict(metadata)
+        self.background_metadata = metadata
         self.background_image_path = Path(path)
+        if self._background_exposure_mismatch():
+            self.use_background.setChecked(False)
         self._update_background_status()
         self._refresh_background_preview()
+
+    def _current_exposure_s(self):
+        try:
+            exposure_pv = resolve_channel(
+                self.context,
+                self.diagnostics["flag_element"],
+                "exposure_time",
+            )
+            value = caget(exposure_pv)
+            return None if value is None else float(value)
+        except (MachineProfileError, TypeError, ValueError):
+            return None
+
+    def _background_exposure_mismatch(self):
+        saved = self.background_metadata.get("exposure_s")
+        current = self._current_exposure_s()
+        if saved is None or current is None:
+            return False
+        return not np.isclose(float(saved), current, rtol=0.01, atol=1e-6)
 
     def save_background_file(self):
         if self.background_image is None:
@@ -1332,6 +1625,8 @@ class RFPhaseScanWindow(QMainWindow):
         except ValueError as exc:
             self._set_scan_status("Invalid Energy Match settings", str(exc))
             QMessageBox.warning(self, "Energy Match Settings", str(exc))
+            return
+        if not self.preview_current_diagnostic(show_warning=True):
             return
         scan_config = dict(self.config["scan"])
         tracking_config = dict(scan_config["energy_tracking"])
@@ -1377,10 +1672,8 @@ class RFPhaseScanWindow(QMainWindow):
         ).pv_name
         self.points_data = []
         self.active_phase_mode = phase.phase_mode
-        self.latest_diagnostic = None
         self.last_fit = None
         self.last_initial_phase = None
-        self._draw_diagnostic_placeholders()
         self.progress.setRange(0, phase.points)
         self.progress.setValue(0)
         self.progress.setFormat(f"0 / {phase.points}")
@@ -1395,7 +1688,7 @@ class RFPhaseScanWindow(QMainWindow):
         background_metadata["roi_enabled"] = self.roi_control.use_roi.isChecked()
         background_metadata["roi"] = self.roi_control.roi().as_dict()
         self.thread = ScanThread(context=self.context, target=target, settings=phase, scan=auto_tune_settings, image_pv=image_pv, image_shape=geometry.shape, pixel_width_mm=geometry.pixel_width_mm, phase_pv=target.pv_name, energy_pv=energy_pv, remove_bg=self.use_background.isChecked() and self.background_image is not None, bg_image=self.background_image, background_metadata=background_metadata, point_measurement=point_measurement, roi=self.roi_control.active_roi())
-        for widget in (self.combo, self.phase_mode, self.low, self.high, self.points, self.settle, self.tracking, self.fallback, self.tracking_reacquire_points, self.measurement_samples, self.measurement_interval, self.auto_tune_settings_button, self.use_background, self.background_settings_button):
+        for widget in (self.combo, self.phase_mode, self.low, self.high, self.points, self.settle, self.tracking, self.fallback, self.tracking_reacquire_points, self.measurement_samples, self.measurement_interval, self.auto_tune_settings_button, self.use_background, self.background_settings_button, self.roi_button, self.preview_button):
             widget.setEnabled(False)
         self.thread.point.connect(self._point)
         self.thread.diagnostic.connect(self._update_diagnostics)
@@ -1444,8 +1737,9 @@ class RFPhaseScanWindow(QMainWindow):
         self.result.setText(
             f"Restore: phase {'OK' if result.get('phase_restored') else 'FAILED'}  |  "
             f"energy {'OK' if result.get('energy_restored') else 'FAILED'}"
-            + (f"  |  crest {float(fit['crest_phase_command_deg']):+.2f} deg  |  "
-               f"amplitude {float(fit['amplitude_mev']):.2f} MeV  |  "
+            + (f"  |  Crest phase {float(fit['crest_phase_command_deg']):+.2f} deg  |  "
+               f"Energy gain {float(fit['amplitude_mev']):.2f} MeV  |  "
+               f"Baseline energy {float(fit['baseline_energy_mev']):.2f} MeV  |  "
                f"RMSE {float(fit['rmse_mev']):.3f} MeV  |  R2 {float(fit['r_squared']):.3f}"
                if fit else "  |  fit unavailable")
             + (f"\nCSV: {result.get('csv_path')}\nJSON: {result.get('json_path')}"
@@ -1459,7 +1753,7 @@ class RFPhaseScanWindow(QMainWindow):
             self.status_panel.set_item("restore", "Partial failure", "warning")
         else:
             self.status_panel.set_item("restore", "Failed", "warning")
-        for widget in (self.combo, self.phase_mode, self.low, self.high, self.points, self.settle, self.tracking, self.fallback, self.tracking_reacquire_points, self.measurement_samples, self.measurement_interval, self.auto_tune_settings_button, self.use_background, self.background_settings_button):
+        for widget in (self.combo, self.phase_mode, self.low, self.high, self.points, self.settle, self.tracking, self.fallback, self.tracking_reacquire_points, self.measurement_samples, self.measurement_interval, self.auto_tune_settings_button, self.use_background, self.background_settings_button, self.roi_button, self.preview_button):
             widget.setEnabled(True)
 
     def closeEvent(self, event):
@@ -1476,7 +1770,17 @@ class RFPhaseScanWindow(QMainWindow):
             self.use_background.blockSignals(True)
             self.use_background.setChecked(False)
             self.use_background.blockSignals(False)
+        elif enabled and self._background_exposure_mismatch():
+            self.use_background.blockSignals(True)
+            self.use_background.setChecked(False)
+            self.use_background.blockSignals(False)
+            QMessageBox.warning(
+                self,
+                "Background",
+                "Saved background exposure differs from the current ENY exposure.",
+            )
         self._update_background_status()
+        self._refresh_latest_diagnostic()
 
     def load_background_file(self):
         image_path, _ = QFileDialog.getOpenFileName(self, "Load background", str(self.runtime_paths["background_image_path"]), "NumPy image (*.npy)")
@@ -1494,6 +1798,14 @@ class RFPhaseScanWindow(QMainWindow):
             QMessageBox.warning(self, "Background", str(exc))
 
     def capture_background(self):
+        if QMessageBox.question(
+            self,
+            "Sample ENY Background",
+            "Confirm that the beam is absent before sampling the background.",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        ) != QMessageBox.Yes:
+            return
         try:
             image_pv = PV(resolve_channel(
                 self.context,
@@ -1505,6 +1817,7 @@ class RFPhaseScanWindow(QMainWindow):
                 image_pv,
                 geometry.shape,
                 geometry.pixel_width_mm,
+                flip_y=self.image_flip_y,
             )
             images = []
             for index in range(self.background_samples_spin.value()):
@@ -1522,6 +1835,8 @@ class RFPhaseScanWindow(QMainWindow):
                 "flag_pv": image_pv.pvname,
                 "shape": list(image.shape),
                 "pixel_width_mm": geometry.pixel_width_mm,
+                "image_flip_y": self.image_flip_y,
+                "exposure_s": self._current_exposure_s(),
                 "sample_count": len(images),
                 "sample_interval_s": self.background_interval_spin.value(),
                 "source": "sampled_latest",

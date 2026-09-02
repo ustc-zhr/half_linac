@@ -49,6 +49,16 @@ class ROIControl(QWidget):
     def active_roi(self) -> ImageROI | None:
         return self.roi() if self.use_roi.isChecked() else None
 
+    def set_state(self, roi: ImageROI, enabled: bool):
+        bounded, warnings = clamp_roi(roi, self.image_shape)
+        self._set_roi(bounded)
+        blocked = self.use_roi.blockSignals(True)
+        self.use_roi.setChecked(bool(enabled))
+        self.use_roi.blockSignals(blocked)
+        for warning in warnings:
+            self.warningRaised.emit(warning)
+        self._emit()
+
     def reconfigure(self, *, image_shape, runtime_path, configured=None):
         self.image_shape = tuple(image_shape)
         self.runtime_path = runtime_path

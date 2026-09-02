@@ -6,6 +6,15 @@ import numpy as np
 from epics import caget, caput
 
 from .image_acquisition import RFImageAcquisition
+from half_linac.src.shared.energy_tuning import (
+    BRIGHTNESS_PEAK,
+    CENTER_LOCK,
+    EnergyStageContext,
+    EnergyTuningPipeline,
+    StageResult,
+    normalize_pipeline,
+    pipeline_has,
+)
 
 
 class EnergyMatchCancelled(RuntimeError):
@@ -46,6 +55,7 @@ class RFPhaseEnergyMatcher:
         remove_bg=False,
         bg_image=None,
         roi=None,
+        flip_y=False,
         settle_time_s=1,
         restore_initial_on_failure=True,
         cancel_requested=None,
@@ -57,11 +67,13 @@ class RFPhaseEnergyMatcher:
         frame_interval_s=0.2,
         pixel_width_mm=None,
         profile_fit_method="Gauss fit",
+        min_fit_r_squared=0.7,
         x_reference_mm=0,
         center_tolerance_mm=0.2,
         max_iterations=6,
         max_correction_step_mev=25,
         objective="profile_lock",
+        pipeline=None,
     ):
         if pixel_width_mm is None:
             raise ValueError("pixel_width_mm is required for energy matching.")
@@ -76,6 +88,7 @@ class RFPhaseEnergyMatcher:
             self.pixel_width_mm,
             background=bg_image if remove_bg else None,
             roi=roi,
+            flip_y=flip_y,
         )
         self.progress_callback = progress_callback
         self.settle_time_s = float(settle_time_s)
@@ -88,11 +101,14 @@ class RFPhaseEnergyMatcher:
         self.verification_min_valid_frames = int(verification_min_valid_frames)
         self.frame_interval_s = float(frame_interval_s)
         self.profile_fit_method = str(profile_fit_method)
+        self.min_fit_r_squared = float(min_fit_r_squared)
         self.x_reference_mm = float(x_reference_mm)
         self.center_tolerance_mm = float(center_tolerance_mm)
         self.max_iterations = int(max_iterations)
         self.max_correction_step_mev = float(max_correction_step_mev)
         self.objective = str(objective).strip()
+        self._legacy_objective = pipeline is None
+        self.pipeline = normalize_pipeline(pipeline, legacy_objective=self.objective)
         if self.objective not in {"profile_lock", "brightness_then_profile_lock"}:
             raise ValueError("Unsupported energy-match objective.")
         if not 1 <= self.min_valid_frames <= self.frame_samples:
@@ -107,9 +123,13 @@ class RFPhaseEnergyMatcher:
             raise ValueError("Center tolerance and maximum correction step must be positive.")
         if self.max_iterations < 1:
             raise ValueError("Maximum energy-match iterations must be at least one.")
+        if not 0 <= self.min_fit_r_squared <= 1:
+            raise ValueError("Minimum Gaussian fit R2 must be in [0, 1].")
         self.initial_energy = None
         self.best_energy = None
         self.center_lock_result = None
+        self.pipeline_result = None
+        self._pipeline_seed = None
         self.last_message = None
         self.status = "IDLE"
 
@@ -157,6 +177,8 @@ class RFPhaseEnergyMatcher:
                 interval_s=self.frame_interval_s,
                 fit_method=self.profile_fit_method,
                 cancel_requested=self._cancelled,
+                allow_direct_fallback=False,
+                min_fit_r_squared=self.min_fit_r_squared,
             )
         except InterruptedError as exc:
             raise EnergyMatchCancelled(str(exc)) from exc
@@ -177,6 +199,7 @@ class RFPhaseEnergyMatcher:
             valid_frames=result["valid_frames"],
             total_frames=samples,
             fit_method=result["fit_method"],
+            fit_r_squared=result["fit_r_squared"],
         )
         return result
 
@@ -220,13 +243,13 @@ class RFPhaseEnergyMatcher:
             if measurement is not None:
                 candidates.append(measurement)
                 if (
-                    self.objective != "brightness_then_profile_lock"
+                    not pipeline_has(self.pipeline, CENTER_LOCK)
                     and abs(measurement["offset_mm"]) <= self.center_tolerance_mm
                 ):
                     break
         if not candidates:
             return None
-        if self.objective == "brightness_then_profile_lock":
+        if pipeline_has(self.pipeline, BRIGHTNESS_PEAK):
             # Use the brightest reliable beam as the seed, then lock its fitted center.
             return max(candidates, key=lambda item: item["brightness"])
         return min(candidates, key=lambda item: abs(item["offset_mm"]))
@@ -274,13 +297,95 @@ class RFPhaseEnergyMatcher:
         }
         return float(verified["energy"])
 
-    def run(self, B_min, B_max, *, start_energy, tracking_reacquire_points=9):
+    def _run_brightness_peak_stage(self, low, high, config):
+        points = int(config.get("points", config.get("reacquire_points", 9)))
+        strategy = str(config.get("strategy", "center_outward")).strip()
+        if strategy != "center_outward":
+            return StageResult(
+                False,
+                None,
+                f"Unsupported RF brightness-peak strategy: {strategy!r}.",
+            )
+        seed = self._reacquire(low, high, self._pipeline_start_energy, points)
+        if seed is None:
+            # Preserve the existing retry behavior when the first reacquire
+            # pass loses the beam or returns no usable profile.
+            seed = self._reacquire(low, high, self._pipeline_start_energy, points)
+        if seed is None:
+            return StageResult(
+                False,
+                None,
+                self.last_message or "No valid beam profile was found in the Energy Match window.",
+            )
+        self._pipeline_seed = seed
+        return StageResult(
+            True,
+            float(seed["energy"]),
+            diagnostics={
+                "brightness": float(seed["brightness"]),
+                "center_offset_mm": float(seed["offset_mm"]),
+                "exploration_strategy": strategy,
+                "exploration_points": points,
+            },
+        )
+
+    def _run_center_lock_stage(self, seed_energy, low, high, config):
+        strategy = str(config.get("strategy", "secant_dispersion")).strip()
+        if strategy != "secant_dispersion":
+            return StageResult(
+                False,
+                None,
+                f"Unsupported RF center-lock strategy: {strategy!r}.",
+            )
+        seed = self._pipeline_seed
+        if seed is None or abs(float(seed["energy"]) - float(seed_energy)) > 1e-9:
+            seed = self._at(float(seed_energy), "track")
+        if seed is None:
+            return StageResult(
+                False,
+                None,
+                self.last_message or "No valid beam profile was found for center lock.",
+            )
+        matched = self._track_center(seed, low, high)
+        if matched is None:
+            return StageResult(
+                False,
+                None,
+                self.last_message or "Energy Match center lock failed.",
+            )
+        return StageResult(
+            True,
+            float(matched),
+            diagnostics={"strategy": strategy, **dict(self.center_lock_result or {})},
+        )
+
+    def _run_explicit_pipeline(
+        self, low, high, start_energy, brightness_peak_config, center_lock_config
+    ):
+        self._pipeline_start_energy = float(start_energy)
+        context = EnergyStageContext(
+            low=float(low),
+            high=float(high),
+            initial_value=float(start_energy),
+            config={
+                "brightness_peak": dict(brightness_peak_config),
+                "center_lock": dict(center_lock_config),
+            },
+            brightness_peak=self._run_brightness_peak_stage,
+            center_lock=self._run_center_lock_stage,
+        )
+        return EnergyTuningPipeline(self.pipeline).run(context)
+
+    def run(self, B_min, B_max, *, start_energy, tracking_reacquire_points=9,
+            brightness_peak_config=None, center_lock_config=None):
         low, high = float(B_min), float(B_max)
         if low >= high:
             raise ValueError("Energy Match bounds must contain low < high.")
         self.status = "RUNNING"
         self.last_message = None
         self.center_lock_result = None
+        self.pipeline_result = None
+        self._pipeline_seed = None
         initial = caget(self.bend_pv)
         if initial is None or not np.isfinite(float(initial)):
             self.status = "FAILED"
@@ -289,16 +394,37 @@ class RFPhaseEnergyMatcher:
         self.initial_energy = float(initial)
         center = float(np.clip(float(start_energy), low, high))
         try:
-            if self.objective == "brightness_then_profile_lock":
-                seed = self._reacquire(low, high, center, tracking_reacquire_points)
-            else:
-                seed = self._at(center, "track")
-                if seed is None:
+            if self._legacy_objective:
+                if pipeline_has(self.pipeline, BRIGHTNESS_PEAK):
                     seed = self._reacquire(low, high, center, tracking_reacquire_points)
-            if seed is None:
-                self.last_message = "No valid beam profile was found in the Energy Match window."
-                raise RuntimeError(self.last_message)
-            matched = self._track_center(seed, low, high)
+                else:
+                    seed = self._at(center, "track")
+                if seed is None and pipeline_has(self.pipeline, BRIGHTNESS_PEAK):
+                    seed = self._reacquire(low, high, center, tracking_reacquire_points)
+                if seed is None:
+                    self.last_message = "No valid beam profile was found in the Energy Match window."
+                    raise RuntimeError(self.last_message)
+                if pipeline_has(self.pipeline, CENTER_LOCK):
+                    matched = self._track_center(seed, low, high)
+                else:
+                    matched = float(seed["energy"])
+                    self._report("final", matched, True, **seed)
+            else:
+                self.pipeline_result = self._run_explicit_pipeline(
+                    low,
+                    high,
+                    center,
+                    brightness_peak_config or {
+                        "strategy": "center_outward",
+                        "points": tracking_reacquire_points,
+                    },
+                    center_lock_config or {"strategy": "secant_dispersion"},
+                )
+                if not self.pipeline_result.ok or self.pipeline_result.actuator_value is None:
+                    raise RuntimeError(
+                        self.pipeline_result.message or "Energy Match pipeline failed."
+                    )
+                matched = float(self.pipeline_result.actuator_value)
             if matched is None:
                 raise RuntimeError(self.last_message or "Energy Match failed.")
             self.best_energy = matched

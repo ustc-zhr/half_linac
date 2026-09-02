@@ -671,6 +671,8 @@ def _run_child(app_name: str) -> None:
             raise AssertionError("HV feedback did not clear trend history for a new session.")
 
     if app_name == "launcher":
+        if window.rf_phase_scan_button.text() != "RF Crest & Gain":
+            raise AssertionError("Launcher did not expose the updated RF app label.")
         window._apply_runtime_selection("irfel", "real")
         switched_log = window.textEdit.toPlainText()
         if "Runtime: machine=irfel, backend=real." not in switched_log:

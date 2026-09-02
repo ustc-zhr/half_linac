@@ -19,7 +19,6 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -30,6 +29,7 @@ from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -78,7 +78,11 @@ from half_linac.src.apps.energy_spectrum.stations import (
     LEGACY_STATION_ID,
     resolve_energy_spectrum_stations,
 )
-from half_linac.src.shared.beam_diagnostics import ROIControl, configured_roi
+from half_linac.src.shared.beam_diagnostics import (
+    ROIControl,
+    configured_roi,
+    resolve_image_display_scale,
+)
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
@@ -144,6 +148,8 @@ DARK_THEME = {
     "metric_idle_fg": "#c8d2da",
     "metric_readout_fg": "#86e8f2",
     "metric_label_fg": "#f3efe3",
+    "selector_popup_selected_bg": "#22313a",
+    "selector_popup_border": "#48606e",
 }
 
 LIGHT_THEME = {
@@ -184,6 +190,8 @@ LIGHT_THEME = {
     "metric_idle_fg": "#4e5a62",
     "metric_readout_fg": "#1f73c9",
     "metric_label_fg": "#2d3940",
+    "selector_popup_selected_bg": "#efe6d9",
+    "selector_popup_border": "#d9d0c3",
 }
 
 
@@ -293,6 +301,13 @@ QLabel[role="field"] {{
     font-weight: 600;
     background: transparent;
     border: none;
+}}
+
+QFrame#resultSeparator {{
+    background-color: {status_separator};
+    border: none;
+    min-width: 1px;
+    max-width: 1px;
 }}
 
 QLabel {{
@@ -442,6 +457,7 @@ QToolButton#themeToggleButton:hover {{
 QToolButton#themeToggleButton:pressed {{
     background-color: {button_pressed_bg};
 }}
+
 """.format_map(theme_values)
 
 
@@ -716,6 +732,11 @@ class ESAAutoTuneThread(QThread):
                 cancel_requested=self.isInterruptionRequested,
                 restore_initial_on_cancel=True,
                 mode=str(self.bend_scan.get("objective", "find_beam")),
+                pipeline=self.bend_scan.get("pipeline"),
+                stage_config={
+                    "brightness_peak": dict(self.bend_scan.get("brightness_peak", {})),
+                    "center_lock": dict(self.bend_scan.get("center_lock", {})),
+                },
                 target_x_pixel=float(
                     self.bend_scan.get(
                         "target_x_pixel",
@@ -793,6 +814,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        gauss_fit_index = self.comboBox_fitmethod.findText("Gauss fit")
+        if gauss_fit_index >= 0:
+            self.comboBox_fitmethod.setCurrentIndex(gauss_fit_index)
         install_qt_window_raise_handler(self)
         self.app_context = load_app_context("energy_spectrum")
         self.machine_profile = self.app_context.profile
@@ -843,6 +867,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._readout_text = None
         self._readout_tone = None
         self._readout_tooltip = None
+        self.log_intensity_enabled = False
+        self._image_display_warning = None
+        self.roi_dialog = None
+        self._roi_edit_active = False
+        self._roi_edit_snapshot = None
+        self._roi_edit_timer_was_active = False
+        self._roi_updates_suspended = False
 
         self.colorbar = None
         self.sigx = None
@@ -1064,11 +1095,20 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_unit = self.auto_tune_target.unit or "a.u."
         self.auto_tune_mode = self._load_auto_tune_scan_mode()
         self.init_ESAflag()
-        self.roi_control.reconfigure(
-            image_shape=(self.flag_pixel[1], self.flag_pixel[0]),
-            runtime_path=self._runtime_paths()["latest_dir"] / "roi" / f"{self.energy_config['flag_element']}.json",
-            configured=configured_roi(self.energy_config.get("roi"), self.control_backend, self.energy_config["flag_element"]),
-        )
+        self._roi_updates_suspended = True
+        try:
+            self.roi_control.reconfigure(
+                image_shape=(self.flag_pixel[1], self.flag_pixel[0]),
+                runtime_path=self._runtime_paths()["latest_dir"] / "roi" / f"{self.energy_config['flag_element']}.json",
+                configured=configured_roi(self.energy_config.get("roi"), self.control_backend, self.energy_config["flag_element"]),
+            )
+        finally:
+            self._roi_updates_suspended = False
+        self._update_roi_summary()
+        if self.roi_dialog is not None:
+            self.roi_dialog.setWindowTitle(
+                f"Software ROI — {self.energy_config['flag_element']}"
+            )
         self._sync_exposure_control_state()
         self._apply_station_controls()
 
@@ -1133,8 +1173,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_max_spin.setValue(
             float(scan_config.get("high", scan_config.get("max", scan_high)))
         )
-        self.auto_tune_coarse_steps_spin.setValue(int(scan_config.get("coarse_steps", 40)))
-        self.auto_tune_fine_steps_spin.setValue(int(scan_config.get("fine_steps", 81)))
+        stage_configs = dict(auto_tune_config.get("stages", {}))
+        brightness_peak_config = dict(stage_configs.get("brightness_peak", auto_tune_config.get("brightness_peak", {})))
+        self.auto_tune_coarse_steps_spin.setValue(
+            int(brightness_peak_config.get("coarse_steps", scan_config.get("coarse_steps", 40)))
+        )
+        self.auto_tune_fine_steps_spin.setValue(
+            int(brightness_peak_config.get("fine_steps", scan_config.get("fine_steps", 81)))
+        )
         self.auto_tune_settle_spin.setValue(float(scan_config.get("settle_time_s", 0.5)))
 
         self.comboBox_start_element.blockSignals(True)
@@ -1654,6 +1700,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.spectrum_plot_title.setObjectName("panelTitle")
         self.stability_plot_title = QLabel("Energy Stability", self.frame_3)
         self.stability_plot_title.setObjectName("panelTitle")
+        self.stability_header_layout = QHBoxLayout()
+        self.stability_header_layout.setContentsMargins(0, 0, 0, 0)
+        self.stability_header_layout.setSpacing(7)
+        self.stability_header_layout.addWidget(self.stability_plot_title)
+        self.stability_header_layout.addStretch(1)
         self.stability_plot = QWidget(self.frame_3)
         self.stability_plot.fig = Figure(figsize=(4, 1.2))
         self.stability_plot.axes = self.stability_plot.fig.add_subplot(111)
@@ -1667,7 +1718,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         self.verticalLayout_5.insertWidget(0, self.flag_plot_title)
         self.verticalLayout_5.insertWidget(2, self.spectrum_plot_title)
-        self.verticalLayout_5.addWidget(self.stability_plot_title)
+        self.verticalLayout_5.addLayout(self.stability_header_layout)
         self.verticalLayout_5.addWidget(self.stability_plot)
         self.verticalLayout_5.setStretch(1, 5)
         self.verticalLayout_5.setStretch(3, 4)
@@ -1822,6 +1873,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         auto_tune_config = resolve_energy_spectrum_auto_tune(self.energy_config)
         configured_objective = str(auto_tune_config["objective"]).strip()
+        configured_pipeline = auto_tune_config.get("pipeline")
+        if configured_pipeline == ["brightness_peak"]:
+            configured_objective = "find_beam"
+        elif configured_pipeline == ["center_lock"]:
+            configured_objective = "center_x_reference"
+        elif configured_pipeline == ["brightness_peak", "center_lock"]:
+            configured_objective = "brightness_then_profile_lock"
         objective_index = self.auto_tune_objective_combo.findData(configured_objective)
         if objective_index < 0:
             raise MachineProfileError(
@@ -1840,7 +1898,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_settle_spin.setProperty("dense", True)
         self.auto_tune_settle_spin.setValue(float(scan_config.get("settle_time_s", 0.5)))
 
-        center_lock_config = dict(auto_tune_config.get("center_lock", {}))
+        measurement_config = dict(auto_tune_config.get("measurement", {}))
+        stage_configs = dict(auto_tune_config.get("stages", {}))
+        center_lock_config = dict(stage_configs.get("center_lock", auto_tune_config.get("center_lock", {})))
         self.auto_tune_frame_interval_spin = QDoubleSpinBox(self.groupBox_8)
         self.auto_tune_frame_interval_spin.setObjectName("autoTuneFrameIntervalSpinBox")
         self.auto_tune_frame_interval_spin.setDecimals(2)
@@ -1850,7 +1910,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_frame_interval_spin.setKeyboardTracking(False)
         self.auto_tune_frame_interval_spin.setProperty("dense", True)
         self.auto_tune_frame_interval_spin.setValue(
-            float(center_lock_config.get("frame_interval_s", 0.2))
+            float(measurement_config.get("frame_interval_s", center_lock_config.get("frame_interval_s", 0.2)))
         )
 
         self.auto_tune_probe_step_spin = QDoubleSpinBox(self.groupBox_8)
@@ -1893,16 +1953,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             spin.setKeyboardTracking(False)
             spin.setProperty("dense", True)
         self.auto_tune_frame_samples_spin.setValue(
-            int(center_lock_config.get("frame_samples", 3))
+            int(measurement_config.get("frame_samples", center_lock_config.get("frame_samples", 3)))
         )
         self.auto_tune_min_valid_frames_spin.setValue(
-            int(center_lock_config.get("min_valid_frames", 2))
+            int(measurement_config.get("min_valid_frames", center_lock_config.get("min_valid_frames", 2)))
         )
         self.auto_tune_verification_frames_spin.setValue(
-            int(center_lock_config.get("verification_frame_samples", 5))
+            int(measurement_config.get("verification_frame_samples", center_lock_config.get("verification_frame_samples", 5)))
         )
         self.auto_tune_verification_min_valid_spin.setValue(
-            int(center_lock_config.get("verification_min_valid_frames", 3))
+            int(measurement_config.get("verification_min_valid_frames", center_lock_config.get("verification_min_valid_frames", 3)))
         )
 
         self.auto_tune_max_offset_spin = QDoubleSpinBox(self.groupBox_8)
@@ -2001,7 +2061,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         objective_layout = QGridLayout()
         objective_layout.setContentsMargins(0, 0, 0, 0)
         objective_layout.setHorizontalSpacing(7)
-        objective_label = QLabel("Method", self.groupBox_8)
+        objective_label = QLabel("Pipeline", self.groupBox_8)
         objective_label.setProperty("role", "field")
         objective_layout.addWidget(objective_label, 0, 0)
         objective_layout.addWidget(self.auto_tune_objective_combo, 0, 1)
@@ -2109,8 +2169,17 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _update_auto_tune_settings_summary(self):
         mode_label = "Relative offsets" if self.auto_tune_mode == "relative" else "Absolute setpoints"
+        pipeline_labels = {
+            "find_beam": "brightness peak",
+            "center_x_reference": "center lock",
+            "brightness_then_profile_lock": "brightness peak + center lock",
+        }
+        pipeline_label = pipeline_labels.get(
+            str(self.auto_tune_objective_combo.currentData()),
+            "configured pipeline",
+        )
         self.auto_tune_settings_summary.setText(
-            f"{mode_label} · {self.auto_tune_min_spin.value():g}–"
+            f"{pipeline_label} · {mode_label} · {self.auto_tune_min_spin.value():g}–"
             f"{self.auto_tune_max_spin.value():g} {self.auto_tune_unit} · "
             f"{self.auto_tune_coarse_steps_spin.value()}/"
             f"{self.auto_tune_fine_steps_spin.value()} pts · "
@@ -2204,7 +2273,22 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "coarse_steps": self.auto_tune_coarse_steps_spin.value(),
             "fine_steps": self.auto_tune_fine_steps_spin.value(),
             "settle_time_s": self.auto_tune_settle_spin.value(),
+            "brightness_peak": dict(
+                resolve_energy_spectrum_auto_tune(self.energy_config).get(
+                    "brightness_peak", {}
+                )
+            ),
+            "center_lock": dict(
+                resolve_energy_spectrum_auto_tune(self.energy_config).get(
+                    "center_lock", {}
+                )
+            ),
             "objective": objective,
+            "pipeline": {
+                "find_beam": ["brightness_peak"],
+                "center_x_reference": ["center_lock"],
+                "brightness_then_profile_lock": ["brightness_peak", "center_lock"],
+            }.get(objective),
             "target_x_pixel": target_x_pixel,
             "frame_samples": self.auto_tune_frame_samples_spin.value(),
             "min_valid_frames": self.auto_tune_min_valid_frames_spin.value(),
@@ -2315,7 +2399,16 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.gridLayout.addWidget(self.label_3, 0, 2)
         self.gridLayout.addWidget(self.lineEdit_refresh, 0, 3)
         self.gridLayout.addWidget(self.label_2, 1, 0)
-        self.gridLayout.addWidget(self.comboBox_colormap, 1, 1)
+        image_display_layout = QHBoxLayout()
+        image_display_layout.setContentsMargins(0, 0, 0, 0)
+        image_display_layout.setSpacing(6)
+        image_display_layout.addWidget(self.comboBox_colormap, 1)
+        self.log_intensity_checkbox = QCheckBox("Log intensity", self.groupBox_4)
+        self.log_intensity_checkbox.setToolTip(
+            "Use logarithmic image colors without changing spectrum analysis."
+        )
+        image_display_layout.addWidget(self.log_intensity_checkbox)
+        self.gridLayout.addLayout(image_display_layout, 1, 1)
         self.gridLayout.addWidget(self.label_10, 1, 2)
         self.gridLayout.addWidget(self.comboBox_fitmethod, 1, 3)
         self.gridLayout.removeWidget(self.checkBox_emit)
@@ -2490,7 +2583,20 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.verticalLayout_12.addWidget(self.checkBox_bg)
         self.verticalLayout_12.addWidget(self.background_status_label)
         self.verticalLayout_12.addWidget(self.background_settings_button)
-        self.verticalLayout_12.addWidget(self.roi_control)
+        roi_row = QHBoxLayout()
+        roi_row.setContentsMargins(0, 0, 0, 0)
+        roi_row.setSpacing(7)
+        roi_label = QLabel("ROI", self.groupBox_4)
+        roi_label.setProperty("role", "field")
+        self.roi_summary_label = QLabel("Off", self.groupBox_4)
+        self.roi_summary_label.setProperty("role", "field")
+        self.roi_edit_button = QPushButton("Edit…", self.groupBox_4)
+        self.roi_edit_button.setProperty("tight", True)
+        roi_row.addWidget(self.roi_summary_label, 1)
+        roi_row.addWidget(self.roi_edit_button)
+        self.gridLayout.addWidget(roi_label, 2, 0)
+        self.gridLayout.addLayout(roi_row, 2, 1, 1, 3)
+        self._update_roi_summary()
         self.groupBox_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self._sync_energy_control_state()
 
@@ -2529,6 +2635,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.lineEdit_refresh.returnPressed.connect(self.set_refresh)
         self.comboBox_fitmethod.currentTextChanged.connect(self._handle_fit_method_change)
         self.comboBox_colormap.currentTextChanged.connect(self._handle_colormap_change)
+        self.log_intensity_checkbox.toggled.connect(
+            self._handle_log_intensity_change
+        )
         self.comboBox_start_element.currentTextChanged.connect(
             self._apply_optics_input_preset
         )
@@ -2543,7 +2652,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.pushButton_load_latest_bg.clicked.connect(self._load_latest_background)
         self.background_settings_button.clicked.connect(self._show_background_dialog)
         self.checkBox_bg.clicked.connect(lambda: self.bg_removeornot(self.checkBox_bg.isChecked()))
-        self.roi_control.roiChanged.connect(lambda _roi, _enabled: self.ESA_running(write_latest=False) if self._pv_available and not self._auto_tune_is_running() else None)
+        self.roi_edit_button.clicked.connect(self._begin_roi_edit)
+        self.roi_control.roiChanged.connect(self._handle_roi_changed)
+        self.roi_control.save_button.clicked.connect(self._capture_roi_edit_snapshot)
 
         self.slider_energy.valueChanged.connect(self._update_energy_slider_label)
         self.slider_energy.sliderReleased.connect(self.set_bend_quad)
@@ -2602,7 +2713,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_coarse_steps_spin: "Auto Find coarse scan points",
             self.auto_tune_fine_steps_spin: "Auto Find fine scan points",
             self.auto_tune_settle_spin: "Auto Find settle time",
-            self.auto_tune_objective_combo: "Auto Find search method",
+            self.auto_tune_objective_combo: "Auto Find tuning pipeline",
             self.auto_tune_frame_samples_spin: "Auto Find Fine and center frame count",
             self.auto_tune_min_valid_frames_spin: "Auto Find minimum valid frame count",
             self.auto_tune_verification_frames_spin: "Auto Find verification frame count",
@@ -2686,6 +2797,43 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 view.setPalette(qt_palette)
                 view.setStyleSheet(view_style)
 
+        station_view = self.station_combo.view()
+        if station_view is not None:
+            station_palette = QPalette(qt_palette)
+            station_palette.setColor(
+                QPalette.Highlight,
+                QColor(palette["selector_popup_selected_bg"]),
+            )
+            station_palette.setColor(
+                QPalette.HighlightedText,
+                QColor(palette["input_fg"]),
+            )
+            station_view.setPalette(station_palette)
+            station_view.setStyleSheet(
+                f"""
+                QListView {{
+                    background-color: {palette["input_bg"]};
+                    color: {palette["input_fg"]};
+                    border: 1px solid {palette["selector_popup_border"]};
+                    border-radius: 6px;
+                    outline: 0;
+                    padding: 0;
+                }}
+                QListView::item {{
+                    background-color: {palette["input_bg"]};
+                    color: {palette["input_fg"]};
+                    min-height: 24px;
+                    padding: 3px 8px;
+                    font-weight: 700;
+                }}
+                QListView::item:selected,
+                QListView::item:hover {{
+                    background-color: {palette["selector_popup_selected_bg"]};
+                    color: {palette["input_fg"]};
+                }}
+                """
+            )
+
     def _warn(self, message):
         print(message)
         QMessageBox.warning(self, "Energy Spectrum", message)
@@ -2761,22 +2909,29 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         auto_tune_enabled = (
             self.control_backend == "real"
             and not self._auto_tune_is_running()
+            and not self._roi_edit_active
             and writes_allowed
             and auto_tune_configured
         )
         self.pushButton_autoFind.setEnabled(auto_tune_enabled)
         scan_running = self._auto_tune_is_running()
+        display_locked = scan_running or self._roi_edit_active
         self.auto_tune_settings_button.setEnabled(
-            not scan_running and auto_tune_configured
+            not display_locked and auto_tune_configured
         )
-        self.station_combo.setEnabled(not scan_running)
-        self.background_settings_button.setEnabled(not scan_running)
-        self.checkBox_bg.setEnabled(not scan_running)
-        self.comboBox_fitmethod.setEnabled(not scan_running)
+        self.station_combo.setEnabled(not display_locked)
+        self.background_settings_button.setEnabled(not display_locked)
+        self.checkBox_bg.setEnabled(not display_locked)
+        self.comboBox_fitmethod.setEnabled(not display_locked)
+        self.comboBox_colormap.setEnabled(not display_locked)
+        self.log_intensity_checkbox.setEnabled(not display_locked)
+        self.roi_edit_button.setEnabled(not display_locked)
+        self.lineEdit_refresh.setEnabled(not self._roi_edit_active)
+        self.theme_toggle_button.setEnabled(not self._roi_edit_active)
         for widget in self.auto_tune_parameter_widgets:
-            widget.setEnabled(not scan_running and auto_tune_configured)
+            widget.setEnabled(not display_locked and auto_tune_configured)
         center_lock_controls_enabled = (
-            not scan_running
+            not display_locked
             and auto_tune_configured
             and self.auto_tune_objective_combo.currentData()
             == "brightness_then_profile_lock"
@@ -2828,7 +2983,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         palette = self._palette()
         theme = build_energy_spectrum_theme(palette)
         self.setStyleSheet(theme)
-        for dialog_name in ("auto_tune_settings_dialog", "background_dialog"):
+        for dialog_name in (
+            "auto_tune_settings_dialog",
+            "background_dialog",
+            "roi_dialog",
+        ):
             dialog = getattr(self, dialog_name, None)
             if dialog is not None:
                 dialog.setStyleSheet(theme)
@@ -2877,6 +3036,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.ESA_running(write_latest=False)
         else:
             self._draw_placeholder_views()
+        self._refresh_background_preview()
+
+    def _handle_log_intensity_change(self, enabled):
+        self.log_intensity_enabled = bool(enabled)
+        if self._pv_available:
+            self.ESA_running(write_latest=False)
         self._refresh_background_preview()
 
     def _handle_fit_method_change(self):
@@ -2955,9 +3120,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
         self.background_plot.axes.clear()
         self._style_axes(self.background_plot, "x (mm)", "y (mm)", title="Background Preview")
-        self.background_plot.axes.imshow(
+        display_image, norm, _warning = resolve_image_display_scale(
             self.bg_image,
+            logarithmic=self.log_intensity_enabled,
+        )
+        self.background_plot.axes.imshow(
+            display_image,
             cmap=self.comboBox_colormap.currentText(),
+            norm=norm,
             origin="lower",
             extent=self.extent,
             aspect="auto",
@@ -3035,24 +3205,73 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._readout_tooltip = None
 
     def _configure_energy_stability_controls(self):
-        self.stability_window_label = QLabel("Stability frames", self.groupBox_5)
+        while self.horizontalLayout_6.count():
+            self.horizontalLayout_6.takeAt(0)
+
+        energy_group = QWidget(self.groupBox_5)
+        energy_layout = QVBoxLayout(energy_group)
+        energy_layout.setContentsMargins(0, 0, 0, 0)
+        energy_layout.setSpacing(2)
+        energy_layout.addWidget(self.label_4)
+        energy_layout.addWidget(self.label_energy)
+
+        spread_group = QWidget(self.groupBox_5)
+        spread_layout = QVBoxLayout(spread_group)
+        spread_layout.setContentsMargins(0, 0, 0, 0)
+        spread_layout.setSpacing(2)
+        spread_layout.addWidget(self.label_6)
+        spread_layout.addWidget(self.label_energyspread)
+
+        stability_group = QWidget(self.groupBox_5)
+        stability_layout = QVBoxLayout(stability_group)
+        stability_layout.setContentsMargins(0, 0, 0, 0)
+        stability_layout.setSpacing(2)
+        stability_meta_layout = QHBoxLayout()
+        stability_meta_layout.setContentsMargins(0, 0, 0, 0)
+        stability_meta_layout.setSpacing(7)
+        self.stability_metric_label = QLabel("Stability RMS", stability_group)
+        self.stability_metric_label.setProperty("role", "metricLabel")
+        self.stability_rms_label = QLabel("N/A", stability_group)
+        self.stability_rms_label.setObjectName("metricValue")
+        self.stability_rms_label.setMinimumWidth(180)
+        self.stability_progress_label = QLabel("0/100 frames", stability_group)
+        self.stability_progress_label.setProperty("role", "field")
+        stability_meta_layout.addWidget(self.stability_metric_label)
+        stability_meta_layout.addStretch(1)
+        stability_meta_layout.addWidget(self.stability_progress_label)
+        stability_layout.addLayout(stability_meta_layout)
+        stability_layout.addWidget(self.stability_rms_label)
+
+        for index, group in enumerate((energy_group, spread_group, stability_group)):
+            if index:
+                separator = QFrame(self.groupBox_5)
+                separator.setObjectName("resultSeparator")
+                separator.setFrameShape(QFrame.VLine)
+                separator.setFrameShadow(QFrame.Plain)
+                self.horizontalLayout_6.addWidget(separator)
+            self.horizontalLayout_6.addWidget(group)
+        self.horizontalLayout_6.setStretch(0, 2)
+        self.horizontalLayout_6.setStretch(2, 3)
+        self.horizontalLayout_6.setStretch(4, 3)
+
+        self.stability_window_label = QLabel("Window", self.frame_3)
         self.stability_window_label.setProperty("role", "field")
-        self.stability_window_spin = QSpinBox(self.groupBox_5)
+        self.stability_window_spin = QSpinBox(self.frame_3)
         self.stability_window_spin.setRange(2, 10000)
         self.stability_window_spin.setValue(100)
         self.stability_window_spin.setSingleStep(10)
-        self.stability_window_spin.setFixedWidth(86)
+        self.stability_window_spin.setFixedWidth(76)
         self.stability_window_spin.setProperty("dense", True)
-        self.stability_rms_label = QLabel("RMS: N/A", self.groupBox_5)
-        self.stability_rms_label.setObjectName("metricValue")
-        self.stability_rms_label.setMinimumWidth(156)
-        self.stability_clear_button = QPushButton("Clear", self.groupBox_5)
-        self.stability_clear_button.setProperty("compact", True)
-        self.stability_clear_button.setFixedWidth(72)
-        self.horizontalLayout_6.addWidget(self.stability_window_label)
-        self.horizontalLayout_6.addWidget(self.stability_window_spin)
-        self.horizontalLayout_6.addWidget(self.stability_rms_label)
-        self.horizontalLayout_6.addWidget(self.stability_clear_button)
+        self.stability_clear_button = QPushButton("Clear", self.frame_3)
+        self.stability_clear_button.setProperty("tight", True)
+        self.stability_clear_button.setFixedSize(64, 30)
+        self.stability_clear_button.setToolTip("Clear energy stability history")
+        self.stability_clear_button.setAccessibleName(
+            "Clear energy stability history"
+        )
+        self.stability_header_layout.addWidget(self.stability_window_label)
+        self.stability_header_layout.addWidget(self.stability_window_spin)
+        self.stability_header_layout.addWidget(self.stability_clear_button)
         self.stability_window_spin.valueChanged.connect(self._update_energy_stability_view)
         self.stability_clear_button.clicked.connect(self._clear_energy_stability_history)
 
@@ -3081,7 +3300,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._style_axes(self.stability_plot, "Frame", "E (MeV)")
         if values.size < 2:
             if hasattr(self, "stability_rms_label"):
-                self.stability_rms_label.setText("RMS: N/A")
+                self.stability_rms_label.setText("N/A")
+                self.stability_progress_label.setText(
+                    f"{values.size}/{window} frames"
+                )
             self.stability_plot.axes.text(
                 0.5,
                 0.5,
@@ -3099,7 +3321,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         relative = abs(rms / mean * 100.0) if not np.isclose(mean, 0.0) else float("nan")
         if hasattr(self, "stability_rms_label"):
             self.stability_rms_label.setText(
-                f"{values.size}/{window}: {rms:.4f} MeV / {relative:.4f}%"
+                f"{rms:.4f} MeV · {relative:.4f}%"
+            )
+            self.stability_progress_label.setText(
+                f"{values.size}/{window} frames"
             )
         x = np.arange(1, values.size + 1)
         palette = self._palette()
@@ -3171,7 +3396,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.label_energy.setText("{:.4f}".format(energy_center))
         energy_spread_mev = abs(energy_center * energy_spread)
         self.label_energyspread.setText(
-            "{:.4f}% / {:.4f} MeV".format(energy_spread * 1e2, energy_spread_mev)
+            "{:.4f}% · {:.4f} MeV".format(energy_spread * 1e2, energy_spread_mev)
         )
         self._record_energy_stability(energy_center)
         self._refresh_status()
@@ -3322,6 +3547,108 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._refresh_background_preview()
         self._update_background_status()
         self.background_dialog.exec_()
+
+    def _update_roi_summary(self, *_args):
+        if not hasattr(self, "roi_summary_label"):
+            return
+        roi = self.roi_control.roi()
+        enabled = self.roi_control.use_roi.isChecked()
+        self.roi_summary_label.setText(
+            f"On · {roi.width} × {roi.height} px" if enabled else "Off"
+        )
+        self.roi_summary_label.setToolTip(
+            f"X {roi.x} · Y {roi.y} · Width {roi.width} · Height {roi.height} px"
+        )
+
+    def _build_roi_dialog(self):
+        dialog = QDialog(self)
+        dialog.setObjectName("energySpectrumDialog")
+        dialog.setWindowTitle(f"Software ROI — {self.energy_config['flag_element']}")
+        dialog.setMinimumWidth(360)
+        dialog.setModal(False)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+        layout.addWidget(self.roi_control)
+
+        status = QLabel("Editing · Image frozen", dialog)
+        status.setProperty("role", "field")
+        layout.addWidget(status)
+
+        buttons = QDialogButtonBox(dialog)
+        done_button = buttons.addButton("Done", QDialogButtonBox.AcceptRole)
+        cancel_button = buttons.addButton("Cancel", QDialogButtonBox.RejectRole)
+        for button in (done_button, cancel_button):
+            button.setProperty("dialogAction", True)
+        done_button.clicked.connect(lambda: self._finish_roi_edit(True))
+        cancel_button.clicked.connect(lambda: self._finish_roi_edit(False))
+        dialog.rejected.connect(lambda: self._finish_roi_edit(False))
+        layout.addWidget(buttons)
+        dialog.setStyleSheet(build_energy_spectrum_theme(self._palette()))
+        self.roi_dialog = dialog
+
+    def _begin_roi_edit(self):
+        if self._auto_tune_is_running():
+            return
+        if self._roi_edit_active:
+            self.roi_dialog.raise_()
+            self.roi_dialog.activateWindow()
+            return
+        if self.roi_dialog is None:
+            self._build_roi_dialog()
+
+        self._roi_edit_snapshot = (
+            self.roi_control.roi(),
+            self.roi_control.use_roi.isChecked(),
+        )
+        self._roi_edit_timer_was_active = self.timer.isActive()
+        if self._roi_edit_timer_was_active:
+            self.timer.stop()
+        self.is_timer_running = False
+        self._roi_edit_active = True
+        self._sync_energy_control_state()
+        self._refresh_status()
+        self.roi_dialog.show()
+        self.roi_dialog.raise_()
+        self.roi_dialog.activateWindow()
+
+    def _capture_roi_edit_snapshot(self):
+        if self._roi_edit_active:
+            self._roi_edit_snapshot = (
+                self.roi_control.roi(),
+                self.roi_control.use_roi.isChecked(),
+            )
+
+    def _finish_roi_edit(self, apply_changes):
+        if not self._roi_edit_active:
+            return
+        if not apply_changes and self._roi_edit_snapshot is not None:
+            roi, enabled = self._roi_edit_snapshot
+            self.roi_control.set_state(roi, enabled)
+
+        self._roi_edit_active = False
+        self._roi_edit_snapshot = None
+        self.roi_dialog.hide()
+        if self._roi_edit_timer_was_active:
+            self.timer.start()
+            self.is_timer_running = True
+        self._roi_edit_timer_was_active = False
+        self._update_roi_summary()
+        self._sync_energy_control_state()
+        if self._pv_available:
+            self.ESA_running(write_latest=False)
+        self._refresh_status()
+
+    def _handle_roi_changed(self, *_args):
+        self._update_roi_summary()
+        if (
+            self._roi_edit_active
+            or self._roi_updates_suspended
+            or self._auto_tune_is_running()
+        ):
+            return
+        if self._pv_available:
+            self.ESA_running(write_latest=False)
 
     def _save_latest_background(self, *, sample_count=None):
         if self.bg_image is None:
@@ -3679,7 +4006,22 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # plot the image
         self.ESAflag_image.axes.clear()
         self._style_axes(self.ESAflag_image, "x (mm)", "y (mm)")
-        self.ESAflag_image.axes.imshow(data,cmap=colormap,origin="lower",extent=self.extent,aspect="auto")
+        display_image, norm, display_warning = resolve_image_display_scale(
+            data,
+            logarithmic=self.log_intensity_enabled,
+        )
+        if display_warning != self._image_display_warning:
+            self._image_display_warning = display_warning
+            if display_warning:
+                print(f"Warning: {display_warning}")
+        self.ESAflag_image.axes.imshow(
+            display_image,
+            cmap=colormap,
+            norm=norm,
+            origin="lower",
+            extent=self.extent,
+            aspect="auto",
+        )
         self.ESAflag_image.axes.set_xlim(self.xlim)
         self.ESAflag_image.axes.set_ylim(self.ylim)
         self.roi_control.attach_axes(self.ESAflag_image.axes, extent=self.extent)
@@ -4170,6 +4512,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._refresh_status()
 
     def run_esa_auto_tune(self):
+        if self._roi_edit_active:
+            self._warn("Finish ROI editing before starting Auto Find.")
+            return
         if self.control_backend != "real":
             print("ESA auto tune is only enabled for the real backend.")
             return

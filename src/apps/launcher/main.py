@@ -880,7 +880,7 @@ APP_CATEGORIES = {
     "measurement": "Measurement & Correction",
     "rf": "RF",
     "feedback": "Feedback",
-    "simulation": "Simulation & Optimization",
+    "simulation": "VA & Optimization",
     "tools": "Machine & Tools",
 }
 
@@ -890,7 +890,7 @@ APP_CATEGORY_NAV_LABELS = {
     "measurement": "Measurement",
     "rf": "RF",
     "feedback": "Feedback",
-    "simulation": "Simulation & Optimization",
+    "simulation": "VA & Optimization",
     "tools": "Machine & Tools",
 }
 
@@ -1017,10 +1017,14 @@ APP_DEFINITIONS = {
         "button_name": "rf_phase_scan_button",
         "category": "rf",
         "access": "write",
-        "button_text": "RF Phase Scan",
-        "label": "RF Phase Scan",
-        "window_title_patterns": ("RF Phase Scan",),
-        "description": "Scan one HALF linac LLRF phase while matching beam energy.",
+        "button_text": "RF Crest & Gain",
+        "label": "RF Crest & Gain",
+        "window_title_patterns": (
+            "RF Phase-Energy Gain Scan",
+            "RF Phase–Energy Gain Scan",
+            "RF Phase Scan",
+        ),
+        "description": "Find RF crest phase and energy gain from matched beam energy.",
         "workflow_name": "rf_phase_scan",
         "machine_ids": ("half",),
         "cmd": ["python3", "main.py"],

@@ -8,7 +8,10 @@ from half_linac.src.apps.rf_phase_scan.energy_match_tuner import (
     RFPhaseEnergyMatcher,
     center_out_values,
 )
-from half_linac.src.apps.rf_phase_scan.spectrum_profile import project_image_profiles
+from half_linac.src.apps.rf_phase_scan.spectrum_profile import (
+    ProfileFit,
+    project_image_profiles,
+)
 
 import numpy as np
 
@@ -123,6 +126,48 @@ def test_rf_image_acquisition_keeps_raw_image_and_subtracts_background_for_analy
     np.testing.assert_array_equal(acquisition.read_analysis(), np.full((5, 6), 7.0))
 
 
+def test_rf_image_acquisition_applies_configured_vertical_orientation():
+    raw = np.arange(30, dtype=float).reshape(5, 6)
+    acquisition = RFImageAcquisition(
+        _ImagePV(raw),
+        (6, 5),
+        0.1,
+        flip_y=True,
+    )
+
+    np.testing.assert_array_equal(acquisition.read_raw(), np.flipud(raw))
+
+
+def test_rf_image_acquisition_rejects_low_quality_gaussian_frames(monkeypatch):
+    raw = np.arange(30, dtype=float).reshape(5, 6)
+    acquisition = RFImageAcquisition(_ImagePV(raw), (6, 5), 0.1)
+
+    def low_quality_fit(x_mm, density_x, method, **_kwargs):
+        normalized = np.asarray(density_x, dtype=float)
+        normalized /= np.max(normalized)
+        return ProfileFit(
+            center_mm=float(x_mm[len(x_mm) // 2]),
+            sigma_mm=0.1,
+            normalized_density=normalized,
+            fitted_density=normalized,
+            method="Gauss fit",
+            r_squared=0.4,
+        )
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.image_acquisition.fit_projection_profile",
+        low_quality_fit,
+    )
+
+    assert acquisition.sample_profile(
+        samples=3,
+        min_valid=2,
+        interval_s=0,
+        fit_method="Gauss fit",
+        min_fit_r_squared=0.7,
+    ) is None
+
+
 def test_rf_projection_preserves_established_edge_crop():
     image = np.arange(30, dtype=float).reshape(5, 6)
     projection = project_image_profiles(image, 0.1)
@@ -134,6 +179,32 @@ def test_reacquire_grid_is_ordered_from_center_outward():
     values = center_out_values(0.0, 100.0, 50.0, 5)
 
     assert values == (50.0, 25.0, 75.0, 0.0, 100.0)
+
+
+def test_brightness_peak_stage_uses_configured_center_outward_point_count():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher._pipeline_start_energy = 50.0
+    matcher._pipeline_seed = None
+    matcher.pipeline = ("brightness_peak",)
+    matcher.center_tolerance_mm = 0.2
+    matcher.last_message = None
+    visited = []
+    matcher._reacquire = lambda low, high, center, steps: (
+        visited.append((low, high, center, steps))
+        or {"energy": 55.0, "brightness": 12.0, "offset_mm": 1.0}
+    )
+
+    result = matcher._run_brightness_peak_stage(
+        0.0,
+        100.0,
+        {"strategy": "center_outward", "points": 5},
+    )
+
+    assert result.ok
+    assert result.actuator_value == 55.0
+    assert visited == [(0.0, 100.0, 50.0, 5)]
+    assert result.diagnostics["exploration_strategy"] == "center_outward"
+    assert result.diagnostics["exploration_points"] == 5
 
 
 def test_dispersion_prediction_moves_coordinated_energy_toward_beam_energy():

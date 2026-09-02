@@ -2424,6 +2424,18 @@ class MachineProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(MachineProfileError, "energy tracking windows"):
             _validate_basic_app_support(profile, "rf_phase_scan", "real")
 
+    def test_half_rf_phase_scan_supports_vm_preview_without_write_channels(self):
+        context = load_app_context(
+            "rf_phase_scan",
+            machine_id="half",
+            control_backend="vm",
+        )
+        workflow = get_workflow(context.profile, "rf_phase_scan")
+
+        self.assertEqual(context.control_backend.name, "vm")
+        self.assertEqual(workflow["preview_energy_mev"], 2200)
+        self.assertEqual(workflow["write_control"]["vm"], "blocked")
+
     def test_half_rf_phase_scan_rejects_ineligible_default_llrf(self):
         profile = load_profile("half")
         workflow = deepcopy(get_workflow(profile, "rf_phase_scan"))

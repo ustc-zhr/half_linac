@@ -14,6 +14,7 @@ ensure_repo_import_path(__file__)
 
 import numpy as np
 from epics import caget_many
+from matplotlib.ticker import MaxNLocator
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QDoubleValidator, QIntValidator
 from PyQt5.QtWidgets import (
@@ -1104,6 +1105,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ax.tick_params(colors=palette["plot_text"], which="both", labelsize=9)
         ax.xaxis.label.set_color(palette["plot_text"])
         ax.yaxis.label.set_color(palette["plot_text"])
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
         for spine in ax.spines.values():
             spine.set_edgecolor(palette["plot_spine"])
@@ -1117,7 +1119,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ax.set_title(title, color=palette["plot_text"], fontsize=11, fontweight="bold", loc="left")
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Position (mm)", fontweight="bold")
-        fig.tight_layout()
+        fig.subplots_adjust(left=0.065, right=0.99, bottom=0.18, top=0.84)
         fig.canvas.draw()
 
     def _apply_plot_limits(self, ax, *, plane):

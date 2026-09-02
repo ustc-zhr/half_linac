@@ -8,6 +8,17 @@ from half_linac.src.apps.energy_spectrum.spectrum_profile import (
     fit_projection_profile,
     project_image_profiles,
 )
+from half_linac.src.shared.energy_tuning import (
+    BRIGHTNESS_PEAK,
+    CallableEnergyActuator,
+    CENTER_LOCK,
+    EnergyStageContext,
+    EnergyTuningPipeline,
+    StageResult,
+    normalize_pipeline,
+    pipeline_has,
+    ScreenProfileMeasurement,
+)
 
 
 class ESAAutoTuneCancelled(RuntimeError):
@@ -43,8 +54,12 @@ class ESA_AutoTuner:
                  flag_pv_obj,
                  flag_pixel,
                  bend_pv,
+                 actuator=None,
+                 measurement=None,
                  flip_y=False,
                  mode="find_beam",
+                 pipeline=None,
+                 stage_config=None,
                  progress_callback=None,
                  remove_bg=False,
                  bg_image=None,
@@ -65,6 +80,8 @@ class ESA_AutoTuner:
                  min_fit_correlation=0.7,
                  pixel_width_mm=None,
                  profile_fit_method="Gauss fit",
+                 allow_direct_fallback=True,
+                 min_profile_fit_r_squared=None,
                  x_reference_mm=0.0,
                  center_step=0.05,
                  center_max_total_offset=1.0,
@@ -82,9 +99,18 @@ class ESA_AutoTuner:
         self.flag_pv_obj = flag_pv_obj
         self.flag_pixel = flag_pixel
         self.bend_pv = bend_pv
+        self.actuator = actuator or CallableEnergyActuator(
+            lambda: caget(self.bend_pv),
+            lambda value: caput(self.bend_pv, float(value)),
+        )
+        if actuator is not None:
+            self.bend_pv = str(bend_pv) if bend_pv is not None else ""
         self.flip_y = bool(flip_y)
 
         self.mode = str(mode).strip()
+        self._legacy_mode = pipeline is None
+        self.pipeline = normalize_pipeline(pipeline, legacy_objective=self.mode)
+        self.stage_config = dict(stage_config or {})
         if self.mode not in {
             "find_beam",
             "center_lock",
@@ -93,6 +119,13 @@ class ESA_AutoTuner:
             "brightness_then_profile_lock",
         }:
             raise ValueError(f"Unsupported ESA auto-tune mode: {self.mode!r}.")
+        if not self._legacy_mode:
+            self.mode = (
+                "brightness_then_profile_lock"
+                if pipeline_has(self.pipeline, BRIGHTNESS_PEAK)
+                and pipeline_has(self.pipeline, CENTER_LOCK)
+                else "find_beam"
+            )
         if target_x_pixel is None:
             target_x_pixel = (self.flag_pixel[0] - 1) / 2.0
         self.target_x_pixel = float(target_x_pixel)
@@ -117,10 +150,33 @@ class ESA_AutoTuner:
         self.min_fit_correlation = float(min_fit_correlation)
         self.pixel_width_mm = None if pixel_width_mm is None else float(pixel_width_mm)
         self.profile_fit_method = str(profile_fit_method).strip()
+        self.allow_direct_fallback = bool(allow_direct_fallback)
+        self.min_profile_fit_r_squared = (
+            None
+            if min_profile_fit_r_squared is None
+            else float(min_profile_fit_r_squared)
+        )
         self.x_reference_mm = float(x_reference_mm)
         self.center_step = float(center_step)
         self.center_max_total_offset = float(center_max_total_offset)
         self.center_tolerance_mm = float(center_tolerance_mm)
+        self.measurement = measurement or (
+            ScreenProfileMeasurement(
+                self._get_flag_image,
+                pixel_width_mm=self.pixel_width_mm,
+                x_reference_mm=self.x_reference_mm,
+                roi=self.roi,
+                frame_interval_s=self.frame_interval_s,
+                fit_method=self.profile_fit_method,
+                allow_direct_fallback=self.allow_direct_fallback,
+                min_fit_r_squared=self.min_profile_fit_r_squared,
+                sleep=self._wait,
+                project_profiles=project_image_profiles,
+                fit_profile=fit_projection_profile,
+            )
+            if self.pixel_width_mm is not None
+            else None
+        )
         if self.frame_samples < 1:
             raise ValueError("frame_samples must be at least 1.")
         if not 1 <= self.min_valid_frames <= self.frame_samples:
@@ -149,7 +205,9 @@ class ESA_AutoTuner:
             or not 0 <= self.min_fit_correlation <= 1
         ):
             raise ValueError("min_fit_correlation must be in [0, 1].")
-        if self.mode == "brightness_then_profile_lock":
+        if pipeline_has(self.pipeline, CENTER_LOCK) and not (
+            self._legacy_mode and self.mode in {"center_lock", "center_x_reference"}
+        ):
             if self.pixel_width_mm is None or not np.isfinite(self.pixel_width_mm):
                 raise ValueError("pixel_width_mm is required for fitted-center lock.")
             if self.pixel_width_mm <= 0:
@@ -161,6 +219,11 @@ class ESA_AutoTuner:
             ):
                 if not np.isfinite(value) or value <= 0:
                     raise ValueError(f"{name} must be positive and finite.")
+        if (
+            self.min_profile_fit_r_squared is not None
+            and not 0 <= self.min_profile_fit_r_squared <= 1
+        ):
+            raise ValueError("Minimum profile fit R2 must be in [0, 1].")
 
         self.best_current = None
         self.best_center_offset_px = None
@@ -198,11 +261,11 @@ class ESA_AutoTuner:
     def _set_bend(self, current, *, allow_cancel=True):
         if allow_cancel:
             self._raise_if_cancelled()
-        caput(self.bend_pv, float(current))
+        self.actuator.set(float(current))
         self._wait_for_settle(allow_cancel=allow_cancel)
 
     def _read_bend(self):
-        value = caget(self.bend_pv)
+        value = self.actuator.read()
         if value is None:
             return None
         return float(value)
@@ -391,7 +454,11 @@ class ESA_AutoTuner:
 
             if has_beam:
                 hits.append((float(B), float(score)))
-                if self.mode in {"find_beam", "brightness_then_profile_lock"} and len(hits) >= 3:
+                if (
+                    self._legacy_mode
+                    and self.mode in {"find_beam", "brightness_then_profile_lock"}
+                    and len(hits) >= 3
+                ):
                     break
 
         if not hits:
@@ -648,6 +715,53 @@ class ESA_AutoTuner:
         frame_samples=None,
         min_valid_frames=None,
     ):
+        if self.measurement is not None:
+            measurement_samples = (
+                self.frame_samples if frame_samples is None else int(frame_samples)
+            )
+            measurement_min_valid = (
+                self.min_valid_frames
+                if min_valid_frames is None
+                else int(min_valid_frames)
+            )
+            observation = self.measurement.measure(
+                float(energy),
+                samples=measurement_samples,
+                min_valid=measurement_min_valid,
+                cancel_requested=self.cancel_requested,
+            )
+            if observation is None:
+                self._report_progress(
+                    stage,
+                    energy,
+                    has_beam=False,
+                    score=None,
+                )
+                return None
+            center_mm = float(observation.center_mm)
+            center_pixel = self._center_mm_to_pixel(center_mm)
+            self._report_progress(
+                stage,
+                energy,
+                has_beam=True,
+                score=observation.brightness,
+                cx=center_pixel,
+                center_mm=center_mm,
+                center_offset_mm=float(observation.center_offset_mm),
+                valid_frames=observation.valid_frames,
+                total_frames=observation.total_frames,
+                fit_method=observation.fit_method,
+                fit_r_squared=observation.fit_r_squared,
+            )
+            return {
+                "energy": float(energy),
+                "center_mm": center_mm,
+                "offset_mm": float(observation.center_offset_mm),
+                "projection_strength": float(observation.brightness or 0.0),
+                "center_spread_mm": float(observation.diagnostics.get("center_spread_mm", 0.0)),
+                "fit_method": observation.fit_method,
+                "fit_r_squared": observation.fit_r_squared,
+            }
         frame_samples = (
             self.frame_samples if frame_samples is None else int(frame_samples)
         )
@@ -672,8 +786,19 @@ class ESA_AutoTuner:
                     projection.x_mm,
                     projection.density_x,
                     self.profile_fit_method,
-                    allow_direct_fallback=True,
+                    allow_direct_fallback=self.allow_direct_fallback,
                 )
+                if (
+                    self.min_profile_fit_r_squared is not None
+                    and (
+                        profile_fit.r_squared is None
+                        or profile_fit.r_squared < self.min_profile_fit_r_squared
+                    )
+                ):
+                    raise SpectrumProfileError(
+                        f"Gaussian fit R2 {profile_fit.r_squared!r} is below "
+                        f"{self.min_profile_fit_r_squared:.3f}."
+                    )
             except SpectrumProfileError as exc:
                 fit_errors.append(str(exc))
             else:
@@ -874,6 +999,88 @@ class ESA_AutoTuner:
         }
         return float(verified["energy"])
 
+    def _run_brightness_peak_stage(self, low, high, config):
+        strategy = str(config.get("strategy", "coarse_fine")).strip()
+        if strategy != "coarse_fine":
+            return StageResult(
+                False,
+                None,
+                f"Unsupported Energy Spectrum brightness-peak strategy: {strategy!r}.",
+            )
+        coarse_steps = int(config.get("coarse_steps", 40))
+        fine_steps = int(config.get("fine_steps", 81))
+        interval = self.coarse_scan(low, high, coarse_steps)
+        if interval is None:
+            return StageResult(
+                False,
+                None,
+                self.last_message or "Coarse scan did not detect a beam.",
+            )
+        self._report_fine_range(*interval, fine_steps)
+        best = self.fine_scan(*interval, fine_steps)
+        if best is None:
+            return StageResult(
+                False,
+                None,
+                self.last_message or "Fine scan did not find a solution.",
+            )
+        self._set_bend(best)
+        return StageResult(
+            True,
+            float(best),
+            diagnostics={
+                "strategy": strategy,
+                "best_brightness": self.best_brightness,
+            },
+        )
+
+    def _run_center_lock_stage(self, seed, low, high, config):
+        strategy = str(config.get("strategy", "local_step")).strip()
+        if strategy != "local_step":
+            return StageResult(
+                False,
+                None,
+                f"Unsupported Energy Spectrum center-lock strategy: {strategy!r}.",
+            )
+        best = self._run_profile_center_lock(seed, low, high)
+        if best is None:
+            return StageResult(
+                False,
+                None,
+                self.last_message or "Center lock did not find a solution.",
+            )
+        return StageResult(
+            True,
+            float(best),
+            diagnostics={
+                "strategy": strategy,
+                **dict(self.center_lock_result or {}),
+            },
+        )
+
+    def _run_explicit_pipeline(self, low, high, coarse_steps, fine_steps):
+        stage_config = {
+            "brightness_peak": {
+                "strategy": "coarse_fine",
+                "coarse_steps": coarse_steps,
+                "fine_steps": fine_steps,
+                **dict(self.stage_config.get("brightness_peak", {})),
+            },
+            "center_lock": {
+                "strategy": "local_step",
+                **dict(self.stage_config.get("center_lock", {})),
+            },
+        }
+        context = EnergyStageContext(
+            low=float(low),
+            high=float(high),
+            initial_value=float(self.initial_current),
+            config=stage_config,
+            brightness_peak=self._run_brightness_peak_stage,
+            center_lock=self._run_center_lock_stage,
+        )
+        return EnergyTuningPipeline(self.pipeline).run(context)
+
     # ==========================================================
     # Public API
     # ==========================================================
@@ -891,6 +1098,7 @@ class ESA_AutoTuner:
         self.hybrid_peak_brightness = None
         self.best_brightness = None
         self.center_lock_result = None
+        self.pipeline_result = None
         self.best_current = None
         self.best_center_offset_px = None
         self.initial_current = self._read_bend()
@@ -899,42 +1107,62 @@ class ESA_AutoTuner:
             self.last_message = "Could not read the initial ESA actuator value."
             return None
         try:
-            interval = self.coarse_scan(B_min, B_max, coarse_steps)
-            if interval is None:
-                self.status = "FAILED"
-                self.last_message = self.last_message or "Coarse scan did not detect a beam."
-                if self.restore_initial_on_failure:
-                    self._restore_initial_bend()
-                return None
+            if self._legacy_mode:
+                if pipeline_has(self.pipeline, BRIGHTNESS_PEAK) or self.mode in {
+                    "center_lock",
+                    "center_x_reference",
+                }:
+                    interval = self.coarse_scan(B_min, B_max, coarse_steps)
+                    if interval is None:
+                        self.status = "FAILED"
+                        self.last_message = self.last_message or "Coarse scan did not detect a beam."
+                        if self.restore_initial_on_failure:
+                            self._restore_initial_bend()
+                        return None
 
-            B1, B2 = interval
-            self._report_fine_range(B1, B2, fine_steps)
-            best_B = self.fine_scan(B1, B2, fine_steps)
+                    B1, B2 = interval
+                    self._report_fine_range(B1, B2, fine_steps)
+                    best_B = self.fine_scan(B1, B2, fine_steps)
+                    if best_B is None:
+                        self.status = "FAILED"
+                        self.last_message = self.last_message or "Fine scan did not find a solution."
+                        if self.restore_initial_on_failure:
+                            self._restore_initial_bend()
+                        return None
+                else:
+                    best_B = float(np.clip(self.initial_current, B_min, B_max))
 
-            if best_B is None:
-                self.status = "FAILED"
-                self.last_message = self.last_message or "Fine scan did not find a solution."
-                if self.restore_initial_on_failure:
-                    self._restore_initial_bend()
-                return None
-
-            if self.mode == "brightness_then_profile_lock":
-                best_B = self._run_profile_center_lock(best_B, B_min, B_max)
-                if best_B is None:
-                    self.status = "FAILED"
-                    if self.restore_initial_on_failure:
-                        self._restore_initial_bend()
-                    return None
+                if pipeline_has(self.pipeline, CENTER_LOCK):
+                    if self.mode in {"center_lock", "center_x_reference"}:
+                        self._set_bend(best_B)
+                    else:
+                        best_B = self._run_profile_center_lock(best_B, B_min, B_max)
+                        if best_B is None:
+                            self.status = "FAILED"
+                            if self.restore_initial_on_failure:
+                                self._restore_initial_bend()
+                            return None
+                else:
+                    self._set_bend(best_B)
+                    if self.mode == "brightness_gated_x_fit" and not self._verify_hybrid_solution(best_B):
+                        self.status = "FAILED"
+                        if self.restore_initial_on_failure:
+                            self._restore_initial_bend()
+                        return None
             else:
-                self._set_bend(best_B)
-                if (
-                    self.mode == "brightness_gated_x_fit"
-                    and not self._verify_hybrid_solution(best_B)
-                ):
+                self.pipeline_result = self._run_explicit_pipeline(
+                    B_min,
+                    B_max,
+                    coarse_steps,
+                    fine_steps,
+                )
+                if not self.pipeline_result.ok or self.pipeline_result.actuator_value is None:
                     self.status = "FAILED"
+                    self.last_message = self.pipeline_result.message or "Energy-tuning pipeline failed."
                     if self.restore_initial_on_failure:
                         self._restore_initial_bend()
                     return None
+                best_B = float(self.pipeline_result.actuator_value)
             self._report_progress("final", best_B, has_beam=True, score=None)
             self.best_current = best_B
             self.status = "DONE"
@@ -991,6 +1219,7 @@ if __name__=='__main__':
     else:
         x_reference_mm = float(x_reference_config)
     objective = str(auto_tune["objective"])
+    pipeline = auto_tune.get("pipeline")
     target_x_pixel = reference_x_pixel(
         x_reference_mm,
         int(flag_pixel_machine[0]),
@@ -1054,6 +1283,10 @@ if __name__=='__main__':
         raise RuntimeError("ESA auto-tune scan requires finite low/high limits.")
     hybrid = workflow.get("auto_tune_hybrid", {})
     center_lock = auto_tune.get("center_lock", {})
+    measurement = auto_tune.get("measurement", {})
+    stage_config = dict(auto_tune.get("stages", {}))
+    stage_config.setdefault("brightness_peak", dict(auto_tune.get("brightness_peak", {})))
+    stage_config.setdefault("center_lock", dict(center_lock))
     sampling = (
         center_lock if objective == "brightness_then_profile_lock" else hybrid
     )
@@ -1062,18 +1295,19 @@ if __name__=='__main__':
         flag_pixel=flag_pixel_machine,
         bend_pv=bend_pv,
         mode=objective,
+        pipeline=pipeline,
         target_x_pixel=target_x_pixel,
         settle_time_s=float(scan.get("settle_time_s", 0.5)),
         restore_initial_on_failure=bool(scan.get("restore_initial_on_failure", True)),
-        frame_samples=int(sampling.get("frame_samples", 3)),
-        min_valid_frames=int(sampling.get("min_valid_frames", 2)),
+        frame_samples=int(measurement.get("frame_samples", sampling.get("frame_samples", 3))),
+        min_valid_frames=int(measurement.get("min_valid_frames", sampling.get("min_valid_frames", 2))),
         verification_frame_samples=int(
             center_lock.get("verification_frame_samples", 5)
         ),
         verification_min_valid_frames=int(
             center_lock.get("verification_min_valid_frames", 3)
         ),
-        frame_interval_s=float(sampling.get("frame_interval_s", 0.2)),
+        frame_interval_s=float(measurement.get("frame_interval_s", sampling.get("frame_interval_s", 0.2))),
         brightness_fraction=float(sampling.get("brightness_fraction", 0.4)),
         max_center_spread_pixel=(
             float(hybrid.get("max_center_spread_mm", 1.0)) / pixel_width_mm
@@ -1089,6 +1323,7 @@ if __name__=='__main__':
         center_tolerance_mm=float(center_lock.get("center_tolerance_mm", 0.2)),
         remove_bg=False,
         bg_image=None,
+        stage_config=stage_config,
     )
 
     best_I = esa_tuner.run(

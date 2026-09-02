@@ -420,9 +420,10 @@ class CTMonitorWindow(QMainWindow):
         self.map_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.map_table.setShowGrid(False)
         self.map_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.map_table.setFixedHeight(
-            self.map_table.horizontalHeader().height() + self.map_table.rowCount() * 31 + 4
-        )
+        self.map_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.map_table.verticalHeader().setDefaultSectionSize(31)
+        self.map_table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.map_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         for row, (upstream, downstream) in enumerate(
             zip(self._map_element_ids, self._map_element_ids[1:])
         ):
@@ -438,6 +439,13 @@ class CTMonitorWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, (upstream, downstream))
                 self.map_table.setItem(row, column, item)
+        table_height = (
+            self.map_table.horizontalHeader().sizeHint().height()
+            + self.map_table.verticalHeader().length()
+            + 2 * self.map_table.frameWidth()
+            + 2
+        )
+        self.map_table.setFixedHeight(table_height)
         self.map_table.cellClicked.connect(self._select_map_segment)
         map_layout.addWidget(self.map_table)
         root.addWidget(map_panel)

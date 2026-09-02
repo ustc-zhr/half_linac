@@ -10,12 +10,22 @@ from .spectrum_profile import SpectrumProfileError, fit_projection_profile, proj
 class RFImageAcquisition:
     """RF scan-local FLAG image reader used by tuning, point samples, and backgrounds."""
 
-    def __init__(self, image_pv, image_shape, pixel_width_mm, *, background=None, roi=None):
+    def __init__(
+        self,
+        image_pv,
+        image_shape,
+        pixel_width_mm,
+        *,
+        background=None,
+        roi=None,
+        flip_y=False,
+    ):
         self.image_pv = image_pv
         self.image_shape = tuple(image_shape)
         self.pixel_width_mm = float(pixel_width_mm)
         self.background = None if background is None else np.asarray(background, dtype=float)
         self.roi = roi
+        self.flip_y = bool(flip_y)
         expected_shape = (self.image_shape[1], self.image_shape[0])
         if self.background is not None and self.background.shape != expected_shape:
             raise ValueError(f"Background shape {self.background.shape} does not match image shape {expected_shape}.")
@@ -25,7 +35,10 @@ class RFImageAcquisition:
         if raw is None:
             raise SpectrumProfileError("Flag image PV returned no data.")
         try:
-            return np.asarray(raw, dtype=float).reshape(self.image_shape[1], self.image_shape[0])
+            image = np.asarray(raw, dtype=float).reshape(
+                self.image_shape[1], self.image_shape[0]
+            )
+            return np.flipud(image) if self.flip_y else image
         except ValueError as exc:
             raise SpectrumProfileError("Flag image PV shape does not match configured geometry.") from exc
 
@@ -35,7 +48,17 @@ class RFImageAcquisition:
             image = np.maximum(image - self.background, 0)
         return image
 
-    def sample_profile(self, *, samples, min_valid, interval_s, fit_method, cancel_requested=None):
+    def sample_profile(
+        self,
+        *,
+        samples,
+        min_valid,
+        interval_s,
+        fit_method,
+        cancel_requested=None,
+        allow_direct_fallback=False,
+        min_fit_r_squared=0.0,
+    ):
         raw_images, fits, strengths = [], [], []
         for index in range(int(samples)):
             if cancel_requested and cancel_requested():
@@ -47,7 +70,20 @@ class RFImageAcquisition:
                     self.pixel_width_mm,
                     self.roi,
                 )
-                profile = fit_projection_profile(projection.x_mm, projection.density_x, fit_method)
+                profile = fit_projection_profile(
+                    projection.x_mm,
+                    projection.density_x,
+                    fit_method,
+                    allow_direct_fallback=allow_direct_fallback,
+                )
+                if (
+                    profile.r_squared is None
+                    or profile.r_squared < float(min_fit_r_squared)
+                ):
+                    raise SpectrumProfileError(
+                        f"Gaussian fit R2 {profile.r_squared!r} is below "
+                        f"{float(min_fit_r_squared):.3f}."
+                    )
             except SpectrumProfileError:
                 pass
             else:

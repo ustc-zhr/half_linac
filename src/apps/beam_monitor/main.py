@@ -15,7 +15,6 @@ from repo_bootstrap import ensure_repo_import_path
 
 ensure_repo_import_path(__file__)
 
-import matplotlib as mpl
 import numpy as np
 from epics import PV, caget, caput
 from PyQt5.QtCore import Qt, QTimer
@@ -35,6 +34,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QStyle,
     QTextEdit,
     QToolButton,
     QVBoxLayout,
@@ -53,6 +53,7 @@ from half_linac.src.shared.beam_diagnostics import (
     save_background,
     ROIControl,
     configured_roi,
+    resolve_image_display_scale,
     roi_extent,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
@@ -460,6 +461,10 @@ class myWindow(QWidget, Ui_Form):
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
         self.beam_monitor_config = get_workflow(self.machine_profile, "beam_monitor")
+        flip_y_config = self.beam_monitor_config.get("image_flip_y", False)
+        if isinstance(flip_y_config, dict):
+            flip_y_config = flip_y_config.get(self.control_backend, False)
+        self.image_flip_y = bool(flip_y_config)
         self.flag_elements = list_elements(
             self.app_context,
             kind="flag",
@@ -496,6 +501,8 @@ class myWindow(QWidget, Ui_Form):
         self.background_dialog = None
         self.background_preview = None
         self.display_settings_dialog = None
+        self.log_intensity_enabled = False
+        self._image_display_warning = None
         self.roi_dialog = None
         self.roi_control = None
         self.roi_status_label = None
@@ -676,14 +683,15 @@ class myWindow(QWidget, Ui_Form):
         action_row.setContentsMargins(0, 0, 0, 0)
         action_row.setSpacing(6)
 
-        self.pushButton.setText("Run Monitor")
-        self.pushButton_2.setText("Pause Monitor")
-        for button in (self.pushButton, self.pushButton_2):
-            button.setProperty("compact", True)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            self._refresh_widget_style(button)
-        action_row.addWidget(self.pushButton)
-        action_row.addWidget(self.pushButton_2)
+        self.monitor_toggle_button = self.pushButton
+        self.monitor_toggle_button.setProperty("compact", True)
+        self.monitor_toggle_button.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Fixed,
+        )
+        self.pushButton_2.hide()
+        self._sync_monitor_toggle_button()
+        action_row.addWidget(self.monitor_toggle_button)
         layout.addLayout(action_row)
 
     def _populate_view_card(self):
@@ -705,8 +713,18 @@ class myWindow(QWidget, Ui_Form):
         for widget in (self.label_3, self.label_4, self.lineEdit_3, self.lineEdit_4):
             widget.hide()
 
+        image_display_row = QHBoxLayout()
+        image_display_row.setContentsMargins(0, 0, 0, 0)
+        image_display_row.setSpacing(6)
+        image_display_row.addWidget(self.comboBox_2, 1)
+        self.log_intensity_checkbox = QCheckBox("Log intensity", self.view_card)
+        self.log_intensity_checkbox.setToolTip(
+            "Use logarithmic image colors without changing profile analysis."
+        )
+        image_display_row.addWidget(self.log_intensity_checkbox)
+
         grid.addWidget(self.label_2, 0, 0)
-        grid.addWidget(self.comboBox_2, 0, 1)
+        grid.addLayout(image_display_row, 0, 1)
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
 
@@ -732,15 +750,17 @@ class myWindow(QWidget, Ui_Form):
         layout.addLayout(display_actions)
 
         self.background_subtract_checkbox.setParent(self.view_card)
+        self.background_subtract_checkbox.setText("Subtract background")
         self.background_status_label.setParent(self.view_card)
         self.background_button.setParent(self.view_card)
         background_row = QHBoxLayout()
         background_row.setContentsMargins(0, 0, 0, 0)
         background_row.setSpacing(6)
         background_row.addWidget(self.background_subtract_checkbox)
-        background_row.addWidget(self.background_status_label, 1)
+        background_row.addStretch(1)
         background_row.addWidget(self.background_button)
         layout.addLayout(background_row)
+        layout.addWidget(self.background_status_label)
 
     def _populate_profile_card(self):
         layout = self.profile_card.layout()
@@ -789,24 +809,27 @@ class myWindow(QWidget, Ui_Form):
 
         self.roi_status_label = QLabel("ROI: Off", self.profile_card)
         self.roi_status_label.setProperty("role", "field")
-        self.roi_button = QPushButton("ROI…", self.profile_card)
+        self.roi_button = QPushButton("Edit…", self.profile_card)
         self.roi_button.setProperty("compact", True)
         self.roi_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._refresh_widget_style(self.roi_button)
-        self.roi_button.hide()
 
         analysis_grid = QGridLayout()
         analysis_grid.setHorizontalSpacing(8)
         analysis_grid.setVerticalSpacing(6)
         analysis_grid.addWidget(method_label, 0, 0)
         analysis_grid.addWidget(self.profile_method_combo, 0, 1)
-        analysis_grid.setColumnStretch(1, 1)
-        layout.addLayout(analysis_grid)
+        roi_label = QLabel("ROI", self.profile_card)
+        roi_label.setProperty("role", "field")
         roi_row = QHBoxLayout()
         roi_row.setContentsMargins(0, 0, 0, 0)
+        roi_row.setSpacing(6)
         roi_row.addWidget(self.roi_status_label, 1)
         roi_row.addWidget(self.roi_button)
-        layout.addLayout(roi_row)
+        analysis_grid.addWidget(roi_label, 1, 0)
+        analysis_grid.addLayout(roi_row, 1, 1)
+        analysis_grid.setColumnStretch(1, 1)
+        layout.addLayout(analysis_grid)
 
         self.label_6.hide()
         self.label_7.hide()
@@ -918,9 +941,13 @@ class myWindow(QWidget, Ui_Form):
         self.lineEdit_3.clear()
         self.plot_beamprofile()
 
+    def _set_log_intensity_enabled(self, enabled):
+        self.log_intensity_enabled = bool(enabled)
+        if self._pv_available:
+            self.plot_beamprofile()
+
     def _configure_default_state(self):
-        self.pushButton.setEnabled(False)
-        self.pushButton_2.setEnabled(True)
+        self._sync_monitor_toggle_button()
         default_flag = self._pick_default_flag_id()
         if default_flag:
             self.flag_selec.setCurrentText(default_flag)
@@ -962,10 +989,13 @@ class myWindow(QWidget, Ui_Form):
             return None
 
     def _connect_signals(self):
-        self.pushButton.clicked.connect(self.start1_btn)
-        self.pushButton_2.clicked.connect(self.stop1_btn)
+        self.monitor_toggle_button.clicked.connect(self._toggle_monitor)
         self.reset_view_button.clicked.connect(self.reset_view)
         self.display_settings_button.clicked.connect(self._show_display_settings_dialog)
+        self.log_intensity_checkbox.toggled.connect(
+            self._set_log_intensity_enabled
+        )
+        self.roi_button.clicked.connect(self._show_roi_dialog)
         self.background_button.clicked.connect(self._show_background_dialog)
         self.background_subtract_checkbox.toggled.connect(
             self._set_background_subtraction
@@ -987,6 +1017,8 @@ class myWindow(QWidget, Ui_Form):
         self._reconfigure_roi(flag_id)
         if self.background_dialog is not None:
             self.background_dialog.setWindowTitle(f"Background Reference — {flag_id}")
+        if self.roi_dialog is not None:
+            self.roi_dialog.setWindowTitle(f"Software ROI — {flag_id}")
         self._draw_placeholder_plot("Beam Profile")
         self._refresh_status()
 
@@ -1015,7 +1047,6 @@ class myWindow(QWidget, Ui_Form):
                 lambda message: self._set_profile_status(message, "warning")
             )
             self.roi_control.roiChanged.connect(self._update_roi_status)
-            self.profile_card.layout().addWidget(self.roi_control)
         else:
             self.roi_control.reconfigure(
                 image_shape=(geometry.shape[1], geometry.shape[0]),
@@ -1028,21 +1059,21 @@ class myWindow(QWidget, Ui_Form):
         if self.roi_status_label is None or self.roi_control is None:
             return
         roi = self.roi_control.roi()
-        text = f"ROI: {roi.width} × {roi.height} px" if self.roi_control.use_roi.isChecked() else "ROI: Off"
+        enabled = self.roi_control.use_roi.isChecked()
+        text = f"On · {roi.width} × {roi.height} px" if enabled else "Off"
         self.roi_status_label.setText(text)
+        self.roi_status_label.setToolTip(
+            f"X {roi.x} · Y {roi.y} · Width {roi.width} · Height {roi.height} px"
+        )
 
     def _show_roi_dialog(self):
         if self.roi_control is None:
             self._reconfigure_roi(self.tmppv)
         if self.roi_dialog is None:
             self.roi_dialog = QDialog(self)
-            self.roi_dialog.setWindowTitle("Software ROI")
+            self.roi_dialog.setWindowTitle(f"Software ROI — {self.tmppv}")
             self.roi_dialog.setMinimumWidth(340)
             layout = QVBoxLayout(self.roi_dialog)
-            note = QLabel("Configure the image region used by the monitor. Changes are ready for the next ROI processing step.", self.roi_dialog)
-            note.setWordWrap(True)
-            note.setProperty("role", "field")
-            layout.addWidget(note)
             layout.addWidget(self.roi_control)
             close_button = QPushButton("Close", self.roi_dialog)
             close_button.setProperty("compact", True)
@@ -1116,14 +1147,14 @@ class myWindow(QWidget, Ui_Form):
 
     def _update_background_status(self):
         if self.background_image is None:
-            text = "BG: None"
+            text = "No background loaded"
         else:
             sample_count = self.background_metadata.get("sample_count")
             sample_text = f" · {sample_count} frame" if sample_count == 1 else (
                 f" · {sample_count} frames" if sample_count else ""
             )
             mismatch_text = " • exposure mismatch" if self._background_exposure_mismatch() else ""
-            text = f"BG: {self.background_flag_id}{sample_text}{mismatch_text}"
+            text = f"{self.background_flag_id}{sample_text}{mismatch_text}"
         self.background_status_label.setText(text)
         if hasattr(self, "background_dialog_status_label"):
             self.background_dialog_status_label.setText(text)
@@ -1325,7 +1356,7 @@ class myWindow(QWidget, Ui_Form):
             axes.set_yticks([])
         else:
             axes.imshow(
-                self.background_image,
+                self._apply_image_orientation(self.background_image),
                 cmap=self.comboBox_2.currentText(),
                 origin="lower",
                 aspect="auto",
@@ -1683,6 +1714,11 @@ class myWindow(QWidget, Ui_Form):
         self._image_pv_name = None
         self._clear_image_cache()
 
+    def _apply_image_orientation(self, image):
+        if self.image_flip_y:
+            return np.flipud(image)
+        return image
+
     def _reset_view_limits(self):
         self.xlim = (-0.5 * self.width, 0.5 * self.width)
         self.ylim = (-0.5 * self.height, 0.5 * self.height)
@@ -1698,38 +1734,22 @@ class myWindow(QWidget, Ui_Form):
             return None
         return interval_ms if interval_ms > 0 else None
 
-    def _resolve_intensity_limits(self, data):
-        data_min = float(np.min(data))
-        data_max = float(np.max(data))
-
-        def parse_limit(line_edit, fallback):
+    def _resolve_intensity_limits(self):
+        def parse_limit(line_edit):
             text = line_edit.text().strip()
             if not text:
-                return fallback
+                return None
             try:
                 value = float(text)
             except ValueError:
                 line_edit.clear()
-                return fallback
+                return None
             if not math.isfinite(value):
                 line_edit.clear()
-                return fallback
+                return None
             return value
 
-        vmin = parse_limit(self.lineEdit_4, data_min)
-        vmax = parse_limit(self.lineEdit_3, data_max)
-        if not vmin < vmax:
-            self._warn_once(
-                f"Warning: invalid intensity range for {self.tmppv}: vmin {vmin} must be smaller than vmax {vmax}."
-            )
-            self._set_profile_status("Bad intensity range", "warning")
-            vmin = data_min
-            vmax = data_max
-            if not vmin < vmax:
-                vmax = vmin + 1.0
-            self.lineEdit_4.clear()
-            self.lineEdit_3.clear()
-        return vmin, vmax
+        return parse_limit(self.lineEdit_4), parse_limit(self.lineEdit_3)
 
     def reset_view(self):
         self._reset_view_limits()
@@ -1863,15 +1883,13 @@ class myWindow(QWidget, Ui_Form):
 
         self.timer.start(freq)
         self.is_timer_running = True
-        self.pushButton.setEnabled(False)
-        self.pushButton_2.setEnabled(True)
+        self._sync_monitor_toggle_button()
         self._refresh_status()
 
     def stop1_btn(self):
         self.timer.stop()
         self.is_timer_running = False
-        self.pushButton.setEnabled(True)
-        self.pushButton_2.setEnabled(False)
+        self._sync_monitor_toggle_button()
         self._refresh_status()
 
     def change_interval(self):
@@ -1881,9 +1899,27 @@ class myWindow(QWidget, Ui_Form):
         self.timer.stop()
         self.timer.start(interval_ms)
         self.is_timer_running = True
-        self.pushButton.setEnabled(False)
-        self.pushButton_2.setEnabled(True)
+        self._sync_monitor_toggle_button()
         self._refresh_status()
+
+    def _toggle_monitor(self):
+        if self.is_timer_running:
+            self.stop1_btn()
+        else:
+            self.start1_btn()
+
+    def _sync_monitor_toggle_button(self):
+        if not hasattr(self, "monitor_toggle_button"):
+            return
+        running = self.is_timer_running
+        icon = QStyle.SP_MediaPause if running else QStyle.SP_MediaPlay
+        self.monitor_toggle_button.setIcon(self.style().standardIcon(icon))
+        self.monitor_toggle_button.setText(
+            "Pause Monitor" if running else "Run Monitor"
+        )
+        self.monitor_toggle_button.setToolTip(
+            "Pause image refresh." if running else "Resume image refresh."
+        )
 
     def setExpoTime(self):
         mode = self._current_mode()
@@ -1967,7 +2003,9 @@ class myWindow(QWidget, Ui_Form):
             self._show_profile_placeholder(title, warning=warning, status_text=status_text)
             return
 
-        raw_data = np.reshape(data_ini, (self.pixel[1], self.pixel[0]))
+        raw_data = self._apply_image_orientation(
+            np.reshape(data_ini, (self.pixel[1], self.pixel[0]))
+        )
         self._profile_warning = None
         self._clear_profile_stats()
 
@@ -2002,7 +2040,11 @@ class myWindow(QWidget, Ui_Form):
             data, fit_result = analyze_beam_image(
                 raw_data,
                 extent=self.extent,
-                background=self.background_image if self.subtract_background_enabled else None,
+                background=(
+                    self._apply_image_orientation(self.background_image)
+                    if self.subtract_background_enabled
+                    else None
+                ),
                 xlim=analysis_xlim,
                 ylim=analysis_ylim,
                 method=self.profile_method_combo.currentText(),
@@ -2020,13 +2062,25 @@ class myWindow(QWidget, Ui_Form):
             )
             return
 
-        vmin, vmax = self._resolve_intensity_limits(data)
-
-        vnorm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
         colormap = self.comboBox_2.currentText()
 
         display_data = raw_data if active_roi is not None else data
         display_extent = self.extent if active_roi is not None else analysis_extent
+        vmin, vmax = self._resolve_intensity_limits()
+        display_data, vnorm, display_warning = resolve_image_display_scale(
+            display_data,
+            logarithmic=self.log_intensity_enabled,
+            vmin=vmin,
+            vmax=vmax,
+        )
+        if display_warning:
+            if display_warning != self._image_display_warning:
+                print(f"Warning: {display_warning}")
+            self._set_profile_status("Display range adjusted", "warning")
+            if vmin is not None or vmax is not None:
+                self.lineEdit_4.clear()
+                self.lineEdit_3.clear()
+        self._image_display_warning = display_warning
         self.h = self.widget.axes.imshow(
             display_data,
             cmap=colormap,
@@ -2055,8 +2109,14 @@ class myWindow(QWidget, Ui_Form):
         self.widget.axes.set_ylim(self.ylim if active_roi is not None else analysis_ylim)
         self.roi_control.attach_axes(self.widget.axes, extent=self.extent)
 
-        height = abs(analysis_ylim[1] - analysis_ylim[0])
-        width = abs(analysis_xlim[1] - analysis_xlim[0])
+        display_xlim = self.widget.axes.get_xlim()
+        display_ylim = self.widget.axes.get_ylim()
+        display_height = abs(display_ylim[1] - display_ylim[0])
+        display_width = abs(display_xlim[1] - display_xlim[0])
+        projection_y_base = min(display_ylim) + display_height * 0.02
+        projection_x_base = min(display_xlim) + display_width * 0.02
+        projection_height = display_height * 0.3
+        projection_width = display_width * 0.3
 
         if not fit_result.has_signal:
             self._set_profile_status("Low signal", "warning")
@@ -2067,16 +2127,16 @@ class myWindow(QWidget, Ui_Form):
         norm_denx = fit_result.x_projection.normalized_projection
         norm_deny = fit_result.y_projection.normalized_projection
         if norm_denx is not None and norm_deny is not None:
-            denx = norm_denx * height * 0.3 + analysis_ylim[0] * 0.98
-            deny = norm_deny * width * 0.3 + analysis_xlim[0] * 0.98
+            denx = norm_denx * projection_height + projection_y_base
+            deny = norm_deny * projection_width + projection_x_base
             self.widget.axes.plot(fit_result.x_axis, denx, "--c")
             self.widget.axes.plot(deny, fit_result.y_axis, "--c")
 
         if fit_result.valid:
             if fit_result.x_projection.fitted_projection is not None:
                 fit_denx = (
-                    fit_result.x_projection.fitted_projection * height * 0.3
-                    + analysis_ylim[0] * 0.98
+                    fit_result.x_projection.fitted_projection * projection_height
+                    + projection_y_base
                 )
                 self.widget.axes.plot(fit_result.x_axis, fit_denx, "--r")
             self.sigx = round(fit_result.sigx_mm, 3)
@@ -2084,8 +2144,8 @@ class myWindow(QWidget, Ui_Form):
 
             if fit_result.y_projection.fitted_projection is not None:
                 fit_deny = (
-                    fit_result.y_projection.fitted_projection * width * 0.3
-                    + analysis_xlim[0] * 0.98
+                    fit_result.y_projection.fitted_projection * projection_width
+                    + projection_x_base
                 )
                 self.widget.axes.plot(
                     fit_deny,

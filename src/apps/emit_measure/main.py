@@ -69,6 +69,7 @@ from half_linac.src.shared.beam_diagnostics import (
     ROIControl,
     configured_roi,
     roi_extent,
+    resolve_image_display_scale,
 )
 from half_linac.src.shared.machine_profile import (
     METADATA_FILENAME,
@@ -963,9 +964,13 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_fit_k1 = None
         self.latest_beam_size_pv = (None, None)
         self.latest_beam_background_status = "Off"
+        self.beam_image_colormap = DEFAULT_BEAM_IMAGE_COLORMAP
+        self.beam_image_logarithmic = False
+        self.beam_image_overlays = True
         self._applying_emit_preset = False
         self.background_dialog = None
         self.roi_dialog = None
+        self.beam_image_display_dialog = None
         self.roi_control = None
         self.roi_status_label = None
         self.background_sample_button = None
@@ -1260,23 +1265,9 @@ class myWindow(QWidget,Ui_Form):
         header.addWidget(self.beam_image_title_label)
         header.addStretch(1)
 
-        colormap_label = QLabel("Colormap", card)
-        colormap_label.setProperty("role", "field")
-        self.beam_image_colormap_combo = QComboBox(card)
-        self.beam_image_colormap_combo.addItems(BEAM_IMAGE_COLORMAPS)
-        self.beam_image_colormap_combo.setCurrentText(DEFAULT_BEAM_IMAGE_COLORMAP)
-        self.beam_image_colormap_combo.setMaximumWidth(105)
-        self.beam_image_colormap_combo.currentTextChanged.connect(self._redraw_latest_beam_image)
-
         self.beam_image_auto_refresh_checkbox = QCheckBox("Auto refresh", card)
         self.beam_image_auto_refresh_checkbox.setChecked(True)
         self.beam_image_auto_refresh_checkbox.stateChanged.connect(self._update_beam_image_auto_refresh)
-        self.beam_image_projection_checkbox = QCheckBox("Projection", card)
-        self.beam_image_projection_checkbox.setChecked(True)
-        self.beam_image_projection_checkbox.stateChanged.connect(self._redraw_latest_beam_image)
-        self.beam_image_fit_curve_checkbox = QCheckBox("Fit curve", card)
-        self.beam_image_fit_curve_checkbox.setChecked(True)
-        self.beam_image_fit_curve_checkbox.stateChanged.connect(self._redraw_latest_beam_image)
         self.beam_image_background_checkbox = QCheckBox("Apply", card)
         self.beam_image_background_checkbox.setChecked(False)
         self.beam_image_background_checkbox.setToolTip(
@@ -1293,10 +1284,12 @@ class myWindow(QWidget,Ui_Form):
 
         self.roi_status_label = QLabel("ROI: Off", card)
         self.roi_status_label.setProperty("role", "field")
-        self.roi_button = QPushButton("ROI…", card)
+        self.roi_button = QPushButton("Edit…", card)
         self.roi_button.setProperty("compact", True)
         self.roi_button.clicked.connect(self._show_roi_dialog)
-        self.roi_button.hide()
+        self.beam_fit_summary_label = QLabel("Fit: Gaussian · No image", card)
+        self.beam_fit_summary_label.setProperty("role", "field")
+        header.addWidget(self.beam_fit_summary_label)
         header.addWidget(self.roi_status_label)
         header.addWidget(self.roi_button)
 
@@ -1312,18 +1305,17 @@ class myWindow(QWidget,Ui_Form):
         self.beam_background_manage_button = QPushButton("Manage…", card)
         self.beam_background_manage_button.setProperty("compact", True)
         self.beam_background_manage_button.clicked.connect(self._show_background_dialog)
-        separator = QFrame(card)
-        separator.setFrameShape(QFrame.VLine)
-        separator.setFrameShadow(QFrame.Sunken)
-        separator.setMaximumHeight(22)
+        self.beam_image_display_button = QPushButton("Display…", card)
+        self.beam_image_display_button.setProperty("compact", True)
+        self.beam_image_display_button.setToolTip(
+            "Set image colormap, intensity scale, and diagnostic overlays."
+        )
+        self.beam_image_display_button.clicked.connect(
+            self._show_beam_image_display_dialog
+        )
         background_label = QLabel("BG:", card)
         background_label.setProperty("role", "field")
         for widget in (
-            colormap_label,
-            self.beam_image_colormap_combo,
-            self.beam_image_projection_checkbox,
-            self.beam_image_fit_curve_checkbox,
-            separator,
             background_label,
             self.beam_background_status_label,
         ):
@@ -1331,6 +1323,7 @@ class myWindow(QWidget,Ui_Form):
         display_row.addStretch(1)
         display_row.addWidget(self.beam_background_manage_button)
         display_row.addWidget(self.beam_image_background_checkbox)
+        display_row.addWidget(self.beam_image_display_button)
         layout.addLayout(display_row)
 
         self.beam_image_widget = MplWidget(card)
@@ -1950,7 +1943,16 @@ class myWindow(QWidget,Ui_Form):
 
     def _apply_theme(self):
         palette = self._palette()
-        self.setStyleSheet(build_emit_measure_theme(palette))
+        theme = build_emit_measure_theme(palette)
+        self.setStyleSheet(theme)
+        for dialog_name in (
+            "background_dialog",
+            "roi_dialog",
+            "beam_image_display_dialog",
+        ):
+            dialog = getattr(self, dialog_name, None)
+            if dialog is not None:
+                dialog.setStyleSheet(theme)
         if self.adaptive_search_button is not None:
             self.scan_strategy_combo.ensurePolished()
             self.adaptive_search_button.setFixedHeight(
@@ -2316,6 +2318,7 @@ class myWindow(QWidget,Ui_Form):
         self._draw_placeholder(self.beam_image_widget, "x (mm)", "y (mm)", note)
         if hasattr(self, "beam_fit_flag_label"):
             self.beam_fit_flag_label.setText("Local fit")
+            self.beam_fit_summary_label.setText("Fit: Gaussian · No image")
             self.beam_fit_sigx_label.setText("--")
             self.beam_fit_sigy_label.setText("--")
             self.beam_fit_status_label.setText("No image")
@@ -2362,9 +2365,14 @@ class myWindow(QWidget,Ui_Form):
         widget = self.beam_image_widget
         widget.axes.clear()
         self._style_axes(widget, "x (mm)", "y (mm)")
-        widget.axes.imshow(
+        display_image, display_norm, _display_warning = resolve_image_display_scale(
             image,
-            cmap=self.beam_image_colormap_combo.currentText() if hasattr(self, "beam_image_colormap_combo") else "viridis",
+            logarithmic=self.beam_image_logarithmic,
+        )
+        widget.axes.imshow(
+            display_image,
+            cmap=self.beam_image_colormap,
+            norm=display_norm,
             origin="lower",
             extent=extent,
             aspect="auto",
@@ -2374,20 +2382,12 @@ class myWindow(QWidget,Ui_Form):
         width = abs(extent[1] - extent[0])
         x_projection = fit_result.x_projection.normalized_projection
         y_projection = fit_result.y_projection.normalized_projection
-        show_projection = (
-            not hasattr(self, "beam_image_projection_checkbox")
-            or self.beam_image_projection_checkbox.isChecked()
-        )
-        show_fit_curve = (
-            not hasattr(self, "beam_image_fit_curve_checkbox")
-            or self.beam_image_fit_curve_checkbox.isChecked()
-        )
-        if show_projection and x_projection is not None and y_projection is not None:
+        if self.beam_image_overlays and x_projection is not None and y_projection is not None:
             denx = x_projection * height * 0.3 + extent[2] * 0.98
             deny = y_projection * width * 0.3 + extent[0] * 0.98
             widget.axes.plot(fit_result.x_axis, denx, "--c")
             widget.axes.plot(deny, fit_result.y_axis, "--c")
-        if show_fit_curve and fit_result.valid:
+        if self.beam_image_overlays and fit_result.valid:
             fit_denx = fit_result.x_projection.fitted_projection * height * 0.3 + extent[2] * 0.98
             fit_deny = fit_result.y_projection.fitted_projection * width * 0.3 + extent[0] * 0.98
             widget.axes.plot(fit_result.x_axis, fit_denx, "--", color=palette["plot_fit"])
@@ -2409,6 +2409,8 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_size_pv = tuple(size_pv)
         self.latest_beam_background_status = background_status
         self.beam_image_title_label.setText(f"Current PRF Image · {flag_name}")
+        fit_status = "valid" if fit_result.valid else fit_result.status
+        self.beam_fit_summary_label.setText(f"Fit: Gaussian · {fit_status}")
         self.beam_fit_flag_label.setText("Local fit")
         self.beam_fit_sigx_label.setText(f"{fit_result.sigx_mm:.3f}" if fit_result.sigx_mm is not None else "--")
         self.beam_fit_sigy_label.setText(f"{fit_result.sigy_mm:.3f}" if fit_result.sigy_mm is not None else "--")
@@ -3919,7 +3921,6 @@ class myWindow(QWidget,Ui_Form):
                 lambda _message: self._refresh_status()
             )
             self.roi_control.roiChanged.connect(self._update_roi_status)
-            self.beam_image_card_layout.addWidget(self.roi_control)
         else:
             self.roi_control.reconfigure(
                 image_shape=(geometry.shape[1], geometry.shape[0]),
@@ -3935,23 +3936,93 @@ class myWindow(QWidget,Ui_Form):
         text = f"ROI: {roi.width} × {roi.height} px" if self.roi_control.use_roi.isChecked() else "ROI: Off"
         self.roi_status_label.setText(text)
 
+    def _show_beam_image_display_dialog(self):
+        if self.beam_image_display_dialog is None:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("PRF Image Display")
+            dialog.setMinimumWidth(300)
+            layout = QVBoxLayout(dialog)
+
+            settings = QGridLayout()
+            settings.setHorizontalSpacing(10)
+            settings.setVerticalSpacing(10)
+            colormap_label = QLabel("Colormap", dialog)
+            colormap_label.setProperty("role", "field")
+            self.beam_image_colormap_combo = QComboBox(dialog)
+            self.beam_image_colormap_combo.addItems(BEAM_IMAGE_COLORMAPS)
+            self.beam_image_colormap_combo.setCurrentText(self.beam_image_colormap)
+            self.beam_image_colormap_combo.currentTextChanged.connect(
+                self._set_beam_image_colormap
+            )
+            settings.addWidget(colormap_label, 0, 0)
+            settings.addWidget(self.beam_image_colormap_combo, 0, 1)
+            settings.setColumnStretch(1, 1)
+            layout.addLayout(settings)
+
+            self.beam_image_log_checkbox = QCheckBox("Log intensity", dialog)
+            self.beam_image_log_checkbox.setChecked(self.beam_image_logarithmic)
+            self.beam_image_log_checkbox.setToolTip(
+                "Use logarithmic image colors without changing profile analysis."
+            )
+            self.beam_image_log_checkbox.toggled.connect(
+                self._set_beam_image_logarithmic
+            )
+            layout.addWidget(self.beam_image_log_checkbox)
+
+            self.beam_image_overlays_checkbox = QCheckBox(
+                "Show projection and Gaussian fit", dialog
+            )
+            self.beam_image_overlays_checkbox.setChecked(self.beam_image_overlays)
+            self.beam_image_overlays_checkbox.setToolTip(
+                "Show diagnostic overlays without changing profile analysis."
+            )
+            self.beam_image_overlays_checkbox.toggled.connect(
+                self._set_beam_image_overlays
+            )
+            layout.addWidget(self.beam_image_overlays_checkbox)
+
+            close_button = QPushButton("Close", dialog)
+            close_button.setProperty("compact", True)
+            close_button.clicked.connect(dialog.hide)
+            layout.addWidget(close_button)
+            dialog.setStyleSheet(build_emit_measure_theme(self._palette()))
+            self.beam_image_display_dialog = dialog
+
+        self.beam_image_display_dialog.show()
+        self.beam_image_display_dialog.raise_()
+        self.beam_image_display_dialog.activateWindow()
+
+    def _set_beam_image_colormap(self, colormap):
+        self.beam_image_colormap = colormap
+        self._redraw_latest_beam_image()
+        self._refresh_emit_background_preview()
+
+    def _set_beam_image_logarithmic(self, checked):
+        self.beam_image_logarithmic = bool(checked)
+        self._redraw_latest_beam_image()
+
+    def _set_beam_image_overlays(self, checked):
+        self.beam_image_overlays = bool(checked)
+        self._redraw_latest_beam_image()
+
     def _show_roi_dialog(self):
         if self.roi_control is None:
             self._reconfigure_roi()
         if self.roi_dialog is None:
             self.roi_dialog = QDialog(self)
-            self.roi_dialog.setWindowTitle("Software ROI")
             self.roi_dialog.setMinimumWidth(340)
             layout = QVBoxLayout(self.roi_dialog)
-            note = QLabel("Configure the image region used for PRF image fitting. Changes are ready for the next fit.", self.roi_dialog)
-            note.setWordWrap(True)
-            note.setProperty("role", "field")
-            layout.addWidget(note)
             layout.addWidget(self.roi_control)
             close_button = QPushButton("Close", self.roi_dialog)
             close_button.setProperty("compact", True)
             close_button.clicked.connect(self.roi_dialog.hide)
             layout.addWidget(close_button)
+            self.roi_dialog.setStyleSheet(
+                build_emit_measure_theme(self._palette())
+            )
+        self.roi_dialog.setWindowTitle(
+            f"Software ROI — {self.comboBox_4.currentText()}"
+        )
         self.roi_dialog.show()
         self.roi_dialog.raise_()
         self.roi_dialog.activateWindow()
@@ -4524,7 +4595,7 @@ class myWindow(QWidget,Ui_Form):
         else:
             axes.imshow(
                 self.background_image,
-                cmap=self.beam_image_colormap_combo.currentText(),
+                cmap=self.beam_image_colormap,
                 origin="lower",
                 aspect="auto",
             )

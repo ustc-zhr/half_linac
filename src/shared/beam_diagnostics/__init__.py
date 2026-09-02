@@ -12,7 +12,11 @@ from .image_fit import (
     fit_beam_image,
     gaussian,
 )
-from .display import BEAM_IMAGE_COLORMAPS, DEFAULT_BEAM_IMAGE_COLORMAP
+from .display import (
+    BEAM_IMAGE_COLORMAPS,
+    DEFAULT_BEAM_IMAGE_COLORMAP,
+    resolve_image_display_scale,
+)
 from .profile_runtime import resolve_beam_background_paths
 from .roi import ImageROI, ROIError, clamp_roi, crop_image, full_frame_roi, load_roi, resolve_roi, roi_extent, save_roi
 from .roi_widget import ROIControl, configured_roi
@@ -23,6 +27,7 @@ __all__ = [
     "BeamImageFitResult",
     "GaussianProjectionFit",
     "DEFAULT_BEAM_IMAGE_COLORMAP",
+    "resolve_image_display_scale",
     "analyze_beam_image",
     "fit_beam_image",
     "gaussian",

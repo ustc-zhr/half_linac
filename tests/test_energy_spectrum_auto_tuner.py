@@ -118,12 +118,13 @@ class _HybridObjectiveAutoTuner(ESA_AutoTuner):
 
 
 class _ProfileLockAutoTuner(ESA_AutoTuner):
-    def __init__(self, *, moving_center=True, progress_callback=None):
+    def __init__(self, *, moving_center=True, progress_callback=None, pipeline=None):
         super().__init__(
             flag_pv_obj=_DummyPV(),
             flag_pixel=(120, 100),
             bend_pv="FAKE:ENERGY",
             mode="brightness_then_profile_lock",
+            pipeline=pipeline,
             target_x_pixel=59.5,
             pixel_width_mm=0.1,
             profile_fit_method="Gauss fit",
@@ -371,6 +372,14 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertEqual(tuner.get_last_status(), "FAILED")
         self.assertAlmostEqual(tuner.current, initial)
         self.assertIn("did not reach x_reference_mm", tuner.get_last_message())
+
+    def test_explicit_center_lock_pipeline_skips_brightness_scan(self):
+        tuner = _ProfileLockAutoTuner(pipeline=["center_lock"])
+
+        best = tuner.run(0, 6, coarse_steps=7, fine_steps=21)
+
+        self.assertAlmostEqual(best, 4.0, delta=0.08)
+        self.assertEqual(tuner.pipeline, ("center_lock",))
 
     def test_profile_center_measurement_does_not_depend_on_2d_beam_detection(self):
         tuner = _ProfileLockAutoTuner()

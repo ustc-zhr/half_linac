@@ -279,6 +279,7 @@ class myWindow(QMainWindow):
     def apply_theme(self, palette):
         self._current_palette = dict(palette)
         self.setStyleSheet(build_bpm_detail_theme(self._current_palette))
+        self._apply_table_chrome_theme()
         x_color = QColor(self._current_palette["orbit_x"])
         y_color = QColor(self._current_palette["orbit_y"])
         text_color = QColor(self._current_palette["window_fg"])
@@ -287,6 +288,55 @@ class myWindow(QMainWindow):
             self.bpm_table.item(row, 1).setForeground(x_color)
             self.bpm_table.item(row, 2).setForeground(y_color)
         self._refresh_connection_style()
+
+    def _apply_table_chrome_theme(self):
+        palette = self._current_palette
+        self.bpm_table.horizontalHeader().setStyleSheet(
+            """
+QHeaderView {
+    background: %(summary_bg)s;
+    border: none;
+}
+QHeaderView::section {
+    background: %(summary_bg)s;
+    color: %(muted_fg)s;
+    border: none;
+    border-bottom: 1px solid %(input_border)s;
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 700;
+}
+""" % palette
+        )
+        self.bpm_table.verticalScrollBar().setStyleSheet(
+            """
+QScrollBar:vertical {
+    background: %(input_bg)s;
+    border: none;
+    width: 12px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: %(input_border)s;
+    border: none;
+    border-radius: 4px;
+    min-height: 28px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical:hover {
+    background: %(muted_fg)s;
+}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    border: none;
+    height: 0;
+}
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+""" % palette
+        )
 
     def set_refresh_interval_ms(self, refresh_interval_ms):
         self.refresh_interval_ms = max(100, int(refresh_interval_ms))

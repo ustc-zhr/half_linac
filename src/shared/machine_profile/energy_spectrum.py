@@ -4,6 +4,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from .models import MachineProfileError
+from half_linac.src.shared.energy_tuning import (
+    EnergyTuningPipelineError,
+    legacy_objective_for_pipeline,
+    normalize_pipeline,
+)
 
 
 LEGACY_ENERGY_SPECTRUM_STATION_ID = "default"
@@ -75,16 +80,56 @@ def resolve_energy_spectrum_auto_tune(
         )
 
     resolved: dict[str, Any] = {}
-    resolved["objective"] = station.get(
-        "objective",
-        defaults.get("objective", workflow.get("auto_tune_objective", "find_beam")),
-    )
-    center_lock = station.get(
-        "center_lock",
-        defaults.get("center_lock", workflow.get("auto_tune_center_lock")),
-    )
-    if center_lock is not None:
-        resolved["center_lock"] = center_lock
+    pipeline = station.get("pipeline", defaults.get("pipeline"))
+    if pipeline is not None:
+        try:
+            normalized_pipeline = normalize_pipeline(pipeline)
+            resolved["pipeline"] = list(normalized_pipeline)
+            resolved["objective"] = legacy_objective_for_pipeline(normalized_pipeline)
+        except EnergyTuningPipelineError as exc:
+            raise MachineProfileError(
+                f"workflows.energy_spectrum.auto_tune.pipeline is invalid: {exc}"
+            ) from exc
+    else:
+        resolved["objective"] = station.get(
+            "objective",
+            defaults.get("objective", workflow.get("auto_tune_objective", "find_beam")),
+        )
+    configured_stages = station.get("stages", defaults.get("stages", {}))
+    if configured_stages is None:
+        configured_stages = {}
+    if not isinstance(configured_stages, Mapping):
+        raise MachineProfileError(
+            "workflows.energy_spectrum.auto_tune.stages must be a mapping."
+        )
+    stage_sources = dict(configured_stages)
+    for stage_name in ("brightness_peak", "center_lock"):
+        if stage_name not in stage_sources:
+            legacy = station.get(stage_name, defaults.get(stage_name))
+            if legacy is not None:
+                stage_sources[stage_name] = legacy
+    legacy_center_lock = workflow.get("auto_tune_center_lock")
+    if "center_lock" not in stage_sources and legacy_center_lock is not None:
+        stage_sources["center_lock"] = legacy_center_lock
+    resolved_stages = {}
+    for stage_name in ("brightness_peak", "center_lock"):
+        stage_config = stage_sources.get(stage_name)
+        if stage_config is not None:
+            if not isinstance(stage_config, Mapping):
+                raise MachineProfileError(
+                    f"workflows.energy_spectrum.auto_tune.{stage_name} must be a mapping."
+                )
+            resolved_stages[stage_name] = dict(stage_config)
+    if resolved_stages:
+        resolved["stages"] = resolved_stages
+        resolved.update(resolved_stages)
+    measurement = station.get("measurement", defaults.get("measurement"))
+    if measurement is not None:
+        if not isinstance(measurement, Mapping):
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune.measurement must be a mapping."
+            )
+        resolved["measurement"] = dict(measurement)
     actuator = station.get("actuator", workflow.get("auto_tune_actuator"))
     if actuator is not None:
         resolved["actuator"] = actuator

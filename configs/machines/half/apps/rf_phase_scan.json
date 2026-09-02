@@ -1,6 +1,7 @@
 {
-  "control_backends": ["real"],
+  "control_backends": ["real", "vm"],
   "station_id": "eny",
+  "preview_energy_mev": 2200,
   "default_element": "LLRF01",
   "scan": {
     "phase": {
@@ -28,6 +29,7 @@
   "diagnostics": {
     "flag_element": "ENY",
     "flag_image_channel": "image",
+    "image_flip_y": true,
     "x_reference_mm": 0,
     "design_eta_m": 0.7484210850804714,
     "roi": {
@@ -38,28 +40,39 @@
   },
   "energy_match_defaults": {
     "profile_fit_method": "Gauss fit",
-    "center_lock": {
+    "measurement": {
       "frame_samples": 3,
       "min_valid_frames": 2,
       "verification_frame_samples": 5,
       "verification_min_valid_frames": 3,
       "frame_interval_s": 0.2,
-      "center_step_mev": 10,
-      "max_total_offset_mev": 100,
-      "center_tolerance_mm": 0.2,
-      "max_iterations": 10,
-      "max_correction_step_mev": 20
+      "profile_fit_method": "Gauss fit",
+      "min_fit_r_squared": 0.7
+    },
+    "stages": {
+      "brightness_peak": {
+        "strategy": "center_outward",
+        "points": 9
+      },
+      "center_lock": {
+        "strategy": "secant_dispersion",
+        "center_step_mev": 10,
+        "max_total_offset_mev": 100,
+        "center_tolerance_mm": 0.2,
+        "max_iterations": 10,
+        "max_correction_step_mev": 20
+      }
     }
   },
   "energy_match": {
-    "initial_objective": "brightness_then_profile_lock",
-    "tracking_objective": "profile_lock",
-    "fallback_objective": "brightness_then_profile_lock",
+    "pipelines": {
+      "initial": ["brightness_peak", "center_lock"],
+      "tracking": ["center_lock"],
+      "fallback": ["brightness_peak", "center_lock"]
+    },
     "range": {
       "low": 0,
       "high": 2450,
-      "coarse_points": 16,
-      "fine_points": 31,
       "settle_time_s": 1,
       "unit": "MeV",
       "mode": "absolute",

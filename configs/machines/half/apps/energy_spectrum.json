@@ -5,23 +5,34 @@
   "energy_reference_channel": "setpoint",
   "energy_control_backends": ["real"],
   "auto_tune_defaults": {
-    "objective": "brightness_then_profile_lock",
-    "center_lock": {
+    "pipeline": ["brightness_peak", "center_lock"],
+    "measurement": {
       "frame_samples": 3,
       "min_valid_frames": 2,
       "verification_frame_samples": 5,
       "verification_min_valid_frames": 3,
       "frame_interval_s": 0.2,
-      "center_step": 0.05,
-      "max_total_offset": 1,
-      "center_tolerance_mm": 0.2
+      "profile_fit_method": "Gauss fit"
+    },
+    "stages": {
+      "brightness_peak": {
+        "strategy": "coarse_fine",
+        "coarse_steps": 40,
+        "fine_steps": 81
+      },
+      "center_lock": {
+        "strategy": "local_step",
+        "center_step": 0.05,
+        "max_total_offset": 1,
+        "center_tolerance_mm": 0.2
+      }
     }
   },
   "stations": {
     "eny": {
       "roi": {
         "vm": {"ENY": {"x": 0, "y": 0, "width": 720, "height": 540}},
-        "real": {"ENY": {"x": 0, "y": 0, "width": 1440, "height": 1080}}
+        "real": {"ENY": {"x": 230, "y": 370, "width": 1000, "height": 330}}
       },
       "flag_element": "ENY",
       "image_flip_y": true,
@@ -41,7 +52,7 @@
     "prf02": {
       "roi": {
         "vm": {"PRF02": {"x": 0, "y": 0, "width": 360, "height": 270}},
-        "real": {"PRF02": {"x": 0, "y": 0, "width": 1440, "height": 1080}}
+        "real": {"PRF02": {"x": 350, "y": 200, "width": 750, "height": 700}}
       },
       "flag_element": "PRF02",
       "x_reference_mm": 0,
