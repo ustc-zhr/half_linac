@@ -60,6 +60,7 @@ def build_style(p):
 QMainWindow, QDialog, QWidget#centralwidget {{ background: {p['window']}; color: {p['text']}; font-family: "IBM Plex Sans", "Source Han Sans SC", "Segoe UI", sans-serif; }}
 QFrame#summaryPanel {{ background: {p['summary']}; border: 1px solid {p['border']}; border-radius: 14px; }}
 QFrame#workspaceCard, QFrame#plotCard {{ background: {p['panel']}; border: 1px solid {p['border']}; border-radius: 14px; }}
+QFrame#parameterCard {{ background: {p['panel']}; border: 1px solid {p['border']}; border-radius: 10px; }}
 QFrame#backgroundCard, QGroupBox#dialogCard {{ background: {p['panel']}; border: 1px solid {p['border']}; border-radius: 12px; margin-top: 0; padding: 0; }}
 QDialog#energySpectrumDialog QToolBar {{ background-color: {p['plot']}; border: none; spacing: 2px; }}
 QDialog#energySpectrumDialog QToolBar QToolButton {{ background: transparent; border: none; border-radius: 4px; padding: 3px; }}
@@ -510,7 +511,12 @@ class RFPhaseScanWindow(QMainWindow):
         self.auto_tune_coarse_steps = QSpinBox()
         self.auto_tune_coarse_steps.setRange(2, 2000)
         self.auto_tune_coarse_steps.setValue(
-            int(auto_brightness_peak.get("reacquire_points", 16))
+            int(
+                auto_brightness_peak.get(
+                    "points",
+                    auto_brightness_peak.get("reacquire_points", 16),
+                )
+            )
         )
         self.auto_tune_settle = self._spin(float(auto_scan["settle_time_s"]), 0, 60)
         self.auto_tune_frame_samples = QSpinBox()
@@ -603,6 +609,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.progress.setRange(0, self.points.value())
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
+        self.progress.setVisible(False)
         self.result = QLabel(
             "Machine state unchanged"
             if self.scan_enabled
@@ -691,13 +698,23 @@ class RFPhaseScanWindow(QMainWindow):
         workspace.setSpacing(12)
         control_column = QVBoxLayout()
         control_column.setSpacing(10)
-        scan_card = QFrame()
-        scan_card.setObjectName("workspaceCard")
-        scan_card.setFixedWidth(360)
-        controls_layout = QVBoxLayout(scan_card)
-        controls_layout.setContentsMargins(14, 13, 14, 14)
+        control_panel = QWidget()
+        control_panel.setFixedWidth(360)
+        controls_layout = QVBoxLayout(control_panel)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(10)
-        controls_layout.addWidget(self._section_title("Scan setup"))
+
+        def parameter_card(title, form):
+            card = QFrame()
+            card.setObjectName("parameterCard")
+            layout = QVBoxLayout(card)
+            layout.setContentsMargins(12, 10, 12, 11)
+            layout.setSpacing(8)
+            layout.addWidget(self._section_title(title))
+            layout.addLayout(form)
+            controls_layout.addWidget(card)
+            return card
+
         phase_form = QFormLayout()
         phase_form.setSpacing(7)
         phase_form.addRow("LLRF", self.combo)
@@ -707,39 +724,42 @@ class RFPhaseScanWindow(QMainWindow):
         phase_form.addRow(self.low_label, self.low)
         phase_form.addRow(self.high_label, self.high)
         phase_form.addRow("Points", self.points)
-        phase_form.addRow("Settle time", self.settle)
-        controls_layout.addLayout(phase_form)
-        controls_layout.addWidget(self._separator())
-        controls_layout.addWidget(self._section_title("Energy tracking"))
+        phase_form.addRow("Phase settle time", self.settle)
+        phase_form.addRow("Samples per point", self.measurement_samples)
+        phase_form.addRow("Sample interval", self.measurement_interval)
+        parameter_card("Phase scan", phase_form)
+
         energy_form = QFormLayout()
         energy_form.setSpacing(7)
         energy_form.addRow("Tracking window", self.tracking)
         energy_form.addRow("Fallback window", self.fallback)
-        energy_form.addRow("Reacquire points", self.tracking_reacquire_points)
-        controls_layout.addLayout(energy_form)
-        controls_layout.addWidget(self._separator())
+        energy_form.addRow("Reacquire search points", self.tracking_reacquire_points)
+        parameter_card("Energy tracking", energy_form)
+
         auto_tune_header = QHBoxLayout()
         auto_tune_header.addWidget(self._section_title("Energy Match"))
         auto_tune_header.addStretch(1)
         auto_tune_header.addWidget(self.auto_tune_settings_button)
-        controls_layout.addLayout(auto_tune_header)
-        controls_layout.addWidget(self.auto_tune_settings_summary)
-        controls_layout.addWidget(self._separator())
-        controls_layout.addWidget(self._section_title("Point measurement"))
-        measurement_form = QFormLayout()
-        measurement_form.setSpacing(7)
-        measurement_form.addRow("Samples", self.measurement_samples)
-        measurement_form.addRow("Interval", self.measurement_interval)
-        controls_layout.addLayout(measurement_form)
+        match_card = QFrame()
+        match_card.setObjectName("parameterCard")
+        match_layout = QVBoxLayout(match_card)
+        match_layout.setContentsMargins(12, 10, 12, 11)
+        match_layout.setSpacing(8)
+        match_layout.addLayout(auto_tune_header)
+        match_layout.addWidget(self.auto_tune_settings_summary)
+        controls_layout.addWidget(match_card)
+
         controls_layout.addStretch(1)
         action_layout = QHBoxLayout()
+        action_layout.setContentsMargins(12, 0, 12, 0)
+        action_layout.setSpacing(8)
         action_layout.addWidget(self.start, 1)
         action_layout.addWidget(self.stop)
         controls_layout.addLayout(action_layout)
         controls_layout.addWidget(self.progress)
-        scan_card.setEnabled(bool(self.targets))
+        control_panel.setEnabled(bool(self.targets))
 
-        control_column.addWidget(scan_card, 1)
+        control_column.addWidget(control_panel, 1)
 
         plot_card = QFrame()
         plot_card.setObjectName("plotCard")
@@ -861,7 +881,7 @@ class RFPhaseScanWindow(QMainWindow):
             (
                 ("Minimum", self.auto_tune_min),
                 ("Maximum", self.auto_tune_max),
-                ("Reacquire points", self.auto_tune_coarse_steps),
+                ("Initial search points", self.auto_tune_coarse_steps),
                 ("Settle time", self.auto_tune_settle),
             ),
         )
@@ -983,7 +1003,7 @@ class RFPhaseScanWindow(QMainWindow):
             pipeline_label = "configured pipeline"
         self.auto_tune_settings_summary.setText(
             f"{pipeline_label} · {self.auto_tune_min.value():g}-{self.auto_tune_max.value():g} MeV · "
-            f"{self.auto_tune_coarse_steps.value()} reacquire pts · "
+            f"{self.auto_tune_coarse_steps.value()} candidate energy pts · "
             f"step <= {self.auto_tune_max_offset.value():g} MeV · "
             f"tol {self.auto_tune_center_tolerance.value():g} mm"
         )
@@ -1700,6 +1720,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.progress.setValue(0)
         self.progress.setFormat(f"0 / {phase.points}")
         self.progress.setTextVisible(True)
+        self.progress.setVisible(True)
         self.status_panel.set_item("restore", "Pending", "subtle")
         background_metadata = dict(self.background_metadata)
         background_metadata["path"] = str(self.runtime_paths["background_image_path"]) if self.background_image is not None else None
@@ -1752,6 +1773,7 @@ class RFPhaseScanWindow(QMainWindow):
     def finished(self, result):
         self._set_scan_status(str(result.get("status", "FAILED")))
         self.stop.setEnabled(False); self.start.setEnabled(True); self.thread = None
+        self.progress.setVisible(False)
         fit = result.get("fit") or {}
         self.last_fit = fit or None
         self.last_initial_phase = result.get("initial_phase_deg")
