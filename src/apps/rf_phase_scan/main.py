@@ -524,11 +524,33 @@ class RFPhaseScanWindow(QMainWindow):
             self.auto_tune_verification_min_valid,
         ):
             spin.setRange(1, 100)
-        self.auto_tune_frame_samples.setValue(int(auto_measurement.get("frame_samples", auto_center_lock["frame_samples"])))
-        self.auto_tune_min_valid_frames.setValue(int(auto_measurement.get("min_valid_frames", auto_center_lock["min_valid_frames"])))
-        self.auto_tune_verification_samples.setValue(int(auto_measurement.get("verification_frame_samples", auto_center_lock["verification_frame_samples"])))
-        self.auto_tune_verification_min_valid.setValue(int(auto_measurement.get("verification_min_valid_frames", auto_center_lock["verification_min_valid_frames"])))
-        self.auto_tune_frame_interval = self._spin(float(auto_measurement.get("frame_interval_s", auto_center_lock["frame_interval_s"])), 0, 10)
+        self.auto_tune_frame_samples.setValue(
+            int(auto_measurement.get("frame_samples", auto_center_lock.get("frame_samples", 3)))
+        )
+        self.auto_tune_min_valid_frames.setValue(
+            int(auto_measurement.get("min_valid_frames", auto_center_lock.get("min_valid_frames", 2)))
+        )
+        self.auto_tune_verification_samples.setValue(
+            int(
+                auto_measurement.get(
+                    "verification_frame_samples",
+                    auto_center_lock.get("verification_frame_samples", 5),
+                )
+            )
+        )
+        self.auto_tune_verification_min_valid.setValue(
+            int(
+                auto_measurement.get(
+                    "verification_min_valid_frames",
+                    auto_center_lock.get("verification_min_valid_frames", 3),
+                )
+            )
+        )
+        self.auto_tune_frame_interval = self._spin(
+            float(auto_measurement.get("frame_interval_s", auto_center_lock.get("frame_interval_s", 0.2))),
+            0,
+            10,
+        )
         self.auto_tune_center_tolerance = self._spin(float(auto_center_lock["center_tolerance_mm"]), 0.01, 10)
         self.auto_tune_max_offset = self._spin(float(auto_center_lock["max_correction_step_mev"]), 0.01, 1000)
         self.auto_tune_fine_steps = QSpinBox()
