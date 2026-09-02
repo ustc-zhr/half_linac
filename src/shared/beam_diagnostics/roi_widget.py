@@ -70,8 +70,15 @@ class ROIControl(QWidget):
         self.reload()
 
     def reload(self):
-        roi, _source, warnings = resolve_roi(runtime_path=self.runtime_path, configured=self.configured, shape=self.image_shape)
+        roi, source, warnings = resolve_roi(
+            runtime_path=self.runtime_path,
+            configured=self.configured,
+            shape=self.image_shape,
+        )
         self._set_roi(roi)
+        blocked = self.use_roi.blockSignals(True)
+        self.use_roi.setChecked(source in {"runtime", "configured"})
+        self.use_roi.blockSignals(blocked)
         for warning in warnings: self.warningRaised.emit(warning)
         self._emit()
 
@@ -86,8 +93,15 @@ class ROIControl(QWidget):
                 Path(path).unlink(missing_ok=True)
         except OSError as exc:
             self.warningRaised.emit(f"Could not remove saved ROI: {exc}")
-        roi, _source, warnings = resolve_roi(runtime_path="/__missing_roi__", configured=self.configured, shape=self.image_shape)
+        roi, source, warnings = resolve_roi(
+            runtime_path="/__missing_roi__",
+            configured=self.configured,
+            shape=self.image_shape,
+        )
         self._set_roi(roi)
+        blocked = self.use_roi.blockSignals(True)
+        self.use_roi.setChecked(source in {"runtime", "configured"})
+        self.use_roi.blockSignals(blocked)
         for warning in warnings: self.warningRaised.emit(warning)
         self._emit()
 

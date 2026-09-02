@@ -2,6 +2,14 @@
   "default_flag": "PRF06",
   "profile_method": "Gaussian fit",
   "image_flip_y": {"real": true},
+  "roi": {
+    "vm": {
+      "PRFD": {"x": 0, "y": 0, "width": 360, "height": 270}
+    },
+    "real": {
+      "PRFD": {"x": 0, "y": 0, "width": 1440, "height": 1080}
+    }
+  },
   "background_sample_count": 5,
   "background_sample_interval_s": 1,
   "write_control": {"vm": "allowed", "real": "allowed"}
