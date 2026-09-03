@@ -52,7 +52,6 @@ from half_linac.src.shared.beam_diagnostics import (
     load_background,
     save_background,
     ROIControl,
-    configured_roi,
     resolve_image_display_scale,
     roi_extent,
 )
@@ -461,10 +460,7 @@ class myWindow(QWidget, Ui_Form):
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
         self.beam_monitor_config = get_workflow(self.machine_profile, "beam_monitor")
-        flip_y_config = self.beam_monitor_config.get("image_flip_y", False)
-        if isinstance(flip_y_config, dict):
-            flip_y_config = flip_y_config.get(self.control_backend, False)
-        self.image_flip_y = bool(flip_y_config)
+        self.image_flip_y = False
         self.flag_elements = list_elements(
             self.app_context,
             kind="flag",
@@ -1032,16 +1028,11 @@ class myWindow(QWidget, Ui_Form):
             flag_id or self.tmppv,
             self.control_backend,
         )
-        configured = configured_roi(
-            self.beam_monitor_config.get("roi"),
-            self.control_backend,
-            flag_id or self.tmppv,
-        )
         if self.roi_control is None:
             self.roi_control = ROIControl(
                 image_shape=(geometry.shape[1], geometry.shape[0]),
                 runtime_path=self._roi_runtime_path(flag_id),
-                configured=configured,
+                configured=geometry.default_roi,
             )
             self.roi_control.warningRaised.connect(
                 lambda message: self._set_profile_status(message, "warning")
@@ -1051,7 +1042,7 @@ class myWindow(QWidget, Ui_Form):
             self.roi_control.reconfigure(
                 image_shape=(geometry.shape[1], geometry.shape[0]),
                 runtime_path=self._roi_runtime_path(flag_id),
-                configured=configured,
+                configured=geometry.default_roi,
             )
         self._update_roi_status()
 
@@ -1706,6 +1697,7 @@ class myWindow(QWidget, Ui_Form):
         )
         self._pixel_geometry_flag_id = flag_id
         self.pixel = geometry.shape
+        self.image_flip_y = geometry.flip_y
         pixel_width = geometry.pixel_width_mm
         self.width = self.pixel[0] * pixel_width
         self.height = self.pixel[1] * pixel_width

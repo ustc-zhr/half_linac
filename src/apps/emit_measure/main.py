@@ -67,8 +67,6 @@ from half_linac.src.shared.beam_diagnostics import (
     resolve_beam_background_paths,
     save_background,
     ROIControl,
-    configured_roi,
-    roi_extent,
     resolve_image_display_scale,
 )
 from half_linac.src.shared.machine_profile import (
@@ -189,7 +187,16 @@ def _projection_measurement_quality(projection):
     return payload
 
 
-def _read_flag_image_fit(image_pv, pixel_shape, extent, *, background=None, roi=None):
+def _read_flag_image_fit(
+    image_pv,
+    pixel_shape,
+    extent,
+    *,
+    background=None,
+    roi=None,
+    flip_y=False,
+    full_frame_for_roi=False,
+):
     raw_image = epics.caget(image_pv)
     if raw_image is None:
         raise RuntimeError(f"Failed to read flag image PV: {image_pv}.")
@@ -205,9 +212,17 @@ def _read_flag_image_fit(image_pv, pixel_shape, extent, *, background=None, roi=
         )
 
     raw_image = np.reshape(flat_image, (pixel_shape[1], pixel_shape[0]))
-    return analyze_beam_image(
+    if flip_y:
+        raw_image = np.flipud(raw_image)
+        if background is not None:
+            background = np.flipud(np.asarray(background))
+    analysis = analyze_beam_image(
         raw_image, extent=extent, background=background, roi=roi
     )
+    if full_frame_for_roi and roi is not None:
+        _analyzed_image, fit_result = analysis
+        return raw_image, fit_result
+    return analysis
 
 
 def _read_optional_scalar_pv(pv_name):
@@ -962,6 +977,8 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_fit_result = None
         self.latest_beam_fit_flag = None
         self.latest_beam_fit_k1 = None
+        self.latest_beam_extent = None
+        self.latest_beam_roi_overlay = False
         self.latest_beam_size_pv = (None, None)
         self.latest_beam_background_status = "Off"
         self.beam_image_colormap = DEFAULT_BEAM_IMAGE_COLORMAP
@@ -2309,6 +2326,8 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_fit_result = None
         self.latest_beam_fit_flag = None
         self.latest_beam_fit_k1 = None
+        self.latest_beam_extent = None
+        self.latest_beam_roi_overlay = False
         self.latest_beam_size_pv = (None, None)
         self.latest_beam_background_status = "Off"
         if hasattr(self, "beam_image_title_label"):
@@ -2336,6 +2355,8 @@ class myWindow(QWidget,Ui_Form):
             self.latest_beam_image,
             self.latest_beam_fit_result,
             k1=self.latest_beam_fit_k1,
+            extent=self.latest_beam_extent,
+            show_roi_overlay=self.latest_beam_roi_overlay,
             size_pv=self.latest_beam_size_pv,
             background_status=self.latest_beam_background_status,
         )
@@ -2348,6 +2369,7 @@ class myWindow(QWidget,Ui_Form):
         *,
         k1=None,
         extent=None,
+        show_roi_overlay=True,
         size_pv=(None, None),
         background_status="Off",
     ):
@@ -2355,12 +2377,6 @@ class myWindow(QWidget,Ui_Form):
             return
         if extent is None:
             extent = self._current_flag_image_extent(flag_name)
-            active_roi = self.roi_control.active_roi() if self.roi_control is not None else None
-            if active_roi is not None:
-                geometry = self._current_flag_pixel_geometry(flag_name)
-                extent = roi_extent(
-                    extent, active_roi, (geometry.shape[1], geometry.shape[0])
-                )
         palette = self._palette()
         widget = self.beam_image_widget
         widget.axes.clear()
@@ -2406,6 +2422,8 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_fit_result = fit_result
         self.latest_beam_fit_flag = flag_name
         self.latest_beam_fit_k1 = k1
+        self.latest_beam_extent = tuple(extent)
+        self.latest_beam_roi_overlay = bool(show_roi_overlay)
         self.latest_beam_size_pv = tuple(size_pv)
         self.latest_beam_background_status = background_status
         self.beam_image_title_label.setText(f"Current PRF Image · {flag_name}")
@@ -2429,7 +2447,7 @@ class myWindow(QWidget,Ui_Form):
             "Cross-check" if size_sigx is not None or size_sigy is not None else "Unavailable"
         )
         self.beam_background_status_label.setText(background_status)
-        if self.roi_control is not None:
+        if show_roi_overlay and self.roi_control is not None:
             self.roi_control.attach_axes(
                 self.beam_image_widget.axes,
                 extent=self._current_flag_image_extent(flag_name),
@@ -2825,6 +2843,7 @@ class myWindow(QWidget,Ui_Form):
             "image_geometry": {
                 "shape": list(paras.flag_pixel_shape),
                 "extent_mm": list(paras.flag_image_extent),
+                "flip_y": bool(paras.flag_image_flip_y),
             },
         }
         roi = getattr(paras, "roi", None)
@@ -3907,15 +3926,12 @@ class myWindow(QWidget,Ui_Form):
     def _reconfigure_roi(self, flag_name=None):
         flag_name = flag_name or self.comboBox_4.currentText()
         geometry = self._current_flag_pixel_geometry(flag_name)
-        configured = configured_roi(
-            self.beam_monitor_config.get("roi"), self.machine_type, flag_name
-        )
         runtime_path = self._scan_latest_dir() / "roi" / f"{flag_name}.json"
         if self.roi_control is None:
             self.roi_control = ROIControl(
                 image_shape=(geometry.shape[1], geometry.shape[0]),
                 runtime_path=runtime_path,
-                configured=configured,
+                configured=geometry.default_roi,
             )
             self.roi_control.warningRaised.connect(
                 lambda _message: self._refresh_status()
@@ -3925,7 +3941,7 @@ class myWindow(QWidget,Ui_Form):
             self.roi_control.reconfigure(
                 image_shape=(geometry.shape[1], geometry.shape[0]),
                 runtime_path=runtime_path,
-                configured=configured,
+                configured=geometry.default_roi,
             )
         self._update_roi_status()
 
@@ -4223,6 +4239,7 @@ class myWindow(QWidget,Ui_Form):
             geometry = self._current_flag_pixel_geometry(para.flag_name)
             para.flag_pixel_shape = geometry.shape
             para.flag_image_extent = _image_extent_from_geometry(geometry)
+            para.flag_image_flip_y = geometry.flip_y
             para.roi = self.roi_control.active_roi()
             para.background_image = None
             para.background_status = "Off"
@@ -4340,6 +4357,8 @@ class myWindow(QWidget,Ui_Form):
                 paras.flag_image_extent,
                 background=paras.background_image,
                 roi=getattr(paras, "roi", None),
+                flip_y=getattr(paras, "flag_image_flip_y", False),
+                full_frame_for_roi=True,
             )
         except RuntimeError as exc:
             self._draw_beam_image_placeholder("PRF image unavailable")
@@ -4347,19 +4366,9 @@ class myWindow(QWidget,Ui_Form):
                 self._warn(str(exc))
             return False
 
-        display_image = image
-        if getattr(paras, "roi", None) is not None:
-            try:
-                raw = np.asarray(epics.caget(paras.flagImagePV), dtype=float)
-                display_image = np.reshape(
-                    raw, (paras.flag_pixel_shape[1], paras.flag_pixel_shape[0])
-                )
-            except (TypeError, ValueError):
-                display_image = image
-
         self._display_beam_image_fit(
             paras.flag_name,
-            display_image,
+            image,
             fit_result,
             extent=paras.flag_image_extent,
             size_pv=_read_optional_size_pvs(paras.flagSigxPV, paras.flagSigyPV),
@@ -4593,8 +4602,12 @@ class myWindow(QWidget,Ui_Form):
             axes.set_xticks([])
             axes.set_yticks([])
         else:
+            display_background = self.background_image
+            geometry = self._current_flag_pixel_geometry(self.background_flag_id)
+            if geometry.flip_y:
+                display_background = np.flipud(display_background)
             axes.imshow(
-                self.background_image,
+                display_background,
                 cmap=self.beam_image_colormap,
                 origin="lower",
                 aspect="auto",
@@ -5128,6 +5141,7 @@ class myWindow(QWidget,Ui_Form):
                 dict["beam_fit"],
                 k1=dict.get("k1"),
                 extent=dict.get("beam_extent"),
+                show_roi_overlay=dict.get("show_roi_overlay", True),
                 size_pv=dict.get("size_pv", (None, None)),
                 background_status=dict.get("background_status", "Off"),
             )
@@ -5238,11 +5252,6 @@ class myWindow(QWidget,Ui_Form):
                 fontsize=10,
             )
         widget.canvas.draw()
-        if self.roi_control is not None:
-            self.roi_control.attach_axes(
-                widget.axes,
-                extent=self._current_flag_image_extent(flag_name),
-            )
 
         if result.get("status") == "valid":
             for field, key in zip(fields, ("ex", "beta", "alpha", "gamma", "exn")):
@@ -5483,6 +5492,8 @@ class scanThread(QThread):
         self.flagSigyPV = getattr(paras, "flagSigyPV", None)
         self.flag_pixel_shape = paras.flag_pixel_shape
         self.flag_image_extent = paras.flag_image_extent
+        self.flag_image_flip_y = getattr(paras, "flag_image_flip_y", False)
+        self.roi = getattr(paras, "roi", None)
         self.background_image = getattr(paras, "background_image", None)
         self.background_status = getattr(paras, "background_status", "Off")
         self.k1_from    = paras.k1_from   
@@ -5604,7 +5615,9 @@ class scanThread(QThread):
                         self.flag_pixel_shape,
                         self.flag_image_extent,
                         background=self.background_image,
-                        roi=self.roi_control.active_roi(),
+                        roi=self.roi,
+                        flip_y=self.flag_image_flip_y,
+                        full_frame_for_roi=True,
                     )
                 except RuntimeError as exc:
                     if not adaptive or retry >= self.adaptive_config.max_retries:
@@ -5637,6 +5650,7 @@ class scanThread(QThread):
                     "beam_image": image,
                     "beam_fit": fit_result,
                     "beam_extent": self.flag_image_extent,
+                    "show_roi_overlay": True,
                     "size_pv": size_pv,
                     "background_status": self.background_status,
                 }

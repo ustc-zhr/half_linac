@@ -141,11 +141,3 @@ class ROIControl(QWidget):
     def _emit(self, *_args):
         if self._selector is not None: self._selector.set_active(self.use_roi.isChecked())
         self.roiChanged.emit(self.roi(), self.use_roi.isChecked())
-
-
-def configured_roi(mapping, backend: str, flag_element: str):
-    if not isinstance(mapping, dict): return None
-    backend_values = mapping.get(backend, {})
-    if not isinstance(backend_values, dict): return None
-    value = backend_values.get(flag_element)
-    return value if isinstance(value, dict) else None

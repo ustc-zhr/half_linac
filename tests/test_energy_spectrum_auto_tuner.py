@@ -20,6 +20,7 @@ from half_linac.src.apps.energy_spectrum.spectrum_profile import (
     gaussian,
     project_image_profiles,
 )
+from half_linac.src.shared.beam_diagnostics import ImageROI
 
 
 class _DummyPV:
@@ -212,6 +213,22 @@ class ESAAutoTunerTests(unittest.TestCase):
 
         self.assertTrue(has_beam)
         self.assertAlmostEqual(center_x, 49.5)
+
+    def test_brightness_detection_is_limited_to_roi_and_keeps_global_x(self):
+        tuner = ESA_AutoTuner(
+            flag_pv_obj=_DummyPV(),
+            flag_pixel=(200, 200),
+            bend_pv="FAKE:BEND",
+            roi=ImageROI(x=100, y=0, width=100, height=200),
+        )
+        image = np.zeros((200, 200))
+        image[80:92, 20:32] = 1000.0
+        image[80:92, 144:156] = 200.0
+
+        has_beam, _score, center_x = tuner._detect_beam(image)
+
+        self.assertTrue(has_beam)
+        self.assertAlmostEqual(center_x, 149.5)
 
     def test_coarse_and_fine_scan_use_triplet_detection_api(self):
         tuner = _FakeAutoTuner()

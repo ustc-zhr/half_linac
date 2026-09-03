@@ -791,10 +791,6 @@ def _validate_basic_app_support(
         if str(workflow.get("default_element", "")) not in {e.id for e in candidates}:
             raise MachineProfileError("workflows.rf_phase_scan.default_element is not an eligible LLRF.")
         diagnostics = _expect_mapping(workflow.get("diagnostics"), "workflows.rf_phase_scan.diagnostics")
-        if not isinstance(diagnostics.get("image_flip_y", False), bool):
-            raise MachineProfileError(
-                "workflows.rf_phase_scan.diagnostics.image_flip_y must be boolean."
-            )
         flag_element = _expect_non_empty_string(diagnostics.get("flag_element"), "workflows.rf_phase_scan.diagnostics.flag_element")
         flag_channel = _expect_non_empty_string(diagnostics.get("flag_image_channel"), "workflows.rf_phase_scan.diagnostics.flag_image_channel")
         flag = profile.get_element(flag_element)

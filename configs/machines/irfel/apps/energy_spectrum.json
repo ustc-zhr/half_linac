@@ -3,10 +3,6 @@
   "flag_image_channel": "image",
   "flag_exposure_channel": "exposure_time",
   "x_reference_mm": 0,
-  "roi": {
-    "vm": {"PRFESA": {"x": 0, "y": 0, "width": 360, "height": 270}},
-    "real": {"PRFESA": {"x": 0, "y": 0, "width": 1440, "height": 1080}}
-  },
   "bend_element": "BM03",
   "energy_element": "ESA_ENERGY",
   "energy_set_channel": "setpoint",

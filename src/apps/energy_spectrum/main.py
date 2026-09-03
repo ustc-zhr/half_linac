@@ -80,7 +80,6 @@ from half_linac.src.apps.energy_spectrum.stations import (
 )
 from half_linac.src.shared.beam_diagnostics import (
     ROIControl,
-    configured_roi,
     resolve_image_display_scale,
 )
 from half_linac.src.shared.app_theme import resolve_initial_theme
@@ -945,7 +944,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.roi_control = ROIControl(
             image_shape=(self.flag_pixel[1], self.flag_pixel[0]),
             runtime_path=self._runtime_paths()["latest_dir"] / "roi" / f"{self.energy_config['flag_element']}.json",
-            configured=configured_roi(self.energy_config.get("roi"), self.control_backend, self.energy_config["flag_element"]),
+            configured=self.flag_default_roi,
         )
         self.roi_control.warningRaised.connect(lambda message: self.statusBar().showMessage(message, 8000))
 
@@ -1100,7 +1099,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.roi_control.reconfigure(
                 image_shape=(self.flag_pixel[1], self.flag_pixel[0]),
                 runtime_path=self._runtime_paths()["latest_dir"] / "roi" / f"{self.energy_config['flag_element']}.json",
-                configured=configured_roi(self.energy_config.get("roi"), self.control_backend, self.energy_config["flag_element"]),
+                configured=self.flag_default_roi,
             )
         finally:
             self._roi_updates_suspended = False
@@ -1173,6 +1172,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.auto_tune_max_spin.setValue(
             float(scan_config.get("high", scan_config.get("max", scan_high)))
         )
+        auto_tune_config = resolve_energy_spectrum_auto_tune(self.energy_config)
         stage_configs = dict(auto_tune_config.get("stages", {}))
         brightness_peak_config = dict(stage_configs.get("brightness_peak", auto_tune_config.get("brightness_peak", {})))
         self.auto_tune_coarse_steps_spin.setValue(
@@ -3867,7 +3867,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         )
         self.flag_pixel = geometry.shape
         self.flag_pixel_width_mm = geometry.pixel_width_mm
-        self.flag_image_flip_y = bool(self.energy_config.get("image_flip_y", False))
+        self.flag_default_roi = geometry.default_roi
+        self.flag_image_flip_y = geometry.flip_y
 
         self.flag_expotime_pv = None
         self.flag_exposure_target = None

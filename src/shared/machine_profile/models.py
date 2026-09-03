@@ -513,10 +513,53 @@ def _parse_image_geometry(
             raise MachineProfileError(
                 f"{location}.image_geometry.{backend_name} values must be positive."
             )
-        parsed[backend_name] = {
+        parsed_backend: dict[str, Any] = {
             "shape": parsed_shape,
             "pixel_width_mm": pixel_width_mm,
         }
+        flip_y = backend_geometry.get("flip_y", False)
+        if not isinstance(flip_y, bool):
+            raise MachineProfileError(
+                f"{location}.image_geometry.{backend_name}.flip_y must be boolean."
+            )
+        parsed_backend["flip_y"] = flip_y
+        default_roi = backend_geometry.get("default_roi")
+        if default_roi is not None:
+            parsed_backend["default_roi"] = _parse_default_image_roi(
+                default_roi,
+                parsed_shape,
+                f"{location}.image_geometry.{backend_name}.default_roi",
+            )
+        parsed[backend_name] = parsed_backend
+    return parsed
+
+
+def _parse_default_image_roi(
+    raw_roi: Any,
+    shape: list[int],
+    location: str,
+) -> dict[str, int]:
+    roi = _expect_mapping(raw_roi, location)
+    required = {"x", "y", "width", "height"}
+    if set(roi) != required:
+        raise MachineProfileError(
+            f"{location} must define exactly x, y, width, and height."
+        )
+    if any(isinstance(roi[key], bool) or not isinstance(roi[key], int) for key in required):
+        raise MachineProfileError(f"{location} values must be integers.")
+    parsed = {key: int(roi[key]) for key in ("x", "y", "width", "height")}
+    if parsed["x"] < 0 or parsed["y"] < 0 or parsed["width"] <= 0 or parsed["height"] <= 0:
+        raise MachineProfileError(
+            f"{location} coordinates must be non-negative and dimensions positive."
+        )
+    image_width, image_height = shape
+    if (
+        parsed["x"] + parsed["width"] > image_width
+        or parsed["y"] + parsed["height"] > image_height
+    ):
+        raise MachineProfileError(
+            f"{location} exceeds image shape {image_width}x{image_height}."
+        )
     return parsed
 
 

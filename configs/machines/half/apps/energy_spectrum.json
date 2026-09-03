@@ -30,12 +30,7 @@
   },
   "stations": {
     "eny": {
-      "roi": {
-        "vm": {"ENY": {"x": 0, "y": 0, "width": 720, "height": 540}},
-        "real": {"ENY": {"x": 230, "y": 370, "width": 1000, "height": 330}}
-      },
       "flag_element": "ENY",
-      "image_flip_y": true,
       "x_reference_mm": 0,
       "bend_element": "BENY",
       "energy_element": "LINAC_ENERGY",
@@ -50,10 +45,6 @@
       "design_eta_m": 0.7484210850804714
     },
     "prf02": {
-      "roi": {
-        "vm": {"PRF02": {"x": 0, "y": 0, "width": 360, "height": 270}},
-        "real": {"PRF02": {"x": 350, "y": 200, "width": 750, "height": 700}}
-      },
       "flag_element": "PRF02",
       "x_reference_mm": 0,
       "bend_element": "BL01A",

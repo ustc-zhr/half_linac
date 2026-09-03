@@ -34,7 +34,7 @@ from half_linac.src.shared.energy_tuning import normalize_pipeline
 from half_linac.src.shared.beam_diagnostics.background_store import (
     BackgroundStoreError, load_background, save_background,
 )
-from half_linac.src.shared.beam_diagnostics import ROIControl, configured_roi
+from half_linac.src.shared.beam_diagnostics import ROIControl
 
 
 PALETTES = {
@@ -438,7 +438,12 @@ class RFPhaseScanWindow(QMainWindow):
         self.config = dict(get_workflow(self.context.profile, "rf_phase_scan"))
         self.station = self.config
         self.diagnostics = dict(self.config["diagnostics"])
-        self.image_flip_y = bool(self.diagnostics.get("image_flip_y", False))
+        diagnostic_geometry = resolve_element_image_geometry(
+            self.context,
+            self.diagnostics["flag_element"],
+            self.context.control_backend.name,
+        )
+        self.image_flip_y = diagnostic_geometry.flip_y
         self.preview_energy_mev = float(self.config.get("preview_energy_mev", 2200.0))
         self.scan_enabled = workflow_writes_allowed(
             self.context,
@@ -597,7 +602,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.roi_control = ROIControl(
             image_shape=(roi_geometry.shape[1], roi_geometry.shape[0]),
             runtime_path=self.runtime_paths["latest_dir"] / "roi" / f"{self.diagnostics['flag_element']}.json",
-            configured=configured_roi(self.diagnostics.get("roi"), self.context.control_backend.name, self.diagnostics["flag_element"]),
+            configured=roi_geometry.default_roi,
         )
         self.roi_control.warningRaised.connect(lambda message: self.statusBar().showMessage(message, 8000))
         self.roi_control.roiChanged.connect(self._roi_changed)

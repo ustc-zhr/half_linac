@@ -8,6 +8,7 @@ from half_linac.src.apps.energy_spectrum.spectrum_profile import (
     fit_projection_profile,
     project_image_profiles,
 )
+from half_linac.src.shared.beam_diagnostics import ImageROI, crop_image
 from half_linac.src.shared.energy_tuning import (
     BRIGHTNESS_PEAK,
     CallableEnergyActuator,
@@ -340,6 +341,11 @@ class ESA_AutoTuner:
         score    : float
         cx       : float or None
         """
+        x_offset = 0
+        if self.roi is not None:
+            img, selected, _warnings = crop_image(img, self.roi)
+            x_offset = selected.x
+
         # 找出图像中显著高于背景的亮点区域（6σ原则）
         thr = np.mean(img) + 6 * np.std(img)
         binary = img > thr
@@ -386,10 +392,10 @@ class ESA_AutoTuner:
             weight_sum = float(np.sum(weights))
             if not np.isfinite(weight_sum) or weight_sum <= 0:
                 return False, 0.0, None
-            cx = float(np.average(region_x, weights=weights))
+            cx = float(np.average(region_x, weights=weights)) + x_offset
         else:
             raw_score = np.sum(img[binary])
-            cx = region.centroid[1]   # x = dispersion direction
+            cx = region.centroid[1] + x_offset   # x = dispersion direction
 
         # -----------------------------
         # scoring
@@ -1297,6 +1303,12 @@ if __name__=='__main__':
         mode=objective,
         pipeline=pipeline,
         target_x_pixel=target_x_pixel,
+        flip_y=geometry.flip_y,
+        roi=(
+            ImageROI(**geometry.default_roi)
+            if geometry.default_roi is not None
+            else None
+        ),
         settle_time_s=float(scan.get("settle_time_s", 0.5)),
         restore_initial_on_failure=bool(scan.get("restore_initial_on_failure", True)),
         frame_samples=int(measurement.get("frame_samples", sampling.get("frame_samples", 3))),

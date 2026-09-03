@@ -2069,7 +2069,10 @@
       "order": 217,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0868}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2079,7 +2082,10 @@
       "order": 218,
       "tags": ["energy_spectrum"],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.1156}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.1156, "default_roi": {"x": 0, "y": 0, "width": 360, "height": 270}},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289, "flip_y": true, "default_roi": {"x": 350, "y": 200, "width": 750, "height": 700}}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2089,7 +2095,10 @@
       "order": 219,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0612}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0153}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0612},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0153, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2099,7 +2108,10 @@
       "order": 220,
       "tags": ["emit"],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0868}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2109,7 +2121,10 @@
       "order": 221,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0868}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2119,7 +2134,10 @@
       "order": 222,
       "tags": ["emit"],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0612}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0153}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0612},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0153, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2129,7 +2147,10 @@
       "order": 223,
       "tags": ["emit"],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0868}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true, "default_roi": {"x": 250, "y": 100, "width": 900, "height": 900}}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2139,7 +2160,10 @@
       "order": 224,
       "tags": ["emit"],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0868}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2149,7 +2173,10 @@
       "order": 225,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0868}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2159,7 +2186,10 @@
       "order": 226,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.1156}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.1156},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2169,7 +2199,10 @@
       "order": 227,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0868}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2179,7 +2212,10 @@
       "order": 228,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.0868}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2189,7 +2225,10 @@
       "order": 229,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.1156}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.1156},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2199,7 +2238,10 @@
       "order": 230,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.08}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.08},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02, "flip_y": true}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2209,7 +2251,10 @@
       "order": 231,
       "tags": [],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.1156}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.1156, "default_roi": {"x": 0, "y": 0, "width": 360, "height": 270}},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289, "flip_y": true, "default_roi": {"x": 0, "y": 0, "width": 1440, "height": 1080}}
+      },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
     {
@@ -2219,7 +2264,10 @@
       "order": 232,
       "tags": ["energy_spectrum"],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [720, 540], "pixel_width_mm": 0.0878}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0439}},
+      "image_geometry": {
+        "vm": {"shape": [720, 540], "pixel_width_mm": 0.0878, "default_roi": {"x": 0, "y": 0, "width": 720, "height": 540}},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0439, "flip_y": true, "default_roi": {"x": 230, "y": 370, "width": 1000, "height": 330}}
+      },
       "logical_channels": ["image", "exposure_time"]
     },
     {

@@ -19,7 +19,7 @@ from .display import (
 )
 from .profile_runtime import resolve_beam_background_paths
 from .roi import ImageROI, ROIError, clamp_roi, crop_image, full_frame_roi, load_roi, resolve_roi, roi_extent, save_roi
-from .roi_widget import ROIControl, configured_roi
+from .roi_widget import ROIControl
 
 __all__ = [
     "BackgroundStoreError",
@@ -46,5 +46,4 @@ __all__ = [
     "roi_extent",
     "save_roi",
     "ROIControl",
-    "configured_roi",
 ]

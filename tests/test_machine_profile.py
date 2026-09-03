@@ -933,6 +933,64 @@ class MachineProfileTests(unittest.TestCase):
             resolve_element_image_geometry(profile, "ENY", "vm").shape,
             (720, 540),
         )
+        prf07_real = resolve_element_image_geometry(profile, "PRF07", "real")
+        self.assertEqual(
+            prf07_real.default_roi,
+            {"x": 250, "y": 100, "width": 900, "height": 900},
+        )
+        self.assertTrue(prf07_real.flip_y)
+        self.assertIsNone(
+            resolve_element_image_geometry(profile, "PRF07", "vm").default_roi
+        )
+        self.assertFalse(
+            resolve_element_image_geometry(profile, "PRF07", "vm").flip_y
+        )
+        self.assertEqual(
+            resolve_element_image_geometry(profile, "ENY", "real").default_roi,
+            {"x": 230, "y": 370, "width": 1000, "height": 330},
+        )
+
+    def test_flag_default_roi_must_fit_backend_image_shape(self):
+        raw = {
+            "id": "PRFTEST",
+            "kind": "flag",
+            "display_name": "PRFTEST",
+            "order": 1,
+            "tags": [],
+            "limits": {},
+            "channels": {"image": {"real": "TEST:IMAGE"}},
+            "image_geometry": {
+                "real": {
+                    "shape": [100, 80],
+                    "pixel_width_mm": 0.02,
+                    "default_roi": {"x": 20, "y": 10, "width": 90, "height": 60},
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(MachineProfileError, "exceeds image shape 100x80"):
+            _parse_element(raw, 0)
+
+    def test_flag_image_flip_must_be_boolean(self):
+        raw = {
+            "id": "PRFTEST",
+            "kind": "flag",
+            "display_name": "PRFTEST",
+            "order": 1,
+            "tags": [],
+            "limits": {},
+            "channels": {"image": {"real": "TEST:IMAGE"}},
+            "image_geometry": {
+                "real": {
+                    "shape": [100, 80],
+                    "pixel_width_mm": 0.02,
+                    "flip_y": "yes",
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(MachineProfileError, "flip_y must be boolean"):
+            _parse_element(raw, 0)
 
     def test_all_directory_flags_define_geometry_for_each_image_backend(self):
         for machine_id in ("_template", "half", "irfel"):

@@ -1012,7 +1012,10 @@
         "watch"
       ],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.02},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}
+      },
       "logical_channels": [
         "image"
       ]
@@ -1027,7 +1030,10 @@
         "watch"
       ],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.02},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}
+      },
       "logical_channels": [
         "image"
       ]
@@ -1043,7 +1049,10 @@
         "beam_monitor"
       ],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.02},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}
+      },
       "logical_channels": [
         "image",
         "exposure_time",
@@ -1061,7 +1070,10 @@
         "watch"
       ],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.02},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}
+      },
       "logical_channels": [
         "image",
         "exposure_time",
@@ -1080,7 +1092,10 @@
         "energy_spectrum"
       ],
       "limits": {},
-      "image_geometry": {"vm": {"shape": [360, 270], "pixel_width_mm": 0.02}, "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02}},
+      "image_geometry": {
+        "vm": {"shape": [360, 270], "pixel_width_mm": 0.02, "default_roi": {"x": 0, "y": 0, "width": 360, "height": 270}},
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.02, "default_roi": {"x": 0, "y": 0, "width": 1440, "height": 1080}}
+      },
       "logical_channels": [
         "image",
         "exposure_time"

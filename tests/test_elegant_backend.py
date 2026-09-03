@@ -7,7 +7,7 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import sdds
@@ -25,6 +25,7 @@ from half_linac.src.shared.elegant_backend import (
     VmWatchImagePublishSpec,
     build_vm_publish_plan,
 )
+from half_linac.src.shared.beam_diagnostics import ImageROI
 from half_linac.src.shared.machine_profile import (
     MachineProfileError,
     build_model_backend,
@@ -1040,6 +1041,133 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertGreater(result.condition_number, 1.0)
         self.assertLess(result.residual_rms, 1.0e-12)
         self.assertAlmostEqual(result.determinant, 7.0)
+
+    def test_emit_measure_scan_thread_keeps_the_selected_roi(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import scanThread
+
+        roi = ImageROI(x=250, y=100, width=900, height=900)
+        thread = scanThread(
+            SimpleNamespace(
+                quad_name="QT02",
+                flag_name="PRF07",
+                quadPV="TEST:QT02:K1",
+                flagImagePV="TEST:PRF07:IMAGE",
+                flag_pixel_shape=(1440, 1080),
+                flag_image_extent=(-1.0, 1.0, -1.0, 1.0),
+                flag_image_flip_y=True,
+                roi=roi,
+                k1_from=-1.0,
+                k1_end=1.0,
+                k1_steps=3,
+                samples=1,
+                EnergyMeV=2200.0,
+                settle_time=0.0,
+                sample_interval=0.0,
+                scan_strategy="grid",
+                model_line="EMIT_QT02_PRF07",
+                app_context=object(),
+                recal=0,
+            )
+        )
+
+        self.assertIs(thread.roi, roi)
+        self.assertTrue(thread.flag_image_flip_y)
+
+    def test_emit_measure_flips_image_and_background_before_roi_analysis(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure import main as emit_main
+
+        image = np.arange(12, dtype=float).reshape(3, 4)
+        background = np.arange(12, 24, dtype=float).reshape(3, 4)
+        roi = ImageROI(x=1, y=1, width=2, height=2)
+        expected = (np.zeros((2, 2)), object())
+        with patch.object(emit_main.epics, "caget", return_value=image.ravel()), patch.object(
+            emit_main,
+            "analyze_beam_image",
+            return_value=expected,
+        ) as analyze:
+            result = emit_main._read_flag_image_fit(
+                "TEST:IMAGE",
+                (4, 3),
+                (-2.0, 2.0, -1.5, 1.5),
+                background=background,
+                roi=roi,
+                flip_y=True,
+            )
+
+        self.assertIs(result, expected)
+        np.testing.assert_array_equal(analyze.call_args.args[0], np.flipud(image))
+        np.testing.assert_array_equal(
+            analyze.call_args.kwargs["background"],
+            np.flipud(background),
+        )
+        self.assertIs(analyze.call_args.kwargs["roi"], roi)
+
+    def test_emit_measure_can_display_full_frame_while_fitting_selected_roi(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure import main as emit_main
+
+        image = np.arange(12, dtype=float).reshape(3, 4)
+        roi = ImageROI(x=1, y=1, width=2, height=2)
+        fit_result = object()
+        with patch.object(emit_main.epics, "caget", return_value=image.ravel()), patch.object(
+            emit_main,
+            "analyze_beam_image",
+            return_value=(np.zeros((2, 2)), fit_result),
+        ):
+            display_image, result = emit_main._read_flag_image_fit(
+                "TEST:IMAGE",
+                (4, 3),
+                (-2.0, 2.0, -1.5, 1.5),
+                roi=roi,
+                full_frame_for_roi=True,
+            )
+
+        np.testing.assert_array_equal(display_image, image)
+        self.assertIs(result, fit_result)
+
+    def test_emit_measure_parabolic_fit_display_does_not_require_image_roi(self):
+        os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+        emit_app_dir = REPO_ROOT / "src/apps/emit_measure"
+        if str(emit_app_dir) not in sys.path:
+            sys.path.insert(0, str(emit_app_dir))
+
+        from half_linac.src.apps.emit_measure.main import myWindow
+
+        widget = SimpleNamespace(axes=MagicMock(), canvas=MagicMock())
+        window = SimpleNamespace(
+            widget_2=widget,
+            lineEdit_11=MagicMock(),
+            lineEdit_12=MagicMock(),
+            lineEdit_13=MagicMock(),
+            lineEdit_14=MagicMock(),
+            lineEdit_15=MagicMock(),
+            lineEdit_16=MagicMock(),
+            _palette=lambda: {"muted_fg": "gray"},
+            _style_axes=lambda *_args: None,
+        )
+
+        myWindow._display_parabolic_plane(
+            window,
+            "xplane",
+            {"status": "fit_failed", "message": "insufficient points"},
+        )
+
+        widget.canvas.draw.assert_called_once_with()
+        window.lineEdit_11.setText.assert_called_once_with("Fit failed")
 
     def test_emit_measure_transfer_matrix_fit_rejects_rank_deficient_scan(self):
         os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))

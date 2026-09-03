@@ -29,14 +29,8 @@
   "diagnostics": {
     "flag_element": "ENY",
     "flag_image_channel": "image",
-    "image_flip_y": true,
     "x_reference_mm": 0,
-    "design_eta_m": 0.7484210850804714,
-    "roi": {
-      "real": {
-        "ENY": {"x": 230, "y": 370, "width": 1000, "height": 330}
-      }
-    }
+    "design_eta_m": 0.7484210850804714
   },
   "energy_match_defaults": {
     "profile_fit_method": "Gauss fit",

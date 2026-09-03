@@ -10,6 +10,8 @@ from .models import AppContext, MachineProfile, MachineProfileError
 class FlagPixelGeometry:
     shape: tuple[int, int]
     pixel_width_mm: float
+    flip_y: bool = False
+    default_roi: Mapping[str, int] | None = None
 
 
 def resolve_element_image_geometry(
@@ -140,7 +142,24 @@ def _parse_geometry(raw: Mapping[str, object], location: str) -> FlagPixelGeomet
     if pixel_width_mm <= 0:
         raise MachineProfileError(f"{location}.pixel_width_mm must be positive.")
 
-    return FlagPixelGeometry(shape=pixel_shape, pixel_width_mm=pixel_width_mm)
+    flip_y = raw.get("flip_y", False)
+    if not isinstance(flip_y, bool):
+        raise MachineProfileError(f"{location}.flip_y must be boolean.")
+
+    default_roi = raw.get("default_roi")
+    if default_roi is not None:
+        default_roi = _expect_mapping(default_roi, f"{location}.default_roi")
+        default_roi = {
+            key: int(default_roi[key])
+            for key in ("x", "y", "width", "height")
+        }
+
+    return FlagPixelGeometry(
+        shape=pixel_shape,
+        pixel_width_mm=pixel_width_mm,
+        flip_y=flip_y,
+        default_roi=default_roi,
+    )
 
 
 def _expect_mapping(value: object, location: str) -> Mapping[str, object]:
