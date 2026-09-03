@@ -620,7 +620,7 @@ class MachineSnapshotWindow(QMainWindow):
         self.export_csv_button.setEnabled(
             self.snapshot_a is not None and self.snapshot_b is not None
         )
-        self.restore_button.setEnabled(snapshot is not None)
+        self.restore_button.setEnabled(selected is not None)
 
     def _restore_selected(self):
         snapshot = self.snapshot_b or self.snapshot_a

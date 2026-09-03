@@ -99,3 +99,6 @@ src/softIOC/*/configure/RELEASE.local
 
 # Local environment exports
 scripts/export_env.sh
+
+# Local delivery packages
+packages/

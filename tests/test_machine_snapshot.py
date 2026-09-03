@@ -168,6 +168,9 @@ def test_qt_window_is_read_only_and_launcher_entry_exists(tmp_path, monkeypatch)
     assert dialog.readbacks_check.isChecked()
     assert not dialog.observations_check.isChecked()
     assert not window.export_csv_button.isEnabled()
+    assert not window.restore_button.isEnabled()
+    window._set_snapshot("a", _snapshot("restore-source", "2026-08-27T00:00:01+00:00"))
+    assert window.restore_button.isEnabled()
 
     repo_root = Path(__file__).resolve().parents[1]
     launcher_source = (repo_root / "src/apps/launcher/main.py").read_text(encoding="utf-8")
