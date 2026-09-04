@@ -2071,7 +2071,7 @@
       "limits": {},
       "image_geometry": {
         "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
-        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true, "default_roi": {"x": 200, "y": 100, "width": 1000, "height": 900}}
       },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
@@ -2110,7 +2110,7 @@
       "limits": {},
       "image_geometry": {
         "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
-        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true, "default_roi": {"x": 270, "y": 50, "width": 980, "height": 900}}
       },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
@@ -2123,7 +2123,7 @@
       "limits": {},
       "image_geometry": {
         "vm": {"shape": [360, 270], "pixel_width_mm": 0.0868},
-        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true}
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0217, "flip_y": true, "default_roi": {"x": 250, "y": 0, "width": 980, "height": 1000}}
       },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
