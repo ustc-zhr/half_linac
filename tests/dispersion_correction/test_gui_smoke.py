@@ -113,6 +113,28 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.calibration_button.text() == "Edit Energy Knob Calibration…"
     assert window.calibration_status_label.text() == "Calibration: Not required"
     assert window.calibration_status_label.isHidden()
+    calibration_editor_args = {}
+
+    class RejectedCalibrationEditor:
+        activated_calibration = None
+        activated_source = None
+
+        def __init__(self, **kwargs):
+            calibration_editor_args.update(kwargs)
+
+        def exec_(self):
+            return 0
+
+    monkeypatch.setattr(
+        "half_linac.src.apps.dispersion_correction.gui.main_window.CalibrationEditorDialog",
+        RejectedCalibrationEditor,
+    )
+    configured_delta = window.config.energy_knob.delta
+    window.delta_spin.setValue(0.005)
+    window._open_calibration_editor()
+    assert calibration_editor_args["target_delta"] == pytest.approx(0.005)
+    assert calibration_editor_args["target_delta"] != configured_delta
+    window.delta_spin.setValue(configured_delta)
     assert window.measure_button.parentWidget() is window.online_content
     assert window.response_button.parentWidget() is window.online_content
     assert window.review_button.parentWidget() is window.online_content

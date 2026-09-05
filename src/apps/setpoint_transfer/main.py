@@ -22,6 +22,8 @@ import epics
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QDoubleValidator
 from PyQt5.QtWidgets import (
@@ -57,6 +59,8 @@ from half_linac.src.shared.machine_profile import (
     RuntimeContextWidget,
     load_profile,
     normalize_mode,
+    build_model_backend,
+    load_model_context,
     resolve_virtual_machine_usedline_workflow,
     resolve_machine_runtime,
 )
@@ -441,7 +445,9 @@ class TwissPreviewDialog(QDialog):
         layout.addWidget(buttons)
 
     def _plot_overview(self, result: TwissPreviewResult) -> None:
-        self.beta_axis, self.eta_axis = self.figure.subplots(2, 1, sharex=True)
+        self.beta_axis, self.eta_axis, self.lattice_axis = self.figure.subplots(
+            3, 1, sharex=True, gridspec_kw={"height_ratios": (3, 3, 0.7)}
+        )
         positions = [row.s_m for row in result.rows]
         design_color = self.palette["muted"]
         x_color = self.palette["accent"]
@@ -469,13 +475,15 @@ class TwissPreviewDialog(QDialog):
             row.s_m for row in result.rows if row.element_name.upper() in override_ids
         }
         for position in sorted(marker_positions):
-            self.beta_axis.axvline(position, color=self.palette["warning"], linewidth=0.8, alpha=0.65)
-            self.eta_axis.axvline(position, color=self.palette["warning"], linewidth=0.8, alpha=0.65)
+            self.beta_axis.axvline(position, color=self.palette["warning"], linestyle=":", linewidth=1.2, alpha=0.8)
+            self.eta_axis.axvline(position, color=self.palette["warning"], linestyle=":", linewidth=1.2, alpha=0.8)
+
+        self._plot_lattice(result, override_ids)
 
         self.beta_axis.set_ylabel("beta [m]")
         self.eta_axis.set_ylabel("eta [m]")
-        self.eta_axis.set_xlabel("s [m]")
-        for axis in (self.beta_axis, self.eta_axis):
+        self.lattice_axis.set_xlabel("s [m]")
+        for axis in (self.beta_axis, self.eta_axis, self.lattice_axis):
             axis.set_facecolor(self.palette["plot"])
             axis.tick_params(colors=self.palette["text"], labelsize=9)
             axis.xaxis.label.set_color(self.palette["text"])
@@ -483,10 +491,55 @@ class TwissPreviewDialog(QDialog):
             for spine in axis.spines.values():
                 spine.set_color(self.palette["border"])
             axis.grid(True, color=self.palette["grid"], linewidth=0.5, alpha=0.5)
+        for axis in (self.beta_axis, self.eta_axis):
             legend = axis.legend(loc="best", ncol=2, fontsize="small", frameon=False)
             for text in legend.get_texts():
                 text.set_color(self.palette["text"])
+        lattice_legend = self.lattice_axis.get_legend()
+        if lattice_legend is not None:
+            for text in lattice_legend.get_texts():
+                text.set_color(self.palette["text"])
         self.canvas.draw_idle()
+
+    def _plot_lattice(self, result: TwissPreviewResult, override_ids: set[str]) -> None:
+        axis = self.lattice_axis
+        axis.axhline(0.0, color=self.palette["muted"], linewidth=0.8)
+        colors = {"quad": "#9b72cf", "bend": "#db8b3d", "bpm": "#4dbb83", "rf": "#b27ad8"}
+        for row in result.rows:
+            element_type = row.element_type.upper()
+            name = row.element_name.upper()
+            if "QUAD" in element_type:
+                kind = "quad"
+                height = 0.75 if row.element_k1_m2 >= 0 else -0.75
+            elif "BEND" in element_type or element_type in {"SBEN", "RBEN"}:
+                kind, height = "bend", 0.9
+            elif name.startswith("BPM") or element_type == "MONI":
+                kind, height = "bpm", 0.55
+            elif "RF" in element_type:
+                kind, height = "rf", 0.6
+            else:
+                continue
+            width = max(row.element_length_m, 0.18)
+            left = row.s_m - max(row.element_length_m, 0.0)
+            axis.add_patch(Rectangle((left, min(0.0, height)), width, abs(height), color=colors[kind], linewidth=0))
+            if name in override_ids:
+                axis.plot(row.s_m, 1.08, marker="v", color=self.palette["warning"], markersize=5)
+        axis.set_ylim(-1.15, 1.25)
+        axis.set_yticks([])
+        axis.set_ylabel("Lattice")
+        axis.legend(
+            handles=[
+                Rectangle((0, 0), 1, 1, color=colors["quad"], label="Quad"),
+                Rectangle((0, 0), 1, 1, color=colors["bend"], label="Bend"),
+                Rectangle((0, 0), 1, 1, color=colors["bpm"], label="BPM"),
+                Rectangle((0, 0), 1, 1, color=colors["rf"], label="RF"),
+                Line2D([], [], color=self.palette["warning"], marker="v", linestyle="None", label="Staged target"),
+            ],
+            loc="upper left",
+            ncol=5,
+            fontsize="small",
+            frameon=False,
+        )
 
 
 class TargetValueDelegate(QStyledItemDelegate):
@@ -531,7 +584,8 @@ class MachineSetpointsWindow(QMainWindow):
         self.active_plan: TransferPlan | None = None
         self.current_values: dict[str, float | None] = {}
         self.staged_values: dict[tuple[str, str], StagedSetpoint] = {}
-        self.design_line_elements: dict[str, set[str]] = {}
+        self.model_lines = ()
+        self.element_model_lines: dict[str, tuple] = {}
         self.selection_checkboxes: dict[str, QCheckBox] = {}
         self.last_result = ()
         self.execution_states: dict[str, str] = {}
@@ -662,9 +716,9 @@ class MachineSetpointsWindow(QMainWindow):
         target_layout.addWidget(self.nudge_up_button)
         layout.addLayout(selection_layout)
         layout.addLayout(target_layout)
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels(
-            ("Select", "Element", "Design K1", f"Current {self.control_backend.upper()}", "Target K1", "Delta", "Source", "Status")
+            ("Select", "Element", "Model line", "Design K1", f"Current {self.control_backend.upper()}", "Target K1", "Delta", "Source", "Status")
         )
         self.table.setEditTriggers(
             QAbstractItemView.DoubleClicked
@@ -676,10 +730,10 @@ class MachineSetpointsWindow(QMainWindow):
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(27)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
         self.table.setColumnWidth(0, 64)
-        self.table.setColumnWidth(4, 120)
-        self.table.setItemDelegateForColumn(4, TargetValueDelegate(self.table))
+        self.table.setColumnWidth(5, 120)
+        self.table.setItemDelegateForColumn(5, TargetValueDelegate(self.table))
         layout.addWidget(self.table)
         self.status_label = QLabel("Ready", central)
         self.status_label.setProperty("role", "status")
@@ -765,18 +819,20 @@ class MachineSetpointsWindow(QMainWindow):
             )
             merged = []
             seen = set()
-            self.design_line_elements = {}
             for line_name in line_names:
                 line_setpoints = extract_design_setpoints(source, line_name=line_name)
-                self.design_line_elements[line_name] = {
-                    item.element_id for item in line_setpoints
-                }
                 for item in line_setpoints:
                     key = (item.element_id, item.field)
                     if key not in seen:
                         seen.add(key)
                         merged.append(item)
             self.design_setpoints = tuple(merged)
+            model_backend = build_model_backend(load_model_context(self.profile.machine.id))
+            self.model_lines = model_backend.get_model_lines()
+            self.element_model_lines = {}
+            for item in self.design_setpoints:
+                line = model_backend.get_element_model_line(item.element_id)
+                self.element_model_lines[item.element_id] = (line,) if line else ()
         except Exception as exc:
             self.status_label.setText(f"Design source error: {exc}")
             self.preview_button.setEnabled(False)
@@ -856,6 +912,10 @@ class MachineSetpointsWindow(QMainWindow):
             )
             values = (
                 item.element_id,
+                ", ".join(
+                    line.display_name
+                    for line in self.element_model_lines.get(item.element_id, ())
+                ) or "Unknown",
                 "" if item.design_value is None else f"{item.design_value:.7g}",
                 "" if item.current_value is None else f"{item.current_value:.7g}",
                 "" if item.target_value is None else f"{item.target_value:.12g}",
@@ -865,7 +925,7 @@ class MachineSetpointsWindow(QMainWindow):
             )
             for column, value in enumerate(values, start=1):
                 cell = QTableWidgetItem(value)
-                if column == 7:
+                if column == 8:
                     color = "#2d7f6d" if item.status == "ready" else "#b44141"
                     if execution_state == "applied":
                         color = "#2d7f6d"
@@ -876,11 +936,11 @@ class MachineSetpointsWindow(QMainWindow):
                     cell.setForeground(QColor(color))
                     if item.message:
                         cell.setToolTip(item.message)
-                if column == 5 and item.target_value is not None and item.current_value is not None:
+                if column == 6 and item.target_value is not None and item.current_value is not None:
                     change = abs(item.target_value - item.current_value)
                     if change > LARGE_CHANGE_THRESHOLD:
                         cell.setForeground(QColor("#d17a18"))
-                if column == 4:
+                if column == 5:
                     flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
                     if can_stage:
                         flags |= Qt.ItemIsEditable
@@ -1234,11 +1294,47 @@ class MachineSetpointsWindow(QMainWindow):
             for (element_id, field), staged in self.staged_values.items()
         }
         try:
-            line_name = _select_twiss_line(
-                set(overrides),
-                self.design_line_elements,
-                self.runtime.vm.line_name,
-            )
+            line_groups = {
+                line.name: {
+                    element_id: values
+                    for element_id, values in overrides.items()
+                    if self.element_model_lines.get(element_id, ())
+                    and self.element_model_lines[element_id][0].name == line.name
+                }
+                for line in self.model_lines
+            }
+            line_groups = {
+                line_name: group for line_name, group in line_groups.items() if group
+            }
+            if not line_groups:
+                raise ValueError(
+                    "Staged Target values do not match any model backend line."
+                )
+            if len(line_groups) > 1:
+                labels = [
+                    f"{line.display_name} ({line.name}): {len(line_groups[line.name])} element(s)"
+                    for line in self.model_lines
+                    if line.name in line_groups
+                ]
+                selected, accepted = QInputDialog.getItem(
+                    self,
+                    "Twiss Model Preview",
+                    "Select model line to preview:",
+                    labels,
+                    0,
+                    False,
+                )
+                if not accepted:
+                    return
+                line_name = next(
+                    line.name
+                    for line in self.model_lines
+                    if selected.startswith(f"{line.display_name} ({line.name})")
+                )
+                overrides = line_groups[line_name]
+            else:
+                line_name = next(iter(line_groups))
+                overrides = line_groups[line_name]
         except ValueError as exc:
             QMessageBox.warning(self, "Twiss Model Preview", str(exc))
             return

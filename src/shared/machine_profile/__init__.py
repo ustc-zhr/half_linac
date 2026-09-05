@@ -52,6 +52,7 @@ from .model_backend import (
     EnergyModelBackend,
     EnergyOpticsResult,
     ElegantModelBackend,
+    ModelLine,
     TwissProfileResult,
     build_model_backend,
     prepare_elegant_model_workdir,

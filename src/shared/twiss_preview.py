@@ -13,6 +13,9 @@ from .machine_profile import (
 @dataclass(frozen=True)
 class TwissPreviewRow:
     element_name: str
+    element_type: str
+    element_length_m: float
+    element_k1_m2: float
     s_m: float
     design: Mapping[str, float]
     target: Mapping[str, float]
@@ -75,6 +78,9 @@ def run_twiss_preview(
         rows.append(
             TwissPreviewRow(
                 element_name=key[0],
+                element_type=str(target.get("element_type", "")),
+                element_length_m=float(target.get("element_length_m", 0.0)),
+                element_k1_m2=float(target.get("element_k1_m2", float("nan"))),
                 s_m=float(target["s_m"]),
                 design={field: float(design[field]) for field in fields},
                 target={field: float(target[field]) for field in fields},

@@ -6484,7 +6484,7 @@ class MainWindow(QMainWindow):
         dialog = CalibrationEditorDialog(
             actuator=self.config.energy_knob.actuator,
             actuator_unit=self.config.energy_knob.actuator_unit,
-            target_delta=self.config.energy_knob.delta,
+            target_delta=float(self.delta_spin.value()),
             draft_directory=energy_calibration_draft_directory(self.app_context),
             machine_id=machine_id,
             backend=backend,

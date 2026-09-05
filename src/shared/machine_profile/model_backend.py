@@ -36,6 +36,18 @@ class TwissProfileResult:
 
 
 @dataclass(frozen=True)
+class ModelLine:
+    name: str
+    elements: frozenset[str]
+
+    @property
+    def display_name(self) -> str:
+        return {"ALL_MAIN": "Design", "ALL_ESA": "ESA-line", "ALL_DUMP": "Dump"}.get(
+            self.name, self.name
+        )
+
+
+@dataclass(frozen=True)
 class EnergyModelPaths:
     working_dir: Path
     ini_ele: Path
@@ -94,6 +106,12 @@ def _exclusive_model_workspace(
 
 
 class BeamModelBackend(Protocol):
+    def get_model_lines(self) -> tuple[ModelLine, ...]: ...
+
+    def get_element_model_lines(self, element_id: str) -> tuple[ModelLine, ...]: ...
+
+    def get_element_model_line(self, element_id: str) -> ModelLine | None: ...
+
     def get_map(
         self,
         elem1: str,
@@ -208,6 +226,35 @@ class ElegantModelBackend:
             or config.get("working_dir")
         )
         self.working_dir = Path(str(working_dir)) if working_dir is not None else self.optics_ele.parent
+        self._model_lines: tuple[ModelLine, ...] | None = None
+
+    def get_model_lines(self) -> tuple[ModelLine, ...]:
+        if self._model_lines is None:
+            base_parser = self._new_parser()
+            lattice = base_parser.build_runtime_state()["lattice"]
+            line_names = sorted(
+                name
+                for name, entry in lattice.items()
+                if name.startswith("ALL_") and str(entry.get("TYPE", "")).upper() == "LINE"
+            )
+            lines = []
+            for name in line_names:
+                parser = ElegantParser(
+                    self.source_lattice,
+                    self.optics_ini_ele,
+                    name,
+                    elegant_dir=self.working_dir,
+                )
+                lines.append(ModelLine(name, frozenset(parser.build_runtime_state()["usedline"])))
+            self._model_lines = tuple(lines)
+        return self._model_lines
+
+    def get_element_model_lines(self, element_id: str) -> tuple[ModelLine, ...]:
+        return tuple(line for line in self.get_model_lines() if element_id in line.elements)
+
+    def get_element_model_line(self, element_id: str) -> ModelLine | None:
+        candidates = self.get_element_model_lines(element_id)
+        return min(candidates, key=lambda line: (len(line.elements), line.name)) if candidates else None
 
     def get_lattice_element(self, element_id: str) -> Mapping[str, str]:
         parser = self._new_parser()
