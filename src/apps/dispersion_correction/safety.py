@@ -9,7 +9,12 @@ def evaluate_safety(
     config: SafetyConfig,
     reference: BPMReading | None,
     current: BPMReading | None,
+    *,
+    plane: str = "x",
 ) -> SafetyStatus:
+    normalized_plane = str(plane).strip().lower()
+    if normalized_plane not in {"x", "y", "xy"}:
+        raise ValueError("Safety orbit plane must be 'x', 'y', or 'xy'")
     if reference is not None and current is not None:
         if reference.names != current.names:
             return SafetyStatus(
@@ -19,18 +24,33 @@ def evaluate_safety(
         common_valid = reference.valid & current.valid
         if np.any(common_valid):
             common_indices = np.flatnonzero(common_valid)
-            orbit_change = np.abs(
-                current.x_mm[common_indices] - reference.x_mm[common_indices]
+            checked_planes = (
+                ("x", "y") if normalized_plane == "xy" else (normalized_plane,)
             )
-            max_local_index = int(np.argmax(orbit_change))
-            max_index = int(common_indices[max_local_index])
-            max_orbit_change = float(orbit_change[max_local_index])
+            maximum: tuple[float, int, str] | None = None
+            for checked_plane in checked_planes:
+                reference_values = getattr(reference, f"{checked_plane}_mm")
+                current_values = getattr(current, f"{checked_plane}_mm")
+                orbit_change = np.abs(
+                    current_values[common_indices]
+                    - reference_values[common_indices]
+                )
+                max_local_index = int(np.argmax(orbit_change))
+                candidate = (
+                    float(orbit_change[max_local_index]),
+                    int(common_indices[max_local_index]),
+                    checked_plane,
+                )
+                if maximum is None or candidate[0] > maximum[0]:
+                    maximum = candidate
+            assert maximum is not None
+            max_orbit_change, max_index, max_plane = maximum
             if max_orbit_change > config.max_reference_orbit_change_mm:
                 return SafetyStatus(
                     ok=False,
                     reason=(
                         f"Reference orbit change {max_orbit_change:.3f} mm at "
-                        f"{reference.names[max_index]} exceeded "
+                        f"{reference.names[max_index]} ({max_plane}) exceeded "
                         f"{config.max_reference_orbit_change_mm:.3f} mm limit"
                     ),
                     max_orbit_change_mm=max_orbit_change,

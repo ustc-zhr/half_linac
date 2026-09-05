@@ -148,6 +148,7 @@ class EpicsMachine(MachineInterface):
             self._energy_tolerance,
             "energy knob",
             confirmations=self._energy_readback_confirmations,
+            comparison_period=self.config.energy_knob.wrap_period,
         )
 
     def get_knobs(self, knob_names: Sequence[str]) -> dict[str, float]:
@@ -342,12 +343,17 @@ class EpicsMachine(MachineInterface):
         if is_direct_delta_actuator(self.config.energy_knob.actuator):
             return float(delta_value)
         try:
-            return calibration_actuator_for_delta(
+            target = calibration_actuator_for_delta(
                 float(delta_value),
                 self.config.energy_knob.calibration,
             )
         except (TypeError, ValueError) as exc:
             raise ValueError(str(exc)) from exc
+        period = self.config.energy_knob.wrap_period
+        if period is None:
+            return target
+        origin = self.config.energy_knob.wrap_origin
+        return float((target - origin) % period + origin)
 
     def _write_quadrupole_targets(self, targets: Mapping[str, float]) -> None:
         if not targets:
@@ -453,6 +459,7 @@ class EpicsMachine(MachineInterface):
         label: str,
         *,
         confirmations: int = 1,
+        comparison_period: float | None = None,
     ) -> None:
         if not np.isfinite(target):
             raise ValueError(f"{label} target must be finite")
@@ -461,7 +468,14 @@ class EpicsMachine(MachineInterface):
         consecutive_matches = 0
         while True:
             actual = self._caget_float(readback_pv)
-            if np.isfinite(actual) and abs(actual - target) <= tolerance:
+            error = abs(actual - target)
+            if comparison_period is not None and np.isfinite(actual):
+                error = abs(
+                    (actual - target + comparison_period / 2.0)
+                    % comparison_period
+                    - comparison_period / 2.0
+                )
+            if np.isfinite(actual) and error <= tolerance:
                 consecutive_matches += 1
                 if consecutive_matches >= confirmations:
                     return

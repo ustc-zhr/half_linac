@@ -13,6 +13,7 @@ from half_linac.src.apps.dispersion_correction import profile_runtime
 from half_linac.src.apps.dispersion_correction.profile_runtime import (
     apply_profile_selection,
     load_profile_run_config,
+    profile_energy_knob_choices,
     profile_section_choices,
     selectable_profile_bpms,
     selectable_profile_quadrupoles,
@@ -288,6 +289,59 @@ def test_half_real_uses_k1_for_correction_and_model_snapshot() -> None:
         pv_reader=lambda pv: 6.25 if pv == k1_pv else None,
     )
     assert snapshot.lattice_overrides == {"QL01": {"K1": 6.25}}
+
+
+def test_half_real_exposes_all_llrf_phase_energy_knobs() -> None:
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="real",
+    )
+    _, config = load_profile_run_config(context)
+
+    choices = profile_energy_knob_choices(context, config)
+
+    assert choices[0].display_name == "KLY01 Modulator HV"
+    assert tuple(choice.display_name for choice in choices[1:]) == (
+        "LLRFPB Phase",
+        *(f"LLRF{index:02d} Phase" for index in range(1, 21)),
+    )
+    assert config.energy_knob.name == "KLY01"
+    selected = apply_profile_selection(
+        context,
+        config,
+        target_bpms=config.target_bpms,
+        knobs=config.knobs,
+        energy_knob_choice=choices[2],
+    )
+    assert selected.energy_knob.name == "LLRF01"
+    assert selected.energy_knob.actuator == "rf_phase"
+    assert selected.energy_knob.actuator_unit == "deg"
+    assert selected.energy_knob.calibration == {}
+    assert selected.energy_knob.wrap_period == pytest.approx(360.0)
+    assert selected.energy_knob.wrap_origin == pytest.approx(-180.0)
+    assert selected.backend.options["pv_map"]["energy_knob"] == {
+        "set": "IN:MW:LLRF01:SET_PHASE",
+        "readback": "IN:MW:LLRF01:GET_PHASE",
+    }
+
+
+def test_energy_knob_candidates_are_profile_only_and_backend_resolvable() -> None:
+    real_context = load_app_context(
+        "dispersion_correction",
+        machine_id="irfel",
+        control_backend="real",
+    )
+    _, real_config = load_profile_run_config(real_context)
+    assert len(profile_energy_knob_choices(real_context, real_config)) == 1
+
+    vm_context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="vm",
+    )
+    _, vm_config = load_profile_run_config(vm_context)
+    assert len(profile_energy_knob_choices(vm_context, vm_config)) == 1
 
 
 def test_half_bh01_bh03_section_uses_symmetric_k1_knobs() -> None:

@@ -11,6 +11,7 @@ class FlagPixelGeometry:
     shape: tuple[int, int]
     pixel_width_mm: float
     flip_y: bool = False
+    x_axis_sign: int = 1
     default_roi: Mapping[str, int] | None = None
 
 
@@ -146,6 +147,10 @@ def _parse_geometry(raw: Mapping[str, object], location: str) -> FlagPixelGeomet
     if not isinstance(flip_y, bool):
         raise MachineProfileError(f"{location}.flip_y must be boolean.")
 
+    x_axis_sign = raw.get("x_axis_sign", 1)
+    if not isinstance(x_axis_sign, int) or isinstance(x_axis_sign, bool) or x_axis_sign not in {-1, 1}:
+        raise MachineProfileError(f"{location}.x_axis_sign must be -1 or 1.")
+
     default_roi = raw.get("default_roi")
     if default_roi is not None:
         default_roi = _expect_mapping(default_roi, f"{location}.default_roi")
@@ -158,6 +163,7 @@ def _parse_geometry(raw: Mapping[str, object], location: str) -> FlagPixelGeomet
         shape=pixel_shape,
         pixel_width_mm=pixel_width_mm,
         flip_y=flip_y,
+        x_axis_sign=x_axis_sign,
         default_roi=default_roi,
     )
 

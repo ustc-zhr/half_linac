@@ -10,8 +10,7 @@
     "max_step_fraction": 0.25,
     "max_iter": 5,
     "response_update": "once",
-    "min_step_improvement": 0.05,
-    "success_min_improvement": 2
+    "min_step_improvement": 0.05
   },
   "safety": {"max_reference_orbit_change_mm": 1},
   "energy_knob": {

@@ -173,13 +173,15 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window.measurement_action_button.click()
     assert next_actions == ["measure"]
     assert window.run_button.text() == "Automatic Correction…"
-    automatic_dialog, generations, response_policy = (
+    automatic_dialog, generations, response_policy, minimum_improvement = (
         window._build_automatic_correction_dialog()
     )
     assert automatic_dialog.objectName() == "automaticCorrectionDialog"
     assert automatic_dialog.findChild(QFrame, "automaticSettingsCard") is not None
     assert generations.objectName() == "automaticGenerationsSpin"
     assert response_policy.objectName() == "automaticResponsePolicy"
+    assert minimum_improvement.objectName() == "automaticMinImprovementSpin"
+    assert minimum_improvement.value() == pytest.approx(5.0)
     assert (
         automatic_dialog.findChild(QPushButton, "automaticStartButton").text()
         == "Start Automatic Correction"
@@ -1400,11 +1402,222 @@ def test_joint_correction_is_recorded_with_two_plane_history() -> None:
     window.close()
 
 
+def test_history_can_restore_a_selected_accepted_state(monkeypatch) -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PyQt5.QtWidgets import QApplication, QMessageBox
+
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.models import (
+        BPMReading,
+        CorrectionResult,
+        CorrectionStep,
+        DispersionMeasurement,
+        SafetyStatus,
+    )
+    from half_linac.src.apps.dispersion_correction.profile_runtime import (
+        load_profile_run_config,
+    )
+    from half_linac.src.shared.machine_profile import load_app_context
+
+    app = QApplication.instance() or QApplication([])
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="irfel",
+        control_backend="real",
+    )
+    _, config = load_profile_run_config(context)
+    window = MainWindow(config, context)
+    reading = BPMReading(
+        names=config.target_bpms,
+        x_mm=np.zeros(2),
+        y_mm=np.zeros(2),
+        valid=np.asarray([True, True]),
+    )
+    measurement = DispersionMeasurement(
+        bpm_names=config.target_bpms,
+        plane="x",
+        delta=0.004,
+        values_mm=np.asarray([1.0, -1.0]),
+        valid=np.asarray([True, True]),
+        plus=reading,
+        minus=reading,
+        target_values_mm=np.zeros(2),
+        target_mask=np.asarray([True, True]),
+    )
+    initial = {"QM13": 1.0, "QM14": 2.0, "QM15": 2.0, "QM16": 1.0}
+    generation_1 = {name: value + 0.1 for name, value in initial.items()}
+    generation_2 = {name: value + 0.2 for name, value in initial.items()}
+    result = CorrectionResult(
+        success=True,
+        reason="Accepted",
+        initial=measurement,
+        final=measurement,
+        initial_knobs={"Q13_Q16_sym": 0.0, "Q14_Q15_sym": 0.0},
+        final_knobs={"Q13_Q16_sym": 0.2, "Q14_Q15_sym": 0.2},
+        steps=(
+            CorrectionStep(
+                iteration=1,
+                gain=0.5,
+                delta_knobs={},
+                accepted=True,
+                reason="Accepted",
+                rms_before_mm=1.0,
+                rms_after_mm=0.7,
+                device_values_before=initial,
+                device_values_trial=generation_1,
+            ),
+            CorrectionStep(
+                iteration=2,
+                gain=0.5,
+                delta_knobs={},
+                accepted=True,
+                reason="Accepted",
+                rms_before_mm=0.7,
+                rms_after_mm=0.5,
+                device_values_before=generation_1,
+                device_values_trial=generation_2,
+            ),
+        ),
+        response=None,
+        safety=SafetyStatus(ok=True, reason="OK"),
+    )
+    window._task_completed("run", result)
+    window._set_running(False, "")
+    window._show_iteration_history()
+    first_index = window.iteration_history_generation_combo.findData("step:0")
+    window.iteration_history_generation_combo.setCurrentIndex(first_index)
+    app.processEvents()
+
+    assert window.restore_history_state_button.isVisibleTo(
+        window.iteration_history_dialog
+    )
+    assert window.restore_history_state_button.isEnabled()
+    tasks = []
+    window._start_task = (
+        lambda task, **kwargs: tasks.append((task, kwargs)) or True
+    )
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_args, **_kwargs: QMessageBox.Yes,
+    )
+    window.restore_history_state_button.click()
+    request = tasks[0][1]["restore_request"]
+    assert request.baseline_values == generation_2
+    assert request.target_values == generation_1
+    assert request.verify_dispersion
+
+    second_index = window.iteration_history_generation_combo.findData("step:1")
+    window.iteration_history_generation_combo.setCurrentIndex(second_index)
+    app.processEvents()
+    assert not window.restore_history_state_button.isEnabled()
+    assert "already active" in window.restore_history_state_button.toolTip().lower()
+    window.active_energy_knob_choice_id = "llrf_phase:LLRF01"
+    window._update_history_restore_action()
+    assert window.restore_history_state_button.isVisibleTo(
+        window.iteration_history_dialog
+    )
+    assert not window.restore_history_state_button.isEnabled()
+    assert "select" in window.restore_history_state_button.toolTip().lower()
+    window.close()
+
+
+def test_half_real_can_switch_llrf_energy_knobs_without_writing(
+    monkeypatch,
+) -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PyQt5.QtWidgets import QApplication
+
+    from half_linac.src.apps.dispersion_correction.gui import main_window
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.profile_runtime import (
+        load_profile_run_config,
+    )
+    from half_linac.src.shared.machine_profile import load_app_context
+
+    app = QApplication.instance() or QApplication([])
+    context = load_app_context(
+        "dispersion_correction",
+        machine_id="half",
+        control_backend="real",
+    )
+    _, config = load_profile_run_config(context)
+    window = MainWindow(config, context)
+    window.show()
+    app.processEvents()
+
+    assert window.energy_knob_combo.count() == 22
+    assert window.energy_knob_combo.currentText() == "KLY01 Modulator HV"
+    llrf01_index = next(
+        index
+        for index in range(window.energy_knob_combo.count())
+        if window.energy_knob_combo.itemData(index).id == "llrf_phase:LLRF01"
+    )
+    llrf02_index = next(
+        index
+        for index in range(window.energy_knob_combo.count())
+        if window.energy_knob_combo.itemData(index).id == "llrf_phase:LLRF02"
+    )
+    window.latest_response = object()
+    window.last_live_preflight = object()
+    window.energy_knob_combo.setCurrentIndex(llrf01_index)
+    app.processEvents()
+
+    assert window.config.energy_knob.name == "LLRF01"
+    assert window.config.energy_knob.actuator_unit == "deg"
+    assert window.config.energy_knob.calibration == {}
+    assert window.latest_response is None
+    assert window.last_live_preflight is None
+    assert window.config.backend.options["pv_map"]["energy_knob"] == {
+        "set": "IN:MW:LLRF01:SET_PHASE",
+        "readback": "IN:MW:LLRF01:GET_PHASE",
+    }
+    assert window.calibration_status_label.text() == "Calibration: Missing"
+
+    calibration = {
+        "kind": "linear_relative",
+        "actuator_per_delta": 2500.0,
+        "baseline_actuator": 0.0,
+    }
+    window._activate_session_calibration(calibration, "llrf01.json")
+    window.energy_knob_combo.setCurrentIndex(llrf02_index)
+    window.energy_knob_combo.setCurrentIndex(llrf01_index)
+    app.processEvents()
+    assert window.config.energy_knob.calibration == calibration
+    assert window.session_energy_calibration_source == "llrf01.json"
+
+    editor_args = {}
+
+    class RejectedEditor:
+        activated_calibration = None
+        activated_source = None
+
+        def __init__(self, **kwargs):
+            editor_args.update(kwargs)
+
+        def exec_(self):
+            return 0
+
+    monkeypatch.setattr(main_window, "CalibrationEditorDialog", RejectedEditor)
+    window._open_calibration_editor()
+    assert editor_args["knob_id"] == "llrf_phase:LLRF01"
+    assert editor_args["knob_display_name"] == "LLRF01 Phase"
+    assert editor_args["require_knob_identity"]
+    assert str(editor_args["draft_directory"]).endswith(
+        "calibrations/llrf_phase/LLRF01"
+    )
+    window.close()
+
+
 def test_offline_demo_confirms_automatic_correction_settings(monkeypatch) -> None:
     pytest.importorskip("PyQt5")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-    from PyQt5.QtWidgets import QApplication, QDialog
+    from PyQt5.QtWidgets import QApplication, QDialog, QDoubleSpinBox
 
     from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
     from half_linac.src.apps.dispersion_correction.workflow import AchromatWorkflow
@@ -1421,11 +1634,25 @@ def test_offline_demo_confirms_automatic_correction_settings(monkeypatch) -> Non
 
     tasks = []
     demo._start_task = lambda task: tasks.append(task)
-    monkeypatch.setattr(QDialog, "exec_", lambda _dialog: QDialog.Accepted)
+
+    def accept_with_settings(dialog):
+        minimum = dialog.findChild(
+            QDoubleSpinBox,
+            "automaticMinImprovementSpin",
+        )
+        assert minimum is not None
+        minimum.setValue(7.5)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(QDialog, "exec_", accept_with_settings)
     demo._confirm_automatic_correction()
 
     assert tasks == ["run"]
     assert demo.correction_mode == "automatic"
+    assert demo.min_step_improvement_spin.value() == pytest.approx(7.5)
+    assert demo._config_from_widgets().solver.min_step_improvement == pytest.approx(
+        0.075
+    )
     assert demo.run_button.text() == "Automatic Correction…"
     assert demo.run_button.parentWidget() is demo.correction_mode_actions
     demo.close()

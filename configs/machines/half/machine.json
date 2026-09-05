@@ -2084,7 +2084,7 @@
       "limits": {},
       "image_geometry": {
         "vm": {"shape": [360, 270], "pixel_width_mm": 0.1156, "default_roi": {"x": 0, "y": 0, "width": 360, "height": 270}},
-        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289, "flip_y": true, "default_roi": {"x": 350, "y": 200, "width": 750, "height": 700}}
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289, "flip_y": true, "x_axis_sign": -1, "default_roi": {"x": 350, "y": 200, "width": 750, "height": 700}}
       },
       "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
     },
@@ -2266,7 +2266,7 @@
       "limits": {},
       "image_geometry": {
         "vm": {"shape": [720, 540], "pixel_width_mm": 0.0878, "default_roi": {"x": 0, "y": 0, "width": 720, "height": 540}},
-        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0439, "flip_y": true, "default_roi": {"x": 230, "y": 370, "width": 1000, "height": 330}}
+        "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0439, "flip_y": true, "x_axis_sign": -1, "default_roi": {"x": 230, "y": 370, "width": 1000, "height": 330}}
       },
       "logical_channels": ["image", "exposure_time"]
     },

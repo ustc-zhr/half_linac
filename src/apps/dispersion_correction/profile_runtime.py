@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 import json
 from pathlib import Path
@@ -11,6 +11,7 @@ from half_linac.src.apps.dispersion_correction.config import parse_config
 from half_linac.src.apps.dispersion_correction.models import (
     CorrectionResult,
     DispersionMeasurement,
+    EnergyKnobConfig,
     JointCorrectionResult,
     JointResponseAnalysisResult,
     MultiPlaneDispersionMeasurement,
@@ -34,6 +35,16 @@ from half_linac.src.shared.machine_profile import (
 
 WORKFLOW_NAME = "dispersion_correction"
 APP_DIR = Path(__file__).resolve().parent
+
+
+@dataclass(frozen=True)
+class ProfileEnergyKnobChoice:
+    """One profile-derived energy actuator that can become the active knob."""
+
+    id: str
+    display_name: str
+    config: EnergyKnobConfig
+    pv_spec: Mapping[str, object]
 
 
 def load_profile_run_config(
@@ -178,12 +189,121 @@ def profile_section_choices(context: AppContext) -> tuple[tuple[str, str], ...]:
     return tuple(choices)
 
 
+def profile_energy_knob_choices(
+    context: AppContext,
+    default_config: RunConfig,
+) -> tuple[ProfileEnergyKnobChoice, ...]:
+    """Return the configured default followed by resolvable profile candidates."""
+
+    workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    default_spec = dict(_mapping(workflow.get("energy_knob"), "energy_knob"))
+    default_name = str(default_config.energy_knob.name).strip()
+    choices = [
+        ProfileEnergyKnobChoice(
+            id=f"configured:{default_name}",
+            display_name=str(
+                default_spec.get("display_name", default_name)
+            ).strip(),
+            config=default_config.energy_knob,
+            pv_spec=default_spec,
+        )
+    ]
+    raw_candidates = workflow.get("energy_knob_candidates", [])
+    if raw_candidates is None:
+        return tuple(choices)
+    if not isinstance(raw_candidates, list):
+        raise MachineProfileError(
+            f"workflows.{WORKFLOW_NAME}.energy_knob_candidates must be a list."
+        )
+
+    backend_name = context.control_backend.name
+    for index, raw in enumerate(raw_candidates):
+        candidate = _mapping(raw, f"energy_knob_candidates[{index}]")
+        kind = str(candidate.get("element_kind", "")).strip() or None
+        required_tag = str(candidate.get("required_tag", "")).strip()
+        set_channel = _backend_string(
+            candidate.get("set_channel", "set"), backend_name
+        )
+        readback_channel = _backend_string(
+            candidate.get("readback_channel", "readback"), backend_name
+        )
+        elements = [
+            element
+            for element in list_elements(context, kind=kind)
+            if (not required_tag or required_tag in element.tags)
+            and _channel_is_resolvable(context, element.id, set_channel)
+            and _channel_is_resolvable(context, element.id, readback_channel)
+        ]
+        first_element = str(candidate.get("first_element", "")).strip()
+        if first_element:
+            elements.sort(
+                key=lambda element: (
+                    element.id != first_element,
+                    element.order,
+                )
+            )
+        calibration_by_element = _mapping(
+            candidate.get("calibrations", {}),
+            f"energy_knob_candidates[{index}].calibrations",
+        )
+        candidate_id = str(candidate.get("id", f"candidate_{index}")).strip()
+        suffix = str(candidate.get("display_suffix", "")).strip()
+        for element in elements:
+            raw_calibration = calibration_by_element.get(element.id, {})
+            calibration = dict(
+                _mapping(
+                    raw_calibration,
+                    f"energy_knob_candidates[{index}].calibrations.{element.id}",
+                )
+            )
+            knob_config = EnergyKnobConfig(
+                name=element.id,
+                delta=float(candidate.get("delta", default_config.energy_knob.delta)),
+                actuator=str(candidate.get("actuator", "delta")),
+                actuator_unit=str(candidate.get("actuator_unit", "delta_p_over_p")),
+                calibration=calibration,
+                readback_tolerance=(
+                    None
+                    if candidate.get("readback_tolerance") is None
+                    else float(candidate["readback_tolerance"])
+                ),
+                readback_confirmations=int(
+                    candidate.get("readback_confirmations", 1)
+                ),
+                round_actuator_step_to_integer=bool(
+                    candidate.get("round_actuator_step_to_integer", False)
+                ),
+                wrap_period=(
+                    None
+                    if candidate.get("wrap_period") is None
+                    else float(candidate["wrap_period"])
+                ),
+                wrap_origin=float(candidate.get("wrap_origin", 0.0)),
+            )
+            pv_spec = {
+                "element": element.id,
+                "set_channel": set_channel,
+                "readback_channel": readback_channel,
+                "actuator_unit": knob_config.actuator_unit,
+            }
+            choices.append(
+                ProfileEnergyKnobChoice(
+                    id=f"{candidate_id}:{element.id}",
+                    display_name=f"{element.id}{' ' + suffix if suffix else ''}",
+                    config=knob_config,
+                    pv_spec=pv_spec,
+                )
+            )
+    return tuple(choices)
+
+
 def apply_profile_selection(
     context: AppContext,
     config: RunConfig,
     *,
     target_bpms: tuple[str, ...],
     knobs,
+    energy_knob_choice: ProfileEnergyKnobChoice | None = None,
 ) -> RunConfig:
     """Resolve PV mappings for one GUI selection without changing the profile."""
 
@@ -219,18 +339,28 @@ def apply_profile_selection(
         )
 
     workflow = get_workflow(context.profile, WORKFLOW_NAME)
+    energy_spec = (
+        energy_knob_choice.pv_spec
+        if energy_knob_choice is not None
+        else _mapping(workflow.get("energy_knob"), "energy_knob")
+    )
     options = dict(config.backend.options)
     options["pv_map"] = _build_selection_pv_map(
         context,
         measurement_bpms,
         all_runtime_knobs,
-        _mapping(workflow.get("energy_knob"), "energy_knob"),
+        energy_spec,
         _quadrupole_control(workflow, context.control_backend.name),
         config.measurement.plane,
     )
     return replace(
         config,
         backend=replace(config.backend, options=options),
+        energy_knob=(
+            energy_knob_choice.config
+            if energy_knob_choice is not None
+            else config.energy_knob
+        ),
         target_bpms=tuple(target_bpms),
         knobs=tuple(knobs),
     )
@@ -277,7 +407,6 @@ def default_offline_config() -> RunConfig:
                 "max_iter": 5,
                 "response_update": "once",
                 "min_step_improvement": 0.05,
-                "success_min_improvement": 2.0,
             },
             "safety": {"max_reference_orbit_change_mm": 1.0},
         }

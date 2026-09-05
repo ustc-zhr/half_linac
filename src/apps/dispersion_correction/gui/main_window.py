@@ -81,10 +81,12 @@ from half_linac.src.apps.dispersion_correction.model_response import (
 )
 from half_linac.src.apps.dispersion_correction.preflight import run_live_preflight, run_preflight
 from half_linac.src.apps.dispersion_correction.profile_runtime import (
+    ProfileEnergyKnobChoice,
     default_offline_config,
     energy_calibration_draft_directory,
     apply_profile_selection,
     load_profile_run_config,
+    profile_energy_knob_choices,
     profile_section_choices,
     selectable_profile_bpms,
     selectable_profile_quadrupoles,
@@ -199,7 +201,9 @@ class WorkflowWorker(QThread):
                     self.restore_request.target_values,
                     reviewed_baseline=self.restore_request.baseline_values,
                     max_changes=self.restore_request.max_changes,
+                    verify_dispersion=self.restore_request.verify_dispersion,
                 )
+                result["target_label"] = self.restore_request.target_label
             else:
                 raise ValueError(f"Unknown task: {self.task}")
         except Exception as exc:
@@ -275,6 +279,8 @@ class CorrectionSessionRun:
     task: str
     result: CorrectionResult | JointCorrectionResult
     requested_generations: int | None = None
+    energy_knob_id: str = ""
+    energy_knob_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -287,9 +293,11 @@ class DesignK1Request:
 @dataclass(frozen=True)
 class CorrectionRestoreRequest:
     run_label: str
+    target_label: str
     baseline_values: dict[str, float]
     target_values: dict[str, float]
     max_changes: dict[str, float]
+    verify_dispersion: bool = False
 
 
 class OverviewControls(QWidget):
@@ -1089,11 +1097,32 @@ class MainWindow(QMainWindow):
         self.correction_recommendation: CorrectionRecommendation | None = None
         self.correction_session_runs: list[CorrectionSessionRun] = []
         self.correction_restore_request: CorrectionRestoreRequest | None = None
+        self._last_known_quadrupole_values: dict[str, float] | None = None
         self.last_live_preflight = None
         self.operation_plan: dict | None = None
         self._loading_widgets = False
         self.config_path: Path | None = None
         self.config = config or default_offline_config()
+        self.energy_knob_choices = (
+            profile_energy_knob_choices(app_context, self.config)
+            if app_context is not None
+            else ()
+        )
+        self.active_energy_knob_choice_id = (
+            self.energy_knob_choices[0].id
+            if self.energy_knob_choices
+            else ""
+        )
+        self.energy_knob_deltas = {
+            choice.id: float(choice.config.delta)
+            for choice in self.energy_knob_choices
+        }
+        self.configured_energy_calibrations = {
+            choice.id: dict(choice.config.calibration)
+            for choice in self.energy_knob_choices
+        }
+        self.session_energy_calibrations: dict[str, dict] = {}
+        self.session_energy_calibration_sources: dict[str, str] = {}
         self.configured_energy_calibration = dict(self.config.energy_knob.calibration)
         self.session_energy_calibration_source: str | None = None
         self.selected_knobs = tuple(self.config.runtime_knobs)
@@ -1324,6 +1353,21 @@ class MainWindow(QMainWindow):
         self.section_combo.currentIndexChanged.connect(self._section_changed)
         self._add_form_row(machine_form, "Section", self.section_combo)
 
+        self.energy_knob_combo = QComboBox()
+        self.energy_knob_combo.setFixedHeight(34)
+        for choice in self.energy_knob_choices:
+            self.energy_knob_combo.addItem(choice.display_name, choice)
+        self.energy_knob_combo.setVisible(len(self.energy_knob_choices) > 1)
+        self.energy_knob_field_label = self._add_form_row(
+            machine_form,
+            "Energy Knob",
+            self.energy_knob_combo,
+        )
+        self.energy_knob_field_label.setVisible(len(self.energy_knob_choices) > 1)
+        self.energy_knob_combo.currentIndexChanged.connect(
+            self._energy_knob_changed
+        )
+
         self.bpm_edit = QLineEdit()
         self.bpm_edit.setFixedHeight(34)
         self.bpm_edit.setReadOnly(True)
@@ -1529,6 +1573,18 @@ class MainWindow(QMainWindow):
             self._update_automatic_correction_tooltip
         )
         self.max_iter_spin.hide()
+
+        self.min_step_improvement_spin = QDoubleSpinBox(frame)
+        self.min_step_improvement_spin.setDecimals(1)
+        self.min_step_improvement_spin.setRange(0.0, 99.9)
+        self.min_step_improvement_spin.setSingleStep(1.0)
+        self.min_step_improvement_spin.valueChanged.connect(
+            self._automatic_setting_changed
+        )
+        self.min_step_improvement_spin.valueChanged.connect(
+            self._update_automatic_correction_tooltip
+        )
+        self.min_step_improvement_spin.hide()
 
         self.response_update_combo = QComboBox(frame)
         self.response_update_combo.addItems(["once", "every_iteration"])
@@ -2039,6 +2095,17 @@ class MainWindow(QMainWindow):
             1,
         )
         iteration_history_actions = QHBoxLayout()
+        self.restore_history_state_button = QPushButton(
+            "Restore Selected Accepted State…"
+        )
+        self.restore_history_state_button.setProperty("role", "control")
+        self.restore_history_state_button.clicked.connect(
+            self._restore_selected_history_state
+        )
+        self.restore_history_state_button.hide()
+        iteration_history_actions.addWidget(
+            self.restore_history_state_button
+        )
         iteration_history_actions.addStretch(1)
         self.close_iteration_history_button = QPushButton("Close")
         self.close_iteration_history_button.clicked.connect(
@@ -2203,6 +2270,12 @@ class MainWindow(QMainWindow):
                     if task in {"run", "joint-run"}
                     else None
                 ),
+                energy_knob_id=self.active_energy_knob_choice_id,
+                energy_knob_name=(
+                    self._current_energy_knob_display_name()
+                    if self.active_energy_knob_choice_id
+                    else ""
+                ),
             )
         )
         self._refresh_iteration_history_runs(
@@ -2247,6 +2320,7 @@ class MainWindow(QMainWindow):
             return None
         return CorrectionRestoreRequest(
             run_label=run_label,
+            target_label=f"initial state before {run_label}",
             baseline_values=baseline,
             target_values=targets,
             max_changes={name: limits[name] for name in targets},
@@ -2256,9 +2330,22 @@ class MainWindow(QMainWindow):
         request = self.correction_restore_request
         if request is None:
             return
+        self._confirm_correction_state_restore(
+            request,
+            title="Restore Initial Correction State",
+            prompt=f"Restore the quadrupole state saved before {request.run_label}?",
+        )
+
+    def _confirm_correction_state_restore(
+        self,
+        request: CorrectionRestoreRequest,
+        *,
+        title: str,
+        prompt: str,
+    ) -> None:
         unit = self._knob_control_unit()
         lines = [
-            f"Restore the quadrupole state saved before {request.run_label}?",
+            prompt,
             "",
         ]
         for name in request.target_values:
@@ -2275,12 +2362,17 @@ class MainWindow(QMainWindow):
                 "before writing. If safety checks fail, the state present before "
                 "this restore attempt is written back.",
                 "",
-                "Existing measurements and recommendations will be discarded.",
+                (
+                    "Existing measurements and recommendations will be discarded; "
+                    "the restored state will receive a fresh dispersion verification."
+                    if request.verify_dispersion
+                    else "Existing measurements and recommendations will be discarded."
+                ),
             ]
         )
         answer = QMessageBox.question(
             self,
-            "Restore Initial Correction State",
+            title,
             "\n".join(lines),
             QMessageBox.Yes | QMessageBox.Cancel,
             QMessageBox.Cancel,
@@ -2290,6 +2382,129 @@ class MainWindow(QMainWindow):
         self._start_task(
             "restore-correction",
             restore_request=request,
+        )
+
+    def _history_restore_limits(self) -> dict[str, float]:
+        limits: dict[str, float] = {}
+        for knob in self.config.runtime_knobs:
+            for device, weight in knob.devices.items():
+                limits[device] = (
+                    limits.get(device, 0.0)
+                    + abs(float(weight)) * float(knob.limit)
+                )
+        return limits
+
+    def _selected_history_restore_request(
+        self,
+    ) -> CorrectionRestoreRequest | None:
+        entry = self._selected_correction_run()
+        selection = str(
+            self.iteration_history_generation_combo.currentData() or ""
+        )
+        if entry is None or not selection.startswith("step:"):
+            return None
+        if (
+            entry.energy_knob_id
+            and entry.energy_knob_id != self.active_energy_knob_choice_id
+        ):
+            return None
+        try:
+            step = entry.result.steps[int(selection.split(":", 1)[1])]
+        except (IndexError, TypeError, ValueError):
+            return None
+        if not step.accepted or not step.device_values_trial:
+            return None
+        baseline = self._last_known_quadrupole_values
+        targets = {
+            str(name): float(value)
+            for name, value in step.device_values_trial.items()
+        }
+        limits = self._history_restore_limits()
+        if (
+            baseline is None
+            or set(baseline) != set(targets)
+            or set(limits) != set(targets)
+        ):
+            return None
+        return CorrectionRestoreRequest(
+            run_label=entry.label,
+            target_label=(
+                f"{entry.label} generation {step.iteration} accepted state"
+            ),
+            baseline_values=dict(baseline),
+            target_values=targets,
+            max_changes=limits,
+            verify_dispersion=True,
+        )
+
+    def _update_history_restore_action(self) -> None:
+        request = self._selected_history_restore_request()
+        entry = self._selected_correction_run()
+        selection = str(
+            self.iteration_history_generation_combo.currentData() or ""
+        )
+        selected_accepted = False
+        if entry is not None and selection.startswith("step:"):
+            try:
+                selected_accepted = entry.result.steps[
+                    int(selection.split(":", 1)[1])
+                ].accepted
+            except (IndexError, TypeError, ValueError):
+                pass
+        energy_knob_mismatch = bool(
+            entry is not None
+            and entry.energy_knob_id
+            and entry.energy_knob_id != self.active_energy_knob_choice_id
+        )
+        online_write = (
+            self.config.backend.type.lower() == "epics"
+            and self.config.backend.mode == "write_enabled"
+            and not self.config.section.model_only
+        )
+        self.restore_history_state_button.setVisible(
+            online_write and (request is not None or selected_accepted)
+        )
+        already_active = bool(
+            request is not None
+            and all(
+                abs(request.baseline_values[name] - value) <= 1.0e-12
+                for name, value in request.target_values.items()
+            )
+        )
+        enabled = (
+            request is not None
+            and online_write
+            and not already_active
+            and not bool(self._active_task)
+        )
+        self.restore_history_state_button.setEnabled(enabled)
+        if energy_knob_mismatch and entry is not None:
+            tooltip = (
+                f"Select {entry.energy_knob_name or entry.energy_knob_id} before "
+                "restoring this accepted state."
+            )
+        elif already_active:
+            tooltip = "The selected accepted state is already active."
+        elif request is not None and online_write:
+            tooltip = (
+                "Restore the selected accepted quadrupole state after checking "
+                "the expected current readbacks."
+            )
+        else:
+            tooltip = (
+                "Select an accepted generation with a known current online "
+                "quadrupole state."
+            )
+        self.restore_history_state_button.setToolTip(tooltip)
+
+    def _restore_selected_history_state(self) -> None:
+        request = self._selected_history_restore_request()
+        if request is None:
+            return
+        self._confirm_correction_state_restore(
+            request,
+            title="Restore Accepted Correction State",
+            prompt=f"Restore {request.target_label}?",
         )
 
     def _refresh_iteration_history_runs(
@@ -2306,6 +2521,8 @@ class MainWindow(QMainWindow):
         self.iteration_history_run_combo.clear()
         for index, entry in enumerate(self.correction_session_runs):
             display = entry.label
+            if entry.energy_knob_name:
+                display += f" · {entry.energy_knob_name}"
             if entry.requested_generations is not None:
                 executed = max(
                     (step.iteration for step in entry.result.steps),
@@ -2393,6 +2610,7 @@ class MainWindow(QMainWindow):
                 "No correction run is available."
             )
             self.iteration_history_knob_table.setRowCount(0)
+            self._update_history_restore_action()
             return
 
         result = entry.result
@@ -2554,7 +2772,9 @@ class MainWindow(QMainWindow):
                 else (
                     f"{entry.label} · final result {state} · RMS "
                     f"{result.initial.rms_mm:.6g} → "
-                    f"{result.final.rms_mm:.6g} mm · {result.reason}"
+                    f"{result.final.rms_mm:.6g} mm · reduction "
+                    f"{result.reduction_percent:.3g}% · "
+                    f"{result.improvement:.3g}× · {result.reason}"
                 )
             )
 
@@ -2597,6 +2817,34 @@ class MainWindow(QMainWindow):
             before_knobs,
             target_knobs,
         )
+        self._update_history_restore_action()
+
+    @staticmethod
+    def _terminal_correction_device_values(
+        result: CorrectionResult | JointCorrectionResult,
+    ) -> dict[str, float] | None:
+        accepted = [
+            step
+            for step in result.steps
+            if step.accepted and step.device_values_trial
+        ]
+        if result.success and accepted:
+            return {
+                str(name): float(value)
+                for name, value in accepted[-1].device_values_trial.items()
+            }
+        restore_known = (
+            isinstance(result, JointCorrectionResult)
+            or result.safety.ok
+        )
+        if restore_known and result.steps:
+            initial = result.steps[0].device_values_before
+            if initial:
+                return {
+                    str(name): float(value)
+                    for name, value in initial.items()
+                }
+        return None
 
     def _fill_iteration_history_knobs(
         self,
@@ -2747,6 +2995,17 @@ class MainWindow(QMainWindow):
             section_index = self.section_combo.findData(self.config.section.id)
             if section_index >= 0:
                 self.section_combo.setCurrentIndex(section_index)
+            if self.energy_knob_choices:
+                knob_index = next(
+                    (
+                        index
+                        for index in range(self.energy_knob_combo.count())
+                        if self.energy_knob_combo.itemData(index).id
+                        == self.active_energy_knob_choice_id
+                    ),
+                    0,
+                )
+                self.energy_knob_combo.setCurrentIndex(knob_index)
             self._update_correction_bpm_summary()
             self.monitor_bpm_edit.setText(
                 ", ".join(self._display_monitor_bpms())
@@ -2757,6 +3016,9 @@ class MainWindow(QMainWindow):
             self.final_samples_spin.setValue(self.config.measurement.final_samples)
             self.settle_time_spin.setValue(self.config.measurement.settle_time_s)
             self.max_iter_spin.setValue(self.config.solver.max_iter)
+            self.min_step_improvement_spin.setValue(
+                100.0 * self.config.solver.min_step_improvement
+            )
             self.gain_spin.setValue(self.config.solver.gain)
             self.max_step_pct_spin.setValue(100.0 * self.config.solver.max_step_fraction)
             self.response_update_combo.setCurrentText(self.config.solver.response_update)
@@ -2923,9 +3185,59 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Dispersion Section", str(exc))
             return
+        previous_energy_knob_id = self.active_energy_knob_choice_id
+        choices = profile_energy_knob_choices(self.app_context, config)
+        active_choice = next(
+            (choice for choice in choices if choice.id == previous_energy_knob_id),
+            choices[0],
+        )
+        for choice in choices:
+            self.configured_energy_calibrations[choice.id] = dict(
+                choice.config.calibration
+            )
+            self.energy_knob_deltas.setdefault(choice.id, float(choice.config.delta))
+        active_config = replace(
+            active_choice.config,
+            delta=float(self.energy_knob_deltas[active_choice.id]),
+            calibration=dict(
+                self.session_energy_calibrations.get(
+                    active_choice.id,
+                    self.configured_energy_calibrations[active_choice.id],
+                )
+            ),
+        )
+        active_choice = replace(active_choice, config=active_config)
+        config = apply_profile_selection(
+            self.app_context,
+            replace(config, energy_knob=active_config),
+            target_bpms=config.target_bpms,
+            knobs=config.knobs,
+            energy_knob_choice=active_choice,
+        )
+        self.energy_knob_choices = choices
+        self.active_energy_knob_choice_id = active_choice.id
         self.config = config
-        self.configured_energy_calibration = dict(config.energy_knob.calibration)
-        self.session_energy_calibration_source = None
+        self.configured_energy_calibration = dict(
+            self.configured_energy_calibrations[active_choice.id]
+        )
+        self.session_energy_calibration_source = (
+            self.session_energy_calibration_sources.get(active_choice.id)
+        )
+        self.energy_knob_combo.blockSignals(True)
+        self.energy_knob_combo.clear()
+        for choice in choices:
+            self.energy_knob_combo.addItem(choice.display_name, choice)
+        self.energy_knob_combo.setCurrentIndex(
+            next(
+                index
+                for index, choice in enumerate(choices)
+                if choice.id == active_choice.id
+            )
+        )
+        self.energy_knob_combo.blockSignals(False)
+        show_energy_choices = len(choices) > 1
+        self.energy_knob_combo.setVisible(show_energy_choices)
+        self.energy_knob_field_label.setVisible(show_energy_choices)
         self.correction_restore_request = None
         self.pending_model_source = None
         self.current_snapshot_time = None
@@ -3702,17 +4014,27 @@ class MainWindow(QMainWindow):
             solver=replace(
                 self.config.solver,
                 max_iter=int(self.max_iter_spin.value()),
+                min_step_improvement=(
+                    float(self.min_step_improvement_spin.value()) / 100.0
+                ),
                 gain=float(self.gain_spin.value()),
                 max_step_fraction=float(self.max_step_pct_spin.value()) / 100.0,
                 response_update=self.response_update_combo.currentText(),
             ),
         )
         if self.app_context is not None:
+            active_choice = self._active_energy_knob_choice()
+            if active_choice is not None:
+                active_choice = replace(
+                    active_choice,
+                    config=config.energy_knob,
+                )
             config = apply_profile_selection(
                 self.app_context,
                 config,
                 target_bpms=bpms,
                 knobs=knobs,
+                energy_knob_choice=active_choice,
             )
         validate_config(config)
         return config
@@ -3913,6 +4235,9 @@ class MainWindow(QMainWindow):
             )
         elif isinstance(result, JointCorrectionResult):
             self._record_correction_run(task, result)
+            self._last_known_quadrupole_values = (
+                self._terminal_correction_device_values(result)
+            )
             if result.success:
                 self.correction_restore_request = (
                     self._build_correction_restore_request(
@@ -3951,6 +4276,9 @@ class MainWindow(QMainWindow):
                 self._refresh_snapshot_after_task = True
         elif isinstance(result, CorrectionResult):
             self._record_correction_run(task, result)
+            self._last_known_quadrupole_values = (
+                self._terminal_correction_device_values(result)
+            )
             if result.success:
                 self.correction_restore_request = (
                     self._build_correction_restore_request(
@@ -3997,6 +4325,10 @@ class MainWindow(QMainWindow):
             and result.get("operation") == "design-k1"
         ):
             self.correction_restore_request = None
+            self._last_known_quadrupole_values = {
+                str(name): float(value)
+                for name, value in result.get("final_values", {}).items()
+            }
             self._invalidate_staged_results(
                 "Design K1 targets were applied. Remeasure dispersion before correction."
             )
@@ -4017,15 +4349,48 @@ class MainWindow(QMainWindow):
             and result.get("operation") == "restore-correction"
         ):
             self.correction_restore_request = None
+            self._last_known_quadrupole_values = {
+                str(name): float(value)
+                for name, value in result.get("final_values", {}).items()
+            }
+            target_label = str(
+                result.get("target_label") or "pre-correction state"
+            )
             self._invalidate_staged_results(
-                "The pre-correction quadrupole state was restored. Remeasure "
+                f"The {target_label} was restored. Remeasure "
                 "dispersion before starting another correction."
             )
+            verification = result.get("verification")
+            if isinstance(verification, MultiPlaneDispersionMeasurement):
+                self.latest_plane_measurements = {
+                    item.plane: item
+                    for item in verification.measurements
+                }
+                self.latest_measurement = verification.primary
+                self.latest_measurement_time = datetime.now()
+                self._show_measurement(verification)
+                self._set_live_multiplane_measurement(
+                    verification,
+                    label="Restored state verification",
+                )
+            elif isinstance(verification, DispersionMeasurement):
+                self.latest_measurement = verification
+                self.latest_measurement_time = datetime.now()
+                self._show_measurement(verification)
+                self._set_live_comparison_measurement(
+                    verification,
+                    label="Restored state verification",
+                )
+            if verification is not None:
+                self.correction_state_label.setText(
+                    f"The {target_label} was restored and its dispersion was "
+                    "remeasured. Recheck PVs before another correction."
+                )
             self.last_live_preflight = None
             self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
-            self._refresh_status("Initial state restored")
+            self._refresh_status("Correction state restored")
             self._append_log(
-                "Pre-correction quadrupole state restored and verified: "
+                f"{target_label.capitalize()} restored and verified: "
                 + ", ".join(
                     f"{name}={value:.8g}"
                     for name, value in result.get("final_values", {}).items()
@@ -4781,7 +5146,8 @@ class MainWindow(QMainWindow):
         )
         text = (
             f"Maximum {self.max_iter_spin.value()} generations · {policy}. "
-            "The loop may stop earlier."
+            f"Each generation must improve RMS by at least "
+            f"{self.min_step_improvement_spin.value():g}%; the loop may stop earlier."
         )
         rank_warning = rank_reduced_response_warning(
             self.latest_response,
@@ -4800,7 +5166,7 @@ class MainWindow(QMainWindow):
 
     def _build_automatic_correction_dialog(
         self,
-    ) -> tuple[QDialog, QSpinBox, QComboBox]:
+    ) -> tuple[QDialog, QSpinBox, QComboBox, QDoubleSpinBox]:
         dialog = QDialog(self)
         dialog.setObjectName("automaticCorrectionDialog")
         dialog.setWindowTitle("Automatic Correction")
@@ -4881,6 +5247,33 @@ class MainWindow(QMainWindow):
         )
         max_step_value.setObjectName("automaticReadOnlyValue")
         settings.addWidget(max_step_value, 2, 3)
+
+        improvement_label = QLabel("Minimum improvement per generation")
+        improvement_label.setProperty("role", "field")
+        settings.addWidget(improvement_label, 3, 0)
+        minimum_improvement = QDoubleSpinBox(dialog)
+        minimum_improvement.setObjectName("automaticMinImprovementSpin")
+        minimum_improvement.setDecimals(1)
+        minimum_improvement.setRange(0.0, 99.9)
+        minimum_improvement.setSingleStep(1.0)
+        minimum_improvement.setSuffix(" %")
+        minimum_improvement.setValue(
+            self.min_step_improvement_spin.value()
+        )
+        minimum_improvement.setToolTip(
+            "A trial generation is retained only when its measured residual "
+            "RMS improves by at least this percentage."
+        )
+        settings.addWidget(minimum_improvement, 3, 1)
+
+        orbit_limit_label = QLabel("Reference orbit change limit")
+        orbit_limit_label.setProperty("role", "field")
+        settings.addWidget(orbit_limit_label, 3, 2)
+        orbit_limit_value = QLabel(
+            f"{self.config.safety.max_reference_orbit_change_mm:g} mm · profile"
+        )
+        orbit_limit_value.setObjectName("automaticReadOnlyValue")
+        settings.addWidget(orbit_limit_value, 3, 3)
         layout.addWidget(settings_card)
 
         safety_text = (
@@ -4911,7 +5304,7 @@ class MainWindow(QMainWindow):
         start_button.clicked.connect(dialog.accept)
         buttons.addWidget(start_button)
         layout.addLayout(buttons)
-        return dialog, generations, response_policy
+        return dialog, generations, response_policy, minimum_improvement
 
     def _confirm_automatic_correction(self) -> None:
         block_reason = self._operation_block_reason()
@@ -4955,7 +5348,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        dialog, generations, response_policy = (
+        dialog, generations, response_policy, minimum_improvement = (
             self._build_automatic_correction_dialog()
         )
         if dialog.exec_() != QDialog.Accepted:
@@ -4965,6 +5358,9 @@ class MainWindow(QMainWindow):
         self._loading_widgets = True
         try:
             self.max_iter_spin.setValue(generations.value())
+            self.min_step_improvement_spin.setValue(
+                minimum_improvement.value()
+            )
             self.response_update_combo.setCurrentText(
                 "every_iteration"
                 if self._joint_correction_enabled()
@@ -5995,12 +6391,15 @@ class MainWindow(QMainWindow):
 
     def _set_running(self, running: bool, task: str) -> None:
         self._active_task = task if running else ""
+        if hasattr(self, "restore_history_state_button"):
+            self._update_history_restore_action()
         profile_managed = self.app_context is not None
         block_reason = self._operation_block_reason()
         operation_allowed = block_reason is None
         self.load_button.setEnabled(not running and not profile_managed)
         for widget in (
             self.section_combo,
+            self.energy_knob_combo,
             self.bpm_select_button,
             self.knob_select_button,
             self.delta_spin,
@@ -6009,6 +6408,7 @@ class MainWindow(QMainWindow):
             self.sample_interval_spin,
             self.final_samples_spin,
             self.max_iter_spin,
+            self.min_step_improvement_spin,
             self.gain_spin,
             self.max_step_pct_spin,
             self.response_update_combo,
@@ -6234,8 +6634,110 @@ class MainWindow(QMainWindow):
         self._update_energy_step_summary()
         if self._loading_widgets:
             return
+        if self.active_energy_knob_choice_id:
+            self.energy_knob_deltas[self.active_energy_knob_choice_id] = float(
+                self.delta_spin.value()
+            )
         self.last_live_preflight = None
         self._selection_changed()
+
+    def _active_energy_knob_choice(self) -> ProfileEnergyKnobChoice | None:
+        for choice in self.energy_knob_choices:
+            if choice.id == self.active_energy_knob_choice_id:
+                return choice
+        return None
+
+    def _current_energy_knob_display_name(self) -> str:
+        choice = self._active_energy_knob_choice()
+        return choice.display_name if choice is not None else self.config.energy_knob.name
+
+    def _energy_knob_changed(self, _index: int) -> None:
+        if self._loading_widgets or self.app_context is None:
+            return
+        choice = self.energy_knob_combo.currentData()
+        if not isinstance(choice, ProfileEnergyKnobChoice):
+            return
+        if choice.id == self.active_energy_knob_choice_id:
+            return
+
+        current_id = self.active_energy_knob_choice_id
+        if current_id:
+            self.energy_knob_deltas[current_id] = float(self.delta_spin.value())
+            if self.session_energy_calibration_source is not None:
+                self.session_energy_calibrations[current_id] = dict(
+                    self.config.energy_knob.calibration
+                )
+                self.session_energy_calibration_sources[current_id] = (
+                    self.session_energy_calibration_source
+                )
+
+        self.active_energy_knob_choice_id = choice.id
+        configured_calibration = dict(
+            self.configured_energy_calibrations.get(
+                choice.id,
+                choice.config.calibration,
+            )
+        )
+        calibration = dict(
+            self.session_energy_calibrations.get(
+                choice.id,
+                configured_calibration,
+            )
+        )
+        active_config = replace(
+            choice.config,
+            delta=float(self.energy_knob_deltas.get(choice.id, choice.config.delta)),
+            calibration=calibration,
+        )
+        active_choice = replace(choice, config=active_config)
+        base_config = replace(self.config, energy_knob=active_config)
+        try:
+            self.config = apply_profile_selection(
+                self.app_context,
+                base_config,
+                target_bpms=base_config.target_bpms,
+                knobs=base_config.knobs,
+                energy_knob_choice=active_choice,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Energy Knob", str(exc))
+            self._loading_widgets = True
+            try:
+                previous = next(
+                    (
+                        index
+                        for index in range(self.energy_knob_combo.count())
+                        if self.energy_knob_combo.itemData(index).id == current_id
+                    ),
+                    0,
+                )
+                self.energy_knob_combo.setCurrentIndex(previous)
+                self.active_energy_knob_choice_id = current_id
+            finally:
+                self._loading_widgets = False
+            return
+
+        self.configured_energy_calibration = configured_calibration
+        self.session_energy_calibration_source = (
+            self.session_energy_calibration_sources.get(choice.id)
+        )
+        self.correction_restore_request = None
+        self.last_live_preflight = None
+        self._loading_widgets = True
+        try:
+            self.delta_spin.setValue(active_config.delta)
+        finally:
+            self._loading_widgets = False
+        self._invalidate_staged_results(
+            "Energy Knob changed. Previous measurements, responses, and "
+            "recommendations were discarded."
+        )
+        self._refresh_operation_plan()
+        self._update_energy_step_summary()
+        self._update_calibration_controls()
+        self._update_static_safety_status()
+        self._set_running(False, "")
+        self._refresh_status("Energy Knob changed")
 
     def _energy_step_plan(self) -> dict[str, object]:
         delta = (
@@ -6492,13 +6994,28 @@ class MainWindow(QMainWindow):
             if self.app_context is not None
             else self.config.backend.type
         )
+        choice = self._active_energy_knob_choice()
+        knob_id = (
+            choice.id if choice is not None else self.config.energy_knob.name
+        )
+        draft_directory = energy_calibration_draft_directory(self.app_context)
+        is_llrf_phase = knob_id.startswith("llrf_phase:")
+        if is_llrf_phase:
+            draft_directory = (
+                draft_directory
+                / "llrf_phase"
+                / self.config.energy_knob.name
+            )
         dialog = CalibrationEditorDialog(
             actuator=self.config.energy_knob.actuator,
             actuator_unit=self.config.energy_knob.actuator_unit,
             target_delta=float(self.delta_spin.value()),
-            draft_directory=energy_calibration_draft_directory(self.app_context),
+            draft_directory=draft_directory,
             machine_id=machine_id,
             backend=backend,
+            knob_id=knob_id,
+            knob_display_name=self._current_energy_knob_display_name(),
+            require_knob_identity=is_llrf_phase,
             parent=self,
         )
         if dialog.exec_() != QDialog.Accepted:
@@ -6527,6 +7044,13 @@ class MainWindow(QMainWindow):
             ),
         )
         self.session_energy_calibration_source = str(source)
+        if self.active_energy_knob_choice_id:
+            self.session_energy_calibrations[
+                self.active_energy_knob_choice_id
+            ] = dict(calibration)
+            self.session_energy_calibration_sources[
+                self.active_energy_knob_choice_id
+            ] = str(source)
         self.correction_restore_request = None
         self._invalidate_staged_results(
             "Session energy calibration activated. Previous measurements and "
@@ -6566,6 +7090,15 @@ class MainWindow(QMainWindow):
             ),
         )
         self.session_energy_calibration_source = None
+        if self.active_energy_knob_choice_id:
+            self.session_energy_calibrations.pop(
+                self.active_energy_knob_choice_id,
+                None,
+            )
+            self.session_energy_calibration_sources.pop(
+                self.active_energy_knob_choice_id,
+                None,
+            )
         self.correction_restore_request = None
         self._invalidate_staged_results(
             "Configured energy calibration restored. Previous measurements and "

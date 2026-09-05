@@ -30,7 +30,7 @@
     "flag_element": "ENY",
     "flag_image_channel": "image",
     "x_reference_mm": 0,
-    "design_eta_m": 0.7484210850804714
+    "design_eta_m": -0.7484210850804714
   },
   "energy_match_defaults": {
     "profile_fit_method": "Gauss fit",

@@ -992,6 +992,27 @@ class MachineProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(MachineProfileError, "flip_y must be boolean"):
             _parse_element(raw, 0)
 
+    def test_flag_image_x_axis_sign_must_be_plus_or_minus_one(self):
+        raw = {
+            "id": "PRFTEST",
+            "kind": "flag",
+            "display_name": "PRFTEST",
+            "order": 1,
+            "tags": [],
+            "limits": {},
+            "channels": {"image": {"real": "TEST:IMAGE"}},
+            "image_geometry": {
+                "real": {
+                    "shape": [100, 80],
+                    "pixel_width_mm": 0.02,
+                    "x_axis_sign": 0,
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(MachineProfileError, "x_axis_sign must be -1 or 1"):
+            _parse_element(raw, 0)
+
     def test_all_directory_flags_define_geometry_for_each_image_backend(self):
         for machine_id in ("_template", "half", "irfel"):
             profile = load_profile(machine_id)

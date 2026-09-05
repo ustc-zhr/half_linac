@@ -524,6 +524,16 @@ def _parse_image_geometry(
                 f"{location}.image_geometry.{backend_name}.flip_y must be boolean."
             )
         parsed_backend["flip_y"] = flip_y
+        x_axis_sign = backend_geometry.get("x_axis_sign", 1)
+        if (
+            not isinstance(x_axis_sign, int)
+            or isinstance(x_axis_sign, bool)
+            or x_axis_sign not in {-1, 1}
+        ):
+            raise MachineProfileError(
+                f"{location}.image_geometry.{backend_name}.x_axis_sign must be -1 or 1."
+            )
+        parsed_backend["x_axis_sign"] = x_axis_sign
         default_roi = backend_geometry.get("default_roi")
         if default_roi is not None:
             parsed_backend["default_roi"] = _parse_default_image_roi(

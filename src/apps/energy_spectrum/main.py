@@ -1488,7 +1488,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._refresh_widget_style(button)
 
     def _use_design_eta(self, status_text=None, tooltip=None):
-        self.eta_flag = float(
+        self.eta_flag = self._eta_in_image_coordinates(
             self.energy_config.get("design_eta_m", DEFAULT_DESIGN_ETA)
         )
         self.latest_model_snapshot_metadata = None
@@ -3443,6 +3443,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "energy_spread_fraction": float(energy_spread),
             "energy_spread_mev": float(abs(energy_center_mev * energy_spread)),
             "eta_m": float(self.eta_flag),
+            "image_x_axis_sign": int(self.flag_image_x_axis_sign),
             "beta_m": float(self.beta_flag),
             "emittance_m": float(self.emi_flag),
             "include_emit": bool(self.with_emit),
@@ -3869,6 +3870,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.flag_pixel_width_mm = geometry.pixel_width_mm
         self.flag_default_roi = geometry.default_roi
         self.flag_image_flip_y = geometry.flip_y
+        self.flag_image_x_axis_sign = geometry.x_axis_sign
 
         self.flag_expotime_pv = None
         self.flag_exposure_target = None
@@ -3915,6 +3917,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if self.flag_image_flip_y:
             return np.flipud(image)
         return image
+
+    def _eta_in_image_coordinates(self, model_eta_m):
+        """Express model dispersion in the unchanged camera-image x coordinate."""
+        return float(self.flag_image_x_axis_sign) * float(model_eta_m)
   
     def setup_timer(self):
         # refreah the figure at 1 Hz
@@ -4228,9 +4234,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._print_energy_model_inputs(snapshot)
 
             line_name = self._energy_model_line("dispersion")
-            self.eta_flag = self.model_backend.get_energy_dispersion(
-                line_name,
-                lattice_overrides=snapshot.lattice_overrides,
+            self.eta_flag = self._eta_in_image_coordinates(
+                self.model_backend.get_energy_dispersion(
+                    line_name,
+                    lattice_overrides=snapshot.lattice_overrides,
+                )
             )
             print(
                 f"dispersion at {self.energy_config['flag_element']} updates: ",
@@ -4252,7 +4260,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
         except Exception as e:
             print(f"Error in cal_disp: {e}")
-            self.eta_flag = float(
+            self.eta_flag = self._eta_in_image_coordinates(
                 self.energy_config.get("design_eta_m", DEFAULT_DESIGN_ETA)
             )
             self.latest_model_snapshot_metadata = None
@@ -4320,7 +4328,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.beta_flag = result.beta_x_m
         self.emi_flag = emi_in # m
 
-        self.eta_flag = result.dispersion_x_m
+        self.eta_flag = self._eta_in_image_coordinates(result.dispersion_x_m)
 
         print('cal results: beta=',self.beta_flag, 'm, alpha=',self.alpha_flag, 'eta=',self.eta_flag, ' m')
 

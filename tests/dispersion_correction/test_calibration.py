@@ -111,6 +111,7 @@ def direct_delta_draft() -> EnergyCalibrationDraft:
         ),
         machine_id="irfel",
         backend="real",
+        knob_id="llrf_phase:KLY1_CH3_PHASE",
     )
 
 
@@ -132,6 +133,7 @@ def test_calibration_draft_quality_and_fragment() -> None:
     assert analysis.fit.actuator_per_delta == pytest.approx(2500.0)
     assert analysis.target_actuator_step == pytest.approx(0.25)
     assert fragment["session_override"]
+    assert fragment["knob_id"] == "llrf_phase:KLY1_CH3_PHASE"
     assert fragment["actuator_per_delta"] == pytest.approx(2500.0)
 
 

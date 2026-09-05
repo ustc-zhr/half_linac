@@ -170,6 +170,39 @@ def test_energy_readback_requires_configured_consecutive_confirmations() -> None
     assert epics.readback_calls == 5
 
 
+def test_wrapped_phase_target_and_readback_use_circular_difference() -> None:
+    set_pv = "TEST:LLRF:PHASE:SET"
+    readback_pv = "TEST:LLRF:PHASE:READBACK"
+    config = write_config()
+    options = deepcopy(config.backend.options)
+    options["pv_map"]["energy_knob"] = {
+        "set": set_pv,
+        "readback": readback_pv,
+    }
+    config = replace(
+        config,
+        backend=replace(config.backend, options=options),
+        energy_knob=replace(
+            config.energy_knob,
+            calibration={"kind": "linear", "actuator_per_delta": 1.0},
+            readback_tolerance=0.1,
+            wrap_period=360.0,
+            wrap_origin=-180.0,
+        ),
+    )
+    epics = SequencedEnergyReadbackFakeEpics(
+        {set_pv: 179.0, readback_pv: 179.0},
+        set_pv,
+        readback_pv,
+        [181.0],
+    )
+
+    EpicsMachine(config, epics_client=epics).set_energy_delta(181.0)
+
+    assert epics.caput_calls[-1] == (set_pv, pytest.approx(-179.0))
+    assert epics.readback_calls == 1
+
+
 def test_modulator_voltage_uses_same_normalized_energy_delta_interface() -> None:
     config = write_config()
     options = deepcopy(config.backend.options)
@@ -668,7 +701,7 @@ def test_full_epics_workflow_corrects_dynamic_model_and_restores_phase() -> None
     result = AchromatWorkflow(config, machine=machine).run()
 
     assert result.success
-    assert result.improvement >= config.solver.success_min_improvement
+    assert result.improvement > 1.0
     assert epics.values[ENERGY_PV] == pytest.approx(12.3)
     assert any(
         epics.values[pv] != pytest.approx(initial_values()[pv])

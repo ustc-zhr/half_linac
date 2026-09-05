@@ -164,7 +164,6 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
             "max_iter": config.solver.max_iter,
             "response_update": config.solver.response_update,
             "min_step_improvement": config.solver.min_step_improvement,
-            "success_min_improvement": config.solver.success_min_improvement,
         },
         "measurement": {
             "planes": list(config.measurement.planes),

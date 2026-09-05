@@ -137,6 +137,9 @@ class CalibrationEditorDialog(QDialog):
         draft_directory: str | Path,
         machine_id: str,
         backend: str,
+        knob_id: str | None = None,
+        knob_display_name: str | None = None,
+        require_knob_identity: bool = False,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -146,6 +149,9 @@ class CalibrationEditorDialog(QDialog):
         self.draft_directory = Path(draft_directory)
         self.machine_id = machine_id
         self.backend = backend
+        self.knob_id = str(knob_id or actuator)
+        self.knob_display_name = str(knob_display_name or self.knob_id)
+        self.require_knob_identity = bool(require_knob_identity)
         self.analysis: EnergyCalibrationAnalysis | None = None
         self.activated_calibration: dict | None = None
         self.activated_source: str | None = None
@@ -172,10 +178,12 @@ class CalibrationEditorDialog(QDialog):
         settings_title.setObjectName("calibrationSectionTitle")
         settings.addWidget(settings_title, 0, 0, 1, 4)
 
-        actuator_label = QLabel("Actuator")
+        actuator_label = QLabel("Energy Knob")
         actuator_label.setProperty("role", "field")
         settings.addWidget(actuator_label, 1, 0)
-        self.actuator_value_label = QLabel(f"{actuator} ({actuator_unit})")
+        self.actuator_value_label = QLabel(
+            f"{self.knob_display_name} — {actuator} ({actuator_unit})"
+        )
         self.actuator_value_label.setObjectName("calibrationActuatorValue")
         settings.addWidget(self.actuator_value_label, 1, 1)
 
@@ -406,6 +414,7 @@ class CalibrationEditorDialog(QDialog):
             energy_unit=self.energy_unit_combo.currentText().strip() or "MeV",
             machine_id=self.machine_id,
             backend=self.backend,
+            knob_id=self.knob_id,
             note=self.note_edit.text().strip(),
         )
 
@@ -628,10 +637,21 @@ class CalibrationEditorDialog(QDialog):
         except Exception as exc:
             QMessageBox.warning(self, "Load Calibration Draft", str(exc))
             return
-        if (
-            draft.actuator != self.actuator
-            or draft.actuator_unit != self.actuator_unit
-        ):
+        identity_mismatch = (
+            draft.machine_id != self.machine_id
+            or draft.backend != self.backend
+            or (draft.knob_id and draft.knob_id != self.knob_id)
+            or (self.require_knob_identity and not draft.knob_id)
+        )
+        if identity_mismatch:
+            QMessageBox.warning(
+                self,
+                "Load Calibration Draft",
+                "The saved draft belongs to a different machine, backend, or "
+                "Energy Knob.",
+            )
+            return
+        if draft.actuator != self.actuator or draft.actuator_unit != self.actuator_unit:
             QMessageBox.warning(
                 self,
                 "Load Calibration Draft",

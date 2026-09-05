@@ -1037,7 +1037,9 @@ class RFPhaseScanWindow(QMainWindow):
         )
         scan["pixel_width_mm"] = float(geometry.pixel_width_mm)
         scan["x_reference_mm"] = float(self.diagnostics.get("x_reference_mm", 0.0))
-        scan["design_eta_m"] = float(self.diagnostics["design_eta_m"])
+        scan["design_eta_m"] = (
+            float(geometry.x_axis_sign) * float(self.diagnostics["design_eta_m"])
+        )
         scan["image_flip_y"] = self.image_flip_y
         scan["min_fit_r_squared"] = self.min_fit_r_squared
         for key in ("initial", "tracking", "fallback"):
@@ -1319,7 +1321,10 @@ class RFPhaseScanWindow(QMainWindow):
                     f"Gaussian fit R2 {profile_fit.r_squared!r} is below "
                     f"{self.min_fit_r_squared:.3f}."
                 )
-            eta_m = float(self.diagnostics["design_eta_m"])
+            eta_m = (
+                float(geometry.x_axis_sign)
+                * float(self.diagnostics["design_eta_m"])
+            )
             x_reference_mm = float(self.diagnostics.get("x_reference_mm", 0.0))
             center_offset_mm = profile_fit.center_mm - x_reference_mm
             energy_center = float(reference_energy_mev) * (

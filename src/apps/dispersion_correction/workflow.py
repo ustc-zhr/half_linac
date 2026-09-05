@@ -352,6 +352,7 @@ class AchromatWorkflow:
                 self.config.safety,
                 baseline_orbit,
                 self._average_bpm(self.config.measurement.samples_per_step),
+                plane=self.config.measurement.plane,
             )
             if not safety.ok:
                 raise RuntimeError(safety.reason)
@@ -386,8 +387,9 @@ class AchromatWorkflow:
         *,
         reviewed_baseline: Mapping[str, float],
         max_changes: Mapping[str, float],
+        verify_dispersion: bool = False,
     ) -> dict[str, object]:
-        """Restore reviewed pre-correction quadrupole targets safely."""
+        """Restore reviewed quadrupole targets safely."""
 
         self._require_write_ready()
         targets = {str(name): float(value) for name, value in target_values.items()}
@@ -398,7 +400,7 @@ class AchromatWorkflow:
         limits = {str(name): float(value) for name, value in max_changes.items()}
         required = set(targets)
         if not required:
-            raise ValueError("At least one pre-correction target is required")
+            raise ValueError("At least one correction-state target is required")
         if set(baseline) != required or set(limits) != required:
             raise ValueError(
                 "Correction restore requires matching baseline, target, and limit devices"
@@ -438,22 +440,28 @@ class AchromatWorkflow:
 
         try:
             self._check_cancelled()
-            self._progress("Restoring pre-correction quadrupole targets", 1, 3)
+            self._progress("Restoring correction-state quadrupole targets", 1, 3)
             target_writer(targets)
             self.machine.wait_stable()
             self._check_cancelled()
             if not self.machine.is_safe():
                 raise RuntimeError(
-                    "Machine unsafe after restoring pre-correction targets"
+                    "Machine unsafe after restoring correction-state targets"
                 )
             safety = evaluate_safety(
                 self.config.safety,
                 baseline_orbit,
                 self._average_bpm(self.config.measurement.samples_per_step),
+                plane=self.config.measurement.plane,
             )
             if not safety.ok:
                 raise RuntimeError(safety.reason)
             final_state = self.machine.snapshot()
+            verification = (
+                self.measure_dispersion(self.config.measurement.final_samples)
+                if verify_dispersion
+                else None
+            )
         except Exception as exc:
             try:
                 self.machine.restore(pre_restore_state)
@@ -466,7 +474,7 @@ class AchromatWorkflow:
                 f"{exc}; pre-restore quadrupole setpoints restored"
             ) from exc
 
-        self._progress("Pre-correction state restored", 3, 3)
+        self._progress("Correction state restored", 3, 3)
         return {
             "operation": "restore-correction",
             "baseline_values": baseline,
@@ -476,6 +484,7 @@ class AchromatWorkflow:
                 for name in targets
             },
             "max_orbit_change_mm": safety.max_orbit_change_mm,
+            "verification": verification,
         }
 
     def _apply_recommendation(
@@ -527,6 +536,7 @@ class AchromatWorkflow:
                 self.config.safety,
                 baseline_reference,
                 self._average_bpm(self.config.measurement.samples_per_step),
+                plane=self.config.measurement.plane,
             )
             if not safety_status.ok:
                 raise RuntimeError(safety_status.reason)
@@ -777,6 +787,7 @@ class AchromatWorkflow:
                         self.config.safety,
                         baseline_reference,
                         current_reference,
+                        plane=self.config.measurement.plane,
                     )
                     if not safety_status.ok:
                         self.machine.restore(state_before)
@@ -905,6 +916,7 @@ class AchromatWorkflow:
                 self.config.safety,
                 baseline_reference,
                 self._average_bpm(self.config.measurement.samples_per_step),
+                plane=self.config.measurement.plane,
             )
         except WorkflowCancelled:
             return self._restore_after_abort(
@@ -923,14 +935,17 @@ class AchromatWorkflow:
                 steps,
                 last_response,
             )
-        success = (
-            safety_status.ok
-            and final_measurement.rms_mm > 0
-            and initial_measurement.rms_mm / final_measurement.rms_mm >= self.config.solver.success_min_improvement
-        )
-        reason = "Accepted" if success else "Improvement below success threshold"
-        if not safety_status.ok:
+        accepted_any = any(step.accepted for step in steps)
+        final_valid = bool(np.isfinite(final_measurement.rms_mm))
+        success = safety_status.ok and accepted_any and final_valid
+        if success:
+            reason = "Accepted"
+        elif not safety_status.ok:
             reason = safety_status.reason
+        elif not accepted_any:
+            reason = "No correction generation was accepted"
+        else:
+            reason = "Final dispersion verification is invalid"
         if not success:
             try:
                 self.machine.restore(initial_state)

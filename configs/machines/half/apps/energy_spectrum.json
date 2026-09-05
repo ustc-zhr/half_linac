@@ -42,7 +42,7 @@
       "model_lines": {"dispersion": "ESAlocal", "twiss": "ALL_ESA"},
       "energy_slider_range_mev": [0, 2450],
       "energy0_default_mev": 2200,
-      "design_eta_m": 0.7484210850804714
+      "design_eta_m": -0.7484210850804714
     },
     "prf02": {
       "flag_element": "PRF02",

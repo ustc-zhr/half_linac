@@ -154,6 +154,12 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
             round_actuator_step_to_integer=bool(
                 energy_raw.get("round_actuator_step_to_integer", False)
             ),
+            wrap_period=(
+                None
+                if energy_raw.get("wrap_period") is None
+                else float(energy_raw["wrap_period"])
+            ),
+            wrap_origin=float(energy_raw.get("wrap_origin", 0.0)),
         ),
         target_bpms=tuple(str(name) for name in target_bpms),
         monitor_bpms=tuple(str(name) for name in monitor_bpms),
@@ -178,7 +184,6 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
             max_iter=int(solver_raw.get("max_iter", 5)),
             response_update=str(solver_raw.get("response_update", "once")).lower(),
             min_step_improvement=float(solver_raw.get("min_step_improvement", 0.05)),
-            success_min_improvement=float(solver_raw.get("success_min_improvement", 2.0)),
         ),
         safety=SafetyConfig(
             max_reference_orbit_change_mm=float(safety_raw.get("max_reference_orbit_change_mm", 1.0)),
@@ -209,6 +214,14 @@ def validate_config(config: RunConfig) -> None:
         raise ValueError("energy_knob.readback_confirmations must be positive")
     if not isinstance(config.energy_knob.round_actuator_step_to_integer, bool):
         raise ValueError("energy_knob.round_actuator_step_to_integer must be boolean")
+    if config.energy_knob.wrap_period is not None:
+        if (
+            not math.isfinite(config.energy_knob.wrap_period)
+            or config.energy_knob.wrap_period <= 0
+        ):
+            raise ValueError("energy_knob.wrap_period must be finite and positive")
+        if not math.isfinite(config.energy_knob.wrap_origin):
+            raise ValueError("energy_knob.wrap_origin must be finite")
     if len(set(config.target_bpms)) != len(config.target_bpms):
         raise ValueError("target_bpms must not contain duplicates")
     if len(set(config.monitor_bpms)) != len(config.monitor_bpms):
@@ -286,6 +299,8 @@ def validate_config(config: RunConfig) -> None:
         raise ValueError("solver.gain must be in (0, 1]")
     if not 0 < config.solver.max_step_fraction <= 1:
         raise ValueError("solver.max_step_fraction must be in (0, 1]")
+    if not 0 <= config.solver.min_step_improvement < 1:
+        raise ValueError("solver.min_step_improvement must be in [0, 1)")
     if config.solver.svd_cut < 0:
         raise ValueError("solver.svd_cut must be non-negative")
     if config.solver.regularization < 0:

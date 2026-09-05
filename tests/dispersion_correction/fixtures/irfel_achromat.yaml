@@ -90,7 +90,6 @@ solver:
   max_iter: 1
   response_update: once
   min_step_improvement: 0.05
-  success_min_improvement: 2.0
 
 safety:
   # TODO: replace with operations-approved values.

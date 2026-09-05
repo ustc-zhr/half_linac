@@ -10,12 +10,12 @@
     "max_step_fraction": 0.25,
     "max_iter": 5,
     "response_update": "once",
-    "min_step_improvement": 0.05,
-    "success_min_improvement": 2
+    "min_step_improvement": 0.05
   },
-  "safety": {"max_reference_orbit_change_mm": 0.5},
+  "safety": {"max_reference_orbit_change_mm": 3},
   "energy_knob": {
     "name": "KLY01",
+    "display_name": "KLY01 Modulator HV",
     "actuator": "modulator_voltage",
     "actuator_unit": "V",
     "delta": 0.005,
@@ -26,6 +26,25 @@
     "set_channel": "voltage_set",
     "readback_channel": "voltage_readback"
   },
+  "energy_knob_candidates": [
+    {
+      "id": "llrf_phase",
+      "element_kind": "rf",
+      "required_tag": "llrf",
+      "first_element": "LLRFPB",
+      "display_suffix": "Phase",
+      "actuator": "rf_phase",
+      "actuator_unit": "deg",
+      "delta": 0.005,
+      "readback_tolerance": 0.1,
+      "readback_confirmations": 2,
+      "set_channel": "phase_set",
+      "readback_channel": "phase_readback",
+      "wrap_period": 360,
+      "wrap_origin": -180,
+      "calibrations": {}
+    }
+  ],
   "sections": [
     {
       "id": "bl01",

@@ -38,6 +38,7 @@ class EnergyCalibrationDraft:
     energy_unit: str = "MeV"
     machine_id: str = "standalone"
     backend: str = "offline"
+    knob_id: str = ""
     note: str = ""
 
 
@@ -317,6 +318,9 @@ def _calibration_payload_for_fit(
         "actuator_per_delta": fit.actuator_per_delta,
         "session_override": True,
         "source": str(source_path),
+        "knob_id": draft.knob_id,
+        "machine_id": draft.machine_id,
+        "backend": draft.backend,
         "baseline_actuator": float(draft.baseline_actuator),
         "fit_r_squared": fit.r_squared,
         "fit_points": fit.n_samples,
@@ -393,6 +397,7 @@ def load_energy_calibration_draft(path: str | Path) -> EnergyCalibrationDraft:
         energy_unit=str(raw.get("energy_unit", "MeV")),
         machine_id=str(raw.get("machine_id", "standalone")),
         backend=str(raw.get("backend", "offline")),
+        knob_id=str(raw.get("knob_id", "")),
         note=str(raw.get("note", "")),
     )
 

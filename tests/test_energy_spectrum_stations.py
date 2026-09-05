@@ -23,6 +23,7 @@ from half_linac.src.shared.machine_profile import (
     load_app_context,
     load_profile,
     resolve_channel,
+    resolve_element_image_geometry,
     workflow_writes_allowed,
 )
 
@@ -110,13 +111,25 @@ class EnergySpectrumStationTests(unittest.TestCase):
             resolve_channel(profile, "PREINJECTOR_ENERGY", "setpoint", "real"),
             "IN:L01:ENG",
         )
-
         real_context = load_app_context(
             "energy_spectrum",
             machine_id="half",
             control_backend="real",
         )
         self.assertTrue(workflow_writes_allowed(real_context, "energy_spectrum"))
+
+    def test_half_energy_flags_keep_vm_x_and_reverse_real_eta_coordinates(self):
+        profile = load_profile("half")
+
+        for flag_id in ("PRF02", "ENY"):
+            self.assertEqual(
+                resolve_element_image_geometry(profile, flag_id, "vm").x_axis_sign,
+                1,
+            )
+            self.assertEqual(
+                resolve_element_image_geometry(profile, flag_id, "real").x_axis_sign,
+                -1,
+            )
 
     def test_station_runtime_artifacts_are_isolated(self):
         context = load_app_context(

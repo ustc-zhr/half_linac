@@ -65,12 +65,12 @@ def test_dispersion_scan_centers_and_restores_on_energy_setpoint() -> None:
     )
 
 
-def test_offline_workflow_improves_dispersion_by_success_threshold() -> None:
+def test_offline_workflow_keeps_accepted_improvements() -> None:
     config = load_config(CONFIG_PATH)
     result = AchromatWorkflow(config).run()
 
     assert result.success
-    assert result.improvement >= config.solver.success_min_improvement
+    assert result.improvement > 1.0
     assert result.final.rms_mm < result.initial.rms_mm
     assert any(step.accepted for step in result.steps)
     assert all(step.measurement_before is not None for step in result.steps)
@@ -78,6 +78,21 @@ def test_offline_workflow_improves_dispersion_by_success_threshold() -> None:
     assert all(step.measurement_after is not None for step in accepted)
     assert all(step.knobs_before is not None for step in result.steps)
     assert all(step.knobs_trial is not None for step in accepted)
+
+
+def test_automatic_workflow_does_not_require_an_overall_improvement_target() -> None:
+    config = load_config(CONFIG_PATH)
+    config = replace(
+        config,
+        solver=replace(config.solver, gain=0.1, max_iter=1),
+    )
+
+    result = AchromatWorkflow(config).run()
+
+    assert result.success
+    assert any(step.accepted for step in result.steps)
+    assert 1.0 < result.improvement < 2.0
+    assert result.final_knobs != result.initial_knobs
 
 
 def test_automatic_workflow_streams_completed_generation_measurements() -> None:
@@ -158,7 +173,7 @@ def test_json_config_runs_workflow() -> None:
     result = AchromatWorkflow(json_config).run()
 
     assert result.success
-    assert result.improvement >= json_config.solver.success_min_improvement
+    assert result.improvement > 1.0
 
 
 def test_response_update_once_measures_matrix_only_once() -> None:
@@ -277,7 +292,7 @@ def test_irfel_mock_workflow_uses_irfel_names_and_improves() -> None:
 
     assert result.success
     assert result.initial.bpm_names == ("BPM9", "BPM10")
-    assert result.improvement >= config.solver.success_min_improvement
+    assert result.improvement > 1.0
     assert set(result.final_knobs) == {"Q13_Q16_sym", "Q14_Q15_sym"}
 
 
@@ -304,4 +319,4 @@ def test_offline_workflow_supports_three_knobs() -> None:
 
     assert result.success
     assert set(result.final_knobs) == {"Q1_sym", "Q2_sym", "Q3_sym"}
-    assert result.improvement >= config.solver.success_min_improvement
+    assert result.improvement > 1.0

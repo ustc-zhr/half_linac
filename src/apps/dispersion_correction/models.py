@@ -26,6 +26,8 @@ class EnergyKnobConfig:
     readback_tolerance: float | None = None
     readback_confirmations: int = 1
     round_actuator_step_to_integer: bool = False
+    wrap_period: float | None = None
+    wrap_origin: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -60,7 +62,6 @@ class SolverConfig:
     max_iter: int = 5
     response_update: str = "once"
     min_step_improvement: float = 0.05
-    success_min_improvement: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -653,6 +654,14 @@ class CorrectionResult:
         if not np.isfinite(final) or final <= 0:
             return float("inf")
         return float(initial / final)
+
+    @property
+    def reduction_percent(self) -> float:
+        initial = self.initial.rms_mm
+        final = self.final.rms_mm
+        if not np.isfinite(initial) or initial <= 0 or not np.isfinite(final):
+            return float("nan")
+        return float(100.0 * (1.0 - final / initial))
 
     @property
     def knob_delta(self) -> dict[str, float]:
