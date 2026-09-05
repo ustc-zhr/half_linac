@@ -120,6 +120,6 @@
     }
   ],
   "default_section": "bl01",
-  "readback_timeout": {"vm": 2, "real": 20},
+  "readback_timeout": {"vm": 2, "real": 50},
   "write_control": {"vm": "allowed", "real": "allowed"}
 }
