@@ -956,8 +956,7 @@ class SolenoidCenteringScanner:
         solenoid_readback = self._read_optional(self.solenoid_readback_pv)
         hcorr_readback = self._read_optional(self.hcorr_readback_pv)
         vcorr_readback = self._read_optional(self.vcorr_readback_pv)
-        bpm_x = self.io.read(self.bpm_x_pv)
-        bpm_y = self.io.read(self.bpm_y_pv)
+        bpm_x, bpm_y = self._read_bpm()
 
         range_checks: list[RangeCheck] = []
         if self.solenoid_target is not None:
@@ -1331,9 +1330,19 @@ class SolenoidCenteringScanner:
             self._raise_if_stopped()
             if index:
                 self._sleep(self.preset.sample_interval_s)
-            xs.append(self.io.read(self.bpm_x_pv))
-            ys.append(self.io.read(self.bpm_y_pv))
+            bpm_x, bpm_y = self._read_bpm()
+            xs.append(bpm_x)
+            ys.append(bpm_y)
         return xs, ys
+
+    def _read_bpm(self) -> tuple[float, float]:
+        workflow = self.app_context.solenoid_centering_workflow
+        scale = (
+            workflow.bpm_position_scale_to_mm.get(self.app_context.control_backend.name, 1.0)
+            if workflow is not None
+            else 1.0
+        )
+        return self.io.read(self.bpm_x_pv) * scale, self.io.read(self.bpm_y_pv) * scale
 
     def _restore_outcome(
         self,

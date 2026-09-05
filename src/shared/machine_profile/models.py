@@ -370,6 +370,7 @@ class SolenoidCenteringWorkflowConfig:
     presets: tuple[SolenoidCenteringPreset, ...]
     presets_by_id: Mapping[str, SolenoidCenteringPreset]
     default_preset: str
+    bpm_position_scale_to_mm: Mapping[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -908,6 +909,23 @@ def _validate_solenoid_centering_workflow(
         workflow.get("sampling", {}),
         "workflows.solenoid_centering.sampling",
     )
+    bpm_scale_by_backend = _expect_mapping(
+        workflow.get("bpm_position_scale_to_mm", {}),
+        "workflows.solenoid_centering.bpm_position_scale_to_mm",
+    )
+    for backend_name, raw_scale in bpm_scale_by_backend.items():
+        try:
+            scale = float(raw_scale)
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(
+                "workflows.solenoid_centering.bpm_position_scale_to_mm."
+                f"{backend_name} must be numeric."
+            ) from exc
+        if not math.isfinite(scale) or scale <= 0:
+            raise MachineProfileError(
+                "workflows.solenoid_centering.bpm_position_scale_to_mm."
+                f"{backend_name} must be finite and positive."
+            )
     for index, raw_preset in enumerate(presets):
         location = f"workflows.solenoid_centering.presets[{index}]"
         preset = _expect_mapping(raw_preset, location)

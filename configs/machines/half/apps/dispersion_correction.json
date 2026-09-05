@@ -18,7 +18,7 @@
     "name": "KLY01",
     "actuator": "modulator_voltage",
     "actuator_unit": "V",
-    "delta": 4.0,
+    "delta": 0.005,
     "readback_tolerance": 15.0,
     "element": {"real": "KLY01"},
     "set_channel": "voltage_set",

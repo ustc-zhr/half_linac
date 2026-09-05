@@ -346,6 +346,13 @@ def load_solenoid_centering_workflow(profile: MachineProfile) -> SolenoidCenteri
             workflow.get("default_preset") or _infer_solenoid_centering_default_preset(presets),
             "workflows.solenoid_centering.default_preset",
         ),
+        bpm_position_scale_to_mm={
+            str(backend): float(scale)
+            for backend, scale in _expect_mapping(
+                workflow.get("bpm_position_scale_to_mm", {}),
+                "workflows.solenoid_centering.bpm_position_scale_to_mm",
+            ).items()
+        },
     )
 
 

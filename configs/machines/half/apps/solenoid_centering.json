@@ -1,5 +1,6 @@
 {
   "control_backends": ["real"],
+  "bpm_position_scale_to_mm": {"real": 0.001},
   "sampling": {"samples_per_point": 3, "settle_time_s": 2, "sample_interval_s": 0.2},
   "max_iters": 2,
   "readback_verification": {
