@@ -9,6 +9,7 @@ from half_linac.src.apps.dispersion_correction.calibration import (
     calibration_actuator_for_delta,
     calibration_actuator_per_delta,
     calibration_delta_for_actuator,
+    effective_delta_for_integer_actuator_step,
     is_direct_delta_actuator,
 )
 from half_linac.src.apps.dispersion_correction.machine.base import MachineInterface
@@ -42,6 +43,7 @@ class EpicsMachine(MachineInterface):
                 config.backend.options.get("energy_readback_tolerance", default_energy_tolerance),
             )
         )
+        self._energy_readback_confirmations = config.energy_knob.readback_confirmations
         quadrupole_tolerance = config.backend.options.get("quadrupole_readback_tolerance")
         self._quadrupole_tolerance_override = (
             None if quadrupole_tolerance is None else float(quadrupole_tolerance)
@@ -132,13 +134,20 @@ class EpicsMachine(MachineInterface):
         if not set_pv:
             raise ValueError("pv_map.energy_knob requires set for writes")
         readback_pv = item.get("readback") or item.get("phase_readback") or set_pv
-        actuator_target = self._energy_actuator_for_delta(float(value))
+        requested_delta = float(value)
+        if self.config.energy_knob.round_actuator_step_to_integer:
+            requested_delta = effective_delta_for_integer_actuator_step(
+                requested_delta,
+                self.config.energy_knob.calibration,
+            )
+        actuator_target = self._energy_actuator_for_delta(requested_delta)
         self._write_and_verify(
             str(set_pv),
             actuator_target,
             str(readback_pv),
             self._energy_tolerance,
             "energy knob",
+            confirmations=self._energy_readback_confirmations,
         )
 
     def get_knobs(self, knob_names: Sequence[str]) -> dict[str, float]:
@@ -442,15 +451,22 @@ class EpicsMachine(MachineInterface):
         readback_pv: str,
         tolerance: float,
         label: str,
+        *,
+        confirmations: int = 1,
     ) -> None:
         if not np.isfinite(target):
             raise ValueError(f"{label} target must be finite")
         self._caput(set_pv, target)
         deadline = time.monotonic() + max(0.0, self._readback_timeout)
+        consecutive_matches = 0
         while True:
             actual = self._caget_float(readback_pv)
             if np.isfinite(actual) and abs(actual - target) <= tolerance:
-                return
+                consecutive_matches += 1
+                if consecutive_matches >= confirmations:
+                    return
+            else:
+                consecutive_matches = 0
             if time.monotonic() >= deadline:
                 raise RuntimeError(
                     f"{label} readback mismatch: target={target:g}, readback={actual:g}, tolerance={tolerance:g}"

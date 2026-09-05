@@ -42,6 +42,7 @@ from PyQt5.QtCore import Qt
 
 from half_linac.src.apps.dispersion_correction.calibration import (
     actuator_step_for_delta,
+    effective_delta_for_integer_actuator_step,
     is_direct_delta_actuator,
 )
 from half_linac.src.apps.dispersion_correction.config import (
@@ -6245,11 +6246,19 @@ class MainWindow(QMainWindow):
         if is_direct_delta_actuator(self.config.energy_knob.actuator):
             return {
                 "calibrated": True,
+                "effective_delta": delta,
                 "actuator_step": delta,
                 "plus_offset": delta,
                 "minus_offset": -delta,
             }
-        return actuator_step_for_delta(delta, self.config.energy_knob.calibration)
+        if self.config.energy_knob.round_actuator_step_to_integer:
+            delta = effective_delta_for_integer_actuator_step(
+                delta,
+                self.config.energy_knob.calibration,
+            )
+        plan = actuator_step_for_delta(delta, self.config.energy_knob.calibration)
+        plan["effective_delta"] = delta
+        return plan
 
     def _energy_step_compact(self) -> str:
         delta = (
@@ -6262,6 +6271,7 @@ class MainWindow(QMainWindow):
         if self.config.backend.type.lower() == "offline":
             return f"SIM ±{delta:g} Δp/p"
         plan = self._energy_step_plan()
+        delta = float(plan.get("effective_delta", delta))
         if not plan.get("calibrated"):
             return f"±{delta:g} Δp/p"
         plus = float(plan["plus_offset"])
@@ -6288,6 +6298,7 @@ class MainWindow(QMainWindow):
             )
             return
         plan = self._energy_step_plan()
+        effective_delta = float(plan.get("effective_delta", delta))
         lines = [
             f"{self.config.energy_knob.name} · {self.config.energy_knob.actuator}",
         ]
@@ -6296,8 +6307,8 @@ class MainWindow(QMainWindow):
             minus = float(plan["minus_offset"])
             unit = self.config.energy_knob.actuator_unit
             lines.append(
-                f"+{delta:g} Δp/p → {plus:+g} {unit}; "
-                f"-{delta:g} Δp/p → {minus:+g} {unit}"
+                f"+{effective_delta:g} Δp/p → {plus:+g} {unit}; "
+                f"-{effective_delta:g} Δp/p → {minus:+g} {unit}"
             )
         else:
             lines.append(

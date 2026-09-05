@@ -308,6 +308,27 @@ def actuator_step_for_delta(delta_momentum: float, calibration: dict[str, Any]) 
     }
 
 
+def effective_delta_for_integer_actuator_step(
+    delta_momentum: float,
+    calibration: dict[str, Any],
+) -> float:
+    """Adjust a linear-calibration delta so its actuator offset is integral."""
+    delta = float(delta_momentum)
+    kind = str(calibration.get("kind", "linear")).strip().lower()
+    if kind not in {"linear", "linear_relative"}:
+        return delta
+    actuator_per_delta = calibration_actuator_per_delta(calibration)
+    if actuator_per_delta is None:
+        return delta
+    if (
+        not np.isfinite(delta)
+        or not np.isfinite(actuator_per_delta)
+        or actuator_per_delta == 0
+    ):
+        raise ValueError("delta and calibration actuator scale must be finite and non-zero")
+    return float(round(delta * actuator_per_delta) / actuator_per_delta)
+
+
 def _calibration_coefficients(calibration: dict[str, Any]) -> tuple[float, ...]:
     raw = calibration.get("coefficients")
     if raw is None:

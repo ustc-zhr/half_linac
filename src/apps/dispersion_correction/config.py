@@ -150,6 +150,10 @@ def parse_config(raw: dict[str, Any]) -> RunConfig:
                 if energy_raw.get("readback_tolerance") is None
                 else float(energy_raw["readback_tolerance"])
             ),
+            readback_confirmations=int(energy_raw.get("readback_confirmations", 1)),
+            round_actuator_step_to_integer=bool(
+                energy_raw.get("round_actuator_step_to_integer", False)
+            ),
         ),
         target_bpms=tuple(str(name) for name in target_bpms),
         monitor_bpms=tuple(str(name) for name in monitor_bpms),
@@ -201,6 +205,10 @@ def validate_config(config: RunConfig) -> None:
         )
     ):
         raise ValueError("energy_knob.readback_tolerance must be finite and non-negative")
+    if config.energy_knob.readback_confirmations <= 0:
+        raise ValueError("energy_knob.readback_confirmations must be positive")
+    if not isinstance(config.energy_knob.round_actuator_step_to_integer, bool):
+        raise ValueError("energy_knob.round_actuator_step_to_integer must be boolean")
     if len(set(config.target_bpms)) != len(config.target_bpms):
         raise ValueError("target_bpms must not contain duplicates")
     if len(set(config.monitor_bpms)) != len(config.monitor_bpms):

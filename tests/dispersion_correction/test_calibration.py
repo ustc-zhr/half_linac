@@ -3,6 +3,7 @@ import pytest
 from half_linac.src.apps.dispersion_correction.calibration import (
     actuator_step_for_delta,
     calibration_actuator_for_delta,
+    effective_delta_for_integer_actuator_step,
     load_energy_knob_calibration_csv,
     load_phase_calibration_csv,
 )
@@ -32,6 +33,15 @@ def test_actuator_step_for_delta_uses_phase_per_delta() -> None:
     assert plan["actuator_step"] == 0.25
     assert plan["plus_offset"] == 0.25
     assert plan["minus_offset"] == -0.25
+
+
+def test_delta_can_be_adjusted_to_an_integer_actuator_step() -> None:
+    calibration = {"kind": "linear", "actuator_per_delta": 2500.0}
+
+    adjusted = effective_delta_for_integer_actuator_step(0.005, calibration)
+
+    assert adjusted == pytest.approx(13.0 / 2500.0)
+    assert adjusted * calibration["actuator_per_delta"] == pytest.approx(13.0)
 
 
 def test_generic_energy_knob_calibration_csv_fit(tmp_path) -> None:

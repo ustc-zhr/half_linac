@@ -6,6 +6,9 @@ import time
 import numpy as np
 
 from half_linac.src.apps.dispersion_correction.knobs import SymmetricKnobSet
+from half_linac.src.apps.dispersion_correction.calibration import (
+    effective_delta_for_integer_actuator_step,
+)
 from half_linac.src.apps.dispersion_correction.machine.base import MachineInterface
 from half_linac.src.apps.dispersion_correction.machine.epics import EpicsMachine
 from half_linac.src.apps.dispersion_correction.machine.offline import OfflineMachine
@@ -100,6 +103,11 @@ class AchromatWorkflow:
         delta = momentum_delta(
             self.config.energy_knob.delta,
         )
+        if self.config.energy_knob.round_actuator_step_to_integer:
+            delta = effective_delta_for_integer_actuator_step(
+                delta,
+                self.config.energy_knob.calibration,
+            )
         energy0 = self.machine.get_energy_setpoint_delta()
         try:
             self._check_cancelled()

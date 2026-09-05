@@ -5,6 +5,7 @@ from typing import Any
 from half_linac.src.apps.dispersion_correction.models import RunConfig
 from half_linac.src.apps.dispersion_correction.calibration import (
     actuator_step_for_delta,
+    effective_delta_for_integer_actuator_step,
     is_direct_delta_actuator,
 )
 from half_linac.src.apps.dispersion_correction.physics import momentum_delta
@@ -14,6 +15,11 @@ def build_operation_plan(config: RunConfig) -> dict[str, Any]:
     delta = momentum_delta(
         config.energy_knob.delta,
     )
+    if config.energy_knob.round_actuator_step_to_integer:
+        delta = effective_delta_for_integer_actuator_step(
+            delta,
+            config.energy_knob.calibration,
+        )
     pv_map = config.backend.options.get("pv_map", {})
     energy_map = pv_map.get("energy_knob", {}) if isinstance(pv_map, dict) else {}
     bpm_map = pv_map.get("bpms", {}) if isinstance(pv_map, dict) else {}

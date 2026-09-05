@@ -94,6 +94,19 @@ class EnergyReadbackFakeEpics(FakeEpics):
         return result
 
 
+class SequencedEnergyReadbackFakeEpics(EnergyReadbackFakeEpics):
+    def __init__(self, values, set_pv: str, readback_pv: str, readbacks):
+        super().__init__(values, set_pv, readback_pv)
+        self.readbacks = list(readbacks)
+        self.readback_calls = 0
+
+    def caget(self, pv, *args, **kwargs):
+        if pv == self.readback_pv and self.readbacks:
+            self.readback_calls += 1
+            return self.readbacks.pop(0)
+        return super().caget(pv, *args, **kwargs)
+
+
 def write_config():
     config = load_config("tests/dispersion_correction/fixtures/irfel_achromat.json")
     return replace(
@@ -135,6 +148,26 @@ def test_phase_energy_delta_is_calibrated_and_verified() -> None:
 
     assert baseline_delta == pytest.approx(12.3 / 2500.0)
     assert epics.values[ENERGY_PV] == pytest.approx(12.55)
+
+
+def test_energy_readback_requires_configured_consecutive_confirmations() -> None:
+    config = write_config()
+    config = replace(
+        config,
+        energy_knob=replace(config.energy_knob, readback_confirmations=3),
+    )
+    target = 12.55
+    epics = SequencedEnergyReadbackFakeEpics(
+        initial_values(),
+        ENERGY_PV,
+        ENERGY_PV,
+        [target, 12.3, target, target, target],
+    )
+    machine = EpicsMachine(config, epics_client=epics)
+
+    machine.set_energy_delta(target / 2500.0)
+
+    assert epics.readback_calls == 5
 
 
 def test_modulator_voltage_uses_same_normalized_energy_delta_interface() -> None:

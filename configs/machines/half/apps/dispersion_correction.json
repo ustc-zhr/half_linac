@@ -20,6 +20,8 @@
     "actuator_unit": "V",
     "delta": 0.005,
     "readback_tolerance": 0.12,
+    "readback_confirmations": 2,
+    "round_actuator_step_to_integer": true,
     "element": {"real": "KLY01"},
     "set_channel": "voltage_set",
     "readback_channel": "voltage_readback"
@@ -120,6 +122,6 @@
     }
   ],
   "default_section": "bl01",
-  "readback_timeout": {"vm": 2, "real": 50},
+  "readback_timeout": {"vm": 2, "real": 150},
   "write_control": {"vm": "allowed", "real": "allowed"}
 }
