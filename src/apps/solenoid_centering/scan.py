@@ -480,6 +480,7 @@ def coordinate_descent(
     *,
     hcorr_limits: tuple[float, float] | None = None,
     vcorr_limits: tuple[float, float] | None = None,
+    round_finished: Callable[[AxisScanResult, AxisScanResult], None] | None = None,
 ) -> tuple[float, float, tuple[AxisScanResult, ...], ScanTermination]:
     if max_iters <= 0:
         raise ValueError("max_iters must be positive.")
@@ -551,6 +552,8 @@ def coordinate_descent(
                 best=v_best,
             )
         )
+        if round_finished is not None:
+            round_finished(axis_scans[-2], axis_scans[-1])
 
         h_boundary_limited = _at_limit(hcorr, hcorr_limits) or _at_clipped_edge(
             hcorr,
@@ -636,6 +639,7 @@ class SolenoidCenteringScanner:
         io: ScalarIO | None = None,
         progress: Callable[[str, int, int], None] | None = None,
         candidate_finished: Callable[[CandidateResult], None] | None = None,
+        round_finished: Callable[[AxisScanResult, AxisScanResult], None] | None = None,
         scoring_mode: str = SCORING_MODE_SLOPE,
         stop_requested: Callable[[], bool] | None = None,
     ):
@@ -644,6 +648,7 @@ class SolenoidCenteringScanner:
         self.io = io or EpicsScalarIO()
         self.progress = progress or (lambda _message, _completed, _total: None)
         self.candidate_finished = candidate_finished or (lambda _candidate: None)
+        self.round_finished = round_finished
         self.scoring_mode = normalize_scoring_mode(scoring_mode)
         self.stop_requested = stop_requested or (lambda: False)
         self.solenoid_target = self._resolve_solenoid_write_target()
@@ -742,6 +747,7 @@ class SolenoidCenteringScanner:
                 evaluator,
                 hcorr_limits=hcorr_limits,
                 vcorr_limits=vcorr_limits,
+                round_finished=self.round_finished,
             )
             best = min((scan.best for scan in axis_scans), key=lambda candidate: candidate.score.score)
             best_score = best.score.score

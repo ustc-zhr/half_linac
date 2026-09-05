@@ -88,6 +88,7 @@ class ScanFailureReport:
 class ScanWorker(QThread):
     progress_changed = pyqtSignal(str, int, int)
     candidate_finished = pyqtSignal(object)
+    round_finished = pyqtSignal(object, object)
     finished_ok = pyqtSignal(object)
     failed = pyqtSignal(object)
 
@@ -108,6 +109,7 @@ class ScanWorker(QThread):
                 self.preset,
                 progress=self.progress_changed.emit,
                 candidate_finished=self.candidate_finished.emit,
+                round_finished=self.round_finished.emit,
                 scoring_mode=self.scoring_mode,
                 stop_requested=lambda: self._stop_requested,
             )
@@ -334,6 +336,9 @@ class MainWindow(QMainWindow):
         result_title = QLabel("Scan Results", self.result_card)
         result_title.setObjectName("panelTitle")
         result_header.addWidget(result_title)
+        self.result_phase_label = QLabel("", self.result_card)
+        self.result_phase_label.setProperty("muted", True)
+        result_header.addWidget(self.result_phase_label)
         self.status_label = QLabel("Idle", self.result_card)
         self.status_label.setObjectName("resultHint")
         self.status_label.setProperty("muted", True)
@@ -354,9 +359,9 @@ class MainWindow(QMainWindow):
         result_layout.addLayout(result_header)
         self.result_table = QTableWidget(0, 7, self.result_card)
         self.result_table.setHorizontalHeaderLabels(
-            ["Axis", "Iteration", "Corrector", "Score", "Length", "Slope X", "Slope Y"]
+            ["Iteration", "Axis", "Corrector", "Score", "Length", "Slope X", "Slope Y"]
         )
-        self.result_table.setAlternatingRowColors(True)
+        self.result_table.setAlternatingRowColors(False)
         self.result_table.setMinimumHeight(135)
         self.result_table.verticalHeader().setVisible(False)
         self.result_table.horizontalHeader().setStretchLastSection(True)
@@ -870,6 +875,7 @@ class MainWindow(QMainWindow):
         self._set_result_action(None)
         self.status_strip.set_value("LAST RESULT", "--")
         self.result_table.setRowCount(0)
+        self.result_phase_label.setText("INTERMEDIATE · NOT APPLICABLE")
         self.live_plot_failed = False
         self.plot.clear()
         self.plot.start_live()
@@ -880,6 +886,7 @@ class MainWindow(QMainWindow):
         self.worker = ScanWorker(self.context, preset, self._scoring_mode(), self)
         self.worker.progress_changed.connect(self._on_progress)
         self.worker.candidate_finished.connect(self._on_candidate_finished)
+        self.worker.round_finished.connect(self._on_round_finished)
         self.worker.finished_ok.connect(self._on_scan_finished)
         self.worker.failed.connect(self._on_scan_failed)
         self.worker.finished.connect(self._on_worker_done)
@@ -984,6 +991,12 @@ class MainWindow(QMainWindow):
             self._append_log(f"Live plot update failed; scan continues without plotting: {exc}")
             self.status_label.setText("Live plot unavailable; scan continues. See Log.")
 
+    def _on_round_finished(self, h_scan, v_scan):
+        try:
+            self._append_result_round(h_scan, v_scan)
+        except Exception as exc:
+            self._append_log(f"Intermediate result update failed; scan continues: {exc}")
+
     def _on_preflight_finished(self, report):
         report_text = report.as_text()
         self._append_log(report_text)
@@ -1054,6 +1067,7 @@ class MainWindow(QMainWindow):
         self._set_workflow_status("RESULT READY", "success")
         self.status_strip.set_value("READINESS", "RESULT READY", "success")
         self.status_strip.set_value("READBACK VERIFIED", "VERIFIED", "success")
+        self.result_phase_label.setText("FINAL")
         termination_reason = (
             result.termination.reason
             if result.termination is not None
@@ -1111,6 +1125,7 @@ class MainWindow(QMainWindow):
                 restore_status="unknown",
             )
         self.preflight_ready = False
+        self.result_phase_label.setText("INCOMPLETE · NOT APPLICABLE")
         labels = {
             "stopped": ("STOPPED / RESTORED", "warning", "STOPPED"),
             "failed": ("SCAN FAILED / RESTORED", "danger", "SCAN FAILED"),
@@ -1189,19 +1204,39 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(False)
 
     def _populate_result_table(self, result):
-        rows = [scan.best for scan in result.axis_scans]
-        self.result_table.setRowCount(len(rows))
-        for row, candidate in enumerate(rows):
+        self.result_table.clearSpans()
+        self.result_table.setRowCount(0)
+        pending_h = None
+        for axis_scan in result.axis_scans:
+            if axis_scan.axis == "h":
+                pending_h = axis_scan
+            elif axis_scan.axis == "v" and pending_h is not None:
+                self._append_result_round(pending_h, axis_scan)
+                pending_h = None
+        self.result_table.resizeColumnsToContents()
+
+    def _append_result_round(self, h_scan, v_scan):
+        if h_scan.round_index != v_scan.round_index:
+            raise ValueError("H/V result pair must belong to the same iteration.")
+        first_row = self.result_table.rowCount()
+        self.result_table.insertRow(first_row)
+        self.result_table.insertRow(first_row + 1)
+        self.result_table.setSpan(first_row, 0, 2, 1)
+        self.result_table.setItem(
+            first_row,
+            0,
+            QTableWidgetItem(str(h_scan.round_index + 1)),
+        )
+        for row, candidate in enumerate((h_scan.best, v_scan.best), start=first_row):
             values = [
                 candidate.axis.upper(),
-                str(candidate.round_index + 1),
                 f"{candidate.corrector_value:.8g}",
                 f"{candidate.score.score:.6g}",
                 f"{candidate.score.trajectory_length:.6g}",
                 f"{candidate.score.slope_x:.6g}",
                 f"{candidate.score.slope_y:.6g}",
             ]
-            for col, value in enumerate(values):
+            for col, value in enumerate(values, start=1):
                 self.result_table.setItem(row, col, QTableWidgetItem(value))
         self.result_table.resizeColumnsToContents()
 

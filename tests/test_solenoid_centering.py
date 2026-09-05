@@ -263,6 +263,28 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertEqual(len(axis_scans), 4)
         self.assertEqual(termination.code, "max_iters_reached")
 
+    def test_coordinate_descent_reports_each_completed_h_v_round(self):
+        scan_range = SolenoidCenteringScanRange(relative_from=-1.0, relative_to=1.0, steps=3)
+        completed_rounds = []
+
+        def evaluator(axis, round_index, hcorr, vcorr):
+            candidate = _candidate(hcorr**2 + vcorr**2, axis=axis, hcorr=hcorr, vcorr=vcorr)
+            return replace(candidate, round_index=round_index)
+
+        scan.coordinate_descent(
+            0.0,
+            0.0,
+            scan_range,
+            2,
+            evaluator,
+            round_finished=lambda h_scan, v_scan: completed_rounds.append((h_scan, v_scan)),
+        )
+
+        self.assertEqual(len(completed_rounds), 1)
+        h_scan, v_scan = completed_rounds[0]
+        self.assertEqual((h_scan.axis, v_scan.axis), ("h", "v"))
+        self.assertEqual((h_scan.round_index, v_scan.round_index), (0, 0))
+
     def test_coordinate_descent_stops_with_boundary_reason(self):
         scan_range = SolenoidCenteringScanRange(relative_from=-1.0, relative_to=1.0, steps=3)
 

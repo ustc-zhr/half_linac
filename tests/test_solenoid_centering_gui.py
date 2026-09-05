@@ -19,7 +19,13 @@ try:
 
     from half_linac.src.apps.solenoid_centering.main import MainWindow, ScanFailureReport
     from half_linac.src.apps.solenoid_centering.mplwidget import MplWidget
-    from half_linac.src.apps.solenoid_centering.scan import CenteringResult, RestoreOutcome
+    from half_linac.src.apps.solenoid_centering.scan import (
+        AxisScanResult,
+        CandidateResult,
+        CenteringResult,
+        ResponseScore,
+        RestoreOutcome,
+    )
 except ImportError:
     QApplication = None
 
@@ -83,6 +89,37 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             },
             restore=RestoreOutcome(status="verified"),
         )
+
+    @staticmethod
+    def _axis_scan(axis: str, iteration: int, corrector: float) -> AxisScanResult:
+        score = ResponseScore(
+            score=abs(corrector), slope_x=corrector, slope_y=-corrector,
+            offset_x=0.0, offset_y=0.0, scale_x=1.0, scale_y=1.0,
+            rms_x=0.0, rms_y=0.0, residual_rms_x=0.0, residual_rms_y=0.0,
+            mean_x=0.0, mean_y=0.0, std_x=0.0, std_y=0.0,
+            trajectory_length=abs(corrector) * 2,
+        )
+        candidate = CandidateResult(
+            axis=axis, round_index=iteration,
+            hcorr=corrector if axis == "h" else 0.0,
+            vcorr=corrector if axis == "v" else 0.0,
+            corrector_value=corrector,
+            solenoid_values=(-1.0, 1.0), bpm_x_means=(0.0, 0.0),
+            bpm_y_means=(0.0, 0.0), score=score,
+        )
+        return AxisScanResult(axis=axis, round_index=iteration, candidates=(candidate,), best=candidate)
+
+    def test_completed_round_is_displayed_as_paired_h_v_rows(self):
+        h_scan = self._axis_scan("h", 0, 0.2)
+        v_scan = self._axis_scan("v", 0, -0.3)
+
+        self.window._on_round_finished(h_scan, v_scan)
+
+        self.assertEqual(self.window.result_table.rowCount(), 2)
+        self.assertEqual(self.window.result_table.rowSpan(0, 0), 2)
+        self.assertEqual(self.window.result_table.item(0, 0).text(), "1")
+        self.assertEqual(self.window.result_table.item(0, 1).text(), "H")
+        self.assertEqual(self.window.result_table.item(1, 1).text(), "V")
 
     def test_non_actionable_result_disables_apply(self):
         self.window._on_scan_finished(self._result(actionable=False))
