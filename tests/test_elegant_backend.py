@@ -37,6 +37,8 @@ from half_linac.src.shared.machine_profile.model_backend import (
     ElegantModelBackend,
     _exclusive_model_workspace,
     _load_matrix,
+    _select_twiss_profile_rows,
+    _transport_twiss,
 )
 from half_linac.src.shared.machine_profile.models import ModelBackendConfig
 from half_linac.src.shared.runtime_state import read_runtime_state
@@ -485,6 +487,84 @@ class ElegantBackendTests(unittest.TestCase):
             emit_lte_text = emit_lte.read_text(encoding="utf-8")
             self.assertIn('QT02: QUAD,L="0.15",K1="9.5"', emit_lte_text)
             self.assertIn('C1: HKICK,L="0",KICK="0.004"', emit_lte_text)
+
+    def test_twiss_transport_normalizes_accelerating_coordinate_map(self):
+        result = _transport_twiss(
+            np.array([[0.5, 0.0], [0.0, 1.0]]),
+            {"beta0": 4.0, "alpha0": 1.0, "gamma0": 0.5},
+        )
+
+        self.assertAlmostEqual(result["beta"] * result["gamma"] - result["alpha"] ** 2, 1.0)
+        self.assertAlmostEqual(result["beta"], 2.0)
+        self.assertAlmostEqual(result["alpha"], 1.0)
+        self.assertAlmostEqual(result["gamma"], 1.0)
+
+    def test_full_twiss_profile_shoots_once_from_line_start(self):
+        backend = build_model_backend(load_app_context("emit_measure"))
+        entrance_matrix = np.eye(6)
+        entrance_matrix[0, 0] = 0.5
+        expected_profile = SimpleNamespace(matrix=np.eye(6), rows=({"element_name": "END"},))
+
+        with patch.object(backend, "get_line_endpoints", return_value=("START", "END")), patch.object(
+            backend, "get_map", return_value=entrance_matrix
+        ) as get_map, patch.object(
+            backend, "get_twiss_profile", return_value=expected_profile
+        ) as get_profile:
+            result = backend.get_full_twiss_profile(
+                "Q2",
+                {"beta0": 4.0, "alpha0": 1.0, "gamma0": 0.5},
+            )
+
+        self.assertIs(result, expected_profile)
+        self.assertEqual(get_map.call_args.kwargs["seq"], "ent2ent")
+        upstream_twiss = get_profile.call_args.args[2]
+        self.assertAlmostEqual(upstream_twiss["beta0"], 8.0)
+        self.assertAlmostEqual(upstream_twiss["alpha0"], 1.0)
+        self.assertAlmostEqual(upstream_twiss["gamma0"], 0.25)
+
+    def test_design_twiss_profile_uses_configured_lattice_and_entrance_twiss(self):
+        backend = build_model_backend(load_app_context("emit_measure"))
+        selected_rows = ({"element_name": "START"}, {"element_name": "END"})
+
+        with patch.object(backend, "get_line_endpoints", return_value=("START", "END")), patch.object(
+            backend, "_run_optics_profile", return_value=(np.eye(6), ({}, {}))
+        ) as run_profile, patch(
+            "half_linac.src.shared.machine_profile.model_backend._select_twiss_profile_rows",
+            return_value=selected_rows,
+        ):
+            result = backend.get_design_twiss_profile(plane="yplane")
+
+        self.assertEqual(result.rows, selected_rows)
+        self.assertEqual(run_profile.call_args.args, ("START", "END"))
+        self.assertEqual(run_profile.call_args.kwargs["seq"], "ent2exit")
+        self.assertEqual(run_profile.call_args.kwargs["plane"], "yplane")
+        self.assertTrue(run_profile.call_args.kwargs["twiss_only"])
+        self.assertNotIn("initial_twiss", run_profile.call_args.kwargs)
+        self.assertNotIn("lattice_overrides", run_profile.call_args.kwargs)
+
+    def test_complete_line_twiss_rows_are_continuous_and_normalized(self):
+        raw_rows = (
+            {"element_name": "_BEG_", "element_type": "MARK", "s_m": 0.0,
+             "beta_x_m": 4.0, "alpha_x": 1.0},
+            {"element_name": "ACC1", "element_type": "RFCA", "s_m": 1.0,
+             "beta_x_m": 2.5, "alpha_x": 0.25},
+            {"element_name": "END", "element_type": "MARK", "s_m": 2.0,
+             "beta_x_m": 3.0, "alpha_x": -0.5},
+        )
+
+        rows = _select_twiss_profile_rows(
+            raw_rows,
+            plane="xplane",
+            initial_element="START",
+            final_element="END",
+        )
+
+        self.assertEqual([row["element_name"] for row in rows], ["START", "ACC1", "END"])
+        distances = [row["distance_m"] for row in rows]
+        self.assertEqual(distances, sorted(distances))
+        self.assertEqual(distances[0], 0.0)
+        for row in rows:
+            self.assertAlmostEqual(row["beta"] * row["gamma"] - row["alpha"] ** 2, 1.0)
 
     def test_model_backend_twiss_profile_orders_forward_and_backward_paths(self):
         backend = build_model_backend(

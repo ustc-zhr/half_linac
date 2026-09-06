@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -120,6 +121,7 @@ class BeamModelBackend(Protocol):
         element_overrides: Mapping[str, float] | None = None,
         lattice_overrides: LatticeOverrides | None = None,
         seq: str = "exit2exit",
+        twiss_only: bool = False,
     ) -> np.ndarray: ...
 
     def get_matrix_element(
@@ -154,6 +156,16 @@ class BeamModelBackend(Protocol):
         inverse: bool = False,
         lattice_overrides: LatticeOverrides | None = None,
     ) -> TwissProfileResult: ...
+
+    def get_full_twiss_profile(
+        self,
+        source_element: str,
+        twiss0: Mapping[str, float],
+        plane: str = "xplane",
+        lattice_overrides: LatticeOverrides | None = None,
+    ) -> TwissProfileResult: ...
+
+    def get_design_twiss_profile(self, plane: str = "xplane") -> TwissProfileResult: ...
 
     def get_line_elements(
         self,
@@ -318,6 +330,7 @@ class ElegantModelBackend:
                     quad1,
                     lattice_overrides=lattice_overrides,
                     seq="ent2exit",
+                    twiss_only=True,
                 )
             )
         else:
@@ -331,6 +344,7 @@ class ElegantModelBackend:
                 quad2,
                 lattice_overrides=lattice_overrides,
                 seq="ent2exit",
+                twiss_only=True,
             )
 
         if plane == "xplane":
@@ -371,6 +385,7 @@ class ElegantModelBackend:
                 elem1,
                 lattice_overrides=lattice_overrides,
                 seq="ent2exit",
+                twiss_only=True,
             )
             matrix = np.linalg.inv(forward_matrix)
             transported = _transport_twiss(_plane_matrix(matrix, plane), twiss0)
@@ -386,6 +401,7 @@ class ElegantModelBackend:
                 seq="ent2exit",
                 initial_twiss=upstream_twiss,
                 plane=plane,
+                twiss_only=True,
             )
             return TwissProfileResult(
                 matrix=matrix,
@@ -410,6 +426,7 @@ class ElegantModelBackend:
             seq="ent2exit",
             initial_twiss=twiss0,
             plane=plane,
+            twiss_only=True,
         )
         return TwissProfileResult(
             matrix=matrix,
@@ -418,6 +435,59 @@ class ElegantModelBackend:
                 plane=plane,
                 initial_element=elem1,
                 final_element=elem2,
+            ),
+        )
+
+    def get_full_twiss_profile(
+        self,
+        source_element: str,
+        twiss0: Mapping[str, float],
+        plane: str = "xplane",
+        lattice_overrides: LatticeOverrides | None = None,
+    ) -> TwissProfileResult:
+        line_start, line_end = self.get_line_endpoints()
+        upstream_twiss = _normalize_initial_twiss(twiss0)
+        if source_element != line_start:
+            entrance_matrix = self.get_map(
+                line_start,
+                source_element,
+                lattice_overrides=lattice_overrides,
+                seq="ent2ent",
+                twiss_only=True,
+            )
+            transported = _transport_twiss(
+                np.linalg.inv(_plane_matrix(entrance_matrix, plane)),
+                upstream_twiss,
+            )
+            upstream_twiss = {
+                "beta0": transported["beta"],
+                "alpha0": transported["alpha"],
+                "gamma0": transported["gamma"],
+            }
+        return self.get_twiss_profile(
+            line_start,
+            line_end,
+            upstream_twiss,
+            plane=plane,
+            lattice_overrides=lattice_overrides,
+        )
+
+    def get_design_twiss_profile(self, plane: str = "xplane") -> TwissProfileResult:
+        line_start, line_end = self.get_line_endpoints()
+        matrix, rows = self._run_optics_profile(
+            line_start,
+            line_end,
+            seq="ent2exit",
+            plane=plane,
+            twiss_only=True,
+        )
+        return TwissProfileResult(
+            matrix=matrix,
+            rows=_select_twiss_profile_rows(
+                rows,
+                plane=plane,
+                initial_element=line_start,
+                final_element=line_end,
             ),
         )
 
@@ -431,6 +501,7 @@ class ElegantModelBackend:
         seq: str = "exit2exit",
         initial_twiss: Mapping[str, float] | None = None,
         twiss_plane: str = "xplane",
+        twiss_only: bool = False,
     ) -> np.ndarray:
         with _exclusive_model_workspace(self.working_dir):
             return self._get_map_unlocked(
@@ -442,6 +513,7 @@ class ElegantModelBackend:
                 seq=seq,
                 initial_twiss=initial_twiss,
                 twiss_plane=twiss_plane,
+                twiss_only=twiss_only,
             )
 
     def _get_map_unlocked(
@@ -487,6 +559,8 @@ class ElegantModelBackend:
             scanline = usedline[id1 + 1 : id2 + 1]
         elif seq == "ent2exit":
             scanline = usedline[id1 : id2 + 1]
+        elif seq == "ent2ent":
+            scanline = usedline[id1:id2]
         else:
             raise ValueError(f"Unsupported transfer sequence: {seq}")
         if not scanline:
@@ -909,16 +983,23 @@ def _transport_twiss(
     beta0 = float(twiss0["beta0"])
     alpha0 = float(twiss0["alpha0"])
     gamma0 = float(twiss0["gamma0"])
-    return {
-        "beta": float(m11**2 * beta0 - 2 * m11 * m12 * alpha0 + m12**2 * gamma0),
-        "alpha": float(
+    beta = float(m11**2 * beta0 - 2 * m11 * m12 * alpha0 + m12**2 * gamma0)
+    alpha = float(
             -m11 * m21 * beta0
             + (m11 * m22 + m12 * m21) * alpha0
             - m12 * m22 * gamma0
-        ),
-        "gamma": float(
+        )
+    gamma = float(
             m21**2 * beta0 - 2 * m21 * m22 * alpha0 + m22**2 * gamma0
-        ),
+        )
+    determinant = beta * gamma - alpha**2
+    if not np.isfinite(determinant) or determinant <= 0:
+        raise MachineProfileError("Twiss transport produced a non-positive beam matrix determinant.")
+    normalization = math.sqrt(determinant)
+    return {
+        "beta": beta / normalization,
+        "alpha": alpha / normalization,
+        "gamma": gamma / normalization,
     }
 
 
