@@ -25,7 +25,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QColor, QDoubleValidator
+from PyQt5.QtGui import QColor, QDoubleValidator, QFont
 from PyQt5.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -117,12 +117,12 @@ QMainWindow, QDialog, QWidget#centralRoot {{
   font-size: 12px;
 }}
 QLabel {{ background: transparent; color: {palette['text']}; }}
-QLabel#windowTitle {{ color: {palette['text']}; font-size: 20px; font-weight: 700; }}
+QLabel#windowTitle {{ color: {palette['text']}; font-size: 18px; font-weight: 700; }}
 QLabel[role="field"] {{ color: {palette['muted']}; font-size: 11px; font-weight: 600; }}
 QLabel[role="meta"] {{ color: {palette['muted']}; font-size: 11px; font-weight: 600; }}
 QLabel[role="status"] {{
   background: {palette['alternate']}; color: {palette['muted']};
-  border: 1px solid {palette['border']}; border-radius: 7px; padding: 5px 9px;
+  border: 1px solid {palette['border']}; border-radius: 6px; padding: 4px 8px;
 }}
 QLineEdit, QComboBox {{
   background: {palette['input']}; color: {palette['text']};
@@ -152,7 +152,7 @@ QHeaderView::section {{
 QPushButton, QToolButton {{
   background: {palette['button']}; color: {palette['text']};
   border: 1px solid {palette['border']}; border-radius: 8px;
-  min-height: 28px; padding: 2px 11px; font-size: 11px; font-weight: 700;
+  min-height: 26px; padding: 2px 9px; font-size: 11px; font-weight: 700;
 }}
 QPushButton:hover, QToolButton:hover {{ background: {palette['button_hover']}; }}
 QPushButton:pressed, QToolButton:pressed {{ background: {palette['button_pressed']}; }}
@@ -601,8 +601,8 @@ class MachineSetpointsWindow(QMainWindow):
         central = QWidget(self)
         central.setObjectName("centralRoot")
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(7)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(5)
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 3)
         title = QLabel("Machine Setpoints", central)
@@ -630,7 +630,7 @@ class MachineSetpointsWindow(QMainWindow):
             label.setProperty("role", "meta")
         context_layout = QHBoxLayout()
         context_layout.setContentsMargins(0, 0, 0, 0)
-        context_layout.setSpacing(12)
+        context_layout.setSpacing(8)
         context_layout.addWidget(self.source_label, 1)
         context_layout.addWidget(self.summary_label, 0, Qt.AlignRight)
         layout.addLayout(context_layout)
@@ -640,8 +640,13 @@ class MachineSetpointsWindow(QMainWindow):
         self.search_input.setPlaceholderText("Filter elements...")
         self.status_filter = QComboBox(central)
         self.status_filter.addItems(("All", "Selected", "Changed", "Ready", "Blocked"))
-        self.select_visible_button = QPushButton("Select Visible", central)
-        self.clear_visible_button = QPushButton("Clear Visible", central)
+        self.select_button = QToolButton(central)
+        self.select_button.setText("Select")
+        self.select_button.setPopupMode(QToolButton.InstantPopup)
+        select_menu = QMenu(self.select_button)
+        self.select_visible_action = select_menu.addAction("Select Visible")
+        self.select_ready_action = select_menu.addAction("Select Ready")
+        self.select_button.setMenu(select_menu)
         filter_layout.addWidget(self.search_input, 1)
         filter_layout.addWidget(self.status_filter)
         layout.addLayout(filter_layout)
@@ -658,15 +663,10 @@ class MachineSetpointsWindow(QMainWindow):
             label.setFixedWidth(58)
         step_group_label.setFixedWidth(34)
         step_group_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.select_ready_button = QPushButton("Select Ready", central)
         self.clear_selection_button = QPushButton("Clear", central)
         self.load_design_button = QPushButton("Use Design", central)
         self.load_current_button = QPushButton("Use Current", central)
         self.clear_target_button = QPushButton("Clear", central)
-        self.absolute_target_button = QPushButton("Abs Target", central)
-        self.absolute_target_button.setToolTip(
-            "Replace staged Target values on selected rows with their absolute values."
-        )
         self.nudge_down_button = QPushButton(f"-{self.target_step:g}", central)
         self.nudge_up_button = QPushButton(f"+{self.target_step:g}", central)
         self.nudge_down_button.setToolTip("Decrease selected Target values by one step.")
@@ -681,26 +681,21 @@ class MachineSetpointsWindow(QMainWindow):
         self.clear_workspace_action = workspace_menu.addAction("Clear Workspace")
         self.workspace_button.setMenu(workspace_menu)
         for button in (
-            self.select_visible_button,
-            self.clear_visible_button,
-            self.select_ready_button,
+            self.select_button,
             self.clear_selection_button,
             self.load_design_button,
             self.load_current_button,
             self.clear_target_button,
-            self.absolute_target_button,
             self.workspace_button,
         ):
-            button.setFixedWidth(104)
+            button.setFixedWidth(92)
         self.nudge_down_button.setFixedWidth(54)
         self.nudge_up_button.setFixedWidth(54)
         self.selection_label = QLabel("0 selected", central)
         self.selection_label.setMinimumWidth(110)
         self.selection_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         selection_layout.addWidget(selection_group_label)
-        selection_layout.addWidget(self.select_visible_button)
-        selection_layout.addWidget(self.clear_visible_button)
-        selection_layout.addWidget(self.select_ready_button)
+        selection_layout.addWidget(self.select_button)
         selection_layout.addWidget(self.clear_selection_button)
         selection_layout.addStretch(1)
         selection_layout.addWidget(self.selection_label)
@@ -708,7 +703,6 @@ class MachineSetpointsWindow(QMainWindow):
         target_layout.addWidget(self.load_design_button)
         target_layout.addWidget(self.load_current_button)
         target_layout.addWidget(self.clear_target_button)
-        target_layout.addWidget(self.absolute_target_button)
         target_layout.addWidget(self.workspace_button)
         target_layout.addStretch(1)
         target_layout.addWidget(step_group_label)
@@ -716,9 +710,9 @@ class MachineSetpointsWindow(QMainWindow):
         target_layout.addWidget(self.nudge_up_button)
         layout.addLayout(selection_layout)
         layout.addLayout(target_layout)
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels(
-            ("Select", "Element", "Model line", "Design K1", f"Current {self.control_backend.upper()}", "Target K1", "Delta", "Source", "Status")
+            ("Select", "Element", "Design K1", f"Current {self.control_backend.upper()}", "Target K1", "Delta", "Source", "Status")
         )
         self.table.setEditTriggers(
             QAbstractItemView.DoubleClicked
@@ -728,12 +722,12 @@ class MachineSetpointsWindow(QMainWindow):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(27)
+        self.table.verticalHeader().setDefaultSectionSize(25)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.Stretch)
         self.table.setColumnWidth(0, 64)
-        self.table.setColumnWidth(5, 120)
-        self.table.setItemDelegateForColumn(5, TargetValueDelegate(self.table))
+        self.table.setColumnWidth(4, 120)
+        self.table.setItemDelegateForColumn(4, TargetValueDelegate(self.table))
         layout.addWidget(self.table)
         self.status_label = QLabel("Ready", central)
         self.status_label.setProperty("role", "status")
@@ -764,17 +758,15 @@ class MachineSetpointsWindow(QMainWindow):
         self.twiss_button.clicked.connect(self.preview_twiss)
         self.apply_button.clicked.connect(self.apply)
         self.restore_button.clicked.connect(self.restore_last_apply)
-        self.select_ready_button.clicked.connect(self._select_all_ready)
         self.clear_selection_button.clicked.connect(self._clear_selection)
         self.load_design_button.clicked.connect(self._load_design)
         self.load_current_button.clicked.connect(self._load_current)
         self.clear_target_button.clicked.connect(self._clear_target)
-        self.absolute_target_button.clicked.connect(self._absolute_selected_targets)
         self.save_workspace_action.triggered.connect(self._save_workspace)
         self.load_workspace_action.triggered.connect(self._load_workspace)
         self.clear_workspace_action.triggered.connect(self._clear_workspace)
-        self.select_visible_button.clicked.connect(lambda: self._select_visible(True))
-        self.clear_visible_button.clicked.connect(lambda: self._select_visible(False))
+        self.select_visible_action.triggered.connect(lambda: self._select_visible(True))
+        self.select_ready_action.triggered.connect(self._select_all_ready)
         self.nudge_down_button.clicked.connect(lambda: self._nudge_selected(-self.target_step))
         self.nudge_up_button.clicked.connect(lambda: self._nudge_selected(self.target_step))
         self.search_input.textChanged.connect(self._apply_filters)
@@ -791,6 +783,8 @@ class MachineSetpointsWindow(QMainWindow):
         self.setStyleSheet(_build_stylesheet(_theme_palette(self.current_theme)))
         if hasattr(self, "theme_toggle_button"):
             self._update_theme_toggle_button()
+        if getattr(self, "plan", None) is not None and hasattr(self, "table"):
+            self._render_plan(self.plan)
 
     def _update_theme_toggle_button(self):
         if self.current_theme == "dark":
@@ -912,10 +906,6 @@ class MachineSetpointsWindow(QMainWindow):
             )
             values = (
                 item.element_id,
-                ", ".join(
-                    line.display_name
-                    for line in self.element_model_lines.get(item.element_id, ())
-                ) or "Unknown",
                 "" if item.design_value is None else f"{item.design_value:.7g}",
                 "" if item.current_value is None else f"{item.current_value:.7g}",
                 "" if item.target_value is None else f"{item.target_value:.12g}",
@@ -925,7 +915,7 @@ class MachineSetpointsWindow(QMainWindow):
             )
             for column, value in enumerate(values, start=1):
                 cell = QTableWidgetItem(value)
-                if column == 8:
+                if column == 7:
                     color = "#2d7f6d" if item.status == "ready" else "#b44141"
                     if execution_state == "applied":
                         color = "#2d7f6d"
@@ -936,11 +926,21 @@ class MachineSetpointsWindow(QMainWindow):
                     cell.setForeground(QColor(color))
                     if item.message:
                         cell.setToolTip(item.message)
-                if column == 6 and item.target_value is not None and item.current_value is not None:
+                if column == 5 and item.target_value is not None and item.current_value is not None:
                     change = abs(item.target_value - item.current_value)
                     if change > LARGE_CHANGE_THRESHOLD:
                         cell.setForeground(QColor("#d17a18"))
+                if column == 4:
+                    if item.target_value is not None:
+                        cell.setFont(QFont(cell.font().family(), cell.font().pointSize(), QFont.Bold))
+                        cell.setBackground(QColor("#183b3b" if self.current_theme == "dark" else "#e4f2ed"))
+                        cell.setForeground(QColor("#e6edf2" if self.current_theme == "dark" else "#245c54"))
                 if column == 5:
+                    if item.target_value is not None and item.current_value is not None:
+                        cell.setFont(QFont(cell.font().family(), cell.font().pointSize(), QFont.Bold))
+                        cell.setBackground(QColor("#26343c" if self.current_theme == "dark" else "#eee8df"))
+                        cell.setForeground(QColor("#e6edf2" if self.current_theme == "dark" else "#40515c"))
+                if column == 4:
                     flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
                     if can_stage:
                         flags |= Qt.ItemIsEditable
@@ -1070,24 +1070,6 @@ class MachineSetpointsWindow(QMainWindow):
         if changed:
             self._rebuild_plan()
 
-    def _absolute_selected_targets(self):
-        selected_plan = self._selected_plan()
-        if selected_plan is None:
-            return
-        changed = False
-        for item in selected_plan.items:
-            if item.target_value is None:
-                continue
-            self.staged_values[(item.element_id, item.field)] = StagedSetpoint(
-                item.element_id,
-                item.field,
-                abs(float(item.target_value)),
-                "manual",
-            )
-            changed = True
-        if changed:
-            self._rebuild_plan()
-
     def _apply_filters(self):
         query = self.search_input.text().strip().casefold()
         selected = self._checked_ids()
@@ -1150,14 +1132,12 @@ class MachineSetpointsWindow(QMainWindow):
         self.load_design_button.setEnabled(selected_operational and not busy)
         self.load_current_button.setEnabled(selected_operational and not busy)
         self.clear_target_button.setEnabled(selected_count > 0 and not busy)
-        self.absolute_target_button.setEnabled(staged_count > 0 and not busy)
         visible_selected = any(
             not self.table.isRowHidden(row)
             and self.table.item(row, 1).text() in self._checked_ids()
             for row in range(self.table.rowCount())
         )
-        self.select_visible_button.setEnabled(not busy)
-        self.clear_visible_button.setEnabled(visible_selected and not busy)
+        self.select_button.setEnabled(not busy)
         self.nudge_down_button.setEnabled(visible_selected and not busy)
         self.nudge_up_button.setEnabled(visible_selected and not busy)
 
