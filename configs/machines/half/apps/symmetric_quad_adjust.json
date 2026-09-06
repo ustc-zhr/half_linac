@@ -1,0 +1,19 @@
+{
+  "control_backends": ["vm", "real"],
+  "write_channel": "K1",
+  "readback_channel": {"vm": "K1", "real": "K1_total"},
+  "pairs": [
+    {"left": "QL01", "right": "QL06"},
+    {"left": "QL02", "right": "QL05"},
+    {"left": "QL03", "right": "QL04"}
+  ],
+  "default_step": 0.1,
+  "step_choices": [0.01, 0.05, 0.1, 0.5, 1.0],
+  "custom_step_minimum": 0.000001,
+  "custom_step_maximum": 1.0,
+  "button_repeat_delay_ms": 300,
+  "button_repeat_interval_ms": 150,
+  "display_decimals": 6,
+  "readback_tolerance": 0.000001,
+  "write_control": {"vm": "allowed", "real": "allowed"}
+}

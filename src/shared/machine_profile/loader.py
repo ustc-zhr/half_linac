@@ -55,6 +55,7 @@ SUPPORTED_APP_NAMES = {
     "power_source_timing",
     "llrf_control",
     "machine_snapshot",
+    "symmetric_quad_adjust",
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
 APP_WORKFLOW_FILES = {
@@ -73,6 +74,7 @@ APP_WORKFLOW_FILES = {
     "ct_monitor": "ct_monitor.json",
     "power_source_timing": "power_source_timing.json",
     "llrf_control": "llrf_control.json",
+    "symmetric_quad_adjust": "symmetric_quad_adjust.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
@@ -90,6 +92,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "power_source_timing": ("power_source_timing",),
     "llrf_control": ("llrf_control",),
     "machine_snapshot": ("control_points",),
+    "symmetric_quad_adjust": ("symmetric_quad_adjust",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",

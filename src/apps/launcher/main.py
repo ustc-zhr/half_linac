@@ -1076,6 +1076,19 @@ APP_DEFINITIONS = {
         "cwd": ROOT / "src/apps/solenoid_field_guide",
         "machine_ids": ("half",),
     },
+    "symmetric_quad_adjust": {
+        "button_name": "symmetric_quad_adjust_button",
+        "category": "tools",
+        "access": "write",
+        "button_text": "Symmetric Quad Adjust",
+        "label": "Symmetric Quad Adjust",
+        "window_title_patterns": ("Symmetric Quadrupole Adjust",),
+        "description": "Adjust configured mirror quadrupoles together in K1, or set one K1 directly.",
+        "workflow_name": "symmetric_quad_adjust",
+        "machine_ids": ("half",),
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/symmetric_quad_adjust",
+    },
     "emitmeasure": {
         "button_name": "emitmeasure",
         "category": "measurement",
@@ -1164,6 +1177,7 @@ PROFILE_MANAGED_APP_KEYS = {
     "hv_feedback": "hv_feedback",
     "power_source_timing": "power_source_timing",
     "llrf_control": "llrf_control",
+    "symmetric_quad_adjust": "symmetric_quad_adjust",
 }
 
 
