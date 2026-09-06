@@ -9,18 +9,23 @@
       "high": 30,
       "steps": 13,
       "unit": "deg",
-      "mode": "relative"
+      "mode": "relative",
+      "settle_time_s": 1,
+      "readback_verification": {
+        "channel": "phase_readback",
+        "tolerance_deg": 0.1,
+        "timeout_s": 2,
+        "poll_interval_s": 0.05
+      }
     },
     "energy_tracking": {
       "tracking_half_window_mev": 50,
       "fallback_half_window_mev": 100,
-      "tracking_reacquire_points": 9,
       "max_consecutive_failures": 3
     },
     "point_measurement": {
       "samples_per_point": 5,
-      "settle_time_s": 1,
-      "sample_interval_s": 0.2,
+      "sample_interval_s": 1,
       "min_valid_samples": 2
     }
   },
@@ -37,30 +42,33 @@
     "measurement": {
       "frame_samples": 3,
       "min_valid_frames": 2,
-      "verification_frame_samples": 5,
-      "verification_min_valid_frames": 3,
-      "frame_interval_s": 0.2,
+      "verification_frame_samples": 3,
+      "verification_min_valid_frames": 2,
+      "frame_interval_s": 1,
       "profile_fit_method": "Gauss fit",
-      "min_fit_r_squared": 0.7
+      "min_fit_r_squared": 0.3,
+      "beam_presence": {
+        "sigma_threshold": 6.0,
+        "min_area_px": 50
+      }
     },
     "stages": {
       "brightness_peak": {
         "strategy": "center_outward",
-        "points": 9
+        "points": 10
       },
       "center_lock": {
         "strategy": "secant_dispersion",
-        "center_step_mev": 10,
-        "max_total_offset_mev": 100,
         "center_tolerance_mm": 0.2,
-        "max_iterations": 10,
+        "max_iterations": 6,
         "max_correction_step_mev": 20
       }
     }
   },
   "energy_match": {
+    "initial_brightness_search": false,
     "pipelines": {
-      "initial": ["brightness_peak", "center_lock"],
+      "initial": ["center_lock"],
       "tracking": ["center_lock"],
       "fallback": ["brightness_peak", "center_lock"]
     },

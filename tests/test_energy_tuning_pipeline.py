@@ -11,6 +11,7 @@ from half_linac.src.shared.energy_tuning import (
     CallableEnergyActuator,
     ScreenProfileMeasurement,
 )
+from half_linac.src.shared.beam_diagnostics import BeamPresenceResult
 from half_linac.src.shared.machine_profile.energy_spectrum import (
     resolve_energy_spectrum_auto_tune,
 )
@@ -47,6 +48,51 @@ class EnergyTuningPipelineTests(unittest.TestCase):
         self.assertEqual(observation.actuator_value, 4.0)
         self.assertAlmostEqual(observation.center_offset_mm, 0.25)
         self.assertEqual(observation.valid_frames, 2)
+
+    def test_screen_profile_measurement_requires_beam_presence(self):
+        class Projection:
+            x_mm = np.array([-1.0, 0.0, 1.0])
+            density_x = np.array([1.0, 3.0, 1.0])
+
+        measurement = ScreenProfileMeasurement(
+            lambda: np.zeros((20, 20)),
+            pixel_width_mm=0.1,
+            detect_presence=lambda _image: BeamPresenceResult(False),
+            project_profiles=lambda *_args: Projection(),
+            fit_profile=lambda *_args, **_kwargs: None,
+        )
+
+        self.assertIsNone(measurement.measure(4.0, samples=3, min_valid=2))
+
+    def test_screen_profile_measurement_reports_center_spread_without_rejecting(self):
+        centers = iter((0.0, 0.2, 1.5))
+
+        class Projection:
+            x_mm = np.array([-1.0, 0.0, 1.0])
+            density_x = np.array([1.0, 3.0, 1.0])
+
+        def fit_profile(*_args, **_kwargs):
+            return type(
+                "Profile",
+                (),
+                {
+                    "center_mm": next(centers),
+                    "method": "Gauss fit",
+                    "r_squared": 0.95,
+                },
+            )()
+
+        measurement = ScreenProfileMeasurement(
+            lambda: np.zeros((20, 20)),
+            pixel_width_mm=0.1,
+            project_profiles=lambda *_args: Projection(),
+            fit_profile=fit_profile,
+        )
+
+        observation = measurement.measure(4.0, samples=3, min_valid=2)
+
+        self.assertIsNotNone(observation)
+        self.assertAlmostEqual(observation.diagnostics["center_spread_mm"], 1.5)
     def test_legacy_objectives_map_to_composable_stages(self):
         self.assertEqual(normalize_pipeline(legacy_objective="find_beam"), (BRIGHTNESS_PEAK,))
         self.assertEqual(normalize_pipeline(legacy_objective="profile_lock"), (CENTER_LOCK,))

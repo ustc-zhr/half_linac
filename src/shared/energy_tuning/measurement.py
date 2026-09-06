@@ -36,6 +36,7 @@ class ScreenProfileMeasurement:
         fit_method: str = "Gauss fit",
         allow_direct_fallback: bool = False,
         min_fit_r_squared: float | None = None,
+        detect_presence: Callable[[Any], Any] | None = None,
         sleep: Callable[[float], None] | None = None,
         project_profiles: Callable[..., Any],
         fit_profile: Callable[..., Any],
@@ -48,6 +49,7 @@ class ScreenProfileMeasurement:
         self.fit_method = str(fit_method)
         self.allow_direct_fallback = bool(allow_direct_fallback)
         self.min_fit_r_squared = min_fit_r_squared
+        self.detect_presence = detect_presence
         self.sleep = sleep or (lambda _duration: None)
         self.project_profiles = project_profiles
         self.fit_profile = fit_profile
@@ -73,12 +75,20 @@ class ScreenProfileMeasurement:
 
         fits = []
         strengths = []
+        presence_results = []
         for index in range(samples):
             if cancel_requested and cancel_requested():
                 raise InterruptedError("Beam measurement stopped by operator.")
             image = np.asarray(self.read_image(), dtype=float)
-            projection = self.project_profiles(image, self.pixel_width_mm, self.roi)
             try:
+                presence = (
+                    self.detect_presence(image)
+                    if self.detect_presence is not None
+                    else None
+                )
+                if presence is not None and not presence.has_beam:
+                    raise ValueError("No significant beam region was detected.")
+                projection = self.project_profiles(image, self.pixel_width_mm, self.roi)
                 profile = self.fit_profile(
                     projection.x_mm,
                     projection.density_x,
@@ -100,19 +110,30 @@ class ScreenProfileMeasurement:
                 profile = None
             if profile is not None:
                 fits.append(profile)
-                strengths.append(float(np.sum(projection.density_x)))
+                strengths.append(
+                    float(presence.brightness)
+                    if presence is not None
+                    else float(np.sum(projection.density_x))
+                )
+                if presence is not None:
+                    presence_results.append(presence)
             if index + 1 < samples:
                 self.sleep(self.frame_interval_s)
 
         if len(fits) < min_valid:
             return None
         centers = [float(profile.center_mm) for profile in fits]
+        center_spread_mm = float(np.ptp(centers))
         qualities = [
             float(profile.r_squared)
             for profile in fits
             if profile.r_squared is not None
         ]
         center_mm = float(np.median(centers))
+        diagnostics = {"center_spread_mm": center_spread_mm}
+        if presence_results:
+            latest_presence = presence_results[-1]
+            diagnostics.update(latest_presence.diagnostics())
         return EnergyObservation(
             actuator_value=float(actuator_value),
             has_beam=True,
@@ -123,5 +144,5 @@ class ScreenProfileMeasurement:
             total_frames=samples,
             fit_method=fits[0].method,
             fit_r_squared=float(np.median(qualities)) if qualities else None,
-            diagnostics={"center_spread_mm": float(np.ptp(centers))},
+            diagnostics=diagnostics,
         )

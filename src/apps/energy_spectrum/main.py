@@ -751,9 +751,6 @@ class ESAAutoTuneThread(QThread):
                     self.bend_scan.get("verification_min_valid_frames", 3)
                 ),
                 frame_interval_s=float(self.bend_scan.get("frame_interval_s", 0.2)),
-                max_center_spread_pixel=float(
-                    self.bend_scan.get("max_center_spread_pixel", np.inf)
-                ),
                 target_tolerance_pixel=float(
                     self.bend_scan.get("target_tolerance_pixel", np.inf)
                 ),
@@ -763,6 +760,15 @@ class ESAAutoTuneThread(QThread):
                 pixel_width_mm=float(self.bend_scan["pixel_width_mm"]),
                 profile_fit_method=str(
                     self.bend_scan.get("profile_fit_method", "Gauss fit")
+                ),
+                min_profile_fit_r_squared=float(
+                    self.bend_scan.get("min_fit_r_squared", 0.3)
+                ),
+                beam_presence_sigma=float(
+                    self.bend_scan.get("beam_presence_sigma", 6.0)
+                ),
+                beam_presence_min_area_px=int(
+                    self.bend_scan.get("beam_presence_min_area_px", 50)
                 ),
                 x_reference_mm=float(self.bend_scan.get("x_reference_mm", 0.0)),
                 center_step=float(
@@ -2265,6 +2271,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.flag_pixel[0],
             self.flag_pixel_width_mm,
         )
+        auto_tune = resolve_energy_spectrum_auto_tune(self.energy_config)
+        measurement = dict(auto_tune.get("measurement", {}))
+        beam_presence = dict(measurement.get("beam_presence", {}))
         return {
             "min": selected.low,
             "max": selected.high,
@@ -2297,6 +2306,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "frame_interval_s": self.auto_tune_frame_interval_spin.value(),
             "pixel_width_mm": self.flag_pixel_width_mm,
             "profile_fit_method": self.comboBox_fitmethod.currentText(),
+            "min_fit_r_squared": float(measurement.get("min_fit_r_squared", 0.3)),
+            "beam_presence_sigma": float(
+                beam_presence.get("sigma_threshold", 6.0)
+            ),
+            "beam_presence_min_area_px": int(
+                beam_presence.get("min_area_px", 50)
+            ),
             "x_reference_mm": self.x_reference_mm,
             "center_step": self.auto_tune_probe_step_spin.value(),
             "center_max_total_offset": self.auto_tune_max_offset_spin.value(),
@@ -4466,6 +4482,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 "verification_min_valid_frames"
             ),
             "frame_interval_s": bend_scan.get("frame_interval_s"),
+            "min_fit_r_squared": bend_scan.get("min_fit_r_squared"),
+            "beam_presence_sigma": bend_scan.get("beam_presence_sigma"),
+            "beam_presence_min_area_px": bend_scan.get(
+                "beam_presence_min_area_px"
+            ),
             "settle_time_s": bend_scan.get("settle_time_s"),
             "center_step_mev": bend_scan.get("center_step"),
             "center_tolerance_mm": bend_scan.get("center_tolerance_mm"),

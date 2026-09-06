@@ -1,6 +1,5 @@
 import time
 import numpy as np
-from skimage import measure
 from epics import PV, caget, caput
 
 from half_linac.src.apps.energy_spectrum.spectrum_profile import (
@@ -8,7 +7,10 @@ from half_linac.src.apps.energy_spectrum.spectrum_profile import (
     fit_projection_profile,
     project_image_profiles,
 )
-from half_linac.src.shared.beam_diagnostics import ImageROI, crop_image
+from half_linac.src.shared.beam_diagnostics import (
+    ImageROI,
+    detect_beam_presence,
+)
 from half_linac.src.shared.energy_tuning import (
     BRIGHTNESS_PEAK,
     CallableEnergyActuator,
@@ -76,13 +78,14 @@ class ESA_AutoTuner:
                  verification_min_valid_frames=3,
                  frame_interval_s=0.2,
                  brightness_fraction=0.4,
-                 max_center_spread_pixel=np.inf,
                  target_tolerance_pixel=np.inf,
                  min_fit_correlation=0.7,
                  pixel_width_mm=None,
                  profile_fit_method="Gauss fit",
                  allow_direct_fallback=True,
                  min_profile_fit_r_squared=None,
+                 beam_presence_sigma=6.0,
+                 beam_presence_min_area_px=50,
                  x_reference_mm=0.0,
                  center_step=0.05,
                  center_max_total_offset=1.0,
@@ -146,7 +149,6 @@ class ESA_AutoTuner:
         self.verification_min_valid_frames = int(verification_min_valid_frames)
         self.frame_interval_s = float(frame_interval_s)
         self.brightness_fraction = float(brightness_fraction)
-        self.max_center_spread_pixel = float(max_center_spread_pixel)
         self.target_tolerance_pixel = float(target_tolerance_pixel)
         self.min_fit_correlation = float(min_fit_correlation)
         self.pixel_width_mm = None if pixel_width_mm is None else float(pixel_width_mm)
@@ -157,6 +159,8 @@ class ESA_AutoTuner:
             if min_profile_fit_r_squared is None
             else float(min_profile_fit_r_squared)
         )
+        self.beam_presence_sigma = float(beam_presence_sigma)
+        self.beam_presence_min_area_px = int(beam_presence_min_area_px)
         self.x_reference_mm = float(x_reference_mm)
         self.center_step = float(center_step)
         self.center_max_total_offset = float(center_max_total_offset)
@@ -171,6 +175,7 @@ class ESA_AutoTuner:
                 fit_method=self.profile_fit_method,
                 allow_direct_fallback=self.allow_direct_fallback,
                 min_fit_r_squared=self.min_profile_fit_r_squared,
+                detect_presence=lambda image: self._beam_presence(image),
                 sleep=self._wait,
                 project_profiles=project_image_profiles,
                 fit_profile=fit_projection_profile,
@@ -197,8 +202,6 @@ class ESA_AutoTuner:
             raise ValueError("frame_interval_s must not be negative.")
         if not np.isfinite(self.brightness_fraction) or not 0 < self.brightness_fraction <= 1:
             raise ValueError("brightness_fraction must be in (0, 1].")
-        if np.isnan(self.max_center_spread_pixel) or self.max_center_spread_pixel <= 0:
-            raise ValueError("max_center_spread_pixel must be positive.")
         if np.isnan(self.target_tolerance_pixel) or self.target_tolerance_pixel <= 0:
             raise ValueError("target_tolerance_pixel must be positive.")
         if (
@@ -225,6 +228,10 @@ class ESA_AutoTuner:
             and not 0 <= self.min_profile_fit_r_squared <= 1
         ):
             raise ValueError("Minimum profile fit R2 must be in [0, 1].")
+        if not np.isfinite(self.beam_presence_sigma) or self.beam_presence_sigma <= 0:
+            raise ValueError("Beam-presence sigma threshold must be positive and finite.")
+        if self.beam_presence_min_area_px < 1:
+            raise ValueError("Beam-presence minimum area must be at least one pixel.")
 
         self.best_current = None
         self.best_center_offset_px = None
@@ -236,6 +243,7 @@ class ESA_AutoTuner:
         self.best_brightness = None
         self.center_lock_result = None
         self.last_profile_diagnostic = None
+        self.last_beam_presence = None
         self.last_message = None
         self.status = "IDLE"
 
@@ -332,6 +340,14 @@ class ESA_AutoTuner:
             }
         )
 
+    def _beam_presence(self, img):
+        return detect_beam_presence(
+            img,
+            roi=self.roi,
+            sigma_threshold=self.beam_presence_sigma,
+            min_area_px=self.beam_presence_min_area_px,
+        )
+
     def _detect_beam(self, img):
         """
         Robust single-shot beam detection
@@ -341,61 +357,12 @@ class ESA_AutoTuner:
         score    : float
         cx       : float or None
         """
-        x_offset = 0
-        if self.roi is not None:
-            img, selected, _warnings = crop_image(img, self.roi)
-            x_offset = selected.x
-
-        # 找出图像中显著高于背景的亮点区域（6σ原则）
-        thr = np.mean(img) + 6 * np.std(img)
-        binary = img > thr
-
-        # 将显著亮点分成独立连通区域，再按所选模式确定候选束斑。
-        labels = measure.label(binary)
-        regions = measure.regionprops(labels)
-        if not regions:
+        presence = self._beam_presence(img)
+        self.last_beam_presence = presence
+        if not presence.has_beam:
             return False, 0.0, None
-        def valid_region(candidate):
-            # 面积适中（50 ~ 100,000 像素），且不能太细长（长宽比 ≤ 6）。
-            if candidate.area < 50 or candidate.area > 1e5:
-                return False
-            major_axis_length = getattr(candidate, "axis_major_length", None)
-            minor_axis_length = getattr(candidate, "axis_minor_length", None)
-            if major_axis_length is None or minor_axis_length is None:
-                major_axis_length = candidate.major_axis_length
-                minor_axis_length = candidate.minor_axis_length
-            return major_axis_length / max(minor_axis_length, 1) <= 6
-
-        if self.mode == "brightness_gated_x_fit":
-            # Anchor the position fit to the brightest valid connected spot. A larger,
-            # dimmer noise island elsewhere in the image must not provide the center.
-            valid_regions = [candidate for candidate in regions if valid_region(candidate)]
-            if not valid_regions:
-                return False, 0.0, None
-            region = max(
-                valid_regions,
-                key=lambda candidate: float(np.sum(img[labels == candidate.label])),
-            )
-        else:
-            region = max(regions, key=lambda candidate: candidate.area)
-            if not valid_region(region):
-                return False, 0.0, None
-
-        # -----------------------------
-        # beam properties
-        # -----------------------------
-        if self.mode == "brightness_gated_x_fit":
-            region_mask = labels == region.label
-            raw_score = float(np.sum(img[region_mask]))
-            region_y, region_x = np.nonzero(region_mask)
-            weights = img[region_y, region_x]
-            weight_sum = float(np.sum(weights))
-            if not np.isfinite(weight_sum) or weight_sum <= 0:
-                return False, 0.0, None
-            cx = float(np.average(region_x, weights=weights)) + x_offset
-        else:
-            raw_score = np.sum(img[binary])
-            cx = region.centroid[1] + x_offset   # x = dispersion direction
+        raw_score = presence.brightness
+        cx = presence.center_x_pixel
 
         # -----------------------------
         # scoring
@@ -408,6 +375,11 @@ class ESA_AutoTuner:
             score = raw_score
 
         return True, score, cx
+
+    def _beam_presence_diagnostics(self):
+        if self.last_beam_presence is None:
+            return {}
+        return self.last_beam_presence.diagnostics()
 
     def _sample_frames(self):
         observations = []
@@ -427,8 +399,6 @@ class ESA_AutoTuner:
             return None
         scores = np.asarray([item[0] for item in observations], dtype=float)
         centers = np.asarray([item[1] for item in observations], dtype=float)
-        if np.ptp(centers) > self.max_center_spread_pixel:
-            return None
         return float(np.median(scores)), float(np.median(centers))
 
     # ==========================================================
@@ -443,11 +413,19 @@ class ESA_AutoTuner:
         for B in scan_values:
             self._raise_if_cancelled()
             self._set_bend(B)
-            img = self._get_flag_image()
-            self._raise_if_cancelled()
-            has_beam, score, cx = self._detect_beam(img)
+            observations = self._sample_frames()
+            summary = self._stable_frame_summary(observations)
+            has_beam = summary is not None
+            score, cx = summary if summary is not None else (0.0, None)
             self._report_progress(
-                "coarse", B, has_beam=has_beam, score=score, cx=cx
+                "coarse",
+                B,
+                has_beam=has_beam,
+                score=score,
+                cx=cx,
+                **self._beam_presence_diagnostics(),
+                valid_frames=len(observations),
+                total_frames=self.frame_samples,
             )
             self.coarse_observations.append(
                 {
@@ -553,7 +531,12 @@ class ESA_AutoTuner:
             score_med = np.median(scores)
             center_med = np.median(centers)
             self._report_progress(
-                "fine", B, has_beam=True, score=score_med, cx=center_med
+                "fine",
+                B,
+                has_beam=True,
+                score=score_med,
+                cx=center_med,
+                **self._beam_presence_diagnostics(),
             )
             if score_med > best_score:
                 best_score = score_med
@@ -758,6 +741,7 @@ class ESA_AutoTuner:
                 total_frames=observation.total_frames,
                 fit_method=observation.fit_method,
                 fit_r_squared=observation.fit_r_squared,
+                **observation.diagnostics,
             )
             return {
                 "energy": float(energy),
@@ -1290,6 +1274,7 @@ if __name__=='__main__':
     hybrid = workflow.get("auto_tune_hybrid", {})
     center_lock = auto_tune.get("center_lock", {})
     measurement = auto_tune.get("measurement", {})
+    beam_presence = measurement.get("beam_presence", {})
     stage_config = dict(auto_tune.get("stages", {}))
     stage_config.setdefault("brightness_peak", dict(auto_tune.get("brightness_peak", {})))
     stage_config.setdefault("center_lock", dict(center_lock))
@@ -1321,14 +1306,18 @@ if __name__=='__main__':
         ),
         frame_interval_s=float(measurement.get("frame_interval_s", sampling.get("frame_interval_s", 0.2))),
         brightness_fraction=float(sampling.get("brightness_fraction", 0.4)),
-        max_center_spread_pixel=(
-            float(hybrid.get("max_center_spread_mm", 1.0)) / pixel_width_mm
-        ),
         target_tolerance_pixel=(
             float(hybrid.get("target_tolerance_mm", 1.0)) / pixel_width_mm
         ),
         min_fit_correlation=float(hybrid.get("min_fit_correlation", 0.7)),
         pixel_width_mm=pixel_width_mm,
+        min_profile_fit_r_squared=float(
+            measurement.get("min_fit_r_squared", 0.3)
+        ),
+        beam_presence_sigma=float(
+            beam_presence.get("sigma_threshold", 6.0)
+        ),
+        beam_presence_min_area_px=int(beam_presence.get("min_area_px", 50)),
         x_reference_mm=x_reference_mm,
         center_step=float(center_lock.get("center_step", 0.05)),
         center_max_total_offset=float(center_lock.get("max_total_offset", 1.0)),

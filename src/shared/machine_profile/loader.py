@@ -831,13 +831,51 @@ def _validate_basic_app_support(
             raise MachineProfileError("workflows.rf_phase_scan phase range is invalid.")
         if int(phase_scan.get("steps", 0)) < 3:
             raise MachineProfileError("workflows.rf_phase_scan.scan.phase.steps must be at least 3.")
+        if _expect_finite_number(
+            phase_scan.get("settle_time_s"),
+            "workflows.rf_phase_scan.scan.phase.settle_time_s",
+        ) < 0:
+            raise MachineProfileError(
+                "workflows.rf_phase_scan.scan.phase.settle_time_s must not be negative."
+            )
+        phase_verification = _expect_mapping(
+            phase_scan.get("readback_verification", {}),
+            "workflows.rf_phase_scan.scan.phase.readback_verification",
+        )
+        phase_readback_channel = _expect_non_empty_string(
+            phase_verification.get("channel", "phase_readback"),
+            "workflows.rf_phase_scan.scan.phase.readback_verification.channel",
+        )
+        if any(
+            phase_readback_channel not in element.channels
+            or backend not in element.channels[phase_readback_channel]
+            for element in candidates
+            for backend in write_backends
+        ):
+            raise MachineProfileError(
+                "workflows.rf_phase_scan phase readback channel is unavailable."
+            )
+        phase_tolerance = _expect_finite_number(
+            phase_verification.get("tolerance_deg", 0.1),
+            "workflows.rf_phase_scan.scan.phase.readback_verification.tolerance_deg",
+        )
+        phase_timeout = _expect_finite_number(
+            phase_verification.get("timeout_s", 2.0),
+            "workflows.rf_phase_scan.scan.phase.readback_verification.timeout_s",
+        )
+        phase_poll_interval = _expect_finite_number(
+            phase_verification.get("poll_interval_s", 0.05),
+            "workflows.rf_phase_scan.scan.phase.readback_verification.poll_interval_s",
+        )
+        if phase_tolerance < 0 or phase_timeout < 0 or phase_poll_interval <= 0:
+            raise MachineProfileError(
+                "workflows.rf_phase_scan phase readback verification values are invalid."
+            )
         tracking = _expect_mapping(scan.get("energy_tracking"), "workflows.rf_phase_scan.scan.energy_tracking")
         tracking_window = float(tracking.get("tracking_half_window_mev", 0))
         fallback_window = float(tracking.get("fallback_half_window_mev", 0))
         if tracking_window <= 0 or fallback_window < tracking_window:
             raise MachineProfileError("workflows.rf_phase_scan energy tracking windows are invalid.")
-        if int(tracking.get("tracking_reacquire_points", 0)) < 2:
-            raise MachineProfileError("workflows.rf_phase_scan.scan.energy_tracking.tracking_reacquire_points must be at least 2.")
         if int(tracking.get("max_consecutive_failures", 0)) < 1:
             raise MachineProfileError("workflows.rf_phase_scan.scan.energy_tracking.max_consecutive_failures must be at least 1.")
         sampling = _expect_mapping(scan.get("point_measurement"), "workflows.rf_phase_scan.scan.point_measurement")
@@ -845,11 +883,13 @@ def _validate_basic_app_support(
         min_valid = int(sampling.get("min_valid_samples", 0))
         if samples < 1 or min_valid < 1 or min_valid > samples:
             raise MachineProfileError("workflows.rf_phase_scan point measurement sample counts are invalid.")
-        if float(sampling.get("settle_time_s", -1)) < 0:
-            raise MachineProfileError("workflows.rf_phase_scan.scan.point_measurement.settle_time_s must not be negative.")
         if float(sampling.get("sample_interval_s", -1)) < 0:
             raise MachineProfileError("workflows.rf_phase_scan.scan.point_measurement.sample_interval_s must not be negative.")
         energy_match = _expect_mapping(workflow.get("energy_match"), "workflows.rf_phase_scan.energy_match")
+        if not isinstance(energy_match.get("initial_brightness_search", False), bool):
+            raise MachineProfileError(
+                "workflows.rf_phase_scan.energy_match.initial_brightness_search must be boolean."
+            )
         stage_defaults = _expect_mapping(
             workflow.get("energy_match_defaults"),
             "workflows.rf_phase_scan.energy_match_defaults",
@@ -909,10 +949,37 @@ def _validate_basic_app_support(
             match_defaults.get("measurement", match_defaults),
             f"{defaults_location}.measurement",
         )
-        match_low = _expect_finite_number(search.get("low"), f"{match_location}.range.low")
-        match_high = _expect_finite_number(search.get("high"), f"{match_location}.range.high")
+        raw_energy_limit = energy.limits_for(energy_channel)
+        if not raw_energy_limit:
+            raise MachineProfileError(
+                f"{energy_element}.{energy_channel} requires machine energy limits."
+            )
+        machine_energy_limit = LimitRange.from_mapping(raw_energy_limit)
+        if (
+            machine_energy_limit.low is None
+            or machine_energy_limit.high is None
+            or machine_energy_limit.low >= machine_energy_limit.high
+        ):
+            raise MachineProfileError(
+                f"{energy_element}.{energy_channel} machine energy limits are invalid."
+            )
+        match_low = _expect_finite_number(
+            search.get("low"), f"{match_location}.range.low"
+        )
+        match_high = _expect_finite_number(
+            search.get("high"), f"{match_location}.range.high"
+        )
         if match_low >= match_high:
-            raise MachineProfileError(f"{match_location}.range.low must be less than high.")
+            raise MachineProfileError(
+                f"{match_location}.range.low must be less than high."
+            )
+        if (
+            match_low < machine_energy_limit.low
+            or match_high > machine_energy_limit.high
+        ):
+            raise MachineProfileError(
+                f"{match_location}.range must stay within the machine energy limits."
+            )
         if _expect_finite_number(search.get("settle_time_s"), f"{match_location}.range.settle_time_s") < 0:
             raise MachineProfileError(f"{match_location}.range.settle_time_s must not be negative.")
         if str(search.get("unit", "")).strip().lower() != "mev":
@@ -956,6 +1023,22 @@ def _validate_basic_app_support(
         if not 0 <= min_fit_r_squared <= 1:
             raise MachineProfileError(
                 f"{defaults_location}.center_lock.min_fit_r_squared must be in [0, 1]."
+            )
+        beam_presence = _expect_mapping(
+            measurement_defaults.get("beam_presence", {}),
+            f"{defaults_location}.measurement.beam_presence",
+        )
+        sigma_threshold = _expect_finite_number(
+            beam_presence.get("sigma_threshold", 6.0),
+            f"{defaults_location}.measurement.beam_presence.sigma_threshold",
+        )
+        min_area_px = _expect_int(
+            beam_presence.get("min_area_px", 50),
+            f"{defaults_location}.measurement.beam_presence.min_area_px",
+        )
+        if sigma_threshold <= 0 or min_area_px < 1:
+            raise MachineProfileError(
+                f"{defaults_location}.measurement.beam_presence values are invalid."
             )
         for key in ("max_correction_step_mev", "center_tolerance_mm"):
             if _expect_finite_number(center_lock.get(key), f"{defaults_location}.center_lock.{key}") <= 0:
@@ -1463,6 +1546,34 @@ def _validate_energy_spectrum_workflow(
         return
 
     auto_tune = resolve_energy_spectrum_auto_tune(workflow)
+    measurement = _expect_mapping(
+        auto_tune.get("measurement", {}),
+        "workflows.energy_spectrum.auto_tune.measurement",
+    )
+    min_fit_r_squared = _expect_finite_number(
+        measurement.get("min_fit_r_squared", 0.3),
+        "workflows.energy_spectrum.auto_tune.measurement.min_fit_r_squared",
+    )
+    beam_presence = _expect_mapping(
+        measurement.get("beam_presence", {}),
+        "workflows.energy_spectrum.auto_tune.measurement.beam_presence",
+    )
+    sigma_threshold = _expect_finite_number(
+        beam_presence.get("sigma_threshold", 6.0),
+        "workflows.energy_spectrum.auto_tune.measurement.beam_presence.sigma_threshold",
+    )
+    min_area_px = _expect_int(
+        beam_presence.get("min_area_px", 50),
+        "workflows.energy_spectrum.auto_tune.measurement.beam_presence.min_area_px",
+    )
+    if not 0 <= min_fit_r_squared <= 1:
+        raise MachineProfileError(
+            "workflows.energy_spectrum auto-tune min_fit_r_squared must be in [0, 1]."
+        )
+    if sigma_threshold <= 0 or min_area_px < 1:
+        raise MachineProfileError(
+            "workflows.energy_spectrum auto-tune beam measurement values are invalid."
+        )
     workflow = dict(workflow)
     workflow.setdefault("auto_tune_objective", auto_tune["objective"])
     if "pipeline" in auto_tune:
@@ -1901,7 +2012,6 @@ def _validate_energy_spectrum_workflow(
         for key in (
             "frame_interval_s",
             "brightness_fraction",
-            "max_center_spread_mm",
             "target_tolerance_mm",
             "min_fit_correlation",
         ):
@@ -1927,11 +2037,10 @@ def _validate_energy_spectrum_workflow(
             raise MachineProfileError(
                 "workflows.energy_spectrum.auto_tune_hybrid.brightness_fraction must be in (0, 1]."
             )
-        for key in ("max_center_spread_mm", "target_tolerance_mm"):
-            if numeric_hybrid[key] <= 0:
-                raise MachineProfileError(
-                    f"workflows.energy_spectrum.auto_tune_hybrid.{key} must be positive."
-                )
+        if numeric_hybrid["target_tolerance_mm"] <= 0:
+            raise MachineProfileError(
+                "workflows.energy_spectrum.auto_tune_hybrid.target_tolerance_mm must be positive."
+            )
         if not 0 <= numeric_hybrid["min_fit_correlation"] <= 1:
             raise MachineProfileError(
                 "workflows.energy_spectrum.auto_tune_hybrid.min_fit_correlation must be in [0, 1]."

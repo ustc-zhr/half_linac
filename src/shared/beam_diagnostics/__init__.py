@@ -5,6 +5,7 @@ from .background_store import (
     subtract_background,
     validate_background_image,
 )
+from .beam_presence import BeamPresenceResult, detect_beam_presence
 from .image_fit import (
     BeamImageFitResult,
     GaussianProjectionFit,
@@ -25,11 +26,13 @@ __all__ = [
     "BackgroundStoreError",
     "BEAM_IMAGE_COLORMAPS",
     "BeamImageFitResult",
+    "BeamPresenceResult",
     "GaussianProjectionFit",
     "DEFAULT_BEAM_IMAGE_COLORMAP",
     "resolve_image_display_scale",
     "analyze_beam_image",
     "fit_beam_image",
+    "detect_beam_presence",
     "gaussian",
     "load_background",
     "resolve_beam_background_paths",

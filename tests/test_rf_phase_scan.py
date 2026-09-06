@@ -2,6 +2,7 @@ from half_linac.src.apps.rf_phase_scan.phase_energy_scan import (
     EnergyMatchResult,
     PhaseEnergyScanner,
     PhaseScanSettings,
+    wait_for_phase_readback,
 )
 from half_linac.src.apps.rf_phase_scan.image_acquisition import RFImageAcquisition
 from half_linac.src.apps.rf_phase_scan.energy_match_tuner import (
@@ -14,9 +15,13 @@ from half_linac.src.apps.rf_phase_scan.spectrum_profile import (
 )
 
 import numpy as np
+import pytest
 
 
-def _settings(*, mode="relative", start=-10.0, stop=10.0, points=3):
+def _settings(
+    *, mode="relative", start=-10.0, stop=10.0, points=3,
+    retry_first_point_on_failure=False,
+):
     return PhaseScanSettings(
         low_offset_deg=start,
         high_offset_deg=stop,
@@ -28,6 +33,7 @@ def _settings(*, mode="relative", start=-10.0, stop=10.0, points=3):
         energy_low_mev=0.0,
         energy_high_mev=2450.0,
         phase_mode=mode,
+        retry_first_point_on_failure=retry_first_point_on_failure,
     )
 
 
@@ -103,6 +109,98 @@ def test_point_measurement_failure_does_not_retry_fallback_window():
     assert len(attempts) == 3
     assert all(attempt == 1 for _center, _low, _high, attempt in attempts)
     assert all(point.attempts == 1 for point in result.points)
+
+
+def test_first_point_can_retry_after_direct_match_failure():
+    commands = []
+    attempts = []
+
+    def match(_center, low, high, attempt):
+        attempts.append((low, high, attempt))
+        if len(attempts) == 1:
+            return EnergyMatchResult(False, "FAILED", message="Direct center lock failed.")
+        return EnergyMatchResult(True, "DONE", energy_mev=2200.0)
+
+    scanner = _scanner(
+        _settings(retry_first_point_on_failure=True),
+        initial_phase=0.0,
+        commands=commands,
+        match_energy=match,
+    )
+
+    result = scanner.run()
+
+    assert result.status == "DONE"
+    assert result.points[0].attempts == 2
+    assert attempts[:2] == [
+        (2175.0, 2225.0, 1),
+        (2100.0, 2300.0, 2),
+    ]
+
+
+def test_phase_readback_verification_polls_until_wrapped_target_arrives(monkeypatch):
+    readings = iter((None, 179.0, -179.95))
+    monkeypatch.setattr(
+        "half_linac.src.apps.rf_phase_scan.phase_energy_scan.time.sleep",
+        lambda _duration: None,
+    )
+
+    actual = wait_for_phase_readback(
+        lambda: next(readings),
+        180.0,
+        tolerance_deg=0.1,
+        timeout_s=2.0,
+        poll_interval_s=0.05,
+    )
+
+    assert actual == -179.95
+
+
+def test_phase_readback_verification_reports_target_and_actual():
+    with pytest.raises(RuntimeError, match=r"target=12 deg, readback=10 deg"):
+        wait_for_phase_readback(
+            lambda: 10.0,
+            12.0,
+            tolerance_deg=0.1,
+            timeout_s=0.0,
+            poll_interval_s=0.05,
+        )
+
+
+def test_energy_match_progress_includes_the_measured_image():
+    image = np.arange(12, dtype=float).reshape(3, 4)
+
+    class Acquisition:
+        def sample_profile(self, **_kwargs):
+            return {
+                "raw_image": image,
+                "center_mm": 0.25,
+                "brightness": 42.0,
+                "fit_method": "Gauss fit",
+                "fit_r_squared": 0.95,
+                "valid_frames": 3,
+            }
+
+    updates = []
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.acquisition = Acquisition()
+    matcher.frame_samples = 3
+    matcher.min_valid_frames = 2
+    matcher.verification_frame_samples = 5
+    matcher.verification_min_valid_frames = 3
+    matcher.frame_interval_s = 0.0
+    matcher.profile_fit_method = "Gauss fit"
+    matcher.min_fit_r_squared = 0.7
+    matcher.x_reference_mm = 0.0
+    matcher.cancel_requested = None
+    matcher.progress_callback = updates.append
+
+    result = matcher._measure(2360.0, "reacquire")
+
+    np.testing.assert_array_equal(result["raw_image"], image)
+    np.testing.assert_array_equal(updates[0]["raw_image"], image)
+    assert updates[0]["energy_mev"] == 2360.0
+    assert updates[0]["stage"] == "reacquire"
 
 
 class _ImagePV:

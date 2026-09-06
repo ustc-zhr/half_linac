@@ -94,7 +94,6 @@ class _HybridObjectiveAutoTuner(ESA_AutoTuner):
             target_x_pixel=59.5,
             frame_interval_s=0.0,
             brightness_fraction=0.4,
-            max_center_spread_pixel=5.0,
             target_tolerance_pixel=2.0,
             min_fit_correlation=0.7,
         )
@@ -229,6 +228,21 @@ class ESAAutoTunerTests(unittest.TestCase):
 
         self.assertTrue(has_beam)
         self.assertAlmostEqual(center_x, 149.5)
+
+    def test_brightness_detection_does_not_reject_an_elongated_spectrum(self):
+        tuner = ESA_AutoTuner(
+            flag_pv_obj=_DummyPV(),
+            flag_pixel=(200, 200),
+            bend_pv="FAKE:BEND",
+        )
+        image = np.zeros((200, 200))
+        image[98:103, 50:130] = 500.0
+
+        has_beam, _score, center_x = tuner._detect_beam(image)
+
+        self.assertTrue(has_beam)
+        self.assertAlmostEqual(center_x, 89.5)
+        self.assertGreater(tuner.last_beam_presence.aspect_ratio, 6.0)
 
     def test_coarse_and_fine_scan_use_triplet_detection_api(self):
         tuner = _FakeAutoTuner()
@@ -398,14 +412,17 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertAlmostEqual(best, 4.0, delta=0.08)
         self.assertEqual(tuner.pipeline, ("center_lock",))
 
-    def test_profile_center_measurement_does_not_depend_on_2d_beam_detection(self):
+    def test_profile_center_measurement_requires_2d_beam_presence(self):
         tuner = _ProfileLockAutoTuner()
-        tuner._detect_beam = lambda _image: (False, None, 0.0)
+        tuner._beam_presence = lambda _image: type(
+            "Presence",
+            (),
+            {"has_beam": False},
+        )()
 
         measurement = tuner._measure_profile_center(tuner.current, "test")
 
-        self.assertIsNotNone(measurement)
-        self.assertAlmostEqual(measurement["center_mm"], -1.5, delta=0.08)
+        self.assertIsNone(measurement)
 
 
 if __name__ == "__main__":

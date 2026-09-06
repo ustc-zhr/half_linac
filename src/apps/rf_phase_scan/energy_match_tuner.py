@@ -68,6 +68,8 @@ class RFPhaseEnergyMatcher:
         pixel_width_mm=None,
         profile_fit_method="Gauss fit",
         min_fit_r_squared=0.7,
+        beam_presence_sigma=6.0,
+        beam_presence_min_area_px=50,
         x_reference_mm=0,
         center_tolerance_mm=0.2,
         max_iterations=6,
@@ -89,6 +91,8 @@ class RFPhaseEnergyMatcher:
             background=bg_image if remove_bg else None,
             roi=roi,
             flip_y=flip_y,
+            beam_presence_sigma=beam_presence_sigma,
+            beam_presence_min_area_px=beam_presence_min_area_px,
         )
         self.progress_callback = progress_callback
         self.settle_time_s = float(settle_time_s)
@@ -193,6 +197,7 @@ class RFPhaseEnergyMatcher:
             stage,
             energy,
             True,
+            raw_image=result["raw_image"],
             center_mm=result["center_mm"],
             center_offset_mm=result["offset_mm"],
             brightness=result["brightness"],
@@ -200,6 +205,13 @@ class RFPhaseEnergyMatcher:
             total_frames=samples,
             fit_method=result["fit_method"],
             fit_r_squared=result["fit_r_squared"],
+            center_spread_mm=result.get("center_spread_mm"),
+            beam_threshold=result.get("beam_threshold"),
+            beam_area_px=result.get("beam_area_px"),
+            beam_major_axis_px=result.get("beam_major_axis_px"),
+            beam_minor_axis_px=result.get("beam_minor_axis_px"),
+            beam_aspect_ratio=result.get("beam_aspect_ratio"),
+            beam_orientation_rad=result.get("beam_orientation_rad"),
         )
         return result
 
@@ -376,7 +388,7 @@ class RFPhaseEnergyMatcher:
         )
         return EnergyTuningPipeline(self.pipeline).run(context)
 
-    def run(self, B_min, B_max, *, start_energy, tracking_reacquire_points=9,
+    def run(self, B_min, B_max, *, start_energy, reacquire_points=9,
             brightness_peak_config=None, center_lock_config=None):
         low, high = float(B_min), float(B_max)
         if low >= high:
@@ -396,11 +408,11 @@ class RFPhaseEnergyMatcher:
         try:
             if self._legacy_objective:
                 if pipeline_has(self.pipeline, BRIGHTNESS_PEAK):
-                    seed = self._reacquire(low, high, center, tracking_reacquire_points)
+                    seed = self._reacquire(low, high, center, reacquire_points)
                 else:
                     seed = self._at(center, "track")
                 if seed is None and pipeline_has(self.pipeline, BRIGHTNESS_PEAK):
-                    seed = self._reacquire(low, high, center, tracking_reacquire_points)
+                    seed = self._reacquire(low, high, center, reacquire_points)
                 if seed is None:
                     self.last_message = "No valid beam profile was found in the Energy Match window."
                     raise RuntimeError(self.last_message)
@@ -416,7 +428,7 @@ class RFPhaseEnergyMatcher:
                     center,
                     brightness_peak_config or {
                         "strategy": "center_outward",
-                        "points": tracking_reacquire_points,
+                        "points": reacquire_points,
                     },
                     center_lock_config or {"strategy": "secant_dispersion"},
                 )

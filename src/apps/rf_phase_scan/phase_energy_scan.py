@@ -24,6 +24,7 @@ class PhaseScanSettings:
     energy_low_mev: float
     energy_high_mev: float
     phase_mode: str = "relative"
+    retry_first_point_on_failure: bool = False
 
     def __post_init__(self) -> None:
         finite_values = (
@@ -68,6 +69,13 @@ class EnergyMatchResult:
     valid_frames: int | None = None
     fit_method: str | None = None
     fit_r_squared: float | None = None
+    center_spread_mm: float | None = None
+    beam_threshold: float | None = None
+    beam_area_px: int | None = None
+    beam_major_axis_px: float | None = None
+    beam_minor_axis_px: float | None = None
+    beam_aspect_ratio: float | None = None
+    beam_orientation_rad: float | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +94,13 @@ class PhaseScanPoint:
     valid_frames: int | None = None
     fit_method: str | None = None
     fit_r_squared: float | None = None
+    center_spread_mm: float | None = None
+    beam_threshold: float | None = None
+    beam_area_px: int | None = None
+    beam_major_axis_px: float | None = None
+    beam_minor_axis_px: float | None = None
+    beam_aspect_ratio: float | None = None
+    beam_orientation_rad: float | None = None
     message: str | None = None
     acquisition_index: int = -1
 
@@ -125,6 +140,50 @@ def wrap_phase_deg(value: float) -> float:
 
 def phase_difference_deg(value: float, reference: float) -> float:
     return wrap_phase_deg(float(value) - float(reference))
+
+
+def wait_for_phase_readback(
+    read_phase: Callable[[], float | None],
+    target_deg: float,
+    *,
+    tolerance_deg: float,
+    timeout_s: float,
+    poll_interval_s: float,
+) -> float:
+    """Wait for a wrapped phase readback to reach a commanded target."""
+    target = float(target_deg)
+    tolerance = float(tolerance_deg)
+    timeout = float(timeout_s)
+    poll_interval = float(poll_interval_s)
+    if not math.isfinite(target):
+        raise ValueError("Phase target must be finite.")
+    if not math.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("Phase readback tolerance must be finite and non-negative.")
+    if not math.isfinite(timeout) or timeout < 0:
+        raise ValueError("Phase readback timeout must be finite and non-negative.")
+    if not math.isfinite(poll_interval) or poll_interval <= 0:
+        raise ValueError("Phase readback poll interval must be finite and positive.")
+
+    deadline = time.monotonic() + timeout
+    actual = None
+    while True:
+        raw = read_phase()
+        try:
+            candidate = float(raw) if raw is not None else math.nan
+        except (TypeError, ValueError):
+            candidate = math.nan
+        if math.isfinite(candidate):
+            actual = candidate
+            if abs(phase_difference_deg(actual, target)) <= tolerance:
+                return actual
+        if time.monotonic() >= deadline:
+            actual_text = "unavailable" if actual is None else f"{actual:g} deg"
+            raise RuntimeError(
+                "LLRF phase readback verification failed: "
+                f"target={target:g} deg, readback={actual_text}, "
+                f"tolerance={tolerance:g} deg, timeout={timeout:g} s."
+            )
+        time.sleep(min(poll_interval, max(deadline - time.monotonic(), 0.0)))
 
 
 def fit_phase_energy_curve(
@@ -293,14 +352,19 @@ class PhaseEnergyScanner:
                     command_phase_deg=command_phase,
                 )
 
-                windows = (
-                    (self.settings.fallback_half_window_mev,)
-                    if acquisition_index == 0
-                    else (
+                if acquisition_index == 0:
+                    if self.settings.retry_first_point_on_failure:
+                        windows = (
+                            self.settings.tracking_half_window_mev,
+                            self.settings.fallback_half_window_mev,
+                        )
+                    else:
+                        windows = (self.settings.fallback_half_window_mev,)
+                else:
+                    windows = (
                         self.settings.tracking_half_window_mev,
                         self.settings.fallback_half_window_mev,
                     )
-                )
                 if valid_matches:
                     search_center = min(
                         valid_matches,
@@ -361,6 +425,13 @@ class PhaseEnergyScanner:
                     valid_frames=match.valid_frames,
                     fit_method=match.fit_method,
                     fit_r_squared=match.fit_r_squared,
+                    center_spread_mm=match.center_spread_mm,
+                    beam_threshold=match.beam_threshold,
+                    beam_area_px=match.beam_area_px,
+                    beam_major_axis_px=match.beam_major_axis_px,
+                    beam_minor_axis_px=match.beam_minor_axis_px,
+                    beam_aspect_ratio=match.beam_aspect_ratio,
+                    beam_orientation_rad=match.beam_orientation_rad,
                     message=match.message,
                 )
                 points.append(point)

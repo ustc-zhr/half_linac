@@ -4,6 +4,8 @@ import time
 
 import numpy as np
 
+from half_linac.src.shared.beam_diagnostics import detect_beam_presence
+
 from .spectrum_profile import SpectrumProfileError, fit_projection_profile, project_image_profiles
 
 
@@ -19,6 +21,8 @@ class RFImageAcquisition:
         background=None,
         roi=None,
         flip_y=False,
+        beam_presence_sigma=6.0,
+        beam_presence_min_area_px=50,
     ):
         self.image_pv = image_pv
         self.image_shape = tuple(image_shape)
@@ -26,9 +30,15 @@ class RFImageAcquisition:
         self.background = None if background is None else np.asarray(background, dtype=float)
         self.roi = roi
         self.flip_y = bool(flip_y)
+        self.beam_presence_sigma = float(beam_presence_sigma)
+        self.beam_presence_min_area_px = int(beam_presence_min_area_px)
         expected_shape = (self.image_shape[1], self.image_shape[0])
         if self.background is not None and self.background.shape != expected_shape:
             raise ValueError(f"Background shape {self.background.shape} does not match image shape {expected_shape}.")
+        if not np.isfinite(self.beam_presence_sigma) or self.beam_presence_sigma <= 0:
+            raise ValueError("Beam-presence sigma threshold must be positive and finite.")
+        if self.beam_presence_min_area_px < 1:
+            raise ValueError("Beam-presence minimum area must be at least one pixel.")
 
     def read_raw(self):
         raw = self.image_pv.get()
@@ -59,14 +69,29 @@ class RFImageAcquisition:
         allow_direct_fallback=False,
         min_fit_r_squared=0.0,
     ):
-        raw_images, fits, strengths = [], [], []
+        raw_images, fits, strengths, presence_results = [], [], [], []
         for index in range(int(samples)):
             if cancel_requested and cancel_requested():
                 raise InterruptedError("Image sampling stopped by operator.")
             raw = self.read_raw()
             try:
+                analysis_image = (
+                    np.maximum(raw - self.background, 0)
+                    if self.background is not None
+                    else raw
+                )
+                presence = detect_beam_presence(
+                    analysis_image,
+                    roi=self.roi,
+                    sigma_threshold=self.beam_presence_sigma,
+                    min_area_px=self.beam_presence_min_area_px,
+                )
+                if not presence.has_beam:
+                    raise SpectrumProfileError(
+                        "No significant beam region was detected."
+                    )
                 projection = project_image_profiles(
-                    np.maximum(raw - self.background, 0) if self.background is not None else raw,
+                    analysis_image,
                     self.pixel_width_mm,
                     self.roi,
                 )
@@ -89,7 +114,8 @@ class RFImageAcquisition:
             else:
                 raw_images.append(raw)
                 fits.append(profile)
-                strengths.append(float(np.sum(projection.density_x)))
+                strengths.append(float(presence.brightness))
+                presence_results.append(presence)
             if index + 1 < int(samples) and interval_s > 0:
                 deadline = time.monotonic() + float(interval_s)
                 while time.monotonic() < deadline:
@@ -98,11 +124,16 @@ class RFImageAcquisition:
                     time.sleep(min(0.05, max(deadline - time.monotonic(), 0)))
         if len(fits) < int(min_valid):
             return None
+        centers = [float(item.center_mm) for item in fits]
+        center_spread_mm = float(np.ptp(centers))
+        presence_diagnostics = presence_results[-1].diagnostics()
         return {
             "raw_image": np.mean(raw_images, axis=0),
-            "center_mm": float(np.median([item.center_mm for item in fits])),
+            "center_mm": float(np.median(centers)),
             "brightness": float(np.median(strengths)),
             "fit_method": fits[0].method,
             "fit_r_squared": (float(np.median([item.r_squared for item in fits if item.r_squared is not None])) if any(item.r_squared is not None for item in fits) else None),
             "valid_frames": len(fits),
+            "center_spread_mm": center_spread_mm,
+            **presence_diagnostics,
         }
