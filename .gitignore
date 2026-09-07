@@ -103,3 +103,7 @@ scripts/export_env.sh
 
 # Local delivery packages
 packages/
+
+# VM workbench observations
+src/virtual_machine/*_elegant/.vm-workbench/
+src/virtual_machine/*_elegant/elegant/*.sig
