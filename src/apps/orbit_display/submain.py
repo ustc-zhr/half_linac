@@ -347,14 +347,7 @@ QScrollBar::sub-page:vertical {
         self.refresh_label.setText(f"Refresh: {self.refresh_interval_ms / 1000:g} s")
 
     def _resolve_bpm_position_scale_to_mm(self):
-        workflow = get_workflow(self.machine_profile, "orbit")
-        scale_by_backend = workflow.get("bpm_position_scale_to_mm", {})
-        if isinstance(scale_by_backend, dict):
-            try:
-                return float(scale_by_backend.get(self.control_backend, 1000.0))
-            except (TypeError, ValueError):
-                pass
-        return 1000.0
+        return self.machine_profile.machine.bpm_scale_to_mm(self.control_backend)
 
     def _format_bpm_value(self, value):
         if value is None:

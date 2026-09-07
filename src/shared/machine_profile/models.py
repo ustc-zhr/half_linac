@@ -15,6 +15,17 @@ class MachineConfig:
     family: str
     display_name: str
     default_mode: str
+    bpm_position_scale_to_mm: Mapping[str, float] = field(default_factory=dict)
+
+    def bpm_scale_to_mm(self, backend: str) -> float:
+        """Resolve the machine-wide conversion from BPM PV units to millimetres."""
+        backend = normalize_mode(backend, "BPM control backend")
+        try:
+            return self.bpm_position_scale_to_mm[backend]
+        except KeyError as exc:
+            raise MachineProfileError(
+                f"machine.bpm_position_scale_to_mm.{backend} is required for BPM reads."
+            ) from exc
 
 
 @dataclass(frozen=True)
@@ -112,6 +123,9 @@ class MachineProfile:
                 machine_raw.get("display_name"), "machine.display_name"
             ),
             default_mode=normalize_mode(machine_raw.get("default_mode"), "machine.default_mode"),
+            bpm_position_scale_to_mm=_parse_bpm_position_scale(
+                machine_raw.get("bpm_position_scale_to_mm", {})
+            ),
         )
 
         elements_raw = data["elements"]
@@ -370,7 +384,6 @@ class SolenoidCenteringWorkflowConfig:
     presets: tuple[SolenoidCenteringPreset, ...]
     presets_by_id: Mapping[str, SolenoidCenteringPreset]
     default_preset: str
-    bpm_position_scale_to_mm: Mapping[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -388,6 +401,23 @@ class AppContext:
     @property
     def machine(self) -> MachineConfig:
         return self.profile.machine
+
+
+def _parse_bpm_position_scale(raw: Any) -> Mapping[str, float]:
+    location = "machine.bpm_position_scale_to_mm"
+    scales = {}
+    for backend, value in _expect_mapping(raw, location).items():
+        name = normalize_mode(backend, location)
+        if name in scales:
+            raise MachineProfileError(f"{location} declares duplicate backend {name!r}.")
+        try:
+            scale = float(value)
+        except (TypeError, ValueError) as exc:
+            raise MachineProfileError(f"{location}.{name} must be numeric.") from exc
+        if isinstance(value, bool) or not math.isfinite(scale) or scale <= 0:
+            raise MachineProfileError(f"{location}.{name} must be finite and positive.")
+        scales[name] = scale
+    return scales
 
 
 def normalize_mode(value: Any, location: str) -> str:
@@ -919,23 +949,6 @@ def _validate_solenoid_centering_workflow(
         workflow.get("sampling", {}),
         "workflows.solenoid_centering.sampling",
     )
-    bpm_scale_by_backend = _expect_mapping(
-        workflow.get("bpm_position_scale_to_mm", {}),
-        "workflows.solenoid_centering.bpm_position_scale_to_mm",
-    )
-    for backend_name, raw_scale in bpm_scale_by_backend.items():
-        try:
-            scale = float(raw_scale)
-        except (TypeError, ValueError) as exc:
-            raise MachineProfileError(
-                "workflows.solenoid_centering.bpm_position_scale_to_mm."
-                f"{backend_name} must be numeric."
-            ) from exc
-        if not math.isfinite(scale) or scale <= 0:
-            raise MachineProfileError(
-                "workflows.solenoid_centering.bpm_position_scale_to_mm."
-                f"{backend_name} must be finite and positive."
-            )
     for index, raw_preset in enumerate(presets):
         location = f"workflows.solenoid_centering.presets[{index}]"
         preset = _expect_mapping(raw_preset, location)

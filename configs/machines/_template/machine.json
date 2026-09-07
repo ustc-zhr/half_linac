@@ -4,7 +4,8 @@
     "id": "template_machine",
     "family": "linac",
     "display_name": "Template Machine",
-    "default_mode": "vm"
+    "default_mode": "vm",
+    "bpm_position_scale_to_mm": {"vm": 1000, "real": 1}
   },
   "elements": [
     {

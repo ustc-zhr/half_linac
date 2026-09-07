@@ -26,7 +26,6 @@ ORBIT_RUNTIME_ROOT = APP_DIR / "runtime"
 
 DEFAULT_RESPONSE_WAIT_S = 8.0
 DEFAULT_CORRECTOR_UPPERLIMIT_RAD = 0.001
-DEFAULT_BPM_POSITION_SCALE_TO_MM = 1000.0
 DEFAULT_SVD_RELATIVE_CUTOFF = 0.01
 LOCAL_RESPONSE_SOURCES = {"measure_live", "active_matrix"}
 DEFAULT_RUNTIME_DEFAULTS: dict[str, Any] = {
@@ -56,10 +55,7 @@ def load_orbit_runtime_settings(target: MachineProfile | AppContext) -> dict[str
     corrector_limit, corrector_limit_unit = _select_corrector_upperlimit(workflow, backend)
     runtime_defaults = _select_runtime_defaults(workflow)
     return {
-        "bpm_position_scale_to_m": _select_bpm_position_scale_to_m(
-            workflow,
-            backend,
-        ),
+        "bpm_position_scale_to_m": profile.machine.bpm_scale_to_mm(backend) * 1e-3,
         "response_wait_s": _select_backend_float(
             workflow,
             "response_wait_s_by_backend",
@@ -319,21 +315,6 @@ def _select_svd_relative_cutoff(
     if cutoff <= 0 or cutoff > 1:
         raise ValueError("svd_relative_cutoff_by_backend must be in the range (0, 1].")
     return cutoff
-
-
-def _select_bpm_position_scale_to_m(
-    workflow: Mapping[str, Any],
-    backend: str,
-) -> float:
-    scale_to_mm = _select_backend_float(
-        workflow,
-        "bpm_position_scale_to_mm",
-        backend,
-        DEFAULT_BPM_POSITION_SCALE_TO_MM,
-    )
-    if scale_to_mm <= 0:
-        raise ValueError("bpm_position_scale_to_mm must be greater than 0.")
-    return scale_to_mm * 1e-3
 
 
 def _select_corrector_upperlimit(

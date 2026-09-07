@@ -37,6 +37,10 @@ hidden from the runtime selector by the leading underscore.
 `machine.json` defines the machine itself:
 
 - machine id, family, display name, and default control backend
+- `machine.bpm_position_scale_to_mm`: BPM PV-to-mm conversion by backend, shared by all
+  apps (e.g. HALF: `{"vm": 1000, "real": 0.001}`, IRFEL: `{"vm": 1000, "real": 1}`).
+  Values must be finite and positive. Configure every backend used for BPM reads;
+  missing values raise an error. App workflow files must not override this conversion.
 - VM and softIOC runtime paths when the machine supports VM workflows
 - machine-native element inventory
 - each element's `kind`, order, optional `plane`, tags, limits, and logical channels

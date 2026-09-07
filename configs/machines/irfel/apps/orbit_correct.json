@@ -1,7 +1,6 @@
 {
   "bpms": ["BPM03", "BPM07", "BPM08", "BPM09", "BPM10"],
   "default_target_bpms": ["BPM03", "BPM07", "BPM08", "BPM09", "BPM10"],
-  "bpm_position_scale_to_mm": {"vm": 1000, "real": 1},
   "xcors": ["HC01", "HC02", "HC05", "HC06", "HC07"],
   "ycors": ["VC01", "VC02", "VC05", "VC06", "VC07"],
   "response_wait_s_by_backend": {"vm": 3, "real": 1},

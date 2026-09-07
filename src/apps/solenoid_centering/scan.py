@@ -1342,11 +1342,8 @@ class SolenoidCenteringScanner:
         return xs, ys
 
     def _read_bpm(self) -> tuple[float, float]:
-        workflow = self.app_context.solenoid_centering_workflow
-        scale = (
-            workflow.bpm_position_scale_to_mm.get(self.app_context.control_backend.name, 1.0)
-            if workflow is not None
-            else 1.0
+        scale = self.app_context.machine.bpm_scale_to_mm(
+            self.app_context.control_backend.name
         )
         return self.io.read(self.bpm_x_pv) * scale, self.io.read(self.bpm_y_pv) * scale
 

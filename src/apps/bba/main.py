@@ -2243,14 +2243,7 @@ class myWindow(QWidget, Ui_Form):
         return snapshot.as_metadata()
 
     def _bba_bpm_position_scale_to_m(self, backend):
-        workflow = self.machine_profile.workflows.get("bba", {})
-        scale_by_backend = workflow.get("bpm_position_scale_to_mm", {})
-        if not isinstance(scale_by_backend, Mapping) or backend not in scale_by_backend:
-            return 1.0
-        scale_to_mm = float(scale_by_backend[backend])
-        if not np.isfinite(scale_to_mm) or scale_to_mm <= 0:
-            raise ValueError(f"bpm_position_scale_to_mm.{backend} must be positive.")
-        return scale_to_mm * 1e-3
+        return self.machine_profile.machine.bpm_scale_to_mm(backend) * 1e-3
 
     def _prepare_bba2_model_snapshot(self, params):
         try:

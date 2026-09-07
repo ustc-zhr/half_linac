@@ -1081,14 +1081,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._refresh_status()
 
     def _resolve_bpm_position_scale_to_mm(self):
-        workflow = get_workflow(self.machine_profile, "orbit")
-        scale_by_backend = workflow.get("bpm_position_scale_to_mm", {})
-        if isinstance(scale_by_backend, dict):
-            try:
-                return float(scale_by_backend.get(self.control_backend, 1000.0))
-            except (TypeError, ValueError):
-                pass
-        return 1000.0
+        return self.machine_profile.machine.bpm_scale_to_mm(self.control_backend)
 
     def _scale_bpm_values(self, values):
         return [

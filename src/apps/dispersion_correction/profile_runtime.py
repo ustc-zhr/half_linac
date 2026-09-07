@@ -91,11 +91,7 @@ def load_profile_run_config(
             backend_name,
             default=2.0,
         ),
-        "bpm_position_scale_to_mm": _backend_number(
-            selected.get("bpm_position_scale_to_mm"),
-            backend_name,
-            default=1.0,
-        ),
+        "bpm_position_scale_to_mm": resolved_context.machine.bpm_scale_to_mm(backend_name),
         "model_only": model_only,
         "pv_map": {} if model_only else _build_profile_pv_map(resolved_context, selected),
     }
