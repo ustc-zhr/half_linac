@@ -3459,7 +3459,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "energy_spread_fraction": float(energy_spread),
             "energy_spread_mev": float(abs(energy_center_mev * energy_spread)),
             "eta_m": float(self.eta_flag),
-            "image_x_axis_sign": int(self.flag_image_x_axis_sign),
+            "model_to_image_x_sign": int(self.flag_model_to_image_x_sign),
             "beta_m": float(self.beta_flag),
             "emittance_m": float(self.emi_flag),
             "include_emit": bool(self.with_emit),
@@ -3886,7 +3886,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.flag_pixel_width_mm = geometry.pixel_width_mm
         self.flag_default_roi = geometry.default_roi
         self.flag_image_flip_y = geometry.flip_y
-        self.flag_image_x_axis_sign = geometry.x_axis_sign
+        self.flag_model_to_image_x_sign = geometry.model_to_image_x_sign
 
         self.flag_expotime_pv = None
         self.flag_exposure_target = None
@@ -3936,7 +3936,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _eta_in_image_coordinates(self, model_eta_m):
         """Express model dispersion in the unchanged camera-image x coordinate."""
-        return float(self.flag_image_x_axis_sign) * float(model_eta_m)
+        return float(self.flag_model_to_image_x_sign) * float(model_eta_m)
   
     def setup_timer(self):
         # refreah the figure at 1 Hz

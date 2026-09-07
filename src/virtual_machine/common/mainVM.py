@@ -19,13 +19,19 @@ ensure_repo_import_path(__file__)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
+    QPushButton,
     QSizePolicy,
+    QStackedWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -40,7 +46,21 @@ from half_linac.src.shared.machine_profile import (
     resolve_virtual_machine_usedline_workflow,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
-from half_linac.src.virtual_machine.lattice_usedline import describe_runtime_usedline
+from half_linac.src.shared.runtime_state import read_runtime_state
+from half_linac.src.virtual_machine.beam_source import (
+    BUNCHED_BEAM,
+    SDDS_BEAM,
+    BeamSourceError,
+    apply_beam_source_config,
+    bootstrap_control,
+    load_beam_source_config,
+    reference_momentum_key,
+    unquote_elegant_string,
+)
+from half_linac.src.virtual_machine.lattice_usedline import (
+    describe_runtime_usedline,
+    infer_usedline_context,
+)
 
 
 PROCESS_START_TIMEOUT_S = 0.3
@@ -526,6 +546,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.process_start_times = {}
         self.current_theme = resolve_initial_theme()
         self._is_shutting_down = False
+        self._vm_config_label = None
         self._install_signal_handlers()
 
         self._connect_signals()
@@ -534,6 +555,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._configure_group_titles()
         self._configure_inputs()
         self._configure_action_buttons()
+        self._build_beam_source_panel()
         self._configure_group_panel()
         self._schedule_layout_refresh()
         self._reset_activity_log()
@@ -559,8 +581,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} VM Control")
-        self.resize(1080, 820)
-        self.setMinimumSize(940, 760)
+        self.resize(1080, 940)
+        self.setMinimumSize(940, 860)
         self._apply_theme()
         self.frame_2.hide()
         self.textEdit.setReadOnly(True)
@@ -622,6 +644,257 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.groupBox_3.setTitle("Error Settings")
         self.groupBox_4.setTitle("Static Offset")
         self.groupBox_5.setTitle("Quadrupole Jitter")
+
+    def _build_beam_source_panel(self):
+        self.beam_source_group = QGroupBox("Beam Source", self.centralwidget)
+        self.beam_source_group.setObjectName("beamSourceGroup")
+        self.beam_source_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        outer = QVBoxLayout(self.beam_source_group)
+        outer.setContentsMargins(12, 10, 12, 12)
+        outer.setSpacing(8)
+
+        header = QHBoxLayout()
+        header.setSpacing(8)
+        source_label = self._beam_field_label("Source", self.beam_source_group)
+        self.beam_source_combo = QComboBox(self.beam_source_group)
+        self.beam_source_combo.setObjectName("beamSourceCombo")
+        self.beam_source_combo.addItem("Generated Bunch", BUNCHED_BEAM)
+        self.beam_source_combo.addItem("SDDS Beam", SDDS_BEAM)
+        self.beam_source_status = QLabel("", self.beam_source_group)
+        self.beam_source_status.setObjectName("beamSourceStatus")
+        self.beam_source_status.setWordWrap(True)
+        self.beam_source_status.setProperty("role", "field")
+        self.reference_label = self._beam_field_label("Reference", self.beam_source_group)
+        self.reference_edit = QLineEdit(self.beam_source_group)
+        self.reference_edit.setObjectName("beamReferenceMomentum")
+        self.reference_edit.setMaximumWidth(150)
+        self.apply_beam_source_button = QPushButton("Apply Beam Settings", self.beam_source_group)
+        self.apply_beam_source_button.setObjectName("applyBeamSource")
+        self.apply_beam_source_button.setMinimumWidth(170)
+        header.addWidget(source_label)
+        header.addWidget(self.beam_source_combo)
+        header.addWidget(self.beam_source_status, 1)
+        header.addWidget(self.reference_label)
+        header.addWidget(self.reference_edit)
+        header.addWidget(self.apply_beam_source_button)
+        outer.addLayout(header)
+
+        self.beam_source_stack = QStackedWidget(self.beam_source_group)
+        self.beam_source_stack.setObjectName("beamSourceStack")
+        self.bunched_page = QWidget(self.beam_source_stack)
+        self.sdds_page = QWidget(self.beam_source_stack)
+        self.bunched_fields = {}
+        self.sdds_fields = {}
+        self.twiss_fields = {}
+        self._build_bunched_beam_page()
+        self._build_sdds_beam_page()
+        self.beam_source_stack.addWidget(self.bunched_page)
+        self.beam_source_stack.addWidget(self.sdds_page)
+        outer.addWidget(self.beam_source_stack)
+        self.verticalLayout_2.addWidget(self.beam_source_group)
+
+        default_control = bootstrap_control(self.runtime)
+        self.beam_reference_key = reference_momentum_key(default_control)
+        reference_unit = "βγ" if self.beam_reference_key == "p_central" else "MeV/c"
+        self.reference_label.setText(f"{self.beam_reference_key} ({reference_unit})")
+        self.beam_source_combo.currentIndexChanged.connect(self._beam_source_mode_changed)
+        self.apply_beam_source_button.clicked.connect(self._apply_beam_source)
+        self.sdds_browse_button.clicked.connect(self._browse_sdds_beam)
+        self._load_beam_source_fields()
+
+    @staticmethod
+    def _beam_field_label(text, parent):
+        label = QLabel(text, parent)
+        label.setProperty("role", "field")
+        return label
+
+    def _add_beam_line_field(self, layout, fields, key, label, index, *, combo=False):
+        row, group = divmod(index, 4)
+        column = group * 2
+        layout.addWidget(self._beam_field_label(label, layout.parentWidget()), row, column)
+        if combo:
+            widget = QComboBox(layout.parentWidget())
+            widget.setEditable(True)
+            widget.addItems(["gaussian", "uniform", "shell"])
+            widget.setMaximumWidth(145)
+        else:
+            widget = QLineEdit(layout.parentWidget())
+            widget.setMaximumWidth(135)
+        widget.setObjectName("beam_" + key.replace("[", "_").replace("]", ""))
+        layout.addWidget(widget, row, column + 1)
+        fields[key] = widget
+        return widget
+
+    def _build_bunched_beam_page(self):
+        layout = QGridLayout(self.bunched_page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setHorizontalSpacing(8)
+        layout.setVerticalSpacing(6)
+        specs = (
+            ("n_particles_per_bunch", "Particles", False),
+            ("emit_nx", "emit_nx", False),
+            ("emit_ny", "emit_ny", False),
+            ("sigma_s", "sigma_s", False),
+            ("sigma_dp", "sigma_dp", False),
+            ("distribution_type[0]", "X distribution", True),
+            ("distribution_cutoff[0]", "X cutoff", False),
+            ("distribution_type[1]", "Y distribution", True),
+            ("distribution_cutoff[1]", "Y cutoff", False),
+            ("distribution_type[2]", "S distribution", True),
+            ("distribution_cutoff[2]", "S cutoff", False),
+        )
+        for index, (key, label, combo) in enumerate(specs):
+            self._add_beam_line_field(layout, self.bunched_fields, key, label, index, combo=combo)
+        for offset, key in enumerate(("beta_x", "beta_y", "alpha_x", "alpha_y"), len(specs)):
+            self._add_beam_line_field(layout, self.twiss_fields, key, key, offset)
+        self.random_seed_edit = self._add_beam_line_field(
+            layout,
+            self.bunched_fields,
+            "random_number_seed",
+            "Random seed",
+            len(specs) + 4,
+        )
+        for column in (1, 3, 5, 7):
+            layout.setColumnStretch(column, 1)
+
+    def _build_sdds_beam_page(self):
+        layout = QGridLayout(self.sdds_page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setHorizontalSpacing(8)
+        layout.setVerticalSpacing(6)
+        input_label = self._beam_field_label("Input file", self.sdds_page)
+        self.sdds_input_edit = QLineEdit(self.sdds_page)
+        self.sdds_input_edit.setObjectName("beam_sdds_input")
+        self.sdds_browse_button = QPushButton("Browse…", self.sdds_page)
+        self.sdds_browse_button.setObjectName("browseSddsBeam")
+        self.sdds_browse_button.setMaximumWidth(110)
+        layout.addWidget(input_label, 0, 0)
+        layout.addWidget(self.sdds_input_edit, 0, 1, 1, 5)
+        layout.addWidget(self.sdds_browse_button, 0, 6, 1, 2)
+        self.sdds_fields["input"] = self.sdds_input_edit
+        for index, (key, label) in enumerate(
+            (("sample_interval", "Sample interval"), ("p_lower", "p_lower"), ("p_upper", "p_upper"))
+        ):
+            self._add_beam_line_field(layout, self.sdds_fields, key, label, index + 4)
+        self.center_arrival_check = QCheckBox("Center arrival time", self.sdds_page)
+        self.center_arrival_check.setObjectName("beam_center_arrival_time")
+        self.reuse_bunch_check = QCheckBox("Reuse bunch", self.sdds_page)
+        self.reuse_bunch_check.setObjectName("beam_reuse_bunch")
+        layout.addWidget(self.center_arrival_check, 2, 0, 1, 2)
+        layout.addWidget(self.reuse_bunch_check, 2, 2, 1, 2)
+        for column in (1, 3, 5, 7):
+            layout.setColumnStretch(column, 1)
+
+    def _load_beam_source_fields(self):
+        config = load_beam_source_config(self.runtime)
+        self.beam_source_config = config
+        self._set_combo_current_data(self.beam_source_combo, config["selected"])
+        for key, widget in self.bunched_fields.items():
+            if key == "random_number_seed":
+                value = config["run_setup"].get(key, "")
+            else:
+                value = config[BUNCHED_BEAM].get(key, "")
+            self._set_beam_widget_text(widget, unquote_elegant_string(value))
+        for key, widget in self.twiss_fields.items():
+            self._set_beam_widget_text(widget, config["twiss_output"].get(key, ""))
+        for key, widget in self.sdds_fields.items():
+            self._set_beam_widget_text(widget, unquote_elegant_string(config[SDDS_BEAM].get(key, "")))
+        self.center_arrival_check.setChecked(str(config[SDDS_BEAM].get("center_arrival_time", "1")) != "0")
+        self.reuse_bunch_check.setChecked(str(config[SDDS_BEAM].get("reuse_bunch", "1")) != "0")
+        self.reference_edit.setText(str(config["run_setup"].get(self.beam_reference_key, "")))
+        self._beam_source_mode_changed()
+
+    @staticmethod
+    def _set_beam_widget_text(widget, value):
+        if isinstance(widget, QComboBox):
+            widget.setCurrentText(str(value))
+        else:
+            widget.setText(str(value))
+
+    def _collect_beam_source_config(self):
+        config = {
+            "selected": self.beam_source_combo.currentData(),
+            BUNCHED_BEAM: dict(self.beam_source_config.get(BUNCHED_BEAM, {})),
+            SDDS_BEAM: dict(self.beam_source_config.get(SDDS_BEAM, {})),
+            "twiss_output": dict(self.beam_source_config.get("twiss_output", {})),
+            "run_setup": dict(self.beam_source_config.get("run_setup", {})),
+        }
+        for key, widget in self.bunched_fields.items():
+            value = widget.currentText() if isinstance(widget, QComboBox) else widget.text()
+            if key == "random_number_seed":
+                config["run_setup"][key] = value
+            else:
+                config[BUNCHED_BEAM][key] = value
+        for key, widget in self.twiss_fields.items():
+            config["twiss_output"][key] = widget.text()
+        for key, widget in self.sdds_fields.items():
+            config[SDDS_BEAM][key] = widget.text()
+        config[SDDS_BEAM]["center_arrival_time"] = self.center_arrival_check.isChecked()
+        config[SDDS_BEAM]["reuse_bunch"] = self.reuse_bunch_check.isChecked()
+        config[SDDS_BEAM]["input_type"] = '"elegant"'
+        config["run_setup"].pop("p_central", None)
+        config["run_setup"].pop("p_central_mev", None)
+        config["run_setup"][self.beam_reference_key] = self.reference_edit.text()
+        return config
+
+    def _beam_source_mode_changed(self):
+        mode = self.beam_source_combo.currentData()
+        self.beam_source_stack.setCurrentWidget(
+            self.bunched_page if mode == BUNCHED_BEAM else self.sdds_page
+        )
+        self.beam_source_status.setText(
+            "Generated particles from beam and Twiss parameters."
+            if mode == BUNCHED_BEAM
+            else "Particles loaded from an Elegant SDDS file."
+        )
+        self._schedule_layout_refresh()
+
+    def _browse_sdds_beam(self):
+        initial = self.sdds_input_edit.text().strip() or str(self.runtime.vm.bootstrap_lattice.parent)
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select SDDS Beam",
+            initial,
+            "SDDS beam files (*.sdds *.bun *.dat);;All files (*)",
+        )
+        if filename:
+            self.sdds_input_edit.setText(filename)
+
+    def _apply_beam_source(self):
+        if self._beam_source_is_segment_handoff():
+            self._notify("Return to a full or predefined usedline before editing the beam source.")
+            return
+        try:
+            self.beam_source_config = apply_beam_source_config(
+                self.runtime,
+                self._collect_beam_source_config(),
+            )
+        except (BeamSourceError, OSError) as exc:
+            self.beam_source_status.setText(f"Invalid settings: {exc}")
+            self._notify(f"Beam settings were not applied: {exc}")
+            return
+        label = "Generated Bunch" if self.beam_source_config["selected"] == BUNCHED_BEAM else "SDDS Beam"
+        self.beam_source_status.setText(f"Applied: {label}")
+        self._notify(f"Applied beam source: {label}. VM refresh requested.")
+
+    def _beam_source_is_segment_handoff(self):
+        try:
+            state = read_runtime_state(self.runtime.vm.runtime_json)
+            return infer_usedline_context(self.runtime, state).get("mode") in {"segment", "prewatch"}
+        except (FileNotFoundError, KeyError, TypeError):
+            return False
+
+    def _refresh_beam_source_availability(self, config_running=False):
+        if not hasattr(self, "beam_source_group"):
+            return
+        handoff = self._beam_source_is_segment_handoff()
+        editable = not handoff and not config_running
+        self.beam_source_combo.setEnabled(editable)
+        self.beam_source_stack.setEnabled(editable)
+        self.reference_edit.setEnabled(editable)
+        self.apply_beam_source_button.setEnabled(editable)
+        if handoff:
+            self.beam_source_status.setText("Segment handoff (pre.bun) — return to a full usedline to edit.")
 
     def _configure_inputs(self):
         self.label_4.setText("Quad DX/DY")
@@ -815,10 +1088,20 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._append_log(f"Current VM usedline: {self._current_usedline_summary()}.")
 
     def _prune_finished_processes(self):
+        routing_change_finished = False
         for key, proc in list(self.processes.items()):
             if proc.poll() is not None:
                 self.processes.pop(key, None)
                 self.process_start_times.pop(key, None)
+                if key == "vm_config":
+                    routing_change_finished = self._vm_config_label in {
+                        "predefined usedline transfer",
+                        "VM usedline simplification",
+                        "Initial lattice reload",
+                    }
+                    self._vm_config_label = None
+        if routing_change_finished and hasattr(self, "beam_source_group"):
+            self._load_beam_source_fields()
 
     def _is_running(self, key):
         proc = self.processes.get(key)
@@ -926,6 +1209,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_FULLline.setEnabled(vm_controls_enabled)
         self.static_err.setEnabled(vm_controls_enabled)
         self.err_off.setEnabled(vm_controls_enabled)
+        self._refresh_beam_source_availability(config_running=config_running)
 
         self._update_button_state(self.start_ioc, ioc_running)
         self._update_button_state(self.start_vm, vm_running)
@@ -987,14 +1271,21 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if not self._is_running("vm"):
             self._notify(f"Start VM before running {label}.")
             return None
+        if self._is_running("vm_config"):
+            self._notify("Another VM configuration change is already running.")
+            return None
 
-        return self._start_process(
+        self._vm_config_label = label
+        process = self._start_process(
             key="vm_config",
             label=label,
             cmd=cmd,
             cwd=str(self.runtime.vm.root),
             expect_running=False,
         )
+        if process is None:
+            self._vm_config_label = None
+        return process
 
     def startioc(self):
         self._notify("Starting softIOC.")

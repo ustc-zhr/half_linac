@@ -33,6 +33,7 @@ jitterfile_*.txt
 # Local control-system source material; keep the tracked provenance README only.
 configs/machines/half/references/control_system/
 configs/machines/half/references/epics_examples/
+configs/machines/half/references/preinjector_parmela/
 src/apps/orbit_correct/runtime/
 src/apps/bba/runtime/
 src/apps/energy_spectrum/runtime/

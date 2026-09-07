@@ -17,6 +17,10 @@ from half_linac.src.shared.machine_profile import (
     resolve_virtual_machine_usedline_workflow,
 )
 from half_linac.src.shared.runtime_state import read_runtime_state, update_runtime_state, write_runtime_state
+from half_linac.src.virtual_machine.beam_source import (
+    BEAM_SOURCE_CONFIG_KEY,
+    apply_preferred_beam_source,
+)
 
 
 PREWATCH_ID = "PREW"
@@ -258,6 +262,10 @@ def simplify_usedline_segment(
             "source": "simplify_VM",
         }
         _restore_baseline_control(runtime_state, baseline_control)
+        apply_preferred_beam_source(
+            runtime_state["control"],
+            runtime_state.get(BEAM_SOURCE_CONFIG_KEY),
+        )
         return True
 
     update_runtime_state(runtime.vm.runtime_json, prepare_pre_bunch)
@@ -355,6 +363,10 @@ def _set_usedline_to_lattice_line(line_name: str, *, success_label: str) -> list
         )
         _restore_baseline_control(runtime_state, baseline_control)
         runtime_state["control"].setdefault("run_setup", {})["use_beamline"] = runtime.vm.line_name
+        apply_preferred_beam_source(
+            runtime_state["control"],
+            runtime_state.get(BEAM_SOURCE_CONFIG_KEY),
+        )
         return True
 
     update_runtime_state(runtime.vm.runtime_json, switch_line)

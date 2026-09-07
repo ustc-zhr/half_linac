@@ -19,6 +19,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REPO_PARENT = REPO_ROOT.parent
 APP_ROOT = REPO_ROOT / "src" / "apps"
+VM_ROOT = REPO_ROOT / "src" / "virtual_machine"
 
 
 @dataclass(frozen=True)
@@ -27,12 +28,26 @@ class GuiSmokeSpec:
     window_class: str
     status_keys: frozenset[str]
     uses_selector: bool = False
+    uses_runtime_context: bool = True
     machine_id: str = "half"
     control_backend: str = "vm"
     expected_hv_feedback_enabled: bool | None = None
 
 
 GUI_SMOKE_SPECS = {
+    "virtual_machine": GuiSmokeSpec(
+        VM_ROOT / "half_elegant" / "mainVM.py",
+        "myWindow",
+        frozenset({"connection", "mode", "config", "current"}),
+        uses_runtime_context=False,
+    ),
+    "virtual_machine_irfel": GuiSmokeSpec(
+        VM_ROOT / "irfel_elegant" / "mainVM.py",
+        "myWindow",
+        frozenset({"connection", "mode", "config", "current"}),
+        uses_runtime_context=False,
+        machine_id="irfel",
+    ),
     "launcher": GuiSmokeSpec(
         APP_ROOT / "launcher" / "main.py",
         "myWindow",
@@ -231,6 +246,30 @@ def _run_child(app_name: str) -> None:
             f"{app_name} status keys are {sorted(status_items)}, expected {sorted(spec.status_keys)}."
         )
 
+    if app_name in {"virtual_machine", "virtual_machine_irfel"}:
+        expected_reference = "p_central" if app_name == "virtual_machine" else "p_central_mev"
+        if window.beam_source_combo.currentData() not in {"bunched_beam", "sdds_beam"}:
+            raise AssertionError(f"{app_name} did not load a valid beam source mode.")
+        if window.beam_reference_key != expected_reference:
+            raise AssertionError(f"{app_name} displayed the wrong reference momentum parameter.")
+        if window.beam_source_group.sizeHint().width() > window.width():
+            raise AssertionError(f"{app_name} beam source panel exceeds the window width.")
+        expected_theme = resolve_initial_theme()
+        window._toggle_theme()
+        if window.current_theme == expected_theme:
+            raise AssertionError(f"{app_name} could not switch its theme independently.")
+        original_handoff_probe = window._beam_source_is_segment_handoff
+        window._beam_source_is_segment_handoff = lambda: True
+        window._refresh_beam_source_availability()
+        if window.apply_beam_source_button.isEnabled():
+            raise AssertionError(f"{app_name} allows beam edits during a segment handoff.")
+        window._beam_source_is_segment_handoff = original_handoff_probe
+        window._refresh_beam_source_availability()
+        window.reference_edit.clear()
+        window._apply_beam_source()
+        if not window.beam_source_status.text().startswith("Invalid settings:"):
+            raise AssertionError(f"{app_name} did not report invalid beam settings.")
+
     if spec.expected_hv_feedback_enabled is not None:
         actual = window.hv_feedback_button.isEnabled()
         if actual is not spec.expected_hv_feedback_enabled:
@@ -339,7 +378,7 @@ def _run_child(app_name: str) -> None:
         selectors = window.findChildren(RuntimeSelectorWidget)
         if len(selectors) != 1:
             raise AssertionError(f"{app_name} has {len(selectors)} runtime selectors; expected 1.")
-    else:
+    elif spec.uses_runtime_context:
         contexts = window.findChildren(RuntimeContextWidget)
         if len(contexts) != 1:
             raise AssertionError(f"{app_name} has {len(contexts)} runtime contexts; expected 1.")

@@ -1067,7 +1067,8 @@ class RFPhaseScanWindow(QMainWindow):
         scan["pixel_width_mm"] = float(geometry.pixel_width_mm)
         scan["x_reference_mm"] = float(self.diagnostics.get("x_reference_mm", 0.0))
         scan["design_eta_m"] = (
-            float(geometry.x_axis_sign) * float(self.diagnostics["design_eta_m"])
+            float(geometry.model_to_image_x_sign)
+            * float(self.diagnostics["design_eta_m"])
         )
         scan["image_flip_y"] = self.image_flip_y
         scan["min_fit_r_squared"] = self.min_fit_r_squared
@@ -1361,7 +1362,7 @@ class RFPhaseScanWindow(QMainWindow):
                     f"{self.min_fit_r_squared:.3f}."
                 )
             eta_m = (
-                float(geometry.x_axis_sign)
+                float(geometry.model_to_image_x_sign)
                 * float(self.diagnostics["design_eta_m"])
             )
             x_reference_mm = float(self.diagnostics.get("x_reference_mm", 0.0))

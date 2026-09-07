@@ -123,11 +123,15 @@ class EnergySpectrumStationTests(unittest.TestCase):
 
         for flag_id in ("PRF02", "ENY"):
             self.assertEqual(
-                resolve_element_image_geometry(profile, flag_id, "vm").x_axis_sign,
+                resolve_element_image_geometry(
+                    profile, flag_id, "vm"
+                ).model_to_image_x_sign,
                 1,
             )
             self.assertEqual(
-                resolve_element_image_geometry(profile, flag_id, "real").x_axis_sign,
+                resolve_element_image_geometry(
+                    profile, flag_id, "real"
+                ).model_to_image_x_sign,
                 -1,
             )
 
