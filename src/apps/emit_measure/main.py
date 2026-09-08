@@ -4970,10 +4970,10 @@ class myWindow(QWidget,Ui_Form):
         para["inverse_map"] = False
         para["direction"] = "full"
 
-        preset = self._current_emit_preset()
-        if preset is None:
-            self.twiss_status_edit.setText("Invalid preset")
-            self._warn_twiss("Select an emittance preset before calculating Twiss.")
+        source_element = self.comboBox_2.currentText().strip()
+        if not source_element:
+            self.twiss_status_edit.setText("Invalid source element")
+            self._warn_twiss("Select a From element before calculating Twiss.")
             return
         try:
             model_line = str(self.twiss_line_combo.currentData() or "")
@@ -4988,7 +4988,7 @@ class myWindow(QWidget,Ui_Form):
             self.twiss_status_edit.setText("Model line failed")
             self._warn_twiss(str(exc))
             return
-        para["quad1"] = preset.quad
+        para["quad1"] = source_element
         para["quad2"] = line_end
         para["model_line"] = model_line
         para["line_start"] = line_start
@@ -5028,7 +5028,7 @@ class myWindow(QWidget,Ui_Form):
             "alpha0": alpha0,
             "gamma0": gamma0,
             "line_name": model_line,
-            "source_element": preset.quad,
+            "source_element": source_element,
         }
         self.latest_twiss_profile = None
         self.latest_twiss_design_profile = None
