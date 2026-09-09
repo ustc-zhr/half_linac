@@ -569,6 +569,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.load_response_matrix_button.clicked.connect(self.load_response_matrix)
 
         self.comboBox.currentIndexChanged.connect(self._on_correction_method_changed)
+        self.correctionPlaneComboBox.currentIndexChanged.connect(
+            self._on_correction_plane_changed
+        )
         self.localResponseSourceComboBox.currentIndexChanged.connect(
             self._on_local_response_source_changed
         )
@@ -931,6 +934,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.globalMaxIterLabel, self.globalMaxIterLineEdit = self._make_parameter_field(card)
         self.svdCutoffPctLabel, self.svdCutoffPctLineEdit = self._make_parameter_field(card)
         self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit = self._make_parameter_field(card)
+        self.correctionPlaneLabel = QLabel(card)
+        self.correctionPlaneComboBox = QComboBox(card)
+        self.correctionPlaneComboBox.addItem("X + Y", "xy")
+        self.correctionPlaneComboBox.addItem("X", "x")
+        self.correctionPlaneComboBox.addItem("Y", "y")
         self.correctionGainLabel, self.correctionGainLineEdit = self._make_parameter_field(card)
         self.correctionMaxStepLabel, self.correctionMaxStepLineEdit = self._make_parameter_field(card)
         self.responseKickLabel, self.responseKickLineEdit = self._make_parameter_field(card)
@@ -986,6 +994,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.oneToOneCorrectionGroup = self._build_parameter_group(
             "One-to-One Correction",
             (
+                (self.correctionPlaneLabel, self.correctionPlaneComboBox, False),
                 (self.oneToOneMaxIterLabel, self.oneToOneMaxIterLineEdit, False),
                 (self.localResponseSourceLabel, self.localResponseSourceComboBox, False),
                 (self.responseKickLabel, self.responseKickLineEdit, False),
@@ -1221,6 +1230,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.globalMaxIterLabel.setProperty("role", "field")
         self.svdCutoffPctLabel.setProperty("role", "field")
         self.oneToOneMaxIterLabel.setProperty("role", "field")
+        self.correctionPlaneLabel.setProperty("role", "field")
         self.correctionGainLabel.setProperty("role", "field")
         self.correctionMaxStepLabel.setProperty("role", "field")
         self.responseKickLabel.setProperty("role", "field")
@@ -1254,6 +1264,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "singular value. Lower values retain more weak modes."
         )
         self.oneToOneMaxIterLabel.setText("1-to-1 Max Iter / BPM")
+        self.correctionPlaneLabel.setText("Correction Plane")
+        self.correctionPlaneComboBox.setToolTip(
+            "X + Y corrects both planes. X and Y correct only the selected plane "
+            "using the corresponding HCor or VCor."
+        )
         self.correctionGainLabel.setText("Correction Gain")
         self.correctionMaxStepLabel.setText("Max Step (%)")
         self.responseKickLabel.setText(f"Local Response Kick ({limit_unit})")
@@ -1424,6 +1439,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _selected_correction_method(self):
         return self.comboBox.currentText().strip().lower()
 
+    def _selected_correction_plane(self):
+        value = self.correctionPlaneComboBox.currentData()
+        return str(value or "xy").strip().lower()
+
     def _selected_local_response_source(self):
         value = self.localResponseSourceComboBox.currentData()
         return str(value or "measure_live").strip().lower()
@@ -1448,6 +1467,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._update_method_parameter_state()
         self._refresh_status()
 
+    def _on_correction_plane_changed(self, *_):
+        self._update_target_plane_state()
+        self._refresh_status()
+
     def _on_local_response_source_changed(self, *_):
         self._update_local_response_source_state()
         self._refresh_status()
@@ -1464,8 +1487,23 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.globalCorrectionGroup.setEnabled(show_global)
         self.oneToOneCorrectionGroup.setVisible(show_one_to_one)
         self.oneToOneCorrectionGroup.setEnabled(show_one_to_one)
+        self._update_target_plane_state()
         self._update_local_response_source_state()
         self._update_global_corrector_edit_state(method == "global")
+
+    def _update_target_plane_state(self):
+        if not hasattr(self, "correctionPlaneComboBox"):
+            return
+        method = self._selected_correction_method()
+        plane = self._selected_correction_plane() if method == "one-to-one" else "xy"
+        x_enabled = plane in {"x", "xy"}
+        y_enabled = plane in {"y", "xy"}
+        for spinbox in self._bpmx_spinboxes:
+            spinbox.setEnabled(x_enabled)
+        for spinbox in self._bpmy_spinboxes:
+            spinbox.setEnabled(y_enabled)
+        self.label_45.setEnabled(x_enabled)
+        self.label_46.setEnabled(y_enabled)
 
     def _update_local_response_source_state(self):
         if not hasattr(self, "responseKickLineEdit"):
@@ -1508,7 +1546,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
             )
         else:
             self.status_panel.set_title("method", "Method")
-            self.status_panel.set_item("method", self.comboBox.currentText(), "subtle")
+            method_text = self.comboBox.currentText()
+            if method_text.strip().lower() == "one-to-one":
+                method_text = f"{method_text} / {self.correctionPlaneComboBox.currentText()}"
+            self.status_panel.set_item("method", method_text, "subtle")
             self.status_panel.set_title("targets", "Targets")
             self.status_panel.set_item(
                 "targets", f"{selected}/{total}", "success" if selected else "warning"
@@ -2054,6 +2095,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _correction_parameter_args(self):
         method = self._selected_correction_method()
+        correction_plane = self._selected_correction_plane() if method == "one-to-one" else "xy"
         local_response_source = self._selected_local_response_source()
         corrector_limit = self._corrector_limit_value()
         correction_settle_s = self._parse_nonnegative_float(
@@ -2117,6 +2159,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             f"{correction_settle_s:.12g}",
             local_response_source,
             f"{svd_relative_cutoff:.12g}",
+            correction_plane,
         ]
         
     def measure_res(self): #measure response matrix

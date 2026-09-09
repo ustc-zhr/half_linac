@@ -104,7 +104,8 @@ class OrbitCorrector:
                 global_ycor_list: Optional[List[str]] = None,
                 correction_settle_s: Optional[float] = None,
                 local_response_source: Optional[str] = None,
-                svd_relative_cutoff: Optional[float] = None):
+                svd_relative_cutoff: Optional[float] = None,
+                correction_plane: str = "xy"):
         self.app_context = load_app_context("orbit_correct")
         self.machine_profile = self.app_context.profile
         self.orbit_workflow = self.app_context.orbit_workflow
@@ -126,6 +127,7 @@ class OrbitCorrector:
             local_response_source,
             str(self.runtime_defaults["local_response_source"]),
         )
+        self.correction_plane = self._select_correction_plane(correction_plane)
 
         # constant definition
         self.response_matrix_path: Path | None = None
@@ -196,6 +198,15 @@ class OrbitCorrector:
             if missing:
                 raise ValueError(f"Unknown target BPMs: {', '.join(missing)}")
             self.target_indices = [index_map[name] for name in target_BPMlist]
+            active_planes = self._active_planes()
+            if "x" in active_planes and any(
+                idx >= len(self.cor_x_list_all) for idx in self.target_indices
+            ):
+                raise ValueError("Selected BPMs do not all have corresponding X correctors.")
+            if "y" in active_planes and any(
+                idx >= len(self.cor_y_list_all) for idx in self.target_indices
+            ):
+                raise ValueError("Selected BPMs do not all have corresponding Y correctors.")
             self.bpm_list_target = list(target_BPMlist)
             self.cor_x_list_target = [self.cor_x_list_all[idx] for idx in self.target_indices]
             self.cor_y_list_target = [self.cor_y_list_all[idx] for idx in self.target_indices]
@@ -280,6 +291,18 @@ class OrbitCorrector:
         return selected
 
     @staticmethod
+    def _select_correction_plane(value: str) -> str:
+        selected = str(value or "xy").strip().lower()
+        if selected not in {"xy", "x", "y"}:
+            raise ValueError("correction_plane must be one of: xy, x, y")
+        return selected
+
+    def _active_planes(self) -> set[str]:
+        if self.correction_plane == "xy":
+            return {"x", "y"}
+        return {self.correction_plane}
+
+    @staticmethod
     def _select_local_response_source(value: Optional[str], default: str) -> str:
         selected = default if value is None else str(value)
         selected = selected.strip().lower()
@@ -328,10 +351,11 @@ class OrbitCorrector:
         if not self.bpm_list_target:
             raise ValueError("No target BPMs selected for orbit correction.")
 
-        if len(self.target_BPMx_values) != len(self.bpm_list_target):
+        active_planes = self._active_planes()
+        if "x" in active_planes and len(self.target_BPMx_values) != len(self.bpm_list_target):
             raise ValueError("Target BPM X values do not match the selected BPM list.")
 
-        if len(self.target_BPMy_values) != len(self.bpm_list_target):
+        if "y" in active_planes and len(self.target_BPMy_values) != len(self.bpm_list_target):
             raise ValueError("Target BPM Y values do not match the selected BPM list.")
 
     def _require_write_allowed(self, operation: str) -> None:
@@ -488,6 +512,7 @@ class OrbitCorrector:
         """one-to-one method"""
         self._require_write_allowed("One-to-one orbit correction")
         self._require_targets()
+        active_planes = self._active_planes()
         local_response_matrix = None
         if self.local_response_source == LOCAL_RESPONSE_ACTIVE_MATRIX:
             local_response_matrix = self._load_valid_response_matrix()
@@ -497,6 +522,7 @@ class OrbitCorrector:
             )
         else:
             logger.info("one-to-one correction measures local responses live")
+        logger.info("one-to-one correction active planes: %s", ", ".join(sorted(active_planes)))
         failures: list[str] = []
         total_bpms = len(self.bpm_list_target)
         for j in range(len(self.bpm_list_target)):
@@ -506,27 +532,40 @@ class OrbitCorrector:
                 current=f"BPM {j + 1}/{total_bpms}: {self.bpm_list_target[j]}",
             )
             logger.info(f"开始校正: {self.bpm_list_target[j]}")
-            
-            # 同时获取初始值
-            xbpm_val0, ybpm_val0, hcorrVal, vcorrVal = self._get_avg_readings([
-                self.pvBPMx[j],
-                self.pvBPMy[j],
-                self.pvCORx[j],
-                self.pvCORy[j]
-            ], bpm_count=2)
-            xcor_id = self.cor_x_list_target[j]
-            ycor_id = self.cor_y_list_target[j]
-            self._require_current_within_limit(xcor_id, hcorrVal)
-            self._require_current_within_limit(ycor_id, vcorrVal)
 
-            initial_x_err = abs(self.target_BPMx_values[j] - xbpm_val0)
-            initial_y_err = abs(self.target_BPMy_values[j] - ybpm_val0)
-            if initial_x_err < self.cor_accuracy and initial_y_err < self.cor_accuracy:
+            xbpm_val0 = None
+            ybpm_val0 = None
+            hcorrVal = None
+            vcorrVal = None
+            if "x" in active_planes:
+                xbpm_val0 = self._get_avg_readings([self.pvBPMx[j]], bpm_count=1)[0]
+                hcorrVal = self._get_avg_readings([self.pvCORx[j]])[0]
+            if "y" in active_planes:
+                ybpm_val0 = self._get_avg_readings([self.pvBPMy[j]], bpm_count=1)[0]
+                vcorrVal = self._get_avg_readings([self.pvCORy[j]])[0]
+            xcor_id = self.cor_x_list_target[j] if "x" in active_planes else None
+            ycor_id = self.cor_y_list_target[j] if "y" in active_planes else None
+            if "x" in active_planes:
+                self._require_current_within_limit(xcor_id, hcorrVal)
+            if "y" in active_planes:
+                self._require_current_within_limit(ycor_id, vcorrVal)
+
+            initial_x_err = (
+                abs(self.target_BPMx_values[j] - xbpm_val0) if "x" in active_planes else None
+            )
+            initial_y_err = (
+                abs(self.target_BPMy_values[j] - ybpm_val0) if "y" in active_planes else None
+            )
+            if all(
+                error is not None and error < self.cor_accuracy
+                for error in (initial_x_err, initial_y_err)
+                if error is not None
+            ):
                 logger.info(
                     "%s already within one-to-one accuracy: error X=%.3e, Y=%.3e",
                     self.bpm_list_target[j],
-                    initial_x_err,
-                    initial_y_err,
+                    initial_x_err if initial_x_err is not None else float("nan"),
+                    initial_y_err if initial_y_err is not None else float("nan"),
                 )
                 self._write_progress(
                     j + 1,
@@ -540,49 +579,67 @@ class OrbitCorrector:
                     local_response_matrix,
                     self.target_indices[j],
                 )
+                if "x" not in active_planes:
+                    Rx = None
+                if "y" not in active_planes:
+                    Ry = None
             else:
-                # 微调并测量响应。X/Y corrector 分开 kick，避免交叉影响响应系数。
-                if not self.corrector_limits[xcor_id].contains(hcorrVal + self.d_value):
-                    raise ValueError(
-                        f"Response kick would exceed the effective limit for {xcor_id}."
-                    )
-                if not self.corrector_limits[ycor_id].contains(vcorrVal + self.d_value):
-                    raise ValueError(
-                        f"Response kick would exceed the effective limit for {ycor_id}."
-                    )
+                Rx = None
+                Ry = None
                 try:
-                    self._write_pv(self.pvCORx[j], hcorrVal + self.d_value, "X corrector response kick")
-                    self._wait_for_correction_settle()
-                    xbpm_val1 = self._get_avg_readings(
-                        [self.pvBPMx[j]], bpm_count=1
-                    )[0]
-                    self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
-
-                    self._write_pv(self.pvCORy[j], vcorrVal + self.d_value, "Y corrector response kick")
-                    self._wait_for_correction_settle()
-                    ybpm_val1 = self._get_avg_readings(
-                        [self.pvBPMy[j]], bpm_count=1
-                    )[0]
+                    if "x" in active_planes:
+                        if not self.corrector_limits[xcor_id].contains(hcorrVal + self.d_value):
+                            raise ValueError(
+                                f"Response kick would exceed the effective limit for {xcor_id}."
+                            )
+                        self._write_pv(
+                            self.pvCORx[j],
+                            hcorrVal + self.d_value,
+                            "X corrector response kick",
+                        )
+                        self._wait_for_correction_settle()
+                        xbpm_val1 = self._get_avg_readings(
+                            [self.pvBPMx[j]], bpm_count=1
+                        )[0]
+                        Rx = (xbpm_val1 - xbpm_val0) / self.d_value
+                    if "y" in active_planes:
+                        if not self.corrector_limits[ycor_id].contains(vcorrVal + self.d_value):
+                            raise ValueError(
+                                f"Response kick would exceed the effective limit for {ycor_id}."
+                            )
+                        self._write_pv(
+                            self.pvCORy[j],
+                            vcorrVal + self.d_value,
+                            "Y corrector response kick",
+                        )
+                        self._wait_for_correction_settle()
+                        ybpm_val1 = self._get_avg_readings(
+                            [self.pvBPMy[j]], bpm_count=1
+                        )[0]
+                        Ry = (ybpm_val1 - ybpm_val0) / self.d_value
                 finally:
-                    self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
-                    self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
+                    if "x" in active_planes:
+                        self._write_pv(self.pvCORx[j], hcorrVal, "X corrector restore")
+                    if "y" in active_planes:
+                        self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector restore")
                     self._wait_for_correction_settle()
-
-                Rx = (xbpm_val1 - xbpm_val0) / self.d_value
-                Ry = (ybpm_val1 - ybpm_val0) / self.d_value
             logger.info(
                 "response coefficient (%s): Rx=%.6g, Ry=%.6g",
                 self.local_response_source,
-                Rx,
-                Ry,
+                Rx if Rx is not None else float("nan"),
+                Ry if Ry is not None else float("nan"),
             )
 
-            if abs(Rx) < MIN_RESPONSE or abs(Ry) < MIN_RESPONSE:
+            response_failure = (
+                ("x" in active_planes and abs(Rx) < MIN_RESPONSE)
+                or ("y" in active_planes and abs(Ry) < MIN_RESPONSE)
+            )
+            if response_failure:
                 logger.warning(
                     "%s response is too small for stable one-to-one correction: Rx=%s, Ry=%s",
                     self.bpm_list_target[j],
-                    Rx,
-                    Ry,
+                    Rx if Rx is not None else "disabled",
+                    Ry if Ry is not None else "disabled",
                 )
                 failures.append(f"{self.bpm_list_target[j]} response too small")
                 self._write_progress(
@@ -596,6 +653,8 @@ class OrbitCorrector:
             converged = False
             x_err = initial_x_err
             y_err = initial_y_err
+            xbpm_val1 = xbpm_val0
+            ybpm_val1 = ybpm_val0
             for loop in range(1, self.one_to_one_max_iter + 1):
                 self._write_progress(
                     j,
@@ -605,17 +664,25 @@ class OrbitCorrector:
                         f"iteration {loop}/{self.one_to_one_max_iter}"
                     ),
                 )
-                xbpm_val1, ybpm_val1 = self._get_avg_readings([
-                    self.pvBPMx[j],
-                    self.pvBPMy[j]
-                ], bpm_count=2)
+                if "x" in active_planes:
+                    xbpm_val1 = self._get_avg_readings([self.pvBPMx[j]], bpm_count=1)[0]
+                if "y" in active_planes:
+                    ybpm_val1 = self._get_avg_readings([self.pvBPMy[j]], bpm_count=1)[0]
 
-                x_delta = self.target_BPMx_values[j] - xbpm_val1
-                y_delta = self.target_BPMy_values[j] - ybpm_val1
-                x_err = abs(x_delta)
-                y_err = abs(y_delta)
+                x_delta = (
+                    self.target_BPMx_values[j] - xbpm_val1 if "x" in active_planes else None
+                )
+                y_delta = (
+                    self.target_BPMy_values[j] - ybpm_val1 if "y" in active_planes else None
+                )
+                x_err = abs(x_delta) if x_delta is not None else None
+                y_err = abs(y_delta) if y_delta is not None else None
 
-                if x_err < self.cor_accuracy and y_err < self.cor_accuracy:
+                if all(
+                    error is not None and error < self.cor_accuracy
+                    for error in (x_err, y_err)
+                    if error is not None
+                ):
                     converged = True
                     break
 
@@ -623,22 +690,30 @@ class OrbitCorrector:
                     "%s one-to-one iteration %d: error X=%.3e, Y=%.3e, corrector=(%.6g, %.6g)",
                     self.bpm_list_target[j],
                     loop,
-                    x_err,
-                    y_err,
-                    hcorrVal,
-                    vcorrVal,
+                    x_err if x_err is not None else float("nan"),
+                    y_err if y_err is not None else float("nan"),
+                    hcorrVal if hcorrVal is not None else float("nan"),
+                    vcorrVal if vcorrVal is not None else float("nan"),
                 )
 
-                next_hcorr = self._clip_corrector(
-                    xcor_id, hcorrVal + self._bounded_correction_step(x_delta, Rx)
+                next_hcorr = (
+                    self._clip_corrector(
+                        xcor_id, hcorrVal + self._bounded_correction_step(x_delta, Rx)
+                    )
+                    if "x" in active_planes
+                    else hcorrVal
                 )
-                next_vcorr = self._clip_corrector(
-                    ycor_id, vcorrVal + self._bounded_correction_step(y_delta, Ry)
+                next_vcorr = (
+                    self._clip_corrector(
+                        ycor_id, vcorrVal + self._bounded_correction_step(y_delta, Ry)
+                    )
+                    if "y" in active_planes
+                    else vcorrVal
                 )
 
                 if previous_pair is not None and (
-                    abs(next_hcorr - previous_pair[0]) < CORRECTOR_EPS
-                    and abs(next_vcorr - previous_pair[1]) < CORRECTOR_EPS
+                    ("x" not in active_planes or abs(next_hcorr - previous_pair[0]) < CORRECTOR_EPS)
+                    and ("y" not in active_planes or abs(next_vcorr - previous_pair[1]) < CORRECTOR_EPS)
                 ):
                     logger.warning(
                         "%s one-to-one correction stopped: corrector oscillation detected.",
@@ -647,8 +722,8 @@ class OrbitCorrector:
                     break
 
                 if (
-                    abs(next_hcorr - hcorrVal) < CORRECTOR_EPS
-                    and abs(next_vcorr - vcorrVal) < CORRECTOR_EPS
+                    ("x" not in active_planes or abs(next_hcorr - hcorrVal) < CORRECTOR_EPS)
+                    and ("y" not in active_planes or abs(next_vcorr - vcorrVal) < CORRECTOR_EPS)
                 ):
                     logger.warning(
                         "%s one-to-one correction stopped: corrector limit reached without convergence.",
@@ -659,8 +734,10 @@ class OrbitCorrector:
                 previous_pair = (hcorrVal, vcorrVal)
                 hcorrVal = next_hcorr
                 vcorrVal = next_vcorr
-                self._write_pv(self.pvCORx[j], hcorrVal, "X corrector correction")
-                self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector correction")
+                if "x" in active_planes:
+                    self._write_pv(self.pvCORx[j], hcorrVal, "X corrector correction")
+                if "y" in active_planes:
+                    self._write_pv(self.pvCORy[j], vcorrVal, "Y corrector correction")
                 self._wait_for_correction_settle()
 
             if not converged:
@@ -669,14 +746,24 @@ class OrbitCorrector:
                     self.bpm_list_target[j],
                     self.one_to_one_max_iter,
                 )
-                failures.append(
-                    f"{self.bpm_list_target[j]} not converged: "
-                    f"error X={x_err:.3e}, Y={y_err:.3e}"
-                )
-            
+                error_parts = []
+                if x_err is not None:
+                    error_parts.append(f"error X={x_err:.3e}")
+                if y_err is not None:
+                    error_parts.append(f"error Y={y_err:.3e}")
+                failures.append(f"{self.bpm_list_target[j]} not converged: " + ", ".join(error_parts))
+
             logger.info(f"correction finished: {self.bpm_list_target[j]}")
-            logger.info(f"corrector: ({hcorrVal:.3f}, {vcorrVal:.3f})")
-            logger.info(f"BPM: ({xbpm_val1:.3e}, {ybpm_val1:.3e})")
+            logger.info(
+                "corrector: (%s, %s)",
+                f"{hcorrVal:.3f}" if hcorrVal is not None else "disabled",
+                f"{vcorrVal:.3f}" if vcorrVal is not None else "disabled",
+            )
+            logger.info(
+                "BPM: (%s, %s)",
+                f"{xbpm_val1:.3e}" if xbpm_val1 is not None else "disabled",
+                f"{ybpm_val1:.3e}" if ybpm_val1 is not None else "disabled",
+            )
             self._write_progress(
                 j + 1,
                 total_bpms,
@@ -694,29 +781,45 @@ class OrbitCorrector:
         return True
 
     def _final_orbit_failures(self) -> list[str]:
-        bpm_pvs = self.pvBPMx + self.pvBPMy
-        xy_vals = self._get_avg_readings(bpm_pvs, bpm_count=len(bpm_pvs))
-        length_half = len(xy_vals) // 2
-        x_vals = xy_vals[:length_half]
-        y_vals = xy_vals[length_half:]
+        active_planes = self._active_planes()
+        x_vals = (
+            self._get_avg_readings(self.pvBPMx, bpm_count=len(self.pvBPMx))
+            if "x" in active_planes
+            else [None] * len(self.bpm_list_target)
+        )
+        y_vals = (
+            self._get_avg_readings(self.pvBPMy, bpm_count=len(self.pvBPMy))
+            if "y" in active_planes
+            else [None] * len(self.bpm_list_target)
+        )
         failures = []
-        for bpm, target_x, target_y, x_value, y_value in zip(
-            self.bpm_list_target,
-            self.target_BPMx_values,
-            self.target_BPMy_values,
-            x_vals,
-            y_vals,
-        ):
-            x_err = abs(target_x - x_value)
-            y_err = abs(target_y - y_value)
+        for index, bpm in enumerate(self.bpm_list_target):
+            x_err = (
+                abs(self.target_BPMx_values[index] - x_vals[index])
+                if "x" in active_planes
+                else None
+            )
+            y_err = (
+                abs(self.target_BPMy_values[index] - y_vals[index])
+                if "y" in active_planes
+                else None
+            )
             logger.info(
                 "one-to-one final check %s: error X=%.3e, Y=%.3e",
                 bpm,
-                x_err,
-                y_err,
+                x_err if x_err is not None else float("nan"),
+                y_err if y_err is not None else float("nan"),
             )
-            if x_err >= self.cor_accuracy or y_err >= self.cor_accuracy:
-                failures.append(f"{bpm} final error X={x_err:.3e}, Y={y_err:.3e}")
+            if (
+                (x_err is not None and x_err >= self.cor_accuracy)
+                or (y_err is not None and y_err >= self.cor_accuracy)
+            ):
+                error_parts = []
+                if x_err is not None:
+                    error_parts.append(f"X={x_err:.3e}")
+                if y_err is not None:
+                    error_parts.append(f"Y={y_err:.3e}")
+                failures.append(f"{bpm} final error " + ", ".join(error_parts))
         return failures
 
     def _expected_response_shape(self) -> tuple[int, int]:
@@ -1031,6 +1134,7 @@ if __name__ == '__main__':
             correction_settle_s = _optional_float_arg(sys.argv, 17)
             local_response_source = sys.argv[18] if len(sys.argv) > 18 else None
             svd_relative_cutoff = _optional_float_arg(sys.argv, 19)
+            correction_plane = sys.argv[20] if len(sys.argv) > 20 else "xy"
             
             corrector = OrbitCorrector(
                 samp_interval, cor_accuracy, samples_perstep,
@@ -1046,6 +1150,7 @@ if __name__ == '__main__':
                 correction_settle_s=correction_settle_s,
                 local_response_source=local_response_source,
                 svd_relative_cutoff=svd_relative_cutoff,
+                correction_plane=correction_plane,
             )
             corrector._require_targets()
             corrector.init_BPM_pv()
