@@ -2496,6 +2496,14 @@ class MachineProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(MachineProfileError, "auto_tune_objective"):
             _validate_energy_spectrum_workflow(profile, workflow)
 
+    def test_energy_spectrum_rejects_ambiguous_design_eta_name(self):
+        profile = load_profile("irfel")
+        workflow = dict(get_workflow(profile, "energy_spectrum"))
+        workflow["design_eta_m"] = -0.75
+
+        with self.assertRaisesRegex(MachineProfileError, "design_model_eta_m"):
+            _validate_energy_spectrum_workflow(profile, workflow)
+
     def test_half_rf_phase_scan_rejects_invalid_tracking_windows(self):
         profile = load_profile("half")
         workflow = deepcopy(get_workflow(profile, "rf_phase_scan"))

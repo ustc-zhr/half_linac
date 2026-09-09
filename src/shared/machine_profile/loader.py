@@ -1799,17 +1799,23 @@ def _validate_energy_spectrum_workflow(
                 f"workflows.energy_spectrum.{energy_range_key} requires finite low < high."
             )
 
-    design_eta = workflow.get("design_eta_m")
+    if "design_eta_m" in workflow:
+        raise MachineProfileError(
+            "workflows.energy_spectrum.design_eta_m was renamed to "
+            "design_model_eta_m to make its coordinate system explicit."
+        )
+
+    design_eta = workflow.get("design_model_eta_m")
     if design_eta is not None:
         try:
             design_eta_value = float(design_eta)
         except (TypeError, ValueError) as exc:
             raise MachineProfileError(
-                "workflows.energy_spectrum.design_eta_m must be numeric."
+                "workflows.energy_spectrum.design_model_eta_m must be numeric."
             ) from exc
         if not math.isfinite(design_eta_value):
             raise MachineProfileError(
-                "workflows.energy_spectrum.design_eta_m must be finite."
+                "workflows.energy_spectrum.design_model_eta_m must be finite."
             )
 
     energy_element_id = workflow.get("energy_element")

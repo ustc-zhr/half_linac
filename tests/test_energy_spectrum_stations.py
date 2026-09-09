@@ -89,7 +89,10 @@ class EnergySpectrumStationTests(unittest.TestCase):
         )
         self.assertEqual(stations["prf02"]["energy0_default_mev"], 114.16)
         self.assertNotIn("model_snapshot_source", stations["prf02"])
-        self.assertAlmostEqual(stations["prf02"]["design_eta_m"], -0.3280857973174453)
+        self.assertAlmostEqual(
+            stations["prf02"]["design_model_eta_m"],
+            -0.3280857973174453,
+        )
         self.assertEqual(
             resolve_channel(profile, "PRF02", "image", "real"),
             "IN:BD:PRF02:image1:ArrayData",
@@ -133,6 +136,12 @@ class EnergySpectrumStationTests(unittest.TestCase):
                     profile, flag_id, "real"
                 ).model_to_image_x_sign,
                 -1,
+            )
+            self.assertEqual(
+                resolve_element_image_geometry(
+                    profile, flag_id, "real"
+                ).model_x_to_image_x(-0.75),
+                0.75,
             )
 
     def test_station_runtime_artifacts_are_isolated(self):

@@ -14,6 +14,10 @@ class FlagPixelGeometry:
     model_to_image_x_sign: int = 1
     default_roi: Mapping[str, int] | None = None
 
+    def model_x_to_image_x(self, value: float) -> float:
+        """Convert a horizontal model-coordinate value to camera-image coordinates."""
+        return float(self.model_to_image_x_sign) * float(value)
+
 
 def resolve_element_image_geometry(
     target: MachineProfile | AppContext,

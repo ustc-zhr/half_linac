@@ -105,7 +105,7 @@ from half_linac.src.shared.window_activation import install_qt_window_raise_hand
 
 
 HEADER_ACTION_HEIGHT = 32
-DEFAULT_DESIGN_ETA = 0.7484210850804714  # [m]
+DEFAULT_DESIGN_MODEL_ETA_M = 0.7484210850804714
 IMAGE_PV_GET_TIMEOUT_S = 3.0
 
 
@@ -816,6 +816,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     a gui window for energ spectrum analysis
     """
 
+    @property
+    def image_eta_m(self):
+        """Dispersion expressed along the unchanged camera-image x axis."""
+        return self.flag_geometry.model_x_to_image_x(self.model_eta_m)
+
     def __init__(self):
         super().__init__()
         self.setupUi(self)
@@ -911,7 +916,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         self.beta_flag = 0
         self.emi_flag = 0
-        self.eta_flag = 0
+        self.model_eta_m = 0
 
         self._connect_signals()
         self._refresh_model_controls()
@@ -1135,7 +1140,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.latest_model_snapshot_path = None
         self.beta_flag = 0
         self.emi_flag = 0
-        self.eta_flag = 0
+        self.model_eta_m = 0
         self._model_text = "Waiting"
         self._model_tone = "subtle"
         self._model_tooltip = None
@@ -1494,16 +1499,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._refresh_widget_style(button)
 
     def _use_design_eta(self, status_text=None, tooltip=None):
-        self.eta_flag = self._eta_in_image_coordinates(
-            self.energy_config.get("design_eta_m", DEFAULT_DESIGN_ETA)
+        self.model_eta_m = float(
+            self.energy_config.get(
+                "design_model_eta_m", DEFAULT_DESIGN_MODEL_ETA_M
+            )
         )
         self.latest_model_snapshot_metadata = None
         self.latest_model_snapshot_path = None
-        self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag, 5)))
+        self.lineEdit_eta_ESAflag.setText(str(round(self.image_eta_m, 5)))
         self._update_model_status(
-            status_text or f"design eta {self.eta_flag:.4f} m",
+            status_text or f"design image eta {self.image_eta_m:.4f} m",
             "warning",
-            tooltip,
+            self._eta_coordinate_tooltip(tooltip),
         )
 
     def _esa_quad_model_fields(self):
@@ -2332,6 +2339,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.label_9.setText("Input @")
         self.label_11.setText("Target")
         self.label_14.setText("Energy setpoint")
+        self.label_eta.setText("Image eta x (m)")
         self.pushButton_cal_disp.setText("Update eta")
         self.pushButton_cal_twiss_disp.setText("Update optics")
         self.pushButton_autoFind.setText("Auto Find")
@@ -2382,6 +2390,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.lineEdit_alpha_ESAflag.setReadOnly(True)
         self.lineEdit_beta_ESAflag.setReadOnly(True)
         self.lineEdit_eta_ESAflag.setReadOnly(True)
+        self.lineEdit_eta_ESAflag.setToolTip(
+            "Horizontal dispersion in camera-image coordinates. The model value "
+            "is converted once using model_to_image_x_sign; the image is unchanged."
+        )
 
         self.horizontalLayout_7.setContentsMargins(10, 8, 10, 8)
         self.horizontalLayout_7.setSpacing(10)
@@ -2715,7 +2727,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.doubleSpinBox_emi_in: "Input emittance x",
             self.lineEdit_alpha_ESAflag: "Target alpha x readout",
             self.lineEdit_beta_ESAflag: "Target beta x readout",
-            self.lineEdit_eta_ESAflag: "Target eta x readout",
+            self.lineEdit_eta_ESAflag: "Image-coordinate eta x readout",
             self.pushButton_cal_disp: "Update dispersion button",
             self.pushButton_cal_twiss_disp: "Update optics button",
             self.slider_energy: "Target energy slider",
@@ -3458,8 +3470,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "energy_center_mev": float(energy_center_mev),
             "energy_spread_fraction": float(energy_spread),
             "energy_spread_mev": float(abs(energy_center_mev * energy_spread)),
-            "eta_m": float(self.eta_flag),
-            "model_to_image_x_sign": int(self.flag_model_to_image_x_sign),
+            "eta_m": float(self.image_eta_m),
+            "image_eta_m": float(self.image_eta_m),
+            "eta_coordinate_system": "camera_image_x",
+            "model_eta_m": float(self.model_eta_m),
+            "model_to_image_x_sign": int(
+                self.flag_geometry.model_to_image_x_sign
+            ),
             "beta_m": float(self.beta_flag),
             "emittance_m": float(self.emi_flag),
             "include_emit": bool(self.with_emit),
@@ -3886,7 +3903,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.flag_pixel_width_mm = geometry.pixel_width_mm
         self.flag_default_roi = geometry.default_roi
         self.flag_image_flip_y = geometry.flip_y
-        self.flag_model_to_image_x_sign = geometry.model_to_image_x_sign
+        self.flag_geometry = geometry
 
         self.flag_expotime_pv = None
         self.flag_exposure_target = None
@@ -3934,9 +3951,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return np.flipud(image)
         return image
 
-    def _eta_in_image_coordinates(self, model_eta_m):
-        """Express model dispersion in the unchanged camera-image x coordinate."""
-        return float(self.flag_model_to_image_x_sign) * float(model_eta_m)
+    def _eta_coordinate_tooltip(self, prefix=None):
+        detail = (
+            f"Model eta {self.model_eta_m:.6g} m × coordinate sign "
+            f"{self.flag_geometry.model_to_image_x_sign:+d} = "
+            f"image eta {self.image_eta_m:.6g} m. The camera image is not flipped."
+        )
+        return f"{prefix}\n{detail}" if prefix else detail
   
     def setup_timer(self):
         # refreah the figure at 1 Hz
@@ -4156,8 +4177,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         # dispersion calculation and display 
         # self.cal_disp()
-        if np.isclose(self.eta_flag, 0.0):
-            print("Warning: eta_flag is zero; skipping energy calculation.")
+        if np.isclose(self.image_eta_m, 0.0):
+            print("Warning: image eta is zero; skipping energy calculation.")
             self._draw_placeholder_plot(self.energy_plot, "Energy Spectrum", "E (MeV)", "Spectrum (arb. units)")
             self._set_energy_unavailable("No eta", "ESA dispersion is zero. Run Update eta or Update optics.")
             self._refresh_status()
@@ -4165,9 +4186,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         # energy_center and energy_spread calculation and display
         dx_center_m = (self.meanx - self.x_reference_mm) * 1e-3
-        energy_center = energy0 * dx_center_m / self.eta_flag + energy0 # MeV
+        energy_center = energy0 * dx_center_m / self.image_eta_m + energy0  # MeV
         energy_all = [
-            energy0 * (xi - self.x_reference_mm) * 1e-3 / self.eta_flag + energy0
+            energy0 * (xi - self.x_reference_mm) * 1e-3 / self.image_eta_m + energy0
             for xi in x
         ]
 
@@ -4187,9 +4208,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
 
         if self.with_emit == True: # 考虑发射度贡献
-            spread_term = (((self.sigx*1e-3)**2 - self.beta_flag * self.emi_flag) / self.eta_flag ** 2)
+            spread_term = (
+                (self.sigx * 1e-3) ** 2 - self.beta_flag * self.emi_flag
+            ) / self.image_eta_m**2
         elif self.with_emit == False: # 不考虑发射度贡献
-            spread_term = (((self.sigx*1e-3)**2 - 0 * 0) / self.eta_flag ** 2)
+            spread_term = (self.sigx * 1e-3) ** 2 / self.image_eta_m**2
         if spread_term < 0:
             print(f"Warning: negative energy spread term {spread_term}; clamping to zero.")
             self._set_energy_unavailable(
@@ -4250,21 +4273,23 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._print_energy_model_inputs(snapshot)
 
             line_name = self._energy_model_line("dispersion")
-            self.eta_flag = self._eta_in_image_coordinates(
+            self.model_eta_m = float(
                 self.model_backend.get_energy_dispersion(
-                    line_name,
-                    lattice_overrides=snapshot.lattice_overrides,
+                    line_name, lattice_overrides=snapshot.lattice_overrides
                 )
             )
             print(
-                f"dispersion at {self.energy_config['flag_element']} updates: ",
-                self.eta_flag,
-                "m",
+                f"dispersion at {self.energy_config['flag_element']} updates: "
+                f"model eta {self.model_eta_m:.6g} m -> "
+                f"image eta {self.image_eta_m:.6g} m",
             )
             self._update_model_status(
-                f"{self._snapshot_status_label(snapshot)} eta {self.eta_flag:.4f} m",
+                f"{self._snapshot_status_label(snapshot)} image eta "
+                f"{self.image_eta_m:.4f} m",
                 "success",
-                self._snapshot_status_tooltip(snapshot),
+                self._eta_coordinate_tooltip(
+                    self._snapshot_status_tooltip(snapshot)
+                ),
             )
         
         except MachineProfileError as e:
@@ -4276,15 +4301,24 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
         except Exception as e:
             print(f"Error in cal_disp: {e}")
-            self.eta_flag = self._eta_in_image_coordinates(
-                self.energy_config.get("design_eta_m", DEFAULT_DESIGN_ETA)
+            self.model_eta_m = float(
+                self.energy_config.get(
+                    "design_model_eta_m", DEFAULT_DESIGN_MODEL_ETA_M
+                )
             )
             self.latest_model_snapshot_metadata = None
             self.latest_model_snapshot_path = None
-            print('default dispersion: ',self.eta_flag, 'm')
-            self._update_model_status(f"design eta {self.eta_flag:.4f} m", "warning")
+            print(
+                f"default dispersion: model eta {self.model_eta_m:.6g} m -> "
+                f"image eta {self.image_eta_m:.6g} m"
+            )
+            self._update_model_status(
+                f"design image eta {self.image_eta_m:.4f} m",
+                "warning",
+                self._eta_coordinate_tooltip(),
+            )
             
-        self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag,5)))
+        self.lineEdit_eta_ESAflag.setText(str(round(self.image_eta_m,5)))
         if archive_result:
             self._archive_next_energy_result = True
         self._refresh_status()
@@ -4344,18 +4378,24 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.beta_flag = result.beta_x_m
         self.emi_flag = emi_in # m
 
-        self.eta_flag = self._eta_in_image_coordinates(result.dispersion_x_m)
+        self.model_eta_m = float(result.dispersion_x_m)
 
-        print('cal results: beta=',self.beta_flag, 'm, alpha=',self.alpha_flag, 'eta=',self.eta_flag, ' m')
+        print(
+            "cal results: beta=", self.beta_flag, "m, alpha=", self.alpha_flag,
+            "model eta=", self.model_eta_m, "m, image eta=", self.image_eta_m, "m"
+        )
 
         self.lineEdit_alpha_ESAflag.setText(str(round(self.alpha_flag,5)))
         self.lineEdit_beta_ESAflag.setText(str(round(self.beta_flag,5)))
         # self.lineEdit_emi_ESAflag.setText(str(self.emi_flag*1e9))
-        self.lineEdit_eta_ESAflag.setText(str(round(self.eta_flag,5)))
+        self.lineEdit_eta_ESAflag.setText(str(round(self.image_eta_m,5)))
         self._update_model_status(
-            f"{self._snapshot_status_label(snapshot)} eta {self.eta_flag:.4f} m",
+            f"{self._snapshot_status_label(snapshot)} image eta "
+            f"{self.image_eta_m:.4f} m",
             "success",
-            self._snapshot_status_tooltip(snapshot),
+            self._eta_coordinate_tooltip(
+                self._snapshot_status_tooltip(snapshot)
+            ),
         )
         if archive_result:
             self._archive_next_energy_result = True
