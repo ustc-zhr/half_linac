@@ -21,6 +21,9 @@ from .models import AppContext, MachineProfileError, ModelBackendConfig
 LatticeOverrides = Mapping[str, Mapping[str, float | int | str]]
 _MODEL_WORKSPACE_LOCK_TIMEOUT_S = 30.0
 _MODEL_WORKSPACE_LOCK_POLL_S = 0.1
+_ELECTRON_MASS_MEV = 0.51099895
+_ACCELERATING_ELEMENT_TYPES = frozenset(("RFCA", "RFCW", "MODRF"))
+_WAKE_FIELDS = frozenset(("ZWAKEFILE", "TRWAKEFILE", "WAKEFILE"))
 
 
 @dataclass(frozen=True)
@@ -108,6 +111,10 @@ def _exclusive_model_workspace(
 
 class BeamModelBackend(Protocol):
     def get_model_lines(self) -> tuple[ModelLine, ...]: ...
+
+    def get_measurement_model_lines(self) -> tuple[ModelLine, ...]: ...
+
+    def get_measurement_model_line(self, elem1: str, elem2: str) -> ModelLine: ...
 
     def get_element_model_lines(self, element_id: str) -> tuple[ModelLine, ...]: ...
 
@@ -221,6 +228,7 @@ class ElegantModelBackend:
                 f"ElegantModelBackend requires engine='elegant', got {model_config.engine!r}."
             )
 
+        self.model_config = model_config
         config = dict(model_config.config)
         self.config = config
         self.energy_mev = energy_mev
@@ -260,6 +268,46 @@ class ElegantModelBackend:
                 lines.append(ModelLine(name, frozenset(parser.build_runtime_state()["usedline"])))
             self._model_lines = tuple(lines)
         return self._model_lines
+
+    def get_measurement_model_lines(self) -> tuple[ModelLine, ...]:
+        base_parser = self._new_parser()
+        lattice = base_parser.build_runtime_state()["lattice"]
+        lines = []
+        for name, entry in sorted(lattice.items()):
+            if not name.lower().startswith("emit_") or str(entry.get("TYPE", "")).upper() != "LINE":
+                continue
+            parser = ElegantParser(
+                self.source_lattice,
+                self.optics_ini_ele,
+                name,
+                elegant_dir=self.working_dir,
+            )
+            lines.append(ModelLine(name, frozenset(parser.build_runtime_state()["usedline"])))
+        return tuple(lines) + self.get_model_lines()
+
+    def get_measurement_model_line(self, elem1: str, elem2: str) -> ModelLine:
+        candidates = [
+            line
+            for line in self.get_measurement_model_lines()
+            if elem1 in line.elements and elem2 in line.elements
+        ]
+        if not candidates:
+            raise MachineProfileError(
+                f"No model line contains both {elem1} and {elem2}."
+            )
+
+        selected = min(candidates, key=lambda line: (len(line.elements), line.name))
+        line_backend = ElegantModelBackend(
+            self.model_config,
+            energy_mev=self.energy_mev,
+            line_name=selected.name,
+        )
+        path = line_backend.get_line_elements(elem1, elem2)
+        if not path or str(path[0]["NAME"]) != elem1:
+            raise MachineProfileError(
+                f"Select a downstream element: {elem2} is upstream of {elem1}."
+            )
+        return selected
 
     def get_element_model_lines(self, element_id: str) -> tuple[ModelLine, ...]:
         return tuple(line for line in self.get_model_lines() if element_id in line.elements)
@@ -447,30 +495,42 @@ class ElegantModelBackend:
     ) -> TwissProfileResult:
         line_start, line_end = self.get_line_endpoints()
         upstream_twiss = _normalize_initial_twiss(twiss0)
-        if source_element != line_start:
-            entrance_matrix = self.get_map(
-                line_start,
-                source_element,
-                lattice_overrides=lattice_overrides,
-                seq="ent2ent",
-                twiss_only=True,
-            )
-            transported = _transport_twiss(
-                np.linalg.inv(_plane_matrix(entrance_matrix, plane)),
-                upstream_twiss,
-            )
-            upstream_twiss = {
-                "beta0": transported["beta"],
-                "alpha0": transported["alpha"],
-                "gamma0": transported["gamma"],
-            }
-        return self.get_twiss_profile(
-            line_start,
-            line_end,
-            upstream_twiss,
-            plane=plane,
-            lattice_overrides=lattice_overrides,
-        )
+        original_energy = self.energy_mev
+        try:
+            if source_element != line_start:
+                self.energy_mev = self._entrance_energy_for_measurement(
+                    line_start, source_element, lattice_overrides=lattice_overrides
+                )
+                entrance_matrix = self.get_map(
+                    line_start, source_element, lattice_overrides=lattice_overrides,
+                    seq="ent2ent", twiss_only=True,
+                )
+                transported = _transport_twiss(
+                    np.linalg.inv(_plane_matrix(entrance_matrix, plane)), upstream_twiss
+                )
+                upstream_twiss = {"beta0": transported["beta"], "alpha0": transported["alpha"], "gamma0": transported["gamma"]}
+            return self.get_twiss_profile(line_start, line_end, upstream_twiss,
+                                          plane=plane, lattice_overrides=lattice_overrides)
+        finally:
+            self.energy_mev = original_energy
+
+    def _entrance_energy_for_measurement(self, line_start, source_element, *, lattice_overrides=None):
+        if self.energy_mev is None:
+            raise MachineProfileError("Full-line Twiss requires measurement-point kinetic energy.")
+        kinetic = float(self.energy_mev)
+        state = self._new_parser().build_runtime_state()
+        usedline = state["usedline"]
+        start, source = self._usedline_index_pair_from_usedline(usedline, line_start, source_element)
+        for element_name in usedline[start:source]:
+            element = state["lattice"][element_name]
+            if str(element.get("TYPE", "")).upper() not in _ACCELERATING_ELEMENT_TYPES:
+                continue
+            voltage_mv = float(element.get("VOLT", 0.0)) / 1e6
+            phase = math.radians(float(element.get("PHASE", 0.0)))
+            kinetic -= voltage_mv * math.sin(phase)
+        if not math.isfinite(kinetic) or kinetic <= 0:
+            raise MachineProfileError("RF energy back-propagation produced a non-positive entrance energy.")
+        return kinetic
 
     def get_design_twiss_profile(self, plane: str = "xplane") -> TwissProfileResult:
         line_start, line_end = self.get_line_endpoints()
@@ -568,6 +628,18 @@ class ElegantModelBackend:
                 f"Model backend generated an empty map line from {elem1!r} to {elem2!r}."
             )
 
+        if self.energy_mev is not None and any(
+            str(lattice[element]["TYPE"]).upper() in _ACCELERATING_ELEMENT_TYPES
+            for element in scanline
+        ):
+            kinetic_energy = float(self.energy_mev)
+            if not math.isfinite(kinetic_energy) or kinetic_energy <= 0:
+                raise MachineProfileError("Accelerating optics requires positive finite kinetic energy.")
+            total_energy = kinetic_energy + _ELECTRON_MASS_MEV
+            control["run_setup"]["p_central"] = math.sqrt(
+                total_energy * total_energy - _ELECTRON_MASS_MEV * _ELECTRON_MASS_MEV
+            ) / _ELECTRON_MASS_MEV
+
         for elem in usedline:
             if "DX" in lattice[elem] or "DY" in lattice[elem]:
                 lattice[elem]["DX"] = "0.0"
@@ -585,6 +657,12 @@ class ElegantModelBackend:
                 and lattice[elem]["DISABLE"] == "0"
             ):
                 lattice[elem]["DISABLE"] = "1"
+
+        if twiss_only:
+            for element in lattice.values():
+                if str(element.get("TYPE", "")).upper() in _ACCELERATING_ELEMENT_TYPES:
+                    for field in _WAKE_FIELDS:
+                        element.pop(field, None)
 
         normalized_overrides = _normalize_lattice_overrides(
             lattice_overrides,
