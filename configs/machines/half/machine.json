@@ -1501,7 +1501,7 @@
       "kind": "quad",
       "display_name": "QL15",
       "order": 154,
-      "tags": ["bba", "emit", "esa_start"],
+      "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
       "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
@@ -1510,7 +1510,7 @@
       "kind": "quad",
       "display_name": "QL16",
       "order": 155,
-      "tags": ["bba", "emit", "esa_start"],
+      "tags": ["bba", "emit"],
       "limits": {"current_set": {"low": -70, "high": 70, "unit": "A"}},
       "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
@@ -1618,7 +1618,7 @@
       "kind": "quad",
       "display_name": "QT01",
       "order": 167,
-      "tags": ["bba", "emit"],
+      "tags": ["bba", "emit", "esa_start"],
       "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
       "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
@@ -1636,7 +1636,7 @@
       "kind": "quad",
       "display_name": "QT03",
       "order": 169,
-      "tags": ["bba", "emit"],
+      "tags": ["bba", "emit", "esa_start"],
       "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
       "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
@@ -1645,7 +1645,7 @@
       "kind": "quad",
       "display_name": "QT04",
       "order": 170,
-      "tags": ["bba", "emit"],
+      "tags": ["bba", "emit", "esa_start"],
       "limits": {"current_set": {"low": 0, "high": 140, "unit": "A"}},
       "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
@@ -1654,7 +1654,7 @@
       "kind": "quad",
       "display_name": "QT05",
       "order": 171,
-      "tags": ["bba", "emit"],
+      "tags": ["bba", "emit", "esa_start"],
       "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
       "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },
@@ -1663,7 +1663,7 @@
       "kind": "quad",
       "display_name": "QT06",
       "order": 172,
-      "tags": ["bba", "emit"],
+      "tags": ["bba", "emit", "esa_start"],
       "limits": {"current_set": {"low": 0, "high": 260, "unit": "A"}},
       "logical_channels": ["K1", "K1_adj", "current_set", "current_readback", "K1_total"]
     },

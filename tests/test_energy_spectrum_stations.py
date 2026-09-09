@@ -20,6 +20,7 @@ from half_linac.src.apps.energy_spectrum.stations import (
 from half_linac.src.shared.elegant_backend import ElegantParser
 from half_linac.src.shared.machine_profile import (
     get_workflow,
+    list_elements,
     load_app_context,
     load_profile,
     resolve_channel,
@@ -143,6 +144,22 @@ class EnergySpectrumStationTests(unittest.TestCase):
                 ).model_x_to_image_x(-0.75),
                 0.75,
             )
+
+    def test_half_eny_optics_start_choices_are_qt01_through_qt06(self):
+        profile = load_profile("half")
+        workflow = get_workflow(profile, "energy_spectrum")
+        _default_station, stations = resolve_energy_spectrum_stations(workflow)
+        tag_name = stations["eny"]["start_element_tag"]
+        tagged_quads = [
+            element.id
+            for element in list_elements(profile, kind="quad")
+            if tag_name in element.tags
+        ]
+
+        self.assertEqual(
+            tagged_quads,
+            [f"QT{index:02d}" for index in range(1, 7)],
+        )
 
     def test_station_runtime_artifacts_are_isolated(self):
         context = load_app_context(
