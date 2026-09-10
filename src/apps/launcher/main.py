@@ -14,7 +14,7 @@ from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QColor, QIcon, QPalette, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -874,7 +874,56 @@ class LauncherAppButton(QPushButton):
         )
 
 
+class SidebarNavButton(QPushButton):
+    """Sidebar filter with a stable, right-aligned running count."""
+
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+        self._label = text
+        self._running_count = 0
+        self._show_running_count = False
+        self._palette = DARK_THEME
+        self.setProperty("nav", True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAccessibleName(text)
+
+    def set_running_count(self, count, *, always_show=False):
+        self._running_count = int(count)
+        self._show_running_count = always_show or count > 0
+        self.update()
+
+    def apply_palette(self, palette):
+        self._palette = palette
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setFont(self.font())
+        label_color = (
+            self._palette["metric_active_fg"]
+            if self.property("navRunning")
+            else self._palette["nav_active_fg"]
+            if self.isChecked()
+            else self._palette["subtitle_fg"]
+        )
+        content_rect = self.rect().adjusted(10, 0, -10, 0)
+        count_width = 26 if self._show_running_count else 0
+        label_rect = content_rect.adjusted(0, 0, -count_width, 0)
+        painter.setPen(QColor(label_color))
+        painter.drawText(label_rect, Qt.AlignLeft | Qt.AlignVCenter, self._label)
+        if self._show_running_count:
+            count_rect = content_rect.adjusted(content_rect.width() - count_width, 0, 0, 0)
+            painter.setPen(QColor(self._palette["metric_active_fg"]))
+            painter.drawText(
+                count_rect,
+                Qt.AlignRight | Qt.AlignVCenter,
+                str(self._running_count),
+            )
+
+
 APP_CATEGORIES = {
+    "running": "Running Apps",
     "all": "All Apps",
     "monitoring": "Monitoring & Diagnostics",
     "measurement": "Measurement & Correction",
@@ -885,6 +934,7 @@ APP_CATEGORIES = {
 }
 
 APP_CATEGORY_NAV_LABELS = {
+    "running": "Running",
     "all": "All Apps",
     "monitoring": "Monitoring",
     "measurement": "Measurement",
@@ -1339,15 +1389,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.category_button_group = QButtonGroup(self)
         self.category_button_group.setExclusive(True)
         self.category_buttons = {}
-        for category, label in APP_CATEGORIES.items():
-            count = len(APP_DEFINITIONS) if category == "all" else sum(
-                spec["category"] == category for spec in APP_DEFINITIONS.values()
-            )
+        for category in APP_CATEGORIES:
             nav_label = APP_CATEGORY_NAV_LABELS[category]
-            button = QPushButton(f"{nav_label.replace('&', '&&')}  {count}", self.app_sidebar)
+            button = SidebarNavButton(nav_label, self.app_sidebar)
             button.setCheckable(True)
-            button.setProperty("nav", True)
-            button.setCursor(Qt.PointingHandCursor)
+            button.setProperty("navRunning", category == "running")
             button.clicked.connect(
                 lambda _checked=False, selected=category: self._select_app_category(selected)
             )
@@ -1567,6 +1613,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         for key, spec in APP_DEFINITIONS.items():
             in_category = (
                 self.current_app_category == "all"
+                or (
+                    self.current_app_category == "running"
+                    and self.process_manager.is_running(key)
+                )
                 or spec["category"] == self.current_app_category
             )
             searchable = " ".join(
@@ -1617,6 +1667,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
             app_scrollbar.setStyleSheet(build_app_scrollbar_theme(palette))
             self._refresh_widget_style(app_scrollbar)
         for button in getattr(self, "managed_buttons", {}).values():
+            button.apply_palette(palette)
+        for button in getattr(self, "category_buttons", {}).values():
             button.apply_palette(palette)
         self._update_theme_toggle_button()
 
@@ -1873,6 +1925,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self._refresh_widget_style(button)
 
         active_count = len(running_keys)
+        self.category_buttons["running"].set_running_count(
+            active_count,
+            always_show=True,
+        )
+        for category, button in self.category_buttons.items():
+            if category in {"running", "all"}:
+                continue
+            running_count = sum(
+                key in running_keys
+                for key, spec in APP_DEFINITIONS.items()
+                if spec["category"] == category
+            )
+            button.set_running_count(running_count)
+
+        if self.current_app_category == "running":
+            self._update_app_filter()
         self._set_summary_value(
             "running",
             f"{active_count} apps" if active_count else "0 apps",
