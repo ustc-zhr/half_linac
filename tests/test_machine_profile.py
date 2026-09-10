@@ -1167,6 +1167,99 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(workflow_writes_allowed(real_context, "bba"))
         require_workflow_write_allowed(real_context, "bba", "test write")
 
+    def test_half_bba1_presets_cover_all_eligible_main_line_quads(self):
+        real_context = load_app_context("bba", machine_id="half", control_backend="real")
+        vm_context = load_app_context("bba", machine_id="half", control_backend="vm")
+        assert real_context.bba_workflow is not None
+        assert vm_context.bba_workflow is not None
+
+        expected_sites = {}
+
+        def add_sites(family, numbers, corr, bpm1, bpm2):
+            for number in numbers:
+                expected_sites[f"{family}{number:02d}"] = (corr, bpm1, bpm2)
+
+        add_sites("QL", (1, 2), 3, 3, 4)
+        add_sites("QL", (3,), 4, 4, 5)
+        add_sites("QL", (4, 5), 5, 5, 6)
+        add_sites("QL", (6,), 6, 6, 7)
+        add_sites("QL", range(7, 13), 7, 7, 8)
+        add_sites("QL", (13,), 8, 8, 9)
+        add_sites("QL", (14, 15), 9, 9, 10)
+        add_sites("QL", (16,), 10, 10, 11)
+        add_sites("QL", range(17, 20), 11, 11, 12)
+        for number in range(20, 28):
+            add_sites("QL", (number,), number - 8, number - 8, number - 7)
+
+        add_sites("QT", (1,), 20, 20, 21)
+        add_sites("QT", range(2, 5), 21, 21, 22)
+        add_sites("QT", (5, 6), 22, 22, 23)
+        add_sites("QT", (7, 8), 23, 23, 24)
+        add_sites("QT", (9,), 24, 24, 25)
+        add_sites("QT", (10, 11), 25, 25, 26)
+        add_sites("QT", range(12, 15), 26, 26, 27)
+        add_sites("QT", range(15, 18), 27, 27, 28)
+        for number in range(18, 24):
+            add_sites("QT", (number,), number + 10, number + 10, number + 11)
+        add_sites("QT", (24, 25), 34, 34, 35)
+        add_sites("QT", (26,), 35, 35, 36)
+        add_sites("QT", (27, 28), 36, 36, 37)
+        add_sites("QT", (29,), 37, 37, 38)
+        add_sites("QT", (30,), 38, 38, 39)
+        add_sites("QT", (31, 32), 39, 39, 40)
+        add_sites("QT", (33,), 40, 40, 41)
+        add_sites("QT", (34, 35), 41, 41, 42)
+        add_sites("QT", (36,), 42, 42, 43)
+
+        real_presets = {
+            preset.id: preset
+            for preset in real_context.bba_workflow.presets
+            if preset.family == "bba1"
+        }
+        vm_presets = {
+            preset.id: preset
+            for preset in vm_context.bba_workflow.presets
+            if preset.family == "bba1"
+        }
+        self.assertEqual(len(expected_sites), 63)
+        self.assertEqual(len(real_presets), 126)
+        self.assertEqual(set(real_presets), set(vm_presets))
+
+        for quad, (corr_number, bpm1_number, bpm2_number) in expected_sites.items():
+            for plane, corr_family in (("x", "XC"), ("y", "YC")):
+                corr = f"{corr_family}{corr_number:02d}"
+                preset_id = f"bba1_{quad.lower()}_{corr.lower()}"
+                real_preset = real_presets[preset_id]
+                vm_preset = vm_presets[preset_id]
+                self.assertEqual(
+                    (real_preset.plane, real_preset.quad, real_preset.corr),
+                    (plane, quad, corr),
+                )
+                self.assertEqual(
+                    (real_preset.bpm1, real_preset.bpm2),
+                    (f"BPM{bpm1_number:02d}", f"BPM{bpm2_number:02d}"),
+                )
+                self.assertEqual(
+                    (real_preset.scan.corr_from, real_preset.scan.corr_end),
+                    (-1.0, 1.0),
+                )
+                self.assertEqual(
+                    (real_preset.scan.corr_unit, real_preset.scan.corr_mode),
+                    ("A", "relative"),
+                )
+                self.assertEqual(
+                    (vm_preset.scan.corr_from, vm_preset.scan.corr_end),
+                    (-0.001, 0.001),
+                )
+                self.assertEqual(
+                    (vm_preset.scan.corr_unit, vm_preset.scan.corr_mode),
+                    ("rad", "absolute"),
+                )
+                self.assertEqual(
+                    (real_preset.scan.quad_from, real_preset.scan.quad_end),
+                    (-5.0, 5.0),
+                )
+
     def test_bba_runtime_paths_are_machine_backend_scoped(self):
         from half_linac.src.apps.bba.profile_runtime import (
             new_bba_scan_archive_dir,
@@ -1542,7 +1635,7 @@ class MachineProfileTests(unittest.TestCase):
     def test_bba_loader_accepts_relative_scan_mode(self):
         profile = load_profile("half")
         workflow = deepcopy(profile.workflows["bba"])
-        workflow["presets"][0]["scan"]["corrector"]["vm"]["mode"] = "relative"
+        workflow["bba1"]["scan"]["corrector"]["vm"]["mode"] = "relative"
         loaded = load_bba_workflow(
             replace(profile, workflows={**profile.workflows, "bba": workflow}),
             "vm",

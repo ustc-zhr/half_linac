@@ -252,12 +252,29 @@ def load_bba_workflow(
         "BBA control backend",
     )
     presets_raw = _expect_list(workflow.get("presets"), "workflows.bba.presets")
+    family_scan_defaults = {
+        family_name: _expect_optional_mapping(
+            _expect_optional_mapping(
+                workflow.get(family_name),
+                f"workflows.bba.{family_name}",
+            ).get("scan"),
+            f"workflows.bba.{family_name}.scan",
+        )
+        for family_name in ("bba1", "bba2")
+    }
 
     presets: list[BBAPreset] = []
     presets_by_id: dict[str, BBAPreset] = {}
     for index, raw_preset in enumerate(presets_raw):
         location = f"workflows.bba.presets[{index}]"
-        preset = _parse_bba_preset(raw_preset, location, backend)
+        raw_preset_mapping = _expect_mapping(raw_preset, location)
+        family_name = str(raw_preset_mapping.get("family", "")).strip().lower()
+        preset = _parse_bba_preset(
+            raw_preset_mapping,
+            location,
+            backend,
+            default_scan=family_scan_defaults.get(family_name),
+        )
         presets.append(preset)
         presets_by_id[preset.id] = preset
 
@@ -3578,8 +3595,11 @@ def _parse_bba_preset(
     raw_preset: Any,
     location: str,
     control_backend: str,
+    *,
+    default_scan: Mapping[str, Any] | None = None,
 ) -> BBAPreset:
     preset = _expect_mapping(raw_preset, location)
+    raw_scan = preset.get("scan", default_scan or {})
     return BBAPreset(
         id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
         family=_expect_non_empty_string(preset.get("family"), f"{location}.family"),
@@ -3590,7 +3610,7 @@ def _parse_bba_preset(
         bpm2=_expect_non_empty_string(preset.get("bpm2"), f"{location}.bpm2"),
         mode=normalize_mode(preset.get("mode"), f"{location}.mode") if "mode" in preset else None,
         scan=_parse_bba_scan_config(
-            _expect_mapping(preset.get("scan", {}), f"{location}.scan"),
+            _expect_mapping(raw_scan, f"{location}.scan"),
             control_backend,
             f"{location}.scan",
         ),

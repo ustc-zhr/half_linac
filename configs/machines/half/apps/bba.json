@@ -1,21 +1,553 @@
 {
   "presets": [
     {
+      "id": "bba1_ql01_xc03",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL01",
+      "corr": "XC03",
+      "bpm1": "BPM03",
+      "bpm2": "BPM04"
+    },
+    {
+      "id": "bba1_ql01_yc03",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL01",
+      "corr": "YC03",
+      "bpm1": "BPM03",
+      "bpm2": "BPM04"
+    },
+    {
+      "id": "bba1_ql02_xc03",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL02",
+      "corr": "XC03",
+      "bpm1": "BPM03",
+      "bpm2": "BPM04"
+    },
+    {
+      "id": "bba1_ql02_yc03",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL02",
+      "corr": "YC03",
+      "bpm1": "BPM03",
+      "bpm2": "BPM04"
+    },
+    {
+      "id": "bba1_ql03_xc04",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL03",
+      "corr": "XC04",
+      "bpm1": "BPM04",
+      "bpm2": "BPM05"
+    },
+    {
+      "id": "bba1_ql03_yc04",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL03",
+      "corr": "YC04",
+      "bpm1": "BPM04",
+      "bpm2": "BPM05"
+    },
+    {
+      "id": "bba1_ql04_xc05",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL04",
+      "corr": "XC05",
+      "bpm1": "BPM05",
+      "bpm2": "BPM06"
+    },
+    {
+      "id": "bba1_ql04_yc05",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL04",
+      "corr": "YC05",
+      "bpm1": "BPM05",
+      "bpm2": "BPM06"
+    },
+    {
+      "id": "bba1_ql05_xc05",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL05",
+      "corr": "XC05",
+      "bpm1": "BPM05",
+      "bpm2": "BPM06"
+    },
+    {
+      "id": "bba1_ql05_yc05",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL05",
+      "corr": "YC05",
+      "bpm1": "BPM05",
+      "bpm2": "BPM06"
+    },
+    {
+      "id": "bba1_ql06_xc06",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL06",
+      "corr": "XC06",
+      "bpm1": "BPM06",
+      "bpm2": "BPM07"
+    },
+    {
+      "id": "bba1_ql06_yc06",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL06",
+      "corr": "YC06",
+      "bpm1": "BPM06",
+      "bpm2": "BPM07"
+    },
+    {
+      "id": "bba1_ql07_xc07",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL07",
+      "corr": "XC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql07_yc07",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL07",
+      "corr": "YC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql08_xc07",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL08",
+      "corr": "XC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql08_yc07",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL08",
+      "corr": "YC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql09_xc07",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL09",
+      "corr": "XC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql09_yc07",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL09",
+      "corr": "YC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql10_xc07",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL10",
+      "corr": "XC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql10_yc07",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL10",
+      "corr": "YC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql11_xc07",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL11",
+      "corr": "XC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql11_yc07",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL11",
+      "corr": "YC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql12_xc07",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL12",
+      "corr": "XC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql12_yc07",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL12",
+      "corr": "YC07",
+      "bpm1": "BPM07",
+      "bpm2": "BPM08"
+    },
+    {
+      "id": "bba1_ql13_xc08",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL13",
+      "corr": "XC08",
+      "bpm1": "BPM08",
+      "bpm2": "BPM09"
+    },
+    {
+      "id": "bba1_ql13_yc08",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL13",
+      "corr": "YC08",
+      "bpm1": "BPM08",
+      "bpm2": "BPM09"
+    },
+    {
+      "id": "bba1_ql14_xc09",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL14",
+      "corr": "XC09",
+      "bpm1": "BPM09",
+      "bpm2": "BPM10"
+    },
+    {
+      "id": "bba1_ql14_yc09",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL14",
+      "corr": "YC09",
+      "bpm1": "BPM09",
+      "bpm2": "BPM10"
+    },
+    {
+      "id": "bba1_ql15_xc09",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL15",
+      "corr": "XC09",
+      "bpm1": "BPM09",
+      "bpm2": "BPM10"
+    },
+    {
+      "id": "bba1_ql15_yc09",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL15",
+      "corr": "YC09",
+      "bpm1": "BPM09",
+      "bpm2": "BPM10"
+    },
+    {
+      "id": "bba1_ql16_xc10",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL16",
+      "corr": "XC10",
+      "bpm1": "BPM10",
+      "bpm2": "BPM11"
+    },
+    {
+      "id": "bba1_ql16_yc10",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL16",
+      "corr": "YC10",
+      "bpm1": "BPM10",
+      "bpm2": "BPM11"
+    },
+    {
+      "id": "bba1_ql17_xc11",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL17",
+      "corr": "XC11",
+      "bpm1": "BPM11",
+      "bpm2": "BPM12"
+    },
+    {
+      "id": "bba1_ql17_yc11",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL17",
+      "corr": "YC11",
+      "bpm1": "BPM11",
+      "bpm2": "BPM12"
+    },
+    {
+      "id": "bba1_ql18_xc11",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL18",
+      "corr": "XC11",
+      "bpm1": "BPM11",
+      "bpm2": "BPM12"
+    },
+    {
+      "id": "bba1_ql18_yc11",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL18",
+      "corr": "YC11",
+      "bpm1": "BPM11",
+      "bpm2": "BPM12"
+    },
+    {
+      "id": "bba1_ql19_xc11",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL19",
+      "corr": "XC11",
+      "bpm1": "BPM11",
+      "bpm2": "BPM12"
+    },
+    {
+      "id": "bba1_ql19_yc11",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL19",
+      "corr": "YC11",
+      "bpm1": "BPM11",
+      "bpm2": "BPM12"
+    },
+    {
+      "id": "bba1_ql20_xc12",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL20",
+      "corr": "XC12",
+      "bpm1": "BPM12",
+      "bpm2": "BPM13"
+    },
+    {
+      "id": "bba1_ql20_yc12",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL20",
+      "corr": "YC12",
+      "bpm1": "BPM12",
+      "bpm2": "BPM13"
+    },
+    {
+      "id": "bba1_ql21_xc13",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL21",
+      "corr": "XC13",
+      "bpm1": "BPM13",
+      "bpm2": "BPM14"
+    },
+    {
+      "id": "bba1_ql21_yc13",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL21",
+      "corr": "YC13",
+      "bpm1": "BPM13",
+      "bpm2": "BPM14"
+    },
+    {
+      "id": "bba1_ql22_xc14",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL22",
+      "corr": "XC14",
+      "bpm1": "BPM14",
+      "bpm2": "BPM15"
+    },
+    {
+      "id": "bba1_ql22_yc14",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL22",
+      "corr": "YC14",
+      "bpm1": "BPM14",
+      "bpm2": "BPM15"
+    },
+    {
+      "id": "bba1_ql23_xc15",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL23",
+      "corr": "XC15",
+      "bpm1": "BPM15",
+      "bpm2": "BPM16"
+    },
+    {
+      "id": "bba1_ql23_yc15",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL23",
+      "corr": "YC15",
+      "bpm1": "BPM15",
+      "bpm2": "BPM16"
+    },
+    {
+      "id": "bba1_ql24_xc16",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL24",
+      "corr": "XC16",
+      "bpm1": "BPM16",
+      "bpm2": "BPM17"
+    },
+    {
+      "id": "bba1_ql24_yc16",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL24",
+      "corr": "YC16",
+      "bpm1": "BPM16",
+      "bpm2": "BPM17"
+    },
+    {
+      "id": "bba1_ql25_xc17",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL25",
+      "corr": "XC17",
+      "bpm1": "BPM17",
+      "bpm2": "BPM18"
+    },
+    {
+      "id": "bba1_ql25_yc17",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL25",
+      "corr": "YC17",
+      "bpm1": "BPM17",
+      "bpm2": "BPM18"
+    },
+    {
+      "id": "bba1_ql26_xc18",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL26",
+      "corr": "XC18",
+      "bpm1": "BPM18",
+      "bpm2": "BPM19"
+    },
+    {
+      "id": "bba1_ql26_yc18",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL26",
+      "corr": "YC18",
+      "bpm1": "BPM18",
+      "bpm2": "BPM19"
+    },
+    {
+      "id": "bba1_ql27_xc19",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL27",
+      "corr": "XC19",
+      "bpm1": "BPM19",
+      "bpm2": "BPM20"
+    },
+    {
+      "id": "bba1_ql27_yc19",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL27",
+      "corr": "YC19",
+      "bpm1": "BPM19",
+      "bpm2": "BPM20"
+    },
+    {
+      "id": "bba1_qt01_xc20",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT01",
+      "corr": "XC20",
+      "bpm1": "BPM20",
+      "bpm2": "BPM21"
+    },
+    {
+      "id": "bba1_qt01_yc20",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT01",
+      "corr": "YC20",
+      "bpm1": "BPM20",
+      "bpm2": "BPM21"
+    },
+    {
+      "id": "bba1_qt02_xc21",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT02",
+      "corr": "XC21",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22"
+    },
+    {
+      "id": "bba1_qt02_yc21",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT02",
+      "corr": "YC21",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22"
+    },
+    {
+      "id": "bba1_qt03_xc21",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT03",
+      "corr": "XC21",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22"
+    },
+    {
+      "id": "bba1_qt03_yc21",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT03",
+      "corr": "YC21",
+      "bpm1": "BPM21",
+      "bpm2": "BPM22"
+    },
+    {
       "id": "bba1_qt04_xc21",
       "family": "bba1",
       "plane": "X",
       "quad": "QT04",
       "corr": "XC21",
       "bpm1": "BPM21",
-      "bpm2": "BPM22",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM22"
     },
     {
       "id": "bba1_qt04_yc21",
@@ -24,15 +556,133 @@
       "quad": "QT04",
       "corr": "YC21",
       "bpm1": "BPM21",
-      "bpm2": "BPM22",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM22"
+    },
+    {
+      "id": "bba1_qt05_xc22",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT05",
+      "corr": "XC22",
+      "bpm1": "BPM22",
+      "bpm2": "BPM23"
+    },
+    {
+      "id": "bba1_qt05_yc22",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT05",
+      "corr": "YC22",
+      "bpm1": "BPM22",
+      "bpm2": "BPM23"
+    },
+    {
+      "id": "bba1_qt06_xc22",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT06",
+      "corr": "XC22",
+      "bpm1": "BPM22",
+      "bpm2": "BPM23"
+    },
+    {
+      "id": "bba1_qt06_yc22",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT06",
+      "corr": "YC22",
+      "bpm1": "BPM22",
+      "bpm2": "BPM23"
+    },
+    {
+      "id": "bba1_qt07_xc23",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT07",
+      "corr": "XC23",
+      "bpm1": "BPM23",
+      "bpm2": "BPM24"
+    },
+    {
+      "id": "bba1_qt07_yc23",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT07",
+      "corr": "YC23",
+      "bpm1": "BPM23",
+      "bpm2": "BPM24"
+    },
+    {
+      "id": "bba1_qt08_xc23",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT08",
+      "corr": "XC23",
+      "bpm1": "BPM23",
+      "bpm2": "BPM24"
+    },
+    {
+      "id": "bba1_qt08_yc23",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT08",
+      "corr": "YC23",
+      "bpm1": "BPM23",
+      "bpm2": "BPM24"
+    },
+    {
+      "id": "bba1_qt09_xc24",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT09",
+      "corr": "XC24",
+      "bpm1": "BPM24",
+      "bpm2": "BPM25"
+    },
+    {
+      "id": "bba1_qt09_yc24",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT09",
+      "corr": "YC24",
+      "bpm1": "BPM24",
+      "bpm2": "BPM25"
+    },
+    {
+      "id": "bba1_qt10_xc25",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT10",
+      "corr": "XC25",
+      "bpm1": "BPM25",
+      "bpm2": "BPM26"
+    },
+    {
+      "id": "bba1_qt10_yc25",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT10",
+      "corr": "YC25",
+      "bpm1": "BPM25",
+      "bpm2": "BPM26"
+    },
+    {
+      "id": "bba1_qt11_xc25",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT11",
+      "corr": "XC25",
+      "bpm1": "BPM25",
+      "bpm2": "BPM26"
+    },
+    {
+      "id": "bba1_qt11_yc25",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT11",
+      "corr": "YC25",
+      "bpm1": "BPM25",
+      "bpm2": "BPM26"
     },
     {
       "id": "bba1_qt12_xc26",
@@ -41,15 +691,7 @@
       "quad": "QT12",
       "corr": "XC26",
       "bpm1": "BPM26",
-      "bpm2": "BPM27",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM27"
     },
     {
       "id": "bba1_qt12_yc26",
@@ -58,15 +700,7 @@
       "quad": "QT12",
       "corr": "YC26",
       "bpm1": "BPM26",
-      "bpm2": "BPM27",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM27"
     },
     {
       "id": "bba1_qt13_xc26",
@@ -75,15 +709,7 @@
       "quad": "QT13",
       "corr": "XC26",
       "bpm1": "BPM26",
-      "bpm2": "BPM27",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM27"
     },
     {
       "id": "bba1_qt13_yc26",
@@ -92,15 +718,7 @@
       "quad": "QT13",
       "corr": "YC26",
       "bpm1": "BPM26",
-      "bpm2": "BPM27",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM27"
     },
     {
       "id": "bba1_qt14_xc26",
@@ -109,15 +727,7 @@
       "quad": "QT14",
       "corr": "XC26",
       "bpm1": "BPM26",
-      "bpm2": "BPM27",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM27"
     },
     {
       "id": "bba1_qt14_yc26",
@@ -126,15 +736,7 @@
       "quad": "QT14",
       "corr": "YC26",
       "bpm1": "BPM26",
-      "bpm2": "BPM27",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM27"
     },
     {
       "id": "bba1_qt15_xc27",
@@ -143,15 +745,7 @@
       "quad": "QT15",
       "corr": "XC27",
       "bpm1": "BPM27",
-      "bpm2": "BPM28",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM28"
     },
     {
       "id": "bba1_qt15_yc27",
@@ -160,15 +754,7 @@
       "quad": "QT15",
       "corr": "YC27",
       "bpm1": "BPM27",
-      "bpm2": "BPM28",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM28"
     },
     {
       "id": "bba1_qt16_xc27",
@@ -177,15 +763,7 @@
       "quad": "QT16",
       "corr": "XC27",
       "bpm1": "BPM27",
-      "bpm2": "BPM28",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM28"
     },
     {
       "id": "bba1_qt16_yc27",
@@ -194,15 +772,25 @@
       "quad": "QT16",
       "corr": "YC27",
       "bpm1": "BPM27",
-      "bpm2": "BPM28",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM28"
+    },
+    {
+      "id": "bba1_qt17_xc27",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT17",
+      "corr": "XC27",
+      "bpm1": "BPM27",
+      "bpm2": "BPM28"
+    },
+    {
+      "id": "bba1_qt17_yc27",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT17",
+      "corr": "YC27",
+      "bpm1": "BPM27",
+      "bpm2": "BPM28"
     },
     {
       "id": "bba1_qt18_xc28",
@@ -211,15 +799,7 @@
       "quad": "QT18",
       "corr": "XC28",
       "bpm1": "BPM28",
-      "bpm2": "BPM29",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM29"
     },
     {
       "id": "bba1_qt18_yc28",
@@ -228,15 +808,7 @@
       "quad": "QT18",
       "corr": "YC28",
       "bpm1": "BPM28",
-      "bpm2": "BPM29",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM29"
     },
     {
       "id": "bba1_qt19_xc29",
@@ -245,15 +817,7 @@
       "quad": "QT19",
       "corr": "XC29",
       "bpm1": "BPM29",
-      "bpm2": "BPM30",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM30"
     },
     {
       "id": "bba1_qt19_yc29",
@@ -262,15 +826,313 @@
       "quad": "QT19",
       "corr": "YC29",
       "bpm1": "BPM29",
-      "bpm2": "BPM30",
-      "scan": {
-        "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
-        },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
-      }
+      "bpm2": "BPM30"
+    },
+    {
+      "id": "bba1_qt20_xc30",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT20",
+      "corr": "XC30",
+      "bpm1": "BPM30",
+      "bpm2": "BPM31"
+    },
+    {
+      "id": "bba1_qt20_yc30",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT20",
+      "corr": "YC30",
+      "bpm1": "BPM30",
+      "bpm2": "BPM31"
+    },
+    {
+      "id": "bba1_qt21_xc31",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT21",
+      "corr": "XC31",
+      "bpm1": "BPM31",
+      "bpm2": "BPM32"
+    },
+    {
+      "id": "bba1_qt21_yc31",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT21",
+      "corr": "YC31",
+      "bpm1": "BPM31",
+      "bpm2": "BPM32"
+    },
+    {
+      "id": "bba1_qt22_xc32",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT22",
+      "corr": "XC32",
+      "bpm1": "BPM32",
+      "bpm2": "BPM33"
+    },
+    {
+      "id": "bba1_qt22_yc32",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT22",
+      "corr": "YC32",
+      "bpm1": "BPM32",
+      "bpm2": "BPM33"
+    },
+    {
+      "id": "bba1_qt23_xc33",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT23",
+      "corr": "XC33",
+      "bpm1": "BPM33",
+      "bpm2": "BPM34"
+    },
+    {
+      "id": "bba1_qt23_yc33",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT23",
+      "corr": "YC33",
+      "bpm1": "BPM33",
+      "bpm2": "BPM34"
+    },
+    {
+      "id": "bba1_qt24_xc34",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT24",
+      "corr": "XC34",
+      "bpm1": "BPM34",
+      "bpm2": "BPM35"
+    },
+    {
+      "id": "bba1_qt24_yc34",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT24",
+      "corr": "YC34",
+      "bpm1": "BPM34",
+      "bpm2": "BPM35"
+    },
+    {
+      "id": "bba1_qt25_xc34",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT25",
+      "corr": "XC34",
+      "bpm1": "BPM34",
+      "bpm2": "BPM35"
+    },
+    {
+      "id": "bba1_qt25_yc34",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT25",
+      "corr": "YC34",
+      "bpm1": "BPM34",
+      "bpm2": "BPM35"
+    },
+    {
+      "id": "bba1_qt26_xc35",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT26",
+      "corr": "XC35",
+      "bpm1": "BPM35",
+      "bpm2": "BPM36"
+    },
+    {
+      "id": "bba1_qt26_yc35",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT26",
+      "corr": "YC35",
+      "bpm1": "BPM35",
+      "bpm2": "BPM36"
+    },
+    {
+      "id": "bba1_qt27_xc36",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT27",
+      "corr": "XC36",
+      "bpm1": "BPM36",
+      "bpm2": "BPM37"
+    },
+    {
+      "id": "bba1_qt27_yc36",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT27",
+      "corr": "YC36",
+      "bpm1": "BPM36",
+      "bpm2": "BPM37"
+    },
+    {
+      "id": "bba1_qt28_xc36",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT28",
+      "corr": "XC36",
+      "bpm1": "BPM36",
+      "bpm2": "BPM37"
+    },
+    {
+      "id": "bba1_qt28_yc36",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT28",
+      "corr": "YC36",
+      "bpm1": "BPM36",
+      "bpm2": "BPM37"
+    },
+    {
+      "id": "bba1_qt29_xc37",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT29",
+      "corr": "XC37",
+      "bpm1": "BPM37",
+      "bpm2": "BPM38"
+    },
+    {
+      "id": "bba1_qt29_yc37",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT29",
+      "corr": "YC37",
+      "bpm1": "BPM37",
+      "bpm2": "BPM38"
+    },
+    {
+      "id": "bba1_qt30_xc38",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT30",
+      "corr": "XC38",
+      "bpm1": "BPM38",
+      "bpm2": "BPM39"
+    },
+    {
+      "id": "bba1_qt30_yc38",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT30",
+      "corr": "YC38",
+      "bpm1": "BPM38",
+      "bpm2": "BPM39"
+    },
+    {
+      "id": "bba1_qt31_xc39",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT31",
+      "corr": "XC39",
+      "bpm1": "BPM39",
+      "bpm2": "BPM40"
+    },
+    {
+      "id": "bba1_qt31_yc39",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT31",
+      "corr": "YC39",
+      "bpm1": "BPM39",
+      "bpm2": "BPM40"
+    },
+    {
+      "id": "bba1_qt32_xc39",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT32",
+      "corr": "XC39",
+      "bpm1": "BPM39",
+      "bpm2": "BPM40"
+    },
+    {
+      "id": "bba1_qt32_yc39",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT32",
+      "corr": "YC39",
+      "bpm1": "BPM39",
+      "bpm2": "BPM40"
+    },
+    {
+      "id": "bba1_qt33_xc40",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT33",
+      "corr": "XC40",
+      "bpm1": "BPM40",
+      "bpm2": "BPM41"
+    },
+    {
+      "id": "bba1_qt33_yc40",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT33",
+      "corr": "YC40",
+      "bpm1": "BPM40",
+      "bpm2": "BPM41"
+    },
+    {
+      "id": "bba1_qt34_xc41",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT34",
+      "corr": "XC41",
+      "bpm1": "BPM41",
+      "bpm2": "BPM42"
+    },
+    {
+      "id": "bba1_qt34_yc41",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT34",
+      "corr": "YC41",
+      "bpm1": "BPM41",
+      "bpm2": "BPM42"
+    },
+    {
+      "id": "bba1_qt35_xc41",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT35",
+      "corr": "XC41",
+      "bpm1": "BPM41",
+      "bpm2": "BPM42"
+    },
+    {
+      "id": "bba1_qt35_yc41",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT35",
+      "corr": "YC41",
+      "bpm1": "BPM41",
+      "bpm2": "BPM42"
+    },
+    {
+      "id": "bba1_qt36_xc42",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QT36",
+      "corr": "XC42",
+      "bpm1": "BPM42",
+      "bpm2": "BPM43"
+    },
+    {
+      "id": "bba1_qt36_yc42",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QT36",
+      "corr": "YC42",
+      "bpm1": "BPM42",
+      "bpm2": "BPM43"
     },
     {
       "id": "bba2_qt04_xc22",
@@ -282,11 +1144,33 @@
       "bpm2": "BPM22",
       "scan": {
         "corrector": {
-          "vm": {"low": -0.001, "high": 0.001, "steps": 5, "unit": "rad", "mode": "absolute"},
-          "real": {"low": -1, "high": 1, "steps": 5, "unit": "A", "mode": "relative"}
+          "vm": {
+            "low": -0.001,
+            "high": 0.001,
+            "steps": 5,
+            "unit": "rad",
+            "mode": "absolute"
+          },
+          "real": {
+            "low": -1,
+            "high": 1,
+            "steps": 5,
+            "unit": "A",
+            "mode": "relative"
+          }
         },
-        "quadrupole": {"low": -5, "high": 5, "steps": 5, "unit": "1/m^2", "mode": "relative"},
-        "sampling": {"samples_per_point": 1, "settle_time_s": 8, "sample_interval_s": 0.5}
+        "quadrupole": {
+          "low": -5,
+          "high": 5,
+          "steps": 5,
+          "unit": "1/m^2",
+          "mode": "relative"
+        },
+        "sampling": {
+          "samples_per_point": 1,
+          "settle_time_s": 8,
+          "sample_interval_s": 0.5
+        }
       },
       "analysis": {
         "energy_mev": 2200,
@@ -299,7 +1183,44 @@
       }
     }
   ],
-  "bba1": {"default_preset": "bba1_qt04_xc21"},
-  "bba2": {"default_preset": "bba2_qt04_xc22"},
-  "write_control": {"vm": "allowed", "real": "allowed"}
+  "bba1": {
+    "default_preset": "bba1_qt04_xc21",
+    "scan": {
+      "corrector": {
+        "vm": {
+          "low": -0.001,
+          "high": 0.001,
+          "steps": 5,
+          "unit": "rad",
+          "mode": "absolute"
+        },
+        "real": {
+          "low": -1,
+          "high": 1,
+          "steps": 5,
+          "unit": "A",
+          "mode": "relative"
+        }
+      },
+      "quadrupole": {
+        "low": -5,
+        "high": 5,
+        "steps": 5,
+        "unit": "1/m^2",
+        "mode": "relative"
+      },
+      "sampling": {
+        "samples_per_point": 1,
+        "settle_time_s": 8,
+        "sample_interval_s": 0.5
+      }
+    }
+  },
+  "bba2": {
+    "default_preset": "bba2_qt04_xc22"
+  },
+  "write_control": {
+    "vm": "allowed",
+    "real": "allowed"
+  }
 }
