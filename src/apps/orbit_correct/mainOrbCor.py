@@ -62,6 +62,8 @@ from half_linac.src.apps.orbit_correct.profile_runtime import (
 )
 
 HEADER_ACTION_HEIGHT = 32
+TARGET_BPM_DECIMALS = 3
+TARGET_BPM_STEP_MM = 0.001
 logger = logging.getLogger(__name__)
 
 DARK_THEME = {
@@ -647,6 +649,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         match = re.search(r"(\d+)$", widget.objectName())
         return int(match.group(1)) if match else 0
 
+    @staticmethod
+    def _configure_target_bpm_spinbox(spinbox):
+        spinbox.setDecimals(TARGET_BPM_DECIMALS)
+        spinbox.setSingleStep(TARGET_BPM_STEP_MM)
+
     def _append_target_bpm_row(self, index):
         row = self.gridLayout_2.rowCount()
         checkbox = QCheckBox(self.scrollAreaWidgetContents_2)
@@ -654,17 +661,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         bpmx_widget = QDoubleSpinBox(self.scrollAreaWidgetContents_2)
         bpmx_widget.setObjectName(f"bpmx_doubleSpinBox_{index:02d}_dynamic")
-        bpmx_widget.setDecimals(2)
+        self._configure_target_bpm_spinbox(bpmx_widget)
         bpmx_widget.setMinimum(-99.99)
         bpmx_widget.setMaximum(99.99)
-        bpmx_widget.setSingleStep(0.1)
 
         bpmy_widget = QDoubleSpinBox(self.scrollAreaWidgetContents_2)
         bpmy_widget.setObjectName(f"bpmy_doubleSpinBox_{index:02d}_dynamic")
-        bpmy_widget.setDecimals(2)
+        self._configure_target_bpm_spinbox(bpmy_widget)
         bpmy_widget.setMinimum(-99.99)
         bpmy_widget.setMaximum(99.99)
-        bpmy_widget.setSingleStep(0.1)
 
         self.gridLayout_2.addWidget(checkbox, row, 0)
         self.gridLayout_2.addWidget(bpmx_widget, row, 1)
@@ -707,6 +712,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.all_checkboxes = checkbox_widgets[: len(orbit_bpms)]
         self._bpmx_spinboxes = bpmx_widgets[: len(orbit_bpms)]
         self._bpmy_spinboxes = bpmy_widgets[: len(orbit_bpms)]
+        for spinbox in self._bpmx_spinboxes + self._bpmy_spinboxes:
+            self._configure_target_bpm_spinbox(spinbox)
         default_target_bpms = set(self.orbit_workflow.default_target_bpms)
 
         for bpm_name, checkbox in zip(orbit_bpms, self.all_checkboxes):
