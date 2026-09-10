@@ -187,7 +187,7 @@ class MultiScreenWorkspace(QWidget):
         actions_outer = QVBoxLayout(actions_card)
         actions_outer.setContentsMargins(10, 8, 10, 8)
         actions_outer.setSpacing(6)
-        actions_title = QLabel("Measurement Actions", actions_card)
+        actions_title = QLabel("Actions", actions_card)
         actions_title.setObjectName("panelTitle")
         actions_outer.addWidget(actions_title)
         controls = QHBoxLayout()
@@ -238,13 +238,14 @@ class MultiScreenWorkspace(QWidget):
             self.load_button,
         ):
             button.setProperty("compact", True)
-        action_group("Session", (self.prepare_button, self.new_button), stretch=1)
+        action_group("Session", (self.prepare_button,), stretch=1)
         action_group(
             "Samples",
             (
                 self.acquire_button,
                 self.manual_button,
                 self.reconstruct_button,
+                self.new_button,
             ),
             stretch=3,
         )
