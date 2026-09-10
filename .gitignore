@@ -61,6 +61,7 @@ src/virtual_machine/half_elegant/esa.json
 src/virtual_machine/half_elegant/.*.lock
 src/virtual_machine/*_elegant/*.json
 src/virtual_machine/*_elegant/.*.lock
+src/virtual_machine/*_elegant/.vm-workbench/
 src/virtual_machine/*_elegant/elegant/lattice.lte
 src/virtual_machine/*_elegant/elegant/one.ele
 src/virtual_machine/*_elegant/elegant/esa.lte
