@@ -222,8 +222,9 @@ def activate_window_for_pid(pid):
 
 def raise_qt_window(window):
     try:
-        from PyQt5.QtCore import Qt
+        from PyQt5.QtCore import QTimer, Qt
     except Exception:
+        QTimer = None
         Qt = None
 
     if window is None:
@@ -231,9 +232,35 @@ def raise_qt_window(window):
 
     if Qt is not None and hasattr(window, "windowState"):
         window.setWindowState((window.windowState() & ~Qt.WindowMinimized) | Qt.WindowActive)
-    if hasattr(window, "showNormal") and window.isMinimized():
-        window.showNormal()
-    elif hasattr(window, "show"):
+
+    # WSLg may ignore raise/activate requests for an existing RAIL surface.
+    # Remapping the same Qt window updates its host stacking order without
+    # recreating it, which avoids the duplicate-window flash caused by
+    # toggling WindowStaysOnTopHint.
+    remap_window = (
+        QTimer is not None
+        and os.environ.get("WSL_DISTRO_NAME")
+        and hasattr(window, "hide")
+        and hasattr(window, "show")
+    )
+    if remap_window:
+        target_ref = weakref.ref(window)
+        window.hide()
+
+        def _show_and_raise():
+            target = target_ref()
+            if target is None:
+                return
+            target.show()
+            if hasattr(target, "raise_"):
+                target.raise_()
+            if hasattr(target, "activateWindow"):
+                target.activateWindow()
+
+        QTimer.singleShot(0, _show_and_raise)
+        return
+
+    if hasattr(window, "show"):
         window.show()
     if hasattr(window, "raise_"):
         window.raise_()

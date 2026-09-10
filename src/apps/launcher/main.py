@@ -1770,16 +1770,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         prompt.setIcon(QMessageBox.Question)
         prompt.setWindowTitle(spec["label"])
         prompt.setText(f"{spec['label']} is already running.")
-        open_button = prompt.addButton("Open", QMessageBox.AcceptRole)
+        foreground_button = prompt.addButton("Bring to Front", QMessageBox.AcceptRole)
         stop_button = prompt.addButton("Stop", QMessageBox.DestructiveRole)
         cancel_button = prompt.addButton("Cancel", QMessageBox.RejectRole)
-        prompt.setDefaultButton(open_button)
+        prompt.setDefaultButton(foreground_button)
         prompt.setEscapeButton(cancel_button)
         prompt.exec_()
 
         clicked_button = prompt.clickedButton()
-        if clicked_button is open_button:
-            self._request_running_app_open(key)
+        if clicked_button is foreground_button:
+            self._request_running_app_foreground(key)
             return
         if clicked_button is stop_button:
             self._stop_running_app(key)
@@ -1787,23 +1787,27 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self._notify(f"{spec['label']} is already running.")
 
-    def _request_running_app_open(self, key):
+    def _request_running_app_foreground(self, key):
         spec = APP_DEFINITIONS[key]
         proc = self.process_manager.processes.get(key)
         if proc is None:
             self._notify(f"{spec['label']} is already running, but its process was not found.")
             return
 
-        title_requested = activate_windows_window_by_title(
-            spec.get("window_title_patterns", (spec["label"],))
-        )
-        x11_requested = activate_window_for_pid(proc.pid)
         qt_requested = request_qt_window_raise(proc.pid)
+        x11_requested = activate_window_for_pid(proc.pid)
+        title_requested = False
+        if not qt_requested and not x11_requested:
+            title_requested = activate_windows_window_by_title(
+                spec.get("window_title_patterns", (spec["label"],))
+            )
         if title_requested or x11_requested or qt_requested:
-            self._notify(f"Open requested for {spec['label']}.")
+            self._notify(f"Bring-to-front requested for {spec['label']}.")
             return
 
-        self._notify(f"{spec['label']} is already running, but its window could not be opened automatically.")
+        self._notify(
+            f"{spec['label']} is already running, but its window could not be brought to front."
+        )
 
     def _stop_running_app(self, key):
         spec = APP_DEFINITIONS[key]
