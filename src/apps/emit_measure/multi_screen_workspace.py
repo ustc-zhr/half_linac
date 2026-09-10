@@ -213,19 +213,6 @@ class MultiScreenWorkspace(QWidget):
         self.acquire_button.setToolTip("Read the selected screen image, fit it locally, and accept the sample.")
         self.manual_button.setToolTip("Enter beam sizes manually and add a sample.")
         self.reconstruct_button.setToolTip("Reconstruct the transverse beam matrix from accepted samples.")
-        def action_group(title, buttons, stretch=0):
-            group = QVBoxLayout()
-            group.setSpacing(4)
-            group_title = QLabel(title, actions_card)
-            group_title.setProperty("role", "sectionTitle")
-            group.addWidget(group_title)
-            row = QHBoxLayout()
-            row.setSpacing(6)
-            for button in buttons:
-                row.addWidget(button)
-            group.addLayout(row)
-            controls.addLayout(group, stretch)
-
         self.prepare_button.setProperty("role", "primary")
         self.acquire_button.setProperty("role", "primary")
         for button in (
@@ -238,17 +225,15 @@ class MultiScreenWorkspace(QWidget):
             self.load_button,
         ):
             button.setProperty("compact", True)
-        action_group("Session", (self.prepare_button,), stretch=1)
-        action_group(
-            "Samples",
-            (
-                self.acquire_button,
-                self.manual_button,
-                self.reconstruct_button,
-                self.new_button,
-            ),
-            stretch=3,
-        )
+        for button in (
+            self.prepare_button,
+            self.acquire_button,
+            self.manual_button,
+            self.reconstruct_button,
+            self.new_button,
+        ):
+            controls.addWidget(button)
+        controls.addStretch(1)
         self.prepare_button.clicked.connect(self.prepare_measurement)
         self.new_button.clicked.connect(self.new_measurement)
         self.acquire_button.clicked.connect(self.acquire_sample)
@@ -1301,7 +1286,15 @@ class MultiScreenWorkspace(QWidget):
     def save_archive(self) -> None:
         if self.session is None:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save Multi-Screen Archive", "multi_screen_measurement.json", "JSON (*.json)")
+        paths = resolve_app_runtime_paths(Path(__file__).resolve().parent, self.app_context)
+        paths["runs_dir"].mkdir(parents=True, exist_ok=True)
+        default_path = paths["runs_dir"] / "multi_screen_measurement.json"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Multi-Screen Archive",
+            str(default_path),
+            "JSON (*.json)",
+        )
         if not path:
             return
         try:
@@ -1328,7 +1321,14 @@ class MultiScreenWorkspace(QWidget):
         return run_path, latest_path
 
     def load_archive(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Load Multi-Screen Archive", "", "JSON (*.json)")
+        paths = resolve_app_runtime_paths(Path(__file__).resolve().parent, self.app_context)
+        paths["runs_dir"].mkdir(parents=True, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Multi-Screen Archive",
+            str(paths["runs_dir"]),
+            "JSON (*.json)",
+        )
         if not path:
             return
         try:
