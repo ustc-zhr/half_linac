@@ -3,6 +3,8 @@ from __future__ import annotations
 import fcntl
 import json
 import math
+import shutil
+import subprocess
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -770,14 +772,8 @@ class ElegantModelBackend:
 
     def _load_optics_profile_rows(self) -> tuple[Mapping[str, Any], ...]:
         twiss_path = self.optics_ele.with_suffix(".twi")
-        twiss = sdds.SDDS(0)
-        twiss.load(str(twiss_path))
         with self.optics_json.open("r", encoding="utf-8") as handle:
             emitted_lattice = json.load(handle).get("lattice", {})
-        columns = {
-            name: twiss.columnData[index][0]
-            for index, name in enumerate(twiss.columnName)
-        }
         required = (
             "ElementName",
             "ElementOccurence",
@@ -792,11 +788,7 @@ class ElegantModelBackend:
             "betay",
             "alphay",
         )
-        missing = [name for name in required if name not in columns]
-        if missing:
-            raise MachineProfileError(
-                f"Elegant Twiss output {twiss_path} is missing columns: {', '.join(missing)}"
-            )
+        columns = _load_sdds_columns(twiss_path, required)
         row_count = len(columns["s"])
         rows = []
         for index in range(row_count):
@@ -894,18 +886,7 @@ class ElegantModelBackend:
         state["usedline"] = usedline[start_index : target_index + 1]
         self._run_energy_state(paths, parser, state)
 
-        twiss = sdds.SDDS(0)
-        twiss.load(str(paths.twi))
-        columns = {
-            name.lower(): twiss.columnData[index][0]
-            for index, name in enumerate(twiss.columnName)
-        }
-        missing_columns = [name for name in ("betax", "alphax", "etax") if name not in columns]
-        if missing_columns:
-            raise MachineProfileError(
-                f"Elegant Twiss output {paths.twi} is missing columns: "
-                f"{', '.join(missing_columns)}"
-            )
+        columns = _load_sdds_columns(paths.twi, ("betax", "alphax", "etax"))
         return EnergyOpticsResult(
             beta_x_m=float(columns["betax"][-1]),
             alpha_x=float(columns["alphax"][-1]),
@@ -1147,20 +1128,83 @@ def _require_config_alias(
 
 
 def _load_matrix(path: Path | str) -> np.ndarray:
-    matrix_file = sdds.SDDS(0)
-    matrix_file.load(str(path))
-    columns = {
-        name: matrix_file.columnData[index][0][0]
-        for index, name in enumerate(matrix_file.columnName)
-    }
     required = [f"R{row}{column}" for row in range(1, 7) for column in range(1, 7)]
-    missing = [name for name in required if name not in columns]
-    if missing:
-        raise MachineProfileError(
-            f"Elegant matrix output {path} is missing columns: {', '.join(missing)}"
-        )
-    values = [columns[name] for name in required]
+    columns = _load_sdds_columns(path, required)
+    values = [columns[name][0] for name in required]
     return np.asarray(values, dtype=float).reshape(6, 6)
+
+
+def _load_sdds_columns(
+    path: Path | str,
+    column_names: Iterable[str],
+) -> dict[str, list[Any]]:
+    """Read the first SDDS page through the legacy binding or Elegant CLI."""
+
+    path = Path(path)
+    names = tuple(str(name) for name in column_names)
+    if not names:
+        return {}
+
+    dataset_factory = getattr(sdds, "SDDS", None)
+    if dataset_factory is not None:
+        dataset = dataset_factory(0)
+        dataset.load(str(path))
+        missing = [name for name in names if name not in dataset.columnName]
+        if missing:
+            raise MachineProfileError(
+                f"SDDS output {path} is missing columns: {', '.join(missing)}"
+            )
+        columns = {}
+        for name in names:
+            pages = dataset.columnData[dataset.columnName.index(name)]
+            if not pages:
+                raise MachineProfileError(f"SDDS output {path} column {name!r} has no pages.")
+            values = np.asarray(pages[0], dtype=object).reshape(-1).tolist()
+            if not values:
+                raise MachineProfileError(f"SDDS output {path} column {name!r} has no rows.")
+            columns[name] = values
+        return columns
+
+    executable = shutil.which("sdds2stream")
+    if executable is None:
+        raise MachineProfileError(
+            "Reading Elegant SDDS output requires either the legacy Python SDDS "
+            "binding or the sdds2stream executable."
+        )
+    completed = subprocess.run(
+        [
+            executable,
+            str(path),
+            f"-columns={','.join(names)}",
+            "-page=1",
+            "-delimiter=|",
+            "-noquotes",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
+        raise MachineProfileError(f"Failed to read SDDS output {path}: {detail}")
+
+    rows = []
+    for line in completed.stdout.splitlines():
+        if not line.strip():
+            continue
+        values = [value.strip() for value in line.split("|")]
+        if len(values) != len(names):
+            raise MachineProfileError(
+                f"SDDS output {path} returned {len(values)} values for "
+                f"{len(names)} requested columns."
+            )
+        rows.append(values)
+    if not rows:
+        raise MachineProfileError(f"SDDS output {path} has no rows on its first page.")
+    return {
+        name: [row[index] for row in rows]
+        for index, name in enumerate(names)
+    }
 
 
 def _optional_float(value: object, *, default: float = float("nan")) -> float:

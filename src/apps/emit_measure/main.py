@@ -63,6 +63,8 @@ from half_linac.src.shared.beam_diagnostics import (
     DEFAULT_BEAM_IMAGE_COLORMAP,
     BackgroundStoreError,
     analyze_beam_image,
+    analyze_raw_beam_image,
+    assess_projection_quality,
     load_background,
     resolve_beam_background_paths,
     save_background,
@@ -103,6 +105,7 @@ from half_linac.src.apps.emit_measure.adaptive_scan import (
     validate_adaptive_scan,
 )
 from half_linac.src.apps.emit_measure.profile_runtime import effective_k1_scan_limit
+from half_linac.src.apps.emit_measure.multi_screen_workspace import MultiScreenWorkspace
 
 nest_dict    = lambda: defaultdict(nest_dict)
 
@@ -136,54 +139,13 @@ def _image_extent_from_geometry(geometry):
 
 
 def _projection_measurement_quality(projection):
-    payload = {
-        "status": "fit_failed",
-        "usable": False,
-        "sigma_pixels": None,
-        "containment_sigma": None,
-        "edge_ratio": None,
-        "fit_residual": projection.residual_rms,
-    }
-    if not projection.valid or projection.center is None or projection.sigma_abs is None:
-        return payload
-
-    axis = np.asarray(projection.axis, dtype=float)
-    values = np.asarray(projection.projection, dtype=float)
-    if axis.size < 2 or values.size != axis.size:
-        return payload
-    pixel_width = float(np.median(np.abs(np.diff(axis))))
-    sigma = float(projection.sigma_abs)
-    center = float(projection.center)
-    sigma_pixels = sigma / pixel_width if pixel_width > 0 else 0.0
-    margin = min(center - float(axis[0]), float(axis[-1]) - center)
-    containment = margin / sigma if sigma > 0 else 0.0
-
-    baseline = float(projection.offset or 0.0) * float(np.max(values))
-    signal = np.clip(values - baseline, 0.0, None)
-    peak = float(np.max(signal)) if signal.size else 0.0
-    edge_bins = max(2, min(5, signal.size // 20))
-    edge_level = max(float(np.mean(signal[:edge_bins])), float(np.mean(signal[-edge_bins:])))
-    edge_ratio = edge_level / peak if peak > 0 else 1.0
-    residual = projection.residual_rms
-
-    if containment < QUALITY_MIN_CONTAINMENT_SIGMA or edge_ratio > QUALITY_MAX_EDGE_RATIO:
-        status = "clipped"
-    elif sigma_pixels < QUALITY_MIN_SIGMA_PIXELS:
-        status = "underresolved"
-    elif residual is not None and residual > QUALITY_MAX_FIT_RESIDUAL:
-        status = "poor_fit"
-    else:
-        status = "usable"
-    payload.update(
-        {
-            "status": status,
-            "usable": status == "usable",
-            "sigma_pixels": sigma_pixels,
-            "containment_sigma": containment,
-            "edge_ratio": edge_ratio,
-        }
+    return assess_projection_quality(
+        projection,
+        min_sigma_pixels=QUALITY_MIN_SIGMA_PIXELS,
+        min_containment_sigma=QUALITY_MIN_CONTAINMENT_SIGMA,
+        max_edge_ratio=QUALITY_MAX_EDGE_RATIO,
+        max_fit_residual=QUALITY_MAX_FIT_RESIDUAL,
     )
-    return payload
 
 
 def _read_flag_image_fit(
@@ -200,28 +162,23 @@ def _read_flag_image_fit(
     if raw_image is None:
         raise RuntimeError(f"Failed to read flag image PV: {image_pv}.")
     try:
-        flat_image = np.asarray(raw_image, dtype=float)
-    except (TypeError, ValueError) as exc:
-        raise RuntimeError(f"Flag image PV is not numeric array data: {image_pv}.") from exc
-
-    expected_size = pixel_shape[0] * pixel_shape[1]
-    if flat_image.size != expected_size:
-        raise RuntimeError(
-            f"Flag image length mismatch for {image_pv}: got {flat_image.size}, expected {expected_size}."
+        return analyze_raw_beam_image(
+            raw_image,
+            pixel_shape=pixel_shape,
+            extent=extent,
+            background=background,
+            roi=roi,
+            flip_y=flip_y,
+            full_frame_for_roi=full_frame_for_roi,
+            analyzer=analyze_beam_image,
         )
-
-    raw_image = np.reshape(flat_image, (pixel_shape[1], pixel_shape[0]))
-    if flip_y:
-        raw_image = np.flipud(raw_image)
-        if background is not None:
-            background = np.flipud(np.asarray(background))
-    analysis = analyze_beam_image(
-        raw_image, extent=extent, background=background, roi=roi
-    )
-    if full_frame_for_roi and roi is not None:
-        _analyzed_image, fit_result = analysis
-        return raw_image, fit_result
-    return analysis
+    except (TypeError, ValueError) as exc:
+        if "image size" in str(exc):
+            raise RuntimeError(
+                f"Flag image length mismatch for {image_pv}: got {np.asarray(raw_image).size}, "
+                f"expected {pixel_shape[0] * pixel_shape[1]}."
+            ) from exc
+        raise RuntimeError(f"Flag image PV is not numeric array data: {image_pv}.") from exc
 
 
 def _read_optional_scalar_pv(pv_name):
@@ -581,6 +538,14 @@ QLabel#panelTitle {{
 
 QLabel[role="field"] {{
     color: {muted_fg};
+    font-size: 11px;
+    font-weight: 600;
+    background: transparent;
+    border: none;
+}}
+
+QLabel#multiScreenDetail {{
+    color: {window_fg};
     font-size: 11px;
     font-weight: 600;
     background: transparent;
@@ -955,6 +920,7 @@ class myWindow(QWidget,Ui_Form):
         self._grid_steps_text = self.lineEdit_9.text()
         self._adaptive_max_points_text = None
         self.use_latest_fit_button = QPushButton("Use Latest Fit", self)
+        self.use_multi_screen_result_button = QPushButton("Use Multi-Screen Result", self)
         self.twiss_initial_title = QLabel("Initial Twiss at From", self)
         self.twiss_result_title = QLabel("Computed Twiss at To", self)
         self.twiss_line_label = QLabel("Line", self)
@@ -1026,6 +992,9 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_4.clicked.connect(self.start_twissCalc)
         self.pushButton_5.clicked.connect(self.stopScan)
         self.use_latest_fit_button.clicked.connect(self._use_latest_fit_for_twiss)
+        self.use_multi_screen_result_button.clicked.connect(
+            self._use_multi_screen_result_for_twiss
+        )
         self.scan_strategy_combo.currentIndexChanged.connect(
             self._handle_scan_strategy_changed
         )
@@ -1107,6 +1076,34 @@ class myWindow(QWidget,Ui_Form):
         self._build_twiss_plot_panel()
         twiss_tab_index = self.tabWidget.addTab(self.twiss_tab, "Twiss")
         self.tabWidget.setTabToolTip(twiss_tab_index, TWISS_TRANSPORT_TOOLTIP)
+        self.multi_screen_workspace = MultiScreenWorkspace(
+            self.app_context,
+            parent=self,
+        )
+        self.multi_screen_workspace.status_changed.connect(
+            self._handle_multi_screen_status
+        )
+        multi_screen_tab_index = self.tabWidget.addTab(
+            self.multi_screen_workspace,
+            "Multi-Screen",
+        )
+        self.tabWidget.setTabToolTip(
+            multi_screen_tab_index,
+            "Read-only multi-screen beam-matrix reconstruction.",
+        )
+
+    def _handle_multi_screen_status(self, state, message):
+        if not hasattr(self, "status_panel"):
+            return
+        tone = {
+            "Complete": "success",
+            "Ready": "success",
+            "Fit Ready": "success",
+            "Partial": "warning",
+            "Invalid": "warning",
+        }.get(state, "subtle")
+        text = state if not message else f"{state}: {message}"
+        self.status_panel.set_item("multi", text, tone)
 
     def _build_twiss_plot_panel(self):
         self.twiss_plot_card = QFrame(self.twiss_tab)
@@ -1219,6 +1216,7 @@ class myWindow(QWidget,Ui_Form):
         self.status_panel.add_item("fit", "PRF FIT", "No image")
         self.status_panel.add_item("emit", "EMIT", "No result")
         self.status_panel.add_item("data", "DATA", "No scan file")
+        self.status_panel.add_item("multi", "MULTI", "Configuring")
         self.status_panel.finish()
         self.status_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         outer_layout.addWidget(self.status_panel)
@@ -1550,6 +1548,7 @@ class myWindow(QWidget,Ui_Form):
             self.pushButton_4,
             self.pushButton_5,
             self.use_latest_fit_button,
+            self.use_multi_screen_result_button,
         ):
             button.setProperty("compact", True)
 
@@ -1630,6 +1629,9 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_5.setToolTip("Stop the running scan and restore the quadrupole setting.")
         self.use_latest_fit_button.setToolTip(
             "Copy beta, alpha and gamma from the latest valid emittance fit for the selected Twiss plane."
+        )
+        self.use_multi_screen_result_button.setToolTip(
+            "Copy beta, alpha and gamma from the latest valid Multi-Screen reconstruction."
         )
         self.preview_fit_button.setToolTip("Read the selected PRF image PV and update the local beam-size fit.")
         self.load_points_button.setToolTip("Open an archived emittance scan for review or recalculation.")
@@ -1926,10 +1928,13 @@ class myWindow(QWidget,Ui_Form):
         self.radioButton.setParent(self.widget_13)
         self.radioButton_2.setParent(self.widget_13)
         self.use_latest_fit_button.setParent(self.widget_13)
+        self.use_multi_screen_result_button.setParent(self.widget_13)
         self.pushButton_4.setParent(self.widget_13)
         footer.addStretch(1)
         self.use_latest_fit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         footer.addWidget(self.use_latest_fit_button)
+        self.use_multi_screen_result_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        footer.addWidget(self.use_multi_screen_result_button)
         self.pushButton_4.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         footer.addWidget(self.pushButton_4)
         layout.addLayout(footer)
@@ -3567,6 +3572,52 @@ class myWindow(QWidget,Ui_Form):
         self.twiss_status_edit.setText(
             f"Loaded latest {self._format_twiss_plane_label(plane)} plane fit{source_text}."
         )
+
+    def _use_multi_screen_result_for_twiss(self):
+        workspace = getattr(self, "multi_screen_workspace", None)
+        session = getattr(workspace, "session", None)
+        reconstruction = getattr(workspace, "reconstruction", None)
+        if session is None or reconstruction is None:
+            self._warn_twiss("No completed Multi-Screen reconstruction is available.")
+            return
+
+        plane_name = "x" if self._selected_twiss_plane() == "xplane" else "y"
+        plane_result = getattr(reconstruction, plane_name, None)
+        if plane_result is None or not plane_result.valid:
+            self._warn_twiss(
+                f"Multi-Screen {plane_name.upper()} plane reconstruction is not valid."
+            )
+            return
+        beta = _finite_float_or_none(getattr(plane_result, "beta_m", None))
+        alpha = _finite_float_or_none(getattr(plane_result, "alpha", None))
+        reference = str(getattr(session.optics, "reference_element", "")).strip()
+        if beta is None or alpha is None or not reference:
+            self._warn_twiss("Multi-Screen result has incomplete Twiss values or reference element.")
+            return
+
+        if self.comboBox_2.findText(reference) < 0:
+            self.comboBox_2.addItem(reference)
+        self._set_combo_current_text(self.comboBox_2, reference)
+        try:
+            self._configure_twiss_line_choices(reference)
+        except Exception as exc:
+            self._warn_twiss(f"Could not configure a model line at {reference}: {exc}")
+            return
+        self.lineEdit.setText(f"{beta:.8g}")
+        self.lineEdit_3.setText(f"{alpha:.8g}")
+        self._sync_initial_twiss_gamma()
+        if session.energy_mev is not None:
+            self.lineEdit_2.setText(f"{float(session.energy_mev):.8g}")
+        self.twiss_initial_source = {
+            "kind": "multi_screen_result",
+            "plane": self._selected_twiss_plane(),
+            "source_element": reference,
+            "preset": session.preset,
+        }
+        self.twiss_status_edit.setText(
+            f"Loaded Multi-Screen {plane_name.upper()} result at {reference}."
+        )
+        self._update_twiss_path_status()
 
     def _parse_positive_int(self, text, field_name):
         try:
@@ -5389,6 +5440,8 @@ class myWindow(QWidget,Ui_Form):
 
     def closeEvent(self, event):
         self.beam_image_timer.stop()
+        if hasattr(self, "multi_screen_workspace"):
+            self.multi_screen_workspace.stop()
         self.stopScan()
         if self._twiss_is_running():
             if not self.twissCal.wait(3000):

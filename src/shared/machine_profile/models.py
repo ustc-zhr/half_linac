@@ -337,11 +337,36 @@ class EmitPreset:
 
 
 @dataclass(frozen=True)
+class EmitMultiScreenSamplingConfig:
+    samples_per_screen: int
+    sample_interval_s: float
+
+
+@dataclass(frozen=True)
+class EmitMultiScreenPreset:
+    id: str
+    screens: tuple[str, ...]
+    reference_element: str
+    model_line: str
+    sampling: EmitMultiScreenSamplingConfig
+    analysis: EmitAnalysisConfig = field(default_factory=EmitAnalysisConfig)
+
+    @property
+    def energy_mev(self) -> float | None:
+        return self.analysis.energy_mev
+
+
+@dataclass(frozen=True)
 class EmitMeasureWorkflowConfig:
     presets: tuple[EmitPreset, ...]
     presets_by_id: Mapping[str, EmitPreset]
     twiss_quads: tuple[str, ...]
     default_preset: str
+    multi_screen_presets: tuple[EmitMultiScreenPreset, ...] = ()
+    multi_screen_presets_by_id: Mapping[str, EmitMultiScreenPreset] = field(
+        default_factory=dict
+    )
+    default_multi_screen_preset: str | None = None
 
 
 @dataclass(frozen=True)
@@ -933,6 +958,71 @@ def _validate_emit_measure_workflow(
         "workflows.emit_measure.twiss_quads",
         expected_kind="quad",
     )
+
+    raw_multi_screen = workflow.get("multi_screen")
+    if raw_multi_screen is None:
+        return
+    multi_screen = _expect_mapping(
+        raw_multi_screen,
+        "workflows.emit_measure.multi_screen",
+    )
+    multi_screen_presets = _expect_list(
+        multi_screen.get("presets"),
+        "workflows.emit_measure.multi_screen.presets",
+    )
+    if not multi_screen_presets:
+        raise MachineProfileError(
+            "workflows.emit_measure.multi_screen.presets must not be empty."
+        )
+    _validate_unique_ids(
+        multi_screen_presets,
+        "workflows.emit_measure.multi_screen.presets",
+    )
+    for index, raw_preset in enumerate(multi_screen_presets):
+        location = f"workflows.emit_measure.multi_screen.presets[{index}]"
+        preset = _expect_mapping(raw_preset, location)
+        _expect_non_empty_string(preset.get("id"), f"{location}.id")
+        screens = _expect_string_list(preset.get("screens"), f"{location}.screens")
+        if len(screens) < 3:
+            raise MachineProfileError(f"{location}.screens must contain at least 3 screens.")
+        if len(set(screens)) != len(screens):
+            raise MachineProfileError(f"{location}.screens must contain unique element ids.")
+        _validate_element_refs(
+            screens,
+            elements_by_id,
+            f"{location}.screens",
+            expected_kind="flag",
+        )
+        _validate_element_ref(
+            preset.get("reference"),
+            elements_by_id,
+            f"{location}.reference",
+        )
+        _expect_non_empty_string(preset.get("model_line"), f"{location}.model_line")
+
+        sampling = _expect_mapping(preset.get("sampling"), f"{location}.sampling")
+        _validate_positive_int(
+            sampling.get("samples_per_screen"),
+            f"{location}.sampling.samples_per_screen",
+        )
+        _validate_nonnegative_float(
+            sampling.get("sample_interval_s"),
+            f"{location}.sampling.sample_interval_s",
+        )
+
+        analysis = _expect_mapping(preset.get("analysis", {}), f"{location}.analysis")
+        energy = analysis.get("energy_mev")
+        if not isinstance(energy, (int, float)) or energy <= 0:
+            raise MachineProfileError(
+                f"{location}.analysis.energy_mev must be a positive number."
+            )
+
+    if "default_preset" in multi_screen:
+        _validate_preset_ref(
+            multi_screen.get("default_preset"),
+            multi_screen_presets,
+            "workflows.emit_measure.multi_screen.default_preset",
+        )
 
 
 def _validate_solenoid_centering_workflow(

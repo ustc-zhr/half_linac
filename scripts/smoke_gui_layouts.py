@@ -119,7 +119,7 @@ GUI_SMOKE_SPECS = {
     "emit_measure": GuiSmokeSpec(
         APP_ROOT / "emit_measure" / "main.py",
         "myWindow",
-        frozenset({"model", "scan", "twiss", "fit", "emit", "data"}),
+        frozenset({"model", "scan", "twiss", "fit", "emit", "data", "multi"}),
     ),
     "hv_feedback": GuiSmokeSpec(
         APP_ROOT / "hv_feedback" / "main.py",

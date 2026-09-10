@@ -18,6 +18,8 @@ from .models import (
     EmitAnalysisConfig,
     EmitAdaptiveScanConfig,
     EmitMeasureWorkflowConfig,
+    EmitMultiScreenPreset,
+    EmitMultiScreenSamplingConfig,
     EmitPreset,
     EmitScanConfig,
     MachineProfile,
@@ -294,6 +296,24 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
         presets.append(preset)
         presets_by_id[preset.id] = preset
 
+    multi_screen_raw = _expect_optional_mapping(
+        workflow.get("multi_screen"),
+        "workflows.emit_measure.multi_screen",
+    )
+    multi_screen_presets: list[EmitMultiScreenPreset] = []
+    multi_screen_presets_by_id: dict[str, EmitMultiScreenPreset] = {}
+    if multi_screen_raw:
+        for index, raw_preset in enumerate(
+            _expect_list(
+                multi_screen_raw.get("presets"),
+                "workflows.emit_measure.multi_screen.presets",
+            )
+        ):
+            location = f"workflows.emit_measure.multi_screen.presets[{index}]"
+            preset = _parse_emit_multi_screen_preset(raw_preset, location)
+            multi_screen_presets.append(preset)
+            multi_screen_presets_by_id[preset.id] = preset
+
     return EmitMeasureWorkflowConfig(
         presets=tuple(presets),
         presets_by_id=presets_by_id,
@@ -306,6 +326,17 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
         default_preset=_expect_non_empty_string(
             workflow.get("default_preset") or _infer_emit_default_preset(presets),
             "workflows.emit_measure.default_preset",
+        ),
+        multi_screen_presets=tuple(multi_screen_presets),
+        multi_screen_presets_by_id=multi_screen_presets_by_id,
+        default_multi_screen_preset=(
+            _expect_non_empty_string(
+                multi_screen_raw.get("default_preset")
+                or multi_screen_presets[0].id,
+                "workflows.emit_measure.multi_screen.default_preset",
+            )
+            if multi_screen_presets
+            else None
         ),
     )
 
@@ -3623,6 +3654,38 @@ def _parse_emit_preset(raw_preset: Any, location: str) -> EmitPreset:
         ),
         scan=scan,
         analysis=_parse_emit_analysis_config(analysis_dict),
+    )
+
+
+def _parse_emit_multi_screen_preset(
+    raw_preset: Any,
+    location: str,
+) -> EmitMultiScreenPreset:
+    preset = _expect_mapping(raw_preset, location)
+    sampling = _expect_mapping(preset.get("sampling"), f"{location}.sampling")
+    analysis = _expect_mapping(preset.get("analysis", {}), f"{location}.analysis")
+    return EmitMultiScreenPreset(
+        id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
+        screens=tuple(_expect_string_list(preset.get("screens"), f"{location}.screens")),
+        reference_element=_expect_non_empty_string(
+            preset.get("reference"),
+            f"{location}.reference",
+        ),
+        model_line=_expect_non_empty_string(
+            preset.get("model_line"),
+            f"{location}.model_line",
+        ),
+        sampling=EmitMultiScreenSamplingConfig(
+            samples_per_screen=_required_positive_int(
+                sampling.get("samples_per_screen"),
+                f"{location}.sampling.samples_per_screen",
+            ),
+            sample_interval_s=_required_nonnegative_float(
+                sampling.get("sample_interval_s"),
+                f"{location}.sampling.sample_interval_s",
+            ),
+        ),
+        analysis=_parse_emit_analysis_config(analysis),
     )
 
 

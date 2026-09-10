@@ -13,6 +13,17 @@ def gaussian(x_value, amplitude, center, sigma, offset):
     return amplitude * np.exp(-((x_value - center) ** 2) / (2 * sigma**2)) + offset
 
 
+def reshape_beam_image(raw_image, pixel_shape, *, flip_y=False) -> np.ndarray:
+    """Validate and reshape a flattened camera frame using ``(width, height)``."""
+    width, height = (int(pixel_shape[0]), int(pixel_shape[1]))
+    array = np.asarray(raw_image, dtype=float)
+    expected = width * height
+    if array.size != expected:
+        raise ValueError(f"image size {array.size} does not match {(width, height)}")
+    image = array.reshape((height, width))
+    return np.flipud(image) if flip_y else image
+
+
 @dataclass(frozen=True)
 class GaussianProjectionFit:
     axis: np.ndarray
@@ -63,6 +74,65 @@ class BeamImageFitResult:
     @property
     def sigy_mm(self) -> float | None:
         return self.y_projection.sigma_abs if self.valid else None
+
+
+def assess_projection_quality(
+    projection: GaussianProjectionFit,
+    *,
+    min_sigma_pixels: float = 1.5,
+    min_containment_sigma: float = 3.0,
+    max_edge_ratio: float = 0.05,
+    max_fit_residual: float = 0.15,
+) -> dict[str, float | str | bool | None]:
+    """Classify whether a fitted projection is suitable for a size sample."""
+    payload: dict[str, float | str | bool | None] = {
+        "status": "fit_failed",
+        "usable": False,
+        "sigma_pixels": None,
+        "containment_sigma": None,
+        "edge_ratio": None,
+        "fit_residual": projection.residual_rms,
+    }
+    if not projection.valid or projection.center is None or projection.sigma_abs is None:
+        return payload
+
+    axis = np.asarray(projection.axis, dtype=float)
+    values = np.asarray(projection.projection, dtype=float)
+    if axis.size < 2 or values.size != axis.size:
+        return payload
+    pixel_width = float(np.median(np.abs(np.diff(axis))))
+    sigma = float(projection.sigma_abs)
+    center = float(projection.center)
+    sigma_pixels = sigma / pixel_width if pixel_width > 0 else 0.0
+    margin = min(center - float(axis[0]), float(axis[-1]) - center)
+    containment = margin / sigma if sigma > 0 else 0.0
+
+    baseline = float(projection.offset or 0.0) * float(np.max(values))
+    signal = np.clip(values - baseline, 0.0, None)
+    peak = float(np.max(signal)) if signal.size else 0.0
+    edge_bins = max(2, min(5, signal.size // 20))
+    edge_level = max(float(np.mean(signal[:edge_bins])), float(np.mean(signal[-edge_bins:])))
+    edge_ratio = edge_level / peak if peak > 0 else 1.0
+    residual = projection.residual_rms
+
+    if containment < min_containment_sigma or edge_ratio > max_edge_ratio:
+        status = "clipped"
+    elif sigma_pixels < min_sigma_pixels:
+        status = "underresolved"
+    elif residual is not None and residual > max_fit_residual:
+        status = "poor_fit"
+    else:
+        status = "usable"
+    payload.update(
+        {
+            "status": status,
+            "usable": status == "usable",
+            "sigma_pixels": sigma_pixels,
+            "containment_sigma": containment,
+            "edge_ratio": edge_ratio,
+        }
+    )
+    return payload
 
 
 def fit_beam_image(
@@ -186,6 +256,33 @@ def analyze_beam_image(
         method=method,
     )
     return image_array, result
+
+
+def analyze_raw_beam_image(
+    raw_image,
+    *,
+    pixel_shape,
+    extent,
+    background=None,
+    roi=None,
+    flip_y=False,
+    full_frame_for_roi=False,
+    analyzer=None,
+):
+    """Prepare a raw camera frame and run the standard beam-image analysis."""
+    image = reshape_beam_image(raw_image, pixel_shape, flip_y=flip_y)
+    if flip_y and background is not None:
+        background = np.flipud(np.asarray(background))
+    analyze = analyze_beam_image if analyzer is None else analyzer
+    analysis = analyze(
+        image,
+        extent=extent,
+        background=background,
+        roi=roi,
+    )
+    if full_frame_for_roi and roi is not None:
+        return image, analysis[1]
+    return analysis
 
 
 def _moment_projection(axis: np.ndarray, projection: np.ndarray) -> GaussianProjectionFit:

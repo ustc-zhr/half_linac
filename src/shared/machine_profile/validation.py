@@ -738,6 +738,10 @@ def _validate_elegant_model_backend(app_name: str, context: AppContext) -> Machi
             for preset in context.emit_measure_workflow.presets
             if preset.model_line
         )
+        line_names.update(
+            preset.model_line
+            for preset in context.emit_measure_workflow.multi_screen_presets
+        )
         for line_name in sorted(line_names):
             line = lattice.get(line_name)
             if line is None:

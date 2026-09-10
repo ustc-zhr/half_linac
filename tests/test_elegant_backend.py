@@ -37,6 +37,7 @@ from half_linac.src.shared.machine_profile.model_backend import (
     ElegantModelBackend,
     _exclusive_model_workspace,
     _load_matrix,
+    _load_sdds_columns,
     _select_twiss_profile_rows,
     _transport_twiss,
 )
@@ -80,6 +81,7 @@ class ElegantBackendTests(unittest.TestCase):
                 with patch(
                     "half_linac.src.shared.machine_profile.model_backend.sdds.SDDS",
                     return_value=matrix_file,
+                    create=True,
                 ):
                     matrix = _load_matrix("matrix.mat")
 
@@ -96,8 +98,37 @@ class ElegantBackendTests(unittest.TestCase):
         with patch(
             "half_linac.src.shared.machine_profile.model_backend.sdds.SDDS",
             return_value=matrix_file,
+            create=True,
         ), self.assertRaisesRegex(MachineProfileError, "missing columns: R16"):
             _load_matrix("matrix.mat")
+
+    def test_sdds_loader_falls_back_to_elegant_cli(self):
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout="Q1|1.25\nQ2|2.5\n",
+            stderr="",
+        )
+        with patch.object(sdds, "SDDS", None, create=True), patch(
+            "half_linac.src.shared.machine_profile.model_backend.shutil.which",
+            return_value="/opt/elegant/bin/sdds2stream",
+        ), patch(
+            "half_linac.src.shared.machine_profile.model_backend.subprocess.run",
+            return_value=completed,
+        ) as run:
+            columns = _load_sdds_columns("twiss.twi", ("ElementName", "betax"))
+
+        self.assertEqual(columns, {"ElementName": ["Q1", "Q2"], "betax": ["1.25", "2.5"]})
+        self.assertEqual(
+            run.call_args.args[0],
+            [
+                "/opt/elegant/bin/sdds2stream",
+                "twiss.twi",
+                "-columns=ElementName,betax",
+                "-page=1",
+                "-delimiter=|",
+                "-noquotes",
+            ],
+        )
 
     def test_model_workspace_lock_times_out_and_releases_after_error(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -396,7 +427,11 @@ class ElegantBackendTests(unittest.TestCase):
 
             with patch(
                 "half_linac.src.shared.machine_profile.model_backend.run_elegant_input",
-            ), patch("half_linac.src.shared.machine_profile.model_backend.sdds.SDDS", FakeSdds):
+            ), patch(
+                "half_linac.src.shared.machine_profile.model_backend.sdds.SDDS",
+                FakeSdds,
+                create=True,
+            ):
                 backend.get_map("QT02", "PRF07")
 
             self.assertNotIn("&error_element", emit_ele.read_text(encoding="utf-8"))
@@ -474,7 +509,11 @@ class ElegantBackendTests(unittest.TestCase):
 
             with patch(
                 "half_linac.src.shared.machine_profile.model_backend.run_elegant_input",
-            ), patch("half_linac.src.shared.machine_profile.model_backend.sdds.SDDS", FakeSdds):
+            ), patch(
+                "half_linac.src.shared.machine_profile.model_backend.sdds.SDDS",
+                FakeSdds,
+                create=True,
+            ):
                 backend.get_map(
                     "D0",
                     "PRF07",
@@ -733,7 +772,11 @@ class ElegantBackendTests(unittest.TestCase):
             ), patch(
                 "half_linac.src.shared.machine_profile.model_backend._exclusive_model_workspace",
                 side_effect=tracked_lock,
-            ), patch("half_linac.src.shared.machine_profile.model_backend.sdds.SDDS", FakeSdds):
+            ), patch(
+                "half_linac.src.shared.machine_profile.model_backend.sdds.SDDS",
+                FakeSdds,
+                create=True,
+            ):
                 dispersion = backend.get_energy_dispersion(
                     "ESA",
                     lattice_overrides={"Q1": {"K1": 2.5}},

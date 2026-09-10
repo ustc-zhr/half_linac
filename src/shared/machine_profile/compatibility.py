@@ -30,6 +30,7 @@ from .pixel_geometry import (
 from .resolver import (
     WriteTarget,
     get_bba_preset,
+    get_emit_multi_screen_preset,
     get_emit_preset,
     get_workflow,
     list_elements,
@@ -55,6 +56,7 @@ __all__ = [
     "REAL_STATUS_WRITE_SMOKE_PASSED",
     "describe_app_support",
     "get_bba_preset",
+    "get_emit_multi_screen_preset",
     "get_emit_preset",
     "get_workflow",
     "list_elements",

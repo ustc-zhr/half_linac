@@ -33,6 +33,7 @@ from half_linac.src.shared.machine_profile import (
     describe_app_model_support,
     describe_app_support,
     get_bba_preset,
+    get_emit_multi_screen_preset,
     get_emit_preset,
     get_workflow,
     list_elements,
@@ -1212,6 +1213,22 @@ class MachineProfileTests(unittest.TestCase):
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
 
+    def test_load_half_multi_screen_emit_preset(self):
+        context = load_app_context("emit_measure")
+        assert context.emit_measure_workflow is not None
+
+        self.assertEqual(
+            context.emit_measure_workflow.default_multi_screen_preset,
+            "linac_exit_prf06_prf09",
+        )
+        multi_screen = get_emit_multi_screen_preset(context)
+        self.assertEqual(multi_screen.reference_element, "PRF06")
+        self.assertEqual(multi_screen.screens, ("PRF06", "PRF07", "PRF08", "PRF09"))
+        self.assertEqual(multi_screen.model_line, "ALL_MAIN")
+        self.assertEqual(multi_screen.sampling.samples_per_screen, 3)
+        self.assertEqual(multi_screen.sampling.sample_interval_s, 0.5)
+        self.assertEqual(multi_screen.energy_mev, 2200.0)
+
     def test_emit_loader_keeps_legacy_flat_scan_compatibility(self):
         profile = load_profile("half")
         workflow = deepcopy(profile.workflows["emit_measure"])
@@ -1233,6 +1250,19 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual((scan.k1_from, scan.k1_end, scan.k1_steps), (-2, 2, 7))
         self.assertEqual((scan.samples, scan.settle_time, scan.sample_interval), (2, 0.5, 0.25))
         self.assertEqual((scan.unit, scan.mode), ("1/m^2", "relative"))
+
+    def test_emit_loader_allows_workflow_without_multi_screen_section(self):
+        profile = load_profile("half")
+        workflow = deepcopy(profile.workflows["emit_measure"])
+        del workflow["multi_screen"]
+
+        loaded = load_emit_measure_workflow(
+            replace(profile, workflows={**profile.workflows, "emit_measure": workflow})
+        )
+
+        self.assertEqual(loaded.multi_screen_presets, ())
+        self.assertEqual(loaded.multi_screen_presets_by_id, {})
+        self.assertIsNone(loaded.default_multi_screen_preset)
 
     def test_resolve_expected_half_channels(self):
         profile = load_profile("half")

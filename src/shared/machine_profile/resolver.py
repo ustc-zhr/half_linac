@@ -8,6 +8,7 @@ from .models import (
     AppContext,
     BBAPreset,
     ElementConfig,
+    EmitMultiScreenPreset,
     EmitPreset,
     MachineProfile,
     MachineProfileError,
@@ -336,3 +337,21 @@ def get_emit_preset(ctx: AppContext, preset_id: str | None = None) -> EmitPreset
         return ctx.emit_measure_workflow.presets_by_id[selected_id]
     except KeyError as exc:
         raise MachineProfileError(f"Unknown emit_measure preset {selected_id!r}.") from exc
+
+
+def get_emit_multi_screen_preset(
+    ctx: AppContext,
+    preset_id: str | None = None,
+) -> EmitMultiScreenPreset:
+    if ctx.emit_measure_workflow is None:
+        raise MachineProfileError("AppContext does not include an emit_measure workflow.")
+    workflow = ctx.emit_measure_workflow
+    selected_id = preset_id or workflow.default_multi_screen_preset
+    if selected_id is None:
+        raise MachineProfileError("emit_measure workflow has no multi-screen presets.")
+    try:
+        return workflow.multi_screen_presets_by_id[selected_id]
+    except KeyError as exc:
+        raise MachineProfileError(
+            f"Unknown multi-screen emit_measure preset {selected_id!r}."
+        ) from exc

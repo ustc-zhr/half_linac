@@ -65,5 +65,21 @@
     }
   ],
   "default_preset": "emit_qt02_prf07",
+  "multi_screen": {
+    "presets": [
+      {
+        "id": "linac_exit_prf06_prf09",
+        "reference": "PRF06",
+        "screens": ["PRF06", "PRF07", "PRF08", "PRF09"],
+        "model_line": "ALL_MAIN",
+        "sampling": {
+          "samples_per_screen": 5,
+          "sample_interval_s": 1
+        },
+        "analysis": {"energy_mev": 2200}
+      }
+    ],
+    "default_preset": "linac_exit_prf06_prf09"
+  },
   "write_control": {"vm": "allowed", "real": "allowed"}
 }

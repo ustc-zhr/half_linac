@@ -9,9 +9,12 @@ from .beam_presence import BeamPresenceResult, detect_beam_presence
 from .image_fit import (
     BeamImageFitResult,
     GaussianProjectionFit,
+    assess_projection_quality,
     analyze_beam_image,
+    analyze_raw_beam_image,
     fit_beam_image,
     gaussian,
+    reshape_beam_image,
 )
 from .display import (
     BEAM_IMAGE_COLORMAPS,
@@ -28,12 +31,15 @@ __all__ = [
     "BeamImageFitResult",
     "BeamPresenceResult",
     "GaussianProjectionFit",
+    "assess_projection_quality",
     "DEFAULT_BEAM_IMAGE_COLORMAP",
     "resolve_image_display_scale",
     "analyze_beam_image",
+    "analyze_raw_beam_image",
     "fit_beam_image",
     "detect_beam_presence",
     "gaussian",
+    "reshape_beam_image",
     "load_background",
     "resolve_beam_background_paths",
     "save_background",
