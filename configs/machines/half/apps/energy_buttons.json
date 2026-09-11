@@ -1,0 +1,4 @@
+{
+  "control_backends": ["real"],
+  "write_control": {"vm": "blocked", "real": "allowed"}
+}

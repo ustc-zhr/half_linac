@@ -9,7 +9,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
-from half_linac.src.shared.machine_profile import load_profile
+from half_linac.src.shared.machine_profile import load_profile, require_workflow_write_allowed
 
 
 def load_energy_references():
@@ -75,6 +75,8 @@ class DemoBackend:
 
 class EpicsBackend:
     def __init__(self):
+        require_workflow_write_allowed(
+            load_profile("half"), "energy_buttons", "Energy reference write", mode="real")
         import epics
         self.pvs = {name: epics.PV(name) for name in PVS}
 

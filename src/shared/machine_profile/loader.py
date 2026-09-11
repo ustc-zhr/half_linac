@@ -61,6 +61,7 @@ SUPPORTED_APP_NAMES = {
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
 APP_WORKFLOW_FILES = {
+    "energy_buttons": "energy_buttons.json",
     "control_points": "control_points.json",
     "orbit": "orbit_correct.json",
     "beam_monitor": "beam_monitor.json",

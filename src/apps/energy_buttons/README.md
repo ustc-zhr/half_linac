@@ -9,8 +9,10 @@ PV 映射位于 `configs/machines/half/control_backends/real.json` 的对应 `en
 
 从仓库根目录启动离线演示：
 
-也可在 Control Room 的 **Machine & Tools** 分类中点击
-**Q Energy Reference (Demo)**（仅 HALF 配置可用）。Launcher 入口始终使用离线演示。
+Control Room 的 **Machine & Tools → Q Energy Reference** 在 HALF / real 模式可用，
+连接实际能量 PV，箭头直接写入；VM 模式禁用该入口。
+写权限由 `configs/machines/half/apps/energy_buttons.json` 管理。
+独立脚本不带参数时仍使用离线演示：
 
 ```sh
 bash scripts/start_energy_buttons.sh

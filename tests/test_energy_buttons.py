@@ -11,6 +11,13 @@ spec.loader.exec_module(control)
 
 
 class EnergyBatchTests(unittest.TestCase):
+    def test_real_workflow_policy(self):
+        profile = control.load_profile("half")
+        self.assertEqual(tuple(profile.workflows["energy_buttons"]["control_backends"]), ("real",))
+        control.require_workflow_write_allowed(profile, "energy_buttons", "test", mode="real")
+        with self.assertRaises(ValueError):
+            control.require_workflow_write_allowed(profile, "energy_buttons", "test", mode="vm")
+
     def test_stale_preflight_writes_nothing(self):
         backend = control.DemoBackend()
         a, b = control.PVS[:2]
