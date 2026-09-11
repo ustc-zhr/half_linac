@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 _ROOT = next(
@@ -23,6 +24,7 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFrame,
+    QFileDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -36,7 +38,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from half_linac.src.apps.llrf_control.epics_client import LlrfMonitor, WriteWorker
+from half_linac.src.apps.llrf_control.epics_client import LlrfMonitor, WriteWorker, SnapshotWorker
 from half_linac.src.apps.llrf_control.model import CoalescingWriteQueue
 from half_linac.src.apps.llrf_control.profile_runtime import (
     QUANTITIES,
@@ -53,11 +55,15 @@ DARK = {
     "window": "#0f1519", "panel": "#172027", "input": "#10171c",
     "border": "#2a3943", "text": "#e6edf2", "muted": "#91a2ad",
     "accent": "#45d0bc", "warning": "#e4b86f", "danger": "#e37878",
+    "toggle_bg": "#11191f", "toggle_border": "#2b3d48", "toggle_fg": "#edf3f7",
+    "toggle_hover_bg": "#18242c", "toggle_pressed_bg": "#0c1217",
 }
 LIGHT = {
     "window": "#f2ede5", "panel": "#fffdf9", "input": "#fffdf9",
     "border": "#d7cec1", "text": "#2c3942", "muted": "#746c62",
     "accent": "#2d7f6d", "warning": "#a97118", "danger": "#b44141",
+    "toggle_bg": "#f8f3eb", "toggle_border": "#d9d0c3", "toggle_fg": "#2c3942",
+    "toggle_hover_bg": "#efe6d9", "toggle_pressed_bg": "#e3d8c8",
 }
 
 
@@ -87,6 +93,13 @@ QPushButton:checked {{ color: {palette['accent']}; border-color: {palette['accen
 QPushButton:disabled, QToolButton:disabled, QComboBox:disabled, QDoubleSpinBox:disabled {{
   color: {palette['muted']}; }}
 QStatusBar {{ background: {palette['panel']}; color: {palette['muted']}; }}
+QToolButton#themeToggleButton {{
+  background-color: {palette['toggle_bg']}; color: {palette['toggle_fg']};
+  border: 1px solid {palette['toggle_border']}; border-radius: 11px;
+  padding: 0px; min-width: 32px; max-width: 32px;
+  min-height: 32px; max-height: 32px; font-size: 14px; font-weight: 700; }}
+QToolButton#themeToggleButton:hover {{ background-color: {palette['toggle_hover_bg']}; }}
+QToolButton#themeToggleButton:pressed {{ background-color: {palette['toggle_pressed_bg']}; }}
 """
 
 
@@ -143,6 +156,8 @@ class LlrfControlWindow(QMainWindow):
         self.dirty_targets: set[str] = set()
         self.failed_quantities: set[str] = set()
         self._worker: WriteWorker | None = None
+        self._snapshot_worker: SnapshotWorker | None = None
+        self._snapshot_dialog = False
         self._theme = resolve_initial_theme()
         self.group_buttons: dict[str, QPushButton] = {}
         self.quantity_widgets: dict[str, QuantityWidgets] = {}
@@ -170,6 +185,14 @@ class LlrfControlWindow(QMainWindow):
         title.setObjectName("title")
         heading.addWidget(title)
         heading.addStretch(1)
+        self.save_button = QPushButton("Save", root)
+        self.restore_button = QPushButton("Restore", root)
+        self.save_button.setToolTip("Save amplitude and phase AO values for all LLRFs")
+        self.restore_button.setToolTip("Restore all LLRF amplitude and phase AO values from a file")
+        self.save_button.clicked.connect(self._save_snapshot)
+        self.restore_button.clicked.connect(self._restore_snapshot)
+        heading.addWidget(self.save_button)
+        heading.addWidget(self.restore_button)
         heading.addWidget(
             RuntimeContextWidget(
                 machine_id=self.runtime.context.machine.id,
@@ -179,6 +202,7 @@ class LlrfControlWindow(QMainWindow):
             )
         )
         self.theme_button = QToolButton(root)
+        self.theme_button.setObjectName("themeToggleButton")
         self.theme_button.setFixedSize(32, 32)
         self.theme_button.clicked.connect(self._toggle_theme)
         heading.addWidget(self.theme_button)
@@ -317,13 +341,13 @@ class LlrfControlWindow(QMainWindow):
     def _apply_theme(self) -> None:
         palette = DARK if self._theme == "dark" else LIGHT
         self.setStyleSheet(_stylesheet(palette))
-        self.theme_button.setText("L" if self._theme == "dark" else "D")
+        self.theme_button.setText("☀" if self._theme == "dark" else "☾")
         self.theme_button.setToolTip(
             "Switch to light theme" if self._theme == "dark" else "Switch to dark theme"
         )
 
     def _select_group(self, element_id: str) -> None:
-        if self.queue.busy:
+        if self.queue.busy or self._snapshot_busy():
             return
         self.current_group = self.groups[element_id]
         self.values.clear()
@@ -408,7 +432,7 @@ class LlrfControlWindow(QMainWindow):
             and self.connected.get(spec.readback_channel, False)
             and setpoint is not None
         )
-        self._set_controls_enabled(widgets, ready)
+        self._set_controls_enabled(widgets, ready and not self._snapshot_busy())
         inflight = self.queue.inflight
         if inflight is not None and inflight[0] == name:
             self._set_status(widgets.status, "Writing", "warning")
@@ -432,7 +456,7 @@ class LlrfControlWindow(QMainWindow):
             widget.setEnabled(enabled)
 
     def _shift(self, name: str, direction: int) -> None:
-        if self.current_group is None:
+        if self.current_group is None or self._snapshot_busy():
             return
         spec = self.current_group.quantities[name]
         current = self.queue.requested.get(name, self.values.get(spec.set_channel))
@@ -452,7 +476,7 @@ class LlrfControlWindow(QMainWindow):
         self._enqueue_write(name, value)
 
     def _commit_target(self, name: str) -> None:
-        if self.current_group is None:
+        if self.current_group is None or self._snapshot_busy():
             return
         spec = self.current_group.quantities[name]
         current = self.queue.requested.get(name, self.values.get(spec.set_channel))
@@ -512,9 +536,91 @@ class LlrfControlWindow(QMainWindow):
         self._refresh_all_quantities()
 
     def _update_group_buttons(self) -> None:
-        enabled = not self.queue.busy
+        enabled = not self.queue.busy and self._worker is None and not self._snapshot_busy()
+        self.save_button.setEnabled(enabled)
+        self.restore_button.setEnabled(enabled)
         for button in self.group_buttons.values():
             button.setEnabled(enabled)
+
+    def _snapshot_busy(self) -> bool:
+        return self._snapshot_dialog or self._snapshot_worker is not None
+
+    def _snapshot_lock(self) -> None:
+        self._update_group_buttons()
+        self._refresh_all_quantities()
+
+    def _save_snapshot(self) -> None:
+        if self.queue.busy or self._worker is not None or self._snapshot_busy():
+            return
+        self._snapshot_dialog = True
+        self._snapshot_lock()
+        try:
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save all LLRF AO parameters",
+                datetime.now().strftime("llrf_settings_%Y%m%d_%H%M%S.json"),
+                "JSON files (*.json)",
+            )
+            if path:
+                self._start_snapshot(path=path)
+        finally:
+            self._snapshot_dialog = False
+            self._snapshot_lock()
+
+    def _restore_snapshot(self) -> None:
+        from half_linac.src.apps.llrf_control.snapshot import load_snapshot, validate_snapshot
+
+        if self.queue.busy or self._worker is not None or self._snapshot_busy():
+            return
+        self._snapshot_dialog = True
+        self._snapshot_lock()
+        try:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Restore all LLRF AO parameters", "", "JSON files (*.json)"
+            )
+            if not path:
+                return
+            try:
+                data = load_snapshot(path)
+                values = validate_snapshot(self.runtime, data)
+            except Exception as exc:
+                QMessageBox.warning(self, "Invalid LLRF Snapshot", str(exc))
+                return
+            answer = QMessageBox.question(
+                self, "Restore LLRF AO parameters",
+                f"Machine: {data['machine']} / {data['backend']}\n"
+                f"Saved: {data['saved_at']}\n\n"
+                f"Restore {len(values)} AO parameters across {len(self.runtime.groups)} LLRFs?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if answer == QMessageBox.Yes:
+                self._start_snapshot(data=data)
+        finally:
+            self._snapshot_dialog = False
+            self._snapshot_lock()
+
+    def _start_snapshot(self, *, path=None, data=None) -> None:
+        worker = SnapshotWorker(self.runtime, path=path, data=data, parent=self)
+        self._snapshot_worker = worker
+        worker.progress.connect(self.statusBar().showMessage)
+        worker.finished.connect(self._snapshot_finished)
+        self._snapshot_lock()
+        worker.start()
+
+    def _snapshot_finished(self) -> None:
+        worker = self._snapshot_worker
+        if worker is None:
+            return
+        self._snapshot_worker = None
+        if self.current_group is not None:
+            self._select_group(self.current_group.element_id)
+        self._snapshot_lock()
+        self.statusBar().showMessage(worker.message if worker.success else "Snapshot operation failed")
+        if not worker.success:
+            dialog = QMessageBox(QMessageBox.Warning, "LLRF Snapshot Failed",
+                                 worker.message.split("\n\n", 1)[0], parent=self)
+            dialog.setDetailedText(worker.message)
+            dialog.exec_()
+        worker.deleteLater()
 
     @staticmethod
     def _step_value(combo: QComboBox) -> float | None:
@@ -545,6 +651,10 @@ class LlrfControlWindow(QMainWindow):
         label.style().polish(label)
 
     def closeEvent(self, event) -> None:
+        if self._snapshot_busy() or self._worker is not None or self.queue.busy:
+            self.statusBar().showMessage("Wait for the current operation to finish before closing")
+            event.ignore()
+            return
         self.monitor.close()
         if self._worker is not None and self._worker.isRunning():
             self._worker.wait(5500)
