@@ -1883,6 +1883,15 @@
     },
     "ICT04": {
       "charge": "IN:BD:ICT4:C"
-    }
+    },
+    "L02_ENERGY": {"energy": "IN:L02:ENG"},
+    "L04_ENERGY": {"energy": "IN:L04:ENG"},
+    "L06_ENERGY": {"energy": "IN:L06:ENG"},
+    "L08_ENERGY": {"energy": "IN:L08:ENG"},
+    "L10_ENERGY": {"energy": "IN:L10:ENG"},
+    "L12_ENERGY": {"energy": "IN:L12:ENG"},
+    "L14_ENERGY": {"energy": "IN:L14:ENG"},
+    "L16_ENERGY": {"energy": "IN:L16:ENG"},
+    "L18_ENERGY": {"energy": "IN:L18:ENG"}
   }
 }

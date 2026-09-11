@@ -952,6 +952,18 @@ APP_ACCESS_LABELS = {
 
 
 APP_DEFINITIONS = {
+    "energy_buttons": {
+        "button_name": "energy_buttons_button",
+        "category": "tools",
+        "access": "tool",
+        "button_text": "Q Energy Reference (Demo)",
+        "label": "Q Energy Reference (Demo)",
+        "window_title_patterns": ("HALF · Q Energy Reference",),
+        "description": "Offline demo for HALF L02–L18 energy references: batch offsets, scaling, and saved schemes. Does not connect to PVs.",
+        "machine_ids": ("half",),
+        "cmd": ["python3", "main.py"],
+        "cwd": ROOT / "src/apps/energy_buttons",
+    },
     "pv_connection_check": {
         "button_name": "pv_connection_check_button",
         "category": "tools",

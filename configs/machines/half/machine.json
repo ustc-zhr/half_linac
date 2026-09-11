@@ -2898,6 +2898,105 @@
         "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback",
         "llrf_waveform", "ssa_waveform", "pickup_waveform"
       ]
+    },
+    {
+      "id": "L02_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L02",
+      "order": 302,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
+    },
+    {
+      "id": "L04_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L04",
+      "order": 304,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
+    },
+    {
+      "id": "L06_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L06",
+      "order": 306,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
+    },
+    {
+      "id": "L08_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L08",
+      "order": 308,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
+    },
+    {
+      "id": "L10_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L10",
+      "order": 310,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
+    },
+    {
+      "id": "L12_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L12",
+      "order": 312,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
+    },
+    {
+      "id": "L14_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L14",
+      "order": 314,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
+    },
+    {
+      "id": "L16_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L16",
+      "order": 316,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
+    },
+    {
+      "id": "L18_ENERGY",
+      "kind": "energy_reference",
+      "display_name": "L18",
+      "order": 318,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "energy"
+      ]
     }
   ]
 }
