@@ -1243,49 +1243,26 @@ QScrollArea { border: none; }
 
     def _update_routing_layout(self):
         self._clear_grid_layout(self.gridLayout_5)
-        width = self.tabs.width() - 40
-
+        self.groupBox_2.setMinimumHeight(0)
         self.gridLayout_5.setContentsMargins(0, 0, 0, 0)
-        self.gridLayout_5.setHorizontalSpacing(10)
-        self.gridLayout_5.setVerticalSpacing(10)
-
-        if width < 420:
-            self.groupBox_2.setMinimumHeight(360)
-            self.gridLayout_5.addWidget(self.comboBox_predefined_usedline, 0, 0)
-            self.gridLayout_5.addWidget(self.pushButton_ESAline, 1, 0)
-            self.gridLayout_5.addWidget(self.pushButton_FULLline, 2, 0)
-            self.gridLayout_5.addWidget(self.comboBox_segment, 3, 0)
-            self.gridLayout_5.addWidget(self.comboBox_simply_start, 4, 0)
-            self.gridLayout_5.addWidget(self.comboBox_simply_end, 5, 0)
-            self.gridLayout_5.addWidget(self.pushButton_simply_VM, 6, 0)
+        self.gridLayout_5.setSpacing(6)
+        self.gridLayout_5.setAlignment(Qt.AlignTop)
+        if not hasattr(self, 'route_labels'):
             return
-
-        self.groupBox_2.setMinimumHeight(260)
-        self.gridLayout_5.addWidget(self.comboBox_predefined_usedline, 0, 0)
-        self.gridLayout_5.addWidget(self.pushButton_ESAline, 0, 1)
-        self.gridLayout_5.addWidget(self.pushButton_FULLline, 1, 0, 1, 2)
-        self.gridLayout_5.addWidget(self.comboBox_segment, 2, 0, 1, 2)
-        self.gridLayout_5.addWidget(self.comboBox_simply_start, 3, 0)
-        self.gridLayout_5.addWidget(self.comboBox_simply_end, 3, 1)
-        self.gridLayout_5.addWidget(self.pushButton_simply_VM, 4, 0, 1, 2)
-        self.gridLayout_5.setColumnStretch(0, 1)
-        self.gridLayout_5.setColumnStretch(1, 1)
+        full, segment, start, end = self.route_labels
+        rows = (full, self.comboBox_predefined_usedline, self.pushButton_ESAline,
+                self.pushButton_FULLline, segment, self.comboBox_segment,
+                start, self.comboBox_simply_start, end, self.comboBox_simply_end,
+                self.pushButton_simply_VM)
+        for row, widget in enumerate(rows):
+            self.gridLayout_5.addWidget(widget, row, 0)
 
     def _update_error_action_layout(self):
         self._clear_grid_layout(self.gridLayout_2)
-        width = self.tabs.width() - 40
-
+        self.groupBox_3.setMinimumHeight(0)
         self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
-        self.gridLayout_2.setHorizontalSpacing(10)
-        self.gridLayout_2.setVerticalSpacing(10)
-
-        if width < 420:
-            self.groupBox_3.setMinimumHeight(260)
-            self.gridLayout_2.addWidget(self.static_err, 0, 0)
-            self.gridLayout_2.addWidget(self.err_off, 1, 0)
-            return
-
-        self.groupBox_3.setMinimumHeight(220)
+        self.gridLayout_2.setSpacing(6)
+        self.gridLayout_2.setAlignment(Qt.AlignTop)
         self.gridLayout_2.addWidget(self.static_err, 0, 0)
         self.gridLayout_2.addWidget(self.err_off, 0, 1)
         self.gridLayout_2.setColumnStretch(0, 1)

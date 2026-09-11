@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTabWidget,
     QScrollArea, QTreeWidget, QTreeWidgetItem, QLineEdit, QLabel, QComboBox, QPlainTextEdit,
-    QToolButton, QSizePolicy)
+    QToolButton, QSizePolicy, QPushButton, QGroupBox, QBoxLayout)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 
@@ -205,6 +205,7 @@ class WorkbenchMixin:
         bg.addWidget(self.reference_edit, 3, 0, 1, 2)
         bg.addWidget(self.apply_beam_source_button, 4, 0, 1, 2)
         self.beam_source_group.layout().insertLayout(0, bg)
+        self._compact_configuration_pages()
         self._beam_source_mode_changed()
         self.main_splitter.addWidget(self.tabs)
         curve_page = QWidget()
@@ -254,6 +255,51 @@ class WorkbenchMixin:
         self._apply_theme()
         self._draw_curve()
         self._draw_screen()
+
+    def _compact_configuration_pages(self):
+        style = """
+QPushButton { min-height: 24px; max-height: 24px; padding: 2px 8px;
+              border-radius: 6px; font-size: 11px; }
+QLineEdit, QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px;
+                      border-radius: 5px; font-size: 11px; }
+QLabel { font-size: 11px; padding: 0px; border: none; background: transparent; }
+QGroupBox { font-size: 12px; border-radius: 6px; padding-top: 22px; }
+QGroupBox::title { left: 8px; top: 4px; }
+"""
+        for page in (self.beam_source_group, self.groupBox_2, self.groupBox_3):
+            page.setStyleSheet(style)
+            page.setMinimumSize(0, 0)
+            page.layout().setAlignment(Qt.AlignTop)
+            page.layout().setContentsMargins(8, 6, 8, 8)
+            page.layout().setSpacing(8)
+            for field in page.findChildren(QWidget):
+                if isinstance(field, (QLineEdit, QComboBox, QPushButton)):
+                    field.setMinimumWidth(0)
+                    field.setMaximumWidth(16777215)
+                    field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                elif isinstance(field, QLabel):
+                    field.setWordWrap(True)
+                    field.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        # Put unused height below the error form, not between its actions and fields.
+        self.groupBox_3.layout().setAlignment(Qt.Alignment())
+        self.groupBox_3.layout().addStretch(1)
+        self.horizontalLayout_2.setDirection(QBoxLayout.TopToBottom)
+        for group, grid in ((self.groupBox_4, self.gridLayout),
+                            (self.groupBox_5, self.gridLayout_7)):
+            group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+            group.layout().setContentsMargins(8, 4, 8, 8)
+            grid.setHorizontalSpacing(6)
+            for column in range(3):
+                grid.setColumnMinimumWidth(column, 0)
+                grid.setColumnStretch(column, 1 if column == 1 else 0)
+        for page in (self.bunched_page, self.sdds_page):
+            page.layout().setContentsMargins(0, 0, 0, 0)
+            page.layout().setHorizontalSpacing(8)
+            page.layout().setVerticalSpacing(5)
+            page.layout().setColumnStretch(1, 1)
+        self.reference_edit.setMaximumWidth(16777215)
+        self.route_labels = [QLabel(text, self.groupBox_2) for text in
+                             ('Full line', 'Local segment', 'Start element', 'End element')]
 
     def _toggle_log(self, checked):
         self.textEdit.setVisible(checked)
