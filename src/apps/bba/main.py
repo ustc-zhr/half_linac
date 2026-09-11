@@ -66,12 +66,34 @@ from half_linac.src.apps.bba.profile_runtime import (
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 
+def bba1_saved_k1_sign(data_path):
+    """Convert legacy plane-signed K1 (and its slope) to magnet K1."""
+    data_path = Path(data_path)
+    with data_path.open(encoding="utf-8") as handle:
+        if "k1_convention=magnet" in handle.readline():
+            return 1
+    metadata_path = data_path.parent / "metadata.json"
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(
+            f"Cannot determine legacy BBA-1 K1 sign: restore metadata.json beside {data_path.name}."
+        ) from exc
+    if not isinstance(metadata, dict):
+        raise RuntimeError("Invalid BBA-1 metadata.")
+    if metadata.get("k1_convention") == "magnet":
+        return 1
+    if metadata.get("family") != "bba1" or metadata.get("plane") not in ("X", "Y"):
+        raise RuntimeError("Legacy BBA-1 data requires metadata with family=bba1 and plane=X or Y.")
+    return 1 if metadata["plane"] == "X" else -1
+
+
 K1LQ_FACTOR = 0.15
 HEADER_ACTION_HEIGHT = 32
 BBA1_QUAD_X_LABEL = "$K_1 (m^{-2})$"
 BBA1_SLOPE_LABEL = "dBPM2/dK1"
 BBA2_QUAD_X_LABEL = "$K_1L_q (m^{-1})$"
-BBA1_SCAN_POINT_COLUMNS = ("Use", "Corrector", "K1", "BPM1 (mm)", "BPM2 (mm)")
+BBA1_SCAN_POINT_COLUMNS = ("Use", "Corrector", "K1 (m⁻²)", "BPM1 (mm)", "BPM2 (mm)")
 BBA2_SCAN_POINT_COLUMNS = {
     "quad": ("Use", "K1Leff", "BPM2 (mm)"),
     "bpm1": ("Use", "BPM1 (mm)"),
@@ -1817,6 +1839,7 @@ class myWindow(QWidget, Ui_Form):
         data = np.loadtxt(raw_path, ndmin=2)
         if data.ndim != 2 or data.shape[1] < 4:
             raise RuntimeError(f"{raw_path.name} must contain corrector, K1, BPM1 and BPM2 columns.")
+        data[:, 1] *= bba1_saved_k1_sign(raw_path)
         self._clear_bba1_scan_points()
         for corr, quad_k1, bpm1, bpm2 in data[:, :4]:
             self._append_bba1_scan_point(corr, quad_k1, bpm1, bpm2)
@@ -2789,6 +2812,7 @@ class BBAScanThread(BBABaseThread):
                 if recalculated is None:
                     data_path = self._require_path(self.params.bba1_data_path, "BBA-1 recalculation data")
                     x, y = self._load_two_column(data_path, "BBA-1 recalculation data")
+                    y = y * bba1_saved_k1_sign(data_path)
                 else:
                     x, y = recalculated
             else:
@@ -2823,6 +2847,7 @@ class BBAScanThread(BBABaseThread):
         data = np.loadtxt(quad_scan_path, ndmin=2)
         if data.shape[1] < 4:
             raise RuntimeError(f"BBA-1 quad scan data is malformed: {quad_scan_path}")
+        data[:, 1] *= bba1_saved_k1_sign(quad_scan_path)
         return self._recalculate_from_points(data[:, :4])
 
     def _recalculate_from_points(self, points):
@@ -2889,6 +2914,7 @@ class BBAScanThread(BBABaseThread):
     def _metadata(self):
         return {
             "family": "bba1",
+            "k1_convention": "magnet",
             "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "machine": getattr(getattr(self.params.app_context, "machine", None), "id", None),
             "backend": self.params.control_backend,
@@ -2923,7 +2949,6 @@ class BBAScanThread(BBABaseThread):
         quad = epics.PV(self.params.quadPV)
         bpm1 = epics.PV(self.params.bpm1PV)
         bpm2 = epics.PV(self.params.bpm2PV)
-        sign = 1 if self.params.plane == "X" else -1
 
         initial_quad = self._safe_get(quad, self.params.quadPV)
         initial_kick = self._safe_get(cor, self.params.corrPV)
@@ -2981,7 +3006,7 @@ class BBAScanThread(BBABaseThread):
                         bpm1_value = self._read_bpm_m(bpm1, self.params.bpm1PV)
                         bpm2_samples.append(bpm2_value)
                         bpm1_samples.append(bpm1_value)
-                        quad_k1 = k1 * sign
+                        quad_k1 = k1
                         quad_scan_rows.append((kick, quad_k1, bpm1_value, bpm2_value))
 
                         self._emit({
@@ -3001,7 +3026,7 @@ class BBAScanThread(BBABaseThread):
                 bpm2_mean = np.mean(bpm2_matrix, axis=1)
                 bpm1_mean = float(np.mean(np.asarray(bpm1_samples, dtype=float)))
 
-                x = sign * k1_values
+                x = k1_values
                 coeff = np.polyfit(x, bpm2_mean, deg=1)
                 fit = np.poly1d(coeff)
 
@@ -3024,13 +3049,13 @@ class BBAScanThread(BBABaseThread):
                 self.params.bba1_data_path,
                 np.column_stack((m1_results, slope_results)),
                 archive_dir=self.params.archive_dir,
-                header="bpm1_mean_m slope_dBPM2_dK1",
+                header="bpm1_mean_m slope_dBPM2_dK1 k1_convention=magnet",
             )
             self._save_array(
                 self.params.bba1_quad_scan_path,
                 np.asarray(quad_scan_rows, dtype=float),
                 archive_dir=self.params.archive_dir,
-                header="corrector_setpoint quad_k1 bpm1_m bpm2_m",
+                header="corrector_setpoint quad_k1 bpm1_m bpm2_m k1_convention=magnet",
             )
             self._save_json(
                 self.params.bba1_metadata_path,
