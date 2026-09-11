@@ -181,6 +181,7 @@ QFrame {{
 QFrame#summaryPanel {{
     background-color: {summary_panel_bg};
     border: 1px solid {summary_panel_border};
+    border-radius: 10px;
 }}
 
 QLabel#summaryTitle {{
@@ -188,7 +189,7 @@ QLabel#summaryTitle {{
     border: none;
     border-radius: 0px;
     color: {title_fg};
-    font-size: 24px;
+    font-size: 23px;
     font-weight: 700;
     letter-spacing: 0.3px;
 }}
@@ -351,12 +352,6 @@ QFrame#statusItem[tone="warning"] {{
 QFrame#statusItem[tone="danger"] {{
     border-left-color: {status_tone_danger_bar};
 }}
-QFrame#statusSeparator {{
-    background: {status_separator};
-    min-width: 1px;
-    max-width: 1px;
-    border: none;
-}}
 QLabel[role="title"] {{
     color: {status_title_fg};
     background: transparent;
@@ -411,17 +406,10 @@ class VMStatusStrip(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(0)
+        layout.setSpacing(8)
         self._layout = layout
 
     def add_item(self, key, title, value):
-        if self._items:
-            separator = QFrame(self)
-            separator.setObjectName("statusSeparator")
-            separator.setFrameShape(QFrame.VLine)
-            separator.setFrameShadow(QFrame.Plain)
-            self._layout.addWidget(separator)
-
         container = QFrame(self)
         container.setObjectName("statusItem")
         container.setProperty("tone", "subtle")
@@ -436,7 +424,8 @@ class VMStatusStrip(QWidget):
         value_label = QLabel(value, container)
         value_label.setProperty("role", "value")
         value_label.setProperty("tone", "subtle")
-        value_label.setWordWrap(True)
+        # Let each status item grow with its text instead of wrapping early.
+        value_label.setWordWrap(False)
 
         inner.addWidget(title_label)
         inner.addWidget(value_label)
@@ -1020,7 +1009,12 @@ QHeaderView::section, QTabBar::tab {
 }
 QTabBar::tab:selected { background: %(input_selection_bg)s; }
 QTreeWidget::item:selected { background: %(input_selection_bg)s; }
-QSplitter::handle { background: %(frame_border)s; }
+QFrame#workbenchCard, QTabWidget::pane {
+    background: %(frame_bg)s; border: 1px solid %(frame_border)s; border-radius: 6px;
+}
+QLabel[role="cardTitle"] { font-size: 12px; font-weight: 600; }
+QSplitter::handle { background: transparent; }
+QSplitter::handle:hover { background: %(frame_border)s; }
 QScrollArea { border: none; }
 """ % palette)
         if hasattr(self, "status_panel"):
