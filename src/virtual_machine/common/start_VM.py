@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 import uuid
 from datetime import datetime, timezone
@@ -220,12 +221,14 @@ def main():
             output_start = time.time()
             # The live JSON remains the only input watched by this loop.
             # Enable statistical output only in the frozen simulation input.
+            original_input = copy.deepcopy(state)
             state["control"]["run_setup"]["sigma"] = "%s.sig"
             frozen = directory / "input.json"
             save_observation(frozen, state)
             parser.lattice = state["lattice"]
             publication = _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, frozen)
             result = collect_results(state, elegant_dir, newer_than=output_start)
+            result["input_state"] = original_input
             result.update(session=session, calculation=status["calculation"], input_version=version)
             # Atomic replacement keeps readers isolated from Elegant's output writes.
             save_observation(directory / "result.json", result)

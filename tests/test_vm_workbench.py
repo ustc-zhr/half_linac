@@ -104,6 +104,9 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(status['result_version'], data.input_version(changed))
             self.assertFalse(status['publication']['bpm'])
             self.assertEqual(status['calculation'], 2)
+            result = read_runtime_state(data.observation_dir(live)/'result.json')
+            self.assertEqual(result['input_state'], changed)
+            self.assertNotIn('sigma', result['input_state']['control']['run_setup'])
 
     def test_failed_calculation_records_error_without_result(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -21,6 +21,8 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationTool
 
 from half_linac.src.shared.runtime_state import read_runtime_state
 from half_linac.src.virtual_machine.beam_source import bootstrap_runtime_state
+from half_linac.src.virtual_machine.magnet_panel import MagnetPanel
+from half_linac.src.virtual_machine.beamline_view import BeamlineView
 from half_linac.src.virtual_machine.workbench_data import input_version, observation_dir, occurrences
 
 
@@ -92,6 +94,7 @@ class WorkbenchMixin:
         self._result = None
         self._version = None
         self._elements = []
+        self._model_state = None
         self._selected_index = None
         self._stopping = False
         self._process_failures = {}
@@ -118,15 +121,12 @@ class WorkbenchMixin:
         self.status_panel._items['mode'][0].findChildren(QLabel)[0].setText('SIMULATION STATUS')
         self.status_panel._items['config'][0].findChildren(QLabel)[0].setText('LATTICE')
         self.status_panel._items['current'][0].findChildren(QLabel)[0].setText('LAST SUCCESS')
+        self.status_panel._items['current'][0].setMinimumWidth(190)
         self.status_panel.setMinimumHeight(54)
         self.status_panel.setMaximumHeight(80)
         outer.addWidget(self.status_panel)
         self.body_splitter = QSplitter(Qt.Vertical)
-        self.beamline = Plot()
-        self.beamline.setMinimumHeight(115)
-        self.beamline.toolbar.setMaximumHeight(28)
-        self.beamline.canvas.mpl_connect('button_press_event', self._beamline_click)
-        self.beamline.canvas.mpl_connect('scroll_event', self._beamline_scroll)
+        self.beamline = BeamlineView(self._beamline_select)
         self.body_splitter.addWidget(self.beamline)
         self.main_splitter = QSplitter(Qt.Horizontal)
         self.tabs = QTabWidget()
@@ -144,7 +144,16 @@ class WorkbenchMixin:
         self.details.setMaximumHeight(150)
         dl.addWidget(self.device_search)
         dl.addWidget(self.devices, 1)
+        self.details.setMaximumHeight(65)
+        self.details.hide()
+        details_toggle = QToolButton()
+        details_toggle.setText('Model Details')
+        details_toggle.setCheckable(True)
+        details_toggle.toggled.connect(self.details.setVisible)
+        dl.addWidget(details_toggle)
         dl.addWidget(self.details)
+        self.magnet_panel = MagnetPanel(self)
+        dl.addWidget(self.magnet_panel)
         self.tabs.addTab(device_page, 'Devices')
         for widget, label in ((self.beam_source_group, 'Beam Source'),
                               (self.groupBox_2, 'Lattice'), (self.groupBox_3, 'Errors')):
@@ -219,6 +228,7 @@ class WorkbenchMixin:
         self.main_splitter.setSizes([330, 660, 300])
         self.body_splitter.addWidget(self.main_splitter)
         self.body_splitter.setSizes([145, 470])
+        outer.addWidget(self.magnet_panel.baseline_bar)
         outer.addWidget(self.body_splitter, 1)
         self.result_status = QLabel('No simulation result')
         outer.addWidget(self.result_status)
@@ -261,53 +271,21 @@ class WorkbenchMixin:
         self._selected_index = current.data(0, Qt.UserRole)
         element = self._elements[self._selected_index]
         self.details.setPlainText(json.dumps(element['parameters'], indent=2))
+        self.magnet_panel.select(element)
         self._draw_curve()
         self._draw_beamline()
 
-    def _beamline_click(self, event):
-        if event.inaxes is not self.beamline.ax or not self._elements or self.beamline.toolbar.mode:
-            return
-        hits = [item['index'] for item in self._elements
-                if item['s'] <= event.xdata <= item['s'] + max(item['length'], .025)]
-        index = min(hits, key=lambda i: self._elements[i]['length']) if hits else min(
-            range(len(self._elements)), key=lambda i: abs(self._elements[i]['s']-event.xdata))
+    def _beamline_select(self, index):
         item = self.devices.topLevelItem(index)
         self.device_search.clear()
         self.devices.setCurrentItem(item)
         self.devices.scrollToItem(item)
 
-    def _beamline_scroll(self, event):
-        if event.inaxes is not self.beamline.ax:
-            return
-        lo, hi = self.beamline.ax.get_xlim()
-        center = event.xdata
-        factor = 0.8 if event.button == 'up' else 1.25
-        self.beamline.ax.set_xlim(center+(lo-center)*factor, center+(hi-center)*factor)
-        self.beamline.canvas.draw_idle()
-
     def _draw_beamline(self):
-        ax = self.beamline.ax
-        limits = ax.get_xlim() if getattr(self, '_preserve_beamline', False) else None
-        ax.clear()
-        colors = {'QUAD': '#45d0bc', 'KQUAD': '#45d0bc', 'WATCH': '#e4b86f',
-                  'CSBEND': '#60a5fa', 'RFCA': '#c49bdf'}
-        for element in self._elements:
-            selected = element['index'] == self._selected_index
-            ax.broken_barh([(element['s'], max(element['length'], .025))],
-                          (-.3 if selected else -.2, .6 if selected else .4),
-                          facecolors=colors.get(element['kind'], '#70838c'))
-            if selected:
-                ax.text(element['s'], .4, element['name'], color='#45d0bc', fontsize=9)
-        ax.set_ylim(-.6, .8)
-        ax.set_yticks([])
-        ax.set_xlabel('s (m) · Select a device · Scroll to zoom · Pan with toolbar')
-        if limits:
-            ax.set_xlim(limits)
-        if not limits:
-            self.beamline.toolbar.update()
-            self.beamline.toolbar.push_current()
+        self.beamline.update_line(self._elements, self._selected_index,
+                                 self.current_theme == 'dark',
+                                 reset=not getattr(self, '_preserve_beamline', False))
         self._preserve_beamline = True
-        self.beamline.theme(self.current_theme == 'dark')
 
     def _draw_curve(self, *args):
         ax = self.curve_plot.ax
@@ -324,6 +302,13 @@ class WorkbenchMixin:
             ax.grid(alpha=.15)
         if self._selected_index is not None and self._selected_index < len(self._elements):
             ax.axvline(self._elements[self._selected_index]['s'], color='#b79964', linestyle=':')
+        if hasattr(self, 'magnet_panel'):
+            baseline = self.magnet_panel.baseline_curve(name)
+            if baseline and 'error' not in baseline:
+                ax.plot(baseline['s'], baseline['x'], '--', color='#45bfa9', label='X baseline')
+                ax.plot(baseline['s'], baseline['y'], '--', color='#609fea', label='Y baseline')
+                ax.set_ylabel(f"{name} ({baseline['unit']})")
+                ax.legend(fontsize=8)
         ax.set_xlabel('s (m)')
         self.curve_plot.toolbar.update()
         self.curve_plot.toolbar.push_current()
@@ -339,6 +324,10 @@ class WorkbenchMixin:
                                         f"RMS (mm): {screen['sx']:.4g}, {screen['sy']:.4g}")
         else:
             self.screen_metrics.setText('Unavailable: ' + screen.get('error', 'No screen output'))
+        if hasattr(self, 'magnet_panel'):
+            comparison = self.magnet_panel.screen_comparison(self.screen_choice.currentData(), screen)
+            if comparison:
+                self.screen_metrics.setText(comparison)
         ax.set_xlabel('x (mm)')
         ax.set_ylabel('y (mm)')
         self.screen_plot.toolbar.update()
@@ -367,18 +356,27 @@ class WorkbenchMixin:
             try:
                 state, version, status, result = self._read_future.result()
                 self._read_error = None
+                self._model_state = state
                 if version != self._version:
                     self._version = version
-                    self._elements = occurrences(state)
-                    self._selected_index = None
-                    self.devices.clear()
-                    for element in self._elements:
-                        item = QTreeWidgetItem([element['name'], element['kind'], f"{element['s']:.3f}"])
-                        item.setData(0, Qt.UserRole, element['index'])
-                        self.devices.addTopLevelItem(item)
-                    self._filter_devices()
-                    self._preserve_beamline = False
-                    self._draw_beamline()
+                    elements = occurrences(state)
+                    topology = lambda values: [(v['name'], v['kind'], v['s'], v['length']) for v in values]
+                    if topology(elements) != topology(self._elements):
+                        self._selected_index = None
+                        self.magnet_panel.selected = None
+                        self._elements = elements
+                        self.devices.clear()
+                        for element in elements:
+                            item = QTreeWidgetItem([element['name'], element['kind'], f"{element['s']:.3f}"])
+                            item.setData(0, Qt.UserRole, element['index'])
+                            self.devices.addTopLevelItem(item)
+                        self._filter_devices()
+                        self._preserve_beamline = False
+                        self._draw_beamline()
+                    else:
+                        self._elements = elements
+                        if self._selected_index is not None:
+                            self.details.setPlainText(json.dumps(elements[self._selected_index]['parameters'], indent=2))
                 self._observation = status if status.get('session') == self._session and self._session else {}
                 if result is not None and result != self._result:
                     self._result = result
@@ -388,6 +386,10 @@ class WorkbenchMixin:
                     for key, screen in result['screens'].items():
                         self.screen_choice.addItem(f"{screen['name']} · {screen['s']:.3f} m", key)
                     index = self.screen_choice.findData(selected)
+                    if index < 0:
+                        available = next((key for key, screen in result['screens'].items()
+                                          if 'image' in screen), None)
+                        index = self.screen_choice.findData(available)
                     self.screen_choice.setCurrentIndex(max(index, 0))
                     self.screen_choice.blockSignals(False)
                     self._draw_curve()
@@ -402,7 +404,7 @@ class WorkbenchMixin:
                                                        lambda: bootstrap_runtime_state(self.runtime))
         ioc = self._is_running('softioc')
         vm = self._is_running('vm')
-        busy = self._is_running('vm_config') or self._stopping
+        busy = self._is_running('vm_config') or self._stopping or self.magnet_panel.busy
         status = self._observation
         phase = status.get('phase', 'Starting') if vm else ('Failed' if 'vm' in self._process_failures else 'Stopped')
         if phase == 'Ready' and status.get('result_version') != self._version:
@@ -429,6 +431,10 @@ class WorkbenchMixin:
             if failed:
                 label += ' · Publication incomplete: ' + ', '.join(failed)
             self.result_status.setText(label)
+        if self._model_state is not None:
+            self.magnet_panel.refresh(self._model_state, status, self._result,
+                ioc and vm and bool(self._session) and status.get('session') == self._session
+                and not self._stopping and not self._is_running('vm_config') and not self._read_error)
         if not self._result:
             self.result_status.setText(f'{phase} · No successful simulation result')
         if self._read_error:
@@ -488,18 +494,26 @@ class WorkbenchMixin:
         return proc
 
     def _stop_subpro(self):
+        self.magnet_panel.controller.cancel.set()
         self._stopping = True
         self._stop_deadline = time.monotonic() + 3
         for proc in self.processes.values():
             self._signal_process_group(proc, signal.SIGTERM)
 
     def closeEvent(self, event):
+        self.magnet_panel.controller.cancel.set()
+        if self.magnet_panel.busy:
+            QTimer.singleShot(100, self.close)
+            event.ignore()
+            return
         if any(proc.poll() is None for proc in self.processes.values()):
             self._close_pending = True
             if not self._stopping:
                 self._stop_subpro()
             event.ignore()
             return
+        if not self.magnet_panel.controller.closed:
+            self.magnet_panel.controller.close()
         self.process_timer.stop()
         self._executor.shutdown(wait=False, cancel_futures=True)
         event.accept()

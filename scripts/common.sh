@@ -19,6 +19,8 @@ case ":${PYTHONPATH:-}:" in
     ;;
 esac
 
+export PYTHONPATH="$REPO_ROOT/scripts/python_imports:$PYTHONPATH"
+
 case ":$PATH:" in
   *":$REPO_ROOT:"*) ;;
   *) export PATH="$PATH:$REPO_ROOT" ;;

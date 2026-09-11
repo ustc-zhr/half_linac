@@ -68,7 +68,9 @@ class WorkbenchGuiTests(unittest.TestCase):
         window._executor.submit.return_value = Future()
         state = dict(lattice={'Q': dict(TYPE='QUAD', L='1')}, usedline=['Q', 'Q'])
         result = dict(session='new', calculation=1, input_version='a', curves={},
-                      screens={'1': dict(name='W', s=2, error='Missing output')})
+                      screens={'0': dict(name='Disabled', s=0, error='WATCH is disabled'),
+                               '1': dict(name='W', s=2, image=[[1]], extent=[0,1,0,1],
+                                         cx=.5, cy=.5, sx=.1, sy=.1)})
         status = dict(session='new', calculation=1, phase='Ready', result_version='a', publication={'bpm': False})
         window._session = 'new'
         window.processes['vm'] = Mock(poll=Mock(return_value=None))
@@ -80,11 +82,15 @@ class WorkbenchGuiTests(unittest.TestCase):
         refresh()
         self.assertIn('Latest Result', window.result_status.text())
         self.assertIn('Publication incomplete', window.result_status.text())
+        self.assertEqual(window.screen_choice.currentData(), '1')
+        window.screen_choice.setCurrentIndex(0)
         selection = window.screen_choice.currentData()
         window.devices.setCurrentItem(window.devices.topLevelItem(1))
         self.assertEqual(window._selected_index, 1)
         self.assertEqual(window.screen_choice.currentData(), selection)
+        result = dict(result, calculation=2)
         refresh('b')
+        self.assertEqual(window.screen_choice.currentData(), selection)
         self.assertIn('Out of Date', window.result_status.text())
         refresh('a', dict(status, session='old'))
         self.assertNotIn('Latest Result', window.result_status.text())
