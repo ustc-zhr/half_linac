@@ -1,10 +1,8 @@
 import os
 import signal
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
-from subprocess import Popen, TimeoutExpired
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -63,10 +61,7 @@ from half_linac.src.virtual_machine.lattice_usedline import (
 )
 
 
-PROCESS_START_TIMEOUT_S = 0.3
-PROCESS_STOP_TIMEOUT_S = 3.0
 PROCESS_REFRESH_INTERVAL_MS = 1000
-PROCESS_READY_GRACE_S = 2.0
 HEADER_ACTION_HEIGHT = 32
 
 DARK_THEME = {
@@ -532,7 +527,10 @@ BUTTON_CONFIG = {
 }
 
 
-class myWindow(QMainWindow, Ui_MainWindow):
+from half_linac.src.virtual_machine.workbench_ui import WorkbenchMixin
+
+
+class myWindow(WorkbenchMixin, QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
@@ -545,7 +543,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.processes = {}
         self.process_start_times = {}
         self.current_theme = resolve_initial_theme()
-        self._is_shutting_down = False
         self._vm_config_label = None
         self._install_signal_handlers()
 
@@ -556,8 +553,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._configure_inputs()
         self._configure_action_buttons()
         self._build_beam_source_panel()
-        self._configure_group_panel()
         self._schedule_layout_refresh()
+        self._build_workbench()
         self._reset_activity_log()
 
         self.QDXDYvalue.setText("0")
@@ -842,6 +839,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.beam_source_stack.setCurrentWidget(
             self.bunched_page if mode == BUNCHED_BEAM else self.sdds_page
         )
+        if hasattr(self, "tabs"):
+            self.beam_source_stack.setFixedHeight(self.beam_source_stack.currentWidget().sizeHint().height())
         self.beam_source_status.setText(
             "Generated particles from beam and Twiss parameters."
             if mode == BUNCHED_BEAM
@@ -1009,7 +1008,21 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def _apply_theme(self):
         palette = DARK_THEME if self.current_theme == "dark" else LIGHT_THEME
-        self.setStyleSheet(build_mainvm_theme(palette))
+        self.setStyleSheet("")
+        self.setStyleSheet(build_mainvm_theme(palette) + """
+QLabel { border: none; background: transparent; font-size: 11px; }
+QTreeWidget, QPlainTextEdit, QTabWidget::pane {
+    background: %(input_bg)s; color: %(input_fg)s; border: 1px solid %(input_border)s;
+    font-size: 11px;
+}
+QHeaderView::section, QTabBar::tab {
+    background: %(frame_bg)s; color: %(window_fg)s; padding: 5px; font-size: 11px;
+}
+QTabBar::tab:selected { background: %(input_selection_bg)s; }
+QTreeWidget::item:selected { background: %(input_selection_bg)s; }
+QSplitter::handle { background: %(frame_border)s; }
+QScrollArea { border: none; }
+""" % palette)
         if hasattr(self, "status_panel"):
             self.status_panel.apply_theme(palette)
         self._update_theme_toggle_button()
@@ -1027,48 +1040,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self._refresh_widget_style(self.theme_toggle_button)
 
-    def _toggle_theme(self):
-        self.current_theme = "light" if self.current_theme == "dark" else "dark"
-        self._apply_theme()
-        self._refresh_process_state()
-
-    def _configure_group_panel(self):
-        self.verticalLayout_2.removeWidget(self.groupBox)
-        self.verticalLayout_2.removeWidget(self.groupBox_2)
-        self.verticalLayout_2.removeWidget(self.groupBox_3)
-
-        self.group_panel_layout = QGridLayout()
-        self.group_panel_layout.setContentsMargins(0, 2, 0, 0)
-        self.group_panel_layout.setHorizontalSpacing(12)
-        self.group_panel_layout.setVerticalSpacing(12)
-        self.group_panel_layout.setColumnStretch(0, 1)
-        self.group_panel_layout.setColumnStretch(1, 1)
-        self.verticalLayout_2.addLayout(self.group_panel_layout)
-
-        for group_box in (
-            self.groupBox,
-            self.groupBox_2,
-            self.groupBox_3,
-            self.groupBox_4,
-            self.groupBox_5,
-        ):
-            group_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-
-        self.verticalLayout_5.setContentsMargins(10, 8, 10, 10)
-        self.verticalLayout_6.setContentsMargins(10, 8, 10, 10)
-        self.verticalLayout_7.setContentsMargins(10, 8, 10, 10)
-        self.verticalLayout.setContentsMargins(10, 8, 10, 10)
-        self.verticalLayout_8.setContentsMargins(10, 8, 10, 10)
 
     def _install_signal_handlers(self):
         signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
         signal.signal(signal.SIGINT, self._handle_shutdown_signal)
 
-    def _handle_shutdown_signal(self, signum, frame):
-        self._shutdown()
-        app = QApplication.instance()
-        if app is not None:
-            app.quit()
 
     def _append_log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -1087,66 +1063,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._append_log("Routing and error tools unlock after the VM is online.")
         self._append_log(f"Current VM usedline: {self._current_usedline_summary()}.")
 
-    def _prune_finished_processes(self):
-        routing_change_finished = False
-        for key, proc in list(self.processes.items()):
-            if proc.poll() is not None:
-                self.processes.pop(key, None)
-                self.process_start_times.pop(key, None)
-                if key == "vm_config":
-                    routing_change_finished = self._vm_config_label in {
-                        "predefined usedline transfer",
-                        "VM usedline simplification",
-                        "Initial lattice reload",
-                    }
-                    self._vm_config_label = None
-        if routing_change_finished and hasattr(self, "beam_source_group"):
-            self._load_beam_source_fields()
 
     def _is_running(self, key):
         proc = self.processes.get(key)
         return proc is not None and proc.poll() is None
 
-    def _is_ready(self, key, grace_period=PROCESS_READY_GRACE_S):
-        if not self._is_running(key):
-            return False
-
-        started_at = self.process_start_times.get(key)
-        if started_at is None:
-            return False
-
-        return (time.monotonic() - started_at) >= grace_period
-
-    def _start_process(self, key, label, cmd, cwd, expect_running):
-        self._prune_finished_processes()
-        if self._is_running(key):
-            self._notify(f"{label} is already running.")
-            return None
-
-        proc = Popen(
-            cmd,
-            cwd=cwd,
-            shell=False,
-            start_new_session=True,
-        )
-
-        if expect_running:
-            try:
-                proc.wait(timeout=PROCESS_START_TIMEOUT_S)
-            except TimeoutExpired:
-                self.processes[key] = proc
-                self.process_start_times[key] = time.monotonic()
-                self._refresh_process_state()
-                return proc
-
-            self._notify(f"Failed to start {label} (exit code {proc.returncode}).")
-            self._refresh_process_state()
-            return None
-
-        self.processes[key] = proc
-        self.process_start_times[key] = time.monotonic()
-        self._refresh_process_state()
-        return proc
 
     def _signal_process_group(self, proc, sig):
         if proc.poll() is not None:
@@ -1162,106 +1083,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             else:
                 proc.terminate()
 
-    def _stop_subpro(self):
-        self._prune_finished_processes()
-        procs = list(self.processes.values())
-
-        for proc in procs:
-            self._signal_process_group(proc, signal.SIGTERM)
-
-        deadline = time.time() + PROCESS_STOP_TIMEOUT_S
-        while time.time() < deadline:
-            if all(proc.poll() is not None for proc in procs):
-                break
-            time.sleep(0.1)
-
-        for proc in procs:
-            if proc.poll() is None:
-                self._signal_process_group(proc, signal.SIGKILL)
-
-        self.processes.clear()
-        self.process_start_times.clear()
-        self._refresh_process_state()
-
-    def _shutdown(self):
-        if self._is_shutting_down:
-            return
-        self._is_shutting_down = True
-        self._stop_subpro()
-
-    def _refresh_process_state(self):
-        self._prune_finished_processes()
-
-        ioc_running = self._is_running("softioc")
-        ioc_ready = self._is_ready("softioc")
-        vm_running = self._is_running("vm")
-        vm_ready = self._is_ready("vm")
-        config_running = self._is_running("vm_config")
-        any_running = any(proc.poll() is None for proc in self.processes.values())
-
-        self.start_ioc.setEnabled(not ioc_running)
-        self.start_vm.setEnabled(ioc_ready and not vm_running)
-        self.shutdown_VM.setEnabled(any_running)
-
-        vm_controls_enabled = vm_ready and not config_running
-        self.pushButton_ESAline.setEnabled(vm_controls_enabled)
-        self.pushButton_simply_VM.setEnabled(vm_controls_enabled)
-        self.pushButton_FULLline.setEnabled(vm_controls_enabled)
-        self.static_err.setEnabled(vm_controls_enabled)
-        self.err_off.setEnabled(vm_controls_enabled)
-        self._refresh_beam_source_availability(config_running=config_running)
-
-        self._update_button_state(self.start_ioc, ioc_running)
-        self._update_button_state(self.start_vm, vm_running)
-        self._update_button_state(self.shutdown_VM, any_running)
-        for button in (
-            self.pushButton_ESAline,
-            self.pushButton_simply_VM,
-            self.pushButton_FULLline,
-            self.static_err,
-            self.err_off,
-        ):
-            self._update_button_state(button, config_running)
-
-        if config_running:
-            self._set_summary_value("config", "Applying", "warning")
-        else:
-            self._set_summary_value("config", self._current_usedline_summary(), "active")
-
-        if not ioc_running and not vm_running:
-            self._set_summary_value("connection", "Offline", "idle")
-        elif not ioc_ready:
-            self._set_summary_value("connection", "softIOC starting", "warning")
-        elif not vm_running:
-            self._set_summary_value("connection", "softIOC only", "warning")
-        elif not vm_ready:
-            self._set_summary_value("connection", "VM booting", "warning")
-        else:
-            self._set_summary_value("connection", "softIOC + VM", "active")
-
-        if config_running:
-            self._set_summary_value("mode", "Config Busy", "warning")
-        elif vm_ready:
-            self._set_summary_value("mode", "Runtime Ready", "active")
-        elif vm_running:
-            self._set_summary_value("mode", "Runtime Boot", "warning")
-        elif ioc_ready:
-            self._set_summary_value("mode", "Start VM", "warning")
-        elif ioc_running:
-            self._set_summary_value("mode", "Startup", "warning")
-        else:
-            self._set_summary_value("mode", "Idle", "idle")
-
-        if config_running:
-            self._set_summary_value("current", "Controls locked", "warning")
-        elif vm_ready:
-            self._set_summary_value("current", "Controls Ready", "active")
-        elif vm_running:
-            self._set_summary_value("current", "Waiting for VM", "warning")
-        elif ioc_ready:
-            self._set_summary_value("current", "Ready to Start VM", "warning")
-        else:
-            self._set_summary_value("current", "Start softIOC", "idle")
 
     def _update_button_state(self, button, is_running):
         button.setProperty("running", is_running)
@@ -1414,128 +1235,38 @@ class myWindow(QMainWindow, Ui_MainWindow):
         super().resizeEvent(event)
         self._schedule_layout_refresh()
 
-    def _refresh_dynamic_layouts(self):
-        self._update_summary_layout()
-        self._update_group_panel_layout()
-        QTimer.singleShot(0, self._refresh_inner_group_layouts)
-
-    def _refresh_inner_group_layouts(self):
-        self._update_runtime_layout()
-        self._update_routing_layout()
-        self._update_error_action_layout()
-
-    def _update_summary_layout(self):
-        return
-
-    def _update_group_panel_layout(self):
-        if not hasattr(self, "group_panel_layout"):
-            return
-
-        while self.group_panel_layout.count():
-            self.group_panel_layout.takeAt(0)
-
-        if self.width() < 940:
-            self.group_panel_layout.setColumnStretch(0, 1)
-            self.group_panel_layout.setColumnStretch(1, 0)
-            self.group_panel_layout.setRowStretch(0, 0)
-            self.group_panel_layout.setRowStretch(1, 0)
-            self.group_panel_layout.setRowStretch(2, 0)
-            self.group_panel_layout.addWidget(self.groupBox, 0, 0, Qt.AlignTop)
-            self.group_panel_layout.addWidget(self.groupBox_2, 1, 0, Qt.AlignTop)
-            self.group_panel_layout.addWidget(self.groupBox_3, 2, 0, Qt.AlignTop)
-            return
-
-        self.group_panel_layout.setColumnStretch(0, 3)
-        self.group_panel_layout.setColumnStretch(1, 5)
-        self.group_panel_layout.setRowStretch(0, 0)
-        self.group_panel_layout.setRowStretch(1, 0)
-
-        right_column = QVBoxLayout()
-        right_column.setContentsMargins(0, 0, 0, 0)
-        right_column.setSpacing(12)
-        right_column.addWidget(self.groupBox_2)
-        right_column.addWidget(self.groupBox_3)
-
-        self.group_panel_layout.addWidget(self.groupBox, 0, 0, Qt.AlignTop)
-        self.group_panel_layout.addLayout(right_column, 0, 1, Qt.AlignTop)
 
     def _clear_grid_layout(self, layout):
         while layout.count():
             layout.takeAt(0)
 
-    def _update_runtime_layout(self):
-        self._clear_grid_layout(self.gridLayout_3)
-        width = max(self.groupBox.width(), self.groupBox.sizeHint().width())
-
-        self.gridLayout_3.setContentsMargins(0, 0, 0, 0)
-        self.gridLayout_3.setHorizontalSpacing(10)
-        self.gridLayout_3.setVerticalSpacing(10)
-
-        if width < 340:
-            self.groupBox.setMinimumHeight(180)
-            self.gridLayout_3.addWidget(self.start_ioc, 0, 0)
-            self.gridLayout_3.addWidget(self.start_vm, 1, 0)
-            return
-
-        self.groupBox.setMinimumHeight(112)
-        self.gridLayout_3.addWidget(self.start_ioc, 0, 0)
-        self.gridLayout_3.addWidget(self.start_vm, 0, 1)
-        self.gridLayout_3.setColumnStretch(0, 1)
-        self.gridLayout_3.setColumnStretch(1, 1)
 
     def _update_routing_layout(self):
         self._clear_grid_layout(self.gridLayout_5)
-        width = max(self.groupBox_2.width(), self.groupBox_2.sizeHint().width())
-
+        self.groupBox_2.setMinimumHeight(0)
         self.gridLayout_5.setContentsMargins(0, 0, 0, 0)
-        self.gridLayout_5.setHorizontalSpacing(10)
-        self.gridLayout_5.setVerticalSpacing(10)
-
-        if width < 420:
-            self.groupBox_2.setMinimumHeight(360)
-            self.gridLayout_5.addWidget(self.comboBox_predefined_usedline, 0, 0)
-            self.gridLayout_5.addWidget(self.pushButton_ESAline, 1, 0)
-            self.gridLayout_5.addWidget(self.pushButton_FULLline, 2, 0)
-            self.gridLayout_5.addWidget(self.comboBox_segment, 3, 0)
-            self.gridLayout_5.addWidget(self.comboBox_simply_start, 4, 0)
-            self.gridLayout_5.addWidget(self.comboBox_simply_end, 5, 0)
-            self.gridLayout_5.addWidget(self.pushButton_simply_VM, 6, 0)
+        self.gridLayout_5.setSpacing(6)
+        self.gridLayout_5.setAlignment(Qt.AlignTop)
+        if not hasattr(self, 'route_labels'):
             return
-
-        self.groupBox_2.setMinimumHeight(260)
-        self.gridLayout_5.addWidget(self.comboBox_predefined_usedline, 0, 0)
-        self.gridLayout_5.addWidget(self.pushButton_ESAline, 0, 1)
-        self.gridLayout_5.addWidget(self.pushButton_FULLline, 1, 0, 1, 2)
-        self.gridLayout_5.addWidget(self.comboBox_segment, 2, 0, 1, 2)
-        self.gridLayout_5.addWidget(self.comboBox_simply_start, 3, 0)
-        self.gridLayout_5.addWidget(self.comboBox_simply_end, 3, 1)
-        self.gridLayout_5.addWidget(self.pushButton_simply_VM, 4, 0, 1, 2)
-        self.gridLayout_5.setColumnStretch(0, 1)
-        self.gridLayout_5.setColumnStretch(1, 1)
+        full, segment, start, end = self.route_labels
+        rows = (full, self.comboBox_predefined_usedline, self.pushButton_ESAline,
+                self.pushButton_FULLline, segment, self.comboBox_segment,
+                start, self.comboBox_simply_start, end, self.comboBox_simply_end,
+                self.pushButton_simply_VM)
+        for row, widget in enumerate(rows):
+            self.gridLayout_5.addWidget(widget, row, 0)
 
     def _update_error_action_layout(self):
         self._clear_grid_layout(self.gridLayout_2)
-        width = max(self.groupBox_3.width(), self.groupBox_3.sizeHint().width())
-
+        self.groupBox_3.setMinimumHeight(0)
         self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
-        self.gridLayout_2.setHorizontalSpacing(10)
-        self.gridLayout_2.setVerticalSpacing(10)
-
-        if width < 420:
-            self.groupBox_3.setMinimumHeight(260)
-            self.gridLayout_2.addWidget(self.static_err, 0, 0)
-            self.gridLayout_2.addWidget(self.err_off, 1, 0)
-            return
-
-        self.groupBox_3.setMinimumHeight(220)
+        self.gridLayout_2.setSpacing(6)
+        self.gridLayout_2.setAlignment(Qt.AlignTop)
         self.gridLayout_2.addWidget(self.static_err, 0, 0)
         self.gridLayout_2.addWidget(self.err_off, 0, 1)
         self.gridLayout_2.setColumnStretch(0, 1)
         self.gridLayout_2.setColumnStretch(1, 1)
-
-    def closeEvent(self, event):
-        self._shutdown()
-        event.accept()
 
 
 if __name__ == '__main__':

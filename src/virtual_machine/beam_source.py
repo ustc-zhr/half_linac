@@ -208,6 +208,12 @@ def normalize_beam_source_config(
 
 def apply_beam_source_config(runtime, raw_config: Mapping[str, Any]) -> dict[str, Any]:
     default_control = bootstrap_control(runtime)
+    reference_key = reference_momentum_key(default_control)
+    config = normalize_beam_source_config(
+        raw_config,
+        elegant_dir=runtime.vm.bootstrap_lattice.parent,
+        reference_key=reference_key,
+    )
     ensure_runtime_state(runtime.vm.runtime_json, lambda: bootstrap_runtime_state(runtime))
     try:
         state = read_runtime_state(runtime.vm.runtime_json)
@@ -215,12 +221,7 @@ def apply_beam_source_config(runtime, raw_config: Mapping[str, Any]) -> dict[str
             raise TypeError("control is not a mapping")
     except (KeyError, TypeError) as exc:
         raise BeamSourceError("VM runtime state does not contain a valid control section.") from exc
-    reference_key = reference_momentum_key(default_control)
-    config = normalize_beam_source_config(
-        raw_config,
-        elegant_dir=runtime.vm.bootstrap_lattice.parent,
-        reference_key=reference_key,
-    )
+
 
     def apply(runtime_state: dict[str, Any]) -> bool:
         runtime_state[BEAM_SOURCE_CONFIG_KEY] = copy.deepcopy(config)

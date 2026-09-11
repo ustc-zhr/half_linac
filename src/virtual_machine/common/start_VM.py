@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import copy
+import os
+import uuid
+from datetime import datetime, timezone
+
 import signal
 import shutil
 import subprocess
@@ -30,6 +35,9 @@ from half_linac.src.shared.runtime_state import (
     update_runtime_state,
 )
 from half_linac.src.virtual_machine.lattice_usedline import describe_runtime_usedline
+from half_linac.src.virtual_machine.workbench_data import (
+    input_version, observation_dir, collect_results, save_observation,
+)
 
 
 JSON_POLL_INTERVAL_S = 2.0
@@ -90,9 +98,18 @@ def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
     print("Elegant simulation completed.")
 
     usedline = read_runtime_state(jsonpath)["usedline"]
+    publication = {}
+    def publish(function, *args, **kwargs):
+        try:
+            return bool(function(*args, **kwargs))
+        except Exception as exc:
+            print(f"Diagnostic publication failed: {exc}", file=sys.stderr)
+            return False
+
     bpm_count = len(publish_plan.bpm_specs)
     if bpm_count:
-        if publisher.publish_bpms(publish_plan, elegant_dir / "one.bpmcen"):
+        publication["bpm"] = publish(publisher.publish_bpms, publish_plan, elegant_dir / "one.bpmcen")
+        if publication["bpm"]:
             print(f"Published BPM positions ({_format_device_count(bpm_count)}).")
         else:
             print(
@@ -102,12 +119,13 @@ def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
 
     image_count = len(publish_plan.watch_image_specs)
     if image_count:
-        if publisher.publish_watch_images(
+        publication["screens"] = publish(publisher.publish_watch_images,
             publish_plan,
             lattice=parser.lattice,
             usedline=usedline,
             elegant_dir=elegant_dir,
-        ):
+        )
+        if publication["screens"]:
             print(f"Published screen images ({_format_device_count(image_count)}).")
         else:
             print(
@@ -117,12 +135,13 @@ def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
 
     scalar_count = len(publish_plan.watch_scalar_specs)
     if scalar_count:
-        if publisher.publish_watch_scalars(
+        publication["charge"] = publish(publisher.publish_watch_scalars,
             publish_plan,
             lattice=parser.lattice,
             usedline=usedline,
             elegant_dir=elegant_dir,
-        ):
+        )
+        if publication["charge"]:
             print(f"Published ICT bunch charge ({_format_device_count(scalar_count)}).")
         else:
             print(
@@ -130,6 +149,7 @@ def _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath):
                 f"({_format_device_count(scalar_count)})."
             )
 
+    return publication
 
 def main():
     signal.signal(signal.SIGTERM, _handle_shutdown_signal)
@@ -180,28 +200,49 @@ def main():
         )
         if diagnostics_changed:
             print("Synchronized scalar diagnostic WATCH elements into VM runtime state.")
-    last_modified = jsonpath.stat().st_mtime
-
-    try:
-        _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath)
-    except Exception as exc:
-        print(f"failed to start VM runtime: {exc}", file=sys.stderr)
-        return 1
-    print("VM ready; waiting for lattice changes...")
-
+    session = os.environ.get("HALF_VM_SESSION") or uuid.uuid4().hex
+    directory = observation_dir(jsonpath)
+    status = dict(session=session, pid=os.getpid(), calculation=0, phase="Starting",
+                  result=None, error=None, publication={})
+    last_version = None
+    save_observation(directory / "status.json", status)
     while not _stop_requested:
-        time.sleep(JSON_POLL_INTERVAL_S)
-        current_modified = jsonpath.stat().st_mtime
-        if current_modified == last_modified:
-            continue
-
-        last_modified = current_modified
-        print("\njson changed, refreshing VM ...")
         try:
-            _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, jsonpath)
-            print("VM ready; waiting for lattice changes...")
+            state = read_runtime_state(jsonpath)
+            version = input_version(state)
+            if version == last_version:
+                time.sleep(JSON_POLL_INTERVAL_S)
+                continue
+            last_version = version
+            status.update(calculation=status["calculation"] + 1, phase="Calculating",
+                          input_version=version, error=None, publication={})
+            save_observation(directory / "status.json", status)
+            started = time.monotonic()
+            output_start = time.time()
+            # The live JSON remains the only input watched by this loop.
+            # Enable statistical output only in the frozen simulation input.
+            original_input = copy.deepcopy(state)
+            state["control"]["run_setup"]["sigma"] = "%s.sig"
+            frozen = directory / "input.json"
+            save_observation(frozen, state)
+            parser.lattice = state["lattice"]
+            publication = _update_vm_outputs(parser, publisher, publish_plan, elegant_dir, frozen)
+            result = collect_results(state, elegant_dir, newer_than=output_start)
+            result["input_state"] = original_input
+            result.update(session=session, calculation=status["calculation"], input_version=version)
+            # Atomic replacement keeps readers isolated from Elegant's output writes.
+            save_observation(directory / "result.json", result)
+            status.update(phase="Ready", publication=publication, result="result.json",
+                          result_version=version, completed_at=datetime.now(timezone.utc).isoformat(),
+                          elapsed=time.monotonic() - started)
+            print("VM ready; waiting for lattice changes...", flush=True)
         except Exception as exc:
-            print(f"failed to refresh VM after json change: {exc}")
+            status.update(phase="Failed", error=str(exc))
+            print(f"VM calculation failed: {exc}", file=sys.stderr, flush=True)
+            time.sleep(JSON_POLL_INTERVAL_S)
+        save_observation(directory / "status.json", status)
+    status["phase"] = "Stopped"
+    save_observation(directory / "status.json", status)
 
     return 0
 

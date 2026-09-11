@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import sys
 from pathlib import Path
@@ -23,6 +24,13 @@ def ensure_repo_import_path(entry_file: str) -> Path:
     if repo_parent not in sys.path:
         sys.path.insert(0, repo_parent)
 
-    os.environ.setdefault("HALF_LINAC_ROOT", str(repo_root))
-    os.environ.setdefault("halflinac_ROOT", str(repo_root))
+    # Entry points must never import a sibling checkout named half_linac.
+    import_root = str(repo_root / "scripts" / "python_imports")
+    if import_root not in sys.path:
+        sys.path.insert(0, import_root)
+    package = importlib.import_module("half_linac")
+    if Path(next(iter(package.__path__))).resolve() != repo_root:
+        raise RuntimeError("A different HALF checkout is already imported; start a fresh process.")
+    os.environ["HALF_LINAC_ROOT"] = str(repo_root)
+    os.environ["halflinac_ROOT"] = str(repo_root)
     return repo_root

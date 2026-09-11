@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import math
 from pathlib import Path
 
 from scipy.stats import truncnorm
@@ -75,19 +76,29 @@ class errorVM:
 def main(argv=None):
     args = list(sys.argv if argv is None else argv)
     error_ele = errorVM(0, resolve_machine_runtime().vm.runtime_json)
-    print(args)
     try:
-        if args[1] == "gene_err":
-            sta_err_quad_sigma_dxdy = float(args[2])
-            jit_err_quad_sigma_k1 = float(args[3])
+        if len(args) < 2 or args[1] not in {"gene_err", "err_off"}:
+            raise ValueError("Expected gene_err OFFSET_UM JITTER_PPM or err_off")
+        offset, jitter = (float(args[2]), float(args[3])) if args[1] == "gene_err" else (0.0, 0.0)
+        if not all(math.isfinite(value) and value >= 0 for value in (offset, jitter)):
+            raise ValueError("Error RMS values must be finite and nonnegative")
+        def apply(state):
+            control = state["control"].get("error_element")
+            if control is None:
+                raise ValueError("This lattice has no error_element configuration")
+            for element in state["lattice"].values():
+                if element["TYPE"] == "QUAD":
+                    element["DX"] = str(truncnorm.rvs(-3, 3, scale=offset*1e-6)) if offset else "0"
+                    element["DY"] = str(truncnorm.rvs(-3, 3, scale=offset*1e-6)) if offset else "0"
+            control["amplitude"] = str(jitter*1e-6)
+            return True
+        update_runtime_state(error_ele.jsonpath, apply)
+        print(f"Applied error model: offset {offset} um RMS, jitter {jitter} ppm RMS")
+        return 0
+    except Exception as exc:
+        print(f"Error model update failed: {exc}", file=sys.stderr)
+        return 1
 
-            error_ele.gen_static_err(sta_err_quad_sigma_dxdy)
-            error_ele.gen_jitter_err(jit_err_quad_sigma_k1)
-        elif args[1] == "err_off":
-            error_ele.err_off()
-    except Exception:
-        pass
-    return 0
 
 
 if __name__ == "__main__":

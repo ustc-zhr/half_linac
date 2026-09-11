@@ -18,6 +18,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REPO_PARENT = REPO_ROOT.parent
+sys.path.insert(0, str(REPO_ROOT))
+from repo_bootstrap import ensure_repo_import_path
+ensure_repo_import_path(__file__)
 APP_ROOT = REPO_ROOT / "src" / "apps"
 VM_ROOT = REPO_ROOT / "src" / "virtual_machine"
 
@@ -710,7 +713,8 @@ def _run_child(app_name: str) -> None:
             raise AssertionError("HV feedback did not clear trend history for a new session.")
 
     if app_name == "launcher":
-        if window.rf_phase_scan_button.text() != "RF Crest & Gain":
+        # App cards render their title in a child label, not QPushButton.text().
+        if window.rf_phase_scan_button.title_label.text() != "RF Crest & Gain":
             raise AssertionError("Launcher did not expose the updated RF app label.")
         window._apply_runtime_selection("irfel", "real")
         switched_log = window.textEdit.toPlainText()
