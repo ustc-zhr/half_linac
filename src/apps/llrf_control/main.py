@@ -549,15 +549,25 @@ class LlrfControlWindow(QMainWindow):
         self._update_group_buttons()
         self._refresh_all_quantities()
 
+    def _snapshot_directory(self) -> Path:
+        directory = Path(__file__).resolve().parent / "runtime" / "snapshots"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
     def _save_snapshot(self) -> None:
         if self.queue.busy or self._worker is not None or self._snapshot_busy():
             return
         self._snapshot_dialog = True
         self._snapshot_lock()
         try:
+            try:
+                directory = self._snapshot_directory()
+            except OSError as exc:
+                QMessageBox.warning(self, "LLRF Snapshot Directory", str(exc))
+                return
             path, _ = QFileDialog.getSaveFileName(
                 self, "Save all LLRF AO parameters",
-                datetime.now().strftime("llrf_settings_%Y%m%d_%H%M%S.json"),
+                str(directory / datetime.now().strftime("llrf_settings_%Y%m%d_%H%M%S.json")),
                 "JSON files (*.json)",
             )
             if path:
@@ -574,8 +584,13 @@ class LlrfControlWindow(QMainWindow):
         self._snapshot_dialog = True
         self._snapshot_lock()
         try:
+            try:
+                directory = self._snapshot_directory()
+            except OSError as exc:
+                QMessageBox.warning(self, "LLRF Snapshot Directory", str(exc))
+                return
             path, _ = QFileDialog.getOpenFileName(
-                self, "Restore all LLRF AO parameters", "", "JSON files (*.json)"
+                self, "Restore all LLRF AO parameters", str(directory), "JSON files (*.json)"
             )
             if not path:
                 return

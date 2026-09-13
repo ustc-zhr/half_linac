@@ -45,6 +45,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QMenu,
     QProgressBar,
     QPushButton,
     QSpinBox,
@@ -103,9 +104,11 @@ from half_linac.src.apps.emit_measure.adaptive_scan import (
     quality_recovery_values,
     seed_values,
     validate_adaptive_scan,
+    restore_scan_quality,
 )
 from half_linac.src.apps.emit_measure.profile_runtime import effective_k1_scan_limit
 from half_linac.src.apps.emit_measure.multi_screen_workspace import MultiScreenWorkspace
+from half_linac.src.apps.emit_measure.matching_workspace import MatchingWorkspace
 
 nest_dict    = lambda: defaultdict(nest_dict)
 
@@ -919,8 +922,11 @@ class myWindow(QWidget,Ui_Form):
         self._last_scan_strategy = "grid"
         self._grid_steps_text = self.lineEdit_9.text()
         self._adaptive_max_points_text = None
-        self.use_latest_fit_button = QPushButton("Use Latest Fit", self)
-        self.use_multi_screen_result_button = QPushButton("Use Multi-Screen Result", self)
+        self.use_result_button = QPushButton("Use Result", self)
+        self.use_result_menu = QMenu(self.use_result_button)
+        self.use_quad_scan_result_action = self.use_result_menu.addAction("Quad-Scan Result")
+        self.use_multi_screen_result_action = self.use_result_menu.addAction("Multi-Screen Result")
+        self.use_result_button.setMenu(self.use_result_menu)
         self.twiss_initial_title = QLabel("Initial Twiss at From", self)
         self.twiss_result_title = QLabel("Computed Twiss at To", self)
         self.twiss_line_label = QLabel("Line", self)
@@ -991,8 +997,8 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_3.clicked.connect(self.clearPlot)
         self.pushButton_4.clicked.connect(self.start_twissCalc)
         self.pushButton_5.clicked.connect(self.stopScan)
-        self.use_latest_fit_button.clicked.connect(self._use_latest_fit_for_twiss)
-        self.use_multi_screen_result_button.clicked.connect(
+        self.use_quad_scan_result_action.triggered.connect(self._use_latest_fit_for_twiss)
+        self.use_multi_screen_result_action.triggered.connect(
             self._use_multi_screen_result_for_twiss
         )
         self.scan_strategy_combo.currentIndexChanged.connect(
@@ -1059,7 +1065,7 @@ class myWindow(QWidget,Ui_Form):
         self._arrange_main_tabs()
 
     def _attach_tab_roots(self):
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.X_Plane), "Scan")
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.X_Plane), "Quad-Scan")
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), "Analysis")
         if self.X_Plane.layout() is self.gridLayout:
             self.gridLayout.setContentsMargins(0, 0, 0, 0)
@@ -1091,6 +1097,8 @@ class myWindow(QWidget,Ui_Form):
             multi_screen_tab_index,
             "Read-only multi-screen beam-matrix reconstruction.",
         )
+        self.matching_workspace = MatchingWorkspace(self.app_context, parent=self)
+        self.tabWidget.addTab(self.matching_workspace, "Matching")
 
     def _handle_multi_screen_status(self, state, message):
         if not hasattr(self, "status_panel"):
@@ -1525,7 +1533,6 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_3.setText("Clear Results")
         self.pushButton_4.setText("Calculate Twiss")
         self.pushButton_5.setText("Stop")
-        self.use_latest_fit_button.setText("Use Latest Fit")
         self.label_32.setText("Settle time (s)")
         self.label_22.setText("Measurement energy (MeV)")
         self.label_4.setText("From")
@@ -1547,8 +1554,7 @@ class myWindow(QWidget,Ui_Form):
             self.pushButton_3,
             self.pushButton_4,
             self.pushButton_5,
-            self.use_latest_fit_button,
-            self.use_multi_screen_result_button,
+            self.use_result_button,
         ):
             button.setProperty("compact", True)
 
@@ -1627,10 +1633,11 @@ class myWindow(QWidget,Ui_Form):
         self.twiss_tab.setToolTip(TWISS_TRANSPORT_TOOLTIP)
         self.pushButton_4.setToolTip(self._twiss_transport_tooltip())
         self.pushButton_5.setToolTip("Stop the running scan and restore the quadrupole setting.")
-        self.use_latest_fit_button.setToolTip(
+        self.use_result_button.setToolTip("Load initial Twiss values from a measurement result.")
+        self.use_quad_scan_result_action.setToolTip(
             "Copy beta, alpha and gamma from the latest valid emittance fit for the selected Twiss plane."
         )
-        self.use_multi_screen_result_button.setToolTip(
+        self.use_multi_screen_result_action.setToolTip(
             "Copy beta, alpha and gamma from the latest valid Multi-Screen reconstruction."
         )
         self.preview_fit_button.setToolTip("Read the selected PRF image PV and update the local beam-size fit.")
@@ -1808,7 +1815,8 @@ class myWindow(QWidget,Ui_Form):
         self.scan_points_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.scan_points_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.scan_points_table.setAlternatingRowColors(True)
-        self.scan_points_table.setMaximumHeight(170)
+        self.scan_points_table.setMinimumHeight(260)
+        self.scan_points_table.setMaximumHeight(300)
         self.scan_points_table.verticalHeader().setVisible(False)
         header = self.scan_points_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -1927,14 +1935,11 @@ class myWindow(QWidget,Ui_Form):
         footer.setSpacing(8)
         self.radioButton.setParent(self.widget_13)
         self.radioButton_2.setParent(self.widget_13)
-        self.use_latest_fit_button.setParent(self.widget_13)
-        self.use_multi_screen_result_button.setParent(self.widget_13)
+        self.use_result_button.setParent(self.widget_13)
         self.pushButton_4.setParent(self.widget_13)
         footer.addStretch(1)
-        self.use_latest_fit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        footer.addWidget(self.use_latest_fit_button)
-        self.use_multi_screen_result_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        footer.addWidget(self.use_multi_screen_result_button)
+        self.use_result_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        footer.addWidget(self.use_result_button)
         self.pushButton_4.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         footer.addWidget(self.pushButton_4)
         layout.addLayout(footer)
@@ -1976,6 +1981,10 @@ class myWindow(QWidget,Ui_Form):
             self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
         self._update_theme_toggle_button()
         self._style_all_plots()
+        if hasattr(self, "matching_workspace"):
+            self.matching_workspace.apply_theme(palette)
+        if hasattr(self, "multi_screen_workspace"):
+            self.multi_screen_workspace._draw_samples()
         self._refresh_emit_background_preview()
 
     def _update_theme_toggle_button(self):
@@ -5439,6 +5448,10 @@ class myWindow(QWidget,Ui_Form):
         self._refresh_status()
 
     def closeEvent(self, event):
+        if hasattr(self, "matching_workspace") and not self.matching_workspace.shutdown():
+            event.ignore()
+            QTimer.singleShot(250, self.close)
+            return
         self.beam_image_timer.stop()
         if hasattr(self, "multi_screen_workspace"):
             self.multi_screen_workspace.stop()
@@ -6012,24 +6025,7 @@ class scanThread(QThread):
         if not isinstance(entries, list):
             raise RuntimeError("Adaptive Quality scan metadata has no point_quality records.")
 
-        quality_by_k1 = defaultdict(lambda: {"x": False, "y": False})
-        for entry in entries:
-            if not isinstance(entry, Mapping):
-                continue
-            try:
-                key = round(float(entry["k1"]), 12)
-            except (KeyError, TypeError, ValueError):
-                continue
-            for plane in ("x", "y"):
-                quality = entry.get(plane)
-                if isinstance(quality, Mapping) and bool(quality.get("usable")):
-                    quality_by_k1[key][plane] = True
-        self.x_quality_usable = [
-            quality_by_k1[round(float(k1), 12)]["x"] for k1 in self.k1l
-        ]
-        self.y_quality_usable = [
-            quality_by_k1[round(float(k1), 12)]["y"] for k1 in self.k1l
-        ]
+        self.x_quality_usable, self.y_quality_usable = restore_scan_quality(self.k1l, entries)
 
     def run(self):
         tmp = {"method": None}
@@ -6256,7 +6252,7 @@ class scanThread(QThread):
         )
 
         self.scan_latest_dir.mkdir(parents=True, exist_ok=True)
-        np.savetxt(self.scan_results_path, data, fmt="%.6e")
+        np.savetxt(self.scan_results_path, data, fmt="%.17e")
         metadata_text = json.dumps(metadata, indent=2, sort_keys=True)
         self.scan_results_meta_path.write_text(metadata_text, encoding="utf-8")
 
@@ -6265,7 +6261,7 @@ class scanThread(QThread):
         archive_dir.mkdir(parents=True, exist_ok=True)
         archive_path = archive_dir / SCAN_RESULTS_FILENAME
         archive_meta_path = archive_dir / METADATA_FILENAME
-        np.savetxt(archive_path, data, fmt="%.6e")
+        np.savetxt(archive_path, data, fmt="%.17e")
         archive_meta_path.write_text(metadata_text, encoding="utf-8")
         self.scan_metadata_paths = [
             self.scan_results_meta_path,
@@ -6518,7 +6514,12 @@ class scanThread(QThread):
         outside_groups.sort(key=lambda item: (item[0], item[1]))
 
         expanded = False
-        while not scanThread._fit_design_is_usable(design, selected):
+        def usable_selection():
+            unique = len(set(float(k1l[index]) for index in selected))
+            minimum = MIN_FINAL_POINTS_PER_PLANE if self.scan_strategy == "adaptive_quality" else LEAST_SQUARES_REQUIRED_RANK
+            return unique >= minimum and scanThread._fit_design_is_usable(design, selected)
+
+        while not usable_selection():
             if not outside_groups:
                 break
             _distance, _value, group = outside_groups.pop(0)
@@ -6526,11 +6527,12 @@ class scanThread(QThread):
             expanded = True
 
         indices = np.asarray(sorted(selected), dtype=int)
-        usable = scanThread._fit_design_is_usable(design, selected)
+        usable = usable_selection()
         if usable:
             status = "expanded_window" if expanded else "window"
         else:
             status = "insufficient_window"
+            indices = np.asarray([], dtype=int)
         return indices, scanThread._fit_selection_payload(
             k1l,
             indices,

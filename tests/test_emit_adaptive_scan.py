@@ -18,11 +18,24 @@ from half_linac.src.apps.emit_measure.adaptive_scan import (
     quality_recovery_values,
     quality_supplement_values,
     seed_values,
+    restore_scan_quality,
     validate_adaptive_scan,
 )
 
 
 class AdaptiveScanPlanTests(unittest.TestCase):
+    def test_quality_survives_legacy_scan_precision(self):
+        k1 = 1.20539369123456
+        entries = [{"k1": k1, "x": {"usable": True}, "y": {"usable": False}}]
+        self.assertEqual(restore_scan_quality([float(format(k1, ".6e")), k1], entries),
+                         ([True, True], [False, False]))
+        self.assertEqual(restore_scan_quality([k1 + 1e-5], entries), ([False], [False]))
+
+    def test_quality_exact_match_precedes_legacy_collision(self):
+        entries = [{"k1": 1.23456781, "x": {"usable": True}},
+                   {"k1": 1.23456782, "x": {"usable": False}}]
+        self.assertEqual(restore_scan_quality([1.23456782], entries), ([False], [False]))
+
     def setUp(self):
         self.config = AdaptiveScanConfig(
             k1_min=-5.0,

@@ -19,6 +19,34 @@ MIN_FINAL_POINTS_PER_PLANE = 5
 MAX_QUALITY_SUPPLEMENT_POINTS = 4
 
 
+def restore_scan_quality(k1_values, entries):
+    """Recover per-plane quality from both full-precision and legacy %.6e files.
+
+    The legacy serialization key is deliberately narrower than a scan reuse
+    tolerance: nearby but distinguishable scan points must not inherit quality.
+    """
+    exact, legacy = {}, {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            k1 = float(entry["k1"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not math.isfinite(k1):
+            continue
+        for index, key in ((exact, k1), (legacy, format(k1, ".6e"))):
+            quality = index.setdefault(key, {"x": False, "y": False})
+            for plane in ("x", "y"):
+                value = entry.get(plane)
+                if isinstance(value, dict) and value.get("usable"):
+                    quality[plane] = True
+    restored = [exact.get(float(k1), legacy.get(format(float(k1), ".6e"), {}))
+                for k1 in k1_values]
+    return ([bool(q.get("x", False)) for q in restored],
+            [bool(q.get("y", False)) for q in restored])
+
+
 @dataclass(frozen=True)
 class AdaptiveScanConfig:
     k1_min: float

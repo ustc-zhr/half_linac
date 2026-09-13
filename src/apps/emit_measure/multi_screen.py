@@ -54,21 +54,28 @@ class MultiScreenOptics:
 
 @dataclass(frozen=True)
 class BeamSizeSample:
-    """One accepted beam-size observation, expressed in SI units."""
+    """One recorded observation; disabled samples never enter reconstruction."""
 
     screen: str
-    sigma_x_m: float
-    sigma_y_m: float
+    sigma_x_m: float | None
+    sigma_y_m: float | None
     timestamp_s: float | None = None
     source: str = "unknown"
     quality: Mapping[str, object] | None = None
+    enabled: bool = True
 
     def __post_init__(self) -> None:
         screen = self.screen.strip()
         if not screen:
             raise ValueError("screen must not be empty")
         object.__setattr__(self, "screen", screen)
+        if not isinstance(self.enabled, bool):
+            raise ValueError("enabled must be a boolean")
         for name in ("sigma_x_m", "sigma_y_m"):
+            if getattr(self, name) is None:
+                if not self.enabled:
+                    continue
+                raise ValueError(f"{name} is required for an enabled sample")
             value = float(getattr(self, name))
             if not math.isfinite(value) or value <= 0.0:
                 raise ValueError(f"{name} must be finite and positive")
@@ -203,7 +210,8 @@ class MultiScreenAcquisition:
     def sample_counts(self) -> Mapping[str, int]:
         counts = {screen: 0 for screen in self.observation_elements}
         for sample in self.samples:
-            counts[sample.screen] += 1
+            if sample.enabled:
+                counts[sample.screen] += 1
         return counts
 
     @property
@@ -227,6 +235,11 @@ class MultiScreenAcquisition:
             raise ValueError(f"screen {sample.screen!r} is not in this acquisition")
         return replace(self, samples=(*self.samples, sample))
 
+    def set_sample_enabled(self, index: int, enabled: bool) -> "MultiScreenAcquisition":
+        samples = list(self.samples)
+        samples[index] = replace(samples[index], enabled=enabled)
+        return replace(self, samples=tuple(samples))
+
     def aggregate(self) -> MultiScreenBeamSizeData:
         if not self.complete:
             counts = self.sample_counts
@@ -240,7 +253,7 @@ class MultiScreenAcquisition:
         estimates = []
         for screen in self.observation_elements:
             screen_samples = tuple(
-                sample for sample in self.samples if sample.screen == screen
+                sample for sample in self.samples if sample.screen == screen and sample.enabled
             )
             x_values = np.asarray(
                 [sample.sigma_x_m for sample in screen_samples],
@@ -350,6 +363,7 @@ def measurement_archive_payload(
                 "timestamp_s": sample.timestamp_s,
                 "source": sample.source,
                 "quality": sample.quality,
+                "enabled": sample.enabled,
             }
             for sample in session.acquisition.samples
         ],
@@ -430,6 +444,7 @@ def load_multi_screen_archive(path: Path | str) -> MultiScreenMeasurementSession
                 item.get("timestamp_s"),
                 item.get("source", "unknown"),
                 item.get("quality"),
+                enabled=item.get("enabled", True),
             )
         )
     optics = MultiScreenOptics(

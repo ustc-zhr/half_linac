@@ -521,6 +521,9 @@ class ElegantModelBackend:
             raise MachineProfileError("Full-line Twiss requires measurement-point kinetic energy.")
         kinetic = float(self.energy_mev)
         state = self._new_parser().build_runtime_state()
+        _apply_lattice_overrides(state["lattice"], _normalize_lattice_overrides(
+            lattice_overrides, element_overrides=None, k1_element=None, k1=None,
+        ))
         usedline = state["usedline"]
         start, source = self._usedline_index_pair_from_usedline(usedline, line_start, source_element)
         for element_name in usedline[start:source]:
@@ -623,6 +626,8 @@ class ElegantModelBackend:
             scanline = usedline[id1 : id2 + 1]
         elif seq == "ent2ent":
             scanline = usedline[id1:id2]
+        elif seq == "exit2ent":
+            scanline = usedline[id1 + 1:id2]
         else:
             raise ValueError(f"Unsupported transfer sequence: {seq}")
         if not scanline:

@@ -44,6 +44,7 @@ src/apps/emit_measure/scanResults.meta.json
 src/apps/emit_measure/runtime/
 src/apps/hv_feedback/runtime/
 src/apps/machine_snapshot/runtime/
+src/apps/llrf_control/runtime/
 runtime/model_backend/
 
 # Runtime artifacts

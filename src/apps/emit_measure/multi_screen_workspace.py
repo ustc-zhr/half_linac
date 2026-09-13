@@ -7,6 +7,7 @@ Manual samples make the workflow useful for archived/offline VM validation too.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -31,6 +32,9 @@ from PyQt5.QtWidgets import (
     QListWidget,
     QPushButton,
     QSpinBox,
+    QTabWidget,
+    QSplitter,
+    QAbstractItemView,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -105,6 +109,7 @@ class MultiScreenWorkspace(QWidget):
         self.image_reader = image_reader
         self.session: MultiScreenMeasurementSession | None = None
         self.reconstruction = None
+        self._archive_review = False
         self._last_frame = None
         self._last_fit = None
         self._last_frame_extent = None
@@ -199,19 +204,16 @@ class MultiScreenWorkspace(QWidget):
         self.auto_refresh_checkbox = QCheckBox("Auto refresh", self)
         self.auto_refresh_checkbox.setChecked(True)
         self.auto_refresh_checkbox.toggled.connect(self._update_auto_refresh)
-        self.manual_button = QPushButton("Add Manual Sample", self)
         self.reconstruct_button = QPushButton("Reconstruct", self)
         self.save_button = QPushButton("Save As...", self)
         self.load_button = QPushButton("Load Archive", self)
         self.prepare_button.setText("Prepare")
         self.new_button.setText("Clear")
         self.acquire_button.setText("Acquire Sample")
-        self.manual_button.setText("Manual Sample")
         self.reconstruct_button.setText("Reconstruct")
         self.prepare_button.setToolTip("Prepare the optics model and start a new measurement session.")
         self.new_button.setToolTip("Clear the current samples and reconstruction result.")
         self.acquire_button.setToolTip("Read the selected screen image, fit it locally, and accept the sample.")
-        self.manual_button.setToolTip("Enter beam sizes manually and add a sample.")
         self.reconstruct_button.setToolTip("Reconstruct the transverse beam matrix from accepted samples.")
         self.prepare_button.setProperty("role", "primary")
         self.acquire_button.setProperty("role", "primary")
@@ -219,7 +221,6 @@ class MultiScreenWorkspace(QWidget):
             self.prepare_button,
             self.new_button,
             self.acquire_button,
-            self.manual_button,
             self.reconstruct_button,
             self.save_button,
             self.load_button,
@@ -228,7 +229,6 @@ class MultiScreenWorkspace(QWidget):
         for button in (
             self.prepare_button,
             self.acquire_button,
-            self.manual_button,
             self.reconstruct_button,
             self.new_button,
         ):
@@ -238,7 +238,6 @@ class MultiScreenWorkspace(QWidget):
         self.new_button.clicked.connect(self.new_measurement)
         self.acquire_button.clicked.connect(self.acquire_sample)
         self.preview_button.clicked.connect(self.preview_sample)
-        self.manual_button.clicked.connect(self.add_manual_sample)
         self.reconstruct_button.clicked.connect(self.reconstruct)
         self.save_button.clicked.connect(self.save_archive)
         self.load_button.clicked.connect(self.load_archive)
@@ -362,31 +361,62 @@ class MultiScreenWorkspace(QWidget):
             image_details.addWidget(value_label, 1, column)
             image_details.setColumnStretch(column, 1)
         image_layout.addLayout(image_details)
-        right_column.addWidget(image_box, 1)
+        self.review_tabs = QTabWidget(self)
+        self.review_tabs.addTab(image_box, "Image")
+        right_column.addWidget(self.review_tabs, 1)
 
         samples_card = QFrame(self)
         samples_card.setObjectName("plotCard")
         samples_layout = QVBoxLayout(samples_card)
         samples_layout.setContentsMargins(10, 10, 10, 10)
         samples_layout.setSpacing(8)
-        samples_title = QLabel("Accepted Samples", samples_card)
-        samples_title.setObjectName("panelTitle")
-        samples_layout.addWidget(samples_title)
-        self.samples_table = QTableWidget(0, 8, samples_card)
+        self.samples_summary_label = QLabel("No samples", samples_card)
+        self.samples_summary_label.setProperty("role", "field")
+        samples_layout.addWidget(self.samples_summary_label)
+        samples_splitter = QSplitter(Qt.Vertical, samples_card)
+        self.samples_plot = MplWidget(samples_splitter)
+        self.samples_plot.fig.clear()
+        self.sample_axes = self.samples_plot.fig.subplots(2, 1, sharex=True)
+        self.samples_plot.setMinimumHeight(220)
+        self.samples_plot.canvas.mpl_connect("pick_event", self._sample_picked)
+        self.samples_table = QTableWidget(0, 6, samples_splitter)
         self.samples_table.setHorizontalHeaderLabels(
-            ("Screen", "N", "σx (mm)", "σy (mm)", "σx SE", "σy SE", "Source", "Quality")
+            ("Use", "Screen", "#", "σx (mm)", "σy (mm)", "Quality")
         )
         self.samples_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.samples_table.setFixedHeight(120)
-        self.samples_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        samples_layout.addWidget(self.samples_table)
+        self.samples_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.samples_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.samples_table.setAlternatingRowColors(True)
+        self.samples_table.verticalHeader().hide()
+        self.samples_table.setMinimumHeight(160)
+        header = self.samples_table.horizontalHeader()
+        for column in range(5):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.Stretch)
+        self.samples_table.itemChanged.connect(self._sample_use_changed)
+        self.samples_table.itemSelectionChanged.connect(self._draw_samples)
+        samples_splitter.addWidget(self.samples_plot)
+        samples_splitter.addWidget(self.samples_table)
+        samples_splitter.setStretchFactor(0, 3)
+        samples_splitter.setStretchFactor(1, 2)
+        samples_splitter.setSizes([300, 220])
+        samples_layout.addWidget(samples_splitter, 1)
         archive_row = QHBoxLayout()
         archive_row.setSpacing(6)
+        self.exclude_samples_button = QPushButton("Exclude Selected", samples_card)
+        self.restore_samples_button = QPushButton("Use All", samples_card)
+        self.exclude_samples_button.clicked.connect(self._exclude_selected_samples)
+        self.restore_samples_button.clicked.connect(self._restore_samples)
+        self.restore_samples_button.setToolTip("Enable all samples with fitted sizes, including quality-rejected samples.")
+        for button in (self.exclude_samples_button, self.restore_samples_button):
+            button.setProperty("compact", True)
+            archive_row.addWidget(button)
         archive_row.addStretch(1)
         archive_row.addWidget(self.save_button)
         archive_row.addWidget(self.load_button)
         samples_layout.addLayout(archive_row)
-        left_column.addWidget(samples_card)
+        self.review_tabs.addTab(samples_card, "Samples")
+        self.review_tabs.currentChanged.connect(lambda _index: self._draw_samples())
 
         results_box = QFrame(self)
         results_box.setObjectName("resultCard")
@@ -399,6 +429,7 @@ class MultiScreenWorkspace(QWidget):
         results_layout = QGridLayout()
         results_layout.setVerticalSpacing(8)
         self.status_label = QLabel("Configuring", results_box)
+        self.status_label.setWordWrap(True)
         self.status_label.setObjectName("multiScreenStatus")
         self.diagnostic_label = QLabel("Optics: no model prepared", results_box)
         self.diagnostic_label.setWordWrap(True)
@@ -446,13 +477,28 @@ class MultiScreenWorkspace(QWidget):
         self._update_button_state()
         self._clear_image_display()
 
+    @staticmethod
+    def _screen_id(item):
+        return item.data(Qt.UserRole) or item.text()
+
+    def _refresh_screen_counts(self):
+        counts = self.session.acquisition.sample_counts if self.session else {}
+        for row in range(self.screen_list.count()):
+            item = self.screen_list.item(row)
+            screen = self._screen_id(item)
+            item.setData(Qt.UserRole, screen)
+            item.setText(
+                f"{screen} · {counts.get(screen, 0)}/{self.session.acquisition.target_samples_per_screen}"
+                if self.session else screen
+            )
+
     def _screen_changed(self, *_args) -> None:
         self._update_button_state()
         item = self.screen_list.currentItem()
         if item is None:
             self._clear_image_display()
             return
-        screen = item.text()
+        screen = self._screen_id(item)
         try:
             self._ensure_roi_control(screen)
             self._roi_changed()
@@ -499,7 +545,7 @@ class MultiScreenWorkspace(QWidget):
         self.new_measurement()
 
     def _refresh_candidates(self) -> None:
-        selected = {self.screen_list.item(index).text() for index in range(self.screen_list.count())}
+        selected = {self._screen_id(self.screen_list.item(index)) for index in range(self.screen_list.count())}
         self.screen_candidate_combo.clear()
         try:
             candidates = [element.id for element in self.app_context.profile.elements if element.kind == "flag"]
@@ -509,7 +555,7 @@ class MultiScreenWorkspace(QWidget):
 
     def _add_screen(self) -> None:
         screen = self.screen_candidate_combo.currentText().strip()
-        if screen and screen not in [self.screen_list.item(i).text() for i in range(self.screen_list.count())]:
+        if screen and screen not in [self._screen_id(self.screen_list.item(i)) for i in range(self.screen_list.count())]:
             self.screen_list.addItem(screen)
             self.new_measurement()
             self._refresh_candidates()
@@ -526,6 +572,8 @@ class MultiScreenWorkspace(QWidget):
 
     def _set_state(self, state: str, message: str = "") -> None:
         self.state = state
+        if state == "Archived":
+            self._archive_review = True
         self.status_label.setText(f"{state}: {message}" if message else state)
         self.status_changed.emit(state, message)
         self._update_button_state()
@@ -533,30 +581,30 @@ class MultiScreenWorkspace(QWidget):
     def _configuration_changed(self, *_args) -> None:
         if self._configuration_guard or self.session is None:
             return
-        if self.state not in {"Ready", "Acquiring", "Fit Ready", "Complete", "Partial"}:
+        if self.state not in {"Ready", "Acquiring", "Fit Ready", "Complete", "Partial", "Archived"}:
             return
         self.new_measurement()
         self._set_state("Configuring", "Configuration changed; prepare a new measurement")
 
     def _update_button_state(self, *_args) -> None:
         prepared = self.session is not None and self.state not in {"Invalid", "Configuring"}
-        writable = prepared and self.state != "Archived"
+        writable = prepared and not self._archive_review
         self.acquire_button.setEnabled(writable and not self.session.acquisition.complete)
         self.preview_button.setEnabled(writable)
-        self.manual_button.setEnabled(writable and not self.session.acquisition.complete)
         self.reconstruct_button.setEnabled(
-            writable and self.session.acquisition.complete
+            self.session is not None and self.session.acquisition.complete
         )
         self.save_button.setEnabled(self.session is not None)
-        self.add_screen_button.setEnabled(self.state != "Archived")
+        self.add_screen_button.setEnabled(not self._archive_review)
         self.remove_screen_button.setEnabled(
-            self.state != "Archived" and self.screen_list.count() > 3
+            not self._archive_review and self.screen_list.count() > 3
         )
         self._update_auto_refresh()
 
     def _update_auto_refresh(self, *_args) -> None:
         active = (
-            self.auto_refresh_checkbox.isChecked()
+            not self._archive_review
+            and self.auto_refresh_checkbox.isChecked()
             and self.session is not None
             and self.state in {"Ready", "Acquiring", "Fit Ready", "Complete", "Partial"}
         )
@@ -566,14 +614,15 @@ class MultiScreenWorkspace(QWidget):
             self._auto_refresh_timer.stop()
 
     def _auto_refresh_current_image(self) -> None:
-        if self.session is None or self.state == "Archived":
+        if self.session is None or self._archive_review:
             return
         self.preview_sample(auto=True)
 
     def new_measurement(self) -> None:
+        self._archive_review = False
         self.session = None
         self.reconstruction = None
-        self.samples_table.setRowCount(0)
+        self._refresh_samples_table()
         self.diagnostic_label.setText("Optics: no model prepared")
         self.results_label.setText("No reconstruction")
         self._reset_result_metrics()
@@ -583,7 +632,8 @@ class MultiScreenWorkspace(QWidget):
         self._set_state("Configuring")
 
     def prepare_measurement(self) -> None:
-        screens = tuple(self.screen_list.item(index).text() for index in range(self.screen_list.count()))
+        self.new_measurement()
+        screens = tuple(self._screen_id(self.screen_list.item(index)) for index in range(self.screen_list.count()))
         if len(screens) < 3 or len(set(screens)) != len(screens):
             self._set_state("Invalid", "Select at least three unique screens")
             return
@@ -618,6 +668,7 @@ class MultiScreenWorkspace(QWidget):
                 self._set_state("Invalid", observability.message)
             else:
                 self._set_state("Ready", observability.message)
+            self._refresh_samples_table()
             self._update_selected_optics()
         except Exception as exc:
             self.session = None
@@ -626,7 +677,7 @@ class MultiScreenWorkspace(QWidget):
     def add_manual_sample(self) -> None:
         if self.session is None:
             return
-        screen = self.screen_list.currentItem().text() if self.screen_list.currentItem() else self.session.acquisition.next_screen
+        screen = self._screen_id(self.screen_list.currentItem()) if self.screen_list.currentItem() else self.session.acquisition.next_screen
         if screen is None:
             return
         sigma_x, accepted_x = QInputDialog.getDouble(self, "Manual Sample", f"{screen} σx (mm)", 1.0, 0.000001, 1e6, 6)
@@ -638,36 +689,40 @@ class MultiScreenWorkspace(QWidget):
         self._accept_sample(screen, sigma_x / 1000.0, sigma_y / 1000.0, "manual")
 
     def acquire_sample(self) -> None:
-        if self.session is None:
+        if self.session is None or self._archive_review:
             return
         item = self.screen_list.currentItem()
-        screen = item.text() if item is not None else self.session.acquisition.next_screen
+        screen = self._screen_id(item) if item is not None else self.session.acquisition.next_screen
         if screen is None:
+            return
+        if self.session.acquisition.sample_counts[screen] >= self.session.acquisition.target_samples_per_screen:
+            self._set_state("Ready", f"{screen} already has enough active samples; select a screen needing samples")
             return
         try:
             payload = self._read_image_payload(screen)
             fit = payload["fit"]
             self._display_payload(screen, payload)
-            if not fit.valid or fit.sigx_mm is None or fit.sigy_mm is None:
-                raise RuntimeError(f"image fit {fit.status}: {fit.message}")
         except Exception as exc:
-            self._set_state("Ready", f"{screen}: {exc}; use manual sample if appropriate")
+            self._set_state("Ready", f"{screen}: {exc}")
             return
-        quality = self._fit_quality(payload["fit"], payload.get("pv_sigx"), payload.get("pv_sigy"))
-        if quality.get("x_status") in {"clipped", "underresolved", "poor_fit"} or quality.get("y_status") in {"clipped", "underresolved", "poor_fit"}:
-            self._set_state("Ready", f"{screen}: image quality rejected ({quality.get('x_status')}/{quality.get('y_status')})")
-            return
-        self._accept_sample(
-            screen,
-            fit.sigx_mm / 1000.0,
-            fit.sigy_mm / 1000.0,
-            "image",
-            quality=quality,
+        quality = self._fit_quality(fit, payload.get("pv_sigx"), payload.get("pv_sigy"))
+        rejected = (
+            not fit.valid
+            or any(quality.get(f"{plane}_status") in {"clipped", "underresolved", "poor_fit"} for plane in ("x", "y"))
         )
+        def size_m(value):
+            return float(value) / 1000 if value is not None and np.isfinite(value) and value > 0 else None
+        x, y = size_m(fit.sigx_mm), size_m(fit.sigy_mm)
+        rejected = rejected or x is None or y is None
+        if rejected:
+            quality["rejected"] = True
+        self._accept_sample(screen, x, y, "image", quality=quality, enabled=not rejected)
 
     def preview_sample(self, *, auto: bool = False) -> None:
+        if self._archive_review:
+            return
         item = self.screen_list.currentItem()
-        screen = item.text() if item is not None else None
+        screen = self._screen_id(item) if item is not None else None
         if not screen:
             self._set_state("Ready", "Select a screen to preview")
             return
@@ -973,7 +1028,7 @@ class MultiScreenWorkspace(QWidget):
         item = self.screen_list.currentItem()
         if item is None:
             return
-        screen = item.text()
+        screen = self._screen_id(item)
         if self.roi_dialog is None:
             self._ensure_roi_control(screen)
             self.roi_dialog = QDialog(self)
@@ -1004,7 +1059,7 @@ class MultiScreenWorkspace(QWidget):
         item = self.screen_list.currentItem()
         if item is None:
             return
-        screen = item.text()
+        screen = self._screen_id(item)
         paths = resolve_beam_background_paths(self.app_context, screen)
         geometry = resolve_element_image_geometry(self.app_context, screen, self.app_context.control_backend.name)
         dialog = QDialog(self)
@@ -1120,7 +1175,7 @@ class MultiScreenWorkspace(QWidget):
     def _update_selected_optics(self, screen: str | None = None) -> None:
         if screen is None:
             item = self.screen_list.currentItem()
-            screen = item.text() if item is not None else None
+            screen = self._screen_id(item) if item is not None else None
         if self.session is None or not screen or screen not in self.session.optics.observation_elements:
             self.selected_optics_label.setText("--")
             return
@@ -1147,11 +1202,11 @@ class MultiScreenWorkspace(QWidget):
             "pv_sigy_mm": pv_sigy,
         }
 
-    def _accept_sample(self, screen: str, sigma_x_m: float, sigma_y_m: float, source: str, quality=None) -> None:
+    def _accept_sample(self, screen: str, sigma_x_m: float | None, sigma_y_m: float | None, source: str, quality=None, *, enabled=True) -> None:
         if self.session is None:
             return
         try:
-            if self.session.acquisition.sample_counts.get(screen, 0) >= self.session.acquisition.target_samples_per_screen:
+            if enabled and self.session.acquisition.sample_counts.get(screen, 0) >= self.session.acquisition.target_samples_per_screen:
                 raise ValueError(
                     f"{screen} already has the target {self.session.acquisition.target_samples_per_screen} sample(s)"
                 )
@@ -1163,55 +1218,131 @@ class MultiScreenWorkspace(QWidget):
                     datetime.now(timezone.utc).timestamp(),
                     source,
                     quality=quality,
+                    enabled=enabled,
                 )
             )
-            self._refresh_samples_table()
-            self._set_state("Fit Ready" if self.session.acquisition.complete else "Acquiring", f"{source} sample accepted")
+            self._samples_changed()
+            if not enabled:
+                self._set_state("Acquiring", f"{screen}: rejected sample recorded — {(quality or {}).get('fit_status', '')} "
+                                f"{(quality or {}).get('x_status', '')}/{(quality or {}).get('y_status', '')}")
         except Exception as exc:
             self._set_state("Ready", str(exc))
 
     def _refresh_samples_table(self) -> None:
+        samples = self.session.acquisition.samples if self.session else ()
+        self.samples_table.blockSignals(True)
+        self.samples_table.setRowCount(len(samples))
+        numbers = {}
+        for row, sample in enumerate(samples):
+            numbers[sample.screen] = numbers.get(sample.screen, 0) + 1
+            quality = sample.quality or {}
+            status = "/".join(str(quality.get(f"{plane}_status", "--")) for plane in ("x", "y"))
+            if quality.get("rejected"):
+                status = "Rejected · " + status
+            values = ("", sample.screen, str(numbers[sample.screen]),
+                      "--" if sample.sigma_x_m is None else f"{sample.sigma_x_m * 1000:.6g}",
+                      "--" if sample.sigma_y_m is None else f"{sample.sigma_y_m * 1000:.6g}", status)
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setToolTip("\n".join(f"{key}: {value}" for key, value in quality.items()))
+                if column == 0:
+                    item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                    item.setCheckState(Qt.Checked if sample.enabled else Qt.Unchecked)
+                    if sample.sigma_x_m is None or sample.sigma_y_m is None:
+                        item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
+                        item.setToolTip("No valid fitted sizes; this sample cannot be used.")
+                self.samples_table.setItem(row, column, item)
+        self.samples_table.blockSignals(False)
+        active = sum(sample.enabled for sample in samples)
+        self.samples_summary_label.setText(f"{active} active / {len(samples)} recorded · Gray points are excluded")
+        self._refresh_screen_counts()
+        self._draw_samples()
+
+    def _samples_changed(self):
+        self.reconstruction = None
+        self._reset_result_metrics()
+        self.results_label.setText("Samples changed · Reconstruct to update results")
+        self._refresh_samples_table()
+        acquisition = self.session.acquisition
+        missing = ", ".join(f"{screen} {count}/{acquisition.target_samples_per_screen}"
+                            for screen, count in acquisition.sample_counts.items()
+                            if count < acquisition.target_samples_per_screen)
+        self._set_state("Archived" if self._archive_review else "Fit Ready" if acquisition.complete else "Acquiring",
+                        f"Need samples: {missing}" if missing else "Ready to reconstruct")
+
+    def _sample_use_changed(self, item):
+        if item.column() != 0 or self.session is None:
+            return
+        self.session = replace(self.session, acquisition=self.session.acquisition.set_sample_enabled(
+            item.row(), item.checkState() == Qt.Checked))
+        self._samples_changed()
+
+    def _exclude_selected_samples(self):
         if self.session is None:
             return
-        screens = self.session.acquisition.observation_elements
-        self.samples_table.setRowCount(len(screens))
-        for row, screen in enumerate(screens):
-            samples = [sample for sample in self.session.acquisition.samples if sample.screen == screen]
-            x_values = np.asarray([sample.sigma_x_m for sample in samples], dtype=float)
-            y_values = np.asarray([sample.sigma_y_m for sample in samples], dtype=float)
-            x_error = float(np.std(x_values, ddof=1) / np.sqrt(x_values.size)) if x_values.size > 1 else None
-            y_error = float(np.std(y_values, ddof=1) / np.sqrt(y_values.size)) if y_values.size > 1 else None
-            values = (
-                screen,
-                str(len(samples)),
-                "--" if not samples else f"{float(np.mean(x_values)) * 1000:.6g}",
-                "--" if not samples else f"{float(np.mean(y_values)) * 1000:.6g}",
-                "--" if x_error is None else f"{x_error * 1000:.3g}",
-                "--" if y_error is None else f"{y_error * 1000:.3g}",
-                self._screen_source(screen),
-                self._screen_quality(screen),
-            )
-            for column, value in enumerate(values):
-                self.samples_table.setItem(row, column, QTableWidgetItem(value))
+        acquisition = self.session.acquisition
+        for row in {index.row() for index in self.samples_table.selectionModel().selectedRows()}:
+            acquisition = acquisition.set_sample_enabled(row, False)
+        self.session = replace(self.session, acquisition=acquisition)
+        self._samples_changed()
 
-    def _screen_source(self, screen: str) -> str:
+    def _restore_samples(self):
         if self.session is None:
-            return "--"
-        sources = [sample.source for sample in self.session.acquisition.samples if sample.screen == screen]
-        return sources[-1] if sources else "--"
+            return
+        acquisition = self.session.acquisition
+        for row, sample in enumerate(acquisition.samples):
+            if sample.sigma_x_m is not None and sample.sigma_y_m is not None:
+                acquisition = acquisition.set_sample_enabled(row, True)
+        self.session = replace(self.session, acquisition=acquisition)
+        self._samples_changed()
 
-    def _screen_quality(self, screen: str) -> str:
-        if self.session is None:
-            return "--"
-        samples = [sample for sample in self.session.acquisition.samples if sample.screen == screen]
-        if not samples:
-            return "--"
-        quality = samples[-1].quality or {}
-        x_status = quality.get("x_status")
-        y_status = quality.get("y_status")
-        if x_status and y_status:
-            return str(x_status) if x_status == y_status else f"{x_status}/{y_status}"
-        return str(quality.get("fit_status", "accepted"))
+    def _sample_picked(self, event):
+        rows = getattr(event.artist, "_sample_rows", ())
+        if rows and len(event.ind):
+            row = rows[event.ind[0]]
+            self.samples_table.selectRow(row)
+            self.samples_table.scrollToItem(self.samples_table.item(row, 0))
+
+    def _draw_samples(self):
+        samples = self.session.acquisition.samples if self.session else ()
+        screens = self.session.acquisition.observation_elements if self.session else ()
+        selected = {index.row() for index in self.samples_table.selectionModel().selectedRows()}
+        palette = self.window()._palette() if hasattr(self.window(), "_palette") else {
+            "plot_card_bg": "#121a20", "plot_bg": "#11181e", "plot_text": "#d7e2ea", "plot_spine": "#445764", "plot_grid": "#2a3943"}
+        self.samples_plot.fig.patch.set_facecolor(palette["plot_card_bg"])
+        for axis, field, color, label in zip(self.sample_axes, ("sigma_x_m", "sigma_y_m"),
+                                              ("#40c9bd", "#f2b35d"), ("σx (mm)", "σy (mm)")):
+            axis.clear()
+            axis.set_facecolor(palette["plot_bg"])
+            axis.tick_params(colors=palette["plot_text"], labelsize=9)
+            axis.set_ylabel(label, color=palette["plot_text"])
+            for spine in axis.spines.values():
+                spine.set_color(palette["plot_spine"])
+            axis.grid(alpha=0.5, color=palette["plot_grid"])
+            for screen_index, screen in enumerate(screens):
+                rows = [i for i, sample in enumerate(samples) if sample.screen == screen]
+                offsets = np.linspace(-0.18, 0.18, len(rows)) if len(rows) > 1 else [0]
+                for row, offset in zip(rows, offsets):
+                    sample = samples[row]
+                    value = getattr(sample, field)
+                    if value is None:
+                        continue
+                    artist = axis.scatter([screen_index + offset], [value * 1000],
+                        c=[color if sample.enabled else "#87929b"], marker="o" if sample.enabled else "x",
+                        s=65 if row in selected else 28, picker=6, zorder=3)
+                    artist._sample_rows = [row]
+                    if row in selected:
+                        axis.scatter([screen_index + offset], [value * 1000], s=120,
+                                     facecolors="none", edgecolors=palette["plot_text"], zorder=4)
+                values = [getattr(samples[row], field) * 1000 for row in rows if samples[row].enabled]
+                if values:
+                    error = np.std(values, ddof=1) / np.sqrt(len(values)) if len(values) > 1 else 0
+                    axis.errorbar(screen_index, np.mean(values), yerr=error, fmt="_", markersize=18,
+                                  color=palette["plot_text"], capsize=5, zorder=5)
+            axis.set_xticks(range(len(screens)), screens)
+            axis.set_xlim(-0.5, max(len(screens) - 0.5, 0.5))
+        self.sample_axes[0].set_title("Individual samples · Mean ± SE", color=palette["plot_text"], fontsize=10)
+        self.samples_plot.canvas.draw_idle()
 
     def reconstruct(self) -> None:
         if self.session is None or not self.session.acquisition.complete:
@@ -1231,11 +1362,11 @@ class MultiScreenWorkspace(QWidget):
                 "partial": "Partial",
                 "invalid": "Invalid",
             }[result.status]
-            archive_paths = self._write_runtime_archives()
+            archive_paths = None if self._archive_review else self._write_runtime_archives()
             detail = "reconstruction updated"
             if archive_paths:
                 detail += f"; auto-saved {archive_paths[0].parent.name}"
-            self._set_state(state, detail)
+            self._set_state("Archived" if self._archive_review else state, detail)
         except Exception as exc:
             self._set_state("Invalid", str(exc))
 
@@ -1299,7 +1430,7 @@ class MultiScreenWorkspace(QWidget):
             return
         try:
             save_multi_screen_archive(path, self.session, reconstruction=self.reconstruction)
-            self._set_state("Archived", Path(path).name)
+            self.status_label.setText(f"Saved: {Path(path).name}")
         except Exception as exc:
             self._set_state("Ready", str(exc))
 
@@ -1334,6 +1465,8 @@ class MultiScreenWorkspace(QWidget):
         try:
             archive_path = Path(path)
             self.session = load_multi_screen_archive(archive_path)
+            self._archive_review = True
+            self._reset_result_metrics()
             archive_payload = json.loads(archive_path.read_text(encoding="utf-8"))
             self.reconstruction = reconstruction_from_archive_payload(
                 archive_payload.get("reconstruction")
@@ -1341,6 +1474,9 @@ class MultiScreenWorkspace(QWidget):
                 else None
             )
             self._load_session_controls()
+            self.diagnostic_label.setText(
+                f"Optics: archived transfer matrices · Reference {self.session.optics.reference_element}"
+            )
             self._refresh_samples_table()
             if self.reconstruction is not None:
                 self._update_result_metrics(self.reconstruction)
@@ -1349,7 +1485,8 @@ class MultiScreenWorkspace(QWidget):
                 self.results_label.setText("No reconstruction in archive")
             self._clear_image_display("Archive loaded; select a screen to review archived samples")
             self._update_selected_optics()
-            self._set_state("Archived", f"{Path(path).name} · read-only")
+            self.review_tabs.setCurrentIndex(1)
+            self._set_state("Archived", f"{Path(path).name} · offline review")
         except Exception as exc:
             self._set_state("Invalid", str(exc))
 

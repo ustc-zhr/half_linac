@@ -1,6 +1,10 @@
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+from types import SimpleNamespace
+from PyQt5.QtCore import Qt
 
 import numpy as np
 
@@ -11,7 +15,10 @@ if str(REPO_ROOT.parent) not in sys.path:
 from PyQt5.QtWidgets import QApplication
 
 from half_linac.src.apps.emit_measure.multi_screen import (
+    BeamSizeSample,
     MultiScreenMeasurementSession,
+    load_multi_screen_archive,
+    save_multi_screen_archive,
     build_multi_screen_optics,
 )
 from half_linac.src.apps.emit_measure.multi_screen_workspace import MultiScreenWorkspace
@@ -58,6 +65,8 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
             optics=optics,
             target_samples_per_screen=1,
         )
+        self.addCleanup(workspace.stop)
+        self.addCleanup(workspace.close)
         workspace._set_state("Ready", "test")
         return workspace
 
@@ -71,7 +80,7 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         workspace.acquire_sample()
         self.assertEqual(len(workspace.session.acquisition.samples), 1)
         self.assertEqual(workspace.session.acquisition.samples[0].source, "image")
-        self.assertEqual(workspace.samples_table.columnCount(), 8)
+        self.assertEqual(workspace.samples_table.columnCount(), 6)
 
     def test_invalid_fit_is_displayed_but_not_accepted(self):
         image = np.zeros((20, 20), dtype=float)
@@ -79,7 +88,10 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         workspace.preview_sample()
         self.assertEqual(len(workspace.session.acquisition.samples), 0)
         workspace.acquire_sample()
-        self.assertEqual(len(workspace.session.acquisition.samples), 0)
+        self.assertEqual(len(workspace.session.acquisition.samples), 1)
+        self.assertFalse(workspace.session.acquisition.samples[0].enabled)
+        self.assertEqual(workspace.session.acquisition.sample_counts["PRF06"], 0)
+        self.assertFalse(workspace.samples_table.item(0, 0).flags() & Qt.ItemIsEnabled)
         self.assertIn("low_signal", workspace.status_label.text())
 
     def test_archived_session_disables_measurement_actions(self):
@@ -87,7 +99,7 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         workspace._set_state("Archived", "read-only")
         self.assertFalse(workspace.preview_button.isEnabled())
         self.assertFalse(workspace.acquire_button.isEnabled())
-        self.assertFalse(workspace.manual_button.isEnabled())
+        self.assertFalse(hasattr(workspace, "manual_button"))
         self.assertFalse(workspace.reconstruct_button.isEnabled())
 
     def test_auto_refresh_defaults_to_two_seconds_and_stops_when_archived(self):
@@ -103,6 +115,89 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         workspace.energy_spin.setValue(workspace.energy_spin.value() + 1.0)
         self.assertIsNone(workspace.session)
         self.assertEqual(workspace.state, "Configuring")
+
+    def _complete_workspace(self):
+        workspace = self._workspace(np.zeros((20, 20)))
+        optics = workspace.session.optics
+        x = np.sqrt(optics.x_measurement_matrix @ np.array([4e-6, -0.3e-6, 0.5e-6]))
+        y = np.sqrt(optics.y_measurement_matrix @ np.array([3e-6, 0.2e-6, 0.4e-6]))
+        for screen, sx, sy in zip(optics.observation_elements, x, y):
+            workspace._accept_sample(screen, sx, sy, "test")
+        return workspace
+
+    def test_exclude_restore_and_replacement_invalidate_result(self):
+        workspace = self._complete_workspace()
+        with patch.object(workspace, "_write_runtime_archives", return_value=None):
+            workspace.reconstruct()
+        self.assertTrue(workspace.reconstruction.valid)
+        original = workspace.session.acquisition.samples[0]
+        workspace.samples_table.item(0, 0).setCheckState(Qt.Unchecked)
+        self.assertIsNone(workspace.reconstruction)
+        self.assertFalse(workspace.reconstruct_button.isEnabled())
+        self.assertTrue(workspace.acquire_button.isEnabled())
+        self.assertIn("PRF06 0/1", workspace.status_label.text())
+        self.assertEqual(workspace._screen_id(workspace.screen_list.item(0)), "PRF06")
+        self.assertIn("0/1", workspace.screen_list.item(0).text())
+        workspace._accept_sample("PRF06", original.sigma_x_m, original.sigma_y_m, "test")
+        self.assertEqual(len(workspace.session.acquisition.samples), 5)
+        self.assertTrue(workspace.reconstruct_button.isEnabled())
+        self.assertFalse(workspace.session.acquisition.samples[0].enabled)
+        workspace._restore_samples()
+        self.assertEqual(workspace.session.acquisition.sample_counts["PRF06"], 2)
+
+    def test_plot_selection_and_exclude_button(self):
+        workspace = self._complete_workspace()
+        artist = next(artist for artist in workspace.sample_axes[0].collections
+                      if getattr(artist, "_sample_rows", None) == [2])
+        workspace._sample_picked(SimpleNamespace(artist=artist, ind=[0]))
+        self.assertEqual(workspace.samples_table.currentRow(), 2)
+        workspace.exclude_samples_button.click()
+        self.assertFalse(workspace.session.acquisition.samples[2].enabled)
+        self.assertEqual(workspace.samples_table.rowCount(), 4)
+
+    def test_archive_review_can_reconstruct_without_acquiring_or_auto_saving(self):
+        workspace = self._complete_workspace()
+        with TemporaryDirectory() as directory:
+            path = save_multi_screen_archive(Path(directory) / "source.json", workspace.session)
+            source = path.read_bytes()
+            with patch("half_linac.src.apps.emit_measure.multi_screen_workspace.QFileDialog.getOpenFileName",
+                       return_value=(str(path), "JSON")):
+                workspace.load_archive()
+            self.assertEqual(workspace.review_tabs.currentIndex(), 1)
+            workspace.samples_table.item(0, 0).setCheckState(Qt.Unchecked)
+            self.assertFalse(workspace.acquire_button.isEnabled())
+            workspace._restore_samples()
+            with patch.object(workspace, "_read_image_payload") as read, patch.object(workspace, "_write_runtime_archives") as save:
+                workspace.acquire_sample()
+                workspace.preview_sample()
+                workspace.reconstruct()
+                read.assert_not_called()
+                save.assert_not_called()
+            self.assertTrue(workspace.reconstruction.valid)
+            self.assertFalse(workspace._auto_refresh_timer.isActive())
+            workspace.samples_table.item(0, 0).setCheckState(Qt.Unchecked)
+            output = Path(directory) / "review.json"
+            with patch("half_linac.src.apps.emit_measure.multi_screen_workspace.QFileDialog.getSaveFileName",
+                       return_value=(str(output), "JSON")):
+                workspace.save_archive()
+            self.assertFalse(load_multi_screen_archive(output).acquisition.samples[0].enabled)
+            self.assertEqual(path.read_bytes(), source)
+
+    def test_finite_quality_rejection_is_recorded_and_can_be_reviewed(self):
+        workspace = self._workspace(np.ones((20, 20)))
+        workspace.image_reader = lambda screen: (0.4, 0.2)
+        # Supply a valid legacy fit and force a quality rejection.
+        from half_linac.src.apps.emit_measure.multi_screen_workspace import _SyntheticFit
+        fit = _SyntheticFit(0.4, 0.2)
+        with patch.object(workspace, "_read_image_payload", return_value={"fit": fit}), \
+             patch.object(workspace, "_display_payload"), \
+             patch.object(workspace, "_fit_quality", return_value={"x_status": "poor_fit", "y_status": "usable"}):
+            workspace.acquire_sample()
+        sample = workspace.session.acquisition.samples[0]
+        self.assertFalse(sample.enabled)
+        self.assertTrue(sample.quality["rejected"])
+        workspace.samples_table.item(0, 0).setCheckState(Qt.Checked)
+        self.assertEqual(workspace.session.acquisition.sample_counts["PRF06"], 1)
 
 
 if __name__ == "__main__":

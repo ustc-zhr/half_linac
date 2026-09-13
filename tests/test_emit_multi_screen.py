@@ -148,9 +148,16 @@ class MultiScreenOpticsTests(unittest.TestCase):
             optics=optics,
             target_samples_per_screen=1,
         ).add_sample(BeamSizeSample("S1", 1e-3, 2e-3, source="manual", quality={"roi": "full"}))
+        session = session.add_sample(BeamSizeSample("S1", None, None, enabled=False, quality={"rejected": True}))
         with TemporaryDirectory() as directory:
             path = save_multi_screen_archive(f"{directory}/measurement.json", session)
+            payload = json.loads(path.read_text())
+            del payload["samples"][0]["enabled"]  # Legacy archives default to active.
+            path.write_text(json.dumps(payload))
             loaded = load_multi_screen_archive(path)
+        self.assertTrue(loaded.acquisition.samples[0].enabled)
+        self.assertFalse(loaded.acquisition.samples[1].enabled)
+        self.assertIsNone(loaded.acquisition.samples[1].sigma_x_m)
         self.assertEqual(loaded.machine, "half")
         self.assertEqual(loaded.acquisition.samples[0].source, "manual")
         self.assertEqual(loaded.acquisition.samples[0].quality["roi"], "full")
@@ -178,6 +185,22 @@ class MultiScreenOpticsTests(unittest.TestCase):
             path.write_text(json.dumps(payload), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must be an integer"):
                 load_multi_screen_archive(path)
+
+    def test_excluded_samples_do_not_count_or_bias_aggregation(self):
+        acquisition = MultiScreenAcquisition.create(("S1", "S2", "S3"), 1)
+        for screen in acquisition.observation_elements:
+            acquisition = acquisition.add_sample(BeamSizeSample(screen, 1e-3, 2e-3))
+        acquisition = acquisition.add_sample(BeamSizeSample("S1", 100e-3, 200e-3, enabled=False))
+        acquisition = acquisition.add_sample(BeamSizeSample("S1", None, None, enabled=False))
+        self.assertEqual(acquisition.sample_counts["S1"], 1)
+        self.assertEqual(acquisition.aggregate().rms_x_m, (1e-3,) * 3)
+        acquisition = acquisition.set_sample_enabled(0, False)
+        self.assertFalse(acquisition.complete)
+        with self.assertRaisesRegex(ValueError, "S1"):
+            acquisition.aggregate()
+        acquisition = acquisition.set_sample_enabled(0, True)
+        self.assertTrue(acquisition.complete)
+        self.assertEqual(len(acquisition.samples), 5)
 
     def test_acquisition_rejects_incomplete_or_unknown_screen_data(self):
         acquisition = MultiScreenAcquisition.create(("S1", "S2", "S3"), 1)

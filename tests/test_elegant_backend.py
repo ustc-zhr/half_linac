@@ -540,6 +540,7 @@ class ElegantBackendTests(unittest.TestCase):
 
     def test_full_twiss_profile_shoots_once_from_line_start(self):
         backend = build_model_backend(load_app_context("emit_measure"))
+        backend.energy_mev = 2200.0
         entrance_matrix = np.eye(6)
         entrance_matrix[0, 0] = 0.5
         expected_profile = SimpleNamespace(matrix=np.eye(6), rows=({"element_name": "END"},))
@@ -548,13 +549,16 @@ class ElegantBackendTests(unittest.TestCase):
             backend, "get_map", return_value=entrance_matrix
         ) as get_map, patch.object(
             backend, "get_twiss_profile", return_value=expected_profile
-        ) as get_profile:
+        ) as get_profile, patch.object(
+            backend, "_entrance_energy_for_measurement", return_value=110.0
+        ):
             result = backend.get_full_twiss_profile(
                 "Q2",
                 {"beta0": 4.0, "alpha0": 1.0, "gamma0": 0.5},
             )
 
         self.assertIs(result, expected_profile)
+        self.assertEqual(backend.energy_mev, 2200.0)
         self.assertEqual(get_map.call_args.kwargs["seq"], "ent2ent")
         upstream_twiss = get_profile.call_args.args[2]
         self.assertAlmostEqual(upstream_twiss["beta0"], 8.0)
@@ -1410,8 +1414,15 @@ class ElegantBackendTests(unittest.TestCase):
             worker, k1, design, "xplane"
         )
 
-        np.testing.assert_allclose(k1[indices], [1.0, 2.0, 3.0])
-        self.assertEqual(selection["status"], "window")
+        self.assertEqual(len(indices), 0)
+        self.assertEqual(selection["status"], "insufficient_window")
+
+        k1 = np.arange(6.0)
+        design = np.column_stack((np.ones_like(k1), k1, k1**2))
+        worker.x_quality_usable = [False, True, True, True, True, True]
+        indices, selection = scanThread._least_squares_selection(worker, k1, design, "xplane")
+        np.testing.assert_allclose(k1[indices], [1, 2, 3, 4, 5])
+        self.assertEqual(selection["status"], "expanded_window")
 
     def test_emit_measure_projection_quality_detects_clipping_and_resolution(self):
         os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
