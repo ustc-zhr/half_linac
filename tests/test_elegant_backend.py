@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 import tempfile
 import unittest
@@ -584,6 +585,38 @@ class ElegantBackendTests(unittest.TestCase):
         self.assertTrue(run_profile.call_args.kwargs["twiss_only"])
         self.assertNotIn("initial_twiss", run_profile.call_args.kwargs)
         self.assertNotIn("lattice_overrides", run_profile.call_args.kwargs)
+
+    def test_design_twiss_preserves_template_momentum_with_measurement_energy(self):
+        configured = build_model_backend(load_app_context("emit_measure"))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = dict(configured.config)
+            config["optics_working_dir"] = tmpdir
+            for key, filename in (("optics_json", "optics.json"),
+                                  ("optics_lte", "optics.lte"),
+                                  ("optics_ele", "optics.ele"),
+                                  ("optics_mat", "optics.mat")):
+                config[key] = str(Path(tmpdir) / filename)
+            backend = ElegantModelBackend(
+                ModelBackendConfig(name="simulation", engine="elegant", config=config),
+                energy_mev=2200.0,
+            )
+            state = backend._new_parser().build_runtime_state()
+            template_setup = state["control"]["run_setup"]
+            self.assertTrue(any(state["lattice"][name]["TYPE"].upper() == "RFCW"
+                                for name in state["usedline"]))
+            with patch("half_linac.src.shared.machine_profile.model_backend.run_elegant_input"), patch(
+                "half_linac.src.shared.machine_profile.model_backend._load_matrix", return_value=np.eye(6)
+            ), patch.object(backend, "_load_optics_profile_rows", return_value=()), patch(
+                "half_linac.src.shared.machine_profile.model_backend._select_twiss_profile_rows", return_value=()
+            ):
+                backend.get_design_twiss_profile()
+                design_setup = json.loads(backend.optics_json.read_text())["control"]["run_setup"]
+                for key in ("p_central", "p_central_mev"):
+                    self.assertEqual(design_setup.get(key), template_setup.get(key))
+                self.assertEqual(backend.energy_mev, 2200.0)
+                backend.get_map(*backend.get_line_endpoints(), seq="ent2exit", twiss_only=True)
+                measurement_setup = json.loads(backend.optics_json.read_text())["control"]["run_setup"]
+                self.assertNotEqual(measurement_setup["p_central"], design_setup.get("p_central"))
 
     def test_complete_line_twiss_rows_are_continuous_and_normalized(self):
         raw_rows = (

@@ -545,6 +545,7 @@ class ElegantModelBackend:
             seq="ent2exit",
             plane=plane,
             twiss_only=True,
+            use_template_energy=True,
         )
         return TwissProfileResult(
             matrix=matrix,
@@ -592,6 +593,7 @@ class ElegantModelBackend:
         initial_twiss: Mapping[str, float] | None = None,
         twiss_plane: str = "xplane",
         twiss_only: bool = False,
+        use_template_energy: bool = False,
     ) -> np.ndarray:
         prepare_elegant_model_workdir(
             self.working_dir,
@@ -635,7 +637,7 @@ class ElegantModelBackend:
                 f"Model backend generated an empty map line from {elem1!r} to {elem2!r}."
             )
 
-        if self.energy_mev is not None and any(
+        if not use_template_energy and self.energy_mev is not None and any(
             str(lattice[element]["TYPE"]).upper() in _ACCELERATING_ELEMENT_TYPES
             for element in scanline
         ):
@@ -761,6 +763,7 @@ class ElegantModelBackend:
         initial_twiss: Mapping[str, float] | None = None,
         plane: str = "xplane",
         twiss_only: bool = False,
+        use_template_energy: bool = False,
     ) -> tuple[np.ndarray, tuple[Mapping[str, Any], ...]]:
         with _exclusive_model_workspace(self.working_dir):
             matrix = self._get_map_unlocked(
@@ -771,6 +774,7 @@ class ElegantModelBackend:
                 initial_twiss=initial_twiss,
                 twiss_plane=plane,
                 twiss_only=twiss_only,
+                use_template_energy=use_template_energy,
             )
             rows = self._load_optics_profile_rows()
         return matrix, rows
