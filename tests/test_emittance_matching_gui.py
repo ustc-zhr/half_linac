@@ -44,8 +44,10 @@ class WorkspaceTests(unittest.TestCase):
             {p: Twiss(3, 0.2, 2e-8) for p in ("x", "y")}, "half", "vm", "ALL_MAIN", {},
             {"kind": "manual"}, True)
         w.populate(baseline)
-        with self.assertRaisesRegex(ValueError, "Declare"): w.measurement()
-        w.declaration.setChecked(True)
+        self.assertTrue(w.measurement().same_state_declared)
+        self.assertEqual(w.measurement().provenance["state_assumption"],
+                         "matching_immediately_after_measurement")
+        self.assertNotIn("declaration_at", w.measurement().provenance)
         self.assertAlmostEqual(w.measurement().planes["x"].emittance, 2e-8)
         w.select_group()
         self.assertEqual(w.target.currentText(), "QL12")
@@ -65,7 +67,7 @@ class WorkspaceTests(unittest.TestCase):
             {"element_id": "QL07", "field_name": "K1", "value": 2}]})
         row = next(r for r in range(w.table.rowCount()) if w.table.item(r, 1).text() == "QL07")
         self.assertEqual(w.table.item(row, 2).text(), "2.0")
-        self.assertFalse(w.declaration.isChecked())
+        self.assertTrue(w.stale)
 
     def test_missing_limits_identify_and_focus_cell(self):
         w = self.workspace
@@ -100,7 +102,7 @@ class WorkspaceTests(unittest.TestCase):
         measurement = import_measurement(payload)
         self.assertEqual(measurement.point.edge, "exit")
         w = self.workspace
-        w.populate(measurement); w.declaration.setChecked(True)
+        w.populate(measurement)
         self.assertIn("uncertainty", w.measurement().provenance)
         w.edits["x", "beta"].setText("4")
         self.assertNotIn("uncertainty", w.measurement().provenance)

@@ -1,7 +1,7 @@
 """Matching suggestions, explicit K1 application/restoration and remeasurement."""
 from copy import deepcopy
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 import math
 import uuid
@@ -9,8 +9,8 @@ from pathlib import Path
 
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QLineEdit, QComboBox, QPushButton, QCheckBox, QTableWidget, QTableWidgetItem,
-    QFileDialog, QMessageBox, QSplitter, QHeaderView, QScrollArea)
+    QLineEdit, QComboBox, QPushButton, QTableWidget, QTableWidgetItem,
+    QFileDialog, QMessageBox, QMenu, QDialog, QDialogButtonBox, QSplitter, QHeaderView, QScrollArea, QFrame, QTabWidget, QSizePolicy, QAbstractItemView)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
@@ -63,28 +63,59 @@ class MatchingWorkspace(QWidget):
         self.revision = 0
         self.updating = False
         layout = QVBoxLayout(self)
-        self.status = QLabel("Load a dual-plane measurement and a same-state K1 snapshot.")
+        layout.setContentsMargins(10, 8, 10, 10)
+        layout.setSpacing(8)
+        self.status = QLabel("Load a dual-plane measurement to prepare matching.")
+        self.status.setObjectName("twissStatus")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-        note = QLabel("Matching · Energy from measurement + model RF · Apply writes K1 to the displayed backend. "
-                      "Requires a calibrated model; Twiss does not certify orbit, losses, dispersion or coupling.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
         split = QSplitter(Qt.Horizontal)
         layout.addWidget(split, 1)
         scroll = QScrollArea()
         self.input_scroll = scroll
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
         panel = QWidget()
         scroll.setWidget(panel)
-        split.addWidget(scroll)
+        self.input_tabs = QTabWidget()
+        self.input_tabs.setMinimumWidth(500)
+        self.input_tabs.addTab(scroll, "Measurement")
+        self.input_tabs.setTabToolTip(0, "Measurement input and matching target")
+        split.addWidget(self.input_tabs)
         left = QVBoxLayout(panel)
-        self.input_panel = panel
+        left.setContentsMargins(0, 0, 6, 0)
+        left.setSpacing(12)
+        self.input_panel = self.input_tabs
+        measurement_card = self._card(left, "Measurement input",
+                                      "Load both planes and check the reference. Energy uses measurement + model RF.")
+        measurement_actions = QHBoxLayout()
+        measurement_card.addLayout(measurement_actions)
+        load_button = QPushButton("Load Measurement…")
+        load_button.clicked.connect(self.load_measurement)
+        self.use_result_button = QPushButton("Use Result")
+        self.use_result_button.setToolTip("Load both planes from a measurement result for matching.")
+        self.use_result_menu = QMenu(self.use_result_button)
+        self.use_quad_scan_result_action = self.use_result_menu.addAction("Quad-Scan Result")
+        self.use_multi_screen_result_action = self.use_result_menu.addAction("Multi-Screen Result")
+        self.use_quad_scan_result_action.triggered.connect(self.latest_scan)
+        self.use_multi_screen_result_action.triggered.connect(self.latest_multi)
+        self.use_result_button.setMenu(self.use_result_menu)
+        for button in (load_button, self.use_result_button):
+            button.setProperty("role", "diagnostic")
+            button.setProperty("compact", "true")
+            button.setMinimumHeight(30)
+            measurement_actions.addWidget(button)
+            self.operation_buttons.append(button)
         grid = QGridLayout()
-        left.addLayout(grid)
+        measurement_card.addLayout(grid)
+        target_card = self._card(left, "Matching target")
+        target_grid = QGridLayout()
+        target_card.addLayout(target_grid)
         self.line = QComboBox()
         self.source = QComboBox()
         self.target = QComboBox()
+        for combo in (self.source, self.target):
+            combo.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.source_edge = QComboBox(); self.source_edge.addItems(["entrance", "exit"])
         self.target_edge = QComboBox(); self.target_edge.addItems(["exit", "entrance"])
         self.energy = QLineEdit()
@@ -92,80 +123,166 @@ class MatchingWorkspace(QWidget):
         self.acceptance = QLineEdit("0.01")
         self.edits = {}
         for i, (label, widget) in enumerate([
-            ("Model line", self.line), ("Measurement reference", self.source),
-            ("Reference boundary", self.source_edge), ("Kinetic energy [MeV]", self.energy),
-            ("Target", self.target), ("Target boundary", self.target_edge),
-            ("Model Bmag − 1 tolerance", self.tolerance),
+            ("Model line", self.line), ("Energy [MeV]", self.energy),
+            ("Mismatch tolerance (Bmag − 1)", self.tolerance),
         ]):
-            grid.addWidget(QLabel(label), i, 0); grid.addWidget(widget, i, 1)
-        for row, p in enumerate(("x", "y"), 7):
-            box = QHBoxLayout()
-            for field, label in (("beta", "β [m]"), ("alpha", "α"), ("emittance", "ε [mm mrad]")):
-                edit = QLineEdit(); edit.setPlaceholderText(label)
-                self.edits[p, field] = edit; box.addWidget(edit)
-            grid.addWidget(QLabel(p.upper()), row, 0); grid.addLayout(box, row, 1)
+            field_grid = grid if i < 2 else target_grid
+            field_row = i if i < 2 else 1
+            field_grid.addWidget(QLabel(label), field_row, 0)
+            field_grid.addWidget(widget, field_row, 1)
+        reference_row = QHBoxLayout()
+        reference_row.addWidget(QLabel("Measurement"))
+        reference_row.addWidget(self.source, 1)
+        reference_row.addWidget(QLabel("Boundary"))
+        reference_row.addWidget(self.source_edge)
+        grid.addLayout(reference_row, 2, 0, 1, 2)
+        target_row = QHBoxLayout()
+        target_row.addWidget(QLabel("Target"))
+        target_row.addWidget(self.target, 1)
+        target_row.addWidget(QLabel("Boundary"))
+        target_row.addWidget(self.target_edge)
+        target_grid.addLayout(target_row, 0, 0, 1, 2)
+        twiss_grid = QGridLayout()
+        grid.addLayout(twiss_grid, 3, 0, 1, 2)
+        for column, label in enumerate(("Plane", "β [m]", "α", "ε [mm mrad]")):
+            heading = QLabel(label)
+            heading.setProperty("role", "field")
+            twiss_grid.addWidget(heading, 0, column)
+        for row, plane in enumerate(("x", "y"), 1):
+            twiss_grid.addWidget(QLabel(plane.upper()), row, 0)
+            for column, field in enumerate(("beta", "alpha", "emittance"), 1):
+                edit = QLineEdit()
+                edit.setMinimumWidth(0)
+                edit.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+                edit.setAlignment(Qt.AlignRight)
+                edit.setToolTip(f"{plane.upper()} · " + ("β [m]" if field == "beta" else
+                                "α" if field == "alpha" else "Geometric ε [mm mrad]"))
+                self.edits[plane, field] = edit
+                twiss_grid.addWidget(edit, row, column)
+                twiss_grid.setColumnStretch(column, 1)
         self.envelopes = {}
-        for row, p in enumerate(("x", "y"), 9):
-            edit = QLineEdit(); edit.setPlaceholderText("Unconstrained")
-            self.envelopes[p] = edit
-            grid.addWidget(QLabel(p.upper() + " max RMS [mm]"), row, 0); grid.addWidget(edit, row, 1)
-        self.declaration = QCheckBox("Both planes, energy and K1 snapshot describe the same running state")
-        left.addWidget(self.declaration)
-        self._buttons(left, [("Load measurement JSON", self.load_measurement),
-                             ("Latest scan", self.latest_scan), ("Multi-Screen result", self.latest_multi)])
-        self._buttons(left, [("Read current K1 snapshot", self.current_snapshot),
-                             ("Load snapshot JSON", self.load_snapshot)])
-        preset_row = QHBoxLayout(); left.addLayout(preset_row)
-        self.presets = QComboBox(); preset_row.addWidget(self.presets)
-        preset = QPushButton("Select group"); preset.clicked.connect(self.select_group); preset_row.addWidget(preset)
-        left.addWidget(QLabel("K1 [m⁻²] · Enter device bounds and max |ΔK1|; scan limits are not used."))
+        self.envelope_button = QPushButton("Beam size limits… · None")
+        self.envelope_button.setProperty("role", "diagnostic")
+        self.envelope_button.setProperty("compact", "true")
+        self.envelope_button.clicked.connect(self.edit_envelope_limits)
+        target_grid.addWidget(self.envelope_button, 2, 0, 1, 2)
+        for plane in ("x", "y"):
+            edit = QLineEdit(self)
+            edit.hide()
+            edit.textChanged.connect(self.update_envelope_summary)
+            self.envelopes[plane] = edit
+        left.addStretch()
+        magnet_scroll = QScrollArea()
+        magnet_scroll.setWidgetResizable(True)
+        magnet_scroll.setFrameShape(QFrame.NoFrame)
+        self.input_scroll = magnet_scroll
+        magnet_panel = QWidget()
+        magnet_scroll.setWidget(magnet_panel)
+        magnet_layout = QVBoxLayout(magnet_panel)
+        magnet_layout.setContentsMargins(0, 0, 6, 0)
+        self.input_tabs.addTab(magnet_scroll, "Magnets && limits")
+        magnet_card = self._card(magnet_layout, "Magnet snapshot & limits",
+                                 "K1 [m⁻²] · Set device bounds and max |ΔK1|; scan limits are not used.")
+        self._buttons(magnet_card, [("Read current K1 snapshot", self.current_snapshot)])
+        preset_row = QHBoxLayout(); magnet_card.addLayout(preset_row)
+        self.presets = QComboBox(); preset_row.addWidget(self.presets, 1)
+        preset = QPushButton("Select group"); preset.setProperty("compact", "true"); preset.clicked.connect(self.select_group); preset_row.addWidget(preset)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["Use", "Quad", "Current K1", "Lower", "Upper", "Max |Δ|"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setMinimumHeight(230)
-        left.addWidget(self.table)
+        self.table.verticalHeader().hide()
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.table.setAlternatingRowColors(True)
+        self.table.horizontalHeaderItem(5).setText("Max |ΔK1|")
+        magnet_card.addWidget(self.table, 1)
         self.calculate = QPushButton("Calculate suggestion")
+        self.calculate.setProperty("role", "primary")
         self.calculate.clicked.connect(self.calculate_match)
-        right = QWidget(); split.addWidget(right)
+        self.result_tabs = QTabWidget()
+        split.addWidget(self.result_tabs)
+        right = QWidget()
+        self.result_tabs.addTab(right, "Matching result")
         right_layout = QVBoxLayout(right)
-        self.figure = Figure(figsize=(7, 6), tight_layout=True)
-        self.canvas = FigureCanvasQTAgg(self.figure); right_layout.addWidget(self.canvas, 1)
+        right_layout.setContentsMargins(6, 0, 0, 0)
+        right_layout.setSpacing(8)
+        optics_card = self._card(right_layout, "Optics & proposed K1",
+                                 "Compare calculated optics and proposed K1 changes.")
+        self.figure = Figure(figsize=(7, 3.5), tight_layout=True)
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        self.canvas.setMinimumHeight(200)
+        self.canvas.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+        optics_card.addWidget(self.canvas, 1)
         self.results_table = QTableWidget(0, 4)
         self.results_table.setHorizontalHeaderLabels(["Quad", "Current K1", "Suggested K1", "ΔK1"])
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        right_layout.addWidget(self.results_table)
-        self._buttons(right_layout, [("Save JSON", self.save), ("Export K1 CSV", self.export),
+        self.results_table.setMinimumHeight(140)
+        self.results_table.setMaximumHeight(210)
+        self.results_table.verticalHeader().hide()
+        self.results_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.results_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.results_table.setAlternatingRowColors(True)
+        self.results_table.setToolTip("K1 and ΔK1 in m⁻²")
+        optics_card.addWidget(self.results_table)
+        self._buttons(optics_card, [("Save JSON", self.save), ("Export K1 CSV", self.export),
                                      ("Open matching archive", self.open_archive)])
-        execution_row = QHBoxLayout(); right_layout.addLayout(execution_row)
+        execution_scroll = QScrollArea()
+        execution_scroll.setWidgetResizable(True)
+        execution_scroll.setFrameShape(QFrame.NoFrame)
+        execution_panel = QWidget()
+        execution_scroll.setWidget(execution_panel)
+        execution_layout = QVBoxLayout(execution_panel)
+        execution_layout.setContentsMargins(6, 0, 0, 0)
+        execution_layout.setSpacing(10)
+        self.result_tabs.addTab(execution_scroll, "Apply && verify")
+        for tabs in (self.input_tabs, self.result_tabs):
+            tabs.setElideMode(Qt.ElideNone)
+            tabs.setUsesScrollButtons(True)
+            tabs.tabBar().setExpanding(False)
+        execution_card = self._card(execution_layout, "Apply & restore",
+                                    "Apply writes K1 to the displayed backend. Energy settings remain unchanged.")
+        execution_row = QHBoxLayout(); execution_card.addLayout(execution_row)
         self.apply_button = QPushButton("Apply suggested K1")
         self.restore_button = QPushButton("Restore previous K1")
+        self.apply_button.setProperty("role", "control")
+        self.restore_button.setProperty("role", "danger")
         self.apply_button.clicked.connect(self.apply_suggestion)
         self.restore_button.clicked.connect(self.restore_previous)
         execution_row.addWidget(self.apply_button); execution_row.addWidget(self.restore_button)
         self.execution_label = QLabel("No K1 application. Energy settings remain unchanged.")
-        self.execution_label.setWordWrap(True); right_layout.addWidget(self.execution_label)
-        acceptance_row = QHBoxLayout(); right_layout.addLayout(acceptance_row)
+        self.execution_label.setWordWrap(True); execution_card.addWidget(self.execution_label)
+        comparison_card = self._card(execution_layout, "Verify with remeasurement",
+                                     "Requires a calibrated model. Twiss does not certify orbit, losses, dispersion or coupling.")
+        acceptance_row = QHBoxLayout(); comparison_card.addLayout(acceptance_row)
         acceptance_row.addWidget(QLabel("Remeasurement Bmag − 1 tolerance")); acceptance_row.addWidget(self.acceptance)
-        self._buttons(right_layout, [("Compare measurement JSON", self.compare_file),
+        self._buttons(comparison_card, [("Compare measurement JSON", self.compare_file),
                                      ("Compare edited inputs", self.compare_inputs)])
         self.comparison_label = QLabel("No remeasurement. Acceptance tolerance is user-defined.")
-        self.comparison_label.setWordWrap(True); right_layout.addWidget(self.comparison_label)
+        self.comparison_label.setWordWrap(True); comparison_card.addWidget(self.comparison_label)
+        execution_layout.addStretch()
+        split.setChildrenCollapsible(False)
+        split.setStretchFactor(0, 2)
+        split.setStretchFactor(1, 3)
+        split.setSizes([560, 840])
         self.cancel = QPushButton("Cancel calculation")
+        self.cancel.setProperty("role", "danger")
         self.cancel.clicked.connect(self.stop); self.cancel.setEnabled(False)
-        actions = QHBoxLayout(); actions.addWidget(self.calculate, 1); actions.addWidget(self.cancel)
+        actions = QHBoxLayout(); actions.addStretch(); actions.addWidget(self.calculate); actions.addWidget(self.cancel)
+        actions.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(actions)
         self.line.currentIndexChanged.connect(self.change_line)
         for widget in [self.source, self.target, self.source_edge, self.target_edge]:
             widget.currentIndexChanged.connect(self.invalidate)
         for edit in [self.energy, self.tolerance, *self.edits.values(), *self.envelopes.values()]:
             edit.textChanged.connect(self.invalidate)
-        self.declaration.toggled.connect(self.invalidate)
         self.table.itemChanged.connect(self.invalidate)
         try:
             backend = build_model_backend(context)
             self.line.blockSignals(True)
             for line in backend.get_model_lines():
-                self.line.addItem(line.display_name, line.name)
+                self.line.addItem(line.name, line.name)
             default = self.line.findData(backend.line_name)
             self.line.setCurrentIndex(max(0, default))
             self.line.blockSignals(False)
@@ -211,11 +328,86 @@ class MatchingWorkspace(QWidget):
                 for text in legend.get_texts(): text.set_color(palette["plot_text"])
         self.canvas.draw_idle()
 
+    def _card(self, layout, title, description=None):
+        card = QFrame(self)
+        card.setObjectName("plotCard")
+        content = QVBoxLayout(card)
+        content.setContentsMargins(12, 10, 12, 12)
+        content.setSpacing(8)
+        heading = QLabel(title)
+        heading.setObjectName("panelTitle")
+        font = heading.font()
+        font.setBold(True)
+        font.setPointSize(font.pointSize() + 1)
+        heading.setFont(font)
+        content.addWidget(heading)
+        if description:
+            hint = QLabel(description)
+            hint.setProperty("role", "field")
+            hint.setWordWrap(True)
+            content.addWidget(hint)
+        layout.addWidget(card)
+        return content
+
     def _buttons(self, layout, buttons):
         row = QHBoxLayout(); layout.addLayout(row)
         for text, callback in buttons:
-            button = QPushButton(text); button.clicked.connect(callback); row.addWidget(button)
+            button = QPushButton(text)
+            button.setProperty("role", "diagnostic")
+            button.setProperty("compact", "true")
+            button.setMinimumHeight(30)
+            button.clicked.connect(callback); row.addWidget(button)
             self.operation_buttons.append(button)
+
+    def update_envelope_summary(self):
+        limits = [f"{plane.upper()} ≤ {edit.text().strip()} mm"
+                  for plane, edit in self.envelopes.items() if edit.text().strip()]
+        summary = ", ".join(limits) if limits else "None"
+        self.envelope_button.setText("Beam size limits… · " + summary)
+        self.envelope_button.setToolTip("Optional RMS (1σ) limits along the matching path. " + summary)
+
+    def edit_envelope_limits(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Beam size limits")
+        layout = QVBoxLayout(dialog)
+        note = QLabel("Optional RMS (1σ) limits along the matching path. Leave blank for no limit.")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        grid = QGridLayout()
+        layout.addLayout(grid)
+        edits = {}
+        for row, (plane, current) in enumerate(self.envelopes.items()):
+            edit = QLineEdit(current.text())
+            edit.setPlaceholderText("No limit")
+            edits[plane] = edit
+            grid.addWidget(QLabel(plane.upper() + " max RMS [mm]"), row, 0)
+            grid.addWidget(edit, row, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        layout.addWidget(buttons)
+
+        def accept():
+            for plane, edit in edits.items():
+                raw = edit.text().strip()
+                if not raw:
+                    continue
+                try:
+                    value = float(raw)
+                    if not math.isfinite(value) or value <= 0:
+                        raise ValueError
+                except ValueError:
+                    QMessageBox.warning(dialog, "Beam size limits",
+                                        f"{plane.upper()} max RMS must be a positive finite number, or blank.")
+                    edit.setFocus()
+                    edit.selectAll()
+                    return
+            dialog.accept()
+
+        buttons.accepted.connect(accept)
+        buttons.rejected.connect(dialog.reject)
+        if dialog.exec_() == QDialog.Accepted:
+            for plane, edit in edits.items():
+                self.envelopes[plane].setText(edit.text().strip())
+        dialog.deleteLater()
 
     def error(self, message):
         self.status.setText(str(message))
@@ -244,7 +436,6 @@ class MatchingWorkspace(QWidget):
             model = ElegantMatchingModel(build_model_backend(self.context, line_name=self.line.currentData()))
             self.model = model
             self.extra_overrides = {}
-            self.declaration.setChecked(False)
             self.updating = True
             for combo in (self.source, self.target):
                 combo.clear(); combo.addItems([n for n in model.names if model.names.count(n) == 1])
@@ -293,7 +484,8 @@ class MatchingWorkspace(QWidget):
         planes = {p: Twiss(float(self.edits[p, "beta"].text()), float(self.edits[p, "alpha"].text()),
                            float(self.edits[p, "emittance"].text()) * 1e-6) for p in ("x", "y")}
         provenance = deepcopy(self.provenance)
-        provenance["declaration_at"] = datetime.now(timezone.utc).isoformat()
+        provenance.pop("declaration_at", None)
+        provenance["state_assumption"] = "matching_immediately_after_measurement"
         provenance["entered_values"] = {p: asdict(t) for p, t in planes.items()}
         if self.loaded_measurement is None or planes != self.loaded_measurement.planes:
             provenance.pop("uncertainty", None)
@@ -301,7 +493,9 @@ class MatchingWorkspace(QWidget):
         value = MeasurementBaseline(Point(self.source.currentText(), self.source_edge.currentText()),
             float(self.energy.text()), planes, self.context.profile.machine.id,
             self.context.control_backend.name, self.line.currentData(), self.overrides(), provenance,
-            self.declaration.isChecked())
+            # Keep the archive/solver field compatible; the GUI assumes matching
+            # follows measurement, rather than requesting a manual declaration.
+            same_state_declared=True)
         value.validate()
         return value
 
@@ -324,9 +518,8 @@ class MatchingWorkspace(QWidget):
         for r in range(self.table.rowCount()):
             k1 = measurement.overrides.get(self.table.item(r, 1).text(), {}).get("K1")
             self.table.item(r, 2).setText("" if k1 is None else str(k1))
-        self.declaration.setChecked(False)
         self.updating = False; self.invalidate()
-        self.status.setText("Measurement loaded. Blank K1 values require a same-state snapshot; confirm state before calculation.")
+        self.status.setText("Measurement loaded. Read current K1 snapshot if required K1 values are missing.")
 
     def load_measurement(self):
         path, _ = QFileDialog.getOpenFileName(self, "Measurement / scan metadata JSON", "", "JSON (*.json)")
@@ -363,8 +556,7 @@ class MatchingWorkspace(QWidget):
         for r in range(self.table.rowCount()):
             value = overrides.get(self.table.item(r, 1).text(), {}).get("K1")
             if value is not None: self.table.item(r, 2).setText(str(value))
-        self.declaration.setChecked(False)
-        self.status.setText("Snapshot loaded. Explicitly confirm it corresponds to the measurement state.")
+        self.status.setText("Current K1 snapshot loaded.")
 
     def current_snapshot(self):
         if not self.model: return
@@ -383,13 +575,6 @@ class MatchingWorkspace(QWidget):
             ).as_metadata()
 
         self.run_task(read_snapshot, self.apply_snapshot)
-
-    def load_snapshot(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Model snapshot JSON", "", "JSON (*.json)")
-        if path:
-            try:
-                data = json.loads(Path(path).read_text()); self.apply_snapshot(data.get("model_snapshot", data))
-            except Exception as exc: self.error(exc)
 
     def run_task(self, operation, completed):
         if self.worker and self.worker.isRunning():
@@ -448,6 +633,7 @@ class MatchingWorkspace(QWidget):
                         first_invalid = self.table.item(row, 3)
                 magnets[name] = limit
         if problems:
+            self.input_tabs.setCurrentIndex(1)
             self.input_scroll.ensureWidgetVisible(self.table)
             self.table.setCurrentItem(first_invalid)
             self.table.scrollToItem(first_invalid)
@@ -688,7 +874,7 @@ class MatchingWorkspace(QWidget):
         try:
             measurement = import_measurement(json.loads(Path(path).read_text()), line=self.line.currentData())
             self.populate(measurement)
-            self.status.setText("Remeasurement loaded: supply actual executed K1, confirm same state, then Compare edited inputs.")
+            self.status.setText("Remeasurement loaded: supply actual executed K1, then Compare edited inputs.")
         except Exception as exc: self.error(exc)
 
     def compare_inputs(self):
