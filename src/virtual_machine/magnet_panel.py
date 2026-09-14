@@ -123,7 +123,7 @@ class MagnetPanel(QWidget):
         self._calculation_started = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(3)
+        layout.setSpacing(8)
         self.title = QLabel('Select a writable magnet')
         self.title.setWordWrap(True)
         self.values = QLabel('PV: Unavailable · Model: Unavailable')
@@ -131,16 +131,20 @@ class MagnetPanel(QWidget):
         layout.addWidget(self.title)
         layout.addWidget(self.values)
         grid = QGridLayout()
-        grid.setVerticalSpacing(3)
+        self.editor_grid = grid
+        grid.setVerticalSpacing(6)
         self.value_edit = QLineEdit()
-        self.value_edit.setPlaceholderText('Pending value')
+        self.value_edit.setPlaceholderText('Enter target value')
+        self.value_label = QLabel('Target')
+        self.value_label.setBuddy(self.value_edit)
         self.step_edit = QLineEdit('0.01')
         self.step_edit.setMaximumWidth(95)
         self.minus = QPushButton('−')
         self.plus = QPushButton('+')
         for button in (self.minus, self.plus):
             button.setMaximumWidth(36)
-        grid.addWidget(self.value_edit, 0, 0, 1, 4)
+        grid.addWidget(self.value_label, 0, 0)
+        grid.addWidget(self.value_edit, 0, 1, 1, 3)
         grid.addWidget(QLabel('Step'), 1, 0)
         grid.addWidget(self.step_edit, 1, 1)
         grid.addWidget(self.minus, 1, 2)
@@ -158,10 +162,6 @@ class MagnetPanel(QWidget):
         self.operation_label = QLabel('')
         self.operation_label.setWordWrap(True)
         layout.addWidget(self.operation_label)
-        for field in (self.value_edit, self.step_edit):
-            field.setStyleSheet('min-height: 18px; padding: 2px 6px; font-size: 12px;')
-        for button in self.findChildren(QPushButton):
-            button.setStyleSheet('min-height: 20px; padding: 2px 6px; font-size: 11px;')
         self.value_edit.textEdited.connect(self._edit)
         self.step_edit.textEdited.connect(self._step_changed)
         self.minus.clicked.connect(lambda: self._step(-1))
@@ -329,9 +329,20 @@ class MagnetPanel(QWidget):
             self.title.setText('Select a writable magnet')
             self.values.setText('PV: Unavailable · Model: Unavailable')
             self.value_edit.clear()
-            self.message.setText('Read-only: no VM magnet channel')
+            self.message.setText('Select a magnet to edit its VM setting.'
+                                 if self.window._selected_index is None else 'Read-only device · View model parameters above.')
         if getattr(self, '_profile_changed', False):
             self.message.setText('Machine configuration changed · Restart this workbench')
+        self.title.setVisible(magnet is not None)
+        self.values.setVisible(magnet is not None)
+        for index in range(self.editor_grid.count()):
+            self.editor_grid.itemAt(index).widget().setVisible(magnet is not None)
+        self.apply_button.setVisible(magnet is not None)
+        self.discard_button.setVisible(magnet is not None)
+        self.operation_label.setVisible(bool(self.operation_label.text()))
+        if magnet and not editable and not self.busy and not getattr(self, '_profile_changed', False):
+            self.message.setText('PV disconnected · Start the VM IOC to edit.' if not connected
+                                 else 'Start the VM simulation to edit this magnet.')
         self.apply_button.setEnabled(bool(editable and valid and not self.controller.pending))
         self.set_baseline_button.setEnabled(bool(self.enabled_session and not self.busy and
             not self.controller.pending and self.result and self.result.get('input_state') and

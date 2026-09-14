@@ -1016,6 +1016,49 @@ QLabel[role="cardTitle"] { font-size: 12px; font-weight: 600; }
 QSplitter::handle { background: transparent; }
 QSplitter::handle:hover { background: %(frame_border)s; }
 QScrollArea { border: none; }
+QTabWidget#configurationTabs QWidget { font-size: 12px; }
+QTabWidget#configurationTabs QLabel { font-weight: normal; }
+QTabWidget#configurationTabs QLabel[role="cardTitle"] { font-weight: 600; }
+QTabWidget#configurationTabs QStackedWidget { border: none; border-radius: 0px; }
+QTabWidget#configurationTabs QToolButton:disabled { color: %(field_fg)s; }
+QTabWidget#configurationTabs QGroupBox#configurationPage {
+    border: none; background: transparent; padding: 0px; margin: 0px;
+}
+QTabWidget#configurationTabs QGroupBox {
+    border-radius: 6px; padding-top: 26px; font-size: 12px;
+}
+QTabWidget#configurationTabs QGroupBox::title { left: 10px; top: 5px; }
+QTabWidget#configurationTabs QLineEdit,
+QTabWidget#configurationTabs QComboBox {
+    min-height: 26px; padding: 3px 8px; border-radius: 5px; font-size: 12px;
+}
+QTabWidget#configurationTabs QPushButton {
+    min-height: 28px; padding: 3px 8px; border-radius: 5px; font-size: 12px;
+}
+QTabWidget#configurationTabs QToolButton {
+    background: transparent; color: %(window_fg)s; border: none;
+    padding: 5px 0px; font-size: 12px;
+}
+QTabWidget#configurationTabs QTreeWidget {
+    border-radius: 5px; alternate-background-color: %(frame_bg)s;
+}
+QTabWidget#configurationTabs QTreeWidget::item { min-height: 24px; padding: 1px 4px; }
+QTabWidget#configurationTabs QHeaderView::section { padding: 6px 4px; border: none; }
+QTabWidget#configurationTabs QTabBar::tab {
+    padding: 8px 9px; border-bottom: 2px solid transparent; font-size: 12px;
+}
+QTabWidget#configurationTabs QTabBar::tab:selected {
+    background: %(frame_bg)s; border-bottom-color: %(input_selection_bg)s;
+}
+QTabWidget#configurationTabs QScrollBar:vertical {
+    width: 10px; background: %(frame_bg)s; margin: 0px;
+}
+QTabWidget#configurationTabs QScrollBar::handle:vertical {
+    background: %(input_border)s; border-radius: 4px; min-height: 28px;
+}
+QTabWidget#configurationTabs QScrollBar::add-line:vertical,
+QTabWidget#configurationTabs QScrollBar::sub-line:vertical { height: 0px; }
+
 """ % palette)
         if hasattr(self, "status_panel"):
             self.status_panel.apply_theme(palette)
@@ -1244,12 +1287,23 @@ QScrollArea { border: none; }
         if not hasattr(self, 'route_labels'):
             return
         full, segment, start, end = self.route_labels
-        rows = (full, self.comboBox_predefined_usedline, self.pushButton_ESAline,
-                self.pushButton_FULLline, segment, self.comboBox_segment,
-                start, self.comboBox_simply_start, end, self.comboBox_simply_end,
-                self.pushButton_simply_VM)
-        for row, widget in enumerate(rows):
-            self.gridLayout_5.addWidget(widget, row, 0)
+        grid = self.gridLayout_5
+        grid.setVerticalSpacing(8)
+        grid.addWidget(full, 0, 0, 1, 2)
+        grid.addWidget(self.comboBox_predefined_usedline, 1, 0, 1, 2)
+        grid.addWidget(self.pushButton_ESAline, 2, 0, 1, 2)
+        grid.setRowMinimumHeight(3, 14)
+        grid.addWidget(segment, 4, 0, 1, 2)
+        grid.addWidget(self.comboBox_segment, 5, 0, 1, 2)
+        grid.addWidget(start, 6, 0)
+        grid.addWidget(self.comboBox_simply_start, 6, 1)
+        grid.addWidget(end, 7, 0)
+        grid.addWidget(self.comboBox_simply_end, 7, 1)
+        grid.addWidget(self.pushButton_simply_VM, 8, 0, 1, 2)
+        grid.setRowMinimumHeight(9, 14)
+        grid.addWidget(self.pushButton_FULLline, 10, 0, 1, 2)
+        grid.addWidget(self.lattice_note, 11, 0, 1, 2)
+        grid.setColumnStretch(1, 1)
 
     def _update_error_action_layout(self):
         self._clear_grid_layout(self.gridLayout_2)

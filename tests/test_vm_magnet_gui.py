@@ -67,6 +67,8 @@ class GuiTests(unittest.TestCase):
     def test_both_editors_units_curves_drafts_and_disconnect(self):
         for machine in ('half', 'irfel'):
             w, p, s = self.window(machine)
+            w.resize(1366, 768)
+            self.app.processEvents()
             self.assertEqual((w.width(), w.height()), (1366, 768))
             q = next(m for m in p.magnets if m.kind == 'quad')
             c = next(m for m in p.magnets if m.kind == 'corr')

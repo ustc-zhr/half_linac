@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTabWidget,
     QScrollArea, QTreeWidget, QTreeWidgetItem, QLineEdit, QLabel, QComboBox, QPlainTextEdit,
-    QToolButton, QSizePolicy, QPushButton, QGroupBox, QBoxLayout, QFrame)
+    QToolButton, QSizePolicy, QPushButton, QGroupBox, QBoxLayout, QFrame, QHeaderView, QAbstractItemView)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 
@@ -152,32 +152,50 @@ class WorkbenchMixin:
         self.main_splitter.setHandleWidth(8)
         self.main_splitter.setChildrenCollapsible(False)
         self.tabs = QTabWidget()
-        self.tabs.setMinimumWidth(300)
-        self.tabs.tabBar().setExpanding(False)
+        self.tabs.setObjectName('configurationTabs')
+        self.tabs.setDocumentMode(True)
+        self.tabs.setMinimumWidth(340)
+        self.tabs.tabBar().setExpanding(True)
         device_page = QWidget()
         dl = QVBoxLayout(device_page)
         dl.setContentsMargins(10, 10, 10, 10)
         dl.setSpacing(8)
         self.device_search = QLineEdit()
-        self.device_search.setPlaceholderText('Search devices')
+        self.device_search.setPlaceholderText('Search name or type…')
+        self.device_search.setClearButtonEnabled(True)
         self.devices = QTreeWidget()
         self.devices.setHeaderLabels(['Element', 'Type', 's (m)'])
-        self.devices.setColumnWidth(0, 115)
+        self.devices.setRootIsDecorated(False)
+        self.devices.setUniformRowHeights(True)
+        self.devices.setAlternatingRowColors(True)
+        self.devices.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.devices.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.devices.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.devices.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.devices.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.device_count = QLabel('No devices loaded')
+        self.device_count.setProperty('role', 'field')
         self.details = QPlainTextEdit()
         self.details.setReadOnly(True)
         self.details.setMaximumHeight(150)
         dl.addWidget(self.device_search)
+        dl.addWidget(self.device_count)
         dl.addWidget(self.devices, 1)
         self.device_summary = QLabel('Select a device to view its parameters')
         self.device_summary.setWordWrap(True)
         self.device_summary.setProperty('role', 'cardTitle')
         dl.addWidget(self.device_summary)
-        self.details.setMaximumHeight(65)
+        self.details.setMaximumHeight(140)
         self.details.hide()
         details_toggle = QToolButton()
-        details_toggle.setText('Model Details')
+        details_toggle.setText('Model parameters')
+        details_toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        details_toggle.setArrowType(Qt.RightArrow)
+        details_toggle.setEnabled(False)
+        self.details_toggle = details_toggle
         details_toggle.setCheckable(True)
         details_toggle.toggled.connect(self.details.setVisible)
+        details_toggle.toggled.connect(lambda opened: details_toggle.setArrowType(Qt.DownArrow if opened else Qt.RightArrow))
         dl.addWidget(details_toggle)
         dl.addWidget(self.details)
         self.magnet_panel = MagnetPanel(self)
@@ -187,7 +205,16 @@ class WorkbenchMixin:
                               (self.groupBox_2, 'Lattice'), (self.groupBox_3, 'Errors')):
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
-            scroll.setWidget(widget)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            container = QWidget()
+            form = QVBoxLayout(container)
+            form.setContentsMargins(12, 12, 12, 12)
+            form.addWidget(widget)
+            form.addStretch(1)
+            widget.setTitle('')
+            widget.setObjectName('configurationPage')
+            scroll.setWidget(container)
             self.tabs.addTab(scroll, label)
         # Preserve each field/label pairing while adapting the old wide forms.
         grid = self.bunched_page.layout()
@@ -231,7 +258,7 @@ class WorkbenchMixin:
         bg.addWidget(self.beam_source_status, 1, 0, 1, 2)
         bg.addWidget(self.reference_label, 2, 0, 1, 2)
         bg.addWidget(self.reference_edit, 3, 0, 1, 2)
-        bg.addWidget(self.apply_beam_source_button, 4, 0, 1, 2)
+        self.beam_source_group.layout().addWidget(self.apply_beam_source_button)
         self.beam_source_group.layout().insertLayout(0, bg)
         self._compact_configuration_pages()
         self._beam_source_mode_changed()
@@ -303,20 +330,10 @@ class WorkbenchMixin:
         self._draw_screen()
 
     def _compact_configuration_pages(self):
-        style = """
-QPushButton { min-height: 24px; max-height: 24px; padding: 2px 8px;
-              border-radius: 6px; font-size: 11px; }
-QLineEdit, QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px;
-                      border-radius: 5px; font-size: 11px; }
-QLabel { font-size: 11px; padding: 0px; border: none; background: transparent; }
-QGroupBox { font-size: 12px; border-radius: 6px; padding-top: 22px; }
-QGroupBox::title { left: 8px; top: 4px; }
-"""
         for page in (self.beam_source_group, self.groupBox_2, self.groupBox_3):
-            page.setStyleSheet(style)
             page.setMinimumSize(0, 0)
             page.layout().setAlignment(Qt.AlignTop)
-            page.layout().setContentsMargins(8, 6, 8, 8)
+            page.layout().setContentsMargins(0, 0, 0, 0)
             page.layout().setSpacing(8)
             for field in page.findChildren(QWidget):
                 if isinstance(field, (QLineEdit, QComboBox, QPushButton)):
@@ -328,7 +345,8 @@ QGroupBox::title { left: 8px; top: 4px; }
                     field.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         # Put unused height below the error form, not between its actions and fields.
         self.groupBox_3.layout().setAlignment(Qt.Alignment())
-        self.groupBox_3.layout().addStretch(1)
+        self.groupBox_3.layout().removeItem(self.gridLayout_2)
+        self.groupBox_3.layout().addLayout(self.gridLayout_2)
         self.horizontalLayout_2.setDirection(QBoxLayout.TopToBottom)
         for group, grid in ((self.groupBox_4, self.gridLayout),
                             (self.groupBox_5, self.gridLayout_7)):
@@ -341,11 +359,15 @@ QGroupBox::title { left: 8px; top: 4px; }
         for page in (self.bunched_page, self.sdds_page):
             page.layout().setContentsMargins(0, 0, 0, 0)
             page.layout().setHorizontalSpacing(8)
-            page.layout().setVerticalSpacing(5)
+            page.layout().setVerticalSpacing(8)
             page.layout().setColumnStretch(1, 1)
         self.reference_edit.setMaximumWidth(16777215)
         self.route_labels = [QLabel(text, self.groupBox_2) for text in
                              ('Full line', 'Local segment', 'Start element', 'End element')]
+        for label in self.route_labels[:2]:
+            label.setProperty('role', 'cardTitle')
+        self.lattice_note = QLabel('Reload restores runtime settings from the initial templates.')
+        self.lattice_note.setWordWrap(True)
 
     def _toggle_log(self, checked):
         self.textEdit.setVisible(checked)
@@ -353,13 +375,21 @@ QGroupBox::title { left: 8px; top: 4px; }
 
     def _filter_devices(self):
         text = self.device_search.text().lower()
+        visible = 0
         for i in range(self.devices.topLevelItemCount()):
             item = self.devices.topLevelItem(i)
             item.setHidden(text not in (item.text(0) + ' ' + item.text(1)).lower())
+            visible += not item.isHidden()
+        total = self.devices.topLevelItemCount()
+        self.device_count.setText(f'{visible} / {total} devices' if text else f'{total} devices')
 
     def _select_device(self, current, previous=None):
         if current is None:
+            self.details.clear()
+            self.details_toggle.setChecked(False)
+            self.details_toggle.setEnabled(False)
             return
+        self.details_toggle.setEnabled(True)
         self._selected_index = current.data(0, Qt.UserRole)
         element = self._elements[self._selected_index]
         self.device_summary.setText(f"{element['name']} · {element['kind']} · s = {element['s']:.3f} m")
@@ -463,6 +493,8 @@ QGroupBox::title { left: 8px; top: 4px; }
                         for element in elements:
                             item = QTreeWidgetItem([element['name'], element['kind'], f"{element['s']:.3f}"])
                             item.setData(0, Qt.UserRole, element['index'])
+                            item.setTextAlignment(2, Qt.AlignRight | Qt.AlignVCenter)
+                            item.setToolTip(0, element['name'])
                             self.devices.addTopLevelItem(item)
                         self._filter_devices()
                         self._preserve_beamline = False
