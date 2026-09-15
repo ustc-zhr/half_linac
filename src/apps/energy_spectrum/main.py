@@ -2450,6 +2450,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.gridLayout.addWidget(self.label_10, 1, 2)
         self.gridLayout.addWidget(self.comboBox_fitmethod, 1, 3)
         self.image_levels_dialog = QDialog(self)
+        self.image_levels_dialog.setObjectName("energySpectrumDialog")
         self.image_levels_dialog.setWindowTitle("Image color limits")
         levels_layout = QGridLayout(self.image_levels_dialog)
         self.image_vmin_edit = QLineEdit(self.image_levels_dialog)
@@ -3054,6 +3055,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "auto_tune_settings_dialog",
             "background_dialog",
             "roi_dialog",
+            "image_levels_dialog",
         ):
             dialog = getattr(self, dialog_name, None)
             if dialog is not None:
