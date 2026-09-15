@@ -1,6 +1,28 @@
 {
   "backend": "real",
   "channels": {
+    "TM_EGUN": {
+      "trigger_delay_set": "IN:TM:EGun:delay:ao",
+      "fine_delay_set": "IN:TM:ioc11:EVR01:OutFPSFPFineDelay-SP"
+    },
+    "TM_BPM01": {
+      "trigger_delay_set": "IN:TM:BPM-1:delay:ao"
+    },
+    "TM_BPM02": {
+      "trigger_delay_set": "IN:TM:BPM-2:delay:ao"
+    },
+    "TM_BPM03": {
+      "trigger_delay_set": "IN:TM:BPM-3:delay:ao"
+    },
+    "TM_PRF01": {
+      "trigger_delay_set": "IN:TM:PRF-1:delay:ao"
+    },
+    "TM_PRF02": {
+      "trigger_delay_set": "IN:TM:PRF-2:delay:ao"
+    },
+    "TM_PRF03": {
+      "trigger_delay_set": "IN:TM:PRF-3:delay:ao"
+    },
     "BPM01": {
       "x": "IN:BD:LE05:DBPM:01:BPM_X",
       "y": "IN:BD:LE05:DBPM:01:BPM_Y"

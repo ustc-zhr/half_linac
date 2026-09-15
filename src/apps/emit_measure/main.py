@@ -2636,6 +2636,10 @@ class myWindow(QWidget,Ui_Form):
             parts.append(f"{from_element} -> {to_element}")
         if energy is not None:
             parts.append(f"measurement energy {energy:g} MeV kinetic")
+        entrance_energy = summary.get("entrance_energy_mev")
+        if entrance_energy is not None:
+            entrance = summary.get("entrance_element") or "line start"
+            parts.append(f"inferred entrance energy ({entrance}) {entrance_energy:.6f} MeV kinetic")
         if status == "error":
             parts.append(_compact_status_text(summary.get("message", "error"), limit=100))
         return ", ".join(parts)
@@ -3180,6 +3184,8 @@ class myWindow(QWidget,Ui_Form):
             "measurement_energy_mev": _finite_float_or_none(
                 result.get("measurement_energy_mev", result.get("energy_mev"))
             ),
+            "entrance_energy_mev": _finite_float_or_none(result.get("entrance_energy_mev")),
+            "entrance_element": result.get("entrance_element"),
             "model_energy_source": result.get(
                 "model_energy_source", "Elegant lattice RF profile"
             ),
@@ -5419,6 +5425,8 @@ class myWindow(QWidget,Ui_Form):
             "to_element": dict.get("to_element"),
             "energy_mev": dict.get("energy_mev"),
             "measurement_energy_mev": dict.get("measurement_energy_mev"),
+            "entrance_energy_mev": dict.get("entrance_energy_mev"),
+            "entrance_element": dict.get("entrance_element"),
             "model_energy_source": dict.get("model_energy_source"),
             "beta0": dict.get("beta0"),
             "alpha0": dict.get("alpha0"),
@@ -5515,6 +5523,8 @@ class twissCalThread(QThread):
                 lattice_overrides=self.input.get("model_lattice_overrides"),
             )
             profile_rows = list(profile.rows)
+            context["entrance_energy_mev"] = profile.entrance_energy_mev
+            context["entrance_element"] = profile.entrance_element
             matrix = profile.matrix
             endpoint = profile_rows[-1]
             twiss1 = {

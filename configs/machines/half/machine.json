@@ -2997,6 +2997,84 @@
       "logical_channels": [
         "energy"
       ]
+    },
+    {
+      "id": "TM_EGUN",
+      "kind": "timing",
+      "display_name": "Electron gun timing",
+      "order": 400,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "trigger_delay_set",
+        "fine_delay_set"
+      ]
+    },
+    {
+      "id": "TM_BPM01",
+      "kind": "timing",
+      "display_name": "BPM timing 1",
+      "order": 401,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "trigger_delay_set"
+      ]
+    },
+    {
+      "id": "TM_BPM02",
+      "kind": "timing",
+      "display_name": "BPM timing 2",
+      "order": 402,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "trigger_delay_set"
+      ]
+    },
+    {
+      "id": "TM_BPM03",
+      "kind": "timing",
+      "display_name": "BPM timing 3",
+      "order": 403,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "trigger_delay_set"
+      ]
+    },
+    {
+      "id": "TM_PRF01",
+      "kind": "timing",
+      "display_name": "PRF timing 1",
+      "order": 404,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "trigger_delay_set"
+      ]
+    },
+    {
+      "id": "TM_PRF02",
+      "kind": "timing",
+      "display_name": "PRF timing 2",
+      "order": 405,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "trigger_delay_set"
+      ]
+    },
+    {
+      "id": "TM_PRF03",
+      "kind": "timing",
+      "display_name": "PRF timing 3",
+      "order": 406,
+      "tags": [],
+      "limits": {},
+      "logical_channels": [
+        "trigger_delay_set"
+      ]
     }
   ]
 }

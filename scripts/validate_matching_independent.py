@@ -78,7 +78,8 @@ def standalone(model, directory, overrides, points):
         particles = _load_sdds_columns(directory / (label + '.out'), ('x', 'xp', 'y', 'yp'))
         measured = {}
         for p in ('x', 'y'):
-            cov = np.cov([particles[p], particles[p + 'p']], bias=True)
+            cov = np.cov([np.asarray(particles[p], dtype=float),
+                          np.asarray(particles[p + 'p'], dtype=float)], bias=True)
             emit = math.sqrt(float(np.linalg.det(cov)))
             measured[p] = Twiss(float(cov[0, 0] / emit), float(-cov[0, 1] / emit), emit)
         result[label] = {'planes': planes, 'particles': measured,
@@ -92,7 +93,8 @@ def run(output, selected_case=None):
     cases = [('ql', [f'QL{i:02d}' for i in range(7, 13)], Point('QL12', 'exit'), Point('QT02'), 'QL10', .15),
              ('qt', [f'QT{i:02d}' for i in range(1, 7)], Point('QT06', 'exit'), Point('QT06', 'exit'), 'QT03', .08),
              ('cross_rf', [f'QL{i:02d}' for i in range(7, 13)], Point('QT01'), Point('QT02', 'exit'), 'QL10', .15),
-             ('biased_input', [f'QL{i:02d}' for i in range(7, 13)], Point('QL12', 'exit'), Point('QT02'), 'QL10', .15)]
+             ('biased_input', [f'QL{i:02d}' for i in range(7, 13)], Point('QL12', 'exit'), Point('QT02'), 'QL10', .15),
+             ('qt_biased', [f'QT{i:02d}' for i in range(1, 7)], Point('QT06', 'exit'), Point('QT06', 'exit'), 'QT03', .08)]
     reports = {}
     for label, magnets, target, measured_at, perturbed, delta in cases:
         if selected_case and label != selected_case:
@@ -106,8 +108,9 @@ def run(output, selected_case=None):
         baseline = MeasurementBaseline(measured_at, before['measurement']['energy'],
             before['measurement']['planes'], 'half', 'vm', 'ALL_MAIN', overrides,
             same_state_declared=True)
-        if label == 'biased_input':
-            baseline.planes = {p: Twiss(t.beta * .75, t.alpha * .75, t.emittance / .75)
+        if label in ('biased_input', 'qt_biased'):
+            bias = .75 if label == 'biased_input' else .95
+            baseline.planes = {p: Twiss(t.beta * bias, t.alpha * bias, t.emittance / bias)
                                for p, t in baseline.planes.items()}
         request = MatchingRequest(baseline, target,
             {q: MagnetLimit(overrides[q]['K1'] - 1, overrides[q]['K1'] + 1, .5) for q in magnets},
@@ -133,7 +136,7 @@ def run(output, selected_case=None):
                 'prediction_beta_relative_error': predicted.beta / actual.beta - 1,
                 'actual': asdict(actual), 'predicted': asdict(predicted)}
             report['planes'][p] = values
-            if label != 'biased_input':
+            if label not in ('biased_input', 'qt_biased'):
                 assert values['standalone_bmag'] - 1 <= request.tolerance, (label, p, values)
                 assert values['prediction_vs_standalone_bmag'] - 1 < 1e-6, (label, p, values)
                 assert values['back_inferred_start_bmag'] - 1 < 1e-6, (label, p, values)
@@ -143,7 +146,7 @@ def run(output, selected_case=None):
             limit = request.magnets[q]
             assert limit.lower <= values['suggested'] <= limit.upper
             assert abs(values['suggested'] - overrides[q]['K1']) <= limit.max_change + 1e-10
-        if label == 'biased_input':
+        if label in ('biased_input', 'qt_biased'):
             remeasurement = MeasurementBaseline(measured_at, after['measurement']['energy'],
                 after['measurement']['planes'], 'half', 'vm', 'ALL_MAIN', applied, same_state_declared=True)
             comparison = compare_measurement(model, result, remeasurement, tolerance=.01)
@@ -159,6 +162,6 @@ def run(output, selected_case=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--case', choices=('ql', 'qt', 'cross_rf', 'biased_input'))
+    parser.add_argument('--case', choices=('ql', 'qt', 'cross_rf', 'biased_input', 'qt_biased'))
     args = parser.parse_args()
     run(args.output, args.case)

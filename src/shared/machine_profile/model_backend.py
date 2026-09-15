@@ -39,6 +39,8 @@ class EnergyOpticsResult:
 class TwissProfileResult:
     matrix: np.ndarray
     rows: tuple[Mapping[str, Any], ...]
+    entrance_energy_mev: float | None = None
+    entrance_element: str | None = None
 
 
 @dataclass(frozen=True)
@@ -511,8 +513,10 @@ class ElegantModelBackend:
                     np.linalg.inv(_plane_matrix(entrance_matrix, plane)), upstream_twiss
                 )
                 upstream_twiss = {"beta0": transported["beta"], "alpha0": transported["alpha"], "gamma0": transported["gamma"]}
-            return self.get_twiss_profile(line_start, line_end, upstream_twiss,
-                                          plane=plane, lattice_overrides=lattice_overrides)
+            profile = self.get_twiss_profile(line_start, line_end, upstream_twiss,
+                                             plane=plane, lattice_overrides=lattice_overrides)
+            return TwissProfileResult(profile.matrix, profile.rows,
+                                      self.energy_mev, line_start)
         finally:
             self.energy_mev = original_energy
 
