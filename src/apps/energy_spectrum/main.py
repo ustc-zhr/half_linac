@@ -824,6 +824,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        self.comboBox_fitmethod.addItem("Peak")
+        self.comboBox_fitmethod.setToolTip(
+            "Gauss fit: fitted peak energy and Gaussian width.\n"
+            "direct: whole-projection mean energy and RMS width.\n"
+            "Peak: raw projection maximum energy; whole-projection RMS width. "
+            "Peak position has pixel resolution and is sensitive to noise."
+        )
         gauss_fit_index = self.comboBox_fitmethod.findText("Gauss fit")
         if gauss_fit_index >= 0:
             self.comboBox_fitmethod.setCurrentIndex(gauss_fit_index)
@@ -4114,11 +4121,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         
         # Use one shared center definition for the GUI and Auto Find center lock.
         try:
-            profile_fit = fit_projection_profile(x, denx0, fit_method)
+            profile_fit = fit_projection_profile(
+                x, denx0, fit_method, allow_direct_fallback=False
+            )
         except SpectrumProfileError as exc:
             self.sigx = None
             self.sigy = None
             print(f"Spectrum profile fit failed: {exc}")
+            self.ESAflag_image.canvas.draw()
+            self.energy_plot.axes.clear()
+            self._style_axes(self.energy_plot, "x (mm)", "Projection (arb. units)")
+            self.energy_plot.axes.plot(x, norm_denx, "--", color=palette["plot_energy"])
+            self.energy_plot.canvas.draw()
             self._update_fit_status("Fit failed", "warning", str(exc))
             self._set_energy_unavailable("Fit failed", str(exc))
             self._refresh_status()
@@ -4150,6 +4164,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             )
             if profile_fit.fallback_error is None:
                 self._update_fit_status("Gauss OK", "success")
+        elif fit_method == "Peak":
+            self._update_fit_status(
+                "Peak", "success",
+                "Energy: raw projection maximum. Spread: whole-projection RMS about its mean.",
+            )
+            self.ESAflag_image.axes.axvline(
+                self.meanx, color=palette["plot_fit"], linestyle="--", linewidth=1.4,
+            )
         else:
             if self._fit_text == self.comboBox_fitmethod.currentText():
                 self._update_fit_status("Direct", "success")
@@ -4250,6 +4272,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="spline fit")
         elif fit_method.lower() in ("gauss", "gauss fit"):
             self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="Gauss fit")
+        elif fit_method == "Peak":
+            self.energy_plot.axes.axvline(
+                energy_center, color=palette["plot_fit"], linestyle="--",
+                linewidth=1.4, label="Peak energy (RMS spread)",
+            )
         legend = self.energy_plot.axes.legend(frameon=False)
         if legend is not None:
             for text in legend.get_texts():

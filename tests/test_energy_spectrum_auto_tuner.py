@@ -16,6 +16,7 @@ from half_linac.src.apps.energy_spectrum.esa_auto_tuner import (
     reference_x_pixel,
 )
 from half_linac.src.apps.energy_spectrum.spectrum_profile import (
+    SpectrumProfileError,
     fit_projection_profile,
     gaussian,
     project_image_profiles,
@@ -159,6 +160,67 @@ class _ProfileLockAutoTuner(ESA_AutoTuner):
 
 
 class ESAAutoTunerTests(unittest.TestCase):
+    def test_peak_energy_uses_maximum_bin_but_width_uses_central_rms(self):
+        x = np.linspace(-10.0, 10.0, 1001)
+        density = gaussian(x, 1.0, -2.0, 0.3) + gaussian(x, 0.2, 3.0, 2.0)
+        peak = fit_projection_profile(x, density, "Peak", allow_direct_fallback=False)
+        direct = fit_projection_profile(x, density, "direct")
+        self.assertEqual(peak.center_mm, x[np.argmax(density)])
+        self.assertGreater(abs(peak.center_mm - direct.center_mm), 2.0)
+        self.assertEqual(peak.sigma_mm, direct.sigma_mm)
+        self.assertEqual(peak.method, "Peak")
+        self.assertIsNone(peak.r_squared)
+        np.testing.assert_array_equal(peak.fitted_density, peak.normalized_density)
+
+    def test_peak_rejects_flat_projection(self):
+        with self.assertRaisesRegex(SpectrumProfileError, "no distinguishable peak"):
+            fit_projection_profile(np.arange(10), np.ones(10), "Peak")
+
+    def test_peak_center_lock_does_not_require_gaussian_r_squared(self):
+        tuner = ESA_AutoTuner(
+            flag_pv_obj=_DummyPV(), flag_pixel=(10, 10), bend_pv="FAKE:ENERGY",
+            pixel_width_mm=0.1, profile_fit_method="Peak", min_profile_fit_r_squared=0.7,
+        )
+        self.assertIsNone(tuner.min_profile_fit_r_squared)
+        self.assertIsNone(tuner.measurement.min_fit_r_squared)
+        self.assertEqual(tuner.measurement.fit_method, "Peak")
+
+    def test_gaussian_fit_resolves_narrow_peak_on_wide_pedestal(self):
+        x = np.linspace(-22.0, 22.0, 1000)
+        density = gaussian(x, 1.0, -1.0, 0.45) + gaussian(x, 0.12, -3.0, 14.0, 0.04)
+        fit = fit_projection_profile(x, density, "Gauss fit", allow_direct_fallback=False)
+        self.assertAlmostEqual(fit.center_mm, -1.0, delta=0.01)
+        self.assertAlmostEqual(fit.sigma_mm, 0.45, delta=0.04)
+        self.assertGreater(fit.r_squared, 0.9)
+
+    def test_gaussian_fit_handles_constant_background(self):
+        x = np.linspace(-10.0, 10.0, 501)
+        density = gaussian(x, 2.0, 1.2, 0.7, 5.0)
+        fit = fit_projection_profile(x, density, "Gauss fit", allow_direct_fallback=False)
+        self.assertAlmostEqual(fit.center_mm, 1.2, places=6)
+        self.assertAlmostEqual(fit.sigma_mm, 0.7, places=6)
+        np.testing.assert_allclose(fit.fitted_density, density / density.max(), atol=1e-7)
+
+    def test_flat_projection_is_not_a_successful_gaussian(self):
+        x = np.linspace(-10.0, 10.0, 501)
+        with self.assertRaises(SpectrumProfileError):
+            fit_projection_profile(x, np.ones_like(x), "Gauss fit", allow_direct_fallback=False)
+        fallback = fit_projection_profile(x, np.ones_like(x), "Gauss fit")
+        self.assertEqual(fallback.method, "direct")
+        self.assertIsNotNone(fallback.fallback_error)
+
+    def test_poor_fit_is_rejected_even_when_optimizer_converges(self):
+        from unittest.mock import patch
+
+        x = np.linspace(-22.0, 22.0, 1000)
+        density = gaussian(x, 1.0, -1.0, 0.45) + gaussian(x, 0.12, -3.0, 14.0, 0.04)
+        with patch(
+            "half_linac.src.apps.energy_spectrum.spectrum_profile.curve_fit",
+            return_value=(np.array([0.2, -1.7, 11.0, 0.0]), np.eye(4)),
+        ):
+            with self.assertRaisesRegex(SpectrumProfileError, "Poor Gaussian fit"):
+                fit_projection_profile(x, density, "Gauss fit", allow_direct_fallback=False)
+
     def test_shared_projection_fit_matches_gaussian_and_direct_center_definitions(self):
         x_mm = np.linspace(-5.0, 5.0, 201)
         density = gaussian(x_mm, 3.0, 0.75, 0.6)

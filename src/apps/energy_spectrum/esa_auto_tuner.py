@@ -156,7 +156,7 @@ class ESA_AutoTuner:
         self.allow_direct_fallback = bool(allow_direct_fallback)
         self.min_profile_fit_r_squared = (
             None
-            if min_profile_fit_r_squared is None
+            if min_profile_fit_r_squared is None or self.profile_fit_method.lower() in {"direct", "peak"}
             else float(min_profile_fit_r_squared)
         )
         self.beam_presence_sigma = float(beam_presence_sigma)
