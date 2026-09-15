@@ -7,7 +7,7 @@
   "correction_settle_s_by_backend": {"vm": 8, "real": 1},
   "svd_relative_cutoff_by_backend": {"vm": 0.001, "real": 0.01},
   "corrector_upperlimit_by_backend": {
-    "vm": {"value": 0.001, "unit": "rad"},
+    "vm": {"value": 0.005, "unit": "rad"},
     "real": {"value": 10, "unit": "A"}
   },
   "runtime_defaults": {

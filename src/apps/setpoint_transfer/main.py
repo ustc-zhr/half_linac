@@ -1168,6 +1168,50 @@ class MachineSetpointsWindow(QMainWindow):
             self.staged_values.pop((item.element_id, item.field), None)
         self._rebuild_plan()
 
+    def _choose_workspace_file(self, *, save):
+        # Qt falls back to the process working directory if this does not exist.
+        try:
+            self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            QMessageBox.critical(self, "Workspace Directory", str(exc))
+            return None
+        dialog = QFileDialog(self)
+        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        palette = _theme_palette(self.current_theme)
+        dialog.setStyleSheet(f"""
+QFileDialog QWidget {{
+    background: {palette['window']}; color: {palette['text']};
+}}
+QFileDialog QAbstractItemView {{
+    background: {palette['input']}; color: {palette['text']};
+    alternate-background-color: {palette['alternate']};
+    selection-background-color: {palette['button_hover']};
+    selection-color: {palette['text']};
+}}
+QFileDialog QAbstractItemView::item:selected {{
+    background: {palette['button_hover']}; color: {palette['text']};
+}}
+""")
+        dialog.setNameFilter("Setpoint workspaces (*.json)")
+        dialog.setDirectory(str(self.workspace_dir))
+        dialog.setDefaultSuffix("json")
+        dialog.resize(820, 520)
+        if save:
+            dialog.setWindowTitle("Save Machine Setpoints Workspace")
+            dialog.setAcceptMode(QFileDialog.AcceptSave)
+            timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S")
+            dialog.selectFile(f"{self.profile.machine.id}_setpoints_{timestamp}.json")
+        else:
+            dialog.setWindowTitle("Load Machine Setpoints Workspace")
+            dialog.setFileMode(QFileDialog.ExistingFile)
+        try:
+            if dialog.exec_() != QDialog.Accepted:
+                return None
+            selected = dialog.selectedFiles()
+            return Path(selected[0]) if selected else None
+        finally:
+            dialog.deleteLater()
+
     def _save_workspace(self):
         staged = tuple(self.staged_values.values())
         if not staged:
@@ -1175,21 +1219,9 @@ class MachineSetpointsWindow(QMainWindow):
                 self, "Save Workspace", "There are no staged Target values to save."
             )
             return
-        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S")
-        default_path = self.workspace_dir / (
-            f"{self.profile.machine.id}_setpoints_{timestamp}.json"
-        )
-        path, _selected_filter = QFileDialog.getSaveFileName(
-            self,
-            "Save Machine Setpoints Workspace",
-            str(default_path),
-            "Setpoint workspaces (*.json)",
-        )
-        if not path:
+        destination = self._choose_workspace_file(save=True)
+        if destination is None:
             return
-        destination = Path(path)
-        if destination.suffix.lower() != ".json":
-            destination = destination.with_suffix(".json")
         try:
             save_target_workspace(
                 destination,
@@ -1200,18 +1232,14 @@ class MachineSetpointsWindow(QMainWindow):
         except (OSError, ValueError) as exc:
             QMessageBox.critical(self, "Save Workspace", str(exc))
             return
+        self.workspace_dir = destination.parent
         self.status_label.setText(
             f"Saved {len(staged)} Target values to {destination}."
         )
 
     def _load_workspace(self):
-        path, _selected_filter = QFileDialog.getOpenFileName(
-            self,
-            "Load Machine Setpoints Workspace",
-            str(self.workspace_dir),
-            "Setpoint workspaces (*.json)",
-        )
-        if not path:
+        path = self._choose_workspace_file(save=False)
+        if path is None:
             return
         try:
             staged = load_target_workspace(
@@ -1236,6 +1264,7 @@ class MachineSetpointsWindow(QMainWindow):
         except ValueError as exc:
             QMessageBox.critical(self, "Load Workspace", str(exc))
             return
+        self.workspace_dir = path.parent
         self._clear_selection()
         self.staged_values = {
             (item.element_id, item.field): item for item in staged

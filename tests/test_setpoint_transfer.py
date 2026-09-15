@@ -502,9 +502,9 @@ def test_gui_workspace_load_replaces_targets_without_selecting(monkeypatch, tmp_
         staged_setpoints=(StagedSetpoint("QL01", "K1", 1.25, "manual"),),
     )
     monkeypatch.setattr(
-        main.QFileDialog,
-        "getOpenFileName",
-        lambda *args, **kwargs: (str(workspace_path), ""),
+        main.MachineSetpointsWindow,
+        "_choose_workspace_file",
+        lambda *args, **kwargs: workspace_path,
     )
 
     app = QApplication.instance() or QApplication([])
@@ -520,8 +520,43 @@ def test_gui_workspace_load_replaces_targets_without_selecting(monkeypatch, tmp_
         app.processEvents()
     app.processEvents()
 
+    assert window.workspace_dir == workspace_path.parent
     assert set(window.staged_values) == {("QL01", "K1")}
     assert window.staged_values[("QL01", "K1")].target_value == 1.25
     assert window._checked_ids() == set()
     assert not window.apply_button.isEnabled()
     window.close()
+
+
+@pytest.mark.parametrize("save", [True, False])
+def test_workspace_dialog_creates_directory_and_uses_json_suffix(monkeypatch, tmp_path, save):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PyQt5")
+    from types import SimpleNamespace
+    from PyQt5.QtWidgets import QApplication, QDialog, QMainWindow
+    from half_linac.src.apps.setpoint_transfer import main
+
+    app = QApplication.instance() or QApplication([])
+    window = QMainWindow()
+    window.workspace_dir = tmp_path / "missing" / "workspaces"
+    window.current_theme = "dark"
+    window.profile = SimpleNamespace(machine=SimpleNamespace(id="half"))
+    window.setStyleSheet(main._build_stylesheet(main._theme_palette("dark")))
+
+    def inspect_dialog(dialog):
+        assert window.workspace_dir.is_dir()
+        assert Path(dialog.directory().absolutePath()) == window.workspace_dir
+        assert dialog.testOption(main.QFileDialog.DontUseNativeDialog)
+        assert dialog.defaultSuffix() == "json"
+        if save:
+            assert dialog.acceptMode() == main.QFileDialog.AcceptSave
+            dialog.selectFile("sample")
+            assert Path(dialog.selectedFiles()[0]).name == "sample.json"
+        else:
+            assert dialog.fileMode() == main.QFileDialog.ExistingFile
+        return QDialog.Rejected
+
+    monkeypatch.setattr(main.QFileDialog, "exec_", inspect_dialog)
+    assert main.MachineSetpointsWindow._choose_workspace_file(window, save=save) is None
+    window.close()
+    app.processEvents()

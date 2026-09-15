@@ -61,6 +61,26 @@ class WorkbenchGuiTests(unittest.TestCase):
             self.assertFalse(window.textEdit.isHidden())
             window.close()
 
+    def test_parameter_selection_scalar_baseline_and_emittance_modes(self):
+        window = self.make_window()
+        scalar = dict(s=[0, 1], x=[5, 10], unit='MeV', labels=['Kinetic Energy'])
+        transverse = dict(s=[0, 1], x=[1, 2], y=[2, 3], unit='mm·mrad')
+        window._result = dict(curves={'Kinetic Energy': scalar,
+            'Geometric Emittance (corrected)': transverse})
+        with patch.object(window.magnet_panel, 'baseline_curve', return_value=scalar):
+            window.curve_choice.setCurrentText('Kinetic Energy')
+            self.assertEqual(len(window.curve_plot.ax.lines), 2)
+            self.assertTrue(window.emittance_type.isHidden())
+            self.assertIn('MeV', window.curve_plot.ax.get_ylabel())
+        window.curve_choice.setCurrentText('Emittance')
+        self.assertFalse(window.emittance_type.isHidden())
+        window.emittance_type.setCurrentText('Geometric')
+        window.emittance_corrected.setChecked(True)
+        self.assertEqual(len(window.curve_plot.ax.lines), 2)
+        self.assertIn('Geometric Emittance (corrected)', window.curve_plot.ax.get_ylabel())
+        window.curve_choice.setCurrentText('Transmission')
+        self.assertIn('Unavailable', window.curve_plot.ax.get_title())
+
     def test_result_freshness_selection_and_publication_warning(self):
         window = self.make_window()
         window._executor.shutdown(wait=True)

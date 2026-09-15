@@ -11,8 +11,27 @@ including repeated elements. Device parameters are read-only. Beam source,
 usedline, segment and error controls are in separate sidebar tabs. A segment
 handoff continues to lock beam-source editing.
 
-The center plot shows Orbit (mm), beta functions (m), dispersion (m), or tracked
-RMS Beam Size (mm). The independent WATCH selector shows coordinate histograms
+The center **Beam Parameters** plot offers Orbit (mm), beta functions (m),
+dispersion (m), tracked RMS Beam Size (mm), Orbit Angle and RMS Divergence (mrad),
+and the following parameters:
+
+- Emittance (mm·mrad): normalized or geometric projected RMS X/Y emittance,
+  with an optional removal of dispersion contributions. Defaults to normalized,
+  with dispersion included.
+- Kinetic Energy (MeV): electron kinetic energy evaluated at the mean momentum
+  `pCentral * (1 + Cdelta)`, approximating mean kinetic energy for narrow spreads.
+- RMS Bunch Length (ps): RMS bunch duration `St`.
+- Relative Momentum Spread (%): `100 * Sdelta / (1 + Cdelta)`, normalized to
+  local mean momentum; this is not an exact relative energy spread.
+- Transmission (%): surviving macroparticles relative to the first recorded
+  position, reflecting only losses represented by the simulation model.
+
+All curves support baseline overlays. Existing `.cen`, `.sig`, and `.twi` files
+are each loaded once per collection, with no extra tracking or particle analysis.
+Changing the plot selection uses the stored snapshot. New parameters become
+available after restarting the updated VM runtime and completing a calculation.
+
+The independent WATCH selector shows coordinate histograms
 and population RMS/centroids in mm. Missing, disabled, ambiguous repeated WATCH,
 and stale output files have explicit unavailable messages. Twiss is never used
 as a substitute for tracked RMS size.

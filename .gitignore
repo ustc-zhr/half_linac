@@ -109,3 +109,7 @@ packages/
 # VM workbench observations
 src/virtual_machine/*_elegant/.vm-workbench/
 src/virtual_machine/*_elegant/elegant/*.sig
+
+# Generated analysis data and figures
+docs/analysis/*.json
+docs/analysis/*.png

@@ -43,6 +43,36 @@ class ResultTests(unittest.TestCase):
             self.assertEqual(result['screens']['1']['sx'], 1)
             self.assertEqual(result['screens']['1']['sy'], 2)
 
+    def test_new_parameters_units_and_single_load_per_file(self):
+        values = dict(s=[0, 1], pCentral=[10, 20], Cdelta=[.1, 0],
+                      Particles=[100, 75], St=[2e-12, 1e-12], Sdelta=[.011, .02],
+                      enx=[2e-6, 3e-6], eny=[1e-6, 2e-6],
+                      ex=[2e-7, 1e-7], ey=[1e-7, .5e-7],
+                      ecnx=[1e-6, 2e-6], ecny=[.5e-6, 1e-6],
+                      ecx=[1e-7, .5e-7], ecy=[.5e-7, .25e-7],
+                      Sxp=[.001, .002], Syp=[.003, .004],
+                      Cxp=[-.001, .002], Cyp=[.003, -.004])
+        dataset = SimpleNamespace(columnName=list(values),
+            columnData=[[v] for v in values.values()], load=Mock())
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for suffix in ('cen', 'sig', 'twi'):
+                (root / f'one.{suffix}').touch()
+            with patch('half_linac.src.shared.elegant_backend.parser._new_legacy_sdds_dataset', return_value=dataset):
+                curves = data.collect_results(dict(lattice={}, usedline=[]), root)['curves']
+            self.assertEqual(dataset.load.call_count, 3)
+        self.assertEqual(curves['Transmission']['x'], [100, 75])
+        self.assertEqual(curves['RMS Bunch Length']['x'], [2, 1])
+        self.assertAlmostEqual(curves['Relative Momentum Spread']['x'][0], 1)
+        self.assertAlmostEqual(curves['Kinetic Energy']['x'][0], .51099895 * (122**.5 - 1))
+        self.assertNotIn('y', curves['Kinetic Energy'])
+        self.assertEqual(curves['Normalized Emittance']['x'], [2, 3])
+        self.assertAlmostEqual(curves['Geometric Emittance']['x'][0], .2)
+        self.assertAlmostEqual(curves['Geometric Emittance (corrected)']['x'][0], .1)
+        self.assertEqual(curves['Normalized Emittance (corrected)']['x'], [1, 2])
+        self.assertEqual(curves['Orbit Angle']['x'], [-1, 2])
+        self.assertEqual(curves['RMS Divergence']['y'], [3, 4])
+
     def test_missing_and_stale_outputs_are_not_zero_curves(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

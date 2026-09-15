@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from collections.abc import Mapping
 from dataclasses import replace
+from functools import partial
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -160,6 +161,7 @@ def _read_flag_image_fit(
     roi=None,
     flip_y=False,
     full_frame_for_roi=False,
+    method="Gaussian fit",
 ):
     raw_image = epics.caget(image_pv)
     if raw_image is None:
@@ -173,7 +175,7 @@ def _read_flag_image_fit(
             roi=roi,
             flip_y=flip_y,
             full_frame_for_roi=full_frame_for_roi,
-            analyzer=analyze_beam_image,
+            analyzer=partial(analyze_beam_image, method=method),
         )
     except (TypeError, ValueError) as exc:
         if "image size" in str(exc):
@@ -1327,6 +1329,16 @@ class myWindow(QWidget,Ui_Form):
         display_row = QHBoxLayout()
         display_row.setContentsMargins(0, 0, 0, 0)
         display_row.setSpacing(8)
+        self.beam_width_method_combo = QComboBox(card)
+        self.beam_width_method_combo.addItem("Gaussian fit", "Gaussian fit")
+        self.beam_width_method_combo.addItem("Projection RMS", "RMS moments")
+        self.beam_width_method_combo.setToolTip(
+            "Beam width used for preview and quad scans. Projection RMS uses intensity-weighted "
+            "second moments and is sensitive to background and ROI clipping. "
+            "Changing this does not reprocess archived beam widths."
+        )
+        self.beam_width_method_combo.currentIndexChanged.connect(self._beam_width_method_changed)
+        self.beam_width_method_combo.hide()
         self.beam_background_status_label = QLabel("Off", card)
         self.beam_background_status_label.setProperty("role", "field")
         self.beam_background_manage_button = QPushButton("Manage…", card)
@@ -1335,7 +1347,7 @@ class myWindow(QWidget,Ui_Form):
         self.beam_image_display_button = QPushButton("Display…", card)
         self.beam_image_display_button.setProperty("compact", True)
         self.beam_image_display_button.setToolTip(
-            "Set image colormap, intensity scale, and diagnostic overlays."
+            "Set beam width method, image colormap, and intensity scale."
         )
         self.beam_image_display_button.clicked.connect(
             self._show_beam_image_display_dialog
@@ -2366,7 +2378,7 @@ class myWindow(QWidget,Ui_Form):
         self._draw_placeholder(self.beam_image_widget, "x (mm)", "y (mm)", note)
         if hasattr(self, "beam_fit_flag_label"):
             self.beam_fit_flag_label.setText("Local fit")
-            self.beam_fit_summary_label.setText("Fit: Gaussian · No image")
+            self.beam_fit_summary_label.setText(f"Width: {self._beam_width_method()} · No image")
             self.beam_fit_sigx_label.setText("--")
             self.beam_fit_sigy_label.setText("--")
             self.beam_fit_status_label.setText("No image")
@@ -2433,10 +2445,12 @@ class myWindow(QWidget,Ui_Form):
             widget.axes.plot(fit_result.x_axis, denx, "--c")
             widget.axes.plot(deny, fit_result.y_axis, "--c")
         if self.beam_image_overlays and fit_result.valid:
-            fit_denx = fit_result.x_projection.fitted_projection * height * 0.3 + extent[2] * 0.98
-            fit_deny = fit_result.y_projection.fitted_projection * width * 0.3 + extent[0] * 0.98
-            widget.axes.plot(fit_result.x_axis, fit_denx, "--", color=palette["plot_fit"])
-            widget.axes.plot(fit_deny, fit_result.y_axis, "--", color=palette["plot_fit"])
+            if fit_result.x_projection.fitted_projection is not None:
+                fit_denx = fit_result.x_projection.fitted_projection * height * 0.3 + extent[2] * 0.98
+                widget.axes.plot(fit_result.x_axis, fit_denx, "--", color=palette["plot_fit"])
+            if fit_result.y_projection.fitted_projection is not None:
+                fit_deny = fit_result.y_projection.fitted_projection * width * 0.3 + extent[0] * 0.98
+                widget.axes.plot(fit_deny, fit_result.y_axis, "--", color=palette["plot_fit"])
 
         if k1 is not None:
             widget.axes.set_title(
@@ -2457,7 +2471,7 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_background_status = background_status
         self.beam_image_title_label.setText(f"Current PRF Image · {flag_name}")
         fit_status = "valid" if fit_result.valid else fit_result.status
-        self.beam_fit_summary_label.setText(f"Fit: Gaussian · {fit_status}")
+        self.beam_fit_summary_label.setText(f"Width: {fit_result.method} · {fit_status}")
         self.beam_fit_flag_label.setText("Local fit")
         self.beam_fit_sigx_label.setText(f"{fit_result.sigx_mm:.3f}" if fit_result.sigx_mm is not None else "--")
         self.beam_fit_sigy_label.setText(f"{fit_result.sigy_mm:.3f}" if fit_result.sigy_mm is not None else "--")
@@ -2862,6 +2876,7 @@ class myWindow(QWidget,Ui_Form):
             "flag": paras.flag_name,
             "model_line": paras.model_line,
             "beam_size_source": "local_fit",
+            "beam_width_method": getattr(paras, "beam_width_method", "Gaussian fit"),
             "flag_image_pv": paras.flagImagePV,
             "size_pv_sigx": paras.flagSigxPV,
             "size_pv_sigy": paras.flagSigyPV,
@@ -2940,6 +2955,13 @@ class myWindow(QWidget,Ui_Form):
             )
 
         mismatches = []
+        file_method = metadata.get("beam_width_method", "Gaussian fit")
+        current_method = expected.get("beam_width_method", "Gaussian fit")
+        if file_method != current_method:
+            mismatches.append(
+                f"beam width method: file={file_method!r}, current={current_method!r}; "
+                "saved widths cannot be converted without the original images"
+            )
         for key in ("machine_id", "backend", "quad", "flag"):
             if metadata.get(key) != expected.get(key):
                 mismatches.append(f"{key}: file={metadata.get(key)!r}, current={expected.get(key)!r}")
@@ -2962,6 +2984,9 @@ class myWindow(QWidget,Ui_Form):
     def _apply_scan_metadata_to_controls(self, metadata, source_label):
         if metadata is None:
             raise RuntimeError(f"{source_label} has no scan metadata.")
+        width_method = metadata.get("beam_width_method", "Gaussian fit")
+        if self.beam_width_method_combo.findData(width_method) < 0:
+            raise RuntimeError(f"{source_label} has unsupported beam width method: {width_method!r}.")
         if metadata.get("schema_version") != SCAN_DATA_SCHEMA_VERSION:
             raise RuntimeError(
                 f"{source_label} has unsupported metadata schema: "
@@ -3061,6 +3086,9 @@ class myWindow(QWidget,Ui_Form):
 
         self._applying_emit_preset = True
         try:
+            blocked = self.beam_width_method_combo.blockSignals(True)
+            self.beam_width_method_combo.setCurrentIndex(self.beam_width_method_combo.findData(width_method))
+            self.beam_width_method_combo.blockSignals(blocked)
             self._set_combo_current_text(self.comboBox, quad_name)
             self._set_combo_current_text(self.comboBox_4, flag_name)
             custom_index = self.preset_combo.findData(None)
@@ -3341,6 +3369,7 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_5.setEnabled(running and not stopping)
         self.pushButton_5.setText("Stopping..." if stopping else "Stop")
         self.pushButton_3.setEnabled(not running)
+        self.beam_width_method_combo.setEnabled(not running)
 
     def _begin_scan_progress(self, paras):
         strategy = str(paras.scan_strategy)
@@ -4052,6 +4081,11 @@ class myWindow(QWidget,Ui_Form):
             )
             settings.addWidget(colormap_label, 0, 0)
             settings.addWidget(self.beam_image_colormap_combo, 0, 1)
+            width_label = QLabel("Beam width", dialog)
+            width_label.setProperty("role", "field")
+            settings.addWidget(width_label, 1, 0)
+            settings.addWidget(self.beam_width_method_combo, 1, 1)
+            self.beam_width_method_combo.show()
             settings.setColumnStretch(1, 1)
             layout.addLayout(settings)
 
@@ -4064,18 +4098,6 @@ class myWindow(QWidget,Ui_Form):
                 self._set_beam_image_logarithmic
             )
             layout.addWidget(self.beam_image_log_checkbox)
-
-            self.beam_image_overlays_checkbox = QCheckBox(
-                "Show projection and Gaussian fit", dialog
-            )
-            self.beam_image_overlays_checkbox.setChecked(self.beam_image_overlays)
-            self.beam_image_overlays_checkbox.setToolTip(
-                "Show diagnostic overlays without changing profile analysis."
-            )
-            self.beam_image_overlays_checkbox.toggled.connect(
-                self._set_beam_image_overlays
-            )
-            layout.addWidget(self.beam_image_overlays_checkbox)
 
             close_button = QPushButton("Close", dialog)
             close_button.setProperty("compact", True)
@@ -4095,10 +4117,6 @@ class myWindow(QWidget,Ui_Form):
 
     def _set_beam_image_logarithmic(self, checked):
         self.beam_image_logarithmic = bool(checked)
-        self._redraw_latest_beam_image()
-
-    def _set_beam_image_overlays(self, checked):
-        self.beam_image_overlays = bool(checked)
         self._redraw_latest_beam_image()
 
     def _show_roi_dialog(self):
@@ -4289,9 +4307,18 @@ class myWindow(QWidget,Ui_Form):
             self._schedule_beam_image_refresh()
 
 
+    def _beam_width_method(self):
+        return self.beam_width_method_combo.currentData() or "Gaussian fit"
+
+    def _beam_width_method_changed(self, _index):
+        self._draw_beam_image_placeholder()
+        if self._beam_image_auto_refresh_ready:
+            self._schedule_beam_image_refresh()
+
     def get_setting(self, *, show_warning=True):
         try:
             para = structData()
+            para.beam_width_method = self._beam_width_method()
             # get scan parameters
             para.quad_name = self.comboBox.currentText()
             para.flag_name = self.comboBox_4.currentText()
@@ -4436,6 +4463,7 @@ class myWindow(QWidget,Ui_Form):
                 roi=getattr(paras, "roi", None),
                 flip_y=getattr(paras, "flag_image_flip_y", False),
                 full_frame_for_roi=True,
+                method=getattr(paras, "beam_width_method", "Gaussian fit"),
             )
         except RuntimeError as exc:
             self._draw_beam_image_placeholder("PRF image unavailable")
@@ -5577,6 +5605,7 @@ class scanThread(QThread):
         self.roi = getattr(paras, "roi", None)
         self.background_image = getattr(paras, "background_image", None)
         self.background_status = getattr(paras, "background_status", "Off")
+        self.beam_width_method = getattr(paras, "beam_width_method", "Gaussian fit")
         self.k1_from    = paras.k1_from   
         self.k1_end     = paras.k1_end    
         self.k1_steps   = paras.k1_steps  
@@ -5699,6 +5728,7 @@ class scanThread(QThread):
                         roi=self.roi,
                         flip_y=self.flag_image_flip_y,
                         full_frame_for_roi=True,
+                        method=self.beam_width_method,
                     )
                 except RuntimeError as exc:
                     if not adaptive or retry >= self.adaptive_config.max_retries:
