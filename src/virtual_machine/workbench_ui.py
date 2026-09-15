@@ -15,7 +15,8 @@ from concurrent.futures import ThreadPoolExecutor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTabWidget,
     QScrollArea, QTreeWidget, QTreeWidgetItem, QLineEdit, QLabel, QComboBox, QPlainTextEdit,
-    QToolButton, QSizePolicy, QPushButton, QGroupBox, QBoxLayout, QFrame, QHeaderView, QAbstractItemView)
+    QToolButton, QSizePolicy, QPushButton, QGroupBox, QBoxLayout, QFrame, QHeaderView, QAbstractItemView,
+    QCheckBox)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 
@@ -265,15 +266,26 @@ class WorkbenchMixin:
         self.main_splitter.addWidget(self.tabs)
         curve_page, cl = self._workbench_card()
         self.curve_choice = QComboBox()
-        self.curve_choice.addItems(['Orbit', 'Twiss', 'Dispersion', 'Beam Size'])
+        self.curve_choice.addItems(['Orbit', 'Twiss', 'Tracked Twiss', 'Dispersion', 'Beam Size',
+                                   'Emittance', 'Kinetic Energy', 'RMS Bunch Length',
+                                   'Relative Momentum Spread', 'Transmission',
+                                   'RMS Divergence', 'Orbit Angle'])
         self.curve_plot = Plot()
         curve_header = QHBoxLayout()
-        curve_title = QLabel('Beam Optics')
+        curve_title = QLabel('Beam Parameters')
         curve_title.setProperty('role', 'cardTitle')
         curve_header.addWidget(curve_title)
         curve_header.addStretch()
         curve_header.addWidget(self.curve_choice)
         cl.addLayout(curve_header)
+        emittance_options = QHBoxLayout()
+        self.emittance_type = QComboBox()
+        self.emittance_type.addItems(['Normalized', 'Geometric'])
+        self.emittance_corrected = QCheckBox('Remove dispersion contribution')
+        emittance_options.addWidget(self.emittance_type)
+        emittance_options.addWidget(self.emittance_corrected)
+        emittance_options.addStretch()
+        cl.addLayout(emittance_options)
         cl.addWidget(self.curve_plot, 1)
         self.main_splitter.addWidget(curve_page)
         screen_page, sl = self._workbench_card()
@@ -324,6 +336,8 @@ class WorkbenchMixin:
         self.device_search.textChanged.connect(self._filter_devices)
         self.devices.currentItemChanged.connect(self._select_device)
         self.curve_choice.currentTextChanged.connect(self._draw_curve)
+        self.emittance_type.currentTextChanged.connect(self._draw_curve)
+        self.emittance_corrected.toggled.connect(self._draw_curve)
         self.screen_choice.currentIndexChanged.connect(self._draw_screen)
         self._apply_theme()
         self._draw_curve()
@@ -414,24 +428,50 @@ class WorkbenchMixin:
         ax = self.curve_plot.ax
         ax.clear()
         name = self.curve_choice.currentText()
+        emittance = name == 'Emittance'
+        self.emittance_type.setVisible(emittance)
+        self.emittance_corrected.setVisible(emittance)
+        if emittance:
+            name = self.emittance_type.currentText() + ' Emittance'
+            if self.emittance_corrected.isChecked():
+                name += ' (corrected)'
+        tooltip = {
+            'Kinetic Energy': 'Electron kinetic energy at the mean momentum, including the centroid momentum offset. Approximates mean kinetic energy for a narrow momentum distribution.',
+            'RMS Bunch Length': 'RMS bunch duration σt in ps.',
+            'Relative Momentum Spread': 'RMS momentum spread divided by the local mean momentum, σp/〈p〉. This is not an exact relative energy spread.',
+            'Transmission': 'Surviving macroparticles relative to the first recorded position. Losses reflect the configured simulation model.',
+            'RMS Divergence': 'RMS angular spread about the centroid in each transverse plane.',
+            'Orbit Angle': 'Mean trajectory angles in the X and Y planes.',
+        }.get(name, '')
+        if emittance:
+            tooltip = 'Projected RMS emittance; ' + (
+                'dispersion contribution removed.' if self.emittance_corrected.isChecked()
+                else 'includes dispersion contribution.')
+        self.curve_choice.setToolTip(tooltip)
+        self.curve_plot.setToolTip(tooltip)
+
+        def plot_curve(curve, baseline=False):
+            labels = curve.get('labels', ['X', 'Y'])
+            for index, (key, color) in enumerate((('x', '#45bfa9'), ('y', '#609fea'))):
+                if key in curve:
+                    label = labels[index] + (' baseline' if baseline else '')
+                    ax.plot(curve['s'], curve[key], '--' if baseline else '-',
+                            color=color, label=label)
+            ax.set_ylabel(f"{name} ({curve['unit']})")
+            ax.legend(fontsize=8)
+            ax.grid(alpha=.15)
+
         data = (self._result or {}).get('curves', {}).get(name, {'error': 'No simulation result'})
         if 'error' in data:
             ax.set_title('Unavailable: ' + data['error'], fontsize=9, wrap=True)
         else:
-            ax.plot(data['s'], data['x'], color='#45bfa9', label='X')
-            ax.plot(data['s'], data['y'], color='#609fea', label='Y')
-            ax.set_ylabel(f"{name} ({data['unit']})")
-            ax.legend(fontsize=8)
-            ax.grid(alpha=.15)
+            plot_curve(data)
         if self._selected_index is not None and self._selected_index < len(self._elements):
             ax.axvline(self._elements[self._selected_index]['s'], color='#b79964', linestyle=':')
         if hasattr(self, 'magnet_panel'):
             baseline = self.magnet_panel.baseline_curve(name)
             if baseline and 'error' not in baseline:
-                ax.plot(baseline['s'], baseline['x'], '--', color='#45bfa9', label='X baseline')
-                ax.plot(baseline['s'], baseline['y'], '--', color='#609fea', label='Y baseline')
-                ax.set_ylabel(f"{name} ({baseline['unit']})")
-                ax.legend(fontsize=8)
+                plot_curve(baseline, baseline=True)
         ax.set_xlabel('s (m)')
         self.curve_plot.toolbar.update()
         self.curve_plot.toolbar.push_current()
