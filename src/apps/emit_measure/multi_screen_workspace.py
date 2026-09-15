@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+from functools import partial
 import json
 from pathlib import Path
 from typing import Callable, Mapping
@@ -117,6 +118,7 @@ class MultiScreenWorkspace(QWidget):
         self.beam_image_colormap = DEFAULT_BEAM_IMAGE_COLORMAP
         self.beam_image_logarithmic = False
         self.beam_image_overlays = True
+        self.beam_width_method = "Gaussian fit"
         self.roi_status = "Off"
         self.background_status = "Off"
         self._background_image = None
@@ -664,6 +666,7 @@ class MultiScreenWorkspace(QWidget):
                 f"cond {observability.x.condition_number:.3g}; "
                 f"Y rank {observability.y.rank}/3, cond {observability.y.condition_number:.3g}"
             )
+            self.session = replace(self.session, beam_width_method=self.beam_width_method)
             if observability.status in {"invalid", "poor"}:
                 self._set_state("Invalid", observability.message)
             else:
@@ -767,7 +770,7 @@ class MultiScreenWorkspace(QWidget):
                 pv_sigy = values.get("pv_sigy")
                 if fit is None and image is not None and extent is not None:
                     _prepared, fit = analyze_beam_image(
-                        np.asarray(image, dtype=float), extent=extent
+                        np.asarray(image, dtype=float), extent=extent, method=self.beam_width_method
                     )
                 if fit is not None:
                     payload = {
@@ -817,6 +820,7 @@ class MultiScreenWorkspace(QWidget):
                 background=background,
                 roi=roi,
                 full_frame_for_roi=True,
+                analyzer=partial(analyze_beam_image, method=self.beam_width_method),
             )
         except (TypeError, ValueError) as exc:
             raise RuntimeError(str(exc)) from exc
@@ -889,7 +893,7 @@ class MultiScreenWorkspace(QWidget):
             used=fit.valid,
         )
         self.beam_fit_summary_label.setText(
-            f"Fit: Gaussian · {'valid' if fit.valid else fit.status}"
+            f"Fit: {getattr(fit, 'method', self.beam_width_method)} · {'valid' if fit.valid else fit.status}"
         )
         self.roi_status_label.setText(f"ROI: {self.roi_status}")
         self.beam_background_status_label.setText(self.background_status)
@@ -990,6 +994,7 @@ class MultiScreenWorkspace(QWidget):
         self.image_axes.set_axis_off()
         self.image_status_label.setText(message)
         self.image_title_label.setText("Current Screen Image")
+        self.beam_fit_summary_label.setText(f"Fit: {self.beam_width_method} · No image")
         self.image_widget.canvas.draw_idle()
         self.image_fit_label.setText("--")
         self.pv_cross_check_label.setText("--")
@@ -1127,6 +1132,20 @@ class MultiScreenWorkspace(QWidget):
         dialog.setWindowTitle("Image Display")
         layout = QVBoxLayout(dialog)
         form = QGridLayout()
+        method = QComboBox(dialog)
+        method.addItem("Gaussian fit", "Gaussian fit")
+        method.addItem("Projection RMS", "RMS moments")
+        method.setCurrentIndex(max(0, method.findData(self.beam_width_method)))
+        method.setToolTip(
+            "Width used for preview and samples. Projection RMS is sensitive to background "
+            "and ROI clipping. Start a new measurement to change method after sampling."
+        )
+        method.setEnabled(not self._archive_review and not (
+            self.session is not None and self.session.acquisition.samples
+        ))
+        method.currentIndexChanged.connect(lambda _index: self._set_beam_width_method(method.currentData()))
+        form.addWidget(QLabel("Beam width"), 2, 0)
+        form.addWidget(method, 2, 1)
         form.addWidget(QLabel("Colormap"), 0, 0)
         cmap = QComboBox(dialog)
         cmap.addItems(BEAM_IMAGE_COLORMAPS)
@@ -1137,16 +1156,24 @@ class MultiScreenWorkspace(QWidget):
         log.setChecked(self.beam_image_logarithmic)
         log.toggled.connect(self._set_image_logarithmic)
         form.addWidget(log, 1, 0, 1, 2)
-        overlays = QCheckBox("Show fit and projection overlays", dialog)
-        overlays.setChecked(self.beam_image_overlays)
-        overlays.toggled.connect(self._set_image_overlays)
-        form.addWidget(overlays, 2, 0, 1, 2)
         layout.addLayout(form)
         close = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
         close.rejected.connect(dialog.reject)
         close.accepted.connect(dialog.accept)
         layout.addWidget(close)
         dialog.exec_()
+
+    def _set_beam_width_method(self, value: str) -> None:
+        if value not in {"Gaussian fit", "RMS moments"}:
+            raise ValueError(f"Unsupported beam width method: {value}")
+        if self._archive_review or (self.session is not None and self.session.acquisition.samples):
+            return
+        self.beam_width_method = value
+        if self.session is not None:
+            self.session = replace(self.session, beam_width_method=value)
+            self.preview_sample()
+        else:
+            self._clear_image_display()
 
     def _set_image_colormap(self, value: str) -> None:
         self.beam_image_colormap = value
@@ -1193,6 +1220,7 @@ class MultiScreenWorkspace(QWidget):
         y_quality = assess_projection_quality(fit.y_projection)
         return {
             "fit_status": fit.status,
+            "beam_width_method": getattr(fit, "method", None),
             "fit_message": fit.message,
             "x_status": x_quality["status"],
             "y_status": y_quality["status"],
@@ -1493,6 +1521,7 @@ class MultiScreenWorkspace(QWidget):
     def _load_session_controls(self) -> None:
         if self.session is None:
             return
+        self.beam_width_method = self.session.beam_width_method
         self._configuration_guard = True
         try:
             self.model_line_edit.setCurrentText(self.session.model_line)

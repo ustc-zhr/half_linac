@@ -289,6 +289,7 @@ class MultiScreenMeasurementSession:
     acquisition: MultiScreenAcquisition
     created_at: str
     schema: str = "emit_multi_screen_v1"
+    beam_width_method: str = "Gaussian fit"
 
     @classmethod
     def create(
@@ -338,6 +339,7 @@ def measurement_archive_payload(
 
     payload: dict[str, object] = {
         "schema": session.schema,
+        "beam_width_method": session.beam_width_method,
         "created_at": session.created_at,
         "machine": session.machine,
         "backend": session.backend,
@@ -463,6 +465,7 @@ def load_multi_screen_archive(path: Path | str) -> MultiScreenMeasurementSession
         optics=optics,
         acquisition=acquisition,
         created_at=str(payload.get("created_at", "")),
+        beam_width_method=str(payload.get("beam_width_method", "Gaussian fit")),
     )
 
 

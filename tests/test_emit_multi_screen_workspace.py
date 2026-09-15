@@ -1,4 +1,5 @@
 import sys
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -81,6 +82,40 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         self.assertEqual(len(workspace.session.acquisition.samples), 1)
         self.assertEqual(workspace.session.acquisition.samples[0].source, "image")
         self.assertEqual(workspace.samples_table.columnCount(), 6)
+
+    def test_width_method_controls_preview_sampling_and_archive(self):
+        axis = np.linspace(-3, 3, 201)
+        profile = np.exp(-axis**2 / .08) + .08 * np.exp(-axis**2 / .8)
+        image = np.outer(profile, profile)
+        workspace = self._workspace(image)
+        workspace.image_reader = lambda _screen: {
+            "image": image, "extent": (-3., 3., -3., 3.),
+        }
+        workspace.preview_sample()
+        gaussian_width = workspace._last_fit.sigx_mm
+        workspace._set_beam_width_method("RMS moments")
+        rms_width = workspace._last_fit.sigx_mm
+        self.assertGreater(rms_width, gaussian_width * 1.3)
+        self.assertIn("RMS moments", workspace.beam_fit_summary_label.text())
+        self.assertIsNone(workspace._last_fit.x_projection.fitted_projection)
+        workspace.acquire_sample()
+        sample = workspace.session.acquisition.samples[0]
+        self.assertAlmostEqual(sample.sigma_x_m * 1000, rms_width)
+        self.assertEqual(sample.quality["beam_width_method"], "RMS moments")
+        workspace._set_beam_width_method("Gaussian fit")
+        self.assertEqual(workspace.beam_width_method, "RMS moments")
+        with TemporaryDirectory() as directory:
+            path = save_multi_screen_archive(Path(directory) / "width.json", workspace.session)
+            restored = load_multi_screen_archive(path)
+            self.assertEqual(restored.beam_width_method, "RMS moments")
+            workspace.session = restored
+            workspace.beam_width_method = "Gaussian fit"
+            workspace._load_session_controls()
+            self.assertEqual(workspace.beam_width_method, "RMS moments")
+            payload = json.loads(path.read_text())
+            del payload["beam_width_method"]
+            path.write_text(json.dumps(payload))
+            self.assertEqual(load_multi_screen_archive(path).beam_width_method, "Gaussian fit")
 
     def test_invalid_fit_is_displayed_but_not_accepted(self):
         image = np.zeros((20, 20), dtype=float)
