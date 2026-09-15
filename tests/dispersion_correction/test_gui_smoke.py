@@ -1402,7 +1402,8 @@ def test_joint_correction_is_recorded_with_two_plane_history() -> None:
     window.close()
 
 
-def test_history_can_restore_a_selected_accepted_state(monkeypatch) -> None:
+@pytest.mark.parametrize("accepted, measured", [(True, True), (False, True), (False, False)])
+def test_history_can_apply_a_selected_generation(monkeypatch, accepted, measured) -> None:
     pytest.importorskip("PyQt5")
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -1461,12 +1462,13 @@ def test_history_can_restore_a_selected_accepted_state(monkeypatch) -> None:
                 iteration=1,
                 gain=0.5,
                 delta_knobs={},
-                accepted=True,
-                reason="Accepted",
+                accepted=accepted,
+                reason="Accepted" if accepted else "Rejected",
                 rms_before_mm=1.0,
                 rms_after_mm=0.7,
                 device_values_before=initial,
                 device_values_trial=generation_1,
+                measurement_after=measurement if measured else None,
             ),
             CorrectionStep(
                 iteration=2,
@@ -1493,6 +1495,11 @@ def test_history_can_restore_a_selected_accepted_state(monkeypatch) -> None:
     assert window.restore_history_state_button.isVisibleTo(
         window.iteration_history_dialog
     )
+    assert window.restore_history_state_button.text() == "Apply…"
+    if not measured:
+        assert not window.restore_history_state_button.isEnabled()
+        window.close()
+        return
     assert window.restore_history_state_button.isEnabled()
     tasks = []
     window._start_task = (
@@ -1731,3 +1738,55 @@ def test_profile_window_opens_an_independent_offline_demo() -> None:
 
     demo.close()
     profile.close()
+
+
+def test_half_quad_groups_can_be_deselected_and_reselected(monkeypatch) -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtWidgets import QApplication, QDialog, QDialogButtonBox, QTableWidget
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.profile_runtime import load_profile_run_config
+    from half_linac.src.shared.machine_profile import load_app_context
+
+    app = QApplication.instance() or QApplication([])
+    context = load_app_context("dispersion_correction", machine_id="half", control_backend="vm")
+    _, config = load_profile_run_config(context)
+    window = MainWindow(config, context)
+    original = tuple(window.selected_knobs)
+    assert len(original) == 3
+
+    def select_middle(dialog):
+        table = dialog.findChild(QTableWidget, "knobSelectionTable")
+        assert table.rowCount() == 3
+        assert all(table.item(row, 0).checkState() == Qt.Checked for row in range(3))
+        table.item(0, 0).setCheckState(Qt.Unchecked)
+        table.item(2, 0).setCheckState(Qt.Unchecked)
+        dialog.findChild(QDialogButtonBox).accepted.emit()
+        return QDialog.Accepted
+
+    monkeypatch.setattr(QDialog, "exec_", select_middle)
+    window.latest_response = object()
+    window._select_knobs()
+    assert [knob.name for knob in window.config.runtime_knobs] == [original[1].name]
+    assert window.latest_response is None
+    assert set(window.config.backend.options["pv_map"]["quadrupoles"]) == set(original[1].devices)
+
+    def reselect(dialog):
+        table = dialog.findChild(QTableWidget, "knobSelectionTable")
+        assert table.rowCount() == 3
+        assert [table.item(row, 0).checkState() == Qt.Checked for row in range(3)] == [False, True, False]
+        table.item(1, 0).setCheckState(Qt.Unchecked)
+        with pytest.raises(ValueError, match="at least one"):
+            window._knobs_from_table(table)
+        table.item(0, 0).setCheckState(Qt.Checked)
+        table.item(2, 0).setCheckState(Qt.Checked)
+        dialog.findChild(QDialogButtonBox).accepted.emit()
+        return QDialog.Accepted
+
+    monkeypatch.setattr(QDialog, "exec_", reselect)
+    window._select_knobs()
+    assert [knob.name for knob in window.config.runtime_knobs] == [original[0].name, original[2].name]
+    assert set(window.config.backend.options["pv_map"]["quadrupoles"]) == set(original[0].devices) | set(original[2].devices)
+    window.close()
+    app.processEvents()

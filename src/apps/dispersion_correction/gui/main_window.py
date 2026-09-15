@@ -1126,6 +1126,7 @@ class MainWindow(QMainWindow):
         self.configured_energy_calibration = dict(self.config.energy_knob.calibration)
         self.session_energy_calibration_source: str | None = None
         self.selected_knobs = tuple(self.config.runtime_knobs)
+        self.available_knobs = self.selected_knobs
         self.knob_hard_limits = tuple(
             knob.limit for knob in self.config.runtime_knobs
         )
@@ -2021,7 +2022,8 @@ class MainWindow(QMainWindow):
         iteration_history_intro = QLabel(
             "Review every attempted generation from this GUI session. The main "
             "dispersion plot continues to show only the initial and latest/final "
-            "measurement."
+            "measurement. Select a generation and click Apply to reapply its "
+            "saved quadrupole values and verify the dispersion."
         )
         iteration_history_intro.setObjectName("workspaceIntro")
         iteration_history_intro.setWordWrap(True)
@@ -2095,14 +2097,11 @@ class MainWindow(QMainWindow):
             1,
         )
         iteration_history_actions = QHBoxLayout()
-        self.restore_history_state_button = QPushButton(
-            "Restore Selected Accepted State…"
-        )
+        self.restore_history_state_button = QPushButton("Apply…")
         self.restore_history_state_button.setProperty("role", "control")
         self.restore_history_state_button.clicked.connect(
             self._restore_selected_history_state
         )
-        self.restore_history_state_button.hide()
         iteration_history_actions.addWidget(
             self.restore_history_state_button
         )
@@ -2412,7 +2411,12 @@ class MainWindow(QMainWindow):
             step = entry.result.steps[int(selection.split(":", 1)[1])]
         except (IndexError, TypeError, ValueError):
             return None
-        if not step.accepted or not step.device_values_trial:
+        measured = (
+            step.measured_after
+            if isinstance(entry.result, JointCorrectionResult)
+            else step.measurement_after
+        )
+        if not step.device_values_trial or (not step.accepted and measured is None):
             return None
         baseline = self._last_known_quadrupole_values
         targets = {
@@ -2429,7 +2433,8 @@ class MainWindow(QMainWindow):
         return CorrectionRestoreRequest(
             run_label=entry.label,
             target_label=(
-                f"{entry.label} generation {step.iteration} accepted state"
+                f"{entry.label} generation {step.iteration} "
+                f"{'accepted' if step.accepted else 'rejected trial'} state"
             ),
             baseline_values=dict(baseline),
             target_values=targets,
@@ -2440,17 +2445,6 @@ class MainWindow(QMainWindow):
     def _update_history_restore_action(self) -> None:
         request = self._selected_history_restore_request()
         entry = self._selected_correction_run()
-        selection = str(
-            self.iteration_history_generation_combo.currentData() or ""
-        )
-        selected_accepted = False
-        if entry is not None and selection.startswith("step:"):
-            try:
-                selected_accepted = entry.result.steps[
-                    int(selection.split(":", 1)[1])
-                ].accepted
-            except (IndexError, TypeError, ValueError):
-                pass
         energy_knob_mismatch = bool(
             entry is not None
             and entry.energy_knob_id
@@ -2461,9 +2455,7 @@ class MainWindow(QMainWindow):
             and self.config.backend.mode == "write_enabled"
             and not self.config.section.model_only
         )
-        self.restore_history_state_button.setVisible(
-            online_write and (request is not None or selected_accepted)
-        )
+        self.restore_history_state_button.setVisible(True)
         already_active = bool(
             request is not None
             and all(
@@ -2481,30 +2473,37 @@ class MainWindow(QMainWindow):
         if energy_knob_mismatch and entry is not None:
             tooltip = (
                 f"Select {entry.energy_knob_name or entry.energy_knob_id} before "
-                "restoring this accepted state."
+                "applying this generation."
             )
         elif already_active:
-            tooltip = "The selected accepted state is already active."
+            tooltip = "The selected generation is already active."
+        elif self._active_task:
+            tooltip = "Wait for the current task to finish before applying a generation."
+        elif not online_write:
+            tooltip = "Apply requires an EPICS backend with writing enabled."
         elif request is not None and online_write:
             tooltip = (
-                "Restore the selected accepted quadrupole state after checking "
-                "the expected current readbacks."
+                "Apply the selected generation's saved quadrupole values after "
+                "checking current readbacks, then remeasure dispersion."
             )
         else:
             tooltip = (
-                "Select an accepted generation with a known current online "
-                "quadrupole state."
+                "Select a generation with saved trial values and a completed "
+                "measurement; the current quadrupole state must also be known."
             )
         self.restore_history_state_button.setToolTip(tooltip)
 
     def _restore_selected_history_state(self) -> None:
+        self._update_history_restore_action()
+        if not self.restore_history_state_button.isEnabled():
+            return
         request = self._selected_history_restore_request()
         if request is None:
             return
         self._confirm_correction_state_restore(
             request,
-            title="Restore Accepted Correction State",
-            prompt=f"Restore {request.target_label}?",
+            title="Apply History Generation",
+            prompt=f"Apply {request.target_label}?",
         )
 
     def _refresh_iteration_history_runs(
@@ -2976,6 +2975,7 @@ class MainWindow(QMainWindow):
         self._loading_widgets = True
         try:
             self.selected_knobs = tuple(self.config.runtime_knobs)
+            self.available_knobs = self.selected_knobs
             if self.app_context is not None:
                 self.available_bpms = selectable_profile_bpms(
                     self.app_context,
@@ -3249,6 +3249,7 @@ class MainWindow(QMainWindow):
             checkbox.setChecked(False)
             checkbox.blockSignals(False)
         self.selected_knobs = tuple(config.runtime_knobs)
+        self.available_knobs = self.selected_knobs
         self.knob_hard_limits = tuple(
             knob.limit for knob in config.runtime_knobs
         )
@@ -3374,6 +3375,11 @@ class MainWindow(QMainWindow):
         if dialog.exec_() != QDialog.Accepted:
             return
         self.selected_knobs = accepted_knobs["value"]
+        selected = iter(self.selected_knobs)
+        self.available_knobs = tuple(
+            next(selected) if table.item(row, 0).checkState() == Qt.Checked else knob
+            for row, knob in enumerate(self.available_knobs)
+        )
         self._update_knob_summary()
         self._selection_changed()
 
@@ -3764,7 +3770,8 @@ class MainWindow(QMainWindow):
         dialog.resize(720, 300)
         layout = QVBoxLayout(dialog)
         prompt = QLabel(
-            "Choose two distinct quadrupoles for each symmetric knob. "
+            "Check the groups to use for response measurement and correction "
+            "(at least one). Choose two distinct quadrupoles for each symmetric knob. "
             "Session measure-step and total-Δ limits cannot exceed profile limits."
         )
         prompt.setObjectName("knobSelectionPrompt")
@@ -3773,7 +3780,7 @@ class MainWindow(QMainWindow):
 
         unit = self._knob_control_unit()
         suffix = f" ({unit})" if unit else ""
-        table = QTableWidget(len(self.selected_knobs), 5)
+        table = QTableWidget(len(self.available_knobs), 5)
         table.setObjectName("knobSelectionTable")
         table.setHorizontalHeaderLabels(
             [
@@ -3793,11 +3800,18 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(2, QHeaderView.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        for row, knob in enumerate(self.selected_knobs):
+        selected_by_name = {knob.name: knob for knob in self.selected_knobs}
+        for row, available_knob in enumerate(self.available_knobs):
+            knob = selected_by_name.get(available_knob.name, available_knob)
             devices = tuple(knob.devices)
             first = devices[0] if devices else ""
             second = devices[1] if len(devices) > 1 else ""
-            table.setItem(row, 0, QTableWidgetItem(self._knob_name(first, second)))
+            item = QTableWidgetItem(self._knob_name(first, second))
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.Checked if knob.name in selected_by_name else Qt.Unchecked
+            )
+            table.setItem(row, 0, item)
             first_combo = self._quad_combo(first)
             second_combo = self._quad_combo(second)
             table.setCellWidget(row, 1, first_combo)
@@ -3838,6 +3852,8 @@ class MainWindow(QMainWindow):
         selected_knobs = []
         selected_devices = []
         for row in range(table.rowCount()):
+            if table.item(row, 0).checkState() != Qt.Checked:
+                continue
             first = self._table_combo_text(table, row, 1)
             second = self._table_combo_text(table, row, 2)
             if not first or not second:
@@ -3859,6 +3875,8 @@ class MainWindow(QMainWindow):
                     limit=limit,
                 )
             )
+        if not selected_knobs:
+            raise ValueError("Select at least one quadrupole group")
         duplicates = sorted(
             name for name in set(selected_devices) if selected_devices.count(name) > 1
         )
