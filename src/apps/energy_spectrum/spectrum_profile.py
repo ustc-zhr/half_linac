@@ -29,6 +29,7 @@ class ProfileFit:
     method: str
     r_squared: float | None
     fallback_error: str | None = None
+    quality_warning: str | None = None
 
 
 def project_image_profiles(image, pixel_width_mm, roi: ImageROI | None = None):
@@ -96,11 +97,14 @@ def fit_projection_profile(
     method,
     *,
     allow_direct_fallback=True,
+    reject_poor_fit=True,
 ):
     """Measure the Gaussian center, whole-profile mean, or raw projection peak.
 
     Peak uses the maximum sampled bin for energy and the whole-profile RMS
     about the weighted mean for width, just like Direct.
+    Set reject_poor_fit=False to display converged fits with quality warnings;
+    automated center locking keeps the default rejection behavior.
     """
     x_mm = np.asarray(x_mm, dtype=float)
     density_x = np.asarray(density_x, dtype=float)
@@ -160,14 +164,20 @@ def fit_projection_profile(
             maxfev=10000,
         )
         fitted = gaussian(x_mm, *parameters)
+        if not np.all(np.isfinite(parameters)) or not np.all(np.isfinite(fitted)):
+            raise ValueError("Gaussian fit returned non-finite parameters or curve.")
         residual_sum = float(np.sum((normalized - fitted) ** 2))
         centered_sum = float(np.sum((normalized - np.mean(normalized)) ** 2))
         r_squared = 1.0 - residual_sum / centered_sum if centered_sum > 0 else 0.0
         # Convergence alone can accept a broad pedestal while missing the beam.
+        quality_warnings = []
         if not np.isfinite(r_squared) or r_squared < 0.7:
-            raise ValueError(f"Poor Gaussian fit: R²={r_squared:.3f} < 0.700.")
+            quality_warnings.append(f"Poor Gaussian fit: R²={r_squared:.3f} < 0.700.")
         if abs(float(fitted[peak_index] - normalized[peak_index])) > 0.25 * amplitude:
-            raise ValueError("Gaussian fit misses the projection peak by more than 25% of its height.")
+            quality_warnings.append("Gaussian fit misses the projection peak by more than 25% of its height.")
+        quality_warning = " ".join(quality_warnings) or None
+        if quality_warning and reject_poor_fit:
+            raise ValueError(quality_warning)
         return ProfileFit(
             center_mm=float(parameters[1]),
             sigma_mm=abs(float(parameters[2])),
@@ -175,6 +185,7 @@ def fit_projection_profile(
             fitted_density=fitted,
             method="Gauss fit",
             r_squared=float(r_squared),
+            quality_warning=quality_warning,
         )
     except (RuntimeError, ValueError, ZeroDivisionError, FloatingPointError) as exc:
         if not allow_direct_fallback:

@@ -209,7 +209,7 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertEqual(fallback.method, "direct")
         self.assertIsNotNone(fallback.fallback_error)
 
-    def test_poor_fit_is_rejected_even_when_optimizer_converges(self):
+    def test_poor_fit_can_be_displayed_but_remains_rejected_by_default(self):
         from unittest.mock import patch
 
         x = np.linspace(-22.0, 22.0, 1000)
@@ -220,6 +220,29 @@ class ESAAutoTunerTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(SpectrumProfileError, "Poor Gaussian fit"):
                 fit_projection_profile(x, density, "Gauss fit", allow_direct_fallback=False)
+            fit = fit_projection_profile(
+                x, density, "Gauss fit", allow_direct_fallback=False, reject_poor_fit=False,
+            )
+            self.assertEqual(fit.method, "Gauss fit")
+            self.assertEqual(fit.center_mm, -1.7)
+            self.assertEqual(fit.sigma_mm, 11.0)
+            self.assertIn("Poor Gaussian fit", fit.quality_warning)
+            self.assertIsNone(fit.fallback_error)
+            np.testing.assert_allclose(fit.fitted_density, gaussian(x, 0.2, -1.7, 11.0))
+
+    def test_display_mode_still_rejects_optimizer_failure(self):
+        from unittest.mock import patch
+
+        x = np.linspace(-5.0, 5.0, 201)
+        with patch(
+            "half_linac.src.apps.energy_spectrum.spectrum_profile.curve_fit",
+            side_effect=RuntimeError("did not converge"),
+        ):
+            with self.assertRaisesRegex(SpectrumProfileError, "did not converge"):
+                fit_projection_profile(
+                    x, gaussian(x, 1.0, 0.0, 0.5), "Gauss fit",
+                    allow_direct_fallback=False, reject_poor_fit=False,
+                )
 
     def test_shared_projection_fit_matches_gaussian_and_direct_center_definitions(self):
         x_mm = np.linspace(-5.0, 5.0, 201)

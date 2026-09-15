@@ -40,6 +40,7 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListView,
     QMainWindow,
     QMessageBox,
@@ -885,6 +886,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._readout_tone = None
         self._readout_tooltip = None
         self.log_intensity_enabled = False
+        self._image_intensity_limits = (None, None)
+        self._display_image_data = None
         self._image_display_warning = None
         self.roi_dialog = None
         self._roi_edit_active = False
@@ -2446,6 +2449,35 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.gridLayout.addLayout(image_display_layout, 1, 1)
         self.gridLayout.addWidget(self.label_10, 1, 2)
         self.gridLayout.addWidget(self.comboBox_fitmethod, 1, 3)
+        self.image_levels_dialog = QDialog(self)
+        self.image_levels_dialog.setWindowTitle("Image color limits")
+        levels_layout = QGridLayout(self.image_levels_dialog)
+        self.image_vmin_edit = QLineEdit(self.image_levels_dialog)
+        self.image_vmax_edit = QLineEdit(self.image_levels_dialog)
+        for edit, name in ((self.image_vmin_edit, "vmin"), (self.image_vmax_edit, "vmax")):
+            edit.setPlaceholderText("Auto")
+            edit.setAccessibleName(f"Image {name}")
+            edit.setToolTip("Image intensity limit; blank = Auto. Display only. Log limits must be positive.")
+            edit.editingFinished.connect(self._handle_intensity_limits_change)
+        levels_layout.addWidget(QLabel("vmin", self.image_levels_dialog), 0, 0)
+        levels_layout.addWidget(self.image_vmin_edit, 0, 1)
+        levels_layout.addWidget(QLabel("vmax", self.image_levels_dialog), 1, 0)
+        levels_layout.addWidget(self.image_vmax_edit, 1, 1)
+        levels_hint = QLabel("Blank = Auto. Changes apply immediately; display only.", self.image_levels_dialog)
+        levels_hint.setWordWrap(True)
+        levels_layout.addWidget(levels_hint, 2, 0, 1, 2)
+        levels_close = QDialogButtonBox(QDialogButtonBox.Close, self.image_levels_dialog)
+        levels_close.rejected.connect(self.image_levels_dialog.close)
+        levels_layout.addWidget(levels_close, 3, 0, 1, 2)
+        self.image_levels_button = QPushButton("Levels…", self.groupBox_4)
+        self.image_levels_button.setProperty("tight", True)
+        self.image_levels_button.setToolTip("Set image vmin / vmax; blank limits use automatic colors.")
+        self.image_levels_button.clicked.connect(self._show_image_levels)
+        image_display_layout.addWidget(self.image_levels_button)
+        self.image_scale_warning = QLabel(self.groupBox_4)
+        self.image_scale_warning.setWordWrap(True)
+        self.image_scale_warning.hide()
+        self.gridLayout.addWidget(self.image_scale_warning, 3, 0, 1, 4)
         self.gridLayout.removeWidget(self.checkBox_emit)
         self.verticalLayout_13.removeWidget(self.checkBox_emit)
         self.verticalLayout_9.insertWidget(1, self.checkBox_emit)
@@ -3075,8 +3107,44 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _handle_log_intensity_change(self, enabled):
         self.log_intensity_enabled = bool(enabled)
-        if self._pv_available:
-            self.ESA_running(write_latest=False)
+        self._refresh_image_colors()
+
+    def _show_image_levels(self):
+        self.image_levels_dialog.show()
+        self.image_levels_dialog.raise_()
+        self.image_levels_dialog.activateWindow()
+
+    def _handle_intensity_limits_change(self):
+        try:
+            limits = tuple(
+                float(edit.text()) if edit.text().strip() else None
+                for edit in (self.image_vmin_edit, self.image_vmax_edit)
+            )
+            if any(value is not None and not np.isfinite(value) for value in limits):
+                raise ValueError("Limits must be finite numbers.")
+            if limits[0] is not None and limits[1] is not None and limits[0] >= limits[1]:
+                raise ValueError("vmin must be smaller than vmax.")
+        except ValueError as exc:
+            self.image_scale_warning.setText(f"Invalid color limits: {exc} Previous limits retained.")
+            self.image_scale_warning.show()
+            return
+        self._image_intensity_limits = limits
+        self.image_scale_warning.hide()
+        self._refresh_image_colors()
+
+    def _refresh_image_colors(self):
+        # Recolor the current frame without reacquiring, fitting, or archiving it.
+        if self._display_image_data is not None and self.ESAflag_image.axes.images:
+            image, norm, warning = resolve_image_display_scale(
+                self._display_image_data, logarithmic=self.log_intensity_enabled,
+                vmin=self._image_intensity_limits[0], vmax=self._image_intensity_limits[1],
+            )
+            artist = self.ESAflag_image.axes.images[0]
+            artist.set_data(image)
+            artist.set_norm(norm)
+            self.image_scale_warning.setText(warning or "")
+            self.image_scale_warning.setVisible(bool(warning))
+            self.ESAflag_image.canvas.draw_idle()
         self._refresh_background_preview()
 
     def _handle_fit_method_change(self):
@@ -3158,6 +3226,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         display_image, norm, _warning = resolve_image_display_scale(
             self.bg_image,
             logarithmic=self.log_intensity_enabled,
+            vmin=self._image_intensity_limits[0],
+            vmax=self._image_intensity_limits[1],
         )
         self.background_plot.axes.imshow(
             display_image,
@@ -4057,14 +4127,20 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # plot the image
         self.ESAflag_image.axes.clear()
         self._style_axes(self.ESAflag_image, "x (mm)", "y (mm)")
+        self._display_image_data = data
         display_image, norm, display_warning = resolve_image_display_scale(
             data,
             logarithmic=self.log_intensity_enabled,
+            vmin=self._image_intensity_limits[0],
+            vmax=self._image_intensity_limits[1],
         )
         if display_warning != self._image_display_warning:
             self._image_display_warning = display_warning
             if display_warning:
                 print(f"Warning: {display_warning}")
+            if not self.image_scale_warning.text().startswith("Invalid color limits:"):
+                self.image_scale_warning.setText(display_warning or "")
+                self.image_scale_warning.setVisible(bool(display_warning))
         self.ESAflag_image.axes.imshow(
             display_image,
             cmap=colormap,
@@ -4122,7 +4198,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # Use one shared center definition for the GUI and Auto Find center lock.
         try:
             profile_fit = fit_projection_profile(
-                x, denx0, fit_method, allow_direct_fallback=False
+                x, denx0, fit_method, allow_direct_fallback=False, reject_poor_fit=False
             )
         except SpectrumProfileError as exc:
             self.sigx = None
@@ -4162,7 +4238,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 color=palette["plot_fit"],
                 linewidth=1.4,
             )
-            if profile_fit.fallback_error is None:
+            if profile_fit.quality_warning:
+                self._update_fit_status(
+                    "Gauss poor", "warning",
+                    profile_fit.quality_warning + " Fitted energy and spread are shown for reference.",
+                )
+            elif profile_fit.fallback_error is None:
                 self._update_fit_status("Gauss OK", "success")
         elif fit_method == "Peak":
             self._update_fit_status(
