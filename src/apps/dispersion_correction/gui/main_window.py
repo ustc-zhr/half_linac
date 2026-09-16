@@ -3210,7 +3210,7 @@ class MainWindow(QMainWindow):
             self.knob_edit.setCursorPosition(0)
             self.knob_edit.setToolTip("\n".join(tooltip_lines))
             return
-        tooltip_lines = ["Symmetric device weights: +1 / +1"]
+        tooltip_lines = ["Single quadrupole or paired quadrupoles with equal +1 weights"]
         unit = self._knob_control_unit()
         unit_suffix = f" {unit}" if unit else ""
         step_fraction = float(self.max_step_pct_spin.value()) / 100.0
@@ -3431,8 +3431,14 @@ class MainWindow(QMainWindow):
         self.selected_knobs = accepted_knobs["value"]
         selected = iter(self.selected_knobs)
         self.available_knobs = tuple(
-            next(selected) if table.item(row, 0).checkState() == Qt.Checked else knob
-            for row, knob in enumerate(self.available_knobs)
+            next(selected)
+            if table.item(row, 0).checkState() == Qt.Checked
+            else table.item(row, 0).data(Qt.UserRole)
+            for row in range(table.rowCount())
+        )
+        self.knob_hard_limits = tuple(
+            table.cellWidget(row, 4).maximum()
+            for row in range(table.rowCount())
         )
         self._update_knob_summary()
         self._selection_changed()
@@ -3825,7 +3831,9 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         prompt = QLabel(
             "Check the groups to use for response measurement and correction "
-            "(at least one). Choose two distinct quadrupoles for each symmetric knob. "
+            "(at least one). Leave Q2 empty for a single quadrupole, or choose "
+            "two distinct quadrupoles for a paired knob. Split pairs to select "
+            "their quadrupoles independently. "
             "Session measure-step and total-Δ limits cannot exceed profile limits."
         )
         prompt.setObjectName("knobSelectionPrompt")
@@ -3840,7 +3848,7 @@ class MainWindow(QMainWindow):
             [
                 "Knob",
                 "Q1",
-                "Q2",
+                "Q2 (optional)",
                 f"Measure Step ±{suffix}",
                 f"Total Δ Limit ±{suffix}",
             ]
@@ -3855,45 +3863,71 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         selected_by_name = {knob.name: knob for knob in self.selected_knobs}
-        for row, available_knob in enumerate(self.available_knobs):
-            knob = selected_by_name.get(available_knob.name, available_knob)
+        self._populate_knob_selection_table(table, [
+            (
+                selected_by_name.get(knob.name, knob),
+                knob.name in selected_by_name,
+                self.knob_hard_limits[row]
+                if row < len(self.knob_hard_limits) else knob.limit,
+            )
+            for row, knob in enumerate(self.available_knobs)
+        ])
+        layout.addWidget(table, 1)
+        split_button = QPushButton("Split pairs")
+        split_button.setObjectName("splitKnobPairsButton")
+        split_button.clicked.connect(lambda: self._split_dialog_knob_pairs(table))
+        layout.addWidget(split_button)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        layout.addWidget(buttons)
+        return dialog, table, buttons
+
+    def _populate_knob_selection_table(
+        self, table: QTableWidget, rows: list[tuple[KnobConfig, bool, float]]
+    ) -> None:
+        table.setRowCount(0)
+        table.setRowCount(len(rows))
+        for row, (knob, checked, hard_limit) in enumerate(rows):
             devices = tuple(knob.devices)
             first = devices[0] if devices else ""
             second = devices[1] if len(devices) > 1 else ""
             item = QTableWidgetItem(self._knob_name(first, second))
+            item.setData(Qt.UserRole, knob)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(
-                Qt.Checked if knob.name in selected_by_name else Qt.Unchecked
-            )
+            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
             table.setItem(row, 0, item)
             first_combo = self._quad_combo(first)
-            second_combo = self._quad_combo(second)
+            second_combo = self._quad_combo(second, optional=True)
             table.setCellWidget(row, 1, first_combo)
             table.setCellWidget(row, 2, second_combo)
-            hard_limit = (
-                self.knob_hard_limits[row]
-                if row < len(self.knob_hard_limits)
-                else knob.limit
-            )
             table.setCellWidget(row, 3, self._knob_value_spin(knob.scan_step, hard_limit))
             table.setCellWidget(row, 4, self._knob_value_spin(knob.limit, hard_limit))
-            first_combo.currentTextChanged.connect(
-                lambda _text, selected_row=row: self._update_dialog_knob_name(
-                    table,
-                    selected_row,
+            for combo in (first_combo, second_combo):
+                combo.currentTextChanged.connect(
+                    lambda _text, selected_row=row: self._update_dialog_knob_name(
+                        table, selected_row,
+                    )
                 )
-            )
-            second_combo.currentTextChanged.connect(
-                lambda _text, selected_row=row: self._update_dialog_knob_name(
-                    table,
-                    selected_row,
-                )
-            )
             table.setRowHeight(row, 42)
-        layout.addWidget(table, 1)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        layout.addWidget(buttons)
-        return dialog, table, buttons
+
+    def _split_dialog_knob_pairs(self, table: QTableWidget) -> None:
+        rows = []
+        for row in range(table.rowCount()):
+            checked = table.item(row, 0).checkState() == Qt.Checked
+            step = self._table_spin_value(table, row, 3)
+            limit = self._table_spin_value(table, row, 4)
+            hard_limit = table.cellWidget(row, 4).maximum()
+            for column in (1, 2):
+                device = self._table_combo_text(table, row, column)
+                if device:
+                    rows.append((
+                        KnobConfig(
+                            name=self._knob_name(device, ""),
+                            devices={device: 1.0}, scan_step=step, limit=limit,
+                        ),
+                        checked,
+                        hard_limit,
+                    ))
+        self._populate_knob_selection_table(table, rows)
 
     def _update_dialog_knob_name(self, table: QTableWidget, row: int) -> None:
         first = self._table_combo_text(table, row, 1)
@@ -3910,8 +3944,8 @@ class MainWindow(QMainWindow):
                 continue
             first = self._table_combo_text(table, row, 1)
             second = self._table_combo_text(table, row, 2)
-            if not first or not second:
-                raise ValueError(f"Knob row {row + 1} requires two quadrupoles")
+            if not first:
+                raise ValueError(f"Knob row {row + 1} requires a quadrupole")
             if first == second:
                 raise ValueError(f"Knob row {row + 1} must use two different quadrupoles")
             scan_step = self._table_spin_value(table, row, 3)
@@ -3920,11 +3954,12 @@ class MainWindow(QMainWindow):
                 raise ValueError(
                     f"Knob row {row + 1} requires Measure Step <= Total Δ Limit"
                 )
-            selected_devices.extend((first, second))
+            devices = {device: 1.0 for device in (first, second) if device}
+            selected_devices.extend(devices)
             selected_knobs.append(
                 KnobConfig(
                     name=self._knob_name(first, second),
-                    devices={first: 1.0, second: 1.0},
+                    devices=devices,
                     scan_step=scan_step,
                     limit=limit,
                 )
@@ -3956,8 +3991,11 @@ class MainWindow(QMainWindow):
             )
         return float(widget.value())
 
-    def _quad_combo(self, selected: str) -> QComboBox:
+    def _quad_combo(self, selected: str, *, optional: bool = False) -> QComboBox:
         combo = QComboBox()
+        if optional:
+            combo.addItem("")
+            combo.setToolTip("Leave empty to control Q1 independently")
         combo.addItems(self.available_quadrupoles)
         index = combo.findText(selected)
         if index >= 0:
@@ -3975,7 +4013,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _knob_name(first: str, second: str) -> str:
-        return f"{first}_{second}_sym" if first and second else "Unconfigured"
+        return f"{first}_{second}_sym" if first and second else first or "Unconfigured"
 
     def _selection_changed(self) -> None:
         if self._loading_widgets:

@@ -1817,3 +1817,72 @@ def test_half_quad_groups_can_be_deselected_and_reselected(monkeypatch) -> None:
     assert set(window.config.backend.options["pv_map"]["quadrupoles"]) == set(original[0].devices) | set(original[2].devices)
     window.close()
     app.processEvents()
+
+
+def test_single_quad_knob_selection(monkeypatch) -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PyQt5.QtWidgets import QApplication, QDialog, QPushButton
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+    from half_linac.src.apps.dispersion_correction.models import KnobConfig
+
+    app = QApplication.instance() or QApplication([])
+    profile_window = MainWindow()
+    profile_window.available_quadrupoles = ("QM11", "QM12", "QM17", "QM18")
+    profile_window.available_knobs = profile_window.selected_knobs = (
+        KnobConfig("QM11_QM12_sym", {"QM11": 1.0, "QM12": 1.0}, 0.0004, 0.01),
+        KnobConfig("QM17_QM18_sym", {"QM17": 1.0, "QM18": 1.0}, 0.002, 0.03),
+    )
+    profile_window.knob_hard_limits = (0.02, 0.05)
+    knob_dialog, knob_table, buttons = profile_window._build_knob_selection_dialog()
+    # Paired knobs can be split into independently selectable quadrupoles.
+    from PyQt5.QtCore import Qt
+    from half_linac.src.apps.dispersion_correction.knobs import SymmetricKnobSet
+
+    knob_dialog.findChild(QPushButton, "splitKnobPairsButton").click()
+    assert knob_table.rowCount() == 4
+    singles = profile_window._knobs_from_table(knob_table)
+    assert [knob.devices for knob in singles] == [
+        {"QM11": 1.0}, {"QM12": 1.0}, {"QM17": 1.0}, {"QM18": 1.0},
+    ]
+    assert singles[0].scan_step == singles[1].scan_step == pytest.approx(0.0004)
+    assert singles[0].limit == singles[1].limit == pytest.approx(0.01)
+    assert knob_table.cellWidget(1, 4).maximum() == pytest.approx(
+        profile_window.knob_hard_limits[0]
+    )
+    knob_set = SymmetricKnobSet(singles)
+    assert knob_set.device_deltas(dict(zip(knob_set.names, [0.001, -0.002, 0, 0]))) == {
+        "QM11": 0.001, "QM12": -0.002, "QM17": 0, "QM18": 0,
+    }
+    knob_table.item(1, 0).setCheckState(Qt.Unchecked)
+    assert len(profile_window._knobs_from_table(knob_table)) == 3
+    knob_table.cellWidget(0, 2).setCurrentText("QM17")
+    with pytest.raises(ValueError, match="only belong to one"):
+        profile_window._knobs_from_table(knob_table)
+    knob_table.cellWidget(0, 2).setCurrentText("")
+    assert profile_window._knobs_from_table(knob_table)[0].name == "QM11"
+    # Rebuilding the dialog must keep single-Q rows single.
+    profile_window._populate_knob_selection_table(knob_table, [
+        (knob, True, knob.limit) for knob in singles
+    ])
+    assert profile_window._knobs_from_table(knob_table) == singles
+    # Accept and reopen through the actual selection path.
+    profile_window.app_context = object()
+    monkeypatch.setattr(profile_window, "_selection_changed", lambda: None)
+    monkeypatch.setattr(
+        profile_window, "_build_knob_selection_dialog",
+        lambda: (knob_dialog, knob_table, buttons),
+    )
+    def accept_dialog(_dialog):
+        buttons.accepted.emit()
+        return QDialog.Accepted
+    monkeypatch.setattr(QDialog, "exec_", accept_dialog)
+    profile_window._select_knobs()
+    assert profile_window.selected_knobs == singles
+    monkeypatch.undo()
+    reopened, reopened_table, _buttons = profile_window._build_knob_selection_dialog()
+    assert profile_window._knobs_from_table(reopened_table) == singles
+    reopened.close()
+    knob_dialog.close()
+    profile_window.close()
+    app.processEvents()
