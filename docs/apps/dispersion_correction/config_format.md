@@ -34,6 +34,22 @@ The schema is the same for JSON and YAML:
 - `solver`: SVD, response-matrix update policy, and trial-step settings.
 - `safety`: BPM orbit-change protection.
 
+The GUI uses one **Correction** entry point. Its settings dialog edits the
+maximum iterations (`solver.max_iter`), gain, maximum step fraction, response
+update policy, and minimum improvement. One iteration performs a single
+measure → solve → apply → verify cycle; larger values repeat the same workflow
+without reviewing each recommendation. Rejected trials retain the existing
+automatic rollback behavior. Abort, History, and Restore Initial remain
+available under their existing backend and safety conditions. Restore Initial
+restores the saved quadrupole values before the latest successful correction,
+not a full-machine configuration.
+In History, selecting **Initial measurement** exposes **Restore Initial…** for
+that run. Restoration requires saved device values, a known current state, and
+an EPICS backend with writing enabled; it checks the existing limits and
+verifies dispersion afterward. Initial tables prefer saved absolute quadrupole
+values. Runs without device snapshots explicitly show relative knob offsets
+and cannot restore physical magnets from those offsets.
+
 Machine-profile workflows may define multiple `sections`. Each section supplies
 the small set of facts that cannot be inferred from element kinds alone:
 
@@ -105,10 +121,35 @@ also used as the practical `dE/E` value.
 
 `solver.response_update` supports two policies:
 
-- `once`: measure the response matrix in the first iteration and reuse it with
-  the latest measured dispersion vector in later iterations.
-- `every_iteration`: remeasure the response matrix before every correction
-  solve.
+- `once`: keep the selected response throughout the run. Without a saved
+  response, measure it in the first iteration. Always solve against fresh
+  dispersion measurements.
+- `every_iteration`: remeasure before each solve; when a saved response is
+  explicitly selected, use it for the first iteration and remeasure from the
+  second iteration onward. Both policies apply to single-plane and joint
+  correction.
+
+**Measure Q Response…** scans the current Q knobs and automatically saves a
+versioned JSON record under the app's `runtime/<machine>/<backend>/responses/`
+directory (`standalone/offline` for the demo). Responses measured during a
+correction run are also saved. Each record contains the matrix, timestamp,
+full run configuration, scan baseline measurement, quadrupole snapshot,
+energy setting, and singular values. Correction reports reference the response
+timestamp. Temporary scan settings are restored before saving.
+
+In **Correction → Q response source**, choose **Measure a new response** or a
+saved measurement. A saved response never supplies the current dispersion:
+the workflow reads the current operating point and measures dispersion again
+before solving. Incompatible machine/backend channels, section, BPM order,
+plane, knob weights/units, or energy knob/calibration are blocked. Malformed
+matrices and responses without usable SVD modes are also rejected. Changes
+to solver gain, step limits, and scan step do not change the matrix definition.
+The dialog shows saved versus latest known quadrupole and energy settings;
+fresh readings are logged at execution. This does not establish that the rest
+of the machine optics is unchanged. Operating-point differences have no
+invented numerical acceptance threshold: remeasure when optics or energy
+changes make the response unreliable. Older reports without the response
+record and operating-point snapshot are not offered for reuse.
 
 The correction step uses normalized bounded least squares. For each knob,
 `step_limit = knob.max_offset * solver.max_step_fraction`. The runtime model

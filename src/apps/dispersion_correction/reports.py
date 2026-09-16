@@ -34,6 +34,7 @@ def result_to_dict(result: CorrectionResult) -> dict[str, Any]:
         "response": None
         if result.response is None
         else {
+            "source_created_at": result.response.source_created_at,
             "matrix": result.response.matrix.tolist(),
             "bpm_names": list(result.response.bpm_names),
             "knob_names": list(result.response.knob_names),

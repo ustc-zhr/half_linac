@@ -419,6 +419,12 @@ def energy_calibration_draft_directory(
     return resolve_app_runtime_paths(APP_DIR, context)["runtime_dir"] / "calibrations"
 
 
+def q_response_directory(context: AppContext | None) -> Path:
+    if context is None:
+        return APP_DIR / "runtime" / "standalone" / "offline" / "responses"
+    return resolve_app_runtime_paths(APP_DIR, context)["runtime_dir"] / "responses"
+
+
 def write_profile_result(
     context: AppContext,
     result: CorrectionResult,
@@ -536,6 +542,7 @@ def _operation_payload(
         }
     if isinstance(result, JointResponseAnalysisResult):
         return {
+            "source_created_at": result.source_created_at,
             "matrix": result.matrix.tolist(),
             "target_names": list(result.target_names),
             "target_bpms": list(result.target_bpms),
@@ -578,6 +585,7 @@ def _operation_payload(
         }
     return {
         "matrix": result.matrix.tolist(),
+        "source_created_at": result.source_created_at,
         "bpm_names": list(result.bpm_names),
         "knob_names": list(result.knob_names),
         "singular_values": result.singular_values.tolist(),

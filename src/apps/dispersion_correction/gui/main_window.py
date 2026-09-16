@@ -84,6 +84,7 @@ from half_linac.src.apps.dispersion_correction.profile_runtime import (
     ProfileEnergyKnobChoice,
     default_offline_config,
     energy_calibration_draft_directory,
+    q_response_directory,
     apply_profile_selection,
     load_profile_run_config,
     profile_energy_knob_choices,
@@ -93,6 +94,9 @@ from half_linac.src.apps.dispersion_correction.profile_runtime import (
     write_profile_operation,
 )
 from half_linac.src.apps.dispersion_correction.reports import result_to_markdown
+from half_linac.src.apps.dispersion_correction.response_store import (
+    SavedQResponse, load_response, save_response,
+)
 from half_linac.src.apps.dispersion_correction.solver import (
     automatic_response_block_reason,
     rank_reduced_response_warning,
@@ -109,6 +113,7 @@ from half_linac.src.shared.window_activation import install_qt_window_raise_hand
 
 
 class WorkflowWorker(QThread):
+    response_saved = pyqtSignal(object, str)
     log = pyqtSignal(str)
     progress = pyqtSignal(str, int, int)
     correction_measurement = pyqtSignal(int, int, str, object)
@@ -124,6 +129,8 @@ class WorkflowWorker(QThread):
         joint_recommendation: JointResponseAnalysisResult | None = None,
         design_k1_request: DesignK1Request | None = None,
         restore_request: CorrectionRestoreRequest | None = None,
+        saved_response: SavedQResponse | None = None,
+        response_directory: Path | None = None,
     ) -> None:
         super().__init__()
         self.task = task
@@ -132,11 +139,20 @@ class WorkflowWorker(QThread):
         self.joint_recommendation = joint_recommendation
         self.design_k1_request = design_k1_request
         self.restore_request = restore_request
+        self.saved_response = saved_response
+        self.response_directory = response_directory
+
+    def _save_response(self, record: SavedQResponse) -> None:
+        if self.response_directory is not None:
+            path = save_response(self.response_directory, record)
+            self.response_saved.emit(record, str(path))
+            self.log.emit(f"Q response saved: {path}")
 
     def run(self) -> None:
         try:
             workflow = AchromatWorkflow(
                 self.config,
+                response_callback=self._save_response,
                 log_callback=self.log.emit,
                 cancellation_callback=self.isInterruptionRequested,
                 progress_callback=self._emit_progress,
@@ -156,6 +172,7 @@ class WorkflowWorker(QThread):
             elif self.task == "joint-response":
                 result = JointResponseAnalyzer(
                     self.config,
+                    response_callback=self._save_response,
                     log_callback=self.log.emit,
                     cancellation_callback=self.isInterruptionRequested,
                     progress_callback=self._emit_progress,
@@ -174,14 +191,15 @@ class WorkflowWorker(QThread):
             elif self.task == "joint-run":
                 result = JointResponseAnalyzer(
                     self.config,
+                    response_callback=self._save_response,
                     log_callback=self.log.emit,
                     cancellation_callback=self.isInterruptionRequested,
                     progress_callback=self._emit_progress,
                     preflight_callback=self.preflight.emit,
                     measurement_callback=self.correction_measurement.emit,
-                ).run_automatic()
+                ).run_automatic(self.saved_response)
             elif self.task == "run":
-                result = workflow.run()
+                result = workflow.run(self.saved_response)
             elif self.task == "apply":
                 if self.recommendation is None:
                     raise ValueError("No reviewed recommendation was supplied")
@@ -764,7 +782,7 @@ class DispersionCurveWidget(QWidget):
         if self.measurement_overlays:
             overlay_key_color = QColor(tokens["text_muted"])
             overlay_key_color.setAlpha(105)
-            draw_series_key("Accepted generations", overlay_key_color)
+            draw_series_key("Accepted iterations", overlay_key_color)
         role_datasets = (
             self.measurement,
             self.reference_measurement,
@@ -1089,6 +1107,7 @@ class MainWindow(QMainWindow):
         self._last_unmapped_plot_bpms: tuple[str, ...] = ()
         self._automatic_initial_measurement: DispersionMeasurement | None = None
         self._active_task = ""
+        self._standalone_response = False
         self.correction_mode: str | None = None
         self.latest_measurement_time: datetime | None = None
         self.latest_measurement: DispersionMeasurement | None = None
@@ -1502,7 +1521,7 @@ class MainWindow(QMainWindow):
         self.final_samples_spin.setRange(1, 200)
         self.final_samples_spin.setToolTip(
             "BPM samples per energy setting used to verify an applied correction "
-            "and the final automatic-correction result."
+            "and the final correction result."
         )
         self.final_samples_spin.valueChanged.connect(self._workflow_input_changed)
         self.verification_samples_field_label = self._add_form_row(
@@ -1565,7 +1584,7 @@ class MainWindow(QMainWindow):
         self.max_iter_spin = QSpinBox(frame)
         self.max_iter_spin.setRange(1, 20)
         self.max_iter_spin.setToolTip(
-            "Maximum automatic correction generations; the loop may stop earlier."
+            "Maximum correction iterations; the loop may stop earlier."
         )
         self.max_iter_spin.valueChanged.connect(
             self._automatic_setting_changed
@@ -1597,11 +1616,11 @@ class MainWindow(QMainWindow):
         )
         self.response_update_combo.hide()
 
-        self.run_button = QPushButton("Automatic Correction…")
+        self.run_button = QPushButton("Correction…")
         self.run_button.setObjectName("automaticCorrectionButton")
         self.run_button.setProperty("role", "control")
         self.run_button.setToolTip(
-            "Run several correction generations without confirmation between "
+            "Run several correction iterations without confirmation between "
             "accepted steps."
         )
         self.run_button.clicked.connect(self._confirm_automatic_correction)
@@ -1745,11 +1764,19 @@ class MainWindow(QMainWindow):
             self.back_to_correction_methods_button
         )
         workflow_secondary_actions.addStretch(1)
+        self.measure_q_response_button = QPushButton("Measure Q Response…")
+        self.measure_q_response_button.setProperty("role", "control")
+        self.measure_q_response_button.clicked.connect(self._measure_q_response)
+        workflow_secondary_actions.addWidget(self.measure_q_response_button)
         self.response_details_button = QPushButton("Response Details…")
         self.response_details_button.setObjectName("workflowSecondaryButton")
         self.response_details_button.clicked.connect(self._show_response_details)
         workflow_secondary_actions.addWidget(self.response_details_button)
         online_layout.addLayout(workflow_secondary_actions)
+        self.saved_response_status = QLabel("Q responses are saved automatically after measurement.")
+        self.saved_response_status.setWordWrap(True)
+        self.saved_response_status.setProperty("muted", "true")
+        online_layout.addWidget(self.saved_response_status)
 
         # These operation-specific buttons remain as internal state holders for the
         # existing safety/tool-tip logic. Operators use only next_action_button.
@@ -1822,7 +1849,7 @@ class MainWindow(QMainWindow):
         correction_layout = QVBoxLayout(self.correction_page)
         correction_layout.setContentsMargins(8, 4, 8, 8)
         correction_title = QLabel(
-            "Review one bounded correction generation prepared from measured dispersion "
+            "Review one bounded correction iteration prepared from measured dispersion "
             "and Q response. No quadrupole target is written until you confirm below."
         )
         correction_title.setObjectName("workspaceIntro")
@@ -2020,9 +2047,9 @@ class MainWindow(QMainWindow):
         self.iteration_history_dialog.resize(1050, 760)
         iteration_history_layout = QVBoxLayout(self.iteration_history_dialog)
         iteration_history_intro = QLabel(
-            "Review every attempted generation from this GUI session. The main "
+            "Review every attempted iteration from this GUI session. The main "
             "dispersion plot continues to show only the initial and latest/final "
-            "measurement. Select a generation and click Apply to reapply its "
+            "measurement. Select an iteration and click Apply to reapply its "
             "saved quadrupole values and verify the dispersion."
         )
         iteration_history_intro.setObjectName("workspaceIntro")
@@ -2061,10 +2088,10 @@ class MainWindow(QMainWindow):
             self.iteration_history_plane_combo
         )
         self.iteration_history_overlay_checkbox = QCheckBox(
-            "Show accepted generations"
+            "Show accepted iterations"
         )
         self.iteration_history_overlay_checkbox.setToolTip(
-            "Add accepted intermediate generations as thin muted curves."
+            "Add accepted intermediate iterations as thin muted curves."
         )
         self.iteration_history_overlay_checkbox.toggled.connect(
             self._refresh_iteration_history_view
@@ -2252,7 +2279,7 @@ class MainWindow(QMainWindow):
         result: CorrectionResult | JointCorrectionResult,
     ) -> None:
         joint = isinstance(result, JointCorrectionResult)
-        run_kind = "Automatic" if task in {"run", "joint-run"} else "Manual"
+        run_kind = "Correction" if task in {"run", "joint-run"} else "Manual"
         if joint:
             run_kind = f"Joint {run_kind}"
         sequence = (
@@ -2298,10 +2325,7 @@ class MainWindow(QMainWindow):
         ]
         if not result.success or not accepted_steps:
             return None
-        targets = {
-            str(name): float(value)
-            for name, value in accepted_steps[0].device_values_before.items()
-        }
+        targets = self._initial_correction_device_values(result)
         baseline = {
             str(name): float(value)
             for name, value in accepted_steps[-1].device_values_trial.items()
@@ -2400,28 +2424,41 @@ class MainWindow(QMainWindow):
         selection = str(
             self.iteration_history_generation_combo.currentData() or ""
         )
-        if entry is None or not selection.startswith("step:"):
+        if entry is None:
             return None
         if (
             entry.energy_knob_id
             and entry.energy_knob_id != self.active_energy_knob_choice_id
         ):
             return None
-        try:
-            step = entry.result.steps[int(selection.split(":", 1)[1])]
-        except (IndexError, TypeError, ValueError):
+        if selection == "initial":
+            saved_values = self._initial_correction_device_values(entry.result)
+            target_label = f"initial state before {entry.label}"
+        elif selection.startswith("step:"):
+            try:
+                step = entry.result.steps[int(selection.split(":", 1)[1])]
+            except (IndexError, TypeError, ValueError):
+                return None
+            measured = (
+                step.measured_after
+                if isinstance(entry.result, JointCorrectionResult)
+                else step.measurement_after
+            )
+            if not step.device_values_trial or (not step.accepted and measured is None):
+                return None
+            saved_values = step.device_values_trial
+            target_label = (
+                f"{entry.label} iteration {step.iteration} "
+                f"{'accepted' if step.accepted else 'rejected trial'} state"
+            )
+        else:
             return None
-        measured = (
-            step.measured_after
-            if isinstance(entry.result, JointCorrectionResult)
-            else step.measurement_after
-        )
-        if not step.device_values_trial or (not step.accepted and measured is None):
+        if not saved_values:
             return None
         baseline = self._last_known_quadrupole_values
         targets = {
             str(name): float(value)
-            for name, value in step.device_values_trial.items()
+            for name, value in saved_values.items()
         }
         limits = self._history_restore_limits()
         if (
@@ -2432,10 +2469,7 @@ class MainWindow(QMainWindow):
             return None
         return CorrectionRestoreRequest(
             run_label=entry.label,
-            target_label=(
-                f"{entry.label} generation {step.iteration} "
-                f"{'accepted' if step.accepted else 'rejected trial'} state"
-            ),
+            target_label=target_label,
             baseline_values=dict(baseline),
             target_values=targets,
             max_changes=limits,
@@ -2443,6 +2477,10 @@ class MainWindow(QMainWindow):
         )
 
     def _update_history_restore_action(self) -> None:
+        initial_selected = self.iteration_history_generation_combo.currentData() == "initial"
+        self.restore_history_state_button.setText(
+            "Restore Initial…" if initial_selected else "Apply…"
+        )
         request = self._selected_history_restore_request()
         entry = self._selected_correction_run()
         energy_knob_mismatch = bool(
@@ -2473,23 +2511,23 @@ class MainWindow(QMainWindow):
         if energy_knob_mismatch and entry is not None:
             tooltip = (
                 f"Select {entry.energy_knob_name or entry.energy_knob_id} before "
-                "applying this generation."
+                "applying this iteration."
             )
         elif already_active:
-            tooltip = "The selected generation is already active."
+            tooltip = "The selected state is already active."
         elif self._active_task:
-            tooltip = "Wait for the current task to finish before applying a generation."
+            tooltip = "Wait for the current task to finish before applying an iteration."
         elif not online_write:
             tooltip = "Apply requires an EPICS backend with writing enabled."
         elif request is not None and online_write:
             tooltip = (
-                "Apply the selected generation's saved quadrupole values after "
+                "Restore the selected state's saved quadrupole values after "
                 "checking current readbacks, then remeasure dispersion."
             )
         else:
             tooltip = (
-                "Select a generation with saved trial values and a completed "
-                "measurement; the current quadrupole state must also be known."
+                "Select a state with saved quadrupole values; "
+                "the current quadrupole state must also be known."
             )
         self.restore_history_state_button.setToolTip(tooltip)
 
@@ -2502,7 +2540,7 @@ class MainWindow(QMainWindow):
             return
         self._confirm_correction_state_restore(
             request,
-            title="Apply History Generation",
+            title="Restore Initial" if self.iteration_history_generation_combo.currentData() == "initial" else "Apply History Iteration",
             prompt=f"Apply {request.target_label}?",
         )
 
@@ -2528,7 +2566,7 @@ class MainWindow(QMainWindow):
                     default=0,
                 )
                 display += (
-                    f" · {executed}/{entry.requested_generations} generations"
+                    f" · {executed}/{entry.requested_generations} iterations"
                 )
             self.iteration_history_run_combo.addItem(display, index)
         index = self.iteration_history_run_combo.findData(current)
@@ -2572,7 +2610,7 @@ class MainWindow(QMainWindow):
                 else:
                     state = "stopped"
                 self.iteration_history_generation_combo.addItem(
-                    f"Generation {step.iteration} · {state}",
+                    f"Iteration {step.iteration} · {state}",
                     f"step:{index}",
                 )
             executed = max(
@@ -2583,7 +2621,7 @@ class MainWindow(QMainWindow):
             if requested is not None and executed < requested:
                 self.iteration_history_generation_combo.addItem(
                     (
-                        f"Stopped early · {executed}/{requested} generations "
+                        f"Stopped early · {executed}/{requested} iterations "
                         "executed"
                     ),
                     "early-stop",
@@ -2639,10 +2677,9 @@ class MainWindow(QMainWindow):
             measurement = displayed_measurement(result.initial)
             reference = None
             label = "Initial measured"
-            before_knobs = (
-                result.steps[0].response.baseline_device_values
-                if joint and result.steps
-                else result.initial_knobs
+            initial_devices = self._initial_correction_device_values(result)
+            before_knobs = initial_devices or (
+                result.initial_knobs
                 if isinstance(result, CorrectionResult)
                 else {}
             )
@@ -2655,6 +2692,11 @@ class MainWindow(QMainWindow):
                     f"{entry.label} · initial RMS "
                     f"{result.initial.rms_mm:.6g} mm"
                 )
+            )
+            status += (
+                f" · Saved quadrupole values ({self._knob_control_unit()})"
+                if initial_devices
+                else " · Relative knob offsets, not absolute quadrupole strengths"
             )
         elif (
             selected_step_index is not None
@@ -2674,9 +2716,9 @@ class MainWindow(QMainWindow):
                 displayed_measurement(result.initial)
             )
             label = (
-                f"Generation {step.iteration} measured"
+                f"Iteration {step.iteration} measured"
                 if joint or step.measurement_after is not None
-                else f"Generation {step.iteration} baseline"
+                else f"Iteration {step.iteration} baseline"
             )
             before_knobs = (
                 step.device_values_before
@@ -2699,7 +2741,7 @@ class MainWindow(QMainWindow):
                 state = "stopped before a valid trial"
             if joint:
                 status = (
-                    f"{entry.label} · generation {step.iteration} {state} · "
+                    f"{entry.label} · iteration {step.iteration} {state} · "
                     f"normalized RMS "
                     f"{step.response.normalized_rms_before:.6g} → "
                     f"{step.normalized_rms_after:.6g} · {step.reason}"
@@ -2711,7 +2753,7 @@ class MainWindow(QMainWindow):
                     else f" → {step.rms_after_mm:.6g} mm"
                 )
                 status = (
-                    f"{entry.label} · generation {step.iteration} {state} · "
+                    f"{entry.label} · iteration {step.iteration} {state} · "
                     f"RMS {step.rms_before_mm:.6g} mm{after} · {step.reason}"
                 )
         elif selection == "early-stop":
@@ -2742,7 +2784,7 @@ class MainWindow(QMainWindow):
             )
             status = (
                 f"{entry.label} · stopped after {executed}/{requested} "
-                f"generations; later generations were not run · {stop_reason}"
+                f"iterations; later iterations were not run · {stop_reason}"
             )
         else:
             measurement = displayed_measurement(result.final)
@@ -2796,7 +2838,7 @@ class MainWindow(QMainWindow):
                     overlays.append(
                         self._plot_dataset_from_measurement(
                             overlay_measurement,
-                            f"Generation {step.iteration}",
+                            f"Iteration {step.iteration}",
                         )
                     )
         self.iteration_history_curve.set_measurement(
@@ -2817,6 +2859,18 @@ class MainWindow(QMainWindow):
             target_knobs,
         )
         self._update_history_restore_action()
+
+    @staticmethod
+    def _initial_correction_device_values(
+        result: CorrectionResult | JointCorrectionResult,
+    ) -> dict[str, float]:
+        if not result.steps:
+            return {}
+        first = result.steps[0]
+        values = first.device_values_before
+        if not values and isinstance(result, JointCorrectionResult):
+            values = first.response.baseline_device_values
+        return {str(name): float(value) for name, value in values.items()}
 
     @staticmethod
     def _terminal_correction_device_values(
@@ -3043,7 +3097,7 @@ class MainWindow(QMainWindow):
             )
             self.bpm_select_button.setVisible(bpm_configuration_available)
             self.knob_select_button.setVisible(not knob_selection_fixed)
-            self.correction_step_card.setVisible(not measurement_only)
+            self.correction_step_card.hide()
             self.verification_samples_field_label.setVisible(
                 not measurement_only
             )
@@ -4064,6 +4118,7 @@ class MainWindow(QMainWindow):
         joint_recommendation: JointResponseAnalysisResult | None = None,
         design_k1_request: DesignK1Request | None = None,
         restore_request: CorrectionRestoreRequest | None = None,
+        saved_response: SavedQResponse | None = None,
     ) -> bool:
         if self.worker is not None and self.worker.isRunning():
             return False
@@ -4114,7 +4169,10 @@ class MainWindow(QMainWindow):
             joint_recommendation=joint_recommendation,
             design_k1_request=design_k1_request,
             restore_request=restore_request,
+            saved_response=saved_response,
+            response_directory=q_response_directory(self.app_context),
         )
+        self.worker.response_saved.connect(self._response_saved)
         self.worker.log.connect(self._append_log)
         self.worker.progress.connect(self._update_progress)
         self.worker.correction_measurement.connect(
@@ -4143,7 +4201,7 @@ class MainWindow(QMainWindow):
             self.correction_recommendation = None
             self.correction_state_label.setText(
                 (
-                    "Two-plane dispersion measured. Choose manual or automatic "
+                    "Two-plane dispersion measured. Start "
                     "joint correction."
                     if self._joint_correction_enabled()
                     else "Two-plane dispersion measured from one energy scan."
@@ -4189,7 +4247,7 @@ class MainWindow(QMainWindow):
             )
             self._refresh_status(f"RMS {result.rms_mm:.4g} mm")
         elif isinstance(result, ResponseMatrixResult):
-            self.correction_mode = "manual"
+            self.correction_mode = None if self._standalone_response else "manual"
             self.latest_response = result
             self.latest_measurement = result.measurement
             self.latest_measurement_time = datetime.now()
@@ -4227,7 +4285,10 @@ class MainWindow(QMainWindow):
                 label="Response baseline",
             )
             self._refresh_status(f"Cond {result.condition_number:.4g}")
-            self._compute_recommendation()
+            if self._standalone_response:
+                self.correction_state_label.setText("Q response measured. Select it in Correction to reuse it.")
+            else:
+                self._compute_recommendation()
         elif isinstance(result, JointResponseAnalysisResult):
             self.latest_joint_response = result
             self.latest_response = None
@@ -4244,8 +4305,7 @@ class MainWindow(QMainWindow):
                 label="Joint response baseline",
             )
             self.correction_state_label.setText(
-                "Joint Q-response analysis complete. The suggested knob changes "
-                "are a read-only preview and cannot be applied from this workflow."
+                "Joint Q response measured. Select it in Correction to reuse it."
             )
             self._refresh_status(
                 f"Joint modes {result.retained_rank}/"
@@ -4321,8 +4381,8 @@ class MainWindow(QMainWindow):
             self.correction_mode = None
             self.correction_state_label.setText(
                 (
-                    "Execution completed and final dispersion verified. Choose manual "
-                    "or automatic correction to continue."
+                    "Execution completed and final dispersion verified. "
+                    "Use Correction to continue."
                 )
                 if result.success
                 else (
@@ -4435,6 +4495,7 @@ class MainWindow(QMainWindow):
             )
             self._append_log(f"Operation archived in {paths['run_metadata'].parent}")
         self._append_log(f"{task} completed")
+        self._standalone_response = False
         if task in {"run", "joint-run"}:
             self._automatic_initial_measurement = None
 
@@ -4451,14 +4512,14 @@ class MainWindow(QMainWindow):
             self._show_measurement(measurement)
             self._set_live_multiplane_measurement(
                 measurement,
-                label=f"Joint generation {iteration} · {state}",
+                label=f"Joint iteration {iteration} · {state}",
             )
             rms_text = " · ".join(
                 f"η{item.plane} {item.measured_rms_mm:.4g} mm"
                 for item in measurement.measurements
             )
             summary = (
-                f"Automatic joint correction · generation {iteration}/{total} "
+                f"Automatic joint correction · iteration {iteration}/{total} "
                 f"{state} · {rms_text}"
             )
             self.workflow_summary_label.setText(summary)
@@ -4483,7 +4544,7 @@ class MainWindow(QMainWindow):
                 f"RMS {measurement.rms_mm:.6g} mm"
             )
         else:
-            label = f"Generation {iteration} · {state}"
+            label = f"Iteration {iteration} · {state}"
             reference = self._automatic_initial_measurement
             restored = (
                 " · restoring previous state"
@@ -4491,7 +4552,7 @@ class MainWindow(QMainWindow):
                 else ""
             )
             summary = (
-                f"Automatic correction · generation {iteration}/{total} "
+                f"Automatic correction · iteration {iteration}/{total} "
                 f"{state}{restored} · RMS {measurement.rms_mm:.6g} mm"
             )
         self._show_measurement(measurement)
@@ -4505,6 +4566,7 @@ class MainWindow(QMainWindow):
         self.plot_state_label.show()
 
     def _task_failed(self, message: str) -> None:
+        self._standalone_response = False
         failed_task = self._active_task
         self._automatic_initial_measurement = None
         if failed_task in {
@@ -5009,7 +5071,7 @@ class MainWindow(QMainWindow):
         if retained_rank < required_rank:
             rank_summary += (
                 "\nRank-reduced response: manual correction uses only the retained "
-                "independent mode; automatic correction uses the same controllable "
+                "independent mode; correction uses the same controllable "
                 "mode and stops if measured RMS does not improve."
             )
         self.response_info.setPlainText(
@@ -5054,7 +5116,7 @@ class MainWindow(QMainWindow):
             for name, value in result.delta_knobs.items()
         )
         required = min(result.matrix.shape)
-        can_apply = not self.config.section.diagnostic_only
+        can_apply = not self.config.section.diagnostic_only and not self._standalone_response
         self.apply_joint_recommendation_button.setVisible(can_apply)
         self.apply_joint_recommendation_button.setEnabled(can_apply)
         self.response_info.setPlainText(
@@ -5158,13 +5220,13 @@ class MainWindow(QMainWindow):
 
     def _automatic_correction_settings_tooltip(self) -> str:
         policy = (
-            "measure Q response every generation"
+            "measure Q response every iteration"
             if self.response_update_combo.currentText() == "every_iteration"
             else "reuse the first measured Q response"
         )
         text = (
-            f"Maximum {self.max_iter_spin.value()} generations · {policy}. "
-            f"Each generation must improve RMS by at least "
+            f"Maximum {self.max_iter_spin.value()} iterations · {policy}. "
+            f"Each iteration must improve RMS by at least "
             f"{self.min_step_improvement_spin.value():g}%; the loop may stop earlier."
         )
         rank_warning = rank_reduced_response_warning(
@@ -5172,6 +5234,36 @@ class MainWindow(QMainWindow):
             self.config.solver.svd_cut,
         )
         return f"{text} {rank_warning}" if rank_warning is not None else text
+
+    def _measure_q_response(self) -> None:
+        self._standalone_response = True
+        if not self._start_task("joint-response" if self._joint_correction_enabled() else "response"):
+            self._standalone_response = False
+
+    def _response_saved(self, record: SavedQResponse, path: str) -> None:
+        self.saved_response_status.setText(
+            f"Q response saved · {record.created_at[:19]} · {record.config['section']['display_name']}"
+        )
+        self.saved_response_status.setToolTip(path)
+        if record.snapshot.device_values:
+            self._last_known_quadrupole_values = dict(record.snapshot.device_values)
+
+    def _populate_response_sources(self, combo: QComboBox, config: RunConfig) -> None:
+        combo.addItem("Measure a new response", None)
+        directory = q_response_directory(self.app_context)
+        for path in sorted(directory.glob("q_response_*.json"), reverse=True):
+            try:
+                record = load_response(path)
+                reason = record.compatibility_error(config)
+                label = f"{record.created_at[:19]} · {record.config['section']['display_name']} · {record.config['measurement']['plane']}"
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                self._append_log(f"Cannot load Q response {path.name}: {exc}")
+                continue
+            combo.addItem(label + (" · incompatible" if reason else ""), record)
+            index = combo.count() - 1
+            combo.setItemData(index, reason or str(path), Qt.ToolTipRole)
+            if reason:
+                combo.model().item(index).setEnabled(False)
 
     def _update_automatic_correction_tooltip(
         self,
@@ -5187,15 +5279,15 @@ class MainWindow(QMainWindow):
     ) -> tuple[QDialog, QSpinBox, QComboBox, QDoubleSpinBox]:
         dialog = QDialog(self)
         dialog.setObjectName("automaticCorrectionDialog")
-        dialog.setWindowTitle("Automatic Correction")
-        dialog.setMinimumWidth(680)
+        dialog.setWindowTitle("Correction")
+        dialog.setMinimumWidth(900)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(12)
 
         intro = QLabel(
-            "Runs repeated measure → solve → apply → verify cycles without "
-            "confirmation between accepted generations."
+            "Measures, solves, applies and verifies automatically. "
+            "Set one iteration for a single step, or more to repeat."
         )
         intro.setObjectName("automaticDialogIntro")
         intro.setWordWrap(True)
@@ -5213,7 +5305,7 @@ class MainWindow(QMainWindow):
         settings_title.setObjectName("automaticDialogSectionTitle")
         settings.addWidget(settings_title, 0, 0, 1, 4)
 
-        generations_label = QLabel("Maximum generations (upper limit)")
+        generations_label = QLabel("Maximum iterations")
         generations_label.setProperty("role", "field")
         settings.addWidget(generations_label, 1, 0)
         generations = QSpinBox(dialog)
@@ -5221,15 +5313,20 @@ class MainWindow(QMainWindow):
         generations.setRange(1, 20)
         generations.setValue(self.max_iter_spin.value())
         generations.setToolTip(
-            "Maximum correction generations; the loop may stop earlier."
+            "Maximum correction iterations; the loop may stop earlier."
         )
         settings.addWidget(generations, 1, 1)
 
         gain_label = QLabel("Solver gain")
         gain_label.setProperty("role", "field")
         settings.addWidget(gain_label, 1, 2)
-        gain_value = QLabel(f"{self.gain_spin.value():.3g}")
-        gain_value.setObjectName("automaticReadOnlyValue")
+        gain_value = QDoubleSpinBox(dialog)
+        gain_value.setObjectName("correctionGainSpin")
+        gain_value.setDecimals(3)
+        gain_value.setRange(0.001, 1.0)
+        gain_value.setSingleStep(0.05)
+        gain_value.setValue(self.gain_spin.value())
+        dialog.accepted.connect(lambda: self.gain_spin.setValue(gain_value.value()))
         settings.addWidget(gain_value, 1, 3)
 
         response_label = QLabel("Q response strategy")
@@ -5238,35 +5335,35 @@ class MainWindow(QMainWindow):
         response_policy = QComboBox(dialog)
         response_policy.setObjectName("automaticResponsePolicy")
         response_policy.addItem(
-            "Every generation (recommended)",
+            "Every iteration",
             "every_iteration",
         )
         response_policy.addItem(
-            "Once (reuse first response)",
+            "Once (keep response)",
             "once",
         )
         policy_index = response_policy.findData(
             self.response_update_combo.currentText()
         )
         response_policy.setCurrentIndex(max(0, policy_index))
-        if self._joint_correction_enabled():
-            response_policy.setCurrentIndex(0)
-            response_policy.setEnabled(False)
-            response_policy.setToolTip(
-                "Joint ηx/ηy correction remeasures the response every generation."
-            )
         settings.addWidget(response_policy, 2, 1)
 
         max_step_label = QLabel("Maximum step")
         max_step_label.setProperty("role", "field")
         settings.addWidget(max_step_label, 2, 2)
-        max_step_value = QLabel(
-            f"{self.max_step_pct_spin.value():.3g}% of range"
+        max_step_value = QDoubleSpinBox(dialog)
+        max_step_value.setObjectName("correctionMaxStepSpin")
+        max_step_value.setDecimals(1)
+        max_step_value.setRange(0.1, 100.0)
+        max_step_value.setSingleStep(5.0)
+        max_step_value.setSuffix(" % of range")
+        max_step_value.setValue(self.max_step_pct_spin.value())
+        dialog.accepted.connect(
+            lambda: self.max_step_pct_spin.setValue(max_step_value.value())
         )
-        max_step_value.setObjectName("automaticReadOnlyValue")
         settings.addWidget(max_step_value, 2, 3)
 
-        improvement_label = QLabel("Minimum improvement per generation")
+        improvement_label = QLabel("Minimum improvement")
         improvement_label.setProperty("role", "field")
         settings.addWidget(improvement_label, 3, 0)
         minimum_improvement = QDoubleSpinBox(dialog)
@@ -5279,25 +5376,55 @@ class MainWindow(QMainWindow):
             self.min_step_improvement_spin.value()
         )
         minimum_improvement.setToolTip(
-            "A trial generation is retained only when its measured residual "
+            "A trial iteration is retained only when its measured residual "
             "RMS improves by at least this percentage."
         )
         settings.addWidget(minimum_improvement, 3, 1)
 
-        orbit_limit_label = QLabel("Reference orbit change limit")
+        orbit_limit_label = QLabel("Orbit change limit")
         orbit_limit_label.setProperty("role", "field")
         settings.addWidget(orbit_limit_label, 3, 2)
-        orbit_limit_value = QLabel(
-            f"{self.config.safety.max_reference_orbit_change_mm:g} mm · profile"
-        )
-        orbit_limit_value.setObjectName("automaticReadOnlyValue")
+        orbit_limit_value = QDoubleSpinBox(dialog)
+        orbit_limit_value.setObjectName("correctionOrbitLimitSpin")
+        orbit_limit_value.setDecimals(2)
+        orbit_limit_value.setRange(0.01, 100.0)
+        orbit_limit_value.setSingleStep(0.1)
+        orbit_limit_value.setSuffix(" mm")
+        orbit_limit_value.setValue(self.config.safety.max_reference_orbit_change_mm)
         settings.addWidget(orbit_limit_value, 3, 3)
+        response_source = QComboBox(dialog)
+        response_source.setObjectName("correctionResponseSource")
+        self._populate_response_sources(response_source, self._config_from_widgets())
+        settings.addWidget(QLabel("Q response source"), 4, 0)
+        settings.addWidget(response_source, 4, 1, 1, 3)
+        source_details = QLabel(dialog)
+        source_details.setObjectName("correctionResponseDetails")
+        source_details.setWordWrap(True)
+        settings.addWidget(source_details, 5, 0, 1, 4)
+
+        def update_source_details():
+            record = response_source.currentData()
+            if record is None:
+                source_details.setText("Measure and save a new Q response at the current operating point.")
+                return
+            readings = getattr(self.last_live_preflight, "readings", {})
+            values = self._last_known_quadrupole_values or readings.get("quadrupole_readbacks")
+            summary = record.operating_point_summary(values, readings.get("energy_value"))
+            source_details.setText(
+                "Singular values: " + ", ".join(f"{value:.4g}" for value in record.singular_values)
+                + f". Quadrupole unit: {self._knob_control_unit()}. "
+                + "Saved → latest known settings: " + summary
+                + ". Changed optics or energy may invalidate the response. "
+                "Current settings and dispersion will be read again at start."
+            )
+
+        response_source.currentIndexChanged.connect(update_source_details)
+        update_source_details()
         layout.addWidget(settings_card)
 
         safety_text = (
             "Stops early if dispersion does not improve or a safety check fails; "
-            "rejected trial settings are restored automatically.\n"
-            "For a new machine configuration, validate one manual correction first."
+            "rejected trial settings are restored automatically."
         )
         rank_warning = rank_reduced_response_warning(
             self.latest_response,
@@ -5316,7 +5443,7 @@ class MainWindow(QMainWindow):
         cancel_button.setObjectName("automaticCancelButton")
         cancel_button.clicked.connect(dialog.reject)
         buttons.addWidget(cancel_button)
-        start_button = QPushButton("Start Automatic Correction")
+        start_button = QPushButton("Start Correction")
         start_button.setObjectName("automaticStartButton")
         start_button.setProperty("role", "control")
         start_button.clicked.connect(dialog.accept)
@@ -5327,7 +5454,7 @@ class MainWindow(QMainWindow):
     def _confirm_automatic_correction(self) -> None:
         block_reason = self._operation_block_reason()
         if block_reason is not None:
-            QMessageBox.warning(self, "Automatic Correction", block_reason)
+            QMessageBox.warning(self, "Correction", block_reason)
             return
         if (
             self.config.section.model_only
@@ -5338,31 +5465,13 @@ class MainWindow(QMainWindow):
             )
         ):
             return
-        if self.latest_measurement is None:
-            QMessageBox.warning(
-                self,
-                "Automatic Correction",
-                "Measure dispersion before starting automatic correction.",
-            )
-            return
-        response_block = (
-            None
-            if self._joint_correction_enabled()
-            else automatic_response_block_reason(
-                self.latest_response,
-                self.config.solver.svd_cut,
-            )
-        )
-        if response_block is not None:
-            QMessageBox.warning(self, "Automatic Correction", response_block)
-            return
         if self.config.backend.type.lower() == "epics" and (
             self.last_live_preflight is None or not self.last_live_preflight.ok
         ):
             QMessageBox.warning(
                 self,
-                "Automatic Correction",
-                "Click Check PVs before starting automatic correction.",
+                "Correction",
+                "Click Check PVs before starting correction.",
             )
             return
 
@@ -5371,6 +5480,16 @@ class MainWindow(QMainWindow):
         )
         if dialog.exec_() != QDialog.Accepted:
             return
+        saved_response = dialog.findChild(QComboBox, "correctionResponseSource").currentData()
+        self.config = replace(
+            self.config,
+            safety=replace(
+                self.config.safety,
+                max_reference_orbit_change_mm=dialog.findChild(
+                    QDoubleSpinBox, "correctionOrbitLimitSpin"
+                ).value(),
+            ),
+        )
 
         previous_loading = self._loading_widgets
         self._loading_widgets = True
@@ -5380,9 +5499,7 @@ class MainWindow(QMainWindow):
                 minimum_improvement.value()
             )
             self.response_update_combo.setCurrentText(
-                "every_iteration"
-                if self._joint_correction_enabled()
-                else str(response_policy.currentData())
+                str(response_policy.currentData())
             )
         finally:
             self._loading_widgets = previous_loading
@@ -5391,7 +5508,7 @@ class MainWindow(QMainWindow):
         self.latest_joint_response = None
         self.correction_recommendation = None
         self.correction_state_label.setText(
-            "Automatic correction is starting. Any previous single-generation "
+            "Automatic correction is starting. Any previous single-iteration "
             "recommendation was discarded."
         )
         self.recommendation_summary_label.setText(
@@ -5406,8 +5523,10 @@ class MainWindow(QMainWindow):
                 self.latest_measurement,
                 label="Latest measured",
             )
-        started = self._start_task(
-            "joint-run" if self._joint_correction_enabled() else "run"
+        task = "joint-run" if self._joint_correction_enabled() else "run"
+        started = (
+            self._start_task(task, saved_response=saved_response)
+            if saved_response is not None else self._start_task(task)
         )
         if started is False:
             self.correction_mode = None
@@ -5629,7 +5748,7 @@ class MainWindow(QMainWindow):
         recommendation: CorrectionRecommendation,
     ) -> str:
         lines = [
-            "The following reviewed targets will be applied for one generation:",
+            "The following reviewed targets will be applied for one iteration:",
             "",
         ]
         if self.config.backend.type.lower() == "offline":
@@ -5890,6 +6009,22 @@ class MainWindow(QMainWindow):
         self._update_operation_banner()
 
     def _next_workflow_action(self) -> tuple[str | None, str, str, str]:
+        if (
+            not self.config.section.model_only
+            and not self.config.section.diagnostic_only
+            and (self.config.measurement.plane != "xy" or self._joint_correction_enabled())
+        ):
+            reason = self._operation_block_reason()
+            if reason is None and self.config.backend.type.lower() == "epics" and (
+                self.last_live_preflight is None or not self.last_live_preflight.ok
+            ):
+                reason = "Click Check PVs before starting correction."
+            return (
+                None,
+                "Correction…",
+                "Correction unavailable" if reason else "Ready for correction",
+                reason or "Set one iteration for a single correction step, or more for repeated measure → solve → apply → verify cycles.",
+            )
         if self.config.section.model_only:
             if self.dispersion_curve.result is None:
                 return (
@@ -6212,7 +6347,7 @@ class MainWindow(QMainWindow):
         self.history_button.setEnabled(not running and has_history)
         self.history_button.setVisible(not measurement_only)
         self.history_button.setToolTip(
-            "Review manual and automatic correction runs by generation."
+            "Review correction runs by iteration."
             if has_history
             else "No correction history is available yet."
         )
@@ -6267,7 +6402,7 @@ class MainWindow(QMainWindow):
                     "Applying and verifying ηx/ηy targets",
                 ),
                 "joint-run": (
-                    "Automatic Joint Correction",
+                    "Joint Correction",
                     "Automatic ηx/ηy correction running",
                 ),
                 "apply": ("Applying and Verifying…", "Reviewed correction running"),
@@ -6314,21 +6449,12 @@ class MainWindow(QMainWindow):
                 and not self._joint_correction_enabled()
             )
         )
-        manual_mode = self.correction_mode == "manual"
-        automatic_mode = self.correction_mode == "automatic"
         self.next_action_button.setVisible(
-            (
-                action == "joint-response"
-                or (
-                    not measurement_only
-                    and (model_only or not automatic_mode)
-                )
-            )
+            model_only or (measurement_only and action == "joint-response")
         )
         self.run_button.setVisible(
             not model_only
             and not measurement_only
-            and not manual_mode
         )
         self.next_action_button.setToolTip(hint)
         self.workflow_state_label.setText(state_text)
@@ -6513,22 +6639,24 @@ class MainWindow(QMainWindow):
                 and self.last_live_preflight.ok
             )
         )
-        automatic_response_reason = automatic_response_block_reason(
-            self.latest_response,
-            self.config.solver.svd_cut,
-        )
         self.run_button.setVisible(automatic_visible)
         if running and task in {"run", "joint-run"}:
-            self.run_button.setText("Automatic Correction · 0%")
+            self.run_button.setText("Correction · 0%")
         elif not running:
-            self.run_button.setText("Automatic Correction…")
+            self.run_button.setText("Correction…")
         self.run_button.setEnabled(
             not running
             and operation_allowed
             and automatic_connection_ready
             and automatic_visible
-            and self.latest_measurement is not None
-            and automatic_response_reason is None
+        )
+        self.measure_q_response_button.setVisible(correction_enabled)
+        self.saved_response_status.setVisible(correction_enabled)
+        self.measure_q_response_button.setEnabled(
+            not running and operation_allowed and automatic_connection_ready and correction_enabled
+        )
+        self.measure_q_response_button.setToolTip(
+            "Measure and save the Q response; temporary Q and energy changes are restored."
         )
         recommendation_inputs_ready = (
             correction_enabled
@@ -6557,14 +6685,8 @@ class MainWindow(QMainWindow):
             automatic_tooltip = block_reason
         elif not automatic_connection_ready:
             automatic_tooltip = (
-                "Click Check PVs before starting automatic correction."
+                "Click Check PVs before starting correction."
             )
-        elif self.latest_measurement is None:
-            automatic_tooltip = (
-                "Measure dispersion before starting automatic correction."
-            )
-        elif automatic_response_reason is not None:
-            automatic_tooltip = automatic_response_reason
         else:
             automatic_tooltip = self._automatic_correction_settings_tooltip()
         self.run_button.setToolTip(automatic_tooltip)
@@ -6627,7 +6749,7 @@ class MainWindow(QMainWindow):
             )
             if iteration_match is not None:
                 generation = (
-                    f"Gen {iteration_match.group(1)}/"
+                    f"Iteration {iteration_match.group(1)}/"
                     f"{iteration_match.group(2)}"
                 )
             elif "Final" in stage:
@@ -6636,7 +6758,7 @@ class MainWindow(QMainWindow):
                 generation = "Initial"
             else:
                 generation = ""
-            parts = ["Automatic"]
+            parts = ["Correction"]
             if generation:
                 parts.append(generation)
             if "·" in stage:
@@ -7179,7 +7301,7 @@ class MainWindow(QMainWindow):
                 "joint-response": "the joint Q-response scan snapshot",
                 "apply": "the pre-apply machine snapshot",
                 "joint-apply": "the pre-apply joint machine snapshot",
-                "run": "the automatic-correction start snapshot",
+                "run": "the correction start snapshot",
                 "joint-run": "the automatic joint-correction snapshot",
                 "design-k1": "the pre-write quadrupole snapshot",
                 "restore-correction": "the pre-restore quadrupole snapshot",

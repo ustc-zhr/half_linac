@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 import time
 
 import numpy as np
@@ -25,6 +26,7 @@ from half_linac.src.apps.dispersion_correction.models import (
 )
 from half_linac.src.apps.dispersion_correction.physics import compute_effective_dispersion, momentum_delta, robust_average
 from half_linac.src.apps.dispersion_correction.preflight import run_live_preflight
+from half_linac.src.apps.dispersion_correction.response_store import SavedQResponse
 from half_linac.src.apps.dispersion_correction.safety import evaluate_safety
 from half_linac.src.apps.dispersion_correction.solver import (
     response_mode_counts,
@@ -68,6 +70,7 @@ class AchromatWorkflow:
         progress_callback: ProgressCallback | None = None,
         preflight_callback: PreflightCallback | None = None,
         correction_measurement_callback: CorrectionMeasurementCallback | None = None,
+        response_callback: Callable[[SavedQResponse], None] | None = None,
     ) -> None:
         self.config = config
         self.machine = machine if machine is not None else create_machine(config)
@@ -76,6 +79,7 @@ class AchromatWorkflow:
         self.progress_callback = progress_callback
         self.preflight_callback = preflight_callback
         self.correction_measurement_callback = correction_measurement_callback
+        self.response_callback = response_callback
         self.knob_names = tuple(knob.name for knob in config.knobs)
         self._progress_depth = 0
         self.last_live_preflight = None
@@ -258,16 +262,27 @@ class AchromatWorkflow:
             + np.array2string(result.matrix, precision=8, suppress_small=False)
         )
         self._validate_response_quality(result)
+        record = SavedQResponse.capture(
+            self.config, result.matrix, base_snapshot,
+            base_measurement, result.singular_values,
+        )
+        result = replace(result, source_created_at=record.created_at)
+        if self.response_callback is not None:
+            self.response_callback(record)
         if report_progress:
             self._progress("Response complete", total_steps, total_steps)
         return result
 
-    def run(self) -> CorrectionResult:
+    def run(self, saved_response: SavedQResponse | None = None) -> CorrectionResult:
         self._require_correction_section()
+        if saved_response is not None:
+            reason = saved_response.compatibility_error(self.config)
+            if reason:
+                raise ValueError(reason)
         self._require_write_ready()
         self._progress_depth += 1
         try:
-            return self._run_correction()
+            return self._run_correction(saved_response)
         finally:
             self._progress_depth -= 1
 
@@ -648,10 +663,15 @@ class AchromatWorkflow:
                 recommendation.response,
             )
 
-    def _run_correction(self) -> CorrectionResult:
+    def _run_correction(self, saved_response: SavedQResponse | None = None) -> CorrectionResult:
         total_steps = self.config.solver.max_iter + 2
         self._progress("Preparing correction", 0, total_steps)
         initial_state = self.machine.snapshot()
+        if saved_response is not None:
+            self._log(f"Using Q response measured {saved_response.created_at}")
+            self._log(saved_response.operating_point_summary(
+                initial_state.device_values, initial_state.energy_delta,
+            ))
         initial_knobs = self.machine.get_knobs(self.knob_names)
         knob_set = SymmetricKnobSet(self.config.knobs, initial_knobs)
         baseline_reference = self._average_bpm(self.config.measurement.samples_per_step)
@@ -667,6 +687,13 @@ class AchromatWorkflow:
         best_measurement = initial_measurement
         best_state = self.machine.snapshot()
         last_response: ResponseMatrixResult | None = None
+        if saved_response is not None:
+            last_response = response_result(
+                saved_response.matrix, self.config.measurement_bpms,
+                self.knob_names, initial_measurement,
+            )
+            last_response = replace(last_response, source_created_at=saved_response.created_at)
+            self._validate_response_quality(last_response)
         steps: list[CorrectionStep] = []
         safety_status = SafetyStatus(ok=True, reason="OK")
 
@@ -674,7 +701,9 @@ class AchromatWorkflow:
             for iteration in range(1, self.config.solver.max_iter + 1):
                 self._check_cancelled()
                 self._log(f"Starting iteration {iteration}")
-                refresh_response = last_response is None or self.config.solver.response_update == "every_iteration"
+                refresh_response = last_response is None or (
+                    iteration > 1 and self.config.solver.response_update == "every_iteration"
+                )
                 if refresh_response:
                     self._progress(
                         f"Iteration {iteration}/{self.config.solver.max_iter} · response",
@@ -687,7 +716,7 @@ class AchromatWorkflow:
                 else:
                     response = last_response
                     solve_measurement = best_measurement
-                    self._log("Reusing response matrix from the first iteration")
+                    self._log("Reusing Q response with current measured dispersion")
 
                 current_knobs = self.machine.get_knobs(self.knob_names)
                 valid_rows = (

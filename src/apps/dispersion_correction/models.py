@@ -336,6 +336,7 @@ class ResponseMatrixResult:
     measurement: DispersionMeasurement
     singular_values: ArrayLike
     condition_number: float
+    source_created_at: str | None = None
 
     def __post_init__(self) -> None:
         matrix = np.asarray(self.matrix, dtype=float)
@@ -366,6 +367,7 @@ class JointResponseAnalysisResult:
     normalized_rms_before: float
     normalized_rms_after: float
     uncontrollable_rms: float
+    source_created_at: str | None = None
 
     def __post_init__(self) -> None:
         matrix = np.asarray(self.matrix, dtype=float)

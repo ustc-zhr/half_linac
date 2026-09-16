@@ -6,6 +6,7 @@ from dataclasses import replace
 import numpy as np
 
 from half_linac.src.apps.dispersion_correction.knobs import SymmetricKnobSet
+from half_linac.src.apps.dispersion_correction.response_store import SavedQResponse
 from half_linac.src.apps.dispersion_correction.models import (
     JointCorrectionResult,
     JointCorrectionStep,
@@ -43,6 +44,7 @@ class JointResponseAnalyzer:
         preflight_callback: PreflightCallback | None = None,
         measurement_callback: MeasurementCallback | None = None,
         machine=None,
+        response_callback: Callable[[SavedQResponse], None] | None = None,
     ) -> None:
         analysis = config.section.joint_response_analysis
         if not analysis.enabled:
@@ -71,6 +73,7 @@ class JointResponseAnalyzer:
         self.cancellation_callback = cancellation_callback
         self.progress_callback = progress_callback
         self.measurement_callback = measurement_callback
+        self.response_callback = response_callback
         self._initial_knob_values: dict[str, float] | None = None
         self._automatic_generation: tuple[int, int] | None = None
 
@@ -154,6 +157,13 @@ class JointResponseAnalyzer:
             baseline_snapshot.device_values,
         )
         self._progress("Joint response analysis complete", total, total)
+        record = SavedQResponse.capture(
+            self.config, result.matrix, baseline_snapshot,
+            baseline, result.singular_values,
+        )
+        result = replace(result, source_created_at=record.created_at)
+        if self.response_callback is not None:
+            self.response_callback(record)
         return result
 
     def _build_result(
@@ -371,11 +381,16 @@ class JointResponseAnalyzer:
             machine.wait_stable()
             raise
 
-    def run_automatic(self) -> JointCorrectionResult:
+    def run_automatic(self, saved_response: SavedQResponse | None = None) -> JointCorrectionResult:
         if self.config.section.diagnostic_only:
             raise PermissionError(
                 "Automatic joint correction is unavailable in a diagnostic section"
             )
+        if saved_response is not None:
+            reason = saved_response.compatibility_error(self.config)
+            if reason:
+                raise ValueError(reason)
+        response = saved_response
         initial: MultiPlaneDispersionMeasurement | None = None
         final: MultiPlaneDispersionMeasurement | None = None
         steps: list[JointCorrectionStep] = []
@@ -385,7 +400,35 @@ class JointResponseAnalyzer:
                 iteration,
                 self.config.solver.max_iter,
             )
-            recommendation = self.run()
+            if response is None or (iteration > 1 and self.config.solver.response_update == "every_iteration"):
+                recommendation = self.run()
+                response = SavedQResponse.capture(
+                    self.config, recommendation.matrix,
+                    self.workflow.machine.snapshot(), recommendation.baseline,
+                    recommendation.singular_values,
+                )
+                response = replace(response, created_at=recommendation.source_created_at)
+            else:
+                snapshot = self.workflow.machine.snapshot()
+                self._log(f"Using Q response measured {response.created_at}")
+                self._log(response.operating_point_summary(snapshot.device_values, snapshot.energy_delta))
+                baseline = self.workflow.measure_dispersion(self.config.measurement.samples_per_step)
+                knob_names = tuple(knob.name for knob in self.analysis.knobs)
+                baseline_knobs = self.workflow.machine.get_knobs(knob_names)
+                if self._initial_knob_values is None:
+                    self._initial_knob_values = dict(baseline_knobs)
+                matrices = {
+                    plane: np.zeros((len(self.config.measurement_bpms), len(knob_names)))
+                    for plane in ("x", "y")
+                }
+                for row, target in enumerate(self.analysis.targets):
+                    index = self.config.measurement_bpms.index(target.bpm)
+                    matrices[target.plane][index, :] = response.matrix[row, :]
+                recommendation = self._build_result(
+                    baseline, matrices, knob_names, SymmetricKnobSet(self.analysis.knobs),
+                    baseline_knobs, snapshot.device_values,
+                )
+                recommendation = replace(recommendation, source_created_at=response.created_at)
             if initial is None:
                 initial = recommendation.baseline
                 self._measurement(
