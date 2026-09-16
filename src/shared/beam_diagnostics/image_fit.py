@@ -340,16 +340,31 @@ def _fit_projection(axis: np.ndarray, projection: np.ndarray) -> GaussianProject
             error="projection has too few points for Gaussian fitting",
         )
 
-    max_index = int(np.argmax(normalized))
+    offset = float(np.min(normalized))
+    signal = normalized - offset
+    total = float(np.sum(signal))
+    if not np.isfinite(total) or total <= 0.0:
+        return GaussianProjectionFit(
+            axis=axis,
+            projection=projection,
+            normalized_projection=normalized,
+            error="projection does not contain finite beam contrast",
+        )
+    # Seed in the camera's physical scale, including narrow beams and ROIs.
+    center = float(np.sum(axis * signal) / total)
+    sigma = float(np.sqrt(np.sum(signal * (axis - center) ** 2) / total))
+    pixel_step = float(np.min(np.abs(np.diff(axis))))
     initial_guess = [
-        float(np.max(normalized)),
-        float(axis[max_index]),
-        1.0,
-        float(np.min(normalized)),
+        float(np.max(signal)),
+        center,
+        max(sigma, pixel_step),
+        offset,
     ]
 
     try:
-        popt, _pcov = curve_fit(gaussian, axis, normalized, p0=initial_guess)
+        popt, _pcov = curve_fit(gaussian, axis, normalized, p0=initial_guess, maxfev=5000)
+        if not np.all(np.isfinite(popt)) or popt[0] <= 0 or abs(popt[2]) <= 0:
+            raise ValueError("Gaussian fit returned invalid beam parameters")
     except (RuntimeError, ValueError, ZeroDivisionError, FloatingPointError) as exc:
         return GaussianProjectionFit(
             axis=axis,

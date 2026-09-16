@@ -1,6 +1,7 @@
 import sys
 import json
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -82,6 +83,27 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         self.assertEqual(len(workspace.session.acquisition.samples), 1)
         self.assertEqual(workspace.session.acquisition.samples[0].source, "image")
         self.assertEqual(workspace.samples_table.columnCount(), 6)
+
+    def test_switch_after_five_samples_and_retry_failed_fit(self):
+        axis = np.linspace(-3, 3, 81)
+        image = np.outer(np.exp(-axis**2 / 0.32), np.exp(-axis**2 / 0.32))
+        workspace = self._workspace(image)
+        workspace.session = replace(workspace.session, acquisition=replace(
+            workspace.session.acquisition, target_samples_per_screen=5))
+        for _ in range(5):
+            workspace.acquire_sample()
+        self.assertEqual(workspace.session.acquisition.sample_counts["PRF06"], 5)
+        workspace.screen_list.setCurrentRow(1)
+        self.assertEqual(workspace._screen_id(workspace.screen_list.currentItem()), "PRF07")
+        reader = workspace.image_reader
+        workspace.image_reader = lambda screen: {"image": np.zeros_like(image), "extent": (-3, 3, -3, 3)}
+        workspace.acquire_sample()
+        self.assertEqual(workspace.session.acquisition.sample_counts["PRF07"], 0)
+        self.assertTrue(workspace.acquire_button.isEnabled())
+        workspace.image_reader = reader
+        workspace.acquire_sample()
+        self.assertEqual(workspace.session.acquisition.sample_counts["PRF06"], 5)
+        self.assertEqual(workspace.session.acquisition.sample_counts["PRF07"], 1)
 
     def test_width_method_controls_preview_sampling_and_archive(self):
         axis = np.linspace(-3, 3, 201)

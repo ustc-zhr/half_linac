@@ -15,6 +15,25 @@ from half_linac.src.shared.beam_diagnostics import fit_beam_image
 
 
 class BeamImageFitTests(unittest.TestCase):
+    def test_gaussian_fit_tracks_camera_scale_with_background(self):
+        for scale in (0.01, 0.1, 10.0):
+            with self.subTest(scale=scale):
+                axis = np.linspace(-6, 6, 121) * scale
+                xx, yy = np.meshgrid(axis, axis)
+                image = 0.2 + np.exp(
+                    -((xx - scale) / (0.3 * scale)) ** 2 / 2
+                    -((yy + scale) / (0.5 * scale)) ** 2 / 2
+                )
+                result = fit_beam_image(image, extent=(-6*scale, 6*scale, -6*scale, 6*scale))
+                self.assertTrue(result.valid, result.message)
+                self.assertAlmostEqual(result.sigx_mm / scale, 0.3, places=4)
+                self.assertAlmostEqual(result.sigy_mm / scale, 0.5, places=4)
+
+    def test_flat_background_is_not_a_valid_beam(self):
+        result = fit_beam_image(np.ones((20, 20)), extent=(-1, 1, -1, 1))
+        self.assertFalse(result.valid)
+        self.assertIn("contrast", result.message)
+
     def test_fit_beam_image_recovers_gaussian_sigmas(self):
         x = np.linspace(-6.0, 6.0, 121)
         y = np.linspace(-5.0, 5.0, 101)

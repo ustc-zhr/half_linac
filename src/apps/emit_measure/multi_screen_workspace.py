@@ -1252,7 +1252,9 @@ class MultiScreenWorkspace(QWidget):
             self._samples_changed()
             if not enabled:
                 self._set_state("Acquiring", f"{screen}: rejected sample recorded — {(quality or {}).get('fit_status', '')} "
-                                f"{(quality or {}).get('x_status', '')}/{(quality or {}).get('y_status', '')}")
+                                f"{(quality or {}).get('x_status', '')}/{(quality or {}).get('y_status', '')}. "
+                                f"{(quality or {}).get('fit_message', '')} "
+                                "Check the image, ROI and background, then retry Acquire.")
         except Exception as exc:
             self._set_state("Ready", str(exc))
 
