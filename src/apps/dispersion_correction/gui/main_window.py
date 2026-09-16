@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import (
     QHeaderView,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QMainWindow,
     QMessageBox,
@@ -1673,10 +1674,9 @@ class MainWindow(QMainWindow):
 
         self.online_page = QFrame()
         self.online_page.setObjectName("workflowActionCard")
-        self.online_page.setMinimumHeight(150)
-        self.online_page.setMaximumHeight(290)
         self.online_content = self.online_page
         online_layout = QVBoxLayout(self.online_page)
+        online_layout.setSizeConstraint(QLayout.SetMinimumSize)
         online_layout.setContentsMargins(14, 10, 14, 12)
         online_layout.setSpacing(6)
 
@@ -1730,6 +1730,9 @@ class MainWindow(QMainWindow):
         self.workflow_summary_label.setWordWrap(True)
         online_layout.addWidget(self.workflow_summary_label)
         self.correction_mode_actions = QWidget()
+        self.correction_mode_actions.setSizePolicy(
+            QSizePolicy.Preferred, QSizePolicy.Fixed
+        )
         correction_mode_layout = QHBoxLayout(self.correction_mode_actions)
         correction_mode_layout.setContentsMargins(0, 0, 0, 0)
         correction_mode_layout.setSpacing(8)
@@ -1738,16 +1741,17 @@ class MainWindow(QMainWindow):
         self.next_action_button.setObjectName("nextWorkflowAction")
         self.next_action_button.setProperty("role", "control")
         self.next_action_button.setSizePolicy(
-            QSizePolicy.Expanding,
+            QSizePolicy.Minimum,
             QSizePolicy.Fixed,
         )
         self.run_button.setSizePolicy(
-            QSizePolicy.Expanding,
+            QSizePolicy.Minimum,
             QSizePolicy.Fixed,
         )
         self.next_action_button.clicked.connect(self._run_next_workflow_action)
-        correction_mode_layout.addWidget(self.next_action_button, 1)
-        correction_mode_layout.addWidget(self.run_button, 1)
+        correction_mode_layout.addWidget(self.next_action_button)
+        correction_mode_layout.addWidget(self.run_button)
+        correction_mode_layout.addStretch(1)
         online_layout.addWidget(self.correction_mode_actions)
         self._update_automatic_correction_tooltip()
         workflow_secondary_actions = QHBoxLayout()
@@ -1765,6 +1769,7 @@ class MainWindow(QMainWindow):
         )
         workflow_secondary_actions.addStretch(1)
         self.measure_q_response_button = QPushButton("Measure Q Response…")
+        self.measure_q_response_button.setObjectName("workflowSecondaryButton")
         self.measure_q_response_button.setProperty("role", "control")
         self.measure_q_response_button.clicked.connect(self._measure_q_response)
         workflow_secondary_actions.addWidget(self.measure_q_response_button)

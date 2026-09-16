@@ -569,9 +569,11 @@ def build_stylesheet(name: str) -> str:
     }}
     QPushButton#nextWorkflowAction,
     QPushButton#automaticCorrectionButton {{
-        min-height: 38px;
-        max-height: 38px;
-        font-size: 14px;
+        border-radius: 9px;
+        min-height: 28px;
+        max-height: 28px;
+        padding: 2px 12px;
+        font-size: 13px;
     }}
     QPushButton#modelDetailsButton,
     QPushButton#refreshSnapshotButton {{
