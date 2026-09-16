@@ -1096,7 +1096,7 @@
       "display_name": "YC20",
       "order": 112,
       "tags": ["orbit", "bba"],
-      "limits": {"current_set": {"low": -10, "high": 10, "unit": "A"}},
+      "limits": {"current_set": {"low": -7, "high": 7, "unit": "A"}},
       "logical_channels": ["kick", "current_set", "current_readback"],
       "plane": "y"
     },
