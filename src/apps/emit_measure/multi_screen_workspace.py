@@ -56,6 +56,7 @@ from half_linac.src.shared.beam_diagnostics import (
     resolve_beam_background_paths,
 )
 from half_linac.src.apps.emit_measure.mplwidget import MplWidget
+from half_linac.src.apps.emit_measure.sample_selection import configure_sample_selection
 from half_linac.src.shared.machine_profile import (
     build_model_backend,
     get_emit_multi_screen_preset,
@@ -382,6 +383,7 @@ class MultiScreenWorkspace(QWidget):
         self.samples_plot.setMinimumHeight(220)
         self.samples_plot.canvas.mpl_connect("pick_event", self._sample_picked)
         self.samples_table = QTableWidget(0, 6, samples_splitter)
+        configure_sample_selection(self.samples_table)
         self.samples_table.setHorizontalHeaderLabels(
             ("Use", "Screen", "#", "σx (mm)", "σy (mm)", "Quality")
         )
@@ -407,10 +409,16 @@ class MultiScreenWorkspace(QWidget):
         archive_row.setSpacing(6)
         self.exclude_samples_button = QPushButton("Exclude Selected", samples_card)
         self.restore_samples_button = QPushButton("Use All", samples_card)
+        self.recalculate_button = QPushButton("Recalculate", samples_card)
+        self.recalculate_button.clicked.connect(self.reconstruct)
+        self.recalculate_button.setToolTip(
+            "Recalculate from checked samples. Each screen needs at least one active sample; "
+            "the acquisition target does not have to be met."
+        )
         self.exclude_samples_button.clicked.connect(self._exclude_selected_samples)
         self.restore_samples_button.clicked.connect(self._restore_samples)
         self.restore_samples_button.setToolTip("Enable all samples with fitted sizes, including quality-rejected samples.")
-        for button in (self.exclude_samples_button, self.restore_samples_button):
+        for button in (self.exclude_samples_button, self.restore_samples_button, self.recalculate_button):
             button.setProperty("compact", True)
             archive_row.addWidget(button)
         archive_row.addStretch(1)
@@ -594,8 +602,9 @@ class MultiScreenWorkspace(QWidget):
         self.acquire_button.setEnabled(writable and not self.session.acquisition.complete)
         self.preview_button.setEnabled(writable)
         self.reconstruct_button.setEnabled(
-            self.session is not None and self.session.acquisition.complete
+            self.session is not None and self.session.acquisition.can_reconstruct
         )
+        self.recalculate_button.setEnabled(self.reconstruct_button.isEnabled())
         self.save_button.setEnabled(self.session is not None)
         self.add_screen_button.setEnabled(not self._archive_review)
         self.remove_screen_button.setEnabled(
@@ -1291,14 +1300,16 @@ class MultiScreenWorkspace(QWidget):
     def _samples_changed(self):
         self.reconstruction = None
         self._reset_result_metrics()
-        self.results_label.setText("Samples changed · Reconstruct to update results")
+        self.results_label.setText("Samples changed · Recalculate to update results")
         self._refresh_samples_table()
         acquisition = self.session.acquisition
         missing = ", ".join(f"{screen} {count}/{acquisition.target_samples_per_screen}"
                             for screen, count in acquisition.sample_counts.items()
                             if count < acquisition.target_samples_per_screen)
         self._set_state("Archived" if self._archive_review else "Fit Ready" if acquisition.complete else "Acquiring",
-                        f"Need samples: {missing}" if missing else "Ready to reconstruct")
+                        (f"Below sampling target: {missing} · Recalculate available"
+                         if acquisition.can_reconstruct else f"Need samples: {missing}")
+                        if missing else "Ready to reconstruct")
 
     def _sample_use_changed(self, item):
         if item.column() != 0 or self.session is None:
@@ -1375,12 +1386,12 @@ class MultiScreenWorkspace(QWidget):
         self.samples_plot.canvas.draw_idle()
 
     def reconstruct(self) -> None:
-        if self.session is None or not self.session.acquisition.complete:
+        if self.session is None or not self.session.acquisition.can_reconstruct:
             return
         try:
             result = reconstruct_multi_screen_measurement(
                 self.session.optics,
-                self.session.acquisition.aggregate(),
+                self.session.acquisition.aggregate(require_target=False),
             )
             self.reconstruction = result
             self._update_result_metrics(result)

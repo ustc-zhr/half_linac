@@ -240,8 +240,12 @@ class MultiScreenAcquisition:
         samples[index] = replace(samples[index], enabled=enabled)
         return replace(self, samples=tuple(samples))
 
-    def aggregate(self) -> MultiScreenBeamSizeData:
-        if not self.complete:
+    @property
+    def can_reconstruct(self) -> bool:
+        return all(count > 0 for count in self.sample_counts.values())
+
+    def aggregate(self, *, require_target: bool = True) -> MultiScreenBeamSizeData:
+        if not self.can_reconstruct or (require_target and not self.complete):
             counts = self.sample_counts
             missing = ", ".join(
                 f"{screen} ({counts[screen]}/{self.target_samples_per_screen})"

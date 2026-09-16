@@ -202,6 +202,29 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         workspace._restore_samples()
         self.assertEqual(workspace.session.acquisition.sample_counts["PRF06"], 2)
 
+    def test_recalculate_checked_samples_below_sampling_target(self):
+        workspace = self._complete_workspace()
+        acquisition = workspace.session.acquisition
+        original = acquisition.samples[0]
+        acquisition = acquisition.add_sample(replace(original, sigma_x_m=original.sigma_x_m * 2))
+        workspace.session = replace(workspace.session, acquisition=replace(
+            acquisition, target_samples_per_screen=5))
+        workspace._samples_changed()
+        workspace.samples_table.item(4, 0).setCheckState(Qt.Unchecked)
+        self.assertFalse(workspace.session.acquisition.complete)
+        self.assertTrue(workspace.recalculate_button.isEnabled())
+        self.assertIn("Recalculate available", workspace.status_label.text())
+        data = workspace.session.acquisition.aggregate(require_target=False)
+        self.assertEqual(data.estimates[0].sample_count, 1)
+        self.assertEqual(data.estimates[0].sigma_x_m, original.sigma_x_m)
+        with patch.object(workspace, "_write_runtime_archives", return_value=None):
+            workspace.recalculate_button.click()
+        self.assertTrue(workspace.reconstruction.valid)
+        workspace.samples_table.item(0, 0).setCheckState(Qt.Unchecked)
+        self.assertFalse(workspace.recalculate_button.isEnabled())
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            workspace.session.acquisition.aggregate(require_target=False)
+
     def test_plot_selection_and_exclude_button(self):
         workspace = self._complete_workspace()
         artist = next(artist for artist in workspace.sample_axes[0].collections

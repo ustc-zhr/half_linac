@@ -109,6 +109,7 @@ from half_linac.src.apps.emit_measure.adaptive_scan import (
 )
 from half_linac.src.apps.emit_measure.profile_runtime import effective_k1_scan_limit
 from half_linac.src.apps.emit_measure.multi_screen_workspace import MultiScreenWorkspace
+from half_linac.src.apps.emit_measure.sample_selection import configure_sample_selection
 from half_linac.src.apps.emit_measure.matching_workspace import MatchingWorkspace
 
 nest_dict    = lambda: defaultdict(nest_dict)
@@ -1438,14 +1439,13 @@ class myWindow(QWidget,Ui_Form):
         self.gridLayout_2.setVerticalSpacing(10)
         self._clear_layout_positions(self.scan_left_column_layout)
         self.scan_left_column_layout.addWidget(self.widget_4)
-        self.scan_left_column_layout.addWidget(self.scan_points_card)
+        self.scan_left_column_layout.addWidget(self.scan_points_card, 1)
         self.gridLayout_2.addWidget(
             self.scan_left_column,
             0,
             0,
             2,
             1,
-            Qt.AlignTop,
         )
         self.gridLayout_2.addWidget(self.beam_image_card, 0, 1, 1, 2)
         self.gridLayout_2.addWidget(self._plot_wrappers[self.widget], 1, 1)
@@ -1503,7 +1503,7 @@ class myWindow(QWidget,Ui_Form):
         self.scan_left_column = QWidget(self.X_Plane)
         self.scan_left_column.setSizePolicy(
             QSizePolicy.Expanding,
-            QSizePolicy.Maximum,
+            QSizePolicy.Expanding,
         )
         self.scan_left_column_layout = QVBoxLayout(self.scan_left_column)
         self.scan_left_column_layout.setContentsMargins(0, 0, 0, 0)
@@ -1513,12 +1513,12 @@ class myWindow(QWidget,Ui_Form):
         self.widget_10.setObjectName("resultCard")
         for widget in (
             self.widget_4,
-            self.scan_points_card,
             self.widget_5,
             self.widget_10,
             self.widget_13,
         ):
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.scan_points_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.widget_13.setMaximumWidth(580)
 
         self.label_9.setText("Scan Control")
@@ -1823,19 +1823,19 @@ class myWindow(QWidget,Ui_Form):
             self.scan_points_card,
         )
         self.scan_points_table.setHorizontalHeaderLabels(SCAN_POINT_COLUMNS)
+        configure_sample_selection(self.scan_points_table)
         self.scan_points_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.scan_points_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.scan_points_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.scan_points_table.setAlternatingRowColors(True)
         self.scan_points_table.setMinimumHeight(260)
-        self.scan_points_table.setMaximumHeight(300)
         self.scan_points_table.verticalHeader().setVisible(False)
         header = self.scan_points_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         for column in range(1, len(SCAN_POINT_COLUMNS)):
             header.setSectionResizeMode(column, QHeaderView.Stretch)
         self.scan_points_table.itemChanged.connect(self._on_scan_point_item_changed)
-        points_layout.addWidget(self.scan_points_table)
+        points_layout.addWidget(self.scan_points_table, 1)
 
         point_actions = QHBoxLayout()
         point_actions.setContentsMargins(0, 0, 0, 0)
