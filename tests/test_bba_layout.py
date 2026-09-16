@@ -22,7 +22,7 @@ for path in (PARENT, BBA_DIR):
 
 from PyQt5.QtWidgets import QApplication
 
-from half_linac.src.apps.bba.main import myWindow, bba1_saved_k1_sign, BBAScanThread
+from half_linac.src.apps.bba.main import myWindow, bba1_saved_k1_sign, BBAScanThread, ScanParameters
 
 
 class BbaK1ConventionTests(unittest.TestCase):
@@ -45,6 +45,8 @@ class BbaK1ConventionTests(unittest.TestCase):
     def test_legacy_y_conversion_preserves_offset_and_reverses_slope(self):
         class Collector:
             _ordered_unique = staticmethod(BBAScanThread._ordered_unique)
+            _bpm1_samples_for_fit = BBAScanThread._bpm1_samples_for_fit
+            params = ScanParameters()
 
             def _emit(self, data):
                 pass
@@ -64,6 +66,80 @@ class BbaK1ConventionTests(unittest.TestCase):
             a, b = np.polyfit(positions, response, 1)
             self.assertAlmostEqual(-b / a, 0.0003)
 
+    def test_initial_k1_reference_survives_save_and_recalculation(self):
+        params = ScanParameters(
+            bba1_bpm1_mode="initial_k1", corr_steps=2, quad_steps=3,
+            samples=2, corrPV="corr", quadPV="quad", bpm1PV="bpm1", bpm2PV="bpm2",
+        )
+        params.corr_target = params.quad_target = None
+        state = {"corr": 0.0, "quad": 2.0}
+        baseline_reads = []
+        scan = BBAScanThread(params)
+
+        def read(pv, label):
+            if pv == "bpm1":
+                if state["quad"] == 2.0:
+                    baseline_reads.append(state["corr"])
+                return state["corr"] + 0.1 * (state["quad"] - 2.0)
+            return (state["corr"] - 0.3) * state["quad"]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            params.bba1_data_path = root / "m1S.txt"
+            params.bba1_quad_scan_path = root / "bba1_quad_scan.txt"
+            params.bba1_metadata_path = root / "metadata.json"
+            with patch("half_linac.src.apps.bba.main.epics.PV", side_effect=lambda name: name), \
+                 patch("half_linac.src.apps.bba.main.resolve_limited_scan_values",
+                       side_effect=[np.array([3., 4., 5.]), np.array([0., 1.])]), \
+                 patch.object(scan, "_safe_get", side_effect=lambda pv, label: state[pv]), \
+                 patch.object(scan, "_safe_put", side_effect=lambda pv, value: state.update({pv: value})), \
+                 patch.object(scan, "_sleep_or_stop", return_value=True), \
+                 patch.object(scan, "_read_bpm_m", side_effect=read), \
+                 patch.object(scan, "_emit"):
+                x, slopes = scan._perform_scan()
+            np.testing.assert_allclose(x, [0., 1.])
+            np.testing.assert_allclose(slopes, [-0.3, 0.7])
+            self.assertEqual(baseline_reads, [0., 0., 1., 1.])
+            self.assertEqual(state, {"corr": 0.0, "quad": 2.0})
+            metadata = json.loads(params.bba1_metadata_path.read_text())
+            self.assertEqual(metadata["bpm1_reference"]["initial_k1"], 2.0)
+
+            # The archive controls recalculation even if the UI has since changed mode.
+            params.recal = True
+            params.bba1_bpm1_mode = "scan_mean"
+            recal = BBAScanThread(params)
+            with patch.object(recal, "_emit") as emit:
+                recal.run()
+            result = emit.call_args.args[0]
+            self.assertEqual(result["show"], "m1S")
+            np.testing.assert_allclose(result["m1"], x)
+            self.assertAlmostEqual(result["offset"], 0.3)
+
+            metadata["bpm1_reference"]["measurements"] = []
+            params.bba1_metadata_path.write_text(json.dumps(metadata))
+            with patch.object(recal, "_emit") as emit:
+                recal.run()
+            self.assertIn("Missing or invalid", emit.call_args.args[0]["error"])
+
+    def test_stop_during_reference_settling_restores_magnets(self):
+        params = ScanParameters(
+            bba1_bpm1_mode="initial_k1", corrPV="corr", quadPV="quad",
+            bpm1PV="bpm1", bpm2PV="bpm2",
+        )
+        params.corr_target = params.quad_target = None
+        state = {"corr": 0.0, "quad": 2.0}
+        scan = BBAScanThread(params)
+        with patch("half_linac.src.apps.bba.main.epics.PV", side_effect=lambda name: name), \
+             patch("half_linac.src.apps.bba.main.resolve_limited_scan_values",
+                   side_effect=[np.array([3., 4.]), np.array([1.])]), \
+             patch.object(scan, "_safe_get", side_effect=lambda pv, label: state[pv]), \
+             patch.object(scan, "_safe_put", side_effect=lambda pv, value: state.update({pv: value})), \
+             patch.object(scan, "_sleep_or_stop", return_value=False), \
+             patch.object(scan, "_read_bpm_m") as read:
+            self.assertIsNone(scan._perform_scan())
+            read.assert_not_called()
+        self.assertEqual(state, {"corr": 0.0, "quad": 2.0})
+
 
 class BbaLayoutTests(unittest.TestCase):
     @classmethod
@@ -78,6 +154,9 @@ class BbaLayoutTests(unittest.TestCase):
             window = myWindow()
 
         try:
+            self.assertEqual(window.bba1_bpm1_mode_combo.currentData(), "scan_mean")
+            window.bba1_bpm1_mode_combo.setCurrentIndex(1)
+            self.assertEqual(window.get_setting().bba1_bpm1_mode, "initial_k1")
             window.resize(1600, 960)
             window.show()
             self.app.processEvents()

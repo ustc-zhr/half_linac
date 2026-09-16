@@ -1,24 +1,6 @@
 {
   "presets": [
     {
-      "id": "bba1_ql01_xc03",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL01",
-      "corr": "XC03",
-      "bpm1": "BPM03",
-      "bpm2": "BPM04"
-    },
-    {
-      "id": "bba1_ql01_yc03",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL01",
-      "corr": "YC03",
-      "bpm1": "BPM03",
-      "bpm2": "BPM04"
-    },
-    {
       "id": "bba1_ql02_xc03",
       "family": "bba1",
       "plane": "X",
@@ -37,166 +19,58 @@
       "bpm2": "BPM04"
     },
     {
-      "id": "bba1_ql03_xc04",
+      "id": "bba1_ql04_xc04",
       "family": "bba1",
       "plane": "X",
-      "quad": "QL03",
+      "quad": "QL04",
       "corr": "XC04",
       "bpm1": "BPM04",
       "bpm2": "BPM05"
     },
     {
-      "id": "bba1_ql03_yc04",
+      "id": "bba1_ql04_yc04",
       "family": "bba1",
       "plane": "Y",
-      "quad": "QL03",
+      "quad": "QL04",
       "corr": "YC04",
       "bpm1": "BPM04",
       "bpm2": "BPM05"
     },
     {
-      "id": "bba1_ql04_xc05",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL04",
-      "corr": "XC05",
-      "bpm1": "BPM05",
-      "bpm2": "BPM06"
-    },
-    {
-      "id": "bba1_ql04_yc05",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL04",
-      "corr": "YC05",
-      "bpm1": "BPM05",
-      "bpm2": "BPM06"
-    },
-    {
-      "id": "bba1_ql05_xc05",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL05",
-      "corr": "XC05",
-      "bpm1": "BPM05",
-      "bpm2": "BPM06"
-    },
-    {
-      "id": "bba1_ql05_yc05",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL05",
-      "corr": "YC05",
-      "bpm1": "BPM05",
-      "bpm2": "BPM06"
-    },
-    {
-      "id": "bba1_ql06_xc06",
+      "id": "bba1_ql06_xc05",
       "family": "bba1",
       "plane": "X",
       "quad": "QL06",
+      "corr": "XC05",
+      "bpm1": "BPM05",
+      "bpm2": "BPM06"
+    },
+    {
+      "id": "bba1_ql06_yc05",
+      "family": "bba1",
+      "plane": "Y",
+      "quad": "QL06",
+      "corr": "YC05",
+      "bpm1": "BPM05",
+      "bpm2": "BPM06"
+    },
+    {
+      "id": "bba1_ql07_xc06",
+      "family": "bba1",
+      "plane": "X",
+      "quad": "QL07",
       "corr": "XC06",
       "bpm1": "BPM06",
       "bpm2": "BPM07"
     },
     {
-      "id": "bba1_ql06_yc06",
+      "id": "bba1_ql07_yc06",
       "family": "bba1",
       "plane": "Y",
-      "quad": "QL06",
+      "quad": "QL07",
       "corr": "YC06",
       "bpm1": "BPM06",
       "bpm2": "BPM07"
-    },
-    {
-      "id": "bba1_ql07_xc07",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL07",
-      "corr": "XC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql07_yc07",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL07",
-      "corr": "YC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql08_xc07",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL08",
-      "corr": "XC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql08_yc07",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL08",
-      "corr": "YC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql09_xc07",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL09",
-      "corr": "XC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql09_yc07",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL09",
-      "corr": "YC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql10_xc07",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL10",
-      "corr": "XC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql10_yc07",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL10",
-      "corr": "YC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql11_xc07",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL11",
-      "corr": "XC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
-    },
-    {
-      "id": "bba1_ql11_yc07",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL11",
-      "corr": "YC07",
-      "bpm1": "BPM07",
-      "bpm2": "BPM08"
     },
     {
       "id": "bba1_ql12_xc07",
@@ -235,24 +109,6 @@
       "bpm2": "BPM09"
     },
     {
-      "id": "bba1_ql14_xc09",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL14",
-      "corr": "XC09",
-      "bpm1": "BPM09",
-      "bpm2": "BPM10"
-    },
-    {
-      "id": "bba1_ql14_yc09",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL14",
-      "corr": "YC09",
-      "bpm1": "BPM09",
-      "bpm2": "BPM10"
-    },
-    {
       "id": "bba1_ql15_xc09",
       "family": "bba1",
       "plane": "X",
@@ -271,58 +127,22 @@
       "bpm2": "BPM10"
     },
     {
-      "id": "bba1_ql16_xc10",
+      "id": "bba1_ql17_xc10",
       "family": "bba1",
       "plane": "X",
-      "quad": "QL16",
+      "quad": "QL17",
       "corr": "XC10",
       "bpm1": "BPM10",
       "bpm2": "BPM11"
     },
     {
-      "id": "bba1_ql16_yc10",
+      "id": "bba1_ql17_yc10",
       "family": "bba1",
       "plane": "Y",
-      "quad": "QL16",
+      "quad": "QL17",
       "corr": "YC10",
       "bpm1": "BPM10",
       "bpm2": "BPM11"
-    },
-    {
-      "id": "bba1_ql17_xc11",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL17",
-      "corr": "XC11",
-      "bpm1": "BPM11",
-      "bpm2": "BPM12"
-    },
-    {
-      "id": "bba1_ql17_yc11",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL17",
-      "corr": "YC11",
-      "bpm1": "BPM11",
-      "bpm2": "BPM12"
-    },
-    {
-      "id": "bba1_ql18_xc11",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QL18",
-      "corr": "XC11",
-      "bpm1": "BPM11",
-      "bpm2": "BPM12"
-    },
-    {
-      "id": "bba1_ql18_yc11",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QL18",
-      "corr": "YC11",
-      "bpm1": "BPM11",
-      "bpm2": "BPM12"
     },
     {
       "id": "bba1_ql19_xc11",
@@ -505,42 +325,6 @@
       "bpm2": "BPM21"
     },
     {
-      "id": "bba1_qt02_xc21",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT02",
-      "corr": "XC21",
-      "bpm1": "BPM21",
-      "bpm2": "BPM22"
-    },
-    {
-      "id": "bba1_qt02_yc21",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT02",
-      "corr": "YC21",
-      "bpm1": "BPM21",
-      "bpm2": "BPM22"
-    },
-    {
-      "id": "bba1_qt03_xc21",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT03",
-      "corr": "XC21",
-      "bpm1": "BPM21",
-      "bpm2": "BPM22"
-    },
-    {
-      "id": "bba1_qt03_yc21",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT03",
-      "corr": "YC21",
-      "bpm1": "BPM21",
-      "bpm2": "BPM22"
-    },
-    {
       "id": "bba1_qt04_xc21",
       "family": "bba1",
       "plane": "X",
@@ -559,24 +343,6 @@
       "bpm2": "BPM22"
     },
     {
-      "id": "bba1_qt05_xc22",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT05",
-      "corr": "XC22",
-      "bpm1": "BPM22",
-      "bpm2": "BPM23"
-    },
-    {
-      "id": "bba1_qt05_yc22",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT05",
-      "corr": "YC22",
-      "bpm1": "BPM22",
-      "bpm2": "BPM23"
-    },
-    {
       "id": "bba1_qt06_xc22",
       "family": "bba1",
       "plane": "X",
@@ -593,24 +359,6 @@
       "corr": "YC22",
       "bpm1": "BPM22",
       "bpm2": "BPM23"
-    },
-    {
-      "id": "bba1_qt07_xc23",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT07",
-      "corr": "XC23",
-      "bpm1": "BPM23",
-      "bpm2": "BPM24"
-    },
-    {
-      "id": "bba1_qt07_yc23",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT07",
-      "corr": "YC23",
-      "bpm1": "BPM23",
-      "bpm2": "BPM24"
     },
     {
       "id": "bba1_qt08_xc23",
@@ -649,24 +397,6 @@
       "bpm2": "BPM25"
     },
     {
-      "id": "bba1_qt10_xc25",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT10",
-      "corr": "XC25",
-      "bpm1": "BPM25",
-      "bpm2": "BPM26"
-    },
-    {
-      "id": "bba1_qt10_yc25",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT10",
-      "corr": "YC25",
-      "bpm1": "BPM25",
-      "bpm2": "BPM26"
-    },
-    {
       "id": "bba1_qt11_xc25",
       "family": "bba1",
       "plane": "X",
@@ -685,42 +415,6 @@
       "bpm2": "BPM26"
     },
     {
-      "id": "bba1_qt12_xc26",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT12",
-      "corr": "XC26",
-      "bpm1": "BPM26",
-      "bpm2": "BPM27"
-    },
-    {
-      "id": "bba1_qt12_yc26",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT12",
-      "corr": "YC26",
-      "bpm1": "BPM26",
-      "bpm2": "BPM27"
-    },
-    {
-      "id": "bba1_qt13_xc26",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT13",
-      "corr": "XC26",
-      "bpm1": "BPM26",
-      "bpm2": "BPM27"
-    },
-    {
-      "id": "bba1_qt13_yc26",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT13",
-      "corr": "YC26",
-      "bpm1": "BPM26",
-      "bpm2": "BPM27"
-    },
-    {
       "id": "bba1_qt14_xc26",
       "family": "bba1",
       "plane": "X",
@@ -737,42 +431,6 @@
       "corr": "YC26",
       "bpm1": "BPM26",
       "bpm2": "BPM27"
-    },
-    {
-      "id": "bba1_qt15_xc27",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT15",
-      "corr": "XC27",
-      "bpm1": "BPM27",
-      "bpm2": "BPM28"
-    },
-    {
-      "id": "bba1_qt15_yc27",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT15",
-      "corr": "YC27",
-      "bpm1": "BPM27",
-      "bpm2": "BPM28"
-    },
-    {
-      "id": "bba1_qt16_xc27",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT16",
-      "corr": "XC27",
-      "bpm1": "BPM27",
-      "bpm2": "BPM28"
-    },
-    {
-      "id": "bba1_qt16_yc27",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT16",
-      "corr": "YC27",
-      "bpm1": "BPM27",
-      "bpm2": "BPM28"
     },
     {
       "id": "bba1_qt17_xc27",
@@ -901,24 +559,6 @@
       "bpm2": "BPM34"
     },
     {
-      "id": "bba1_qt24_xc34",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT24",
-      "corr": "XC34",
-      "bpm1": "BPM34",
-      "bpm2": "BPM35"
-    },
-    {
-      "id": "bba1_qt24_yc34",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT24",
-      "corr": "YC34",
-      "bpm1": "BPM34",
-      "bpm2": "BPM35"
-    },
-    {
       "id": "bba1_qt25_xc34",
       "family": "bba1",
       "plane": "X",
@@ -953,24 +593,6 @@
       "corr": "YC35",
       "bpm1": "BPM35",
       "bpm2": "BPM36"
-    },
-    {
-      "id": "bba1_qt27_xc36",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT27",
-      "corr": "XC36",
-      "bpm1": "BPM36",
-      "bpm2": "BPM37"
-    },
-    {
-      "id": "bba1_qt27_yc36",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT27",
-      "corr": "YC36",
-      "bpm1": "BPM36",
-      "bpm2": "BPM37"
     },
     {
       "id": "bba1_qt28_xc36",
@@ -1027,24 +649,6 @@
       "bpm2": "BPM39"
     },
     {
-      "id": "bba1_qt31_xc39",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT31",
-      "corr": "XC39",
-      "bpm1": "BPM39",
-      "bpm2": "BPM40"
-    },
-    {
-      "id": "bba1_qt31_yc39",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT31",
-      "corr": "YC39",
-      "bpm1": "BPM39",
-      "bpm2": "BPM40"
-    },
-    {
       "id": "bba1_qt32_xc39",
       "family": "bba1",
       "plane": "X",
@@ -1079,24 +683,6 @@
       "corr": "YC40",
       "bpm1": "BPM40",
       "bpm2": "BPM41"
-    },
-    {
-      "id": "bba1_qt34_xc41",
-      "family": "bba1",
-      "plane": "X",
-      "quad": "QT34",
-      "corr": "XC41",
-      "bpm1": "BPM41",
-      "bpm2": "BPM42"
-    },
-    {
-      "id": "bba1_qt34_yc41",
-      "family": "bba1",
-      "plane": "Y",
-      "quad": "QT34",
-      "corr": "YC41",
-      "bpm1": "BPM41",
-      "bpm2": "BPM42"
     },
     {
       "id": "bba1_qt35_xc41",

@@ -1167,7 +1167,7 @@ class MachineProfileTests(unittest.TestCase):
         self.assertTrue(workflow_writes_allowed(real_context, "bba"))
         require_workflow_write_allowed(real_context, "bba", "test write")
 
-    def test_half_bba1_presets_cover_all_eligible_main_line_quads(self):
+    def test_half_bba1_presets_target_quad_adjacent_to_bpm1(self):
         real_context = load_app_context("bba", machine_id="half", control_backend="real")
         vm_context = load_app_context("bba", machine_id="half", control_backend="vm")
         assert real_context.bba_workflow is not None
@@ -1179,36 +1179,36 @@ class MachineProfileTests(unittest.TestCase):
             for number in numbers:
                 expected_sites[f"{family}{number:02d}"] = (corr, bpm1, bpm2)
 
-        add_sites("QL", (1, 2), 3, 3, 4)
-        add_sites("QL", (3,), 4, 4, 5)
-        add_sites("QL", (4, 5), 5, 5, 6)
-        add_sites("QL", (6,), 6, 6, 7)
-        add_sites("QL", range(7, 13), 7, 7, 8)
+        add_sites("QL", (2,), 3, 3, 4)
+        add_sites("QL", (4,), 4, 4, 5)
+        add_sites("QL", (6,), 5, 5, 6)
+        add_sites("QL", (7,), 6, 6, 7)
+        add_sites("QL", (12,), 7, 7, 8)
         add_sites("QL", (13,), 8, 8, 9)
-        add_sites("QL", (14, 15), 9, 9, 10)
-        add_sites("QL", (16,), 10, 10, 11)
-        add_sites("QL", range(17, 20), 11, 11, 12)
+        add_sites("QL", (15,), 9, 9, 10)
+        add_sites("QL", (17,), 10, 10, 11)
+        add_sites("QL", (19,), 11, 11, 12)
         for number in range(20, 28):
             add_sites("QL", (number,), number - 8, number - 8, number - 7)
 
         add_sites("QT", (1,), 20, 20, 21)
-        add_sites("QT", range(2, 5), 21, 21, 22)
-        add_sites("QT", (5, 6), 22, 22, 23)
-        add_sites("QT", (7, 8), 23, 23, 24)
+        add_sites("QT", (4,), 21, 21, 22)
+        add_sites("QT", (6,), 22, 22, 23)
+        add_sites("QT", (8,), 23, 23, 24)
         add_sites("QT", (9,), 24, 24, 25)
-        add_sites("QT", (10, 11), 25, 25, 26)
-        add_sites("QT", range(12, 15), 26, 26, 27)
-        add_sites("QT", range(15, 18), 27, 27, 28)
+        add_sites("QT", (11,), 25, 25, 26)
+        add_sites("QT", (14,), 26, 26, 27)
+        add_sites("QT", (17,), 27, 27, 28)
         for number in range(18, 24):
             add_sites("QT", (number,), number + 10, number + 10, number + 11)
-        add_sites("QT", (24, 25), 34, 34, 35)
+        add_sites("QT", (25,), 34, 34, 35)
         add_sites("QT", (26,), 35, 35, 36)
-        add_sites("QT", (27, 28), 36, 36, 37)
+        add_sites("QT", (28,), 36, 36, 37)
         add_sites("QT", (29,), 37, 37, 38)
         add_sites("QT", (30,), 38, 38, 39)
-        add_sites("QT", (31, 32), 39, 39, 40)
+        add_sites("QT", (32,), 39, 39, 40)
         add_sites("QT", (33,), 40, 40, 41)
-        add_sites("QT", (34, 35), 41, 41, 42)
+        add_sites("QT", (35,), 41, 41, 42)
         add_sites("QT", (36,), 42, 42, 43)
 
         real_presets = {
@@ -1221,8 +1221,8 @@ class MachineProfileTests(unittest.TestCase):
             for preset in vm_context.bba_workflow.presets
             if preset.family == "bba1"
         }
-        self.assertEqual(len(expected_sites), 63)
-        self.assertEqual(len(real_presets), 126)
+        self.assertEqual(len(expected_sites), 40)
+        self.assertEqual(len(real_presets), 80)
         self.assertEqual(set(real_presets), set(vm_presets))
 
         for quad, (corr_number, bpm1_number, bpm2_number) in expected_sites.items():

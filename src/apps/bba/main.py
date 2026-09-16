@@ -531,6 +531,7 @@ class ScanParameters:
     bba1_metadata_path: Path | None = None
     bba1_source_dir: Path | None = None
     bba1_recal_points: list[tuple[float, float, float, float]] | None = None
+    bba1_bpm1_mode: str = "scan_mean"
     bba2_quad_scan_path: Path | None = None
     bba2_bpm1_path: Path | None = None
     bba2_corrector_scan_path: Path | None = None
@@ -656,13 +657,12 @@ class myWindow(QWidget, Ui_Form):
         self.gridLayout_2.setRowStretch(1, 2)
         self.gridLayout_2.setColumnStretch(0, 1)
         self.gridLayout_2.setColumnStretch(1, 1)
-        self.gridLayout_2.setHorizontalSpacing(14)
+        self.gridLayout_2.setSpacing(10)
         self.gridLayout_3.setRowStretch(0, 4)
         self.gridLayout_3.setRowStretch(1, 2)
         self.gridLayout_3.setColumnStretch(0, 1)
         self.gridLayout_3.setColumnStretch(1, 1)
-        self.gridLayout_3.setHorizontalSpacing(14)
-        self.gridLayout_3.setVerticalSpacing(14)
+        self.gridLayout_3.setSpacing(10)
 
         self._style_plot_cards()
         self._style_control_cards()
@@ -860,6 +860,7 @@ class myWindow(QWidget, Ui_Form):
 
         form.addWidget(self._make_field_label("Plane", self.frame), 1, 0)
         self.comboBox_5.setParent(self.frame)
+        self.comboBox_5.setFont(self.comboBox.font())
         self.comboBox_5.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         form.addWidget(self.comboBox_5, 1, 1, 1, 3)
 
@@ -904,6 +905,12 @@ class myWindow(QWidget, Ui_Form):
         self.bba1_scan_mode_label.setMinimumWidth(0)
         self.bba1_scan_mode_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         form.addWidget(self.bba1_scan_mode_label, 6, 1, 1, 7)
+
+        self.bba1_bpm1_mode_combo = QComboBox(self.frame)
+        self.bba1_bpm1_mode_combo.addItem("Scan average", "scan_mean")
+        self.bba1_bpm1_mode_combo.addItem("Initial K1", "initial_k1")
+        form.addWidget(self._make_field_label("BPM1 mode", self.frame), 1, 4)
+        form.addWidget(self.bba1_bpm1_mode_combo, 1, 5, 1, 3)
 
         for column in (1, 3, 5, 7):
             form.setColumnStretch(column, 1)
@@ -1676,7 +1683,6 @@ class myWindow(QWidget, Ui_Form):
             },
         )
         self._refresh_bba2_corrector_model_summary()
-        self._load_latest_bba1_data_into_table()
         self._load_latest_bba2_data_into_table()
 
     def _profile_default_control_backend(self):
@@ -1841,6 +1847,11 @@ class myWindow(QWidget, Ui_Form):
             raise RuntimeError(f"{raw_path.name} must contain corrector, K1, BPM1 and BPM2 columns.")
         data[:, 1] *= bba1_saved_k1_sign(raw_path)
         self._clear_bba1_scan_points()
+        self.bba1_loaded_source_dir = raw_path.parent
+        metadata_path = raw_path.parent / "metadata.json"
+        metadata = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
+        mode = metadata.get("bpm1_reference", {}).get("mode", "scan_mean")
+        self.bba1_bpm1_mode_combo.setCurrentIndex(self.bba1_bpm1_mode_combo.findData(mode))
         for corr, quad_k1, bpm1, bpm2 in data[:, :4]:
             self._append_bba1_scan_point(corr, quad_k1, bpm1, bpm2)
         self._redraw_bba1_scan_points_from_table()
@@ -2320,6 +2331,7 @@ class myWindow(QWidget, Ui_Form):
             params.samples = int(self.lineEdit_8.text())
             params.settle_time = float(self.lineEdit_7.text())
             params.sample_interval = float(self.bba1_sample_interval_edit.text())
+            params.bba1_bpm1_mode = self.bba1_bpm1_mode_combo.currentData()
             params.corr_mode = self._bba1_corr_mode
             params.quad_mode = self._bba1_quad_mode
             params.corr_unit = self._bba1_corr_unit
@@ -2416,6 +2428,7 @@ class myWindow(QWidget, Ui_Form):
         self._clear_bba1_scan_points()
         params.recal = False
         self._apply_runtime_paths(params, "bba1")
+        self.bba1_loaded_source_dir = params.bba1_metadata_path.parent
         self.scan_mode = "scan"
         self.scan_family = "bba1"
         self._attach_scan(BBAScanThread(params), self.display)
@@ -2463,20 +2476,16 @@ class myWindow(QWidget, Ui_Form):
 
         params.recal = True
         self._apply_runtime_paths(params, "bba1")
-        source_dir = self._latest_bba1_data_dir()
+        points = self._enabled_bba1_scan_points()
+        if len(points) < 2:
+            self._warn("At least 2 active BBA-1 scan points are required for recalculation.")
+            return
+        params.bba1_recal_points = points
+        source_dir = getattr(self, "bba1_loaded_source_dir", None) or self._latest_bba1_data_dir()
         params.bba1_source_dir = source_dir
         params.bba1_data_path = source_dir / "m1S.txt"
         params.bba1_quad_scan_path = source_dir / "bba1_quad_scan.txt"
         params.bba1_metadata_path = source_dir / "metadata.json"
-        if hasattr(self, "bba1_scan_points_table"):
-            if self.bba1_scan_points_table.rowCount() == 0:
-                self._load_latest_bba1_data_into_table()
-            if self.bba1_scan_points_table.rowCount() > 0:
-                points = self._enabled_bba1_scan_points()
-                if len(points) < 2:
-                    self._warn("At least 2 active BBA-1 scan points are required for recalculation.")
-                    return
-                params.bba1_recal_points = points
         self.scan_mode = "recalculate"
         self.scan_family = "bba1"
         self._attach_scan(BBAScanThread(params), self.display)
@@ -2800,10 +2809,19 @@ class BBAScanThread(BBABaseThread):
     def __init__(self, params):
         super().__init__()
         self.params = params
+        self.bpm1_reference_samples = {}
+        self.initial_quad_k1 = None
 
     def run(self):
         try:
             if self.params.recal:
+                metadata = self._load_json(self.params.bba1_metadata_path)
+                reference = metadata.get("bpm1_reference", {})
+                self.params.bba1_bpm1_mode = reference.get("mode", "scan_mean")
+                self.bpm1_reference_samples = {
+                    float(row["corr"]): row["samples_m"]
+                    for row in reference.get("measurements", [])
+                }
                 self._emit({"clear": True})
                 if self.params.bba1_recal_points is not None:
                     recalculated = self._recalculate_from_points(self.params.bba1_recal_points)
@@ -2887,7 +2905,8 @@ class BBAScanThread(BBABaseThread):
             coeff = np.polyfit(quad_means, bpm2_means, deg=1)
             fit = np.poly1d(coeff)
 
-            bpm1_mean = float(np.mean(group_bpm1))
+            reference_samples = self._bpm1_samples_for_fit(kick, group_bpm1)
+            bpm1_mean = float(np.mean(reference_samples))
             slope = float(coeff[0])
             m1_results.append(bpm1_mean)
             slope_results.append(slope)
@@ -2897,10 +2916,21 @@ class BBAScanThread(BBABaseThread):
                 "y": fit(quad_means),
                 "m1": bpm1_mean,
                 "slope_k1": slope,
-                "mm1": group_bpm1,
+                "mm1": reference_samples,
             })
 
         return np.asarray(m1_results, dtype=float), np.asarray(slope_results, dtype=float)
+
+    def _bpm1_samples_for_fit(self, kick, scan_samples):
+        mode = self.params.bba1_bpm1_mode
+        if mode == "scan_mean":
+            return np.asarray(scan_samples, dtype=float)
+        if mode != "initial_k1":
+            raise RuntimeError(f"Unknown BBA-1 BPM1 reference mode: {mode}")
+        samples = np.asarray(self.bpm1_reference_samples.get(float(kick), []), dtype=float)
+        if samples.size == 0 or not np.all(np.isfinite(samples)):
+            raise RuntimeError(f"Missing or invalid initial-K1 BPM1 samples for corrector {kick}.")
+        return samples
 
     @staticmethod
     def _ordered_unique(values):
@@ -2914,6 +2944,14 @@ class BBAScanThread(BBABaseThread):
     def _metadata(self):
         return {
             "family": "bba1",
+            "bpm1_reference": {
+                "mode": self.params.bba1_bpm1_mode,
+                "initial_k1": self.initial_quad_k1,
+                "measurements": [
+                    {"corr": kick, "samples_m": samples}
+                    for kick, samples in self.bpm1_reference_samples.items()
+                ],
+            },
             "k1_convention": "magnet",
             "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "machine": getattr(getattr(self.params.app_context, "machine", None), "id", None),
@@ -2951,6 +2989,7 @@ class BBAScanThread(BBABaseThread):
         bpm2 = epics.PV(self.params.bpm2PV)
 
         initial_quad = self._safe_get(quad, self.params.quadPV)
+        self.initial_quad_k1 = initial_quad
         initial_kick = self._safe_get(cor, self.params.corrPV)
         k1_values = resolve_limited_scan_values(
             self.params.app_context,
@@ -2986,7 +3025,21 @@ class BBAScanThread(BBABaseThread):
             for kick in kick_values:
                 if not self.is_running:
                     return None
+                if self.params.bba1_bpm1_mode == "initial_k1":
+                    self._safe_put(quad, initial_quad)
                 self._safe_put(cor, kick)
+
+                if self.params.bba1_bpm1_mode == "initial_k1":
+                    if not self._sleep_or_stop(self.params.settle_time):
+                        return None
+                    reference_samples = []
+                    for sample_index in range(self.params.samples):
+                        if not self.is_running:
+                            return None
+                        if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
+                            return None
+                        reference_samples.append(self._read_bpm_m(bpm1, self.params.bpm1PV))
+                    self.bpm1_reference_samples[float(kick)] = reference_samples
 
                 bpm2_samples = []
                 bpm1_samples = []
@@ -3024,7 +3077,8 @@ class BBAScanThread(BBABaseThread):
 
                 bpm2_matrix = np.asarray(bpm2_samples, dtype=float).reshape(self.params.quad_steps, self.params.samples)
                 bpm2_mean = np.mean(bpm2_matrix, axis=1)
-                bpm1_mean = float(np.mean(np.asarray(bpm1_samples, dtype=float)))
+                reference_samples = self._bpm1_samples_for_fit(kick, bpm1_samples)
+                bpm1_mean = float(np.mean(reference_samples))
 
                 x = k1_values
                 coeff = np.polyfit(x, bpm2_mean, deg=1)
@@ -3040,7 +3094,7 @@ class BBAScanThread(BBABaseThread):
                     "y": fit(x),
                     "m1": bpm1_mean,
                     "slope_k1": slope,
-                    "mm1": np.asarray(bpm1_samples, dtype=float),
+                    "mm1": reference_samples,
                 })
                 if not self._sleep_or_stop(1):
                     return None
