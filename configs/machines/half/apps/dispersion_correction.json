@@ -1,7 +1,7 @@
 {
   "control_backends": ["vm", "real"],
   "quadrupole_control": {"vm": "K1", "real": "K1"},
-  "measurement": {"plane": "x", "samples_per_step": 5, "sample_interval_s": 0.2, "final_samples": 10, "settle_time_s": 1},
+  "measurement": {"plane": "x", "samples_per_step": 5, "sample_interval_s": 1, "final_samples": 6, "settle_time_s": 3},
   "solver": {
     "svd_cut": 0.001,
     "regularization": 0.001,
