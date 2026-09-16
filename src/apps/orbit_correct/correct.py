@@ -31,7 +31,8 @@ from half_linac.src.apps.orbit_correct.profile_runtime import (
     display_unit,
     effective_corrector_limit,
     load_orbit_runtime_settings,
-    resolve_active_response_matrix,
+    get_active_response_matrix_record,
+    require_response_coverage,
 )
 
 
@@ -830,25 +831,29 @@ class OrbitCorrector:
         matrix: np.ndarray,
         target_index: int,
     ) -> tuple[float, float]:
+        bpm = self.bpm_list_all[target_index]
+        bpms, xcors, ycors = self._response_ids()
         return (
-            float(matrix[target_index, target_index]),
-            float(matrix[self.N_BPM + target_index, self.N_COR + target_index]),
+            float(matrix[bpms.index(bpm), xcors.index(self.cor_x_list_all[target_index])]),
+            float(matrix[len(bpms) + bpms.index(bpm),
+                         len(xcors) + ycors.index(self.cor_y_list_all[target_index])]),
         )
 
-    def _load_valid_response_matrix(self) -> np.ndarray:
-        expected_shape = self._expected_response_shape()
-        matrix_path = resolve_active_response_matrix(self.app_context)
-        self.response_matrix_path = matrix_path
-        matrix = np.loadtxt(matrix_path)
-        if matrix.shape != expected_shape:
-            raise ValueError(
-                "Response matrix shape mismatch for "
-                f"{self.machine_profile.machine.id}/{self.machine_mode}: "
-                f"{matrix_path} has shape {matrix.shape}, expected {expected_shape}. "
-                "Run Measure Response Matrix for the current machine/backend before using "
-                "matrix-based correction."
-            )
-        return matrix
+    def _response_ids(self):
+        return getattr(self, "response_ids", (
+            self.bpm_list_all, self.cor_x_list_all, self.cor_y_list_all
+        ))
+
+    def _load_valid_response_matrix(self, *, global_correction=False) -> np.ndarray:
+        record = get_active_response_matrix_record(self.app_context)
+        if record is None:
+            raise FileNotFoundError("No active response matrix. Measure or load a response matrix first.")
+        xcors = self.global_xcor_list if global_correction else self.cor_x_list_target
+        ycors = self.global_ycor_list if global_correction else self.cor_y_list_target
+        require_response_coverage(record, self.bpm_list_target, xcors, ycors)
+        self.response_ids = (record["bpms"], record["xcors"], record["ycors"])
+        self.response_matrix_path = Path(record["matrix_path"])
+        return np.loadtxt(self.response_matrix_path)
 
     def _compute_svd(self, min_singular_value: float | None = None):
         """计算响应矩阵的SVD分解"""
@@ -862,14 +867,14 @@ class OrbitCorrector:
                 "svd_relative_cutoff",
             )
         )
-        RM = self._load_valid_response_matrix()
-        selected = np.array(self.target_indices, dtype=int)
-        selected_xcors = np.array(self.global_xcor_indices, dtype=int)
-        selected_ycors = np.array(self.global_ycor_indices, dtype=int)
-        ORM_x_full = RM[0:self.N_BPM, 0:self.N_COR]
-        ORM_y_full = RM[self.N_BPM:self.N_BPM * 2, self.N_COR:self.N_COR * 2]
-        ORM_x = ORM_x_full[np.ix_(selected, selected_xcors)]
-        ORM_y = ORM_y_full[np.ix_(selected, selected_ycors)]
+        RM = self._load_valid_response_matrix(global_correction=True)
+        bpms, xcors, ycors = self._response_ids()
+        selected = [bpms.index(name) for name in self.bpm_list_target]
+        selected_xcors = [xcors.index(name) for name in self.global_xcor_list]
+        selected_ycors = [ycors.index(name) for name in self.global_ycor_list]
+        ORM_x = RM[np.ix_(selected, selected_xcors)]
+        ORM_y = RM[np.ix_([len(bpms) + i for i in selected],
+                          [len(xcors) + i for i in selected_ycors])]
         logger.info(
             "global correction uses %sx%s X and %sx%s Y response submatrices for BPMs: %s; "
             "X correctors: %s; Y correctors: %s",

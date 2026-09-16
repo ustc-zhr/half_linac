@@ -40,7 +40,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt5.QtCore import QRegExp, Qt, QTimer
+from PyQt5.QtCore import QEvent, QRegExp, Qt, QTimer
 from OrbCorgui import Ui_MainWindow
 
 from half_linac.src.shared.machine_profile import (
@@ -59,6 +59,8 @@ from half_linac.src.apps.orbit_correct.profile_runtime import (
     list_response_matrix_records,
     load_orbit_runtime_settings,
     set_active_response_matrix,
+    response_measurement_ids,
+    require_response_coverage,
 )
 
 HEADER_ACTION_HEIGHT = 32
@@ -146,16 +148,30 @@ QFrame#summaryPanel {{
     border-radius: 14px;
 }}
 
-QFrame#sectionCard, QFrame#toolbarPanel, QFrame#commandPane {{
+QFrame#sectionCard, QFrame#toolbarPanel {{
     background-color: {panel_bg};
     border: 1px solid {panel_border};
     border-radius: 14px;
 }}
 
+QFrame#tabsContainer, QFrame#commandPane, QFrame#responsePane,
+QFrame#parameterGroup, QFrame#responseMatrixRow, QFrame#globalCorrectorsRow {{
+    background-color: transparent;
+    border: none;
+}}
+
+QWidget#tab, QWidget#tab_2 {{
+    background-color: {window_bg};
+}}
+
 QFrame#subCard {{
-    background-color: {status_strip_bg};
-    border: 1px solid {status_strip_border};
+    background-color: {panel_bg};
+    border: 1px solid {panel_border};
     border-radius: 12px;
+}}
+
+QFrame#sectionCard QLabel, QFrame#tabsContainer QLabel {{
+    background-color: transparent;
 }}
 
 QFrame#parameterGroup {{
@@ -170,12 +186,8 @@ QFrame#targetToolbar {{
 }}
 
 QTabWidget::pane {{
-    border-left: 1px solid {panel_border};
-    border-right: 1px solid {panel_border};
-    border-bottom: 1px solid {panel_border};
-    border-radius: 14px;
-    background: {panel_bg};
-    top: -1px;
+    border: none;
+    background: {window_bg};
 }}
 
 QTabBar::base {{
@@ -367,6 +379,17 @@ QWidget#targetsContent {{
     background-color: {panel_bg};
 }}
 
+QFrame#bpmToolbar, QWidget#bpmSelectionBody, QScrollArea#bpmTableScroll {{
+    background-color: {panel_bg};
+    border: none;
+}}
+
+QFrame#bpmTableHeader {{
+    background-color: {panel_bg};
+    border: none;
+    border-bottom: 1px solid {panel_border};
+}}
+
 QToolButton#themeToggleButton {{
     background-color: {button_bg};
     border: 1px solid {button_border};
@@ -545,6 +568,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.process_manager = ManagedProcessGroup(notify=self._notify)
         self.process_manager.install_signal_handlers()
         self._response_scan_was_running = False
+        self._active_matrix_record = None
+        self._active_matrix_error = None
+        self._global_correctors_matrix_key = None
 
         self.all_checkboxes = []
         self._bpmx_spinboxes = []
@@ -649,10 +675,19 @@ class myWindow(QMainWindow, Ui_MainWindow):
         match = re.search(r"(\d+)$", widget.objectName())
         return int(match.group(1)) if match else 0
 
-    @staticmethod
-    def _configure_target_bpm_spinbox(spinbox):
+    def _configure_target_bpm_spinbox(self, spinbox):
         spinbox.setDecimals(TARGET_BPM_DECIMALS)
         spinbox.setSingleStep(TARGET_BPM_STEP_MM)
+        for widget in (spinbox, spinbox.lineEdit()):
+            widget.setProperty("bpmTargetEditor", True)
+            widget.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Wheel and watched.property("bpmTargetEditor"):
+            # Always scroll the list, including while a target editor has focus.
+            QApplication.sendEvent(self.scrollArea.viewport(), event)
+            return True
+        return super().eventFilter(watched, event)
 
     def _append_target_bpm_row(self, index):
         row = self.gridLayout_2.rowCount()
@@ -794,11 +829,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.horizontalLayout_9.removeItem(self.verticalLayout_5)
 
         self.left_panel = QFrame(self.centralwidget)
-        self.left_panel.setObjectName("sectionCard")
+        self.left_panel.setObjectName("tabsContainer")
         self.left_panel.setLayout(self.verticalLayout_4)
         self.left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        self.verticalLayout_4.setContentsMargins(12, 12, 12, 12)
-        self.verticalLayout_4.setSpacing(12)
+        self.verticalLayout_4.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayout_4.setSpacing(0)
 
         self.right_panel = QFrame(self.centralwidget)
         self.right_panel.setObjectName("sectionCard")
@@ -806,9 +841,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.verticalLayout_5.setContentsMargins(12, 12, 12, 12)
         self.verticalLayout_5.setSpacing(12)
-        self.verticalLayout_5.insertWidget(0, self._make_panel_title("Target BPMs", self.right_panel))
+        bpm_heading = QHBoxLayout()
+        bpm_heading.addWidget(self._make_panel_title("BPM Selection", self.right_panel))
+        bpm_heading.addStretch(1)
+        self.bpm_count_label = QLabel(self.right_panel)
+        bpm_heading.addWidget(self.bpm_count_label)
+        self.verticalLayout_5.insertLayout(0, bpm_heading)
 
-        self.horizontalLayout_9.addWidget(self.left_panel, 1)
+        self.horizontalLayout_9.addWidget(self.left_panel, 3)
+        self.horizontalLayout_9.addWidget(self.right_panel, 2)
+        self.bpm_scope_hint = QLabel(self.right_panel)
+        self.bpm_scope_hint.setWordWrap(True)
+        self.verticalLayout_5.insertWidget(1, self.bpm_scope_hint)
 
         self.tabWidget.setDocumentMode(False)
         self.tabWidget.tabBar().setDrawBase(False)
@@ -830,23 +874,26 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout_5.setVerticalSpacing(8)
         self.gridLayout_2.setHorizontalSpacing(10)
         self.gridLayout_2.setVerticalSpacing(6)
-        self.gridLayout_2.setContentsMargins(8, 8, 8, 8)
+        self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
         self.gridLayout.setHorizontalSpacing(0)
         self.gridLayout.setVerticalSpacing(10)
 
-        self.horizontalLayout.setContentsMargins(14, 14, 14, 14)
+        self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout.setSpacing(14)
         self.horizontalLayout.removeItem(self.gridLayout)
         self.command_pane = QFrame(self.tab)
         self.command_pane.setObjectName("commandPane")
         command_layout = QVBoxLayout(self.command_pane)
-        command_layout.setContentsMargins(14, 14, 14, 14)
-        command_layout.setSpacing(12)
-        command_layout.addWidget(self._build_correction_parameters_card())
-        command_layout.addWidget(self._build_correction_actions_card())
+        command_layout.setContentsMargins(0, 0, 0, 0)
+        command_layout.setSpacing(20)
+        parameters = self._build_correction_parameters_card()
+        actions = self._build_correction_actions_card()
+        actions.setObjectName("parameterGroup")
+        actions.layout().setContentsMargins(0, 0, 0, 0)
+        parameters.layout().addWidget(actions)
+        command_layout.addWidget(parameters)
         command_layout.addStretch(1)
         self.horizontalLayout.addWidget(self.command_pane, 2)
-        self.horizontalLayout.addWidget(self.right_panel, 3)
 
         self.response_pane = QFrame(self.tab_2)
         self.response_pane.setObjectName("responsePane")
@@ -854,11 +901,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
         response_outer.setContentsMargins(0, 0, 0, 0)
         response_outer.setSpacing(0)
         response_outer.addWidget(self.response_pane)
-        response_layout = QHBoxLayout(self.response_pane)
-        response_layout.setContentsMargins(14, 14, 14, 14)
-        response_layout.setSpacing(12)
-        response_layout.addWidget(self._build_matrix_library_card(), 2, Qt.AlignTop)
-        response_layout.addWidget(self._build_matrix_measure_card(), 3, Qt.AlignTop)
+        response_layout = QVBoxLayout(self.response_pane)
+        response_layout.setContentsMargins(0, 0, 0, 0)
+        response_layout.setSpacing(10)
+        response_layout.addWidget(self._build_matrix_measure_card())
+        response_layout.addWidget(self._build_matrix_library_card())
+        response_layout.addStretch(1)
 
     def _build_target_bpm_panel(self):
         self.verticalLayout_5.removeItem(self.gridLayout_5)
@@ -882,9 +930,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         target_layout.setSpacing(10)
 
         toolbar = QFrame(self.target_bpm_tab)
-        toolbar.setObjectName("targetToolbar")
+        toolbar.setObjectName("bpmToolbar")
         toolbar_layout = QGridLayout(toolbar)
-        toolbar_layout.setContentsMargins(12, 10, 12, 10)
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
         toolbar_layout.setHorizontalSpacing(10)
         toolbar_layout.setVerticalSpacing(8)
 
@@ -894,23 +942,41 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.allTargetBPMsCheckBox = QCheckBox("All BPMs", toolbar)
         self.allTargetBPMsCheckBox.setTristate(True)
         action_row.addWidget(self.allTargetBPMsCheckBox)
+        self.clearBPMsButton = QPushButton("Clear", toolbar)
+        self.clearBPMsButton.setProperty("compact", True)
+        self.clearBPMsButton.clicked.connect(self.cancelall)
+        action_row.addWidget(self.clearBPMsButton)
         self.saveTargetBPMsButton = QPushButton("Save", toolbar)
         self.loadTargetBPMsButton = QPushButton("Load", toolbar)
         action_row.addWidget(self.saveTargetBPMsButton)
         action_row.addWidget(self.loadTargetBPMsButton)
         action_row.addStretch(1)
 
-        toolbar_layout.addLayout(action_row, 0, 0, 1, 3)
-        toolbar_layout.addWidget(self.progressBar, 0, 3)
-        toolbar_layout.addWidget(self.label_45, 1, 1)
-        toolbar_layout.addWidget(self.label_46, 1, 2)
-        toolbar_layout.setColumnStretch(0, 2)
-        toolbar_layout.setColumnStretch(1, 2)
-        toolbar_layout.setColumnStretch(2, 2)
-        toolbar_layout.setColumnStretch(3, 1)
+        toolbar_layout.addLayout(action_row, 0, 0)
+        self.progressBar.hide()
+        self.bpm_table_header = QFrame(self.target_bpm_tab)
+        self.bpm_table_header.setObjectName("bpmTableHeader")
+        header_layout = QGridLayout(self.bpm_table_header)
+        header_layout.setContentsMargins(0, 6, self.scrollArea.verticalScrollBar().sizeHint().width(), 8)
+        header_layout.setHorizontalSpacing(10)
+        header_layout.addWidget(QLabel("BPM", self.bpm_table_header), 0, 0)
+        header_layout.addWidget(self.label_45, 0, 1)
+        header_layout.addWidget(self.label_46, 0, 2)
+        for grid in (header_layout, self.gridLayout_2):
+            grid.setColumnMinimumWidth(0, 110)
+            grid.setColumnStretch(0, 0)
+            grid.setColumnStretch(1, 1)
+            grid.setColumnStretch(2, 1)
+        self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
+        self.gridLayout_2.setColumnStretch(3, 0)
+        self.scrollArea.setObjectName("bpmTableScroll")
+        self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.scrollArea.setFrameShape(QFrame.NoFrame)
+        self.target_bpm_tab.setObjectName("bpmSelectionBody")
 
         self.target_toolbar = toolbar
         target_layout.addWidget(toolbar)
+        target_layout.addWidget(self.bpm_table_header)
         target_layout.addWidget(self.scrollArea, 1)
         self.verticalLayout_5.addWidget(self.target_bpm_tab, 1)
         self._build_global_corrector_dialog()
@@ -956,6 +1022,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.activeMatrixLabel, self.activeMatrixValueLabel = self._make_parameter_display(card)
         self.openResponseMatrixTabButton = QPushButton(card)
         self.responseMatrixRow = QFrame(card)
+        self.responseMatrixRow.setObjectName("responseMatrixRow")
         response_matrix_row_layout = QHBoxLayout(self.responseMatrixRow)
         response_matrix_row_layout.setContentsMargins(0, 0, 0, 0)
         response_matrix_row_layout.setSpacing(8)
@@ -964,6 +1031,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.globalCorrectorsLabel, self.globalCorrectorsValueLabel = self._make_parameter_display(card)
         self.editCorrectorsButton = QPushButton(card)
         self.globalCorrectorsRow = QFrame(card)
+        self.globalCorrectorsRow.setObjectName("globalCorrectorsRow")
         global_correctors_row_layout = QHBoxLayout(self.globalCorrectorsRow)
         global_correctors_row_layout.setContentsMargins(0, 0, 0, 0)
         global_correctors_row_layout.setSpacing(8)
@@ -991,7 +1059,6 @@ class myWindow(QMainWindow, Ui_MainWindow):
             (
                 (self.globalMaxIterLabel, self.globalMaxIterLineEdit, False),
                 (self.svdCutoffPctLabel, self.svdCutoffPctLineEdit, False),
-                (self.activeMatrixLabel, self.responseMatrixRow, False),
                 (self.globalCorrectorsLabel, self.globalCorrectorsRow, False),
             ),
             card,
@@ -1009,6 +1076,22 @@ class myWindow(QMainWindow, Ui_MainWindow):
             card,
         )
         layout.addWidget(self.oneToOneCorrectionGroup)
+        self.matrixCoverageLabel = QLabel(card)
+        self.matrixCoverageLabel.setWordWrap(True)
+        self.matrixInfoGroup = self._build_parameter_group(
+            None, ((self.activeMatrixLabel, self.responseMatrixRow, False),), card
+        )
+        coverage_row = QHBoxLayout()
+        coverage_row.addWidget(self.matrixCoverageLabel, 1)
+        self.selectMatrixDevicesButton = QPushButton("Select Matrix Devices", card)
+        self.selectMatrixDevicesButton.setProperty("compact", True)
+        self.selectMatrixDevicesButton.setToolTip(
+            "Select all BPMs and Global Correctors covered by the current matrix; keep target values."
+        )
+        self.selectMatrixDevicesButton.clicked.connect(self._select_matrix_devices)
+        coverage_row.addWidget(self.selectMatrixDevicesButton)
+        self.matrixInfoGroup.layout().addLayout(coverage_row)
+        layout.addWidget(self.matrixInfoGroup)
 
         return card
 
@@ -1030,7 +1113,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         group = QFrame(parent)
         group.setObjectName("parameterGroup")
         group_layout = QVBoxLayout(group)
-        group_layout.setContentsMargins(10, 10, 10, 10)
+        group_layout.setContentsMargins(0, 0, 0, 0)
         group_layout.setSpacing(8)
 
         if title:
@@ -1048,6 +1131,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 self.gridLayout.removeWidget(widget)
             grid.addWidget(label, row, 0)
             grid.addWidget(widget, row, 1)
+        grid.setColumnMinimumWidth(0, 172)
         grid.setColumnStretch(0, 0)
         grid.setColumnStretch(1, 1)
         group_layout.addLayout(grid)
@@ -1175,13 +1259,20 @@ class myWindow(QMainWindow, Ui_MainWindow):
         matrix_action_row = QHBoxLayout()
         matrix_action_row.setContentsMargins(0, 0, 0, 0)
         matrix_action_row.setSpacing(10)
-        self.load_response_matrix_button = QPushButton("Load Selected Matrix", card)
+        self.load_response_matrix_button = QPushButton("Use This Matrix", card)
         for button in (self.load_response_matrix_button,):
             button.setProperty("compact", True)
             button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
             matrix_action_row.addWidget(button)
         matrix_action_row.addStretch(1)
+        self.returnToCorrectionButton = QPushButton("Return to Correction", card)
+        self.returnToCorrectionButton.setProperty("compact", True)
+        self.returnToCorrectionButton.clicked.connect(lambda: self.tabWidget.setCurrentWidget(self.tab))
+        matrix_action_row.addWidget(self.returnToCorrectionButton)
         layout.addLayout(matrix_action_row)
+        self.matrixLibraryActiveLabel = QLabel(card)
+        self.matrixLibraryActiveLabel.setWordWrap(True)
+        layout.addWidget(self.matrixLibraryActiveLabel)
         return card
 
     def _build_matrix_measure_card(self):
@@ -1285,22 +1376,15 @@ class myWindow(QMainWindow, Ui_MainWindow):
             "same-plane response coefficients from the active response matrix."
         )
         self.matrixScopeLabel.setText("Measurement Scope")
-        self.matrixScopeValueLabel.setText(
-            f"All configured: {len(self.orbit_workflow.bpms)} BPMs, "
-            f"{len(self.orbit_workflow.xcors)} X correctors, "
-            f"{len(self.orbit_workflow.ycors)} Y correctors"
-        )
-        self.matrixScopeValueLabel.setToolTip(
-            "Target BPM and Global Corrector selections apply to orbit correction only."
-        )
+        self._update_measurement_scope()
         self.matrixResponseKickLabel.setText(f"Kick Step ({limit_unit})")
         self.matrixWaitSLabel.setText("Settle Time (s)")
         self.matrixSampleIntervalSLabel.setText("Sample Interval (s)")
         self.matrixSamplesLabel.setText("Samples/step")
         self.activeMatrixLabel.setText("Response Matrix")
         self.globalCorrectorsLabel.setText("Global Correctors")
-        self.label_45.setText("BPM X (mm)")
-        self.label_46.setText("BPM Y (mm)")
+        self.label_45.setText("Target X (mm)")
+        self.label_46.setText("Target Y (mm)")
         self._hide_target_bpm_unit_labels()
 
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), "Run Correct")
@@ -1322,11 +1406,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         ):
             button.setProperty("compact", True)
 
-        self.pushButton.setText("Measure Full Matrix")
+        self.pushButton.setText("Measure Selected BPMs")
         self.stop_response_button.setText("Stop Measurement")
-        self.openResponseMatrixTabButton.setText("Open")
+        self.openResponseMatrixTabButton.setText("Manage Matrices")
         self.openResponseMatrixTabButton.clicked.connect(
-            lambda: self.tabWidget.setCurrentWidget(self.tab_2)
+            self._manage_response_matrices
         )
         self.editCorrectorsButton.setText("Edit")
         self.editCorrectorsButton.clicked.connect(self._open_global_correctors_dialog)
@@ -1357,7 +1441,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         card.setObjectName("subCard")
         layout = QVBoxLayout(card)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setSpacing(16)
         if title:
             title_label = QLabel(title, card)
             title_label.setObjectName("subTitle")
@@ -1526,6 +1610,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
     def _refresh_status(self):
         if not hasattr(self, "status_panel"):
             return
+        self._update_measurement_scope()
+        self._update_matrix_coverage()
         response_running = self.process_manager.is_running("response_matrix")
         correction_running = self.process_manager.is_running("orbit_correction")
         maintenance_running = (
@@ -1535,20 +1621,29 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if self._response_scan_was_running and not response_running:
             self.refresh_response_matrices()
         self._response_scan_was_running = response_running
+        self.load_response_matrix_button.setEnabled(not (response_running or correction_running))
 
         total = len(self.all_checkboxes)
         selected = self._selected_bpm_count()
         process_text, process_tone = self._current_process_status()
         response_page = self.tabWidget.currentWidget() is self.tab_2
+        self.target_bpm_tab.setEnabled(not (response_running or correction_running or maintenance_running))
+        for widget in (self.label_45, self.label_46, self.saveTargetBPMsButton,
+                       self.loadTargetBPMsButton, *self._bpmx_spinboxes, *self._bpmy_spinboxes):
+            widget.setVisible(not response_page)
+        self.bpm_scope_hint.setText(
+            "Measure BPMs and paired X/Y correctors."
+            if response_page else "Correction targets"
+        )
         self.status_panel.set_item("tab", self.tabWidget.tabText(self.tabWidget.currentIndex()), "subtle")
         if response_page:
-            corrector_total = len(self.orbit_workflow.xcors) + len(self.orbit_workflow.ycors)
+            corrector_total = 2 * selected
             self.status_panel.set_title("method", "Measurement")
-            self.status_panel.set_item("method", "Full Matrix", "subtle")
+            self.status_panel.set_item("method", "Selected BPMs", "subtle")
             self.status_panel.set_title("targets", "Scope")
             self.status_panel.set_item(
                 "targets",
-                f"{len(self.orbit_workflow.bpms)} BPM / {corrector_total} COR",
+                f"{selected} BPM / {corrector_total} COR",
                 "success",
             )
         else:
@@ -1566,7 +1661,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._refresh_correction_progress(correction_running)
         self.correction_progress.setVisible(correction_running)
         if hasattr(self, "stop_response_button"):
-            self.pushButton.setEnabled(not response_running)
+            self.pushButton.setEnabled(not response_running and not correction_running and selected > 0)
             self.stop_response_button.setEnabled(response_running)
         self._set_correction_action_state(correction_running)
         self.pushButton_4.setEnabled(
@@ -1576,6 +1671,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             enabled=not response_running and not correction_running and not maintenance_running
         )
         self.progressBar.setValue(selected)
+        self.bpm_count_label.setText(f"{selected} / {total} selected")
         self._sync_all_target_bpms_checkbox()
         if hasattr(self, "globalCorrectorsValueLabel"):
             self.globalCorrectorsValueLabel.setText(self._global_corrector_summary())
@@ -1605,14 +1701,81 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.pushButton_7.setToolTip("No correction backup is available for this machine/backend.")
 
     def _format_response_matrix_record(self, record):
-        created_at = str(record.get("created_at", "--"))
-        matrix_file = Path(str(record.get("matrix_file", "--"))).name
-        shape = record.get("shape", ("?", "?"))
+        shape = record["shape"]
         try:
-            shape_text = f"{shape[0]}x{shape[1]}"
-        except (TypeError, IndexError):
-            shape_text = "?x?"
-        return f"{created_at}  {shape_text}  {matrix_file}"
+            date = datetime.fromisoformat(record["created_at"]).strftime("%m-%d %H:%M")
+        except (ValueError, KeyError):
+            date = "--"
+        return f"{shape[0]}×{shape[1]} · {len(record['bpms'])} BPM · {date}"
+
+    def _select_matrix_devices(self):
+        if any(self.process_manager.is_running(key) for key in
+               ("response_matrix", "orbit_correction", "cor_off", "cor_recover")):
+            return
+        # Validate the current file again before changing the selection.
+        try:
+            record = get_active_response_matrix_record(self.app_context)
+        except Exception as exc:
+            self.refresh_response_matrices()
+            QMessageBox.warning(self, "Orbit Correct", str(exc))
+            return
+        if record is None:
+            self.refresh_response_matrices()
+            return
+        bpms = set(record["bpms"])
+        for checkbox in self.all_checkboxes:
+            blocked = checkbox.blockSignals(True)
+            checkbox.setChecked(checkbox.text() in bpms)
+            checkbox.blockSignals(blocked)
+        self._sync_global_correctors_to_matrix(record, force=True)
+        self.refresh_response_matrices()
+        self._refresh_status()
+
+    def _manage_response_matrices(self):
+        self.refresh_response_matrices()
+        self.tabWidget.setCurrentWidget(self.tab_2)
+        self.response_matrix_combo.setFocus()
+
+    def _update_matrix_coverage(self):
+        if not hasattr(self, "matrixCoverageLabel"):
+            return
+        method = self._selected_correction_method()
+        required = method == "global" or (
+            method == "one-to-one" and self._selected_local_response_source() == "active_matrix"
+        )
+        self.matrixInfoGroup.setVisible(required)
+        record = self._active_matrix_record
+        self.selectMatrixDevicesButton.setEnabled(
+            record is not None and not self._active_matrix_error
+            and not any(self.process_manager.is_running(key) for key in
+                        ("response_matrix", "orbit_correction", "cor_off", "cor_recover"))
+        )
+        detail = ""
+        if not required:
+            text = "Measure Live: no response matrix required."
+        elif self._active_matrix_error:
+            text = "Invalid matrix: " + self._active_matrix_error
+        elif record is None:
+            text = "No matrix selected."
+        elif not self.target_BPMs()[0]:
+            text = "Select at least one BPM."
+        else:
+            bpms, xcors, ycors = response_measurement_ids(self.app_context, self.target_BPMs()[0])
+            if method == "global":
+                xcors, ycors = self._selected_global_correctors()
+            missing = [name for key, names in (("bpms", bpms), ("xcors", xcors), ("ycors", ycors))
+                       for name in names if name not in record[key]]
+            if missing:
+                detail = "Missing: " + ", ".join(missing)
+                text = "Missing: " + ", ".join(missing[:4])
+                if len(missing) > 4:
+                    text += f" … ({len(missing)} devices; hover for details)"
+            elif not xcors or not ycors:
+                text = "Select X and Y correctors for global correction."
+            else:
+                text = "Covers current selection."
+        self.matrixCoverageLabel.setText(text)
+        self.matrixCoverageLabel.setToolTip(detail or text)
 
     def _set_active_response_matrix_text(self, value_text):
         if hasattr(self, "activeMatrixValueLabel"):
@@ -1631,6 +1794,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 self._format_response_matrix_record(record),
                 record.get("metadata_path"),
             )
+            self.response_matrix_combo.setItemData(
+                self.response_matrix_combo.count() - 1,
+                str(record["matrix_file"]) + "\n" + "\n".join(
+                    f"{key}: {', '.join(record[key])}" for key in ("bpms", "xcors", "ycors")),
+                Qt.ToolTipRole,
+            )
         self.response_matrix_combo.blockSignals(False)
 
         if current_metadata:
@@ -1638,24 +1807,58 @@ class myWindow(QMainWindow, Ui_MainWindow):
             if index >= 0:
                 self.response_matrix_combo.setCurrentIndex(index)
 
+        self._active_matrix_record = None
+        self._active_matrix_error = None
+        self.activeMatrixValueLabel.setToolTip("")
         try:
             active = get_active_response_matrix_record(self.app_context)
         except Exception as exc:
-            self._set_active_response_matrix_text(f"invalid ({exc})")
+            self._active_matrix_error = str(exc)
+            self.matrixLibraryActiveLabel.setText(f"Current: invalid ({exc})")
+            self._set_active_response_matrix_text("Invalid matrix")
+            self._update_matrix_coverage()
             return
 
         if active is None:
-            self._set_active_response_matrix_text("--")
+            self._global_correctors_matrix_key = None
+            self._set_active_response_matrix_text("No matrix selected")
+            self.matrixLibraryActiveLabel.setText("Current: none")
+            self._update_matrix_coverage()
             return
 
+        self._active_matrix_record = active
+        self._sync_global_correctors_to_matrix(active)
         self._set_active_response_matrix_text(self._format_response_matrix_record(active))
+        self.matrixLibraryActiveLabel.setText("Current: " + self._format_response_matrix_record(active))
+        self._update_matrix_coverage()
         active_metadata = active.get("metadata_path")
         if active_metadata:
             index = self.response_matrix_combo.findData(active_metadata)
             if index >= 0:
+                self.response_matrix_combo.setItemText(index, "[Current] " + self.response_matrix_combo.itemText(index))
                 self.response_matrix_combo.setCurrentIndex(index)
+                self.activeMatrixValueLabel.setToolTip(self.response_matrix_combo.itemData(index, Qt.ToolTipRole))
+
+    def _sync_global_correctors_to_matrix(self, record, *, force=False):
+        """Apply matrix coverage once; preserve subsequent manual selections."""
+        key = (record["metadata_path"], tuple(record["xcors"]), tuple(record["ycors"]))
+        if not force and key == self._global_correctors_matrix_key:
+            return
+        for checkboxes, names in (
+            (self.global_xcor_checkboxes, record["xcors"]),
+            (self.global_ycor_checkboxes, record["ycors"]),
+        ):
+            covered = set(names)
+            for checkbox in checkboxes:
+                blocked = checkbox.blockSignals(True)
+                checkbox.setChecked(checkbox.text() in covered)
+                checkbox.blockSignals(blocked)
+        self._global_correctors_matrix_key = key
+        self.globalCorrectorsValueLabel.setText(self._global_corrector_summary())
 
     def load_response_matrix(self):
+        if any(self.process_manager.is_running(key) for key in ("orbit_correction", "response_matrix")):
+            return
         metadata_path = self.response_matrix_combo.currentData()
         if not metadata_path:
             QMessageBox.warning(
@@ -1672,6 +1875,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.refresh_response_matrices()
             return
 
+        self._sync_global_correctors_to_matrix(active, force=True)
         self._notify(f"Loaded response matrix: {Path(active['matrix_file']).name}")
         self.refresh_response_matrices()
 
@@ -1961,6 +2165,35 @@ class myWindow(QMainWindow, Ui_MainWindow):
             unit,
         )
 
+    def _update_measurement_scope(self):
+        bpms = self.target_BPMs()[0]
+        n = len(bpms)
+        self.matrixScopeValueLabel.setText(
+            f"{n} BPMs / {n} X + {n} Y correctors / {2*n} × {2*n}"
+        )
+        if bpms:
+            _, xcors, ycors = response_measurement_ids(self.app_context, bpms)
+            detail = "\n".join((", ".join(bpms), ", ".join(xcors), ", ".join(ycors)))
+        else:
+            detail = "Select at least one BPM in BPM Selection."
+        self.matrixScopeValueLabel.setToolTip(
+            "Uses checked BPMs and their configured corrector pairs.\n" + detail
+        )
+
+    def _check_correction_matrix_coverage(self):
+        method = self._selected_correction_method()
+        if method != "global" and not (
+            method == "one-to-one" and self._selected_local_response_source() == "active_matrix"
+        ):
+            return
+        record = get_active_response_matrix_record(self.app_context)
+        if record is None:
+            raise ValueError("Measure or load a response matrix first.")
+        bpms, xcors, ycors = response_measurement_ids(self.app_context, self.target_BPMs()[0])
+        if method == "global":
+            xcors, ycors = self._selected_global_correctors()
+        require_response_coverage(record, bpms, xcors, ycors)
+
     def _matrix_measurement_args(self):
         profile_limit = float(self.orbit_runtime["corrector_upperlimit"])
         unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
@@ -2180,6 +2413,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             )
             return
         try:
+            bpms, _, _ = response_measurement_ids(self.app_context, self.target_BPMs()[0])
             response_kick, wait_s, sample_interval_s, n_averages = self._matrix_measurement_args()
         except ValueError as exc:
             QMessageBox.warning(self, "Orbit Correct", str(exc))
@@ -2203,6 +2437,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                 str(n_averages),
                 f"{wait_s:.12g}",
                 f"{sample_interval_s:.12g}",
+                ",".join(bpms),
             ],
             cwd=str(APP_DIR),
         )
@@ -2253,6 +2488,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         bpmy_target_values = [str(i) for i in bpmy_target_values]
         try:
             runtime_args = self._correction_parameter_args()
+            self._check_correction_matrix_coverage()
         except ValueError as exc:
             QMessageBox.warning(self, "Orbit Correct", str(exc))
             return

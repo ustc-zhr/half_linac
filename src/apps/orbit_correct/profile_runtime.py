@@ -127,6 +127,31 @@ def resolve_orbit_runtime_paths(target: MachineProfile | AppContext) -> dict[str
     }
 
 
+def response_measurement_ids(target, selected_bpms=None):
+    """Select BPMs and their configured positional corrector pairs."""
+    bpms, xcors, ycors = _orbit_ids(target)
+    selected = bpms if selected_bpms is None else list(selected_bpms)
+    if not selected or len(set(selected)) != len(selected):
+        raise ValueError("Select at least one BPM, without duplicates.")
+    unknown = [name for name in selected if name not in bpms]
+    if unknown:
+        raise ValueError("Unknown measurement BPMs: " + ", ".join(unknown))
+    indices = [bpms.index(name) for name in selected]
+    if any(i >= len(xcors) or i >= len(ycors) for i in indices):
+        raise ValueError("Selected BPMs must have paired X and Y correctors.")
+    return selected, [xcors[i] for i in indices], [ycors[i] for i in indices]
+
+
+def require_response_coverage(record, bpms, xcors, ycors):
+    for key, requested in (("bpms", bpms), ("xcors", xcors), ("ycors", ycors)):
+        missing = [name for name in requested if name not in record[key]]
+        if missing:
+            raise ValueError(
+                "Active response matrix does not cover " + ", ".join(missing)
+                + ". Select covered devices or measure/load a matrix covering this range."
+            )
+
+
 def expected_response_matrix_shape(target: MachineProfile | AppContext) -> tuple[int, int]:
     bpms, xcors, _ycors = _orbit_ids(target)
     return (2 * len(bpms), 2 * len(xcors))
@@ -137,9 +162,11 @@ def validate_response_matrix_quality(
     matrix,
     *,
     source: str = "response matrix",
+    selected_bpms=None,
 ) -> None:
     matrix_array = np.asarray(matrix, dtype=float)
-    expected_shape = expected_response_matrix_shape(target)
+    bpms, xcors, ycors = response_measurement_ids(target, selected_bpms)
+    expected_shape = (2 * len(bpms), len(xcors) + len(ycors))
     if matrix_array.shape != expected_shape:
         raise ValueError(
             f"Response matrix shape mismatch for {source}: "
@@ -148,7 +175,6 @@ def validate_response_matrix_quality(
     if not np.all(np.isfinite(matrix_array)):
         raise ValueError(f"Response matrix quality check failed for {source}: contains NaN or Inf.")
 
-    bpms, xcors, ycors = _orbit_ids(target)
     n_bpm = len(bpms)
     n_xcor = len(xcors)
     n_ycor = len(ycors)
@@ -164,18 +190,22 @@ def write_response_matrix_snapshot(
     matrix,
     *,
     created_at: datetime | None = None,
+    selected_bpms=None,
 ) -> dict[str, Any]:
     paths = resolve_orbit_runtime_paths(target)
     matrix_dir = paths["response_matrix_dir"]
     matrix_dir.mkdir(parents=True, exist_ok=True)
 
     matrix_array = np.asarray(matrix, dtype=float)
-    expected_shape = expected_response_matrix_shape(target)
+    bpms, xcors, ycors = response_measurement_ids(target, selected_bpms)
+    expected_shape = (2 * len(bpms), len(xcors) + len(ycors))
     if matrix_array.shape != expected_shape:
         raise ValueError(
             f"Response matrix shape mismatch: got {matrix_array.shape}, expected {expected_shape}."
         )
-    validate_response_matrix_quality(target, matrix_array, source="new response matrix")
+    validate_response_matrix_quality(
+        target, matrix_array, source="new response matrix", selected_bpms=bpms
+    )
 
     created_at = created_at or datetime.now().astimezone()
     stem = _unique_response_stem(matrix_dir, created_at)
@@ -183,7 +213,7 @@ def write_response_matrix_snapshot(
     metadata_path = matrix_dir / f"{stem}.json"
 
     np.savetxt(matrix_path, matrix_array)
-    metadata = _build_response_matrix_metadata(target, matrix_path, metadata_path, created_at)
+    metadata = _build_response_matrix_metadata(target, matrix_path, metadata_path, created_at, bpms)
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     set_active_response_matrix(target, metadata_path)
     return _enrich_response_metadata(target, metadata, metadata_path)
@@ -385,9 +415,10 @@ def _build_response_matrix_metadata(
     matrix_path: Path,
     metadata_path: Path,
     created_at: datetime,
+    selected_bpms=None,
 ) -> dict[str, Any]:
-    bpms, xcors, ycors = _orbit_ids(target)
-    shape = expected_response_matrix_shape(target)
+    bpms, xcors, ycors = response_measurement_ids(target, selected_bpms)
+    shape = (2 * len(bpms), len(xcors) + len(ycors))
     return {
         "machine_id": _machine_id(target),
         "backend": _backend_name(target),
@@ -437,7 +468,7 @@ def _validate_response_metadata(
             f"expected {expected_backend!r}."
         )
 
-    bpms, xcors, ycors = _orbit_ids(target)
+    bpms, xcors, ycors = response_measurement_ids(target, metadata.get("bpms", []))
     if list(metadata.get("bpms", ())) != bpms:
         raise ValueError(f"Response matrix {metadata_path} BPM list does not match current profile.")
     if list(metadata.get("xcors", ())) != xcors:
@@ -445,7 +476,7 @@ def _validate_response_metadata(
     if list(metadata.get("ycors", ())) != ycors:
         raise ValueError(f"Response matrix {metadata_path} Y corrector list does not match current profile.")
 
-    expected_shape = expected_response_matrix_shape(target)
+    expected_shape = (2 * len(bpms), len(xcors) + len(ycors))
     if tuple(metadata.get("shape", ())) != expected_shape:
         raise ValueError(
             f"Response matrix {metadata_path} metadata shape is {metadata.get('shape')}, "
@@ -484,16 +515,18 @@ def _validate_response_metadata(
         if not isinstance(matrix_file, str) or not matrix_file.strip():
             raise ValueError(f"Response matrix metadata {metadata_path} is missing matrix_file.")
         matrix_path = _resolve_runtime_path(target, matrix_file)
-        matrix = _validate_response_matrix_shape(target, matrix_path)
-        validate_response_matrix_quality(target, matrix, source=str(matrix_path))
+        matrix = _validate_response_matrix_shape(target, matrix_path, expected_shape)
+        validate_response_matrix_quality(
+            target, matrix, source=str(matrix_path), selected_bpms=bpms
+        )
 
 
-def _validate_response_matrix_shape(target: MachineProfile | AppContext, matrix_path: Path) -> np.ndarray:
+def _validate_response_matrix_shape(target: MachineProfile | AppContext, matrix_path: Path, expected_shape=None) -> np.ndarray:
     if not matrix_path.is_file():
         raise FileNotFoundError(f"Response matrix file not found: {matrix_path}")
 
     matrix = np.loadtxt(matrix_path)
-    expected_shape = expected_response_matrix_shape(target)
+    expected_shape = expected_shape or expected_response_matrix_shape(target)
     if matrix.shape != expected_shape:
         raise ValueError(
             f"Response matrix {matrix_path} has shape {matrix.shape}, expected {expected_shape}."

@@ -32,6 +32,7 @@ from half_linac.src.apps.orbit_correct.profile_runtime import (
     effective_corrector_limit,
     load_orbit_runtime_settings,
     write_response_matrix_snapshot,
+    response_measurement_ids,
 )
 
 # Configure logging
@@ -52,7 +53,7 @@ class ResponseMatrixCalculator:
     
     def __init__(self, d_value: float = 1e-5, n_averages: int = 2,
                  wait_s: float | None = None,
-                 sample_interval_s: float | None = None):
+                 sample_interval_s: float | None = None, selected_bpms=None):
         """
         Initialize response matrix calculator.
         
@@ -61,6 +62,7 @@ class ResponseMatrixCalculator:
             n_averages: Number of measurement averages
             wait_s: Settling time after each corrector update [s]
             sample_interval_s: Wait time between repeated BPM samples [s]
+            selected_bpms: BPM names to measure with paired correctors; None selects all.
         """
         self.app_context = load_app_context("orbit_correct")
         require_workflow_write_allowed(
@@ -78,9 +80,9 @@ class ResponseMatrixCalculator:
         self.profile_max_value = self.orbit_runtime["corrector_upperlimit"]
         self.max_value_unit = display_unit(self.orbit_runtime["corrector_upperlimit_unit"])
         self.progress_path = Path(self.orbit_runtime["response_progress_path"])
-        self.bpm_ids = list(self.orbit_workflow.bpms)
-        self.xcor_ids = list(self.orbit_workflow.xcors)
-        self.ycor_ids = list(self.orbit_workflow.ycors)
+        self.bpm_ids, self.xcor_ids, self.ycor_ids = response_measurement_ids(
+            self.app_context, selected_bpms
+        )
         self.corrector_limits = {
             element_id: effective_corrector_limit(
                 self.app_context,
@@ -390,7 +392,9 @@ class ResponseMatrixCalculator:
         """Save response matrix to file."""
         try:
             if filename is None:
-                metadata = write_response_matrix_snapshot(self.app_context, self.response_matrix)
+                metadata = write_response_matrix_snapshot(
+                    self.app_context, self.response_matrix, selected_bpms=self.bpm_ids
+                )
                 logger.info(
                     "Response matrix saved to %s and set active",
                     metadata["matrix_file"],
@@ -437,6 +441,7 @@ if __name__ == '__main__':
             n_averages=n_averages,
             wait_s=wait_s,
             sample_interval_s=sample_interval_s,
+            selected_bpms=sys.argv[5].split(",") if len(sys.argv) > 5 else None,
         )
         calculator.init_BPM_pv()
         calculator.init_COR_pv()
