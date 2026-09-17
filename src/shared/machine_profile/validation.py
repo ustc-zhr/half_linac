@@ -23,6 +23,7 @@ from .compatibility import (
     resolve_virtual_machine_usedline_workflow,
 )
 from .commissioning import (
+    REAL_COMMISSIONING_WORKFLOWS_BY_APP,
     REAL_STATUS_NOT_SUPPORTED,
     REAL_STATUS_READ_ONLY,
     REAL_STATUS_WRITE_BLOCKED,
@@ -588,6 +589,7 @@ def _validate_app(profile: MachineProfile, app_name: str) -> list[MachineValidat
     if (
         profile.machine.id == "irfel"
         and app_name not in INTRINSIC_READ_ONLY_APP_NAMES
+        and app_name in REAL_COMMISSIONING_WORKFLOWS_BY_APP
     ):
         checks.append(_validate_real_commissioning_status(profile, app_name))
 

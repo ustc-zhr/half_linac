@@ -58,6 +58,7 @@ SUPPORTED_APP_NAMES = {
     "llrf_control",
     "machine_snapshot",
     "symmetric_quad_adjust",
+    "magnet_cycle",
 }
 MODEL_APP_NAMES = {"bba", "emit_measure", "energy_spectrum", "dispersion_correction"}
 APP_WORKFLOW_FILES = {
@@ -78,6 +79,7 @@ APP_WORKFLOW_FILES = {
     "power_source_timing": "power_source_timing.json",
     "llrf_control": "llrf_control.json",
     "symmetric_quad_adjust": "symmetric_quad_adjust.json",
+    "magnet_cycle": "magnet_cycle.json",
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
@@ -96,6 +98,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "llrf_control": ("llrf_control",),
     "machine_snapshot": ("control_points",),
     "symmetric_quad_adjust": ("symmetric_quad_adjust",),
+    "magnet_cycle": ("magnet_cycle",),
 }
 PATHLIKE_MODEL_CONFIG_KEYS = (
     "_json",

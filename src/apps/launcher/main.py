@@ -50,6 +50,9 @@ from half_linac.src.shared.machine_profile import (
     real_commissioning_status_label,
     resolve_machine_runtime,
 )
+from half_linac.src.shared.machine_profile.commissioning import (
+    REAL_COMMISSIONING_WORKFLOWS_BY_APP,
+)
 from half_linac.src.shared.machine_profile.runtime_selector import (
     RuntimeSelectorWidget,
 )
@@ -952,6 +955,18 @@ APP_ACCESS_LABELS = {
 
 
 APP_DEFINITIONS = {
+    "magnet_cycle": {
+        "button_name": "magnet_cycle_button",
+        "category": "tools",
+        "access": "write",
+        "button_text": "Magnet Cycle",
+        "label": "Magnet Cycle",
+        "window_title_patterns": ("Magnet Cycle",),
+        "description": "Cycle magnet currents within machine limits using the selected machine and control backend.",
+        "workflow_name": "magnet_cycle",
+        "cmd": ["python3", "main.py", "--epics"],
+        "cwd": ROOT / "src/apps/magnet_cycle",
+    },
     "energy_buttons": {
         "button_name": "energy_buttons_button",
         "category": "tools",
@@ -1227,6 +1242,7 @@ APP_DEFINITIONS = {
 }
 
 PROFILE_MANAGED_APP_KEYS = {
+    "magnet_cycle": "magnet_cycle",
     "orbitdisplay": "orbit_display",
     "beammonitor": "beam_monitor",
     "ct_monitor": "ct_monitor",
@@ -1541,7 +1557,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
                     )
                     tooltip = f"{tooltip}\n\nUnavailable: {reason}"
 
-            if supported and profile_app_name is not None:
+            if supported and profile_app_name in REAL_COMMISSIONING_WORKFLOWS_BY_APP:
                 tooltip = self._append_real_commissioning_tooltip(tooltip, profile_app_name)
                 if self.machine_profile.machine.id == "irfel" and self.control_backend == "real":
                     try:
@@ -1905,6 +1921,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         statuses = []
         for app_name in dict.fromkeys(PROFILE_MANAGED_APP_KEYS.values()):
+            if app_name not in REAL_COMMISSIONING_WORKFLOWS_BY_APP:
+                continue
             try:
                 statuses.append(real_commissioning_status(self.machine_profile, app_name))
             except MachineProfileError:
