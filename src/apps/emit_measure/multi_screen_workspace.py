@@ -517,6 +517,9 @@ class MultiScreenWorkspace(QWidget):
         if self._last_frame_screen != screen:
             self._clear_image_display(f"{screen} selected. Click Refresh to read its current image.")
         self._update_selected_optics(screen)
+        owner = self.window()
+        if hasattr(owner, "_refresh_status"):
+            owner._refresh_status()
 
     def _load_default_preset(self) -> None:
         workflow = self.app_context.emit_measure_workflow
@@ -625,7 +628,7 @@ class MultiScreenWorkspace(QWidget):
             self._auto_refresh_timer.stop()
 
     def _auto_refresh_current_image(self) -> None:
-        if self.session is None or self._archive_review:
+        if self.session is None or self._archive_review or not self.isVisible():
             return
         self.preview_sample(auto=True)
 
@@ -901,14 +904,20 @@ class MultiScreenWorkspace(QWidget):
             pv_sigy,
             used=fit.valid,
         )
+        quality = self._fit_quality(fit, pv_sigx, pv_sigy)
+        quality_text = f"X: {quality['x_status']} · Y: {quality['y_status']}"
         self.beam_fit_summary_label.setText(
-            f"Fit: {getattr(fit, 'method', self.beam_width_method)} · {'valid' if fit.valid else fit.status}"
+            f"{screen} · {getattr(fit, 'method', self.beam_width_method)} · "
+            + (quality_text if fit.valid else fit.status)
         )
         self.roi_status_label.setText(f"ROI: {self.roi_status}")
         self.beam_background_status_label.setText(self.background_status)
         self.image_status_label.setText(
-            f"{screen}: {fit.status} · {fit.message}" if fit.message else f"{screen}: {fit.status}"
+            f"{screen}: {quality_text}" + (f" · {fit.message}" if fit.message else "")
         )
+        owner = self.window()
+        if hasattr(owner, "_refresh_status"):
+            owner._refresh_status()
         self.image_title_label.setText(f"Current Screen Image · {screen}")
         self._update_selected_optics(screen)
         self.image_axes.clear()

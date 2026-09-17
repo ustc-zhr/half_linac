@@ -84,6 +84,25 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         self.assertEqual(workspace.session.acquisition.samples[0].source, "image")
         self.assertEqual(workspace.samples_table.columnCount(), 6)
 
+    def test_failed_previous_screen_does_not_reject_current_screen(self):
+        axis = np.linspace(-3, 3, 81)
+        image = np.outer(np.exp(-axis**2 / .32), np.exp(-axis**2 / .32))
+        workspace = self._workspace(image)
+        calls = []
+        def reader(screen):
+            calls.append(screen)
+            return {"image": np.zeros_like(image) if screen == "PRF07" else image,
+                    "extent": (-3, 3, -3, 3)}
+        workspace.image_reader = reader
+        workspace.screen_list.setCurrentRow(1)
+        workspace.acquire_sample()
+        workspace.screen_list.setCurrentRow(2)
+        workspace.acquire_sample()
+        self.assertEqual(calls, ["PRF07", "PRF08"])
+        self.assertEqual(workspace.session.acquisition.sample_counts["PRF08"], 1)
+        self.assertIn("PRF08", workspace.beam_fit_summary_label.text())
+        self.assertIn("X: usable", workspace.beam_fit_summary_label.text())
+
     def test_switch_after_five_samples_and_retry_failed_fit(self):
         axis = np.linspace(-3, 3, 81)
         image = np.outer(np.exp(-axis**2 / 0.32), np.exp(-axis**2 / 0.32))

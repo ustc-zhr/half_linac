@@ -2557,7 +2557,14 @@ class myWindow(QWidget,Ui_Form):
                 "success",
                 self._format_twiss_status_tooltip(self.latest_twiss_summary),
             )
-        if self.latest_beam_fit_result is None:
+        multi = getattr(self, "multi_screen_workspace", None)
+        if multi is not None and self.tabWidget.currentWidget() is multi:
+            self.status_panel.set_item(
+                "fit", multi.beam_fit_summary_label.text(),
+                "success" if multi._last_fit is not None and multi._last_fit.valid else "warning",
+                multi.image_status_label.text(),
+            )
+        elif self.latest_beam_fit_result is None:
             self.status_panel.set_item("fit", "No image", "subtle")
         elif self.latest_beam_fit_result.valid:
             self.status_panel.set_item(
@@ -4487,6 +4494,8 @@ class myWindow(QWidget,Ui_Form):
         return True
 
     def _auto_refresh_beam_image_fit(self):
+        if self.tabWidget.currentWidget() is not self.X_Plane:
+            return
         if not self._beam_image_auto_refresh_ready:
             return
         if self._scan_is_running():

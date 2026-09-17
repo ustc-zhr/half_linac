@@ -39,6 +39,15 @@ class WidthMethodTests(unittest.TestCase):
         py = np.exp(-y*y/.012) + .15*np.exp(-y*y/.2)
         return np.outer(py, px)
 
+    def test_hidden_quad_scan_does_not_refresh_previous_screen(self):
+        w = self.window
+        w._beam_image_auto_refresh_ready = True
+        w.beam_image_auto_refresh_checkbox.setChecked(True)
+        w.tabWidget.setCurrentWidget(w.multi_screen_workspace)
+        with patch.object(w, 'refresh_current_beam_image_fit') as refresh:
+            w._auto_refresh_beam_image_fit()
+            refresh.assert_not_called()
+
     def test_default_and_rms_preview_and_scan_use_the_same_width(self):
         w = self.window
         self.assertEqual(w._beam_width_method(), 'Gaussian fit')
