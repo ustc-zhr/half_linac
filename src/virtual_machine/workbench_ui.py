@@ -10,7 +10,9 @@ import sys
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
+from zoneinfo import ZoneInfo
 
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTabWidget,
@@ -25,6 +27,22 @@ from half_linac.src.virtual_machine.beam_source import bootstrap_runtime_state
 from half_linac.src.virtual_machine.magnet_panel import MagnetPanel
 from half_linac.src.virtual_machine.beamline_view import BeamlineView
 from half_linac.src.virtual_machine.workbench_data import input_version, observation_dir, occurrences
+
+
+_BEIJING_TZ = ZoneInfo('Asia/Shanghai')
+
+
+def _format_completed_at(value):
+    """Format the VM completion timestamp in Beijing time for the summary bar."""
+    if not value:
+        return ''
+    try:
+        completed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if completed.tzinfo is None:
+            completed = completed.replace(tzinfo=timezone.utc)
+        return completed.astimezone(_BEIJING_TZ).strftime('%H:%M:%S')
+    except (TypeError, ValueError):
+        return ''
 
 
 class PlotToolbar(NavigationToolbar2QT):
@@ -587,7 +605,10 @@ class WorkbenchMixin:
                                    'danger' if phase == 'Failed' else 'info')
         self.status_panel.set_item('config', self._current_usedline_summary())
         completed = status.get('completed_at', '')
-        self.status_panel.set_item('current', f"{completed[11:19]} UTC / {status.get('elapsed', 0):.2f} s" if completed else 'None')
+        completed_time = _format_completed_at(completed)
+        self.status_panel.set_item('current',
+                                   f"{completed_time} BJT / {status.get('elapsed', 0):.2f} s"
+                                   if completed_time else 'None')
         if self._result:
             fresh = (vm and phase == 'Ready' and self._result.get('input_version') == self._version
                      and self._result.get('session') == self._session
