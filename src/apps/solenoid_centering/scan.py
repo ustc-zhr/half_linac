@@ -355,8 +355,10 @@ def _response_matrix_axis_plan(
     scan_range: SolenoidCenteringScanRange,
     limits: tuple[float, float] | None,
     response_step: float | None = None,
+    *,
+    reference_center: float | None = None,
 ) -> tuple[tuple[float, float] | None, tuple[float, ...]]:
-    """Use one configured grid interval for response, with continuous target bounds."""
+    """Perturb around center within target bounds anchored at reference_center."""
     if scan_range.steps < 2:
         raise ValueError("Response matrix requires at least two corrector steps.")
     relative_low = min(scan_range.relative_from, scan_range.relative_to)
@@ -367,7 +369,8 @@ def _response_matrix_axis_plan(
     )
     if not np.isfinite(step) or step <= 0:
         raise ValueError("Response matrix requires a finite, nonzero corrector step.")
-    low, high = center + relative_low, center + relative_high
+    bounds_center = center if reference_center is None else reference_center
+    low, high = bounds_center + relative_low, bounds_center + relative_high
     if limits is not None:
         low, high = max(low, limits[0]), min(high, limits[1])
     if low >= high:
@@ -1401,54 +1404,100 @@ class SolenoidCenteringScanner:
         hcorr_limits: tuple[float, float] | None,
         vcorr_limits: tuple[float, float] | None,
     ) -> tuple[float, float, tuple[AxisScanResult, ...], ScanTermination, CandidateResult]:
-        h_bounds, h_values = _response_matrix_axis_plan(
-            baseline.hcorr, self.preset.corrector_scan, hcorr_limits, self.response_step,
-        )
-        v_bounds, v_values = _response_matrix_axis_plan(
-            baseline.vcorr, self.preset.corrector_scan, vcorr_limits, self.response_step,
-        )
-        if h_bounds is None or v_bounds is None or len(h_values) < 2 or len(v_values) < 2:
-            raise ValueError("Response matrix needs one in-limit step on each side of both correctors.")
-        h_candidates = (
-            evaluator("h", 0, h_values[0], baseline.vcorr),
-            evaluator("h", 0, h_values[1], baseline.vcorr),
-        )
-        v_candidates = (
-            evaluator("v", 0, baseline.hcorr, v_values[0]),
-            evaluator("v", 0, baseline.hcorr, v_values[1]),
-        )
-        h_scan = AxisScanResult("h", 0, h_candidates, min(h_candidates, key=lambda c: c.score.score))
-        v_scan = AxisScanResult("v", 0, v_candidates, min(v_candidates, key=lambda c: c.score.score))
-        if self.round_finished is not None:
-            self.round_finished(h_scan, v_scan)
-        scans = (h_scan, v_scan)
-        try:
-            target_h, target_v = response_matrix_target(
-                (baseline, *h_candidates, *v_candidates),
-                scoring_mode=self.scoring_mode,
-                h_bounds=h_bounds,
-                v_bounds=v_bounds,
+        current = baseline
+        best = baseline
+        scans: list[AxisScanResult] = []
+        edge_tolerance = max(1e-12, self._response_step() * 1e-3)
+        movement_tolerance = max(edge_tolerance, self._corrector_tolerance())
+
+        for round_index in range(self.preset.max_rounds):
+            h_bounds, h_values = _response_matrix_axis_plan(
+                current.hcorr, self.preset.corrector_scan, hcorr_limits,
+                self.response_step, reference_center=baseline.hcorr,
             )
-        except ValueError as exc:
-            return (
-                baseline.hcorr, baseline.vcorr, scans,
-                ScanTermination("matrix_unreliable", str(exc), 0, True, True), baseline,
+            v_bounds, v_values = _response_matrix_axis_plan(
+                current.vcorr, self.preset.corrector_scan, vcorr_limits,
+                self.response_step, reference_center=baseline.vcorr,
             )
-        verified = evaluator("verify", 0, target_h, target_v)
-        verify_scan = AxisScanResult("verify", 0, (verified,), verified)
-        boundary = _at_limit(target_h, hcorr_limits) or _at_limit(target_v, vcorr_limits)
-        boundary = boundary or np.isclose(target_h, h_bounds[0]) or np.isclose(target_h, h_bounds[1])
-        boundary = boundary or np.isclose(target_v, v_bounds[0]) or np.isclose(target_v, v_bounds[1])
-        boundary = bool(boundary)
+            if h_bounds is None or v_bounds is None or len(h_values) < 2 or len(v_values) < 2:
+                termination = ScanTermination(
+                    "insufficient_perturbation_space",
+                    "Cannot measure one COR response step on both sides within the original bounds.",
+                    round_index, True,
+                )
+                return best.hcorr, best.vcorr, tuple(scans), termination, best
+
+            h_candidates = (
+                evaluator("h", round_index, h_values[0], current.vcorr),
+                evaluator("h", round_index, h_values[1], current.vcorr),
+            )
+            v_candidates = (
+                evaluator("v", round_index, current.hcorr, v_values[0]),
+                evaluator("v", round_index, current.hcorr, v_values[1]),
+            )
+            h_scan = AxisScanResult(
+                "h", round_index, h_candidates,
+                min(h_candidates, key=lambda candidate: candidate.score.score),
+            )
+            v_scan = AxisScanResult(
+                "v", round_index, v_candidates,
+                min(v_candidates, key=lambda candidate: candidate.score.score),
+            )
+            scans.extend((h_scan, v_scan))
+            if self.round_finished is not None:
+                self.round_finished(h_scan, v_scan)
+            try:
+                target_h, target_v = response_matrix_target(
+                    (current, *h_candidates, *v_candidates),
+                    scoring_mode=self.scoring_mode,
+                    h_bounds=h_bounds,
+                    v_bounds=v_bounds,
+                )
+            except ValueError as exc:
+                termination = ScanTermination(
+                    "matrix_unreliable", str(exc), round_index, True, True,
+                )
+                return best.hcorr, best.vcorr, tuple(scans), termination, best
+
+            if (abs(target_h - current.hcorr) <= movement_tolerance
+                    and abs(target_v - current.vcorr) <= movement_tolerance):
+                termination = ScanTermination(
+                    "converged_no_coordinate_change",
+                    "Response-matrix target is unchanged within corrector readback resolution.",
+                    round_index + 1, round_index + 1 < self.preset.max_rounds,
+                )
+                return best.hcorr, best.vcorr, tuple(scans), termination, best
+
+            verified = evaluator("verify", round_index, target_h, target_v)
+            scans.append(AxisScanResult("verify", round_index, (verified,), verified))
+            if verified.score.score < best.score.score:
+                best = verified
+            boundary = any(
+                abs(value - edge) <= edge_tolerance
+                for value, bounds in ((target_h, h_bounds), (target_v, v_bounds))
+                for edge in bounds
+            )
+            if boundary:
+                termination = ScanTermination(
+                    "boundary_limited", "Response-matrix target reached the usable boundary.",
+                    round_index + 1, True, True,
+                )
+                return best.hcorr, best.vcorr, tuple(scans), termination, best
+            if verified.score.score >= current.score.score:
+                termination = ScanTermination(
+                    "no_score_improvement",
+                    "Measured response-matrix target did not improve the previous score.",
+                    round_index + 1, True,
+                )
+                return best.hcorr, best.vcorr, tuple(scans), termination, best
+            current = verified
+
         termination = ScanTermination(
-            "boundary_limited" if boundary else "matrix_verified",
-            "Response-matrix target reached the usable boundary." if boundary else
-            "Response-matrix target measured and verified.",
-            1,
-            boundary,
-            boundary,
+            "max_iters_reached",
+            f"Completed configured maximum of {self.preset.max_rounds} response-matrix iteration(s).",
+            self.preset.max_rounds, False,
         )
-        return target_h, target_v, (*scans, verify_scan), termination, verified
+        return best.hcorr, best.vcorr, tuple(scans), termination, best
 
     def _evaluate_candidate(
         self,
@@ -1571,7 +1620,7 @@ class SolenoidCenteringScanner:
 
     def _estimated_candidate_count(self) -> int:
         if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX:
-            return 5  # four perturbations and one measured verification
+            return 5 * self.preset.max_rounds  # four perturbations and verification per round
         return self.preset.max_rounds * 2 * self.preset.corrector_scan.steps
 
     def _estimated_solenoid_points(self) -> int:

@@ -158,7 +158,8 @@ class MplWidget(QWidget):
             self.score_axes.plot(x_values, scores, marker="o", label=label)
             self.score_axes.axvline(scan.best.corrector_value, linestyle="--", alpha=0.35)
 
-        verification = next((scan.best for scan in axis_scans if scan.axis == "verify"), None)
+        verifications = [scan.best for scan in axis_scans if scan.axis == "verify"]
+        verification = min(verifications, key=lambda item: item.score.score) if verifications else None
         best = verification or min((scan.best for scan in axis_scans), key=lambda item: item.score.score)
         if verification is not None:
             self.bpm_axes.set_title("Verified Target BPM vs Solenoid")

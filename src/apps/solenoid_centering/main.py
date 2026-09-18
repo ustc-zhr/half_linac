@@ -509,7 +509,6 @@ class MainWindow(QMainWindow):
             "Response matrix measures COR at the displayed response step on each side "
             "of the current value and uses From/To as target bounds."
         )
-        self.max_iters.setToolTip("Used by grid search only.")
 
         method_layout = QFormLayout()
         method_layout.setContentsMargins(0, 0, 0, 0)
@@ -591,12 +590,10 @@ class MainWindow(QMainWindow):
         run_settings.setVerticalSpacing(5)
         for label, widget in (
             ("Score mode", self.scoring_mode_combo),
-            ("Max iterations (grid)", self.max_iters),
+            ("Max iterations", self.max_iters),
         ):
             field_label = QLabel(label, self.run_card)
             field_label.setProperty("role", "field")
-            if widget is self.max_iters:
-                self.max_iters_label = field_label
             run_settings.addRow(field_label, widget)
         run_layout.addLayout(run_settings)
 
@@ -833,8 +830,6 @@ class MainWindow(QMainWindow):
         self.cor_range_label.setText("COR limits" if matrix else "COR")
         self.cor_steps.setVisible(not matrix)
         self.response_step_row.setVisible(matrix)
-        self.max_iters.setVisible(not matrix)
-        self.max_iters_label.setVisible(not matrix)
 
     def _preset_with_overrides(self) -> SolenoidCenteringPreset:
         preset = self._current_preset()
@@ -1163,7 +1158,8 @@ class MainWindow(QMainWindow):
         )
         if result.recommendation_available:
             self.status_strip.set_value("RESULT QUALITY", "VALID", "success")
-            if result.termination is not None and result.termination.early:
+            if (result.termination is not None
+                    and result.termination.code == "converged_no_coordinate_change"):
                 self._set_workflow_status("CONVERGED", "success")
             self.status_label.setText(
                 f"Quality passed: {result.relative_improvement:.1%}. {termination_reason}"
@@ -1295,7 +1291,8 @@ class MainWindow(QMainWindow):
                 row = self.result_table.rowCount()
                 self.result_table.insertRow(row)
                 for column, value in enumerate((
-                    "--", "VERIFY", f"H {candidate.hcorr:.8g}, V {candidate.vcorr:.8g}",
+                    str(axis_scan.round_index + 1), "VERIFY",
+                    f"H {candidate.hcorr:.8g}, V {candidate.vcorr:.8g}",
                     f"{candidate.score.score:.6g}",
                     f"{candidate.score.trajectory_length:.6g}",
                     f"{candidate.score.slope_x:.6g}",

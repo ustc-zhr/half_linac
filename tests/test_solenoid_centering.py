@@ -710,7 +710,7 @@ class SolenoidCenteringTests(unittest.TestCase):
                  ("v", start_v - 1.0), ("v", start_v + 1.0)],
             )
             self.assertTrue(result.recommendation_available)
-            self.assertEqual(result.termination.code, "matrix_verified")
+            self.assertEqual(result.termination.code, "max_iters_reached")
             json.dumps(result.as_dict())
             self.assertAlmostEqual(result.recommended_hcorr - start_h, 0.3555556, places=3)
             self.assertAlmostEqual(result.recommended_vcorr - start_v, -0.1111111, places=3)
@@ -788,6 +788,91 @@ class SolenoidCenteringTests(unittest.TestCase):
             [("h", -0.25), ("h", 0.25), ("v", -0.25), ("v", 0.25)],
         )
         self.assertEqual(result.scan_config["response_step"], 0.25)
+
+    def test_response_matrix_remeasures_around_verified_target(self):
+        context, preset, values = _ready_fixture()
+        preset = replace(preset, max_rounds=2, settle_time_s=0.0, sample_interval_s=0.0)
+        sol_pv = _solenoid_setpoint_pv(context, preset)
+        h_pv = resolve_corrector_write_channel(context, preset.hcorr)
+        v_pv = resolve_corrector_write_channel(context, preset.vcorr)
+        x_pv = resolve_channel(context, preset.bpm, "x")
+        y_pv = resolve_channel(context, preset.bpm, "y")
+
+        class CurvedResponseIO(MockIO):
+            def read(self, pv_name):
+                h, v, sol = self.values[h_pv], self.values[v_pv], self.values[sol_pv] - 1.0
+                if pv_name == x_pv:
+                    return (h - 0.5 + 0.3 * (h - 0.5) ** 2 + 0.2 * v) * sol
+                if pv_name == y_pv:
+                    return (v + 0.1 * h) * sol
+                return super().read(pv_name)
+
+        io = CurvedResponseIO(values)
+        scanner = scan.SolenoidCenteringScanner(
+            context, preset, io=io, search_mode=scan.SEARCH_MODE_RESPONSE_MATRIX,
+            response_step=0.25,
+        )
+        self.assertEqual(scanner.preflight().corrector_candidates, 11)
+        with (
+            patch.object(scan, "require_workflow_write_allowed", lambda *args, **kwargs: None),
+            patch.object(scan, "write_scan_result"),
+        ):
+            result = scanner.run()
+        first_verify = next(item.best for item in result.axis_scans if item.axis == "verify")
+        second_h = next(
+            item for item in result.axis_scans if item.axis == "h" and item.round_index == 1
+        )
+        self.assertAlmostEqual(second_h.candidates[0].hcorr, first_verify.hcorr - 0.25)
+        self.assertAlmostEqual(second_h.candidates[1].hcorr, first_verify.hcorr + 0.25)
+        self.assertEqual(result.termination.iterations_completed, 2)
+        self.assertLess(result.best_score, first_verify.score.score)
+        self.assertTrue(result.recommendation_available)
+        self.assertEqual(result.restore.status, "verified")
+        json.dumps(result.as_dict())
+
+    def test_response_matrix_iteration_keeps_original_target_bounds(self):
+        scan_range = SolenoidCenteringScanRange(
+            relative_from=-2.0, relative_to=2.0, steps=5,
+        )
+        bounds, perturbations = scan._response_matrix_axis_plan(
+            1.8, scan_range, (-10.0, 10.0), 0.25, reference_center=0.0,
+        )
+        self.assertEqual(bounds, (-2.0, 2.0))
+        self.assertEqual(perturbations, (1.55,))
+
+    def test_response_matrix_stops_when_next_target_is_unchanged(self):
+        context, preset, values = _ready_fixture()
+        scanner = scan.SolenoidCenteringScanner(
+            context, replace(preset, max_rounds=3), io=MockIO(values),
+            search_mode=scan.SEARCH_MODE_RESPONSE_MATRIX, response_step=0.25,
+        )
+        measured = []
+
+        def evaluator(axis, round_index, hcorr, vcorr):
+            solenoid = (-1.0, 0.0, 1.0)
+            xs = tuple((hcorr - 0.35) * value for value in solenoid)
+            ys = tuple((vcorr + 0.1) * value for value in solenoid)
+            score = scan.evaluate_solenoid_response(
+                solenoid, [[value] for value in xs], [[value] for value in ys],
+            )
+            candidate = replace(
+                _candidate(score.score, axis=axis, hcorr=hcorr, vcorr=vcorr),
+                round_index=round_index, bpm_x_means=xs, bpm_y_means=ys, score=score,
+            )
+            measured.append(candidate)
+            return candidate
+
+        baseline = evaluator("baseline", 0, 0.0, 0.0)
+        hcorr, vcorr, scans, termination, best = scanner._response_matrix_search(
+            baseline, evaluator, (-10.0, 10.0), (-10.0, 10.0),
+        )
+        self.assertEqual(termination.code, "converged_no_coordinate_change")
+        self.assertEqual(termination.iterations_completed, 2)
+        self.assertEqual(len(measured), 10)  # No second verification scan.
+        self.assertEqual(len([item for item in scans if item.axis == "verify"]), 1)
+        self.assertAlmostEqual(hcorr, 0.35)
+        self.assertAlmostEqual(vcorr, -0.1)
+        self.assertIs(best, next(item.best for item in scans if item.axis == "verify"))
 
     def test_missing_readback_verification_blocks_scan_before_writes(self):
         context, preset, values = _ready_fixture()

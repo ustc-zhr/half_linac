@@ -184,7 +184,7 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
 
         self.assertTrue(self.window.cor_steps.isHidden())
         self.assertFalse(self.window.response_step_row.isHidden())
-        self.assertTrue(self.window.max_iters.isHidden())
+        self.assertFalse(self.window.max_iters.isHidden())
         self.assertEqual(self.window.cor_range_label.text(), "COR limits")
         self.assertFalse(self.window.preflight_ready)
 
