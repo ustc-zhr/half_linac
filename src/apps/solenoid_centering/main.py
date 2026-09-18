@@ -491,6 +491,7 @@ class MainWindow(QMainWindow):
         self.sol_from = self._double_spin(-1e6, 1e6, 0.01, 4)
         self.sol_to = self._double_spin(-1e6, 1e6, 0.01, 4)
         self.sol_steps = self._int_spin(2, 999)
+        self.sol_steps.setToolTip("Actual solenoid points measured per candidate in either method.")
         self.cor_from = self._double_spin(-1e6, 1e6, 0.0001, 6)
         self.cor_to = self._double_spin(-1e6, 1e6, 0.0001, 6)
         self.cor_steps = self._int_spin(2, 999)

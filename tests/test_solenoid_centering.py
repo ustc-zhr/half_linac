@@ -697,13 +697,14 @@ class SolenoidCenteringTests(unittest.TestCase):
             )
             report = scanner.preflight()
             self.assertEqual(report.corrector_candidates, 6)
-            self.assertEqual(report.solenoid_points, 3)
+            self.assertEqual(report.solenoid_points, 5)
             with (
                 patch.object(scan, "require_workflow_write_allowed", lambda *args, **kwargs: None),
                 patch.object(scan, "write_scan_result"),
             ):
                 result = scanner.run()
             self.assertEqual(len(candidates), 6)
+            self.assertTrue(all(len(item.solenoid_values) == 5 for item in candidates))
             self.assertEqual(
                 [(item.axis, item.corrector_value) for item in candidates[1:5]],
                 [("h", start_h - 1.0), ("h", start_h + 1.0),

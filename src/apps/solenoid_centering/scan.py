@@ -1176,7 +1176,7 @@ class SolenoidCenteringScanner:
             vcorr_readback=vcorr_readback,
             bpm_x=bpm_x,
             bpm_y=bpm_y,
-            solenoid_points=self._estimated_solenoid_points(),
+            solenoid_points=self.preset.solenoid_scan.steps,
             corrector_candidates=self._estimated_candidate_count() + 1,
             bpm_samples=self.preset.samples_per_point,
             estimated_duration_s=self._estimated_duration_s(),
@@ -1528,7 +1528,7 @@ class SolenoidCenteringScanner:
         solenoid_values = []
         x_samples = []
         y_samples = []
-        for solenoid in self._solenoid_points(original_solenoid):
+        for solenoid in relative_scan_points(original_solenoid, self.preset.solenoid_scan):
             self._raise_if_stopped()
             solenoid = float(solenoid)
             self._write_and_verify(
@@ -1623,26 +1623,15 @@ class SolenoidCenteringScanner:
             return 5 * self.preset.max_rounds  # four perturbations and verification per round
         return self.preset.max_rounds * 2 * self.preset.corrector_scan.steps
 
-    def _estimated_solenoid_points(self) -> int:
-        if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX:
-            return min(3, self.preset.solenoid_scan.steps)
-        return self.preset.solenoid_scan.steps
-
     def _response_step(self) -> float:
         if self.response_step is not None:
             return float(self.response_step)
         scan_range = self.preset.corrector_scan
         return abs(scan_range.relative_to - scan_range.relative_from) / (scan_range.steps - 1)
 
-    def _solenoid_points(self, original_solenoid: float) -> np.ndarray:
-        points = relative_scan_points(original_solenoid, self.preset.solenoid_scan)
-        if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX and len(points) > 3:
-            return points[[0, len(points) // 2, -1]]
-        return points
-
     def _estimated_duration_s(self) -> float:
         samples_delay = max(0, self.preset.samples_per_point - 1) * self.preset.sample_interval_s
-        per_candidate = self.preset.settle_time_s + self._estimated_solenoid_points() * (
+        per_candidate = self.preset.settle_time_s + self.preset.solenoid_scan.steps * (
             self.preset.settle_time_s + samples_delay
         )
         return float((self._estimated_candidate_count() + 1) * per_candidate)
@@ -1675,7 +1664,7 @@ class SolenoidCenteringScanner:
                 self._response_step() if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX else None
             ),
             "solenoid_scan": asdict(self.preset.solenoid_scan),
-            "measured_solenoid_points": self._estimated_solenoid_points(),
+            "measured_solenoid_points": self.preset.solenoid_scan.steps,
             "corrector_scan": asdict(self.preset.corrector_scan),
             "samples_per_point": self.preset.samples_per_point,
             "settle_time_s": self.preset.settle_time_s,
