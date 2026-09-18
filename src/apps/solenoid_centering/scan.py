@@ -348,6 +348,32 @@ def _bounded_candidate_values(
     return values
 
 
+def _response_matrix_axis_plan(
+    center: float,
+    scan_range: SolenoidCenteringScanRange,
+    limits: tuple[float, float] | None,
+) -> tuple[tuple[float, float] | None, tuple[float, ...]]:
+    """Use one configured grid interval for response, with continuous target bounds."""
+    if scan_range.steps < 2:
+        raise ValueError("Response matrix requires at least two corrector steps.")
+    relative_low = min(scan_range.relative_from, scan_range.relative_to)
+    relative_high = max(scan_range.relative_from, scan_range.relative_to)
+    step = (relative_high - relative_low) / (scan_range.steps - 1)
+    if not np.isfinite(step) or step <= 0:
+        raise ValueError("Response matrix requires a finite, nonzero corrector step.")
+    low, high = center + relative_low, center + relative_high
+    if limits is not None:
+        low, high = max(low, limits[0]), min(high, limits[1])
+    if low >= high:
+        return None, ()
+    tolerance = max(1.0, abs(low), abs(high)) * 1e-12
+    perturbations = tuple(
+        value for value in (center - step, center + step)
+        if low - tolerance <= value <= high + tolerance
+    )
+    return (low, high), perturbations
+
+
 def _bounded_candidate_info(
     center: float,
     scan_range: SolenoidCenteringScanRange,
@@ -1235,6 +1261,16 @@ class SolenoidCenteringScanner:
         requested = tuple(
             float(value) for value in relative_scan_points(center, self.preset.corrector_scan)
         )
+        if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX:
+            bounds, perturbations = _response_matrix_axis_plan(
+                center, self.preset.corrector_scan, _numeric_limit(target.machine_limit),
+            )
+            return self._build_range_check(
+                label, target.element_id, bounds or requested, target.pv_name,
+                target.machine_limit, first_values=(requested[0], requested[-1]),
+                requested_points=2, feasible_points=len(perturbations),
+                clipping_allowed=True,
+            )
         feasible = _bounded_candidate_values(
             center,
             self.preset.corrector_scan,
@@ -1353,23 +1389,21 @@ class SolenoidCenteringScanner:
         hcorr_limits: tuple[float, float] | None,
         vcorr_limits: tuple[float, float] | None,
     ) -> tuple[float, float, tuple[AxisScanResult, ...], ScanTermination, CandidateResult]:
-        h_values = _bounded_candidate_values(
+        h_bounds, h_values = _response_matrix_axis_plan(
             baseline.hcorr, self.preset.corrector_scan, hcorr_limits,
         )
-        v_values = _bounded_candidate_values(
+        v_bounds, v_values = _response_matrix_axis_plan(
             baseline.vcorr, self.preset.corrector_scan, vcorr_limits,
         )
-        if len(h_values) < 2 or len(v_values) < 2:
-            raise ValueError("Response matrix needs two in-limit perturbations on each axis.")
-        h_bounds = (min(h_values), max(h_values))
-        v_bounds = (min(v_values), max(v_values))
+        if h_bounds is None or v_bounds is None or len(h_values) < 2 or len(v_values) < 2:
+            raise ValueError("Response matrix needs one in-limit step on each side of both correctors.")
         h_candidates = (
-            evaluator("h", 0, h_bounds[0], baseline.vcorr),
-            evaluator("h", 0, h_bounds[1], baseline.vcorr),
+            evaluator("h", 0, h_values[0], baseline.vcorr),
+            evaluator("h", 0, h_values[1], baseline.vcorr),
         )
         v_candidates = (
-            evaluator("v", 0, baseline.hcorr, v_bounds[0]),
-            evaluator("v", 0, baseline.hcorr, v_bounds[1]),
+            evaluator("v", 0, baseline.hcorr, v_values[0]),
+            evaluator("v", 0, baseline.hcorr, v_values[1]),
         )
         h_scan = AxisScanResult("h", 0, h_candidates, min(h_candidates, key=lambda c: c.score.score))
         v_scan = AxisScanResult("v", 0, v_candidates, min(v_candidates, key=lambda c: c.score.score))

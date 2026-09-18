@@ -704,6 +704,11 @@ class SolenoidCenteringTests(unittest.TestCase):
             ):
                 result = scanner.run()
             self.assertEqual(len(candidates), 6)
+            self.assertEqual(
+                [(item.axis, item.corrector_value) for item in candidates[1:5]],
+                [("h", start_h - 1.0), ("h", start_h + 1.0),
+                 ("v", start_v - 1.0), ("v", start_v + 1.0)],
+            )
             self.assertTrue(result.recommendation_available)
             self.assertEqual(result.termination.code, "matrix_verified")
             json.dumps(result.as_dict())
@@ -729,6 +734,38 @@ class SolenoidCenteringTests(unittest.TestCase):
         json.dumps(result.as_dict())
         self.assertFalse(result.recommendation_available)
         self.assertEqual(result.restore.status, "verified")
+
+    def test_response_matrix_target_uses_full_configured_bounds(self):
+        solenoid = (-1.0, 0.0, 1.0)
+        candidates = tuple(
+            replace(
+                _candidate(1.0, axis=axis, hcorr=h, vcorr=v),
+                bpm_x_means=tuple((h - 1.5) * sol for sol in solenoid),
+                bpm_y_means=tuple(v * sol for sol in solenoid),
+            )
+            for axis, h, v in (
+                ("baseline", 0.0, 0.0), ("h", -1.0, 0.0), ("h", 1.0, 0.0),
+                ("v", 0.0, -1.0), ("v", 0.0, 1.0),
+            )
+        )
+        target_h, target_v = scan.response_matrix_target(
+            candidates, scoring_mode=scan.SCORING_MODE_SLOPE,
+            h_bounds=(-2.0, 2.0), v_bounds=(-2.0, 2.0),
+        )
+        self.assertAlmostEqual(target_h, 1.5)
+        self.assertAlmostEqual(target_v, 0.0)
+
+    def test_response_matrix_preflight_requires_both_one_step_perturbations(self):
+        context, preset, values = _ready_fixture()
+        h_pv = resolve_corrector_write_channel(context, preset.hcorr)
+        values[h_pv] = 9.5  # +1 A would exceed the +10 A machine limit.
+        scanner = scan.SolenoidCenteringScanner(
+            context, preset, io=MockIO(values),
+            search_mode=scan.SEARCH_MODE_RESPONSE_MATRIX,
+        )
+        report = scanner.preflight()
+        self.assertFalse(report.is_ready)
+        self.assertIn("INSUFFICIENT CANDIDATES HCOR", report.as_text())
 
     def test_missing_readback_verification_blocks_scan_before_writes(self):
         context, preset, values = _ready_fixture()

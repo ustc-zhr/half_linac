@@ -500,10 +500,12 @@ class MainWindow(QMainWindow):
         self.search_mode_combo.addItem("Grid search", SEARCH_MODE_GRID)
         self.search_mode_combo.addItem("Response matrix", SEARCH_MODE_RESPONSE_MATRIX)
         self.search_mode_combo.setToolTip(
-            "Response matrix uses the corrector range endpoints and up to three solenoid points, "
-            "then measures the predicted target."
+            "Response matrix measures one COR grid interval on each side of the current value "
+            "and uses From/To as target bounds."
         )
-        self.cor_steps.setToolTip("Used by grid search; response matrix uses range endpoints.")
+        self.cor_steps.setToolTip(
+            "Response matrix perturbation = (To - From) / (Steps - 1)."
+        )
         self.max_iters.setToolTip("Used by grid search only.")
 
         range_title = QLabel("Relative Scan Range", self.scan_card)
