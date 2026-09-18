@@ -1,5 +1,6 @@
 import sys
 import colorsys
+import time
 from pathlib import Path
 
 _REPO_BOOTSTRAP_ROOT = next(
@@ -42,6 +43,7 @@ from half_linac.src.shared.machine_profile import (
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 from gui import Ui_MainWindow
+from jitter_data import finite_mm
 
 
 HEADER_ACTION_HEIGHT = 32
@@ -452,6 +454,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._bpm_range_is_custom = False
         self._axis_ranges = {"x": (None, None), "y": (None, None)}
         self._bpm_detail_window = None
+        self._jitter_window = None
         self.refresh_interval_ms = 1000
 
         self._configure_window()
@@ -593,10 +596,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.detail_button.clicked.connect(self.start_bpmvalue_btn)
         header_layout.addWidget(self.detail_button)
 
+        self.jitter_button = QPushButton("Jitter", panel)
+        self.jitter_button.setObjectName("headerButton")
+        self.jitter_button.clicked.connect(self.open_jitter_window)
+        header_layout.addWidget(self.jitter_button)
+
         for widget in (
             self.live_button,
             self.refresh_interval_edit,
             self.detail_button,
+            self.jitter_button,
         ):
             widget.setFixedHeight(HEADER_ACTION_HEIGHT + 2)
             header_layout.setAlignment(widget, Qt.AlignVCenter)
@@ -727,6 +736,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
             self.status_panel.apply_theme(palette)
         if self._bpm_detail_window is not None:
             self._bpm_detail_window.apply_theme(palette)
+        if self._jitter_window is not None:
+            self._jitter_window.apply_theme(palette)
         self._update_theme_toggle_button()
 
     def _update_theme_toggle_button(self):
@@ -777,10 +788,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.refresh_interval_ms = new_interval_ms
         self._restore_refresh_interval_text()
         self._sync_bpm_detail_refresh_interval()
-        if self.is_x_running:
-            self._start_refresh_timer()
-        if self.is_y_running:
-            self._start_refresh_timer()
+        if self._jitter_window is not None:
+            self._jitter_window.set_refresh_interval_ms(self.refresh_interval_ms)
+        self._start_refresh_timer()
         self._notify(f"Orbit refresh interval set to {self._format_refresh_interval()}.")
         self._refresh_status()
 
@@ -933,8 +943,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._update_live_controls()
 
     def _start_refresh_timer(self):
-        if self.is_x_running or self.is_y_running:
+        if self.is_x_running or self.is_y_running or self._jitter_sampling():
             self.refresh_timer.start(self.refresh_interval_ms)
+
+    def _jitter_sampling(self):
+        return self._jitter_window is not None and self._jitter_window.sampling
 
     def _start_default_refresh(self):
         self.is_x_running = True
@@ -945,11 +958,16 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._notify("Orbit refresh started.")
 
     def _stop_refresh_timer_if_idle(self):
-        if not self.is_x_running and not self.is_y_running:
+        if not self.is_x_running and not self.is_y_running and not self._jitter_sampling():
             self.refresh_timer.stop()
 
     def _refresh_running_orbits(self):
         self.init_pv()
+        if self._jitter_sampling():
+            self._jitter_window.add_sample(
+                time.time(), self.pvlx_val, self.pvly_val,
+                self.bpm_position_scale_to_mm,
+            )
         if self.is_x_running:
             self.plotorbit_x(read_pv=False)
         if self.is_y_running:
@@ -964,8 +982,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def init_pv(self):
         try:
-            self.pvlx_val = caget_many(self.bpm_x_pvs)
-            self.pvly_val = caget_many(self.bpm_y_pvs)
+            x_values = caget_many(self.bpm_x_pvs)
+            y_values = caget_many(self.bpm_y_pvs)
+            self.pvlx_val = self._normalize_read_values(x_values, len(self.bpm_x_pvs))
+            self.pvly_val = self._normalize_read_values(y_values, len(self.bpm_y_pvs))
             self._pv_available = True
             self._pv_error = None
         except Exception as exc:
@@ -976,6 +996,12 @@ class myWindow(QMainWindow, Ui_MainWindow):
             if error_text != self._pv_error:
                 self._pv_error = error_text
                 self._notify("PV connection unavailable. Orbit Display is in offline shell mode.")
+
+    @staticmethod
+    def _normalize_read_values(values, count):
+        normalized = ([] if values is None else list(values))[:count]
+        normalized.extend([None] * (count - len(normalized)))
+        return normalized
 
     def _update_live_controls(self):
         if not hasattr(self, "live_button"):
@@ -991,7 +1017,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         if self.is_x_running or self.is_y_running:
             self.is_x_running = False
             self.is_y_running = False
-            self.refresh_timer.stop()
+            self._stop_refresh_timer_if_idle()
             self._notify("Orbit refresh paused for both planes.")
         else:
             self._apply_refresh_interval()
@@ -1084,12 +1110,11 @@ class myWindow(QMainWindow, Ui_MainWindow):
         return self.machine_profile.machine.bpm_scale_to_mm(self.control_backend)
 
     def _scale_bpm_values(self, values):
-        return [
-            float(value) * self.bpm_position_scale_to_mm
-            if value is not None
-            else np.nan
-            for value in values
-        ]
+        scaled_values = []
+        for value in values:
+            scaled = finite_mm(value, self.bpm_position_scale_to_mm)
+            scaled_values.append(np.nan if scaled is None else scaled)
+        return scaled_values
 
     def _style_plot_axes(self, ax, fig):
         palette = self._palette()
@@ -1129,6 +1154,18 @@ class myWindow(QMainWindow, Ui_MainWindow):
             ax.set_ylim(top=y_max)
 
         ax.set_xlim(left=bpm_start, right=bpm_end)
+
+    def _draw_zero_reference(self, ax):
+        for artist in list(ax.collections):
+            if artist.get_gid() == "orbit_zero_reference":
+                artist.remove()
+        bottom, top = sorted(ax.get_ylim())
+        if bottom <= 0 <= top:
+            reference = ax.hlines(
+                0, *ax.get_xlim(), colors=self._palette()["muted_fg"],
+                linewidth=0.9, alpha=0.55, zorder=1,
+            )
+            reference.set_gid("orbit_zero_reference")
 
     @staticmethod
     def _trim_hold_traces(ax):
@@ -1172,6 +1209,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             linewidth=1.5,
         )
         self._apply_plot_limits(ax, plane="x")
+        self._draw_zero_reference(ax)
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Cx (mm)", fontweight="bold")
         if hold_trace:
@@ -1216,6 +1254,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             linewidth=1.5,
         )
         self._apply_plot_limits(ax, plane="y")
+        self._draw_zero_reference(ax)
         ax.set_xlabel("BPM #", fontweight="bold")
         ax.set_ylabel("Cy (mm)", fontweight="bold")
         if hold_trace:
@@ -1242,6 +1281,36 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._bpm_detail_window.raise_()
         self._bpm_detail_window.activateWindow()
         self._notify("BPM detail window opened.")
+
+    def open_jitter_window(self):
+        if self._jitter_window is None:
+            from jitter_window import JitterWindow
+
+            self._jitter_window = JitterWindow(
+                self.bpm_ids,
+                self.machine_profile.machine.display_name,
+                self.refresh_interval_ms,
+                self._palette(),
+                bpm_range=(self._bpm_range_start, self._bpm_range_end),
+                parent=self,
+            )
+            self._jitter_window.setAttribute(Qt.WA_DeleteOnClose, True)
+            self._jitter_window.sampling_changed.connect(self._on_jitter_sampling_changed)
+            self._jitter_window.closed.connect(self._on_jitter_window_closed)
+            self._start_refresh_timer()
+        self._jitter_window.show()
+        self._jitter_window.raise_()
+        self._jitter_window.activateWindow()
+
+    def _on_jitter_sampling_changed(self, sampling):
+        if sampling:
+            self._start_refresh_timer()
+        else:
+            self._stop_refresh_timer_if_idle()
+
+    def _on_jitter_window_closed(self):
+        self._jitter_window = None
+        self._stop_refresh_timer_if_idle()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
