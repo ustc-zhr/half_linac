@@ -767,6 +767,28 @@ class SolenoidCenteringTests(unittest.TestCase):
         self.assertFalse(report.is_ready)
         self.assertIn("INSUFFICIENT CANDIDATES HCOR", report.as_text())
 
+    def test_response_matrix_uses_explicit_response_step(self):
+        context, preset, values = _ready_fixture()
+        io = MockIO(values)
+        candidates = []
+        scanner = scan.SolenoidCenteringScanner(
+            context, preset, io=io, search_mode=scan.SEARCH_MODE_RESPONSE_MATRIX,
+            response_step=0.25, candidate_finished=candidates.append,
+        )
+        report = scanner.preflight()
+        self.assertTrue(report.is_ready)
+        self.assertEqual(report.response_step, 0.25)
+        with (
+            patch.object(scan, "require_workflow_write_allowed", lambda *args, **kwargs: None),
+            patch.object(scan, "write_scan_result"),
+        ):
+            result = scanner.run()
+        self.assertEqual(
+            [(item.axis, item.corrector_value) for item in candidates[1:5]],
+            [("h", -0.25), ("h", 0.25), ("v", -0.25), ("v", 0.25)],
+        )
+        self.assertEqual(result.scan_config["response_step"], 0.25)
+
     def test_missing_readback_verification_blocks_scan_before_writes(self):
         context, preset, values = _ready_fixture()
         preset = replace(preset, motion_verification=None)

@@ -258,6 +258,7 @@ class PreflightReport:
     readback_checks: tuple[ReadbackCheck, ...]
     readback_verification_configured: bool
     search_mode: str = SEARCH_MODE_GRID
+    response_step: float | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -287,6 +288,7 @@ class PreflightReport:
                 f"corrector candidates up to {self.corrector_candidates}, "
                 f"solenoid points={self.solenoid_points}, "
                 f"bpm samples/point={self.bpm_samples}",
+                *([f"COR response step={self.response_step:g}"] if self.response_step is not None else []),
                 f"estimated duration ~= {self.estimated_duration_s:.1f} s",
             ]
         )
@@ -352,13 +354,17 @@ def _response_matrix_axis_plan(
     center: float,
     scan_range: SolenoidCenteringScanRange,
     limits: tuple[float, float] | None,
+    response_step: float | None = None,
 ) -> tuple[tuple[float, float] | None, tuple[float, ...]]:
     """Use one configured grid interval for response, with continuous target bounds."""
     if scan_range.steps < 2:
         raise ValueError("Response matrix requires at least two corrector steps.")
     relative_low = min(scan_range.relative_from, scan_range.relative_to)
     relative_high = max(scan_range.relative_from, scan_range.relative_to)
-    step = (relative_high - relative_low) / (scan_range.steps - 1)
+    step = (
+        float(response_step) if response_step is not None
+        else (relative_high - relative_low) / (scan_range.steps - 1)
+    )
     if not np.isfinite(step) or step <= 0:
         raise ValueError("Response matrix requires a finite, nonzero corrector step.")
     low, high = center + relative_low, center + relative_high
@@ -737,6 +743,7 @@ class SolenoidCenteringScanner:
         round_finished: Callable[[AxisScanResult, AxisScanResult], None] | None = None,
         scoring_mode: str = SCORING_MODE_SLOPE,
         search_mode: str = SEARCH_MODE_GRID,
+        response_step: float | None = None,
         stop_requested: Callable[[], bool] | None = None,
     ):
         self.app_context = app_context
@@ -749,6 +756,9 @@ class SolenoidCenteringScanner:
         if search_mode not in SEARCH_MODES:
             raise ValueError(f"Unsupported search mode: {search_mode!r}.")
         self.search_mode = search_mode
+        if response_step is not None and (not np.isfinite(response_step) or response_step <= 0):
+            raise ValueError("COR response step must be finite and positive.")
+        self.response_step = response_step
         self.stop_requested = stop_requested or (lambda: False)
         self.solenoid_target = self._resolve_solenoid_write_target()
         self.solenoid_pv = (
@@ -1171,6 +1181,7 @@ class SolenoidCenteringScanner:
             readback_checks=readback_checks,
             readback_verification_configured=motion is not None,
             search_mode=self.search_mode,
+            response_step=self._response_step() if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX else None,
         )
 
     def _check_single_value_limit(self, target: WriteTarget, value: float) -> None:
@@ -1264,6 +1275,7 @@ class SolenoidCenteringScanner:
         if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX:
             bounds, perturbations = _response_matrix_axis_plan(
                 center, self.preset.corrector_scan, _numeric_limit(target.machine_limit),
+                self.response_step,
             )
             return self._build_range_check(
                 label, target.element_id, bounds or requested, target.pv_name,
@@ -1390,10 +1402,10 @@ class SolenoidCenteringScanner:
         vcorr_limits: tuple[float, float] | None,
     ) -> tuple[float, float, tuple[AxisScanResult, ...], ScanTermination, CandidateResult]:
         h_bounds, h_values = _response_matrix_axis_plan(
-            baseline.hcorr, self.preset.corrector_scan, hcorr_limits,
+            baseline.hcorr, self.preset.corrector_scan, hcorr_limits, self.response_step,
         )
         v_bounds, v_values = _response_matrix_axis_plan(
-            baseline.vcorr, self.preset.corrector_scan, vcorr_limits,
+            baseline.vcorr, self.preset.corrector_scan, vcorr_limits, self.response_step,
         )
         if h_bounds is None or v_bounds is None or len(h_values) < 2 or len(v_values) < 2:
             raise ValueError("Response matrix needs one in-limit step on each side of both correctors.")
@@ -1567,6 +1579,12 @@ class SolenoidCenteringScanner:
             return min(3, self.preset.solenoid_scan.steps)
         return self.preset.solenoid_scan.steps
 
+    def _response_step(self) -> float:
+        if self.response_step is not None:
+            return float(self.response_step)
+        scan_range = self.preset.corrector_scan
+        return abs(scan_range.relative_to - scan_range.relative_from) / (scan_range.steps - 1)
+
     def _solenoid_points(self, original_solenoid: float) -> np.ndarray:
         points = relative_scan_points(original_solenoid, self.preset.solenoid_scan)
         if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX and len(points) > 3:
@@ -1604,6 +1622,9 @@ class SolenoidCenteringScanner:
             "preset_id": self.preset.id,
             "scoring_mode": self.scoring_mode,
             "search_mode": self.search_mode,
+            "response_step": (
+                self._response_step() if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX else None
+            ),
             "solenoid_scan": asdict(self.preset.solenoid_scan),
             "measured_solenoid_points": self._estimated_solenoid_points(),
             "corrector_scan": asdict(self.preset.corrector_scan),

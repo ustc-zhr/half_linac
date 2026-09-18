@@ -171,7 +171,26 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
             self.window.scoring_mode_combo.parentWidget(),
             self.window.run_card,
         )
+        self.assertIs(self.window.search_mode_combo.parentWidget(), self.window.scan_card)
         self.assertIs(self.window.max_iters.parentWidget(), self.window.run_card)
+
+    def test_search_method_shows_only_its_parameters(self):
+        self.assertFalse(self.window.cor_steps.isHidden())
+        self.assertTrue(self.window.response_step_row.isHidden())
+        self.assertFalse(self.window.max_iters.isHidden())
+
+        index = self.window.search_mode_combo.findData("response_matrix")
+        self.window.search_mode_combo.setCurrentIndex(index)
+
+        self.assertTrue(self.window.cor_steps.isHidden())
+        self.assertFalse(self.window.response_step_row.isHidden())
+        self.assertTrue(self.window.max_iters.isHidden())
+        self.assertEqual(self.window.cor_range_label.text(), "COR limits")
+        self.assertFalse(self.window.preflight_ready)
+
+        self.window.search_mode_combo.setCurrentIndex(0)
+        self.assertFalse(self.window.cor_steps.isHidden())
+        self.assertTrue(self.window.response_step_row.isHidden())
 
     def test_selected_solenoid_overrides_the_preset_default(self):
         default_solenoid = self.window._current_preset().solenoid

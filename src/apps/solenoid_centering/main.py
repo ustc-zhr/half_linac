@@ -95,12 +95,13 @@ class ScanWorker(QThread):
     failed = pyqtSignal(object)
 
     def __init__(self, context, preset, scoring_mode=SCORING_MODE_SLOPE,
-                 search_mode=SEARCH_MODE_GRID, parent=None):
+                 search_mode=SEARCH_MODE_GRID, response_step=None, parent=None):
         super().__init__(parent)
         self.context = context
         self.preset = preset
         self.scoring_mode = scoring_mode
         self.search_mode = search_mode
+        self.response_step = response_step
         self._stop_requested = False
 
     def request_stop(self):
@@ -116,6 +117,7 @@ class ScanWorker(QThread):
                 round_finished=self.round_finished.emit,
                 scoring_mode=self.scoring_mode,
                 search_mode=self.search_mode,
+                response_step=self.response_step,
                 stop_requested=lambda: self._stop_requested,
             )
             result = scanner.run()
@@ -178,16 +180,19 @@ class PreflightWorker(QThread):
     finished_ok = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, context, preset, search_mode=SEARCH_MODE_GRID, parent=None):
+    def __init__(self, context, preset, search_mode=SEARCH_MODE_GRID,
+                 response_step=None, parent=None):
         super().__init__(parent)
         self.context = context
         self.preset = preset
         self.search_mode = search_mode
+        self.response_step = response_step
 
     def run(self):
         try:
             scanner = SolenoidCenteringScanner(
                 self.context, self.preset, search_mode=self.search_mode,
+                response_step=self.response_step,
             )
             report = scanner.preflight()
         except Exception as exc:
@@ -489,6 +494,7 @@ class MainWindow(QMainWindow):
         self.cor_from = self._double_spin(-1e6, 1e6, 0.0001, 6)
         self.cor_to = self._double_spin(-1e6, 1e6, 0.0001, 6)
         self.cor_steps = self._int_spin(2, 999)
+        self.cor_response_step = self._double_spin(0.000001, 1e6, 0.0001, 6)
         self.samples = self._int_spin(1, 999)
         self.settle = self._double_spin(0.0, 3600.0, 0.5, 2)
         self.sample_interval = self._double_spin(0.0, 3600.0, 0.1, 2)
@@ -496,21 +502,25 @@ class MainWindow(QMainWindow):
         self.scoring_mode_combo = QComboBox(content)
         self.scoring_mode_combo.addItem("Slope score", SCORING_MODE_SLOPE)
         self.scoring_mode_combo.addItem("Trajectory length", SCORING_MODE_TRAJECTORY_LENGTH)
-        self.search_mode_combo = QComboBox(content)
+        self.search_mode_combo = QComboBox(self.scan_card)
         self.search_mode_combo.addItem("Grid search", SEARCH_MODE_GRID)
         self.search_mode_combo.addItem("Response matrix", SEARCH_MODE_RESPONSE_MATRIX)
         self.search_mode_combo.setToolTip(
-            "Response matrix measures one COR grid interval on each side of the current value "
-            "and uses From/To as target bounds."
-        )
-        self.cor_steps.setToolTip(
-            "Response matrix perturbation = (To - From) / (Steps - 1)."
+            "Response matrix measures COR at the displayed response step on each side "
+            "of the current value and uses From/To as target bounds."
         )
         self.max_iters.setToolTip("Used by grid search only.")
 
-        range_title = QLabel("Relative Scan Range", self.scan_card)
-        range_title.setProperty("role", "groupTitle")
-        scan_card_layout.addWidget(range_title)
+        method_layout = QFormLayout()
+        method_layout.setContentsMargins(0, 0, 0, 0)
+        method_label = QLabel("Method", self.scan_card)
+        method_label.setProperty("role", "field")
+        method_layout.addRow(method_label, self.search_mode_combo)
+        scan_card_layout.addLayout(method_layout)
+
+        self.range_title = QLabel("Relative Scan Range", self.scan_card)
+        self.range_title.setProperty("role", "groupTitle")
+        scan_card_layout.addWidget(self.range_title)
         range_layout = QGridLayout()
         range_layout.setContentsMargins(0, 0, 0, 0)
         range_layout.setHorizontalSpacing(5)
@@ -529,6 +539,8 @@ class MainWindow(QMainWindow):
         ):
             row_label = QLabel(label, self.scan_card)
             row_label.setProperty("role", "field")
+            if label == "COR":
+                self.cor_range_label = row_label
             range_layout.addWidget(row_label, row, 0)
             for column, widget in enumerate(widgets, start=1):
                 widget.setMinimumWidth(0)
@@ -538,6 +550,15 @@ class MainWindow(QMainWindow):
         range_layout.setColumnStretch(2, 3)
         range_layout.setColumnStretch(3, 2)
         scan_card_layout.addLayout(range_layout)
+
+        self.response_step_row = QWidget(self.scan_card)
+        response_step_layout = QHBoxLayout(self.response_step_row)
+        response_step_layout.setContentsMargins(0, 0, 0, 0)
+        response_step_label = QLabel("COR response step (A)", self.response_step_row)
+        response_step_label.setProperty("role", "field")
+        response_step_layout.addWidget(response_step_label)
+        response_step_layout.addWidget(self.cor_response_step, 1)
+        scan_card_layout.addWidget(self.response_step_row)
 
         acquisition_title = QLabel("Acquisition", self.scan_card)
         acquisition_title.setProperty("role", "groupTitle")
@@ -569,12 +590,13 @@ class MainWindow(QMainWindow):
         run_settings.setContentsMargins(0, 0, 0, 0)
         run_settings.setVerticalSpacing(5)
         for label, widget in (
-            ("Search method", self.search_mode_combo),
             ("Score mode", self.scoring_mode_combo),
             ("Max iterations (grid)", self.max_iters),
         ):
             field_label = QLabel(label, self.run_card)
             field_label.setProperty("role", "field")
+            if widget is self.max_iters:
+                self.max_iters_label = field_label
             run_settings.addRow(field_label, widget)
         run_layout.addLayout(run_settings)
 
@@ -615,6 +637,7 @@ class MainWindow(QMainWindow):
             self.cor_from,
             self.cor_to,
             self.cor_steps,
+            self.cor_response_step,
             self.samples,
             self.settle,
             self.sample_interval,
@@ -630,6 +653,7 @@ class MainWindow(QMainWindow):
             self.search_mode_combo,
         ):
             combo.currentIndexChanged.connect(self._invalidate_preflight)
+        self.search_mode_combo.currentIndexChanged.connect(self._update_method_fields)
         for spin in (
             self.sol_from,
             self.sol_to,
@@ -637,12 +661,14 @@ class MainWindow(QMainWindow):
             self.cor_from,
             self.cor_to,
             self.cor_steps,
+            self.cor_response_step,
             self.samples,
             self.settle,
             self.sample_interval,
             self.max_iters,
         ):
             spin.valueChanged.connect(self._invalidate_preflight)
+        self._update_method_fields()
         return panel
 
     @staticmethod
@@ -764,6 +790,10 @@ class MainWindow(QMainWindow):
         self.cor_from.setValue(preset.corrector_scan.relative_from)
         self.cor_to.setValue(preset.corrector_scan.relative_to)
         self.cor_steps.setValue(preset.corrector_scan.steps)
+        self.cor_response_step.setValue(
+            abs(preset.corrector_scan.relative_to - preset.corrector_scan.relative_from)
+            / (preset.corrector_scan.steps - 1)
+        )
         self.samples.setValue(preset.samples_per_point)
         self.settle.setValue(preset.settle_time_s)
         self.sample_interval.setValue(preset.sample_interval_s)
@@ -788,6 +818,23 @@ class MainWindow(QMainWindow):
 
     def _search_mode(self) -> str:
         return str(self.search_mode_combo.currentData())
+
+    def _response_step(self) -> float | None:
+        return (
+            self.cor_response_step.value()
+            if self._search_mode() == SEARCH_MODE_RESPONSE_MATRIX else None
+        )
+
+    def _update_method_fields(self, *_args) -> None:
+        matrix = self._search_mode() == SEARCH_MODE_RESPONSE_MATRIX
+        self.range_title.setText(
+            "SOL scan / COR target limits (relative)" if matrix else "Relative Scan Range"
+        )
+        self.cor_range_label.setText("COR limits" if matrix else "COR")
+        self.cor_steps.setVisible(not matrix)
+        self.response_step_row.setVisible(matrix)
+        self.max_iters.setVisible(not matrix)
+        self.max_iters_label.setVisible(not matrix)
 
     def _preset_with_overrides(self) -> SolenoidCenteringPreset:
         preset = self._current_preset()
@@ -870,7 +917,7 @@ class MainWindow(QMainWindow):
         self._append_log("Starting read-only preflight.")
         self.progress.setValue(0)
         self.preflight_worker = PreflightWorker(
-            self.context, preset, self._search_mode(), self,
+            self.context, preset, self._search_mode(), self._response_step(), self,
         )
         self.preflight_worker.finished_ok.connect(self._on_preflight_finished)
         self.preflight_worker.failed.connect(self._on_preflight_failed)
@@ -911,7 +958,8 @@ class MainWindow(QMainWindow):
         self._set_workflow_status("RUNNING", "warning")
         self.status_strip.set_value("READINESS", "SCANNING", "warning")
         self.worker = ScanWorker(
-            self.context, preset, self._scoring_mode(), self._search_mode(), self,
+            self.context, preset, self._scoring_mode(), self._search_mode(),
+            self._response_step(), self,
         )
         self.worker.progress_changed.connect(self._on_progress)
         self.worker.candidate_finished.connect(self._on_candidate_finished)
