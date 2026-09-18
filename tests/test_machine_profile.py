@@ -1253,7 +1253,7 @@ class MachineProfileTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     (vm_preset.scan.corr_unit, vm_preset.scan.corr_mode),
-                    ("rad", "absolute"),
+                    ("rad", "relative"),
                 )
                 self.assertEqual(
                     (real_preset.scan.quad_from, real_preset.scan.quad_end),

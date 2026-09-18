@@ -65,6 +65,7 @@ from half_linac.src.apps.bba.profile_runtime import (
     resolve_limited_scan_values,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
+from half_linac.src.apps.bba.fit_quality import fit_bba1_center
 
 def bba1_saved_k1_sign(data_path):
     """Convert legacy plane-signed K1 (and its slope) to magnet K1."""
@@ -494,6 +495,8 @@ class BBAStatusStrip(QWidget):
 
 @dataclass
 class ScanParameters:
+    preset_id: str = ""
+    batch: bool = False
     corr: str = ""
     quad: str = ""
     bpm1: str = ""
@@ -856,7 +859,12 @@ class myWindow(QWidget, Ui_Form):
         self.bba1_preset_combo = QComboBox(self.frame)
         self.bba1_preset_combo.currentIndexChanged.connect(self._apply_selected_bba1_preset)
         form.addWidget(self._make_field_label("Preset", self.frame), 0, 0)
-        form.addWidget(self.bba1_preset_combo, 0, 1, 1, 7)
+        preset_actions = QHBoxLayout()
+        preset_actions.addWidget(self.bba1_preset_combo, 1)
+        self.bba1_batch_button = QPushButton("Batch…", self.frame)
+        self.bba1_batch_button.clicked.connect(self._open_bba1_batch)
+        preset_actions.addWidget(self.bba1_batch_button)
+        form.addLayout(preset_actions, 0, 1, 1, 7)
 
         form.addWidget(self._make_field_label("Plane", self.frame), 1, 0)
         self.comboBox_5.setParent(self.frame)
@@ -2241,7 +2249,7 @@ class myWindow(QWidget, Ui_Form):
             params.archive_dir = new_bba_scan_archive_dir(context, family)
 
     def _scan_is_running(self):
-        return self.scan is not None and self.scan.isRunning()
+        return self.scan is not None
 
     def _attach_scan(self, thread, display_handler):
         self.scan = thread
@@ -2254,7 +2262,16 @@ class myWindow(QWidget, Ui_Form):
         self.scan = None
         self.scan_mode = None
         self.scan_family = None
+        self.tabWidget.setEnabled(True)
         self._refresh_status()
+
+    def _open_bba1_batch(self):
+        if self._scan_is_running():
+            self._warn("Stop the current scan before opening a batch.")
+            return
+        from half_linac.src.apps.bba.batch import BBABatchDialog
+        dialog = BBABatchDialog(self, BBAScanThread)
+        dialog.exec_()
 
     def _start_clear(self, display_handler):
         self.clear = ClearThread()
@@ -2291,7 +2308,7 @@ class myWindow(QWidget, Ui_Form):
         params.model_lattice_overrides = model_snapshot_lattice_overrides(metadata)
         params.model_snapshot_error = None
 
-    def get_setting(self):
+    def get_setting(self, preset=None):
         try:
             params = ScanParameters()
             params.corr = self.comboBox.currentText()
@@ -2299,6 +2316,11 @@ class myWindow(QWidget, Ui_Form):
             params.bpm1 = self.comboBox_3.currentText()
             params.bpm2 = self.comboBox_4.currentText()
             params.plane = self._normalize_plane_value(self.comboBox_5.currentText())
+            if preset is not None:
+                params.preset_id = preset.id
+                params.corr, params.quad = preset.corr, preset.quad
+                params.bpm1, params.bpm2 = preset.bpm1, preset.bpm2
+                params.plane = self._normalize_plane_value(preset.plane)
 
             mode = self._profile_default_control_backend()
             self._require_family_control_backend(self.bba_workflow.bba1, mode, "BBA-1")
@@ -2322,20 +2344,41 @@ class myWindow(QWidget, Ui_Form):
             params.app_context = self.app_context
             params.bpm_position_scale_to_m = self._bba_bpm_position_scale_to_m(mode)
 
-            params.corr_from = float(self.lineEdit.text())
-            params.corr_end = float(self.lineEdit_2.text())
-            params.corr_steps = int(self.lineEdit_3.text())
-            params.quad_from = float(self.lineEdit_6.text())
-            params.quad_end = float(self.lineEdit_4.text())
-            params.quad_steps = int(self.lineEdit_5.text())
-            params.samples = int(self.lineEdit_8.text())
-            params.settle_time = float(self.lineEdit_7.text())
-            params.sample_interval = float(self.bba1_sample_interval_edit.text())
+            if preset is None:
+                params.corr_from = float(self.lineEdit.text())
+                params.corr_end = float(self.lineEdit_2.text())
+                params.corr_steps = int(self.lineEdit_3.text())
+                params.quad_from = float(self.lineEdit_6.text())
+                params.quad_end = float(self.lineEdit_4.text())
+                params.quad_steps = int(self.lineEdit_5.text())
+                params.samples = int(self.lineEdit_8.text())
+                params.settle_time = float(self.lineEdit_7.text())
+                params.sample_interval = float(self.bba1_sample_interval_edit.text())
             params.bba1_bpm1_mode = self.bba1_bpm1_mode_combo.currentData()
             params.corr_mode = self._bba1_corr_mode
             params.quad_mode = self._bba1_quad_mode
             params.corr_unit = self._bba1_corr_unit
             params.quad_unit = self._bba1_quad_unit
+            if preset is not None:
+                for name, value in preset.scan.as_dict().items():
+                    setattr(params, name, value)
+
+            for label, unit, target in (
+                ("COR", params.corr_unit, params.corr_target),
+                ("Quad", params.quad_unit, params.quad_target),
+            ):
+                if unit and target.unit and unit != target.unit:
+                    raise ValueError(f"{label} scan unit {unit!r} does not match {target.unit!r}.")
+
+            if not all(np.isfinite(value) for value in (
+                params.corr_from, params.corr_end, params.quad_from, params.quad_end,
+                params.settle_time, params.sample_interval,
+            )):
+                raise ValueError("Scan ranges and timing must be finite.")
+            if params.corr_from >= params.corr_end or params.quad_from >= params.quad_end:
+                raise ValueError("Scan From must be less than To.")
+            if params.corr_steps < 2 or params.quad_steps < 2:
+                raise ValueError("BBA-1 requires at least two COR and Quad steps.")
 
             self._validate_positive_int(params.corr_steps, "Corrector steps")
             self._validate_positive_int(params.quad_steps, "Quad steps")
@@ -2457,12 +2500,8 @@ class myWindow(QWidget, Ui_Form):
     def stopScan(self):
         if self._scan_is_running():
             self.scan.stop()
-            if not self.scan.wait(3000):
-                print("Timed out waiting for BBA scan thread to stop.")
-            print("Scan thread is stopped.")
-        self.scan = None
-        self.scan_mode = None
-        self.scan_family = None
+            self.status_panel.set_item("scan", "Stopping / restoring", "warning")
+            return
         self._refresh_status()
 
     def recalculate(self):
@@ -2617,9 +2656,18 @@ class myWindow(QWidget, Ui_Form):
             self._style_axes(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL)
             m1_mm = np.asarray(data["m1"]) * 1e3
             self.widget_2.axes.plot(m1_mm, data["slope_k1"], marker="o", linestyle="None", color=palette["plot_point"])
-            self.widget_2.axes.plot(m1_mm, data["yvals"], linestyle="-", color=palette["plot_fit"])
+            if len(data["yvals"]) == len(m1_mm):
+                order = np.argsort(m1_mm)
+                self.widget_2.axes.plot(m1_mm[order], np.asarray(data["yvals"])[order], linestyle="-", color=palette["plot_fit"])
             self.widget_2.canvas.draw()
-            self.lineEdit_10.setText(f"{data['offset'] * 1e3:.4f}")
+            quality = data.get("fit_quality", {})
+            offset = data.get("offset")
+            sigma = quality.get("offset_sigma_m")
+            value = "Unavailable" if offset is None else f"{offset * 1e3:.4f}"
+            if sigma is not None:
+                value += f" ± {sigma * 1e3:.4f}"
+            self.lineEdit_10.setText(value)
+            self.lineEdit_10.setToolTip("1σ statistical uncertainty. " + "; ".join(quality.get("reasons", [])))
         self._refresh_status()
 
     def display_bba2(self, data):
@@ -2715,6 +2763,10 @@ class myWindow(QWidget, Ui_Form):
         self._refresh_status()
 
     def closeEvent(self, event):
+        if self._scan_is_running():
+            self.stopScan()
+            event.ignore()
+            return
         self.stopScan()
         event.accept()
 
@@ -2811,8 +2863,67 @@ class BBAScanThread(BBABaseThread):
         self.params = params
         self.bpm1_reference_samples = {}
         self.initial_quad_k1 = None
+        self.outcome = {"status": "pending", "error": "", "restored": False}
+        self.raw_rows = []
+        self.restore_readbacks = []
+
+    def _capture_restore_readbacks(self):
+        if not self.params.batch or self.params.control_backend != "real":
+            return []
+        readbacks = []
+        for element in (self.params.quad, self.params.corr):
+            name = resolve_channel(self.params.app_context, element, "current_readback", "real")
+            pv = epics.PV(name)
+            readbacks.append((pv, self._safe_get(pv, name)))
+        return readbacks
+
+    def _safe_get(self, pv, label):
+        value = pv.get(timeout=5, use_monitor=False)
+        if value is None or not np.isfinite(float(value)):
+            raise RuntimeError(f"Failed to read finite value from {label}.")
+        return float(value)
+
+    def _safe_put(self, pv, value):
+        if value is None or pv.put(value, wait=True, timeout=5) != 1:
+            raise RuntimeError(f"Write failed: {pv.pvname}.")
+
+    def _restore(self, targets):
+        errors = []
+        for pv, initial in targets:
+            try:
+                self._safe_put(pv, initial)
+                restored = self._safe_get(pv, getattr(pv, "pvname", str(pv)))
+                if not np.isclose(restored, initial, rtol=1e-7, atol=1e-9):
+                    raise RuntimeError(f"Setpoint restoration mismatch: {pv}.")
+            except Exception as exc:
+                errors.append(str(exc))
+        if errors:
+            raise RuntimeError("Restoration failed: " + "; ".join(errors))
+        deadline = time.monotonic() + self.params.settle_time
+        while time.monotonic() < deadline:
+            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
+        deadline = time.monotonic() + 15
+        for pv, initial in self.restore_readbacks:
+            while abs(self._safe_get(pv, pv.pvname) - initial) > 0.01:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(f"Current readback did not return within 0.01 A: {pv.pvname}.")
+                time.sleep(0.1)
+        self.outcome["restored"] = True
+
+    def preflight(self):
+        for name in (self.params.corrPV, self.params.quadPV, self.params.bpm1PV, self.params.bpm2PV):
+            self._safe_get(epics.PV(name), name)
+        for name in (self.params.corrPV, self.params.quadPV):
+            if not epics.PV(name).write_access:
+                raise RuntimeError(f"PV is not writable: {name}.")
+        self._capture_restore_readbacks()
+        self._scan_ranges(
+            self._safe_get(epics.PV(self.params.quadPV), self.params.quadPV),
+            self._safe_get(epics.PV(self.params.corrPV), self.params.corrPV),
+        )
 
     def run(self):
+        self.outcome["status"] = "running"
         try:
             if self.params.recal:
                 metadata = self._load_json(self.params.bba1_metadata_path)
@@ -2836,26 +2947,37 @@ class BBAScanThread(BBABaseThread):
             else:
                 scan_result = self._perform_scan()
                 if scan_result is None:
+                    self.outcome["status"] = "stopped"
                     return
                 x, y = scan_result
 
-            if len(x) < 2:
-                raise RuntimeError("Need at least two BBA-1 points to fit the offset.")
-
-            coeff = np.polyfit(x, y, deg=1)
-            if np.isclose(coeff[0], 0.0):
-                raise RuntimeError("BBA-1 slope is zero; cannot compute offset.")
-
-            fit = np.poly1d(coeff)
+            quality = fit_bba1_center(x, y)
+            self.outcome.update(status="success", offset_m=quality["offset_m"], fit_quality=quality)
             self._emit({
                 "show": "m1S",
-                "m1": x,
-                "slope_k1": y,
-                "yvals": fit(x),
-                "offset": -coeff[1] / coeff[0],
+                "m1": quality["positions_m"],
+                "slope_k1": quality["responses"],
+                "yvals": quality["fitted"],
+                "offset": quality["offset_m"],
+                "fit_quality": quality,
             })
         except Exception as exc:
+            self.outcome.update(status="failed", error=str(exc))
             self._emit({"error": str(exc)})
+        finally:
+            if not self.params.recal:
+                try:
+                    self._save_array(
+                        self.params.bba1_quad_scan_path,
+                        np.asarray(self.raw_rows, dtype=float).reshape(-1, 4),
+                        archive_dir=self.params.archive_dir,
+                        header="corrector_setpoint quad_k1 bpm1_m bpm2_m k1_convention=magnet",
+                    )
+                    self._save_json(self.params.bba1_metadata_path, self._metadata(), archive_dir=self.params.archive_dir)
+                except Exception as exc:
+                    previous = self.outcome["error"]
+                    self.outcome.update(status="failed", error=f"{previous} Save failed: {exc}".strip())
+                    self._emit({"error": self.outcome["error"]})
 
     def _recalculate_from_quad_scan(self):
         quad_scan_path = self._require_path(self.params.bba1_quad_scan_path, "BBA-1 quad scan data")
@@ -2944,6 +3066,12 @@ class BBAScanThread(BBABaseThread):
     def _metadata(self):
         return {
             "family": "bba1",
+            "preset_id": self.params.preset_id,
+            "outcome": dict(self.outcome),
+            "restoration_readbacks": [
+                {"pv": pv.pvname, "initial_a": initial, "tolerance_a": 0.01}
+                for pv, initial in self.restore_readbacks
+            ],
             "bpm1_reference": {
                 "mode": self.params.bba1_bpm1_mode,
                 "initial_k1": self.initial_quad_k1,
@@ -2982,15 +3110,15 @@ class BBAScanThread(BBABaseThread):
             },
         }
 
-    def _perform_scan(self):
-        cor = epics.PV(self.params.corrPV)
-        quad = epics.PV(self.params.quadPV)
-        bpm1 = epics.PV(self.params.bpm1PV)
-        bpm2 = epics.PV(self.params.bpm2PV)
-
-        initial_quad = self._safe_get(quad, self.params.quadPV)
-        self.initial_quad_k1 = initial_quad
-        initial_kick = self._safe_get(cor, self.params.corrPV)
+    def _scan_ranges(self, initial_quad, initial_kick):
+        if self.params.batch:
+            for target, low, high, mode, center in (
+                (self.params.quad_target, self.params.quad_from, self.params.quad_end, self.params.quad_mode, initial_quad),
+                (self.params.corr_target, self.params.corr_from, self.params.corr_end, self.params.corr_mode, initial_kick),
+            ):
+                shift = center if mode == "relative" else 0
+                if not target.machine_limit.contains(low + shift) or not target.machine_limit.contains(high + shift):
+                    raise RuntimeError(f"{target.element_id}: scan exceeds machine limits; adjust the preset.")
         k1_values = resolve_limited_scan_values(
             self.params.app_context,
             self.params.quad,
@@ -3015,11 +3143,24 @@ class BBAScanThread(BBABaseThread):
             initial_kick,
             write_target=self.params.corr_target,
         )
+        return k1_values, kick_values
+
+    def _perform_scan(self):
+        cor = epics.PV(self.params.corrPV)
+        quad = epics.PV(self.params.quadPV)
+        bpm1 = epics.PV(self.params.bpm1PV)
+        bpm2 = epics.PV(self.params.bpm2PV)
+        initial_quad = self._safe_get(quad, self.params.quadPV)
+        self.initial_quad_k1 = initial_quad
+        initial_kick = self._safe_get(cor, self.params.corrPV)
+        k1_values, kick_values = self._scan_ranges(initial_quad, initial_kick)
+        self.restore_readbacks = self._capture_restore_readbacks()
         print("ini values of the quad and corrector=", initial_quad, initial_kick)
 
         m1_results = []
         slope_results = []
         quad_scan_rows = []
+        self.raw_rows = quad_scan_rows
 
         try:
             for kick in kick_values:
@@ -3052,6 +3193,8 @@ class BBAScanThread(BBABaseThread):
 
                     for sample_index in range(self.params.samples):
                         print("cor-kick,K1=", kick, k1)
+                        if not self.is_running:
+                            return None
                         if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                             return None
 
@@ -3119,8 +3262,7 @@ class BBAScanThread(BBABaseThread):
             print("Scan finished, corrector and quad are back to initial values.")
             return np.asarray(m1_results, dtype=float), np.asarray(slope_results, dtype=float)
         finally:
-            self._safe_put(quad, initial_quad)
-            self._safe_put(cor, initial_kick)
+            self._restore(((quad, initial_quad), (cor, initial_kick)))
 
 
 class BBAScanThreadBBA2(BBABaseThread):

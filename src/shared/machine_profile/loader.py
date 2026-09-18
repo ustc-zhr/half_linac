@@ -3595,6 +3595,16 @@ def _load_json_file(path: Path, location: str) -> Mapping[str, Any]:
     return raw
 
 
+def _merge_bba_scan(defaults: Mapping[str, Any], overrides: Mapping[str, Any]) -> dict:
+    merged = dict(defaults)
+    for key, value in overrides.items():
+        if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+            merged[key] = _merge_bba_scan(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def _parse_bba_preset(
     raw_preset: Any,
     location: str,
@@ -3604,6 +3614,8 @@ def _parse_bba_preset(
 ) -> BBAPreset:
     preset = _expect_mapping(raw_preset, location)
     raw_scan = preset.get("scan", default_scan or {})
+    if isinstance(raw_scan, Mapping) and {"corrector", "quadrupole", "sampling"} & set(raw_scan):
+        raw_scan = _merge_bba_scan(default_scan or {}, raw_scan)
     return BBAPreset(
         id=_expect_non_empty_string(preset.get("id"), f"{location}.id"),
         family=_expect_non_empty_string(preset.get("family"), f"{location}.family"),
@@ -4007,7 +4019,9 @@ def _select_bba_scan_range(
 ) -> dict[str, Any]:
     configured = _expect_mapping(raw_range, location)
     if {"low", "high", "steps", "unit"} <= set(configured):
-        selected = configured
+        selected = dict(configured)
+        if control_backend in configured:
+            selected.update(_expect_mapping(configured[control_backend], f"{location}.{control_backend}"))
         selected_location = location
     else:
         selected = _expect_mapping(
