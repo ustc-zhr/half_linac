@@ -201,12 +201,14 @@ class JointResponseAnalyzer:
             dtype=bool,
         )
         targets = np.asarray([item.target_mm for item in rows], dtype=float)
-        tolerances = np.asarray([item.tolerance_mm for item in rows], dtype=float)
+        scales = np.asarray(
+            [item.normalization_scale_mm for item in rows], dtype=float
+        )
         if not np.any(valid):
             raise RuntimeError("No valid joint response target observations")
 
-        normalized_matrix = matrix[valid, :] / tolerances[valid, np.newaxis]
-        normalized_residual = (values[valid] - targets[valid]) / tolerances[valid]
+        normalized_matrix = matrix[valid, :] / scales[valid, np.newaxis]
+        normalized_residual = (values[valid] - targets[valid]) / scales[valid]
         current = knob_set.vector_from_mapping(baseline_knobs)
         initial = knob_set.vector_from_mapping(
             self._initial_knob_values or baseline_knobs
@@ -256,14 +258,14 @@ class JointResponseAnalyzer:
             )
         predicted_residual = (
             predicted[valid] - targets[valid]
-        ) / tolerances[valid]
+        ) / scales[valid]
         result = JointResponseAnalysisResult(
             matrix=matrix,
             target_names=tuple(item.name for item in rows),
             target_bpms=tuple(item.bpm for item in rows),
             target_planes=tuple(item.plane for item in rows),
             target_values_mm=targets,
-            tolerances_mm=tolerances,
+            normalization_scales_mm=scales,
             baseline_values_mm=values,
             valid=valid,
             knob_names=knob_names,
@@ -492,7 +494,7 @@ class JointResponseAnalyzer:
             if item.valid[index]:
                 residuals.append(
                     (item.values_mm[index] - target.target_mm)
-                    / target.tolerance_mm
+                    / target.normalization_scale_mm
                 )
         if not residuals:
             return float("nan")

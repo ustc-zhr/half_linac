@@ -1,3 +1,4 @@
+import copy
 from dataclasses import replace
 import json
 
@@ -118,12 +119,16 @@ def test_joint_response_can_be_saved_and_reused(tmp_path, policy):
     config = _joint_config()
     analysis = config.section.joint_response_analysis
     config = replace(config, section=replace(config.section, diagnostic_only=False,
-        joint_response_analysis=replace(analysis, targets=tuple(replace(target, tolerance_mm=0.01) for target in analysis.targets))),
+        joint_response_analysis=replace(analysis, targets=tuple(replace(target, normalization_scale_mm=0.01) for target in analysis.targets))),
         solver=replace(config.solver, max_iter=3, response_update=policy))
     records = []
     JointResponseAnalyzer(config, response_callback=records.append).run()
     record = load_response(save_response(tmp_path, records[0]))
     assert record.compatibility_error(config) is None
+    legacy_config = copy.deepcopy(record.config)
+    for target in legacy_config["section"]["joint_response_analysis"]["targets"]:
+        target["tolerance_mm"] = target.pop("normalization_scale_mm")
+    assert replace(record, config=legacy_config).compatibility_error(config) is None
     measured = []
     result = JointResponseAnalyzer(config, response_callback=measured.append).run_automatic(record)
     assert result.success

@@ -86,7 +86,7 @@ class JointDispersionTargetConfig:
     bpm: str
     plane: str
     target_mm: float = 0.0
-    tolerance_mm: float = 1.0
+    normalization_scale_mm: float = 1.0
 
     @property
     def name(self) -> str:
@@ -352,7 +352,7 @@ class JointResponseAnalysisResult:
     target_bpms: tuple[str, ...]
     target_planes: tuple[str, ...]
     target_values_mm: ArrayLike
-    tolerances_mm: ArrayLike
+    normalization_scales_mm: ArrayLike
     baseline_values_mm: ArrayLike
     valid: ArrayLike
     knob_names: tuple[str, ...]
@@ -372,7 +372,9 @@ class JointResponseAnalysisResult:
     def __post_init__(self) -> None:
         matrix = np.asarray(self.matrix, dtype=float)
         targets = np.asarray(self.target_values_mm, dtype=float)
-        tolerances = np.asarray(self.tolerances_mm, dtype=float)
+        normalization_scales = np.asarray(
+            self.normalization_scales_mm, dtype=float
+        )
         baseline = np.asarray(self.baseline_values_mm, dtype=float)
         valid = np.asarray(self.valid, dtype=bool)
         predicted = np.asarray(self.predicted_values_mm, dtype=float)
@@ -382,18 +384,28 @@ class JointResponseAnalysisResult:
             raise ValueError("Joint response matrix shape does not match rows and knobs")
         if any(
             values.shape != (row_count,)
-            for values in (targets, tolerances, baseline, valid, predicted)
+            for values in (
+                targets,
+                normalization_scales,
+                baseline,
+                valid,
+                predicted,
+            )
         ):
             raise ValueError("Joint response row arrays must match target names")
         if len(self.target_bpms) != row_count or len(self.target_planes) != row_count:
             raise ValueError("Joint response target metadata lengths must match")
-        if np.any(tolerances <= 0):
-            raise ValueError("Joint response tolerances must be positive")
+        if np.any(normalization_scales <= 0):
+            raise ValueError("Joint response normalization scales must be positive")
         if tuple(self.delta_knobs) != self.knob_names:
             raise ValueError("Joint recommendation knob order must match response columns")
         object.__setattr__(self, "matrix", matrix)
         object.__setattr__(self, "target_values_mm", targets)
-        object.__setattr__(self, "tolerances_mm", tolerances)
+        object.__setattr__(
+            self,
+            "normalization_scales_mm",
+            normalization_scales,
+        )
         object.__setattr__(self, "baseline_values_mm", baseline)
         object.__setattr__(self, "valid", valid)
         object.__setattr__(self, "predicted_values_mm", predicted)

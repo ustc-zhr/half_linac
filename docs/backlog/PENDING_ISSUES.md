@@ -433,3 +433,17 @@
   - Remove shared-workspace locking only after every caller reads exclusively from its own run directory; retain a small lock if updating shared `latest` metadata is not atomic.
 - Trigger:
   - Implement when parallel calculations, per-run cancellation, retained diagnostics, remote workers, or auditable model replay become required.
+
+### 13. Dispersion-Correction Target Model Unification
+
+- Status: deferred
+- Priority: low
+- Background:
+  - The dispersion-correction GUI now selects `x`, `y`, or `xy` together with correction BPMs in the session dialog; a section supplies the physical/model boundary and initial preset.
+  - Runtime behavior remains compatible with the existing configuration model: single-plane targets use `target_bpms` plus `target_dispersion_mm`, while joint targets use `joint_response_analysis.targets`.
+- Follow-up:
+  - Consider representing single-plane and joint targets with one plane-aware target structure.
+  - Preserve old machine-profile configs and saved Q-response files through explicit compatibility parsing or migration.
+  - Update preflight, response compatibility checks, reports, and regression tests together if the model is unified.
+- Trigger:
+  - Revisit when the duplicated target representations cause a concrete feature limitation, compatibility problem, or recurring maintenance cost. The current duplication does not block operator workflows.

@@ -54,10 +54,10 @@
       ],
       "joint_response_analysis": {
         "targets": [
-          {"bpm": "BPM09", "plane": "x", "target_mm": 0, "tolerance_mm": 1},
-          {"bpm": "BPM10", "plane": "x", "target_mm": 0, "tolerance_mm": 1},
-          {"bpm": "BPM09", "plane": "y", "target_mm": 0, "tolerance_mm": 1},
-          {"bpm": "BPM10", "plane": "y", "target_mm": 0, "tolerance_mm": 1}
+          {"bpm": "BPM09", "plane": "x", "target_mm": 0, "normalization_scale_mm": 1},
+          {"bpm": "BPM10", "plane": "x", "target_mm": 0, "normalization_scale_mm": 1},
+          {"bpm": "BPM09", "plane": "y", "target_mm": 0, "normalization_scale_mm": 1},
+          {"bpm": "BPM10", "plane": "y", "target_mm": 0, "normalization_scale_mm": 1}
         ],
         "knobs": [
           {"name": "Q13_Q16_sym", "devices": {"QM13": 1, "QM16": 1}, "scan": {"step": 1, "max_offset": 5, "mode": "relative", "unit": "1/m^2"}},

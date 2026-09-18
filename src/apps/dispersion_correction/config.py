@@ -243,10 +243,6 @@ def validate_config(config: RunConfig) -> None:
         raise ValueError(
             "section.joint_response_analysis requires both targets and knobs"
         )
-    if joint.enabled and config.measurement.plane != "xy":
-        raise ValueError(
-            "section.joint_response_analysis requires measurement.plane='xy'"
-        )
     joint_names = [target.name for target in joint.targets]
     if len(set(joint_names)) != len(joint_names):
         raise ValueError("Joint response targets must not contain duplicates")
@@ -262,16 +258,13 @@ def validate_config(config: RunConfig) -> None:
             )
         if not math.isfinite(target.target_mm):
             raise ValueError("Joint response target values must be finite")
-        if not math.isfinite(target.tolerance_mm) or target.tolerance_mm <= 0:
-            raise ValueError("Joint response target tolerances must be positive")
-    if (
-        config.measurement.plane == "xy"
-        and not config.section.diagnostic_only
-        and not joint.enabled
-    ):
-        raise ValueError(
-            "measurement.plane='xy' currently requires a diagnostic-only section"
-        )
+        if (
+            not math.isfinite(target.normalization_scale_mm)
+            or target.normalization_scale_mm <= 0
+        ):
+            raise ValueError(
+                "Joint response target normalization scales must be positive"
+            )
     if len(config.section.target_dispersion_mm) != len(config.target_bpms):
         raise ValueError("section.target_dispersion_mm length must match target_bpms")
     if not all(math.isfinite(value) for value in config.section.target_dispersion_mm):
@@ -348,7 +341,9 @@ def _parse_joint_target(raw: Any, index: int) -> JointDispersionTargetConfig:
         bpm=str(item.get("bpm", "")).strip(),
         plane=str(item.get("plane", "")).strip().lower(),
         target_mm=float(item.get("target_mm", 0.0)),
-        tolerance_mm=float(item.get("tolerance_mm", 1.0)),
+        normalization_scale_mm=float(
+            item.get("normalization_scale_mm", item.get("tolerance_mm", 1.0))
+        ),
     )
 
 

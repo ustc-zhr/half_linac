@@ -548,7 +548,7 @@ def _operation_payload(
             "target_bpms": list(result.target_bpms),
             "target_planes": list(result.target_planes),
             "target_values_mm": result.target_values_mm.tolist(),
-            "tolerances_mm": result.tolerances_mm.tolist(),
+            "normalization_scales_mm": result.normalization_scales_mm.tolist(),
             "baseline_values_mm": result.baseline_values_mm.tolist(),
             "valid": result.valid.tolist(),
             "knob_names": list(result.knob_names),

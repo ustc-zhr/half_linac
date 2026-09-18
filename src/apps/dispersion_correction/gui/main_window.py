@@ -3140,7 +3140,7 @@ class MainWindow(QMainWindow):
             self.bpm_edit.setToolTip(
                 "\n".join(
                     f"{target.name}: target {target.target_mm:g} mm, "
-                    f"tolerance {target.tolerance_mm:g} mm"
+                    f"scale {target.normalization_scale_mm:g} mm"
                     for target in targets
                 )
             )
@@ -3466,127 +3466,158 @@ class MainWindow(QMainWindow):
     def _build_correction_bpm_dialog(
         self,
     ) -> tuple[QDialog, QTableWidget, QDialogButtonBox]:
-        joint = self._joint_correction_enabled()
         dialog = QDialog(self)
         dialog.setObjectName("correctionBpmDialog")
         dialog.setStyleSheet(build_stylesheet(self.theme_name))
         dialog.setWindowTitle("Set Correction BPMs")
-        dialog.resize(940 if joint else 650, 560)
+        dialog.resize(940, 560)
         layout = QVBoxLayout(dialog)
         prompt = QLabel(
-            (
-                "Choose the BPMs used by the joint solver, then set ηx/ηy "
-                "targets and normalization tolerances. Unselected BPMs remain "
-                "measurement-only monitors."
-            )
-            if joint
-            else (
-                "Choose correction BPMs and set their target dispersion. "
-                "Unselected BPMs already in this section remain "
-                "measurement-only monitors."
-            )
+            "Choose the correction plane, BPMs, and target dispersion. "
+            "Unselected BPMs remain measurement-only monitors."
         )
         prompt.setObjectName("correctionBpmPrompt")
         prompt.setWordWrap(True)
         layout.addWidget(prompt)
 
-        candidates = self._correction_bpm_candidates()
-        if joint:
-            target_map = {
-                (target.bpm, target.plane): target
-                for target in self.config.section.joint_response_analysis.targets
-            }
-            selected = {bpm for bpm, _plane in target_map}
-            table = QTableWidget(len(candidates), 6)
-            table.setHorizontalHeaderLabels(
-                [
-                    "Use",
-                    "BPM",
-                    "ηx Target",
-                    "ηx Tol.",
-                    "ηy Target",
-                    "ηy Tol.",
-                ]
+        plane_row = QHBoxLayout()
+        plane_row.addWidget(QLabel("Plane"))
+        plane_combo = QComboBox()
+        plane_combo.addItem("Horizontal ηx", "x")
+        plane_combo.addItem("Vertical ηy", "y")
+        plane_combo.addItem("Both ηx + ηy", "xy")
+        plane_combo.setCurrentIndex(
+            max(0, plane_combo.findData(self.config.measurement.plane))
+        )
+        plane_row.addWidget(plane_combo)
+        plane_row.addStretch(1)
+        layout.addLayout(plane_row)
+
+        candidates = (
+            self._correction_bpm_candidates()
+            if self.config.section.joint_response_analysis.enabled
+            else tuple(dict.fromkeys(
+                (*self.config.measurement_bpms, *self.available_bpms)
+            ))
+        )
+        selected_by_plane = {
+            "x": set(self.config.target_bpms),
+            "y": set(self.config.target_bpms),
+        }
+        target_drafts = {
+            (bpm, plane): target
+            for plane in self.config.measurement.planes
+            for bpm, target in zip(
+                self.config.target_bpms,
+                self.config.section.target_dispersion_mm,
             )
-            for row, bpm in enumerate(candidates):
-                table.setCellWidget(
-                    row,
-                    0,
-                    self._bpm_use_checkbox(bpm in selected),
-                )
-                table.setItem(row, 1, QTableWidgetItem(bpm))
-                x_target = target_map.get((bpm, "x"))
-                y_target = target_map.get((bpm, "y"))
-                table.setCellWidget(
-                    row,
-                    2,
-                    self._dispersion_target_spin(
-                        0.0 if x_target is None else x_target.target_mm
-                    ),
-                )
-                table.setCellWidget(
-                    row,
-                    3,
-                    self._dispersion_tolerance_spin(
-                        1.0 if x_target is None else x_target.tolerance_mm
-                    ),
-                )
-                table.setCellWidget(
-                    row,
-                    4,
-                    self._dispersion_target_spin(
-                        0.0 if y_target is None else y_target.target_mm
-                    ),
-                )
-                table.setCellWidget(
-                    row,
-                    5,
-                    self._dispersion_tolerance_spin(
-                        1.0 if y_target is None else y_target.tolerance_mm
-                    ),
-                )
-        else:
-            plane = self.config.measurement.planes[0]
-            target_by_bpm = dict(
-                zip(
-                    self.config.target_bpms,
-                    self.config.section.target_dispersion_mm,
-                )
+        }
+        scale_drafts: dict[tuple[str, str], float] = {}
+        for target in self.config.section.joint_response_analysis.targets:
+            selected_by_plane[target.plane].add(target.bpm)
+            target_drafts[(target.bpm, target.plane)] = target.target_mm
+            scale_drafts[(target.bpm, target.plane)] = (
+                target.normalization_scale_mm
             )
-            table = QTableWidget(len(candidates), 4)
-            table.setHorizontalHeaderLabels(
-                ["Use", "BPM", "Plane", "Target (mm)"]
-            )
-            for row, bpm in enumerate(candidates):
-                table.setCellWidget(
-                    row,
-                    0,
-                    self._bpm_use_checkbox(bpm in target_by_bpm),
-                )
-                table.setItem(row, 1, QTableWidgetItem(bpm))
-                table.setItem(row, 2, QTableWidgetItem(f"η{plane}"))
-                table.setCellWidget(
-                    row,
-                    3,
-                    self._dispersion_target_spin(
-                        target_by_bpm.get(bpm, 0.0)
-                    ),
-                )
+
+        table = QTableWidget()
         table.setObjectName("correctionBpmTable")
         table.verticalHeader().setVisible(False)
         table.setSelectionMode(QAbstractItemView.NoSelection)
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        if joint:
-            for column in range(2, 6):
+        table._dispersion_plane_combo = plane_combo
+        table._dispersion_candidates = candidates
+        table._dispersion_selected_by_plane = selected_by_plane
+        table._dispersion_target_drafts = target_drafts
+        table._dispersion_scale_drafts = scale_drafts
+
+        def capture_table() -> None:
+            plane = getattr(table, "_dispersion_active_plane", None)
+            if plane not in {"x", "y", "xy"}:
+                return
+            selected = {
+                bpm
+                for row, bpm in enumerate(candidates)
+                if self._table_checkbox_checked(table, row, 0)
+            }
+            active_planes = ("x", "y") if plane == "xy" else (plane,)
+            for active_plane in active_planes:
+                selected_by_plane[active_plane] = set(selected)
+            for row, bpm in enumerate(candidates):
+                if plane == "xy":
+                    for active_plane, target_column, scale_column in (
+                        ("x", 2, 3),
+                        ("y", 4, 5),
+                    ):
+                        target_drafts[(bpm, active_plane)] = self._table_spin_value(
+                            table, row, target_column
+                        )
+                        scale_drafts[(bpm, active_plane)] = self._table_spin_value(
+                            table, row, scale_column
+                        )
+                else:
+                    target_drafts[(bpm, plane)] = self._table_spin_value(
+                        table, row, 3
+                    )
+
+        def populate_table() -> None:
+            capture_table()
+            plane = str(plane_combo.currentData() or "x")
+            table._dispersion_active_plane = plane
+            joint = plane == "xy"
+            table.clear()
+            table.setRowCount(len(candidates))
+            table.setColumnCount(6 if joint else 4)
+            table.setHorizontalHeaderLabels(
+                ["Use", "BPM", "ηx Target", "ηx Scale", "ηy Target", "ηy Scale"]
+                if joint
+                else ["Use", "BPM", "Plane", "Target (mm)"]
+            )
+            selected = (
+                selected_by_plane["x"] | selected_by_plane["y"]
+                if joint
+                else selected_by_plane[plane]
+            )
+            for row, bpm in enumerate(candidates):
+                table.setCellWidget(row, 0, self._bpm_use_checkbox(bpm in selected))
+                table.setItem(row, 1, QTableWidgetItem(bpm))
+                if joint:
+                    for active_plane, target_column, scale_column in (
+                        ("x", 2, 3),
+                        ("y", 4, 5),
+                    ):
+                        table.setCellWidget(
+                            row,
+                            target_column,
+                            self._dispersion_target_spin(
+                                target_drafts.get((bpm, active_plane), 0.0)
+                            ),
+                        )
+                        table.setCellWidget(
+                            row,
+                            scale_column,
+                            self._normalization_scale_spin(
+                                scale_drafts.get((bpm, active_plane), 1.0)
+                            ),
+                        )
+                else:
+                    table.setItem(row, 2, QTableWidgetItem(f"η{plane}"))
+                    table.setCellWidget(
+                        row,
+                        3,
+                        self._dispersion_target_spin(
+                            target_drafts.get((bpm, plane), 0.0)
+                        ),
+                    )
+                table.setRowHeight(row, 42)
+            header = table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.Stretch)
+            for column in range(2, table.columnCount()):
                 header.setSectionResizeMode(column, QHeaderView.Stretch)
-        else:
-            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(3, QHeaderView.Stretch)
-        for row in range(table.rowCount()):
-            table.setRowHeight(row, 42)
+
+        plane_combo.currentIndexChanged.connect(populate_table)
+        populate_table()
         layout.addWidget(table, 1)
 
         note = QLabel(
@@ -3621,8 +3652,16 @@ class MainWindow(QMainWindow):
         self,
         table: QTableWidget,
     ) -> None:
-        joint = self._joint_correction_enabled()
-        candidates = self._correction_bpm_candidates()
+        plane_combo = getattr(table, "_dispersion_plane_combo", None)
+        plane = str(
+            plane_combo.currentData()
+            if plane_combo is not None
+            else self.config.measurement.plane
+        )
+        joint = plane == "xy"
+        candidates = tuple(
+            getattr(table, "_dispersion_candidates", self._correction_bpm_candidates())
+        )
         selected_bpms = tuple(
             bpm
             for row, bpm in enumerate(candidates)
@@ -3632,6 +3671,7 @@ class MainWindow(QMainWindow):
             raise ValueError("Select at least one correction BPM.")
 
         previous_measurement_bpms = self.config.measurement_bpms
+        previous_plane = self.config.measurement.plane
         target_map: dict[tuple[str, str], float] = {}
         if joint:
             previous = self.config.section.joint_response_analysis
@@ -3639,7 +3679,7 @@ class MainWindow(QMainWindow):
             for row, bpm in enumerate(candidates):
                 if bpm not in selected_bpms:
                     continue
-                for plane, target_column, tolerance_column in (
+                for target_plane, target_column, scale_column in (
                     ("x", 2, 3),
                     ("y", 4, 5),
                 ):
@@ -3648,25 +3688,30 @@ class MainWindow(QMainWindow):
                         row,
                         target_column,
                     )
-                    tolerance_mm = self._table_spin_value(
+                    normalization_scale_mm = self._table_spin_value(
                         table,
                         row,
-                        tolerance_column,
+                        scale_column,
                     )
                     targets.append(
                         JointDispersionTargetConfig(
                             bpm=bpm,
-                            plane=plane,
+                            plane=target_plane,
                             target_mm=target_mm,
-                            tolerance_mm=tolerance_mm,
+                            normalization_scale_mm=normalization_scale_mm,
                         )
                     )
-                    target_map[(bpm, plane)] = target_mm
+                    target_map[(bpm, target_plane)] = target_mm
             section = replace(
                 self.config.section,
                 joint_response_analysis=replace(
                     previous,
                     targets=tuple(targets),
+                    knobs=(
+                        previous.knobs
+                        if previous.knobs
+                        else tuple(self.selected_knobs)
+                    ),
                 ),
             )
             target_bpms: tuple[str, ...] = ()
@@ -3676,7 +3721,6 @@ class MainWindow(QMainWindow):
                 )
             )
         else:
-            plane = self.config.measurement.planes[0]
             value_by_bpm = {
                 bpm: self._table_spin_value(table, row, 3)
                 for row, bpm in enumerate(candidates)
@@ -3721,7 +3765,11 @@ class MainWindow(QMainWindow):
             target_bpms=target_bpms,
             monitor_bpms=monitor_bpms,
             section=replace(section, model_observables=observables),
+            measurement=replace(self.config.measurement, plane=plane),
         )
+        if plane != previous_plane:
+            self._load_config_to_widgets()
+            return
         measurement_bpms_changed = (
             self.config.measurement_bpms != previous_measurement_bpms
         )
@@ -3819,7 +3867,7 @@ class MainWindow(QMainWindow):
         return spin
 
     @staticmethod
-    def _dispersion_tolerance_spin(value: float) -> QDoubleSpinBox:
+    def _normalization_scale_spin(value: float) -> QDoubleSpinBox:
         spin = QDoubleSpinBox()
         spin.setDecimals(6)
         spin.setRange(1.0e-6, 1.0e6)
@@ -4064,23 +4112,47 @@ class MainWindow(QMainWindow):
         return ""
 
     def _config_from_widgets(self) -> RunConfig:
+        plane = self.config.measurement.plane
         diagnostic_only = self.config.section.diagnostic_only
-        joint = self._joint_correction_enabled()
-        bpms = (
-            ()
-            if diagnostic_only or joint
-            else self.config.target_bpms
+        joint = (
+            not diagnostic_only
+            and plane == "xy"
+            and self.config.section.joint_response_analysis.enabled
         )
+        joint_targets = self.config.section.joint_response_analysis.targets
+        single_plane_joint = (
+            bool(joint_targets)
+            and not joint
+            and not self.config.target_bpms
+            and plane in {"x", "y"}
+        )
+        if single_plane_joint:
+            selected_targets = tuple(
+                target for target in joint_targets if target.plane == plane
+            )
+            bpms = tuple(dict.fromkeys(target.bpm for target in selected_targets))
+        else:
+            bpms = (
+                ()
+                if diagnostic_only or joint
+                else self.config.target_bpms
+            )
         if not bpms and not diagnostic_only and not joint:
             raise ValueError("At least one BPM is required")
         session_knobs = () if diagnostic_only else tuple(self.selected_knobs)
         knobs = () if joint else session_knobs
-        target_by_bpm = dict(
-            zip(
-                self.config.target_bpms,
-                self.config.section.target_dispersion_mm,
+        if single_plane_joint:
+            target_by_bpm = {
+                target.bpm: target.target_mm
+                for target in selected_targets
+            }
+        else:
+            target_by_bpm = dict(
+                zip(
+                    self.config.target_bpms,
+                    self.config.section.target_dispersion_mm,
+                )
             )
-        )
         monitor_bpms = tuple(
             dict.fromkeys(
                 (
@@ -4118,9 +4190,10 @@ class MainWindow(QMainWindow):
                     for name in bpms
                 ),
             ),
-            knobs=knobs,
+            knobs=(session_knobs if single_plane_joint else knobs),
             measurement=replace(
                 self.config.measurement,
+                plane=plane,
                 samples_per_step=int(self.samples_per_step_spin.value()),
                 sample_interval_s=float(self.sample_interval_spin.value()),
                 final_samples=int(self.final_samples_spin.value()),

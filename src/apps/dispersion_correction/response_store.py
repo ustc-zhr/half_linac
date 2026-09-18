@@ -24,6 +24,17 @@ def _json_values(value: Any) -> Any:
     return value
 
 
+def _joint_targets_for_signature(section: dict[str, Any]) -> list[dict[str, Any]]:
+    targets = section["joint_response_analysis"]["targets"]
+    normalized = []
+    for target in targets:
+        item = dict(target)
+        if "normalization_scale_mm" not in item and "tolerance_mm" in item:
+            item["normalization_scale_mm"] = item.pop("tolerance_mm")
+        normalized.append(item)
+    return normalized
+
+
 def _signature(config: dict[str, Any]) -> dict[str, Any]:
     joint = config["measurement"]["plane"] == "xy"
     section = config["section"]
@@ -40,7 +51,7 @@ def _signature(config: dict[str, Any]) -> dict[str, Any]:
         "plane": config["measurement"]["plane"],
         "BPM order": list(dict.fromkeys(config["monitor_bpms"] + config["target_bpms"])),
         "correction BPMs": config["target_bpms"],
-        "joint targets": section["joint_response_analysis"]["targets"] if joint else [],
+        "joint targets": _joint_targets_for_signature(section) if joint else [],
         "knobs/weights/units": [
             {key: knob[key] for key in ("name", "devices", "unit", "scan_mode")}
             for knob in knobs
@@ -88,7 +99,9 @@ class SavedQResponse:
                 return "Invalid response matrix dimensions or non-finite values"
             matrix = self.matrix
             if joint:
-                matrix = matrix / np.asarray([item.tolerance_mm for item in analysis.targets])[:, None]
+                matrix = matrix / np.asarray(
+                    [item.normalization_scale_mm for item in analysis.targets]
+                )[:, None]
             else:
                 matrix = matrix[[name in config.target_bpms for name in config.measurement_bpms]]
             singular = np.linalg.svd(matrix, compute_uv=False)

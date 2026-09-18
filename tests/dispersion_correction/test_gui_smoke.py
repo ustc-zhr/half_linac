@@ -921,7 +921,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         pytest.approx(2.0)
     )
     assert (
-        joint_config.section.joint_response_analysis.targets[0].tolerance_mm
+        joint_config.section.joint_response_analysis.targets[0].normalization_scale_mm
         == pytest.approx(0.5)
     )
     assert joint_config.section.joint_response_analysis.targets[1].target_mm == (
@@ -1885,4 +1885,48 @@ def test_single_quad_knob_selection(monkeypatch) -> None:
     reopened.close()
     knob_dialog.close()
     profile_window.close()
+    app.processEvents()
+
+
+def test_correction_bpm_dialog_selects_plane_and_preserves_drafts() -> None:
+    pytest.importorskip("PyQt5")
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PyQt5.QtWidgets import QApplication
+
+    from half_linac.src.apps.dispersion_correction.gui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    dialog, table, _buttons = window._build_correction_bpm_dialog()
+    plane_combo = table._dispersion_plane_combo
+
+    assert plane_combo.currentData() == "x"
+    assert table.columnCount() == 4
+    table.cellWidget(0, 3).setValue(1.25)
+
+    plane_combo.setCurrentIndex(plane_combo.findData("y"))
+    assert table.columnCount() == 4
+    assert table.item(0, 2).text() == "ηy"
+    table.cellWidget(0, 3).setValue(-2.5)
+
+    plane_combo.setCurrentIndex(plane_combo.findData("xy"))
+    assert table.columnCount() == 6
+    assert table.horizontalHeaderItem(3).text() == "ηx Scale"
+    assert table.cellWidget(0, 2).value() == pytest.approx(1.25)
+    assert table.cellWidget(0, 4).value() == pytest.approx(-2.5)
+
+    window._apply_correction_bpm_table(table)
+    config = window._config_from_widgets()
+    assert config.measurement.plane == "xy"
+    assert config.target_bpms == ()
+    assert config.section.joint_response_analysis.enabled
+    assert config.section.joint_response_analysis.targets[0].target_mm == pytest.approx(
+        1.25
+    )
+    assert config.section.joint_response_analysis.targets[1].target_mm == pytest.approx(
+        -2.5
+    )
+
+    dialog.close()
+    window.close()
     app.processEvents()
