@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from dataclasses import replace
@@ -705,6 +706,7 @@ class SolenoidCenteringTests(unittest.TestCase):
             self.assertEqual(len(candidates), 6)
             self.assertTrue(result.recommendation_available)
             self.assertEqual(result.termination.code, "matrix_verified")
+            json.dumps(result.as_dict())
             self.assertAlmostEqual(result.recommended_hcorr - start_h, 0.3555556, places=3)
             self.assertAlmostEqual(result.recommended_vcorr - start_v, -0.1111111, places=3)
             self.assertEqual(result.restore.status, "verified")
@@ -724,6 +726,7 @@ class SolenoidCenteringTests(unittest.TestCase):
         ):
             result = scanner.run()
         self.assertEqual(result.termination.code, "matrix_unreliable")
+        json.dumps(result.as_dict())
         self.assertFalse(result.recommendation_available)
         self.assertEqual(result.restore.status, "verified")
 

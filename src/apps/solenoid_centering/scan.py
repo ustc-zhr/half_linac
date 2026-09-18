@@ -1393,6 +1393,7 @@ class SolenoidCenteringScanner:
         boundary = _at_limit(target_h, hcorr_limits) or _at_limit(target_v, vcorr_limits)
         boundary = boundary or np.isclose(target_h, h_bounds[0]) or np.isclose(target_h, h_bounds[1])
         boundary = boundary or np.isclose(target_v, v_bounds[0]) or np.isclose(target_v, v_bounds[1])
+        boundary = bool(boundary)
         termination = ScanTermination(
             "boundary_limited" if boundary else "matrix_verified",
             "Response-matrix target reached the usable boundary." if boundary else
