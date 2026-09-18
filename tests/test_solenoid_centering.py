@@ -665,6 +665,68 @@ class SolenoidCenteringTests(unittest.TestCase):
             )
         )
 
+    def test_response_matrix_fits_both_modes_and_restores_setpoints(self):
+        context, preset, values = _ready_fixture()
+        preset = replace(preset, settle_time_s=0.0, sample_interval_s=0.0)
+        sol_pv = _solenoid_setpoint_pv(context, preset)
+        h_pv = resolve_corrector_write_channel(context, preset.hcorr)
+        v_pv = resolve_corrector_write_channel(context, preset.vcorr)
+        x_pv = resolve_channel(context, preset.bpm, "x")
+        y_pv = resolve_channel(context, preset.bpm, "y")
+        start_sol, start_h, start_v = values[sol_pv], values[h_pv], values[v_pv]
+
+        class LinearResponseIO(MockIO):
+            def read(self, pv_name):
+                h = self.values[h_pv] - start_h
+                v = self.values[v_pv] - start_v
+                sol = self.values[sol_pv] - start_sol
+                if pv_name == x_pv:
+                    return (h + 0.5 * v - 0.3) * sol
+                if pv_name == y_pv:
+                    return (-0.25 * h + v + 0.2) * sol
+                return super().read(pv_name)
+
+        for scoring_mode in scan.SCORING_MODES:
+            io = LinearResponseIO(values)
+            candidates = []
+            scanner = scan.SolenoidCenteringScanner(
+                context, preset, io=io, scoring_mode=scoring_mode,
+                search_mode=scan.SEARCH_MODE_RESPONSE_MATRIX,
+                candidate_finished=candidates.append,
+            )
+            report = scanner.preflight()
+            self.assertEqual(report.corrector_candidates, 6)
+            self.assertEqual(report.solenoid_points, 3)
+            with (
+                patch.object(scan, "require_workflow_write_allowed", lambda *args, **kwargs: None),
+                patch.object(scan, "write_scan_result"),
+            ):
+                result = scanner.run()
+            self.assertEqual(len(candidates), 6)
+            self.assertTrue(result.recommendation_available)
+            self.assertEqual(result.termination.code, "matrix_verified")
+            self.assertAlmostEqual(result.recommended_hcorr - start_h, 0.3555556, places=3)
+            self.assertAlmostEqual(result.recommended_vcorr - start_v, -0.1111111, places=3)
+            self.assertEqual(result.restore.status, "verified")
+            self.assertEqual((io.values[sol_pv], io.values[h_pv], io.values[v_pv]),
+                             (start_sol, start_h, start_v))
+
+    def test_response_matrix_blocks_uninformative_response(self):
+        context, preset, values = _ready_fixture()
+        preset = replace(preset, settle_time_s=0.0, sample_interval_s=0.0)
+        io = MockIO(values)
+        scanner = scan.SolenoidCenteringScanner(
+            context, preset, io=io, search_mode=scan.SEARCH_MODE_RESPONSE_MATRIX,
+        )
+        with (
+            patch.object(scan, "require_workflow_write_allowed", lambda *args, **kwargs: None),
+            patch.object(scan, "write_scan_result"),
+        ):
+            result = scanner.run()
+        self.assertEqual(result.termination.code, "matrix_unreliable")
+        self.assertFalse(result.recommendation_available)
+        self.assertEqual(result.restore.status, "verified")
+
     def test_missing_readback_verification_blocks_scan_before_writes(self):
         context, preset, values = _ready_fixture()
         preset = replace(preset, motion_verification=None)

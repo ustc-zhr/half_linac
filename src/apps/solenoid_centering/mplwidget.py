@@ -158,7 +158,10 @@ class MplWidget(QWidget):
             self.score_axes.plot(x_values, scores, marker="o", label=label)
             self.score_axes.axvline(scan.best.corrector_value, linestyle="--", alpha=0.35)
 
-        best = min((scan.best for scan in axis_scans), key=lambda item: item.score.score)
+        verification = next((scan.best for scan in axis_scans if scan.axis == "verify"), None)
+        best = verification or min((scan.best for scan in axis_scans), key=lambda item: item.score.score)
+        if verification is not None:
+            self.bpm_axes.set_title("Verified Target BPM vs Solenoid")
         self.bpm_axes.plot(
             best.solenoid_values,
             best.bpm_x_means,
@@ -172,7 +175,7 @@ class MplWidget(QWidget):
             label="BPM Y",
         )
         self._plot_xy_trajectories(candidates, best)
-        self._plot_all_scan_data(candidates)
+        self._plot_all_scan_data(candidates, highlighted=best)
         self.score_axes.legend(loc="best")
         self.bpm_axes.legend(loc="best")
         self.summary_canvas.draw_idle()
@@ -191,7 +194,7 @@ class MplWidget(QWidget):
         self.all_y_axes.set_ylabel("BPM Y (mm)")
         self.all_y_axes.grid(True, alpha=0.25)
 
-    def _plot_all_scan_data(self, candidates, *, live=False):
+    def _plot_all_scan_data(self, candidates, *, live=False, highlighted=None):
         self.all_x_axes.clear()
         self.all_y_axes.clear()
         self._reset_all_scan_axes()
@@ -200,7 +203,7 @@ class MplWidget(QWidget):
 
         colors = self._trajectory_colors(len(candidates))
         show_all_labels = len(candidates) <= 12
-        best = min(candidates, key=lambda item: item.score.score)
+        best = highlighted or min(candidates, key=lambda item: item.score.score)
         for index, candidate in enumerate(candidates):
             label = self._candidate_label(candidate) if show_all_labels else None
             line_width = 2.2 if candidate is best else 1.1

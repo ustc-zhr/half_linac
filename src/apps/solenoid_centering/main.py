@@ -69,6 +69,8 @@ from half_linac.src.apps.solenoid_centering.scan import (
     RestoreFailed,
     SCORING_MODE_SLOPE,
     SCORING_MODE_TRAJECTORY_LENGTH,
+    SEARCH_MODE_GRID,
+    SEARCH_MODE_RESPONSE_MATRIX,
     StateDriftError,
     SolenoidCenteringScanner,
     StopRequested,
@@ -92,11 +94,13 @@ class ScanWorker(QThread):
     finished_ok = pyqtSignal(object)
     failed = pyqtSignal(object)
 
-    def __init__(self, context, preset, scoring_mode=SCORING_MODE_SLOPE, parent=None):
+    def __init__(self, context, preset, scoring_mode=SCORING_MODE_SLOPE,
+                 search_mode=SEARCH_MODE_GRID, parent=None):
         super().__init__(parent)
         self.context = context
         self.preset = preset
         self.scoring_mode = scoring_mode
+        self.search_mode = search_mode
         self._stop_requested = False
 
     def request_stop(self):
@@ -111,6 +115,7 @@ class ScanWorker(QThread):
                 candidate_finished=self.candidate_finished.emit,
                 round_finished=self.round_finished.emit,
                 scoring_mode=self.scoring_mode,
+                search_mode=self.search_mode,
                 stop_requested=lambda: self._stop_requested,
             )
             result = scanner.run()
@@ -173,14 +178,17 @@ class PreflightWorker(QThread):
     finished_ok = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, context, preset, parent=None):
+    def __init__(self, context, preset, search_mode=SEARCH_MODE_GRID, parent=None):
         super().__init__(parent)
         self.context = context
         self.preset = preset
+        self.search_mode = search_mode
 
     def run(self):
         try:
-            scanner = SolenoidCenteringScanner(self.context, self.preset)
+            scanner = SolenoidCenteringScanner(
+                self.context, self.preset, search_mode=self.search_mode,
+            )
             report = scanner.preflight()
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -488,6 +496,15 @@ class MainWindow(QMainWindow):
         self.scoring_mode_combo = QComboBox(content)
         self.scoring_mode_combo.addItem("Slope score", SCORING_MODE_SLOPE)
         self.scoring_mode_combo.addItem("Trajectory length", SCORING_MODE_TRAJECTORY_LENGTH)
+        self.search_mode_combo = QComboBox(content)
+        self.search_mode_combo.addItem("Grid search", SEARCH_MODE_GRID)
+        self.search_mode_combo.addItem("Response matrix", SEARCH_MODE_RESPONSE_MATRIX)
+        self.search_mode_combo.setToolTip(
+            "Response matrix uses the corrector range endpoints and up to three solenoid points, "
+            "then measures the predicted target."
+        )
+        self.cor_steps.setToolTip("Used by grid search; response matrix uses range endpoints.")
+        self.max_iters.setToolTip("Used by grid search only.")
 
         range_title = QLabel("Relative Scan Range", self.scan_card)
         range_title.setProperty("role", "groupTitle")
@@ -550,8 +567,9 @@ class MainWindow(QMainWindow):
         run_settings.setContentsMargins(0, 0, 0, 0)
         run_settings.setVerticalSpacing(5)
         for label, widget in (
+            ("Search method", self.search_mode_combo),
             ("Score mode", self.scoring_mode_combo),
-            ("Max iterations", self.max_iters),
+            ("Max iterations (grid)", self.max_iters),
         ):
             field_label = QLabel(label, self.run_card)
             field_label.setProperty("role", "field")
@@ -588,6 +606,7 @@ class MainWindow(QMainWindow):
             self.vcorr_combo,
             self.bpm_combo,
             self.scoring_mode_combo,
+            self.search_mode_combo,
             self.sol_from,
             self.sol_to,
             self.sol_steps,
@@ -606,6 +625,7 @@ class MainWindow(QMainWindow):
             self.vcorr_combo,
             self.bpm_combo,
             self.scoring_mode_combo,
+            self.search_mode_combo,
         ):
             combo.currentIndexChanged.connect(self._invalidate_preflight)
         for spin in (
@@ -764,6 +784,9 @@ class MainWindow(QMainWindow):
     def _scoring_mode(self) -> str:
         return normalize_scoring_mode(self.scoring_mode_combo.currentData())
 
+    def _search_mode(self) -> str:
+        return str(self.search_mode_combo.currentData())
+
     def _preset_with_overrides(self) -> SolenoidCenteringPreset:
         preset = self._current_preset()
         if self.sol_from.value() == self.sol_to.value():
@@ -844,7 +867,9 @@ class MainWindow(QMainWindow):
         self.active_preflight_revision = self.configuration_revision
         self._append_log("Starting read-only preflight.")
         self.progress.setValue(0)
-        self.preflight_worker = PreflightWorker(self.context, preset, self)
+        self.preflight_worker = PreflightWorker(
+            self.context, preset, self._search_mode(), self,
+        )
         self.preflight_worker.finished_ok.connect(self._on_preflight_finished)
         self.preflight_worker.failed.connect(self._on_preflight_failed)
         self.preflight_worker.finished.connect(self._on_preflight_done)
@@ -883,7 +908,9 @@ class MainWindow(QMainWindow):
         self.progress.setValue(0)
         self._set_workflow_status("RUNNING", "warning")
         self.status_strip.set_value("READINESS", "SCANNING", "warning")
-        self.worker = ScanWorker(self.context, preset, self._scoring_mode(), self)
+        self.worker = ScanWorker(
+            self.context, preset, self._scoring_mode(), self._search_mode(), self,
+        )
         self.worker.progress_changed.connect(self._on_progress)
         self.worker.candidate_finished.connect(self._on_candidate_finished)
         self.worker.round_finished.connect(self._on_round_finished)
@@ -1213,6 +1240,18 @@ class MainWindow(QMainWindow):
             elif axis_scan.axis == "v" and pending_h is not None:
                 self._append_result_round(pending_h, axis_scan)
                 pending_h = None
+            elif axis_scan.axis == "verify":
+                candidate = axis_scan.best
+                row = self.result_table.rowCount()
+                self.result_table.insertRow(row)
+                for column, value in enumerate((
+                    "--", "VERIFY", f"H {candidate.hcorr:.8g}, V {candidate.vcorr:.8g}",
+                    f"{candidate.score.score:.6g}",
+                    f"{candidate.score.trajectory_length:.6g}",
+                    f"{candidate.score.slope_x:.6g}",
+                    f"{candidate.score.slope_y:.6g}",
+                )):
+                    self.result_table.setItem(row, column, QTableWidgetItem(value))
         self.result_table.resizeColumnsToContents()
 
     def _append_result_round(self, h_scan, v_scan):

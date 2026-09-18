@@ -40,6 +40,9 @@ NOISE_FLOOR = 1e-15
 SCORING_MODE_SLOPE = "slope"
 SCORING_MODE_TRAJECTORY_LENGTH = "trajectory_length"
 SCORING_MODES = (SCORING_MODE_SLOPE, SCORING_MODE_TRAJECTORY_LENGTH)
+SEARCH_MODE_GRID = "grid"
+SEARCH_MODE_RESPONSE_MATRIX = "response_matrix"
+SEARCH_MODES = (SEARCH_MODE_GRID, SEARCH_MODE_RESPONSE_MATRIX)
 
 
 class StopRequested(RuntimeError):
@@ -161,6 +164,7 @@ class CenteringResult:
     restore: RestoreOutcome | None = None
     operation_status: str = "completed"
     schema_version: int = 5
+    search_mode: str = SEARCH_MODE_GRID
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -253,6 +257,7 @@ class PreflightReport:
     range_checks: tuple[RangeCheck, ...]
     readback_checks: tuple[ReadbackCheck, ...]
     readback_verification_configured: bool
+    search_mode: str = SEARCH_MODE_GRID
 
     @property
     def is_ready(self) -> bool:
@@ -265,7 +270,8 @@ class PreflightReport:
     def as_text(self) -> str:
         lines = [
             "READY" if self.is_ready else "NOT READY",
-            f"machine={self.machine_id} backend={self.backend} preset={self.preset_id}",
+            f"machine={self.machine_id} backend={self.backend} preset={self.preset_id} "
+            f"search={self.search_mode}",
             f"solenoid setpoint {self.solenoid_pv} = {self.original_solenoid:g}",
         ]
         if self.solenoid_readback_pv:
@@ -607,6 +613,69 @@ def coordinate_descent(
     return hcorr, vcorr, tuple(axis_scans), termination
 
 
+def response_matrix_target(
+    candidates: tuple[CandidateResult, ...],
+    *,
+    scoring_mode: str,
+    h_bounds: tuple[float, float],
+    v_bounds: tuple[float, float],
+) -> tuple[float, float]:
+    """Fit BPM trajectories against two correctors and predict their optimum."""
+    baseline = candidates[0]
+    design = np.asarray(
+        [[1.0, item.hcorr - baseline.hcorr, item.vcorr - baseline.vcorr]
+         for item in candidates],
+        dtype=float,
+    )
+    if np.linalg.matrix_rank(design) < 3:
+        raise ValueError("Response matrix has insufficient independent corrector changes.")
+    points = np.asarray(
+        [np.column_stack((item.bpm_x_means, item.bpm_y_means)) for item in candidates],
+        dtype=float,
+    )
+    if not np.all(np.isfinite(points)):
+        raise ValueError("Response matrix contains non-finite BPM samples.")
+    coefficients = np.linalg.lstsq(design, points.reshape(len(candidates), -1), rcond=None)[0]
+    coefficients = coefficients.reshape(3, len(baseline.solenoid_values), 2)
+    trajectory_response = np.column_stack((
+        np.diff(coefficients[1], axis=0).reshape(-1),
+        np.diff(coefficients[2], axis=0).reshape(-1),
+    ))
+    if np.linalg.cond(trajectory_response) > 100:
+        raise ValueError("Response matrix is poorly conditioned; no reliable target.")
+    sol = np.asarray(baseline.solenoid_values, dtype=float)
+    if scoring_mode == SCORING_MODE_SLOPE:
+        local = sol - float(np.mean(sol))
+        slopes = np.asarray([
+            [np.polyfit(local, coefficients[row, :, plane], min(2, len(sol) - 1))[-2]
+             for plane in range(2)]
+            for row in range(3)
+        ])
+        matrix = slopes[1:].T
+        if np.linalg.cond(matrix) > 100:
+            raise ValueError("Response matrix is poorly conditioned; no reliable target.")
+        offset = -np.linalg.solve(matrix, slopes[0])
+    else:
+        from scipy.optimize import minimize
+
+        def predicted_length(offset: np.ndarray) -> float:
+            trajectory = coefficients[0] + offset[0] * coefficients[1] + offset[1] * coefficients[2]
+            return _trajectory_length(trajectory[:, 0], trajectory[:, 1])
+
+        bounds = (
+            (h_bounds[0] - baseline.hcorr, h_bounds[1] - baseline.hcorr),
+            (v_bounds[0] - baseline.vcorr, v_bounds[1] - baseline.vcorr),
+        )
+        fit = minimize(predicted_length, np.zeros(2), bounds=bounds, method="L-BFGS-B")
+        if not fit.success or not np.all(np.isfinite(fit.x)):
+            raise ValueError("Trajectory-length response fit did not converge.")
+        offset = fit.x
+    return (
+        float(np.clip(baseline.hcorr + offset[0], *h_bounds)),
+        float(np.clip(baseline.vcorr + offset[1], *v_bounds)),
+    )
+
+
 class EpicsScalarIO:
     def __init__(self, timeout_s: float = 2.0):
         from epics import caget, caput
@@ -641,6 +710,7 @@ class SolenoidCenteringScanner:
         candidate_finished: Callable[[CandidateResult], None] | None = None,
         round_finished: Callable[[AxisScanResult, AxisScanResult], None] | None = None,
         scoring_mode: str = SCORING_MODE_SLOPE,
+        search_mode: str = SEARCH_MODE_GRID,
         stop_requested: Callable[[], bool] | None = None,
     ):
         self.app_context = app_context
@@ -650,6 +720,9 @@ class SolenoidCenteringScanner:
         self.candidate_finished = candidate_finished or (lambda _candidate: None)
         self.round_finished = round_finished
         self.scoring_mode = normalize_scoring_mode(scoring_mode)
+        if search_mode not in SEARCH_MODES:
+            raise ValueError(f"Unsupported search mode: {search_mode!r}.")
+        self.search_mode = search_mode
         self.stop_requested = stop_requested or (lambda: False)
         self.solenoid_target = self._resolve_solenoid_write_target()
         self.solenoid_pv = (
@@ -739,17 +812,24 @@ class SolenoidCenteringScanner:
             self.progress("baseline candidate", completed, total)
             hcorr_limits = _numeric_limit(self.hcorr_target.machine_limit)
             vcorr_limits = _numeric_limit(self.vcorr_target.machine_limit)
-            recommended_h, recommended_v, axis_scans, termination = coordinate_descent(
-                original_hcorr,
-                original_vcorr,
-                self.preset.corrector_scan,
-                self.preset.max_rounds,
-                evaluator,
-                hcorr_limits=hcorr_limits,
-                vcorr_limits=vcorr_limits,
-                round_finished=self.round_finished,
-            )
-            best = min((scan.best for scan in axis_scans), key=lambda candidate: candidate.score.score)
+            if self.search_mode == SEARCH_MODE_GRID:
+                recommended_h, recommended_v, axis_scans, termination = coordinate_descent(
+                    original_hcorr,
+                    original_vcorr,
+                    self.preset.corrector_scan,
+                    self.preset.max_rounds,
+                    evaluator,
+                    hcorr_limits=hcorr_limits,
+                    vcorr_limits=vcorr_limits,
+                    round_finished=self.round_finished,
+                )
+                best = min((scan.best for scan in axis_scans), key=lambda candidate: candidate.score.score)
+            else:
+                recommended_h, recommended_v, axis_scans, termination, best = (
+                    self._response_matrix_search(
+                        baseline, evaluator, hcorr_limits, vcorr_limits,
+                    )
+                )
             best_score = best.score.score
             relative_improvement, recommendation_available, recommendation_status = (
                 self._recommendation_quality(baseline, best)
@@ -767,6 +847,7 @@ class SolenoidCenteringScanner:
                 best_score=float(best_score),
                 axis_scans=axis_scans,
                 scoring_mode=self.scoring_mode,
+                search_mode=self.search_mode,
                 baseline_candidate=baseline,
                 relative_improvement=relative_improvement,
                 recommendation_available=recommendation_available,
@@ -1056,13 +1137,14 @@ class SolenoidCenteringScanner:
             vcorr_readback=vcorr_readback,
             bpm_x=bpm_x,
             bpm_y=bpm_y,
-            solenoid_points=self.preset.solenoid_scan.steps,
+            solenoid_points=self._estimated_solenoid_points(),
             corrector_candidates=self._estimated_candidate_count() + 1,
             bpm_samples=self.preset.samples_per_point,
             estimated_duration_s=self._estimated_duration_s(),
             range_checks=tuple(range_checks),
             readback_checks=readback_checks,
             readback_verification_configured=motion is not None,
+            search_mode=self.search_mode,
         )
 
     def _check_single_value_limit(self, target: WriteTarget, value: float) -> None:
@@ -1264,6 +1346,63 @@ class SolenoidCenteringScanner:
                 errors.append(f"{label} ({setpoint_pv}): {exc}")
         return errors
 
+    def _response_matrix_search(
+        self,
+        baseline: CandidateResult,
+        evaluator: Callable[[str, int, float, float], CandidateResult],
+        hcorr_limits: tuple[float, float] | None,
+        vcorr_limits: tuple[float, float] | None,
+    ) -> tuple[float, float, tuple[AxisScanResult, ...], ScanTermination, CandidateResult]:
+        h_values = _bounded_candidate_values(
+            baseline.hcorr, self.preset.corrector_scan, hcorr_limits,
+        )
+        v_values = _bounded_candidate_values(
+            baseline.vcorr, self.preset.corrector_scan, vcorr_limits,
+        )
+        if len(h_values) < 2 or len(v_values) < 2:
+            raise ValueError("Response matrix needs two in-limit perturbations on each axis.")
+        h_bounds = (min(h_values), max(h_values))
+        v_bounds = (min(v_values), max(v_values))
+        h_candidates = (
+            evaluator("h", 0, h_bounds[0], baseline.vcorr),
+            evaluator("h", 0, h_bounds[1], baseline.vcorr),
+        )
+        v_candidates = (
+            evaluator("v", 0, baseline.hcorr, v_bounds[0]),
+            evaluator("v", 0, baseline.hcorr, v_bounds[1]),
+        )
+        h_scan = AxisScanResult("h", 0, h_candidates, min(h_candidates, key=lambda c: c.score.score))
+        v_scan = AxisScanResult("v", 0, v_candidates, min(v_candidates, key=lambda c: c.score.score))
+        if self.round_finished is not None:
+            self.round_finished(h_scan, v_scan)
+        scans = (h_scan, v_scan)
+        try:
+            target_h, target_v = response_matrix_target(
+                (baseline, *h_candidates, *v_candidates),
+                scoring_mode=self.scoring_mode,
+                h_bounds=h_bounds,
+                v_bounds=v_bounds,
+            )
+        except ValueError as exc:
+            return (
+                baseline.hcorr, baseline.vcorr, scans,
+                ScanTermination("matrix_unreliable", str(exc), 0, True, True), baseline,
+            )
+        verified = evaluator("verify", 0, target_h, target_v)
+        verify_scan = AxisScanResult("verify", 0, (verified,), verified)
+        boundary = _at_limit(target_h, hcorr_limits) or _at_limit(target_v, vcorr_limits)
+        boundary = boundary or np.isclose(target_h, h_bounds[0]) or np.isclose(target_h, h_bounds[1])
+        boundary = boundary or np.isclose(target_v, v_bounds[0]) or np.isclose(target_v, v_bounds[1])
+        termination = ScanTermination(
+            "boundary_limited" if boundary else "matrix_verified",
+            "Response-matrix target reached the usable boundary." if boundary else
+            "Response-matrix target measured and verified.",
+            1,
+            boundary,
+            boundary,
+        )
+        return target_h, target_v, (*scans, verify_scan), termination, verified
+
     def _evaluate_candidate(
         self,
         axis: str,
@@ -1293,7 +1432,7 @@ class SolenoidCenteringScanner:
         solenoid_values = []
         x_samples = []
         y_samples = []
-        for solenoid in relative_scan_points(original_solenoid, self.preset.solenoid_scan):
+        for solenoid in self._solenoid_points(original_solenoid):
             self._raise_if_stopped()
             solenoid = float(solenoid)
             self._write_and_verify(
@@ -1384,11 +1523,24 @@ class SolenoidCenteringScanner:
             )
 
     def _estimated_candidate_count(self) -> int:
+        if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX:
+            return 5  # four perturbations and one measured verification
         return self.preset.max_rounds * 2 * self.preset.corrector_scan.steps
+
+    def _estimated_solenoid_points(self) -> int:
+        if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX:
+            return min(3, self.preset.solenoid_scan.steps)
+        return self.preset.solenoid_scan.steps
+
+    def _solenoid_points(self, original_solenoid: float) -> np.ndarray:
+        points = relative_scan_points(original_solenoid, self.preset.solenoid_scan)
+        if self.search_mode == SEARCH_MODE_RESPONSE_MATRIX and len(points) > 3:
+            return points[[0, len(points) // 2, -1]]
+        return points
 
     def _estimated_duration_s(self) -> float:
         samples_delay = max(0, self.preset.samples_per_point - 1) * self.preset.sample_interval_s
-        per_candidate = self.preset.settle_time_s + self.preset.solenoid_scan.steps * (
+        per_candidate = self.preset.settle_time_s + self._estimated_solenoid_points() * (
             self.preset.settle_time_s + samples_delay
         )
         return float((self._estimated_candidate_count() + 1) * per_candidate)
@@ -1416,7 +1568,9 @@ class SolenoidCenteringScanner:
         return {
             "preset_id": self.preset.id,
             "scoring_mode": self.scoring_mode,
+            "search_mode": self.search_mode,
             "solenoid_scan": asdict(self.preset.solenoid_scan),
+            "measured_solenoid_points": self._estimated_solenoid_points(),
             "corrector_scan": asdict(self.preset.corrector_scan),
             "samples_per_point": self.preset.samples_per_point,
             "settle_time_s": self.preset.settle_time_s,
@@ -1520,6 +1674,10 @@ def main(argv: list[str] | None = None) -> int:
         default=SCORING_MODE_SLOPE,
         help="Candidate ranking metric.",
     )
+    parser.add_argument(
+        "--search-mode", choices=SEARCH_MODES, default=SEARCH_MODE_GRID,
+        help="Corrector search method.",
+    )
     args = parser.parse_args(argv)
 
     stop = {"requested": False}
@@ -1540,6 +1698,7 @@ def main(argv: list[str] | None = None) -> int:
         context,
         preset,
         scoring_mode=args.scoring_mode,
+        search_mode=args.search_mode,
         progress=lambda message, completed, total: print(f"{completed}/{total} {message}", flush=True),
         stop_requested=lambda: stop["requested"],
     )
