@@ -26,6 +26,7 @@ profile 时看平台与机器，需要 app 细节时进入应用目录，历史�
 
 ## 应用说明
 
+- [apps/JOINT_SOLENOID_CENTERING.md](apps/JOINT_SOLENOID_CENTERING.md): 联立螺线管 Centering 的 HALF 试验流程、配置和结果边界
 - [apps/BEAM_DYNAMICS_OPERATION_NOTES.md](apps/BEAM_DYNAMICS_OPERATION_NOTES.md): BBA、Twiss 等束流动力学计算的操作边界说明
 - [apps/DISPERSION_CORRECTION.md](apps/DISPERSION_CORRECTION.md): 色散校正应用运行边界和 commissioning 信息
 - [apps/ENERGY_TUNING_PIPELINE.md](apps/ENERGY_TUNING_PIPELINE.md): Energy Spectrum 与 RF 能量自适应扫描的测量层、亮度寻峰和中心锁定

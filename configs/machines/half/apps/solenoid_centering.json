@@ -49,8 +49,8 @@
       "id": "sl01_2_centering",
       "display_name": "SL01-2 Centering",
       "solenoid": "SL01-2",
-      "hcorr": "SM01-DX",
-      "vcorr": "SM01-DY",
+      "hcorr": "SL01-DX",
+      "vcorr": "SL01-DY",
       "bpm": "BPM02",
       "scan": {
         "solenoid": {"low": -4, "high": 4, "steps": 5, "unit": "A", "mode": "relative"},
@@ -70,6 +70,89 @@
       }
     }
   ],
+  "joint_centering": {
+    "defaults": {
+      "probe_a": 0.2,
+      "max_step_a": 0.25,
+      "max_excursion_a": 0.5,
+      "max_iterations": 2,
+      "response_floor_mm": 0.01
+    },
+    "groups": [
+      {
+        "id": "sm_sl",
+        "display_name": "SM01 + SL01-1 + SL01-2",
+        "targets": [
+          {
+            "preset": "sm01_centering",
+            "bpms": [
+              "BPM01",
+              "BPM02"
+            ],
+            "modulation_a": 0.5
+          },
+          {
+            "preset": "sl01_1_centering",
+            "bpms": [
+              "BPM02"
+            ],
+            "modulation_a": 0.5
+          },
+          {
+            "preset": "sl01_2_centering",
+            "bpms": [
+              "BPM02"
+            ],
+            "modulation_a": 0.5
+          }
+        ]
+      },
+      {
+        "id": "front_end",
+        "display_name": "SS01 + SS02 + SM01 + SL01-1 + SL01-2",
+        "targets": [
+          {
+            "preset": "ss01_centering",
+            "bpms": [
+              "BPM01",
+              "BPM02"
+            ],
+            "modulation_a": 0.2
+          },
+          {
+            "preset": "ss02_centering",
+            "bpms": [
+              "BPM01",
+              "BPM02"
+            ],
+            "modulation_a": 0.2
+          },
+          {
+            "preset": "sm01_centering",
+            "bpms": [
+              "BPM01",
+              "BPM02"
+            ],
+            "modulation_a": 0.5
+          },
+          {
+            "preset": "sl01_1_centering",
+            "bpms": [
+              "BPM02"
+            ],
+            "modulation_a": 0.5
+          },
+          {
+            "preset": "sl01_2_centering",
+            "bpms": [
+              "BPM02"
+            ],
+            "modulation_a": 0.5
+          }
+        ]
+      }
+    ]
+  },
   "default_preset": "sl01_1_centering",
   "write_control": {"vm": "blocked", "real": "allowed"}
 }

@@ -279,6 +279,12 @@ class MainWindow(QMainWindow):
         title.setObjectName("summaryTitle")
         title_row.addWidget(title)
         title_row.addStretch(1)
+        self.joint_button = QPushButton("Joint Centering", header)
+        self.joint_button.setVisible(bool(
+            self.context.profile.workflows.get("solenoid_centering", {}).get("joint_centering")
+        ))
+        self.joint_button.clicked.connect(self._open_joint_centering)
+        title_row.addWidget(self.joint_button)
         title_row.addWidget(
             RuntimeContextWidget(
                 machine_id=self.context.machine.id,
@@ -406,6 +412,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.log_view)
 
         self.setCentralWidget(central)
+
+    def _open_joint_centering(self):
+        if self.worker is not None or self.preflight_worker is not None:
+            QMessageBox.information(self, "Joint Centering", "Please wait for the current operation to finish.")
+            return
+        from half_linac.src.apps.solenoid_centering.joint_gui import JointCenteringDialog
+        try:
+            dialog = JointCenteringDialog(self.context, self)
+            dialog.exec_()
+        except Exception as exc:
+            QMessageBox.critical(self, "Joint Centering", str(exc))
+        self._invalidate_preflight()
 
     def _build_control_panel(self, parent):
         panel = QFrame(parent)

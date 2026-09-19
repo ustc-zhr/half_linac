@@ -29,8 +29,16 @@ def resolve_solenoid_centering_runtime_paths(
     }
 
 
-def write_scan_result(target: MachineProfile | AppContext, result: dict[str, Any]) -> Path:
+def write_scan_result(
+    target: MachineProfile | AppContext, result: dict[str, Any], *, namespace: str | None = None,
+) -> Path:
     paths = resolve_solenoid_centering_runtime_paths(target)
+    if namespace is not None:
+        if namespace != "joint":
+            raise ValueError(f"Unknown scan namespace: {namespace}")
+        root = paths["runtime_dir"] / namespace
+        paths.update(latest_dir=root / "latest", archive_dir=root / "scans",
+                     latest_result_path=root / "latest" / LATEST_RESULT_FILE)
     latest_dir = paths["latest_dir"]
     archive_dir = paths["archive_dir"]
     latest_dir.mkdir(parents=True, exist_ok=True)
@@ -42,7 +50,7 @@ def write_scan_result(target: MachineProfile | AppContext, result: dict[str, Any
     paths["latest_result_path"].write_text(text, encoding="utf-8")
 
     preset = str(payload.get("preset_id", "scan")).strip().lower().replace(" ", "_") or "scan"
-    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")
     archive_path = archive_dir / f"scan_{timestamp}_{preset}.json"
     archive_path.write_text(text, encoding="utf-8")
     return archive_path
@@ -53,4 +61,3 @@ def read_latest_scan_result(target: MachineProfile | AppContext) -> dict[str, An
     if not path.is_file():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
-
