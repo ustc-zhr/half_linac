@@ -121,6 +121,46 @@ class BbaK1ConventionTests(unittest.TestCase):
                 recal.run()
             self.assertIn("Missing or invalid", emit.call_args.args[0]["error"])
 
+    def test_initial_k1_reference_matches_legacy_rounded_scan(self):
+        scan = BBAScanThread(ScanParameters(bba1_bpm1_mode="initial_k1"))
+        kicks = [0.083961473281, 0.183961473281, 0.283961473281]
+        scan.bpm1_reference_samples = {
+            kick: [position] for kick, position in zip(kicks, [-0.001, 0., 0.001])
+        }
+        points = np.array([
+            (kick, k1, 0.009, (samples[0] - 0.0003) * k1)
+            for kick, samples in scan.bpm1_reference_samples.items()
+            for k1 in (1., 2., 3.)
+        ])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "scan.txt"
+            archive = Path(directory) / "archive"
+            scan._save_array(path, points, archive_dir=archive)
+            np.testing.assert_array_equal(np.loadtxt(path), points)
+            np.testing.assert_array_equal(np.loadtxt(archive / path.name), points)
+            np.savetxt(path, points, fmt="%.6e")
+            with patch.object(scan, "_emit"):
+                positions, slopes = scan._recalculate_from_points(np.loadtxt(path))
+            np.testing.assert_allclose(positions, [-0.001, 0., 0.001])
+            self.assertAlmostEqual(-np.polyfit(positions, slopes, 1)[1], 0.0003)
+
+    def test_initial_k1_reference_rejects_missing_invalid_and_ambiguous(self):
+        scan = BBAScanThread(ScanParameters(bba1_bpm1_mode="initial_k1"))
+        for references in ({}, {0.083961473281: []},
+                           {0.083961473281: [float("nan")]},
+                           {0.08396148: [0.001]}):
+            scan.bpm1_reference_samples = references
+            with self.assertRaisesRegex(RuntimeError, "Missing or invalid"):
+                scan._bpm1_samples_for_fit(0.08396147, [0.009])
+        scan.bpm1_reference_samples = {
+            0.083961473281: [0.001], 0.083961473282: [0.002],
+        }
+        with self.assertRaisesRegex(RuntimeError, "Ambiguous"):
+            scan._bpm1_samples_for_fit(0.08396147, [0.009])
+        np.testing.assert_array_equal(
+            scan._bpm1_samples_for_fit(0.083961473281, [0.009]), [0.001],
+        )
+
     def test_stop_during_reference_settling_restores_magnets(self):
         params = ScanParameters(
             bba1_bpm1_mode="initial_k1", corrPV="corr", quadPV="quad",

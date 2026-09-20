@@ -2827,12 +2827,12 @@ class BBABaseThread(QThread):
     def _save_array(self, path, data, *, archive_dir=None, archive_name=None, header=""):
         target = self._require_path(path, "BBA data")
         target.parent.mkdir(parents=True, exist_ok=True)
-        np.savetxt(target, data, fmt="%.6e", header=header)
+        np.savetxt(target, data, fmt="%.18e", header=header)
         if archive_dir is None:
             return
         archive_path = Path(archive_dir) / (archive_name or target.name)
         archive_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savetxt(archive_path, data, fmt="%.6e", header=header)
+        np.savetxt(archive_path, data, fmt="%.18e", header=header)
 
     def _save_json(self, path, data, *, archive_dir=None, archive_name=None):
         target = self._require_path(path, "BBA metadata")
@@ -3049,7 +3049,19 @@ class BBAScanThread(BBABaseThread):
             return np.asarray(scan_samples, dtype=float)
         if mode != "initial_k1":
             raise RuntimeError(f"Unknown BBA-1 BPM1 reference mode: {mode}")
-        samples = np.asarray(self.bpm1_reference_samples.get(float(kick), []), dtype=float)
+        key = float(kick)
+        if key not in self.bpm1_reference_samples:
+            # Legacy text scans rounded setpoints to %.6e, while JSON kept
+            # full precision. Match that exact serialization, not nearby kicks.
+            matches = [
+                value for value in self.bpm1_reference_samples
+                if float(format(value, ".6e")) == key
+            ]
+            if len(matches) > 1:
+                raise RuntimeError(f"Ambiguous initial-K1 BPM1 reference for corrector {kick}.")
+            if matches:
+                key = matches[0]
+        samples = np.asarray(self.bpm1_reference_samples.get(key, []), dtype=float)
         if samples.size == 0 or not np.all(np.isfinite(samples)):
             raise RuntimeError(f"Missing or invalid initial-K1 BPM1 samples for corrector {kick}.")
         return samples

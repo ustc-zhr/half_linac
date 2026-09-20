@@ -60,7 +60,7 @@
       "id": "bba1_ql12_xc07", "family": "bba1", "plane": "X", "quad": "QL12", "corr": "XC07", "bpm1": "BPM07", "bpm2": "BPM08",
       "scan": {
         "corrector": {"vm": {"low": -0.001, "high": 0.001, "mode": "relative"}, "real": {"low": -0.1, "high": 0.1, "mode": "relative"}},
-        "quadrupole": {"low": -1, "high": 1, "mode": "relative"}
+        "quadrupole": {"low": -0.7, "high": 0.7, "mode": "relative"}
       }
     },
     {
@@ -87,8 +87,8 @@
     {
       "id": "bba1_ql15_xc09", "family": "bba1", "plane": "X", "quad": "QL15", "corr": "XC09", "bpm1": "BPM09", "bpm2": "BPM10",
       "scan": {
-        "corrector": {"vm": {"low": -0.001, "high": 0.001, "mode": "relative"}, "real": {"low": -0.1, "high": 0.1, "mode": "relative"}},
-        "quadrupole": {"low": -1, "high": 1, "mode": "relative"}
+        "corrector": {"vm": {"low": -0.001, "high": 0.001, "mode": "relative"}, "real": {"low": -0.07, "high": 0.13, "mode": "relative"}},
+        "quadrupole": {"low": -0.5, "high": 1, "mode": "relative"}
       }
     },
     {
@@ -116,7 +116,7 @@
       "id": "bba1_ql19_xc11", "family": "bba1", "plane": "X", "quad": "QL19", "corr": "XC11", "bpm1": "BPM11", "bpm2": "BPM12",
       "scan": {
         "corrector": {"vm": {"low": -0.001, "high": 0.001, "mode": "relative"}, "real": {"low": -0.1, "high": 0.1, "mode": "relative"}},
-        "quadrupole": {"low": -2, "high": 0, "mode": "relative"}
+        "quadrupole": {"low": -2, "high": -0.5, "mode": "relative"}
       }
     },
     {
@@ -256,7 +256,7 @@
       "id": "bba1_qt04_xc21", "family": "bba1", "plane": "X", "quad": "QT04", "corr": "XC21", "bpm1": "BPM21", "bpm2": "BPM22",
       "scan": {
         "corrector": {"vm": {"low": -0.001, "high": 0.001, "mode": "relative"}, "real": {"low": -0.2, "high": 0.2, "mode": "relative"}},
-        "quadrupole": {"low": -0.3, "high": 0.3, "mode": "relative"}
+        "quadrupole": {"low": -0.5, "high": 0.5, "mode": "relative"}
       }
     },
     {
