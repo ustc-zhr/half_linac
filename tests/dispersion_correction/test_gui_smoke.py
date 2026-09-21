@@ -153,6 +153,10 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.correction_step_card.objectName() == "controlSectionCard"
     assert window.measurement_action_button.parentWidget() is window.measurement_card
     assert window.gain_spin.parentWidget() is window.correction_step_card
+    assert window.svd_cut_pct_spin.parentWidget() is window.correction_step_card
+    assert window.svd_cut_pct_spin.value() == pytest.approx(
+        100.0 * window.config.solver.svd_cut
+    )
     assert window.run_button.parentWidget() is window.correction_mode_actions
     assert window.run_button.objectName() == "automaticCorrectionButton"
     assert window.apply_recommendation_button.parentWidget() is window.correction_page
@@ -281,6 +285,11 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert not window.run_button.isHidden()
     assert window.review_button.isEnabled()
     assert "discarded" in window.correction_state_label.text().lower()
+    window.svd_cut_pct_spin.setValue(5.0)
+    app.processEvents()
+    assert window._config_from_widgets().solver.svd_cut == pytest.approx(0.05)
+    assert window.latest_measurement is response.measurement
+    assert window.latest_response is response
     window.back_to_correction_methods_button.click()
     assert window.correction_mode is None
     assert window.latest_measurement is response.measurement
@@ -1650,12 +1659,15 @@ def test_offline_demo_confirms_automatic_correction_settings(monkeypatch) -> Non
     demo._start_task = lambda task: tasks.append(task)
 
     original_gain = demo.gain_spin.value()
+    original_svd_cut = demo.svd_cut_pct_spin.value()
     original_orbit_limit = demo.config.safety.max_reference_orbit_change_mm
     cancelled, _, _, _ = demo._build_automatic_correction_dialog()
     cancelled.findChild(QDoubleSpinBox, "correctionGainSpin").setValue(0.9)
+    cancelled.findChild(QDoubleSpinBox, "automaticSvdCutoffSpin").setValue(5.0)
     cancelled.findChild(QDoubleSpinBox, "correctionOrbitLimitSpin").setValue(8.0)
     cancelled.reject()
     assert demo.gain_spin.value() == original_gain
+    assert demo.svd_cut_pct_spin.value() == original_svd_cut
     assert demo.config.safety.max_reference_orbit_change_mm == original_orbit_limit
     assert tasks == []
 
@@ -1664,6 +1676,7 @@ def test_offline_demo_confirms_automatic_correction_settings(monkeypatch) -> Non
         dialog.findChild(QSpinBox, "automaticGenerationsSpin").setValue(1)
         dialog.findChild(QDoubleSpinBox, "correctionGainSpin").setValue(0.3)
         dialog.findChild(QDoubleSpinBox, "correctionMaxStepSpin").setValue(12.5)
+        dialog.findChild(QDoubleSpinBox, "automaticSvdCutoffSpin").setValue(5.0)
         dialog.findChild(QDoubleSpinBox, "correctionOrbitLimitSpin").setValue(2.5)
         minimum = dialog.findChild(
             QDoubleSpinBox,
@@ -1681,6 +1694,8 @@ def test_offline_demo_confirms_automatic_correction_settings(monkeypatch) -> Non
     assert demo.max_iter_spin.value() == 1
     assert demo.gain_spin.value() == pytest.approx(0.3)
     assert demo.max_step_pct_spin.value() == pytest.approx(12.5)
+    assert demo.svd_cut_pct_spin.value() == pytest.approx(5.0)
+    assert demo._config_from_widgets().solver.svd_cut == pytest.approx(0.05)
     assert demo._config_from_widgets().safety.max_reference_orbit_change_mm == pytest.approx(2.5)
     assert demo.correction_mode == "automatic"
     assert demo.min_step_improvement_spin.value() == pytest.approx(7.5)

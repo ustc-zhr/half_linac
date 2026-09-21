@@ -1576,6 +1576,25 @@ class MainWindow(QMainWindow):
             "Max Step (%)",
             self.max_step_pct_spin,
         )
+
+        self.svd_cut_pct_spin = QDoubleSpinBox()
+        self.svd_cut_pct_spin.setObjectName("svdCutoffSpin")
+        self.svd_cut_pct_spin.setDecimals(3)
+        self.svd_cut_pct_spin.setRange(0.0, 99.9)
+        self.svd_cut_pct_spin.setSingleStep(0.1)
+        self.svd_cut_pct_spin.setSuffix(" %")
+        self.svd_cut_pct_spin.setToolTip(
+            "Discard response modes whose singular value is below this "
+            "percentage of the largest singular value."
+        )
+        self.svd_cut_pct_spin.valueChanged.connect(
+            self._correction_setting_changed
+        )
+        self._add_form_row(
+            correction_step_form,
+            "SVD Cutoff",
+            self.svd_cut_pct_spin,
+        )
         correction_card_layout.addLayout(correction_step_form)
         layout.addWidget(self.correction_step_card)
 
@@ -3080,6 +3099,7 @@ class MainWindow(QMainWindow):
             )
             self.gain_spin.setValue(self.config.solver.gain)
             self.max_step_pct_spin.setValue(100.0 * self.config.solver.max_step_fraction)
+            self.svd_cut_pct_spin.setValue(100.0 * self.config.solver.svd_cut)
             self.response_update_combo.setCurrentText(self.config.solver.response_update)
             entrance = self.config.section.model_entrance or "section entrance"
             self.model_boundary_label.setText(f"Assume D=D'=0 at {entrance}")
@@ -3370,7 +3390,7 @@ class MainWindow(QMainWindow):
             return
         self.correction_recommendation = None
         self.correction_state_label.setText(
-            "Correction limits changed. The previous recommendation was discarded, "
+            "Correction settings changed. The previous recommendation was discarded, "
             "but the dispersion measurement remains valid."
         )
         self.recommendation_summary_label.setText(
@@ -4207,6 +4227,7 @@ class MainWindow(QMainWindow):
                 ),
                 gain=float(self.gain_spin.value()),
                 max_step_fraction=float(self.max_step_pct_spin.value()) / 100.0,
+                svd_cut=float(self.svd_cut_pct_spin.value()) / 100.0,
                 response_update=self.response_update_combo.currentText(),
             ),
         )
@@ -5342,6 +5363,7 @@ class MainWindow(QMainWindow):
         )
         text = (
             f"Maximum {self.max_iter_spin.value()} iterations · {policy}. "
+            f"SVD cutoff {self.svd_cut_pct_spin.value():g}%. "
             f"Each iteration must improve RMS by at least "
             f"{self.min_step_improvement_spin.value():g}%; the loop may stop earlier."
         )
@@ -5497,9 +5519,28 @@ class MainWindow(QMainWindow):
         )
         settings.addWidget(minimum_improvement, 3, 1)
 
+        svd_cut_label = QLabel("SVD cutoff")
+        svd_cut_label.setProperty("role", "field")
+        settings.addWidget(svd_cut_label, 3, 2)
+        svd_cut_value = QDoubleSpinBox(dialog)
+        svd_cut_value.setObjectName("automaticSvdCutoffSpin")
+        svd_cut_value.setDecimals(3)
+        svd_cut_value.setRange(0.0, 99.9)
+        svd_cut_value.setSingleStep(0.1)
+        svd_cut_value.setSuffix(" %")
+        svd_cut_value.setValue(self.svd_cut_pct_spin.value())
+        svd_cut_value.setToolTip(
+            "Discard response modes whose singular value is below this "
+            "percentage of the largest singular value."
+        )
+        dialog.accepted.connect(
+            lambda: self.svd_cut_pct_spin.setValue(svd_cut_value.value())
+        )
+        settings.addWidget(svd_cut_value, 3, 3)
+
         orbit_limit_label = QLabel("Orbit change limit")
         orbit_limit_label.setProperty("role", "field")
-        settings.addWidget(orbit_limit_label, 3, 2)
+        settings.addWidget(orbit_limit_label, 4, 0)
         orbit_limit_value = QDoubleSpinBox(dialog)
         orbit_limit_value.setObjectName("correctionOrbitLimitSpin")
         orbit_limit_value.setDecimals(2)
@@ -5507,16 +5548,16 @@ class MainWindow(QMainWindow):
         orbit_limit_value.setSingleStep(0.1)
         orbit_limit_value.setSuffix(" mm")
         orbit_limit_value.setValue(self.config.safety.max_reference_orbit_change_mm)
-        settings.addWidget(orbit_limit_value, 3, 3)
+        settings.addWidget(orbit_limit_value, 4, 1)
         response_source = QComboBox(dialog)
         response_source.setObjectName("correctionResponseSource")
         self._populate_response_sources(response_source, self._config_from_widgets())
-        settings.addWidget(QLabel("Q response source"), 4, 0)
-        settings.addWidget(response_source, 4, 1, 1, 3)
+        settings.addWidget(QLabel("Q response source"), 5, 0)
+        settings.addWidget(response_source, 5, 1, 1, 3)
         source_details = QLabel(dialog)
         source_details.setObjectName("correctionResponseDetails")
         source_details.setWordWrap(True)
-        settings.addWidget(source_details, 5, 0, 1, 4)
+        settings.addWidget(source_details, 6, 0, 1, 4)
 
         def update_source_details():
             record = response_source.currentData()
@@ -5735,6 +5776,7 @@ class MainWindow(QMainWindow):
             f"(improvement {improvement:+.6g} mm)\n"
             f"Response condition number: {recommendation.condition_number:.6g} · "
             f"{knob_count} knobs · effective modes {retained_rank}/{required_rank} · "
+            f"SVD cutoff {100.0 * self.config.solver.svd_cut:g}% · "
             f"gain {self.config.solver.gain:.3g} · "
             f"max step {100.0 * self.config.solver.max_step_fraction:.1f}%\n"
             + "Knob changes: "
