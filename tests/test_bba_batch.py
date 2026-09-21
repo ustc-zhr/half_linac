@@ -173,10 +173,16 @@ class BbaBatchTests(unittest.TestCase):
         try:
             positions = np.linspace(-0.001, 0.001, 5)
             quality = fit_bba1_center(positions, positions - 0.003)
+            quality["inner_fits"] = [
+                {"corrector": value, "slope": value, "quality": "good"}
+                for value in (-1.0, 0.0, 1.0)
+            ]
+            quality["inner_summary"] = {"total": 3, "good": 3, "weak": 0, "review": 0, "invalid": 0}
             record = dict(status="success", offset_m=quality["offset_m"], fit_quality=quality, archive="/tmp/bba-review-test")
             dialog.selected_rows = [0]
             dialog._progress(0, record)
             self.assertEqual(dialog.table.item(0, 8).text(), "Review")
+            self.assertIn("Guidance:", dialog.table.item(0, 8).toolTip())
             self.assertIn("±", dialog.table.item(0, 6).text())
             dialog._select_review()
             self.assertEqual(dialog._rows(), [0])

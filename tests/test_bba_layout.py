@@ -201,6 +201,11 @@ class BbaLayoutTests(unittest.TestCase):
             window.show()
             self.app.processEvents()
 
+            self.assertLessEqual(
+                abs(window.bba1_batch_button.height() - window.bba1_preset_combo.height()),
+                2,
+            )
+
             page_widgets = (
                 (window.tab, window.widget, window.widget_2),
                 (window.tab_2, window.widget_3, window.widget_4),

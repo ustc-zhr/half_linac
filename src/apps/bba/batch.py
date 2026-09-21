@@ -18,7 +18,12 @@ from PyQt5.QtWidgets import (
 
 from half_linac.src.shared.machine_profile.app_runtime import sanitize_runtime_token
 from half_linac.src.shared.machine_profile.loader import machine_root, load_bba_workflow
-from half_linac.src.apps.bba.fit_quality import fit_bba1_center
+from half_linac.src.apps.bba.fit_quality import (
+    analyze_bba1_inner_fit,
+    build_bba1_scan_guidance,
+    fit_bba1_center,
+    summarize_bba1_inner_fits,
+)
 
 
 def save_preset_scans(path, expected_text, originals, presets, backend, profile=None):
@@ -240,8 +245,12 @@ class BBABatchDialog(QDialog):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.verticalHeader().hide()
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Interactive)
+        header.resizeSection(1, 360)
+        for column in (2, 3):
+            header.setSectionResizeMode(column, QHeaderView.Stretch)
         if self.presets:
             scan = self.presets[0].scan
             self.table.horizontalHeaderItem(2).setText(f"COR ({scan.corr_unit})")
@@ -295,7 +304,7 @@ class BBABatchDialog(QDialog):
         editor_actions = QHBoxLayout()
         self.edit_note = QLabel("Changes apply to this batch. Save Defaults keeps them for future runs.")
         editor_actions.addWidget(self.edit_note, 1)
-        for label, handler in (("Apply to Row", self._commit_editor), ("Sampling → Checked", self._apply_sampling), ("Save Defaults", self._save_defaults)):
+        for label, handler in (("Apply to Row", self._commit_editor), ("Copy Sampling to Checked", self._apply_sampling), ("Save Defaults", self._save_defaults)):
             button = QPushButton(label)
             button.setProperty("compact", True)
             button.clicked.connect(handler)
@@ -319,7 +328,7 @@ class BBABatchDialog(QDialog):
             button.setFixedWidth(155 if button != self.close_button else 85)
             controls.addWidget(button)
         controls.insertStretch(2, 1)
-        for label, handler in (("View Fit", self._view_result), ("Load Result…", self._load_result)):
+        for label, handler in (("View Fit", self._view_result), ("Open Result…", self._load_result)):
             button = QPushButton(label)
             button.clicked.connect(handler)
             controls.insertWidget(2, button)
@@ -448,7 +457,7 @@ class BBABatchDialog(QDialog):
             per_point = scan.settle_time + (scan.samples - 1) * scan.sample_interval
             reference = per_point if self.window.bba1_bpm1_mode_combo.currentData() == "initial_k1" else 0
             seconds += scan.corr_steps * (scan.quad_steps * per_point + reference + 1) + scan.settle_time
-        self.summary.setText(f"{len(rows)} selected · approximately {seconds / 60:.1f} min plus PV communication and restoration checks")
+        self.summary.setText(f"{len(rows)} selected · approximately {seconds / 60:.1f} min")
         self.start_button.setEnabled(bool(rows))
 
     def _start(self):
@@ -523,6 +532,7 @@ class BBABatchDialog(QDialog):
             if "fit_quality" not in record:
                 data = np.loadtxt(Path(path).parent / "m1S.txt", ndmin=2)
                 record["fit_quality"] = fit_bba1_center(data[:, 0], data[:, 1])
+            self._add_inner_diagnostics_from_raw(record, Path(path).parent)
             self._show_fit(record, metadata.get("preset_id") or "BBA1")
         except (OSError, ValueError, KeyError, IndexError) as exc:
             QMessageBox.warning(self, "BBA1 result", str(exc))
@@ -555,6 +565,37 @@ class BBABatchDialog(QDialog):
                       "\n1σ is an approximate fit statistic; it excludes systematic errors and BPM1 measurement uncertainty.")
         note.setWordWrap(True)
         layout.addWidget(note)
+        inner_fits = quality.get("inner_fits")
+        if inner_fits:
+            guidance = quality.get("scan_guidance") or build_bba1_scan_guidance(quality)
+            guidance_label = QLabel("Scan guidance: " + " ".join(guidance))
+            guidance_label.setWordWrap(True)
+            layout.addWidget(guidance_label)
+            summary = quality.get("inner_summary") or summarize_bba1_inner_fits(inner_fits)
+            layout.addWidget(QLabel(
+                f"Inner fits: {summary.get('good', 0)} good, {summary.get('weak', 0)} weak, "
+                f"{summary.get('review', 0)} review, {summary.get('invalid', 0)} invalid"
+            ))
+            table = QTableWidget(len(inner_fits), 5, dialog)
+            table.setHorizontalHeaderLabels(["Corrector", "Slope", "R²", "S/N", "Status"])
+            table.verticalHeader().hide()
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.setMaximumHeight(155)
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            for row, item in enumerate(inner_fits):
+                corrector = item.get("corrector")
+                values = (
+                    "—" if corrector is None else f"{corrector:.6g}",
+                    "—" if item.get("slope") is None else f"{item['slope']:.6g}",
+                    "—" if item.get("r_squared") is None else f"{item['r_squared']:.3f}",
+                    "—" if item.get("signal_to_noise") is None else f"{item['signal_to_noise']:.2f}",
+                    item.get("quality", "invalid"),
+                )
+                for column, value in enumerate(values):
+                    table.setItem(row, column, QTableWidgetItem(value))
+            layout.addWidget(table)
+        else:
+            layout.addWidget(QLabel("Inner diagnostics unavailable for this result"))
         figure = Figure(tight_layout=True)
         canvas = FigureCanvasQTAgg(figure)
         layout.addWidget(NavigationToolbar2QT(canvas, dialog))
@@ -608,12 +649,54 @@ class BBABatchDialog(QDialog):
                 self.table.item(row, 6).setText("—")
             self.table.item(row, 8).setText({"good": "Normal", "review": "Review", "invalid": "Invalid"}[quality["quality"]])
             self.table.item(row, 8).setForeground(QColor(self.window._palette()["metric_active_fg" if quality["quality"] == "good" else "metric_warning_fg"]))
-            self.table.item(row, 8).setToolTip("; ".join(quality["reasons"]) or "No review flags. Double-click to inspect fit.")
+            summary = quality.get("inner_summary")
+            tooltip = "; ".join(quality["reasons"]) or "No review flags. Double-click to inspect fit."
+            if summary:
+                tooltip += ("\n" if tooltip else "") + (
+                    f"Inner fits: {summary.get('good', 0)} good, "
+                    f"{summary.get('weak', 0)} weak, {summary.get('review', 0)} review"
+                )
+                guidance = quality.get("scan_guidance") or build_bba1_scan_guidance(quality)
+                tooltip += "\nGuidance: " + guidance[0]
+            self.table.item(row, 8).setToolTip(tooltip)
             score = quality.get("r_squared")
             self.table.item(row, 9).setText("—" if score is None else f"{score:.3f}")
         self.table.item(row, 7).setText("Saved" if status == "success" else "")
         self.table.item(row, 7).setToolTip(record.get("archive", ""))
         self.summary.setText(f"{index + 1}/{len(self.selected_rows)} · {self.presets[row].id} · {status}")
+
+    @staticmethod
+    def _add_inner_diagnostics_from_raw(record, directory):
+        quality = record.get("fit_quality")
+        if not isinstance(quality, dict) or quality.get("inner_fits"):
+            return
+        try:
+            raw = np.loadtxt(Path(directory) / "bba1_quad_scan.txt", ndmin=2)
+            if raw.ndim != 2 or raw.shape[1] < 4:
+                return
+            fits = []
+            for corrector in BBABatchDialog._ordered_unique(raw[:, 0]):
+                points = raw[raw[:, 0] == corrector]
+                k1 = BBABatchDialog._ordered_unique(points[:, 1])
+                groups = [points[points[:, 1] == value, 3] for value in k1]
+                item = analyze_bba1_inner_fit(k1, groups)
+                item["corrector"] = float(corrector)
+                fits.append(item)
+            if fits:
+                quality["inner_fits"] = fits
+                quality["inner_summary"] = summarize_bba1_inner_fits(fits)
+                quality["scan_guidance"] = build_bba1_scan_guidance(quality)
+        except (OSError, ValueError, IndexError):
+            return
+
+    @staticmethod
+    def _ordered_unique(values):
+        unique = []
+        for value in values:
+            value = float(value)
+            if value not in unique:
+                unique.append(value)
+        return unique
 
     def _stop(self):
         if self.worker is not None:

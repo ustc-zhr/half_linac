@@ -6,10 +6,76 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from half_linac.src.apps.bba.fit_quality import fit_bba1_center
+from half_linac.src.apps.bba.fit_quality import (
+    analyze_bba1_inner_fit,
+    build_bba1_scan_guidance,
+    fit_bba1_center,
+)
 
 
 class BbaFitQualityTests(unittest.TestCase):
+    def test_inner_linear_repeated_samples_are_good(self):
+        k1 = np.linspace(-2, 2, 5)
+        samples = [np.array([0.4 * value + 0.001, 0.4 * value, 0.4 * value - 0.001]) for value in k1]
+        result = analyze_bba1_inner_fit(k1, samples)
+        self.assertEqual(result["quality"], "good")
+        self.assertGreater(result["signal_to_noise"], 1)
+        self.assertIsNotNone(result["slope_sigma"])
+
+    def test_inner_weak_slope_is_not_invalid(self):
+        k1 = np.linspace(-2, 2, 5)
+        samples = [np.array([0.0001 * value + noise for noise in (-0.01, 0.01, 0.0)]) for value in k1]
+        result = analyze_bba1_inner_fit(k1, samples)
+        self.assertEqual(result["quality"], "weak")
+
+    def test_inner_excess_residuals_are_review(self):
+        k1 = np.linspace(-2, 2, 5)
+        samples = [np.array([0.4 * value, 0.4 * value + 0.001, 0.4 * value - 0.001]) for value in k1]
+        samples[2] += 0.2
+        result = analyze_bba1_inner_fit(k1, samples)
+        self.assertEqual(result["quality"], "review")
+
+    def test_inner_invalid_and_single_sample_cases(self):
+        invalid = analyze_bba1_inner_fit([0, 1], [[0], [1]])
+        self.assertEqual(invalid["quality"], "invalid")
+        single = analyze_bba1_inner_fit([0, 1, 2], [[0], [1], [2]])
+        self.assertEqual(single["quality"], "good")
+        self.assertIsNone(single["noise_mean_m"])
+
+    def test_scan_guidance_distinguishes_weak_review_and_cor_range(self):
+        base = {
+            "positions_m": [-0.001, 0.0, 0.001],
+            "offset_m": 0.0,
+            "inner_fits": [
+                {"corrector": -1.0, "slope": -1.0, "quality": "good"},
+                {"corrector": 0.0, "slope": 0.0, "quality": "weak"},
+                {"corrector": 1.0, "slope": 1.0, "quality": "good"},
+            ],
+        }
+        guidance = build_bba1_scan_guidance(base)
+        self.assertIn("may be expected", " ".join(guidance))
+
+        weak = dict(base, inner_fits=[
+            {"corrector": -1.0, "slope": -0.1, "quality": "weak"},
+            {"corrector": 0.0, "slope": 0.0, "quality": "weak"},
+            {"corrector": 1.0, "slope": 0.1, "quality": "good"},
+        ])
+        self.assertIn("widening the K1 range", " ".join(build_bba1_scan_guidance(weak)))
+
+        review = dict(base, inner_fits=[
+            {"corrector": -1.0, "slope": -1.0, "quality": "review"},
+            {"corrector": 0.0, "slope": 0.0, "quality": "good"},
+            {"corrector": 1.0, "slope": 1.0, "quality": "good"},
+        ])
+        self.assertIn("K1 nonlinearity", " ".join(build_bba1_scan_guidance(review)))
+
+        outside = dict(base, offset_m=-0.002, inner_fits=[
+            {"corrector": 0.0, "slope": 1.0, "quality": "good"},
+            {"corrector": 1.0, "slope": 2.0, "quality": "good"},
+            {"corrector": 2.0, "slope": 3.0, "quality": "good"},
+        ])
+        self.assertIn("lower COR setpoints", " ".join(build_bba1_scan_guidance(outside)))
+
     def test_exact_center_and_covariance_uncertainty(self):
         positions = np.arange(-2, 3) * 0.001
         noise = np.array([1, -2, 2, -2, 1]) * 0.0001

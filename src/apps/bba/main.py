@@ -65,7 +65,12 @@ from half_linac.src.apps.bba.profile_runtime import (
     resolve_limited_scan_values,
 )
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
-from half_linac.src.apps.bba.fit_quality import fit_bba1_center
+from half_linac.src.apps.bba.fit_quality import (
+    analyze_bba1_inner_fit,
+    build_bba1_scan_guidance,
+    fit_bba1_center,
+    summarize_bba1_inner_fits,
+)
 
 def bba1_saved_k1_sign(data_path):
     """Convert legacy plane-signed K1 (and its slope) to magnet K1."""
@@ -588,7 +593,7 @@ class myWindow(QWidget, Ui_Form):
 
     def _configure_window(self):
         self.setWindowTitle(f"{self.machine_profile.machine.display_name} BBA")
-        self.resize(1600, 960)
+        self.resize(1600, 1080)
         self.setMinimumSize(1320, 860)
         self.tabWidget.setCurrentIndex(0)
 
@@ -621,6 +626,11 @@ class myWindow(QWidget, Ui_Form):
 
     def _setup_defaults(self):
         self.lineEdit_10.clear()
+        if hasattr(self, "bba1_inner_summary_label"):
+            self.bba1_inner_summary_label.clear()
+            self.bba1_inner_summary_label.setToolTip("")
+        if hasattr(self, "bba1_scan_guidance_label"):
+            self.bba1_scan_guidance_label.clear()
         self.lineEdit_18.clear()
         self.lineEdit_19.clear()
         self.lineEdit_19.setToolTip("")
@@ -734,6 +744,7 @@ class myWindow(QWidget, Ui_Form):
 
         title = QLabel(title_text, card)
         title.setObjectName("panelTitle")
+        title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         card_layout.addWidget(title)
         card_layout.addWidget(widget)
 
@@ -862,6 +873,7 @@ class myWindow(QWidget, Ui_Form):
         preset_actions = QHBoxLayout()
         preset_actions.addWidget(self.bba1_preset_combo, 1)
         self.bba1_batch_button = QPushButton("Batch…", self.frame)
+        self.bba1_batch_button.setProperty("compact", True)
         self.bba1_batch_button.clicked.connect(self._open_bba1_batch)
         preset_actions.addWidget(self.bba1_batch_button)
         form.addLayout(preset_actions, 0, 1, 1, 7)
@@ -924,6 +936,14 @@ class myWindow(QWidget, Ui_Form):
             form.setColumnStretch(column, 1)
 
         layout.addLayout(form)
+        controls = QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(8)
+        for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
+            button.setParent(self.frame)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            controls.addWidget(button)
+        layout.addLayout(controls)
 
     def _rebuild_bba1_run_panel(self):
         layout = QVBoxLayout(self.frame_2)
@@ -979,17 +999,6 @@ class myWindow(QWidget, Ui_Form):
         self.bba1_restore_points_button.clicked.connect(self._restore_all_bba1_scan_points)
         layout.addLayout(point_actions)
 
-        layout.addWidget(self._make_panel_title("Run & Readout", self.frame_2))
-
-        controls = QHBoxLayout()
-        controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(8)
-        for button in (self.pushButton, self.pushButton_2, self.pushButton_4):
-            button.setParent(self.frame_2)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            controls.addWidget(button)
-        layout.addLayout(controls)
-
         result_row = QGridLayout()
         result_row.setHorizontalSpacing(8)
         result_row.setVerticalSpacing(6)
@@ -998,7 +1007,18 @@ class myWindow(QWidget, Ui_Form):
         self.lineEdit_10.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         result_row.addWidget(self.lineEdit_10, 0, 1)
         result_row.setColumnStretch(1, 1)
+        layout.addWidget(self._make_panel_title("Result & Diagnostics", self.frame_2))
         layout.addLayout(result_row)
+        self.bba1_inner_summary_label = QLabel(self.frame_2)
+        self.bba1_inner_summary_label.setProperty("role", "field")
+        self.bba1_inner_summary_label.setWordWrap(True)
+        self.bba1_inner_summary_label.setText("Inner diagnostics unavailable")
+        layout.addWidget(self.bba1_inner_summary_label)
+        self.bba1_scan_guidance_label = QLabel(self.frame_2)
+        self.bba1_scan_guidance_label.setWordWrap(True)
+        self.bba1_scan_guidance_label.setProperty("role", "field")
+        self.bba1_scan_guidance_label.setText("Scan guidance unavailable")
+        layout.addWidget(self.bba1_scan_guidance_label)
 
     def _rebuild_bba2_setup_panel(self):
         layout = QVBoxLayout(self.frame_3)
@@ -1777,11 +1797,19 @@ class myWindow(QWidget, Ui_Form):
         active, total = self._bba1_scan_points_counts()
         label.setText(f"{active} active / {total} total")
 
+    def _clear_bba1_diagnostics(self):
+        if hasattr(self, "bba1_inner_summary_label"):
+            self.bba1_inner_summary_label.setText("Inner diagnostics unavailable")
+            self.bba1_inner_summary_label.setToolTip("")
+        if hasattr(self, "bba1_scan_guidance_label"):
+            self.bba1_scan_guidance_label.setText("Scan guidance unavailable")
+
     def _on_bba1_scan_point_item_changed(self, item):
         if item.column() != 0:
             return
         self._update_bba1_scan_points_summary()
         self._redraw_bba1_scan_points_from_table()
+        self._clear_bba1_diagnostics()
 
     def _clear_bba1_scan_points(self):
         table = getattr(self, "bba1_scan_points_table", None)
@@ -1791,6 +1819,7 @@ class myWindow(QWidget, Ui_Form):
         table.setRowCount(0)
         table.blockSignals(False)
         self._update_bba1_scan_points_summary()
+        self._clear_bba1_diagnostics()
 
     def _append_bba1_scan_point(self, corr, quad_k1, bpm1, bpm2, *, enabled=True):
         table = getattr(self, "bba1_scan_points_table", None)
@@ -1911,6 +1940,7 @@ class myWindow(QWidget, Ui_Form):
         table.blockSignals(False)
         self._update_bba1_scan_points_summary()
         self._redraw_bba1_scan_points_from_table()
+        self._clear_bba1_diagnostics()
 
     def _restore_all_bba1_scan_points(self):
         table = getattr(self, "bba1_scan_points_table", None)
@@ -1924,6 +1954,7 @@ class myWindow(QWidget, Ui_Form):
         table.blockSignals(False)
         self._update_bba1_scan_points_summary()
         self._redraw_bba1_scan_points_from_table()
+        self._clear_bba1_diagnostics()
 
     def _redraw_bba1_scan_points_from_table(self):
         table = getattr(self, "bba1_scan_points_table", None)
@@ -2605,6 +2636,7 @@ class myWindow(QWidget, Ui_Form):
             self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-1 scan points")
             self._draw_placeholder(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL, "Waiting for BBA-1 fit")
             self.lineEdit_10.setText("")
+            self._clear_bba1_diagnostics()
             if data.get("clear_points"):
                 self._clear_bba1_scan_points()
             self._refresh_status()
@@ -2667,7 +2699,22 @@ class myWindow(QWidget, Ui_Form):
             if sigma is not None:
                 value += f" ± {sigma * 1e3:.4f}"
             self.lineEdit_10.setText(value)
-            self.lineEdit_10.setToolTip("1σ statistical uncertainty. " + "; ".join(quality.get("reasons", [])))
+            summary = quality.get("inner_summary")
+            if summary:
+                self.bba1_inner_summary_label.setText(
+                    f"Inner fits: {summary.get('good', 0)} good · "
+                    f"{summary.get('weak', 0)} weak · "
+                    f"{summary.get('review', 0)} review · "
+                    f"{summary.get('invalid', 0)} invalid"
+                )
+            else:
+                self.bba1_inner_summary_label.setText("Inner diagnostics unavailable")
+            guidance = quality.get("scan_guidance") or build_bba1_scan_guidance(quality)
+            self.bba1_scan_guidance_label.setText("Scan guidance: " + " ".join(guidance))
+            self.lineEdit_10.setToolTip(
+                "1σ statistical uncertainty. " + "; ".join(quality.get("reasons", [])) +
+                ("\nGuidance: " + " ".join(guidance) if guidance else "")
+            )
         self._refresh_status()
 
     def display_bba2(self, data):
@@ -2866,6 +2913,7 @@ class BBAScanThread(BBABaseThread):
         self.outcome = {"status": "pending", "error": "", "restored": False}
         self.raw_rows = []
         self.restore_readbacks = []
+        self.inner_fits = []
 
     def _capture_restore_readbacks(self):
         if not self.params.batch or self.params.control_backend != "real":
@@ -2952,6 +3000,10 @@ class BBAScanThread(BBABaseThread):
                 x, y = scan_result
 
             quality = fit_bba1_center(x, y)
+            if self.inner_fits:
+                quality["inner_fits"] = self.inner_fits
+                quality["inner_summary"] = summarize_bba1_inner_fits(self.inner_fits)
+                quality["scan_guidance"] = build_bba1_scan_guidance(quality)
             self.outcome.update(status="success", offset_m=quality["offset_m"], fit_quality=quality)
             self._emit({
                 "show": "m1S",
@@ -3006,6 +3058,7 @@ class BBAScanThread(BBABaseThread):
 
         m1_results = []
         slope_results = []
+        self.inner_fits = []
         for kick in self._ordered_unique(kick_values):
             kick_mask = kick_values == kick
             group_quad_k1 = quad_k1_values[kick_mask]
@@ -3026,6 +3079,12 @@ class BBAScanThread(BBABaseThread):
             bpm2_means = np.asarray(bpm2_means, dtype=float)
             coeff = np.polyfit(quad_means, bpm2_means, deg=1)
             fit = np.poly1d(coeff)
+            inner = analyze_bba1_inner_fit(
+                quad_means, [group_bpm2[group_quad_k1 == value]
+                             for value in self._ordered_unique(group_quad_k1)]
+            )
+            inner["corrector"] = float(kick)
+            self.inner_fits.append(inner)
 
             reference_samples = self._bpm1_samples_for_fit(kick, group_bpm1)
             bpm1_mean = float(np.mean(reference_samples))
@@ -3171,6 +3230,7 @@ class BBAScanThread(BBABaseThread):
 
         m1_results = []
         slope_results = []
+        self.inner_fits = []
         quad_scan_rows = []
         self.raw_rows = quad_scan_rows
 
@@ -3232,6 +3292,9 @@ class BBAScanThread(BBABaseThread):
 
                 bpm2_matrix = np.asarray(bpm2_samples, dtype=float).reshape(self.params.quad_steps, self.params.samples)
                 bpm2_mean = np.mean(bpm2_matrix, axis=1)
+                inner = analyze_bba1_inner_fit(k1_values, list(bpm2_matrix))
+                inner["corrector"] = float(kick)
+                self.inner_fits.append(inner)
                 reference_samples = self._bpm1_samples_for_fit(kick, bpm1_samples)
                 bpm1_mean = float(np.mean(reference_samples))
 
