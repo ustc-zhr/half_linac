@@ -10,6 +10,7 @@ from datetime import datetime
 from collections.abc import Mapping
 from dataclasses import replace
 from functools import partial
+from copy import deepcopy
 
 _REPO_BOOTSTRAP_ROOT = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file()
@@ -1202,6 +1203,12 @@ class myWindow(QWidget,Ui_Form):
         title.setObjectName("summaryTitle")
         header_layout.addWidget(title)
         header_layout.addStretch(1)
+
+        self.optimization_dialog = None
+        self.optimization_button = QPushButton("Emittance Optimization", panel)
+        self.optimization_button.setVisible(self.machine_profile.machine.id == "half")
+        self.optimization_button.clicked.connect(self._show_optimization)
+        header_layout.addWidget(self.optimization_button)
 
         header_layout.addWidget(
             RuntimeContextWidget(
@@ -4322,6 +4329,51 @@ class myWindow(QWidget,Ui_Form):
         if self._beam_image_auto_refresh_ready:
             self._schedule_beam_image_refresh()
 
+    def _show_optimization(self):
+        from half_linac.src.apps.emit_measure.optimization_gui import OptimizationDialog
+        if self.optimization_dialog is None:
+            self.optimization_dialog = OptimizationDialog(self)
+        self.optimization_dialog.refresh_note()
+        self.optimization_dialog.show()
+        self.optimization_dialog.raise_()
+        self.optimization_dialog.activateWindow()
+
+    def optimization_parameters(self, variables=()):
+        """Freeze the current measurement without changing ordinary scan settings."""
+        from half_linac.src.apps.emit_measure.optimization import VerifiedQuadRestore
+        if self.machine_profile.machine.id != "half" or self.machine_type != "real":
+            raise ValueError("Emittance optimization requires HALF real channels.")
+        require_workflow_write_allowed(self.app_context, "emit_measure", "Emittance optimization")
+        if self.beam_image_background_checkbox.isChecked() and not self._background_reference_is_usable():
+            raise ValueError("Selected screen background is not usable; correct it before optimization.")
+        para = self.get_setting(show_warning=False)
+        if para is None:
+            raise ValueError("Invalid main-window measurement settings; check the scan range, sampling and model path.")
+        if not math.isfinite(para.EnergyMeV) or para.EnergyMeV <= 0:
+            raise ValueError("Measurement energy must be finite and positive.")
+        quad = self.machine_profile.get_element(para.quad_name)
+        for variable in variables:
+            element = self.machine_profile.get_element(variable.element_id)
+            if element.kind != "solenoid" or element.order >= quad.order:
+                raise ValueError(f"{element.id}: select a solenoid upstream of {quad.id}.")
+        para.roi = deepcopy(para.roi)
+        if para.background_image is not None:
+            para.background_image = np.array(para.background_image, copy=True)
+        para.recal = False
+        image = epics.caget(para.flagImagePV, timeout=10, use_monitor=False)
+        if image is None or np.asarray(image).size != int(np.prod(para.flag_pixel_shape)):
+            raise ValueError(f"{para.flag_name} image is unavailable or its dimensions do not match the configuration.")
+        self._prepare_emit_model_snapshot(para)
+        para.restore_quad = VerifiedQuadRestore(self.app_context, para.quad_name)
+        para.scan_metadata = self._scan_metadata_from_paras(para)
+        para.scan_metadata["initial_quad"] = {
+            "element": para.quad_name,
+            "k1": para.restore_quad.initial_k1,
+            "current_set": para.restore_quad.initial_current,
+            "current_readback": para.restore_quad.initial_readback,
+        }
+        return para
+
     def get_setting(self, *, show_warning=True):
         try:
             para = structData()
@@ -4457,6 +4509,8 @@ class myWindow(QWidget,Ui_Form):
             return None
 
     def refresh_current_beam_image_fit(self, paras=None, *, show_warning=True):
+        if getattr(self, "_closing", False) or getattr(self, "_optimization_locked", False):
+            return False
         if paras is None:
             paras = self.get_setting(show_warning=show_warning)
             if paras is None:
@@ -4929,6 +4983,8 @@ class myWindow(QWidget,Ui_Form):
                 self.beam_image_timer.start()
  
     def startScan(self):
+        if getattr(self, "_optimization_locked", False):
+            return
         if not self._require_model_backend_available("Emit measurement scan"):
             return
         if self._scan_is_running():
@@ -5000,6 +5056,8 @@ class myWindow(QWidget,Ui_Form):
         self._refresh_status()
 
     def recalculate(self):
+        if getattr(self, "_optimization_locked", False):
+            return
         if not self._require_model_backend_available("Emit recalculation"):
             return
         if self._scan_is_running():
@@ -5493,14 +5551,28 @@ class myWindow(QWidget,Ui_Form):
         self._refresh_status()
 
     def closeEvent(self, event):
+        optimization = getattr(self, "optimization_dialog", None)
+        if optimization is not None and not optimization.shutdown():
+            event.ignore()
+            if optimization.busy():
+                QTimer.singleShot(250, self.close)
+            else:
+                optimization.show()
+                optimization.raise_()
+            return
         if hasattr(self, "matching_workspace") and not self.matching_workspace.shutdown():
             event.ignore()
             QTimer.singleShot(250, self.close)
             return
+        self._closing = True
         self.beam_image_timer.stop()
         if hasattr(self, "multi_screen_workspace"):
             self.multi_screen_workspace.stop()
         self.stopScan()
+        if self._scan_is_running():
+            event.ignore()
+            QTimer.singleShot(250, self.close)
+            return
         if self._twiss_is_running():
             if not self.twissCal.wait(3000):
                 print("Timed out waiting for twiss thread to finish.")
@@ -5653,6 +5725,8 @@ class scanThread(QThread):
         self.final_plane_validation = None
         self.is_running = True
         self.effective_k1_limit = None
+        self.terminal_result = {"restored": False}
+        self.restore_quad_callback = getattr(paras, "restore_quad", None)
 
     def _sleep_or_stop(self, seconds):
         end_time = time.time() + seconds
@@ -5661,8 +5735,12 @@ class scanThread(QThread):
         return self.is_running
 
     def _restore_quad(self, value):
+        if self.restore_quad_callback is not None:
+            self.restore_quad_callback(value)
+            return
         if value is not None:
-            epics.caput(self.quadPV, value)
+            if epics.caput(self.quadPV, value, wait=True, timeout=10) != 1:
+                raise RuntimeError(f"Failed to restore {self.quad_name} to {value}.")
 
     @staticmethod
     def _sample_error(values):
@@ -5711,7 +5789,13 @@ class scanThread(QThread):
                 f"Planned K1 {float(k1):g} is outside effective limit "
                 f"{self.effective_k1_limit.describe()} for {self.quad_name}.K1."
             )
-        epics.caput(self.quadPV, k1)
+        if self.restore_quad_callback is not None:
+            def check_running():
+                if not self.is_running:
+                    raise RuntimeError("Scan stopped.")
+            self.restore_quad_callback.move(k1, check_running)
+        else:
+            epics.caput(self.quadPV, k1)
         if not self._sleep_or_stop(self.settle_time):
             return None
 
@@ -6270,15 +6354,26 @@ class scanThread(QThread):
             tmp["fit_summary"] = least_squares_summary
             tmp["all_fit_summary"] = fit_summary
 
+            self.terminal_result.update(deepcopy(tmp))
             self.trigger.emit(tmp)
             self._write_scan_fit_summary(fit_summary)
             print(f"leastSquare finished: {least_squares_summary['status']}")
            
             print("Program finished !")
         except Exception as exc:
+            self.terminal_result["error"] = str(exc)
+            self.terminal_result["fatal"] = True
             self.trigger.emit({"error": str(exc)})
         finally:
-            self._restore_quad(iniK1)
+            try:
+                self._restore_quad(iniK1)
+                self.terminal_result["restored"] = True
+            except Exception as exc:
+                self.terminal_result.update(restored=False, restore_error=str(exc))
+                self.trigger.emit({"error": f"Quadrupole restoration failed: {exc}"})
+            self.terminal_result["archive"] = str(self.scan_results_path)
+            if not self.is_running:
+                self.terminal_result["error"] = "Scan stopped."
 
     # Method-1, least squares method
     # --------------------
@@ -6398,6 +6493,7 @@ class scanThread(QThread):
             "gamma": result.gamma,
         }
         for key in (
+            "exn_raw",
             "determinant",
             "rank",
             "condition_number",
@@ -6680,6 +6776,7 @@ class scanThread(QThread):
             tmp = structData()
             tmp.ex    = round(ex   ,4)
             tmp.exn   = round(exn  ,2)
+            tmp.exn_raw = float(exn)
             tmp.beta  = round(beta ,2)
             tmp.alpha = round(alpha,2)
             tmp.gamma = round(gamma,2)
