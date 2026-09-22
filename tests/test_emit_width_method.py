@@ -48,6 +48,15 @@ class WidthMethodTests(unittest.TestCase):
             w._auto_refresh_beam_image_fit()
             refresh.assert_not_called()
 
+    def test_enabling_auto_refresh_reads_immediately(self):
+        w = self.window
+        w.tabWidget.setCurrentWidget(w.X_Plane)
+        w._beam_image_auto_refresh_ready = True
+        w.beam_image_auto_refresh_checkbox.setChecked(False)
+        with patch.object(w, 'refresh_current_beam_image_fit') as refresh:
+            w.beam_image_auto_refresh_checkbox.setChecked(True)
+            refresh.assert_called_once_with(show_warning=False)
+
     def test_default_and_rms_preview_and_scan_use_the_same_width(self):
         w = self.window
         self.assertEqual(w._beam_width_method(), 'Gaussian fit')
@@ -92,6 +101,44 @@ class WidthMethodTests(unittest.TestCase):
         expected = dict(metadata, beam_width_method='RMS moments')
         with self.assertRaisesRegex(RuntimeError, 'cannot be converted'):
             w._validate_scan_metadata(metadata, expected, 'legacy archive')
+
+    def test_display_limits_only_affect_fit_when_enabled(self):
+        w = self.window
+        paras = w.get_setting()
+        image = self.image(paras)
+        self.pv.side_effect = lambda pv, *args, **kwargs: image.ravel() if pv == paras.flagImagePV else None
+        w.beam_width_method_combo.setCurrentIndex(1)
+        w.beam_image_vmin = 0.04
+        w.beam_image_vmax = 0.5
+        self.assertTrue(w.refresh_current_beam_image_fit())
+        full_width = w.latest_beam_fit_result.sigx_mm
+        self.assertIsNone(w.get_setting().fit_vmin)
+        w.fit_intensity_checkbox.setChecked(True)
+        limited_paras = w.get_setting()
+        self.assertEqual(limited_paras.fit_vmin, 0.04)
+        self.assertTrue(w.refresh_current_beam_image_fit(limited_paras))
+        self.assertLess(w.latest_beam_fit_result.sigx_mm, full_width)
+        self.assertEqual(w._scan_metadata_from_paras(limited_paras)['fit_vmin'], 0.04)
+
+    def test_vmin_updates_image_while_field_still_has_focus(self):
+        w = self.window
+        paras = w.get_setting()
+        image = self.image(paras)
+        self.pv.side_effect = lambda pv, *args, **kwargs: image.ravel() if pv == paras.flagImagePV else None
+        self.assertTrue(w.refresh_current_beam_image_fit(paras))
+        w._show_beam_image_display_dialog()
+        w.beam_image_vmin_edit.setText('60')
+        norm = w.beam_image_widget.axes.images[-1].norm
+        self.assertEqual(norm.vmin, 60.0)
+        self.assertGreater(norm.vmax, norm.vmin)
+        self.assertFalse(w.fit_intensity_checkbox.isChecked())
+
+    def test_background_apply_control_lives_in_manage_dialog(self):
+        w = self.window
+        w._show_background_dialog()
+        self.assertIs(w.beam_image_background_checkbox.parentWidget(), w.background_dialog)
+        self.assertIn('Apply background', w.beam_image_background_checkbox.text())
+        w.background_dialog.hide()
 
     def test_method_locked_during_scan_and_enabled_afterwards(self):
         w = self.window

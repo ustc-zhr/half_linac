@@ -14,7 +14,9 @@ BEAM_IMAGE_COLORMAPS = (
 DEFAULT_BEAM_IMAGE_COLORMAP = "viridis"
 
 
-def resolve_image_display_scale(data, *, logarithmic=False, vmin=None, vmax=None):
+def resolve_image_display_scale(
+    data, *, logarithmic=False, vmin=None, vmax=None, preserve_manual_limits=False,
+):
     """Return display-only image data and normalization without changing analysis data."""
     image = np.asarray(data, dtype=float)
     finite_values = image[np.isfinite(image)]
@@ -34,8 +36,13 @@ def resolve_image_display_scale(data, *, logarithmic=False, vmin=None, vmax=None
             resolved_min = auto_min if vmin is None or vmin <= 0 else float(vmin)
             resolved_max = auto_max if vmax is None or vmax <= 0 else float(vmax)
             if resolved_min >= resolved_max:
-                resolved_min, resolved_max = auto_min, auto_max
-                warning = "Invalid Log intensity limits; using the positive image range."
+                if preserve_manual_limits and vmin is not None and vmax is None and vmin > 0:
+                    resolved_max = resolved_min * 10.0
+                elif preserve_manual_limits and vmax is not None and vmin is None and vmax > 0:
+                    resolved_min = resolved_max / 10.0
+                else:
+                    resolved_min, resolved_max = auto_min, auto_max
+                    warning = "Invalid Log intensity limits; using the positive image range."
             elif (vmin is not None and vmin <= 0) or (vmax is not None and vmax <= 0):
                 warning = "Log intensity limits must be positive; using automatic positive limits."
             if resolved_min >= resolved_max:
@@ -49,8 +56,13 @@ def resolve_image_display_scale(data, *, logarithmic=False, vmin=None, vmax=None
     resolved_min = auto_min if vmin is None else float(vmin)
     resolved_max = auto_max if vmax is None else float(vmax)
     if resolved_min >= resolved_max:
-        resolved_min, resolved_max = auto_min, auto_max
-        warning = warning or "Invalid intensity limits; using the image range."
+        if preserve_manual_limits and vmin is not None and vmax is None:
+            resolved_max = resolved_min + max(auto_max - auto_min, 1.0)
+        elif preserve_manual_limits and vmax is not None and vmin is None:
+            resolved_min = resolved_max - max(auto_max - auto_min, 1.0)
+        else:
+            resolved_min, resolved_max = auto_min, auto_max
+            warning = warning or "Invalid intensity limits; using the image range."
     if resolved_min >= resolved_max:
         resolved_max = resolved_min + 1.0
     return np.ma.masked_invalid(image), Normalize(resolved_min, resolved_max), warning

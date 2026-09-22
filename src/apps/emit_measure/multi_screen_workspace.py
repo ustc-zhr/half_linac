@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from functools import partial
 import json
+import math
 from pathlib import Path
 from typing import Callable, Mapping
 
@@ -30,6 +31,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QPushButton,
     QSpinBox,
@@ -118,6 +120,9 @@ class MultiScreenWorkspace(QWidget):
         self._last_frame_screen = None
         self.beam_image_colormap = DEFAULT_BEAM_IMAGE_COLORMAP
         self.beam_image_logarithmic = False
+        self.beam_image_vmin = None
+        self.beam_image_vmax = None
+        self.fit_uses_vmin = False
         self.beam_image_overlays = True
         self.beam_width_method = "Gaussian fit"
         self.roi_status = "Off"
@@ -125,6 +130,7 @@ class MultiScreenWorkspace(QWidget):
         self._background_image = None
         self._background_screen = None
         self._background_metadata = {}
+        self.background_dialog = None
         self.roi_control = None
         self._roi_screen = None
         self.roi_dialog = None
@@ -203,10 +209,13 @@ class MultiScreenWorkspace(QWidget):
         self.prepare_button = QPushButton("Prepare Measurement", self)
         self.new_button = QPushButton("Clear", self)
         self.acquire_button = QPushButton("Acquire Sample", self)
-        self.preview_button = QPushButton("Preview", self)
         self.auto_refresh_checkbox = QCheckBox("Auto refresh", self)
         self.auto_refresh_checkbox.setChecked(True)
-        self.auto_refresh_checkbox.toggled.connect(self._update_auto_refresh)
+        self.auto_refresh_checkbox.setToolTip(
+            "Read and fit the selected screen every 2 seconds after preparation. "
+            "Turning this on also refreshes immediately."
+        )
+        self.auto_refresh_checkbox.toggled.connect(self._auto_refresh_toggled)
         self.reconstruct_button = QPushButton("Reconstruct", self)
         self.save_button = QPushButton("Save As...", self)
         self.load_button = QPushButton("Load Archive", self)
@@ -240,7 +249,6 @@ class MultiScreenWorkspace(QWidget):
         self.prepare_button.clicked.connect(self.prepare_measurement)
         self.new_button.clicked.connect(self.new_measurement)
         self.acquire_button.clicked.connect(self.acquire_sample)
-        self.preview_button.clicked.connect(self.preview_sample)
         self.reconstruct_button.clicked.connect(self.reconstruct)
         self.save_button.clicked.connect(self.save_archive)
         self.load_button.clicked.connect(self.load_archive)
@@ -314,34 +322,52 @@ class MultiScreenWorkspace(QWidget):
         self.roi_button = QPushButton("Edit...", image_box)
         self.roi_button.setProperty("compact", True)
         self.roi_button.clicked.connect(self._show_roi_info)
-        self.preview_button.setText("Refresh")
-        self.preview_button.setProperty("compact", True)
         image_header.addWidget(self.beam_fit_summary_label)
-        image_header.addWidget(self.roi_status_label)
-        image_header.addWidget(self.roi_button)
         image_header.addWidget(self.auto_refresh_checkbox)
-        image_header.addWidget(self.preview_button)
-        image_layout.addLayout(image_header)
-        display_tools = QHBoxLayout()
-        display_tools.setSpacing(6)
-        display_tools.addWidget(QLabel("BG:", image_box))
         self.beam_background_status_label = QLabel("Off", image_box)
         self.beam_background_status_label.setProperty("role", "field")
         self.beam_background_manage_button = QPushButton("Manage...", image_box)
         self.beam_background_manage_button.setProperty("compact", True)
         self.beam_background_manage_button.clicked.connect(self._show_background_info)
-        self.beam_image_background_checkbox = QCheckBox("Apply", image_box)
+        self.beam_image_background_checkbox = QCheckBox("Apply background subtraction", image_box)
+        self.beam_image_background_checkbox.hide()
         self.beam_image_background_checkbox.setToolTip("Background subtraction is available through the Scan image workflow.")
         self.beam_image_background_checkbox.toggled.connect(self._background_toggled)
         self.beam_image_display_button = QPushButton("Display...", image_box)
         self.beam_image_display_button.setProperty("compact", True)
         self.beam_image_display_button.clicked.connect(self._show_display_dialog)
-        display_tools.addWidget(self.beam_background_status_label)
-        display_tools.addStretch(1)
-        display_tools.addWidget(self.beam_background_manage_button)
-        display_tools.addWidget(self.beam_image_background_checkbox)
-        display_tools.addWidget(self.beam_image_display_button)
-        image_layout.addLayout(display_tools)
+        self.width_method_combo = QComboBox(image_box)
+        self.width_method_combo.addItem("Gaussian fit", "Gaussian fit")
+        self.width_method_combo.addItem("Projection RMS", "RMS moments")
+        self.width_method_combo.currentIndexChanged.connect(
+            lambda _index: self._set_beam_width_method(self.width_method_combo.currentData())
+        )
+        self.fit_intensity_checkbox = QCheckBox("Use vmin for fit", image_box)
+        self.fit_intensity_checkbox.setToolTip(
+            "Remove pixels below Display vmin before computing projections. "
+            "vmax only changes image colors."
+        )
+        self.fit_intensity_checkbox.toggled.connect(self._set_fit_uses_vmin)
+        image_header.addWidget(self.beam_image_display_button)
+        image_layout.addLayout(image_header)
+        fit_tools = QHBoxLayout()
+        fit_tools.setSpacing(6)
+        fit_label = QLabel("Fit", image_box)
+        fit_label.setProperty("role", "field")
+        fit_tools.addWidget(fit_label)
+        fit_tools.addWidget(self.width_method_combo)
+        fit_tools.addWidget(self.fit_intensity_checkbox)
+        fit_tools.addSpacing(12)
+        background_label = QLabel("BG:", image_box)
+        background_label.setProperty("role", "field")
+        fit_tools.addWidget(background_label)
+        fit_tools.addWidget(self.beam_background_status_label)
+        fit_tools.addWidget(self.beam_background_manage_button)
+        fit_tools.addSpacing(12)
+        fit_tools.addWidget(self.roi_status_label)
+        fit_tools.addWidget(self.roi_button)
+        fit_tools.addStretch(1)
+        image_layout.addLayout(fit_tools)
         self.image_widget = MplWidget(image_box)
         self.image_widget.fig.clear()
         self.image_axes = self.image_widget.fig.add_subplot(111)
@@ -509,6 +535,12 @@ class MultiScreenWorkspace(QWidget):
             self._clear_image_display()
             return
         screen = self._screen_id(item)
+        if self._background_screen != screen and self.beam_image_background_checkbox.isChecked():
+            blocked = self.beam_image_background_checkbox.blockSignals(True)
+            self.beam_image_background_checkbox.setChecked(False)
+            self.beam_image_background_checkbox.blockSignals(blocked)
+            self.background_status = "Off"
+            self.beam_background_status_label.setText("Off")
         try:
             self._ensure_roi_control(screen)
             self._roi_changed()
@@ -603,7 +635,7 @@ class MultiScreenWorkspace(QWidget):
         prepared = self.session is not None and self.state not in {"Invalid", "Configuring"}
         writable = prepared and not self._archive_review
         self.acquire_button.setEnabled(writable and not self.session.acquisition.complete)
-        self.preview_button.setEnabled(writable)
+        self.auto_refresh_checkbox.setEnabled(not self._archive_review)
         self.reconstruct_button.setEnabled(
             self.session is not None and self.session.acquisition.can_reconstruct
         )
@@ -613,6 +645,12 @@ class MultiScreenWorkspace(QWidget):
         self.remove_screen_button.setEnabled(
             not self._archive_review and self.screen_list.count() > 3
         )
+        can_change_fit = not self._archive_review and not (
+            self.session is not None and self.session.acquisition.samples
+        )
+        self.width_method_combo.setEnabled(can_change_fit)
+        self.fit_intensity_checkbox.setEnabled(can_change_fit)
+        self.beam_image_background_checkbox.setEnabled(can_change_fit)
         self._update_auto_refresh()
 
     def _update_auto_refresh(self, *_args) -> None:
@@ -626,6 +664,11 @@ class MultiScreenWorkspace(QWidget):
             self._auto_refresh_timer.start()
         elif not active and self._auto_refresh_timer.isActive():
             self._auto_refresh_timer.stop()
+
+    def _auto_refresh_toggled(self, checked: bool) -> None:
+        self._update_auto_refresh()
+        if checked and self._auto_refresh_timer.isActive():
+            self._auto_refresh_current_image()
 
     def _auto_refresh_current_image(self) -> None:
         if self.session is None or self._archive_review or not self.isVisible():
@@ -678,7 +721,11 @@ class MultiScreenWorkspace(QWidget):
                 f"cond {observability.x.condition_number:.3g}; "
                 f"Y rank {observability.y.rank}/3, cond {observability.y.condition_number:.3g}"
             )
-            self.session = replace(self.session, beam_width_method=self.beam_width_method)
+            self.session = replace(
+                self.session,
+                beam_width_method=self.beam_width_method,
+                fit_vmin=self.beam_image_vmin if self.fit_uses_vmin else None,
+            )
             if observability.status in {"invalid", "poor"}:
                 self._set_state("Invalid", observability.message)
             else:
@@ -782,7 +829,9 @@ class MultiScreenWorkspace(QWidget):
                 pv_sigy = values.get("pv_sigy")
                 if fit is None and image is not None and extent is not None:
                     _prepared, fit = analyze_beam_image(
-                        np.asarray(image, dtype=float), extent=extent, method=self.beam_width_method
+                        np.asarray(image, dtype=float), extent=extent,
+                        method=self.beam_width_method,
+                        fit_vmin=self.beam_image_vmin if self.fit_uses_vmin else None,
                     )
                 if fit is not None:
                     payload = {
@@ -832,7 +881,10 @@ class MultiScreenWorkspace(QWidget):
                 background=background,
                 roi=roi,
                 full_frame_for_roi=True,
-                analyzer=partial(analyze_beam_image, method=self.beam_width_method),
+                analyzer=partial(
+                    analyze_beam_image, method=self.beam_width_method,
+                    fit_vmin=self.beam_image_vmin if self.fit_uses_vmin else None,
+                ),
             )
         except (TypeError, ValueError) as exc:
             raise RuntimeError(str(exc)) from exc
@@ -848,8 +900,19 @@ class MultiScreenWorkspace(QWidget):
         return payload
 
     def _background_toggled(self, checked: bool) -> None:
+        item = self.screen_list.currentItem()
+        screen = self._screen_id(item) if item is not None else None
+        if checked and (self._background_image is None or self._background_screen != screen):
+            blocked = self.beam_image_background_checkbox.blockSignals(True)
+            self.beam_image_background_checkbox.setChecked(False)
+            self.beam_image_background_checkbox.blockSignals(blocked)
+            self.background_status = "Load a matching background first"
+            self.beam_background_status_label.setText(self.background_status)
+            return
         self.background_status = "Applied" if checked and self._background_image is not None else "Off"
         self.beam_background_status_label.setText(self.background_status)
+        if self.session is not None and not self._archive_review:
+            self.preview_sample()
 
     def _display_payload(self, screen: str, payload: Mapping[str, object]) -> None:
         self._display_frame(
@@ -931,6 +994,9 @@ class MultiScreenWorkspace(QWidget):
                 display_image, display_norm, _warning = resolve_image_display_scale(
                     self._last_frame,
                     logarithmic=self.beam_image_logarithmic,
+                    vmin=self.beam_image_vmin,
+                    vmax=self.beam_image_vmax,
+                    preserve_manual_limits=True,
                 )
                 self.image_axes.imshow(
                     display_image,
@@ -1084,19 +1150,38 @@ class MultiScreenWorkspace(QWidget):
             return
         screen = self._screen_id(item)
         paths = resolve_beam_background_paths(self.app_context, screen)
-        geometry = resolve_element_image_geometry(self.app_context, screen, self.app_context.control_backend.name)
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Beam Background - {screen}")
-        layout = QVBoxLayout(dialog)
-        load_button = QPushButton("Load saved background", dialog)
-        load_button.clicked.connect(lambda: self._load_background(screen, geometry, paths))
-        layout.addWidget(QLabel(f"Expected reference: {paths['background_image_path']}"))
-        layout.addWidget(load_button)
-        buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
-        buttons.rejected.connect(dialog.reject)
-        buttons.accepted.connect(dialog.accept)
-        layout.addWidget(buttons)
-        dialog.exec_()
+        if self.background_dialog is None:
+            dialog = QDialog(self)
+            layout = QVBoxLayout(dialog)
+            self.background_reference_label = QLabel(dialog)
+            self.background_reference_label.setWordWrap(True)
+            layout.addWidget(self.background_reference_label)
+            load_button = QPushButton("Load saved background", dialog)
+            load_button.clicked.connect(self._load_selected_background)
+            layout.addWidget(load_button)
+            layout.addWidget(self.beam_image_background_checkbox)
+            self.beam_image_background_checkbox.show()
+            buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
+            buttons.rejected.connect(dialog.reject)
+            buttons.accepted.connect(dialog.accept)
+            layout.addWidget(buttons)
+            self.background_dialog = dialog
+        self.background_dialog.setWindowTitle(f"Beam Background - {screen}")
+        self.background_reference_label.setText(
+            f"Expected reference: {paths['background_image_path']}"
+        )
+        self.background_dialog.exec_()
+
+    def _load_selected_background(self) -> None:
+        item = self.screen_list.currentItem()
+        if item is None:
+            return
+        screen = self._screen_id(item)
+        paths = resolve_beam_background_paths(self.app_context, screen)
+        geometry = resolve_element_image_geometry(
+            self.app_context, screen, self.app_context.control_backend.name
+        )
+        self._load_background(screen, geometry, paths)
 
     def _ensure_roi_control(self, screen: str) -> None:
         geometry = resolve_element_image_geometry(self.app_context, screen, self.app_context.control_backend.name)
@@ -1150,20 +1235,22 @@ class MultiScreenWorkspace(QWidget):
         dialog.setWindowTitle("Image Display")
         layout = QVBoxLayout(dialog)
         form = QGridLayout()
-        method = QComboBox(dialog)
-        method.addItem("Gaussian fit", "Gaussian fit")
-        method.addItem("Projection RMS", "RMS moments")
-        method.setCurrentIndex(max(0, method.findData(self.beam_width_method)))
-        method.setToolTip(
-            "Width used for preview and samples. Projection RMS is sensitive to background "
-            "and ROI clipping. Start a new measurement to change method after sampling."
-        )
-        method.setEnabled(not self._archive_review and not (
-            self.session is not None and self.session.acquisition.samples
-        ))
-        method.currentIndexChanged.connect(lambda _index: self._set_beam_width_method(method.currentData()))
-        form.addWidget(QLabel("Beam width"), 2, 0)
-        form.addWidget(method, 2, 1)
+        edits = []
+        for row, label, value in (
+            (2, "vmin", self.beam_image_vmin),
+            (3, "vmax", self.beam_image_vmax),
+        ):
+            edit = QLineEdit(dialog)
+            edit.setPlaceholderText("Auto")
+            edit.setText("" if value is None else f"{value:g}")
+            form.addWidget(QLabel(label, dialog), row, 0)
+            form.addWidget(edit, row, 1)
+            edits.append(edit)
+        for edit in edits:
+            edit.textChanged.connect(
+                lambda _text: self._set_image_limits(*edits, refit=False)
+            )
+            edit.editingFinished.connect(lambda: self._set_image_limits(*edits))
         form.addWidget(QLabel("Colormap"), 0, 0)
         cmap = QComboBox(dialog)
         cmap.addItems(BEAM_IMAGE_COLORMAPS)
@@ -1181,12 +1268,62 @@ class MultiScreenWorkspace(QWidget):
         layout.addWidget(close)
         dialog.exec_()
 
+    def _set_image_limits(self, minimum_edit, maximum_edit, *, refit=True):
+        try:
+            limits = [float(edit.text()) if edit.text().strip() else None
+                      for edit in (minimum_edit, maximum_edit)]
+            if any(value is not None and not math.isfinite(value) for value in limits):
+                raise ValueError("vmin and vmax must be finite")
+            if all(value is not None for value in limits) and limits[0] >= limits[1]:
+                raise ValueError("vmin must be below vmax")
+            if self.fit_uses_vmin and limits[0] is None:
+                raise ValueError("set vmin before using it for fit")
+        except ValueError as exc:
+            if refit:
+                self.status_label.setText(f"Image range: {exc}")
+            return
+        if self._archive_review or (self.session is not None and self.session.acquisition.samples):
+            if self.fit_uses_vmin and limits[0] != self.beam_image_vmin:
+                if refit:
+                    self.status_label.setText("Start a new measurement to change fit vmin")
+                return
+        self.beam_image_vmin, self.beam_image_vmax = limits
+        self._redraw_image()
+        if refit and self.fit_uses_vmin and self.session is not None:
+            self.session = replace(self.session, fit_vmin=self.beam_image_vmin)
+            self.preview_sample()
+
+    def _set_fit_uses_vmin(self, enabled):
+        if enabled and self.beam_image_vmin is None:
+            self.fit_intensity_checkbox.blockSignals(True)
+            self.fit_intensity_checkbox.setChecked(False)
+            self.fit_intensity_checkbox.blockSignals(False)
+            self.status_label.setText("Set vmin in Display before using it for fit")
+            return
+        if self._archive_review or (self.session is not None and self.session.acquisition.samples):
+            self.fit_intensity_checkbox.blockSignals(True)
+            self.fit_intensity_checkbox.setChecked(self.fit_uses_vmin)
+            self.fit_intensity_checkbox.blockSignals(False)
+            return
+        self.fit_uses_vmin = bool(enabled)
+        if self.session is not None:
+            self.session = replace(
+                self.session,
+                fit_vmin=self.beam_image_vmin if self.fit_uses_vmin else None,
+            )
+            self.preview_sample()
+
     def _set_beam_width_method(self, value: str) -> None:
         if value not in {"Gaussian fit", "RMS moments"}:
             raise ValueError(f"Unsupported beam width method: {value}")
         if self._archive_review or (self.session is not None and self.session.acquisition.samples):
             return
         self.beam_width_method = value
+        self.width_method_combo.blockSignals(True)
+        self.width_method_combo.setCurrentIndex(
+            max(0, self.width_method_combo.findData(value))
+        )
+        self.width_method_combo.blockSignals(False)
         if self.session is not None:
             self.session = replace(self.session, beam_width_method=value)
             self.preview_sample()
@@ -1544,6 +1681,16 @@ class MultiScreenWorkspace(QWidget):
         if self.session is None:
             return
         self.beam_width_method = self.session.beam_width_method
+        self.beam_image_vmin = self.session.fit_vmin
+        self.fit_uses_vmin = self.session.fit_vmin is not None
+        self.width_method_combo.blockSignals(True)
+        self.width_method_combo.setCurrentIndex(
+            max(0, self.width_method_combo.findData(self.beam_width_method))
+        )
+        self.width_method_combo.blockSignals(False)
+        self.fit_intensity_checkbox.blockSignals(True)
+        self.fit_intensity_checkbox.setChecked(self.fit_uses_vmin)
+        self.fit_intensity_checkbox.blockSignals(False)
         self._configuration_guard = True
         try:
             self.model_line_edit.setCurrentText(self.session.model_line)

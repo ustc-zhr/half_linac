@@ -239,6 +239,7 @@ def analyze_beam_image(
     ylim: Sequence[float] | None = None,
     method: str = "Gaussian fit",
     roi=None,
+    fit_vmin: float | None = None,
 ) -> tuple[np.ndarray, BeamImageFitResult]:
     """Prepare one camera frame and run the shared beam-profile analysis."""
     image_array = np.asarray(image, dtype=float)
@@ -248,8 +249,13 @@ def analyze_beam_image(
         from .roi import crop_image, roi_extent
         image_array, selected, _warnings = crop_image(image_array, roi)
         extent = roi_extent(extent, selected, np.asarray(image).shape)
+    fit_image = image_array
+    if fit_vmin is not None:
+        if not np.isfinite(fit_vmin):
+            raise ValueError("fit vmin must be finite")
+        fit_image = np.where(image_array >= fit_vmin, image_array, 0.0)
     result = fit_beam_image(
-        image_array,
+        fit_image,
         extent=extent,
         xlim=xlim,
         ylim=ylim,

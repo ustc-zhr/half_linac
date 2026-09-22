@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT.parent) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT.parent))
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QDialog
 
 from half_linac.src.apps.emit_measure.multi_screen import (
     BeamSizeSample,
@@ -158,6 +158,37 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
             path.write_text(json.dumps(payload))
             self.assertEqual(load_multi_screen_archive(path).beam_width_method, "Gaussian fit")
 
+    def test_vmin_fit_control_is_frozen_with_multi_screen_samples(self):
+        axis = np.linspace(-3, 3, 201)
+        profile = np.exp(-axis**2 / .08) + .08 * np.exp(-axis**2 / .8)
+        image = np.outer(profile, profile)
+        workspace = self._workspace(image)
+        workspace.image_reader = lambda _screen: {
+            "image": image, "extent": (-3., 3., -3., 3.),
+        }
+        workspace.width_method_combo.setCurrentIndex(1)
+        workspace.preview_sample()
+        full_width = workspace._last_fit.sigx_mm
+        workspace.beam_image_vmin = 0.03
+        workspace.fit_intensity_checkbox.setChecked(True)
+        self.assertLess(workspace._last_fit.sigx_mm, full_width)
+        workspace.acquire_sample()
+        self.assertEqual(workspace.session.fit_vmin, 0.03)
+        self.assertFalse(workspace.fit_intensity_checkbox.isEnabled())
+        with TemporaryDirectory() as directory:
+            path = save_multi_screen_archive(Path(directory) / "threshold.json", workspace.session)
+            self.assertEqual(load_multi_screen_archive(path).fit_vmin, 0.03)
+
+    def test_background_apply_control_lives_in_manage_dialog(self):
+        workspace = self._workspace(np.zeros((20, 20)))
+        with patch.object(QDialog, "exec_", return_value=0):
+            workspace._show_background_info()
+        self.assertIs(
+            workspace.beam_image_background_checkbox.parentWidget(),
+            workspace.background_dialog,
+        )
+        self.assertFalse(workspace.beam_image_background_checkbox.isChecked())
+
     def test_invalid_fit_is_displayed_but_not_accepted(self):
         image = np.zeros((20, 20), dtype=float)
         workspace = self._workspace(image)
@@ -173,7 +204,7 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
     def test_archived_session_disables_measurement_actions(self):
         workspace = self._workspace(np.zeros((20, 20), dtype=float))
         workspace._set_state("Archived", "read-only")
-        self.assertFalse(workspace.preview_button.isEnabled())
+        self.assertFalse(workspace.auto_refresh_checkbox.isEnabled())
         self.assertFalse(workspace.acquire_button.isEnabled())
         self.assertFalse(hasattr(workspace, "manual_button"))
         self.assertFalse(workspace.reconstruct_button.isEnabled())
@@ -185,6 +216,13 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         self.assertTrue(workspace._auto_refresh_timer.isActive())
         workspace._set_state("Archived", "read-only")
         self.assertFalse(workspace._auto_refresh_timer.isActive())
+
+    def test_enabling_auto_refresh_previews_immediately(self):
+        workspace = self._workspace(np.zeros((20, 20), dtype=float))
+        workspace.auto_refresh_checkbox.setChecked(False)
+        with patch.object(workspace, "_auto_refresh_current_image") as refresh:
+            workspace.auto_refresh_checkbox.setChecked(True)
+            refresh.assert_called_once_with()
 
     def test_configuration_change_discards_prepared_session(self):
         workspace = self._workspace(np.zeros((20, 20), dtype=float))

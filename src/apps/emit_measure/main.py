@@ -164,6 +164,7 @@ def _read_flag_image_fit(
     flip_y=False,
     full_frame_for_roi=False,
     method="Gaussian fit",
+    fit_vmin=None,
 ):
     raw_image = epics.caget(image_pv)
     if raw_image is None:
@@ -177,7 +178,7 @@ def _read_flag_image_fit(
             roi=roi,
             flip_y=flip_y,
             full_frame_for_roi=full_frame_for_roi,
-            analyzer=partial(analyze_beam_image, method=method),
+            analyzer=partial(analyze_beam_image, method=method, fit_vmin=fit_vmin),
         )
     except (TypeError, ValueError) as exc:
         if "image size" in str(exc):
@@ -963,6 +964,8 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_background_status = "Off"
         self.beam_image_colormap = DEFAULT_BEAM_IMAGE_COLORMAP
         self.beam_image_logarithmic = False
+        self.beam_image_vmin = None
+        self.beam_image_vmax = None
         self.beam_image_overlays = True
         self._applying_emit_preset = False
         self.background_dialog = None
@@ -1304,20 +1307,18 @@ class myWindow(QWidget,Ui_Form):
 
         self.beam_image_auto_refresh_checkbox = QCheckBox("Auto refresh", card)
         self.beam_image_auto_refresh_checkbox.setChecked(True)
-        self.beam_image_auto_refresh_checkbox.stateChanged.connect(self._update_beam_image_auto_refresh)
-        self.beam_image_background_checkbox = QCheckBox("Apply", card)
+        self.beam_image_auto_refresh_checkbox.toggled.connect(
+            self._beam_image_auto_refresh_toggled
+        )
+        self.beam_image_background_checkbox = QCheckBox("Apply background subtraction", card)
         self.beam_image_background_checkbox.setChecked(False)
+        self.beam_image_background_checkbox.hide()
         self.beam_image_background_checkbox.setToolTip(
             "Subtract the matching saved background before fitting."
         )
         self.beam_image_background_checkbox.toggled.connect(
             self._set_background_application
         )
-
-        self.preview_fit_button = QPushButton("Refresh", card)
-        self.preview_fit_button.setProperty("compact", True)
-        self.preview_fit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        self.preview_fit_button.clicked.connect(lambda: self.refresh_current_beam_image_fit())
 
         self.roi_status_label = QLabel("ROI: Off", card)
         self.roi_status_label.setProperty("role", "field")
@@ -1327,16 +1328,7 @@ class myWindow(QWidget,Ui_Form):
         self.beam_fit_summary_label = QLabel("Fit: Gaussian · No image", card)
         self.beam_fit_summary_label.setProperty("role", "field")
         header.addWidget(self.beam_fit_summary_label)
-        header.addWidget(self.roi_status_label)
-        header.addWidget(self.roi_button)
-
         header.addWidget(self.beam_image_auto_refresh_checkbox)
-        header.addWidget(self.preview_fit_button)
-        layout.addLayout(header)
-
-        display_row = QHBoxLayout()
-        display_row.setContentsMargins(0, 0, 0, 0)
-        display_row.setSpacing(8)
         self.beam_width_method_combo = QComboBox(card)
         self.beam_width_method_combo.addItem("Gaussian fit", "Gaussian fit")
         self.beam_width_method_combo.addItem("Projection RMS", "RMS moments")
@@ -1346,7 +1338,12 @@ class myWindow(QWidget,Ui_Form):
             "Changing this does not reprocess archived beam widths."
         )
         self.beam_width_method_combo.currentIndexChanged.connect(self._beam_width_method_changed)
-        self.beam_width_method_combo.hide()
+        self.fit_intensity_checkbox = QCheckBox("Use vmin for fit", card)
+        self.fit_intensity_checkbox.setToolTip(
+            "Remove pixels below Display vmin from projections before fitting. "
+            "vmax only changes image colors."
+        )
+        self.fit_intensity_checkbox.toggled.connect(self._fit_intensity_changed)
         self.beam_background_status_label = QLabel("Off", card)
         self.beam_background_status_label.setProperty("role", "field")
         self.beam_background_manage_button = QPushButton("Manage…", card)
@@ -1355,23 +1352,32 @@ class myWindow(QWidget,Ui_Form):
         self.beam_image_display_button = QPushButton("Display…", card)
         self.beam_image_display_button.setProperty("compact", True)
         self.beam_image_display_button.setToolTip(
-            "Set beam width method, image colormap, and intensity scale."
+            "Set image colormap and intensity scale."
         )
         self.beam_image_display_button.clicked.connect(
             self._show_beam_image_display_dialog
         )
+        header.addWidget(self.beam_image_display_button)
+        layout.addLayout(header)
+
+        fit_row = QHBoxLayout()
+        fit_row.setSpacing(8)
+        fit_label = QLabel("Fit", card)
+        fit_label.setProperty("role", "field")
+        fit_row.addWidget(fit_label)
+        fit_row.addWidget(self.beam_width_method_combo)
+        fit_row.addWidget(self.fit_intensity_checkbox)
+        fit_row.addSpacing(12)
         background_label = QLabel("BG:", card)
         background_label.setProperty("role", "field")
-        for widget in (
-            background_label,
-            self.beam_background_status_label,
-        ):
-            display_row.addWidget(widget)
-        display_row.addStretch(1)
-        display_row.addWidget(self.beam_background_manage_button)
-        display_row.addWidget(self.beam_image_background_checkbox)
-        display_row.addWidget(self.beam_image_display_button)
-        layout.addLayout(display_row)
+        fit_row.addWidget(background_label)
+        fit_row.addWidget(self.beam_background_status_label)
+        fit_row.addWidget(self.beam_background_manage_button)
+        fit_row.addSpacing(12)
+        fit_row.addWidget(self.roi_status_label)
+        fit_row.addWidget(self.roi_button)
+        fit_row.addStretch(1)
+        layout.addLayout(fit_row)
 
         self.beam_image_widget = MplWidget(card)
         layout.addWidget(self.beam_image_widget, 1)
@@ -1659,7 +1665,10 @@ class myWindow(QWidget,Ui_Form):
         self.use_multi_screen_result_action.setToolTip(
             "Copy beta, alpha and gamma from the latest valid Multi-Screen reconstruction."
         )
-        self.preview_fit_button.setToolTip("Read the selected PRF image PV and update the local beam-size fit.")
+        self.beam_image_auto_refresh_checkbox.setToolTip(
+            "Read and fit the current PRF image every 2 seconds outside scans. "
+            "Turning this on also refreshes immediately; scan samples update the image independently."
+        )
         self.load_points_button.setToolTip("Open an archived emittance scan for review or recalculation.")
         self.exclude_points_button.setToolTip("Disable the selected scan points without deleting the rows.")
         self.restore_points_button.setToolTip("Enable all scan points in the table.")
@@ -2392,7 +2401,6 @@ class myWindow(QWidget,Ui_Form):
             self.beam_size_pv_sigx_label.setText("--")
             self.beam_size_pv_sigy_label.setText("--")
             self.beam_size_pv_status_label.setText("Unavailable")
-            self.beam_background_status_label.setText("Not checked")
 
     def _redraw_latest_beam_image(self, *args):
         del args
@@ -2432,6 +2440,9 @@ class myWindow(QWidget,Ui_Form):
         display_image, display_norm, _display_warning = resolve_image_display_scale(
             image,
             logarithmic=self.beam_image_logarithmic,
+            vmin=self.beam_image_vmin,
+            vmax=self.beam_image_vmax,
+            preserve_manual_limits=True,
         )
         widget.axes.imshow(
             display_image,
@@ -2891,6 +2902,7 @@ class myWindow(QWidget,Ui_Form):
             "model_line": paras.model_line,
             "beam_size_source": "local_fit",
             "beam_width_method": getattr(paras, "beam_width_method", "Gaussian fit"),
+            "fit_vmin": getattr(paras, "fit_vmin", None),
             "flag_image_pv": paras.flagImagePV,
             "size_pv_sigx": paras.flagSigxPV,
             "size_pv_sigy": paras.flagSigyPV,
@@ -2976,6 +2988,11 @@ class myWindow(QWidget,Ui_Form):
                 f"beam width method: file={file_method!r}, current={current_method!r}; "
                 "saved widths cannot be converted without the original images"
             )
+        if metadata.get("fit_vmin") != expected.get("fit_vmin"):
+            mismatches.append(
+                f"fit vmin: file={metadata.get('fit_vmin')!r}, "
+                f"current={expected.get('fit_vmin')!r}; saved widths cannot be converted"
+            )
         for key in ("machine_id", "backend", "quad", "flag"):
             if metadata.get(key) != expected.get(key):
                 mismatches.append(f"{key}: file={metadata.get(key)!r}, current={expected.get(key)!r}")
@@ -2999,6 +3016,9 @@ class myWindow(QWidget,Ui_Form):
         if metadata is None:
             raise RuntimeError(f"{source_label} has no scan metadata.")
         width_method = metadata.get("beam_width_method", "Gaussian fit")
+        fit_vmin = metadata.get("fit_vmin")
+        if fit_vmin is not None and (not isinstance(fit_vmin, (int, float)) or not math.isfinite(fit_vmin)):
+            raise RuntimeError(f"{source_label} has invalid fit vmin: {fit_vmin!r}.")
         if self.beam_width_method_combo.findData(width_method) < 0:
             raise RuntimeError(f"{source_label} has unsupported beam width method: {width_method!r}.")
         if metadata.get("schema_version") != SCAN_DATA_SCHEMA_VERSION:
@@ -3103,6 +3123,14 @@ class myWindow(QWidget,Ui_Form):
             blocked = self.beam_width_method_combo.blockSignals(True)
             self.beam_width_method_combo.setCurrentIndex(self.beam_width_method_combo.findData(width_method))
             self.beam_width_method_combo.blockSignals(blocked)
+            self.beam_image_vmin = fit_vmin
+            blocked = self.fit_intensity_checkbox.blockSignals(True)
+            self.fit_intensity_checkbox.setChecked(fit_vmin is not None)
+            self.fit_intensity_checkbox.blockSignals(blocked)
+            if self.beam_image_display_dialog is not None:
+                blocked = self.beam_image_vmin_edit.blockSignals(True)
+                self.beam_image_vmin_edit.setText("" if fit_vmin is None else f"{fit_vmin:g}")
+                self.beam_image_vmin_edit.blockSignals(blocked)
             self._set_combo_current_text(self.comboBox, quad_name)
             self._set_combo_current_text(self.comboBox_4, flag_name)
             custom_index = self.preset_combo.findData(None)
@@ -3384,6 +3412,10 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_5.setText("Stopping..." if stopping else "Stop")
         self.pushButton_3.setEnabled(not running)
         self.beam_width_method_combo.setEnabled(not running)
+        self.fit_intensity_checkbox.setEnabled(not running)
+        self.beam_image_background_checkbox.setEnabled(not running)
+        if self.beam_image_display_dialog is not None:
+            self.beam_image_vmin_edit.setEnabled(not running or not self.fit_intensity_checkbox.isChecked())
 
     def _begin_scan_progress(self, paras):
         strategy = str(paras.scan_strategy)
@@ -4095,11 +4127,18 @@ class myWindow(QWidget,Ui_Form):
             )
             settings.addWidget(colormap_label, 0, 0)
             settings.addWidget(self.beam_image_colormap_combo, 0, 1)
-            width_label = QLabel("Beam width", dialog)
-            width_label.setProperty("role", "field")
-            settings.addWidget(width_label, 1, 0)
-            settings.addWidget(self.beam_width_method_combo, 1, 1)
-            self.beam_width_method_combo.show()
+            self.beam_image_vmin_edit = QLineEdit(dialog)
+            self.beam_image_vmax_edit = QLineEdit(dialog)
+            for row, label, edit, value in (
+                (1, "vmin", self.beam_image_vmin_edit, self.beam_image_vmin),
+                (2, "vmax", self.beam_image_vmax_edit, self.beam_image_vmax),
+            ):
+                edit.setPlaceholderText("Auto")
+                edit.setText("" if value is None else f"{value:g}")
+                edit.textChanged.connect(lambda _text: self._set_beam_image_limits(refit=False))
+                edit.editingFinished.connect(self._set_beam_image_limits)
+                settings.addWidget(QLabel(label, dialog), row, 0)
+                settings.addWidget(edit, row, 1)
             settings.setColumnStretch(1, 1)
             layout.addLayout(settings)
 
@@ -4132,6 +4171,35 @@ class myWindow(QWidget,Ui_Form):
     def _set_beam_image_logarithmic(self, checked):
         self.beam_image_logarithmic = bool(checked)
         self._redraw_latest_beam_image()
+
+    def _set_beam_image_limits(self, *, refit=True):
+        try:
+            values = [float(edit.text()) if edit.text().strip() else None
+                      for edit in (self.beam_image_vmin_edit, self.beam_image_vmax_edit)]
+            if any(value is not None and not math.isfinite(value) for value in values):
+                raise ValueError("vmin and vmax must be finite")
+            if all(value is not None for value in values) and values[0] >= values[1]:
+                raise ValueError("vmin must be below vmax")
+            if self.fit_intensity_checkbox.isChecked() and values[0] is None:
+                raise ValueError("set vmin before using it for fit")
+        except ValueError as exc:
+            if refit:
+                self._warn(f"Invalid image range: {exc}")
+            return
+        self.beam_image_vmin, self.beam_image_vmax = values
+        self._redraw_latest_beam_image()
+        if refit and self.fit_intensity_checkbox.isChecked() and self._beam_image_auto_refresh_ready:
+            self._schedule_beam_image_refresh()
+
+    def _fit_intensity_changed(self, checked):
+        if checked and self.beam_image_vmin is None:
+            self.fit_intensity_checkbox.blockSignals(True)
+            self.fit_intensity_checkbox.setChecked(False)
+            self.fit_intensity_checkbox.blockSignals(False)
+            self._warn("Set vmin in Display before using it for fit.")
+            return
+        if self._beam_image_auto_refresh_ready:
+            self._schedule_beam_image_refresh()
 
     def _show_roi_dialog(self):
         if self.roi_control is None:
@@ -4378,6 +4446,7 @@ class myWindow(QWidget,Ui_Form):
         try:
             para = structData()
             para.beam_width_method = self._beam_width_method()
+            para.fit_vmin = self.beam_image_vmin if self.fit_intensity_checkbox.isChecked() else None
             # get scan parameters
             para.quad_name = self.comboBox.currentText()
             para.flag_name = self.comboBox_4.currentText()
@@ -4525,6 +4594,7 @@ class myWindow(QWidget,Ui_Form):
                 flip_y=getattr(paras, "flag_image_flip_y", False),
                 full_frame_for_roi=True,
                 method=getattr(paras, "beam_width_method", "Gaussian fit"),
+                fit_vmin=getattr(paras, "fit_vmin", None),
             )
         except RuntimeError as exc:
             self._draw_beam_image_placeholder("PRF image unavailable")
@@ -4569,6 +4639,11 @@ class myWindow(QWidget,Ui_Form):
                 self.beam_image_timer.start()
         else:
             self.beam_image_timer.stop()
+
+    def _beam_image_auto_refresh_toggled(self, checked):
+        self._update_beam_image_auto_refresh()
+        if checked:
+            self._auto_refresh_beam_image_fit()
 
     def _schedule_beam_image_refresh(self):
         QTimer.singleShot(
@@ -4620,6 +4695,8 @@ class myWindow(QWidget,Ui_Form):
             self.background_dialog_status_label.setWordWrap(True)
             self.background_dialog_status_label.setProperty("role", "field")
             layout.addWidget(self.background_dialog_status_label)
+            layout.addWidget(self.beam_image_background_checkbox)
+            self.beam_image_background_checkbox.show()
 
             buttons = QHBoxLayout()
             self.background_sample_button = QPushButton("Sample Background", dialog)
@@ -4735,7 +4812,7 @@ class myWindow(QWidget,Ui_Form):
 
     def _update_emit_background_status(self):
         if self.background_image is None:
-            text = "None"
+            text = "Off"
         else:
             sample_count = self.background_metadata.get("sample_count")
             sample_text = f" · {sample_count} frames" if sample_count else ""
@@ -5687,6 +5764,7 @@ class scanThread(QThread):
         self.background_image = getattr(paras, "background_image", None)
         self.background_status = getattr(paras, "background_status", "Off")
         self.beam_width_method = getattr(paras, "beam_width_method", "Gaussian fit")
+        self.fit_vmin = getattr(paras, "fit_vmin", None)
         self.k1_from    = paras.k1_from   
         self.k1_end     = paras.k1_end    
         self.k1_steps   = paras.k1_steps  
@@ -5822,6 +5900,7 @@ class scanThread(QThread):
                         flip_y=self.flag_image_flip_y,
                         full_frame_for_roi=True,
                         method=self.beam_width_method,
+                        fit_vmin=self.fit_vmin,
                     )
                 except RuntimeError as exc:
                     if not adaptive or retry >= self.adaptive_config.max_retries:

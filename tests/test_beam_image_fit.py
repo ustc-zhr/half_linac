@@ -11,10 +11,29 @@ PARENT = REPO_ROOT.parent
 if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
-from half_linac.src.shared.beam_diagnostics import fit_beam_image
+from half_linac.src.shared.beam_diagnostics import analyze_beam_image, fit_beam_image
 
 
 class BeamImageFitTests(unittest.TestCase):
+    def test_fit_vmin_removes_halo_after_background_without_changing_display_image(self):
+        axis = np.linspace(-5, 5, 201)
+        core = np.exp(-axis**2 / (2 * 0.45**2))
+        halo = 0.04 * np.exp(-axis**2 / (2 * 2.0**2))
+        image = np.outer(core + halo, core + halo) + 0.1
+        background = np.full_like(image, 0.1)
+        extent = (-5, 5, -5, 5)
+        prepared, full = analyze_beam_image(
+            image, extent=extent, background=background, method="RMS moments"
+        )
+        displayed, core_fit = analyze_beam_image(
+            image, extent=extent, background=background,
+            method="RMS moments", fit_vmin=0.02,
+        )
+        np.testing.assert_allclose(displayed, prepared)
+        self.assertTrue(core_fit.valid)
+        self.assertLess(core_fit.sigx_mm, full.sigx_mm)
+        self.assertTrue(np.any(core_fit.cropped_image == 0))
+
     def test_gaussian_fit_tracks_camera_scale_with_background(self):
         for scale in (0.01, 0.1, 10.0):
             with self.subTest(scale=scale):

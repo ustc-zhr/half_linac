@@ -49,6 +49,14 @@ class ImageDisplayScaleTests(unittest.TestCase):
         self.assertEqual(image.mask.tolist(), [[True, True]])
         self.assertIn("no finite", warning)
 
+    def test_emittance_keeps_manual_vmin_above_current_frame(self):
+        _image, norm, warning = resolve_image_display_scale(
+            np.array([[0.0, 2.0]]), vmin=60.0, preserve_manual_limits=True,
+        )
+        self.assertEqual(norm.vmin, 60.0)
+        self.assertGreater(norm.vmax, 60.0)
+        self.assertIsNone(warning)
+
 
 if __name__ == "__main__":
     unittest.main()
