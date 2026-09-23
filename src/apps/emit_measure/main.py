@@ -4449,11 +4449,14 @@ class myWindow(QWidget,Ui_Form):
             raise ValueError("Invalid main-window measurement settings; check the scan range, sampling and model path.")
         if not math.isfinite(para.EnergyMeV) or para.EnergyMeV <= 0:
             raise ValueError("Measurement energy must be finite and positive.")
-        quad = self.machine_profile.get_element(para.quad_name)
         for variable in variables:
             element = self.machine_profile.get_element(variable.element_id)
-            if element.kind != "solenoid" or element.order >= quad.order:
-                raise ValueError(f"{element.id}: select a solenoid upstream of {quad.id}.")
+            # Profile order groups the device catalog by kind; it is not a
+            # longitudinal coordinate (HALF solenoids follow all quads there).
+            # Upstream solenoids are selected by the operator. The measurement
+            # quad-to-screen path is independently validated by get_setting().
+            if element.kind != "solenoid":
+                raise ValueError(f"{element.id}: select a solenoid as an optimization variable.")
         para.roi = deepcopy(para.roi)
         if para.background_image is not None:
             para.background_image = np.array(para.background_image, copy=True)

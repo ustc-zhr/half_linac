@@ -250,23 +250,35 @@ class DialogTests(unittest.TestCase):
         self.assertNotIn('Adaptive or Adaptive Quality required', self.dialog.measurement_note.text())
         main.epics.caput.assert_not_called()
 
-    def test_non_upstream_variable_rejected_before_image_or_quad_reads(self):
-        from dataclasses import replace
+    def test_non_solenoid_rejected_before_image_or_quad_reads(self):
         from half_linac.src.apps.emit_measure.optimization import OptimizationVariable
         host = self.host
         ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')
         host.app_context, host.machine_profile, host.machine_type = ctx, ctx.profile, 'real'
         host._apply_emit_preset(host._find_emit_preset('emit_ql09_prf03'))
-        host.scan_strategy_combo.setCurrentIndex(host.scan_strategy_combo.findData('adaptive_quality'))
-        original_get = host.machine_profile.get_element
-        def get_element(name):
-            element = original_get(name)
-            return replace(element, order=10000) if name == 'SS01' else element
         main.epics.caget.reset_mock()
-        with patch.object(type(host.machine_profile), 'get_element', side_effect=get_element):
-            with self.assertRaisesRegex(ValueError, 'upstream of QL09'):
-                host.optimization_parameters((OptimizationVariable('SS01', 1, 9),))
+        with self.assertRaisesRegex(ValueError, 'select a solenoid'):
+            host.optimization_parameters((OptimizationVariable('QL09', 1, 9),))
         main.epics.caget.assert_not_called()
+        main.epics.caput.assert_not_called()
+
+    def test_catalog_order_does_not_reject_ss01_for_ql13(self):
+        import numpy as np
+        from half_linac.src.apps.emit_measure.optimization import OptimizationVariable
+        host = self.host
+        ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')
+        host.app_context, host.machine_profile, host.machine_type = ctx, ctx.profile, 'real'
+        host._apply_emit_preset(host._find_emit_preset('emit_ql09_prf03'))
+        paras = host.get_setting(show_warning=False)
+        paras.quad_name, paras.flag_name = 'QL13', 'PRF04'
+        self.assertGreater(ctx.profile.get_element('SS01').order, ctx.profile.get_element('QL13').order)
+        quad = Mock(initial_k1=0., initial_current=5., initial_readback=5.)
+        with patch.object(host, 'get_setting', return_value=paras), \
+             patch.object(host, '_prepare_emit_model_snapshot'), \
+             patch('half_linac.src.apps.emit_measure.optimization.VerifiedQuadRestore', return_value=quad), \
+             patch.object(main.epics, 'caget', return_value=np.zeros(paras.flag_pixel_shape)):
+            frozen = host.optimization_parameters((OptimizationVariable('SS01', 1, 9),))
+        self.assertEqual(frozen.quad_name, 'QL13')
         main.epics.caput.assert_not_called()
 
     def test_delayed_refresh_is_blocked_when_closed_or_optimizing(self):

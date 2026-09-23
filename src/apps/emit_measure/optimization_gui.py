@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import math
 from datetime import datetime
 from pathlib import Path
 from threading import Event
@@ -673,8 +674,20 @@ class OptimizationDialog(QDialog):
             return
         try:
             self.check_idle()
+            try:
+                other_limit = float(self.other_limit.text().strip())
+                if not math.isfinite(other_limit) or other_limit <= 0:
+                    raise ValueError
+            except ValueError:
+                self.other_limit.setFocus()
+                self.other_limit.selectAll()
+                other_plane = 'Y' if self.plane.currentData() == 'x' else 'X'
+                raise ValueError(
+                    f'Enter a positive Other-plane limit (mm·mrad) for the {other_plane} plane '
+                    'before starting optimization.'
+                ) from None
             config = OptimizationConfig(
-                self.selected_variables(), self.plane.currentData(), float(self.other_limit.text()),
+                self.selected_variables(), self.plane.currentData(), other_limit,
                 self.count.value(), self.minutes.value(), settle_time=self.solenoid_settle.value(),
                 algorithm=self.algorithm.currentData(), rcds_initial_step=self.rcds_step.value(),
                 bo_initial_samples=self.bo_initial_samples.value(),
