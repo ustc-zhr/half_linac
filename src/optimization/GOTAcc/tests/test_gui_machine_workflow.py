@@ -344,6 +344,49 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
     assert not window.machine_controller.ensure_machine_ready_for_online(window._current_task())
 
 
+@pytest.mark.parametrize("synced", [True, False])
+def test_pv_check_does_not_require_optimizer_setup(tmp_path, window, monkeypatch, synced):
+    task = _online_task(tmp_path)
+    for row in task["variables"]:
+        row.update(Lower="", Upper="", Initial="")
+    if not synced:
+        task["variables"] = []
+        task["objectives"] = []
+    task["machine"]["mapping"].append(
+        {"Role": "constraint", "Name": "guard", "PV Name": "TEST:GUARD"}
+    )
+    task["machine"]["write_links"] = [
+        {"Enabled": "Y", "Source Index": "", "Target PV": "TEST:LINK"},
+        {"Enabled": "N", "Source Index": "0", "Target PV": "TEST:DISABLED"},
+        {"Enabled": "Y", "Source Index": "0", "Target PV": "TEST:Q1:SET"},
+    ]
+    window._apply_task_payload(task, goto_builder=False)
+    reads = []
+
+    def fake_caget(pvname, *, timeout):
+        reads.append(pvname)
+        return 1.0
+
+    monkeypatch.setattr(window.machine_controller, "_prepare_epics_caget", lambda: fake_caget)
+    assert window.machine_controller.check_machine_pv(show_dialog=False)
+    assert set(reads) == {
+        "TEST:Q1:SET", "TEST:Q1:RB", "TEST:Q2:SET", "TEST:Q2:RB",
+        "TEST:TRANS", "TEST:GUARD", "TEST:LINK",
+    }
+    assert len(reads) == len(set(reads))
+    valid, errors = TaskService.validate_task_data(window._current_task())
+    assert not valid
+    assert errors
+
+    monkeypatch.setattr(
+        window.machine_controller, "_prepare_epics_caget",
+        lambda: lambda pvname, **kwargs: None,
+    )
+    assert not window.machine_controller.check_machine_pv(show_dialog=False)
+    assert "returned None" in window.state.last_test_read_detail
+    assert not window.state.machine_check_identity
+
+
 def test_online_validation_rejects_mapping_ambiguity(tmp_path):
     task = _online_task(tmp_path)
     task["machine"]["mapping"][1]["PV Name"] = "TEST:Q2:SET"

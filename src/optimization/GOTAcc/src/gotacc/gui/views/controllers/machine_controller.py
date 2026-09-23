@@ -1810,18 +1810,20 @@ class MachineController:
 
         try:
             caget = self._prepare_epics_caget()
-            task_cfg = TaskService.build_task_config(task)
-            kwargs = task_cfg.backend.kwargs
+            # Connectivity is independent of optimizer setup and mapping sync.
+            # Read the configured signals directly, without building a runnable task.
+            machine = task.get("machine", {}) or {}
             pvnames: list[str] = []
-            for field in (
-                "knobs_pvnames",
-                "knob_readback_pvnames",
-                "obj_pvnames",
-                "constraint_pvnames",
-            ):
-                pvnames.extend(str(value).strip() for value in kwargs.get(field, []) if str(value).strip())
-            for _source, target in kwargs.get("write_policy_kwargs", {}).get("pvlinks", []):
-                target_text = str(target).strip()
+            for row in machine.get("mapping", []) or []:
+                for field in ("PV Name", "Readback"):
+                    pvname = str(row.get(field, "")).strip()
+                    if pvname:
+                        pvnames.append(pvname)
+            for row in machine.get("write_links", []) or []:
+                enabled = row.get("Enabled", "")
+                if enabled and not TaskService._is_enabled(enabled):
+                    continue
+                target_text = str(row.get("Target PV", "")).strip()
                 if target_text:
                     pvnames.append(target_text)
             pvnames = list(dict.fromkeys(pvnames))

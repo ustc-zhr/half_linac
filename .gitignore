@@ -49,6 +49,7 @@ src/apps/llrf_control/runtime/
 runtime/model_backend/
 
 # Runtime artifacts
+/runs/
 *.log
 *.mat
 *.npy
