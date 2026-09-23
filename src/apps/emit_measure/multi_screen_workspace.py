@@ -120,6 +120,8 @@ class MultiScreenWorkspace(QWidget):
         self._last_frame_screen = None
         self.beam_image_colormap = DEFAULT_BEAM_IMAGE_COLORMAP
         self.beam_image_logarithmic = False
+        self.beam_image_show_colorbar = False
+        self.beam_image_colorbar = None
         self.beam_image_vmin = None
         self.beam_image_vmax = None
         self.fit_uses_vmin = False
@@ -983,6 +985,9 @@ class MultiScreenWorkspace(QWidget):
             owner._refresh_status()
         self.image_title_label.setText(f"Current Screen Image · {screen}")
         self._update_selected_optics(screen)
+        if self.beam_image_colorbar is not None:
+            self.beam_image_colorbar.remove()
+            self.beam_image_colorbar = None
         self.image_axes.clear()
         self._style_image_axes()
         if self._last_frame is not None:
@@ -998,7 +1003,7 @@ class MultiScreenWorkspace(QWidget):
                     vmax=self.beam_image_vmax,
                     preserve_manual_limits=True,
                 )
-                self.image_axes.imshow(
+                image_artist = self.image_axes.imshow(
                     display_image,
                     origin="lower",
                     extent=self._last_frame_extent,
@@ -1006,6 +1011,18 @@ class MultiScreenWorkspace(QWidget):
                     cmap=self.beam_image_colormap,
                     norm=display_norm if display_norm is not None else Normalize(vmin=vmin, vmax=vmax),
                 )
+                if self.beam_image_show_colorbar:
+                    self.beam_image_colorbar = self.image_widget.fig.colorbar(
+                        image_artist, ax=self.image_axes, pad=0.02, fraction=0.046
+                    )
+                    palette = self.window()._palette() if hasattr(self.window(), "_palette") else None
+                    if palette is not None:
+                        self.beam_image_colorbar.set_label(
+                            "Intensity", color=palette["plot_text"]
+                        )
+                        self.beam_image_colorbar.ax.tick_params(
+                            colors=palette["plot_text"]
+                        )
                 self.image_axes.set_xlabel("x (mm)")
                 self.image_axes.set_ylabel("y (mm)")
                 self.image_axes.set_title("")
@@ -1072,6 +1089,9 @@ class MultiScreenWorkspace(QWidget):
         self._last_frame_screen = None
         if not hasattr(self, "image_axes"):
             return
+        if self.beam_image_colorbar is not None:
+            self.beam_image_colorbar.remove()
+            self.beam_image_colorbar = None
         self.image_axes.clear()
         self._style_image_axes()
         self.image_axes.text(0.5, 0.5, "No image preview", ha="center", va="center", transform=self.image_axes.transAxes)
@@ -1261,6 +1281,13 @@ class MultiScreenWorkspace(QWidget):
         log.setChecked(self.beam_image_logarithmic)
         log.toggled.connect(self._set_image_logarithmic)
         form.addWidget(log, 1, 0, 1, 2)
+        colorbar = QCheckBox("Show colorbar", dialog)
+        colorbar.setChecked(self.beam_image_show_colorbar)
+        colorbar.setToolTip(
+            "Show the current image intensity scale beside the screen image."
+        )
+        colorbar.toggled.connect(self._set_image_colorbar_visible)
+        form.addWidget(colorbar, 4, 0, 1, 2)
         layout.addLayout(form)
         close = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
         close.rejected.connect(dialog.reject)
@@ -1336,6 +1363,10 @@ class MultiScreenWorkspace(QWidget):
 
     def _set_image_logarithmic(self, value: bool) -> None:
         self.beam_image_logarithmic = bool(value)
+        self._redraw_image()
+
+    def _set_image_colorbar_visible(self, value: bool) -> None:
+        self.beam_image_show_colorbar = bool(value)
         self._redraw_image()
 
     def _set_image_overlays(self, value: bool) -> None:

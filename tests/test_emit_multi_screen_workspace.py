@@ -189,6 +189,19 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         )
         self.assertFalse(workspace.beam_image_background_checkbox.isChecked())
 
+    def test_display_colorbar_can_be_toggled_without_duplicate_axes(self):
+        axis = np.linspace(-3, 3, 81)
+        image = np.outer(np.exp(-axis**2), np.exp(-axis**2))
+        workspace = self._workspace(image)
+        workspace.preview_sample()
+        self.assertEqual(len(workspace.image_widget.fig.axes), 1)
+        workspace._set_image_colorbar_visible(True)
+        self.assertEqual(len(workspace.image_widget.fig.axes), 2)
+        workspace._redraw_image()
+        self.assertEqual(len(workspace.image_widget.fig.axes), 2)
+        workspace._set_image_colorbar_visible(False)
+        self.assertEqual(len(workspace.image_widget.fig.axes), 1)
+
     def test_invalid_fit_is_displayed_but_not_accepted(self):
         image = np.zeros((20, 20), dtype=float)
         workspace = self._workspace(image)

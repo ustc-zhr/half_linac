@@ -964,6 +964,8 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_background_status = "Off"
         self.beam_image_colormap = DEFAULT_BEAM_IMAGE_COLORMAP
         self.beam_image_logarithmic = False
+        self.beam_image_show_colorbar = False
+        self.beam_image_colorbar = None
         self.beam_image_vmin = None
         self.beam_image_vmax = None
         self.beam_image_overlays = True
@@ -2379,6 +2381,9 @@ class myWindow(QWidget,Ui_Form):
     def _draw_beam_image_placeholder(self, note="Update PRF image before scan"):
         if not hasattr(self, "beam_image_widget"):
             return
+        if self.beam_image_colorbar is not None:
+            self.beam_image_colorbar.remove()
+            self.beam_image_colorbar = None
         self.latest_beam_image = None
         self.latest_beam_fit_result = None
         self.latest_beam_fit_flag = None
@@ -2435,6 +2440,9 @@ class myWindow(QWidget,Ui_Form):
             extent = self._current_flag_image_extent(flag_name)
         palette = self._palette()
         widget = self.beam_image_widget
+        if self.beam_image_colorbar is not None:
+            self.beam_image_colorbar.remove()
+            self.beam_image_colorbar = None
         widget.axes.clear()
         self._style_axes(widget, "x (mm)", "y (mm)")
         display_image, display_norm, _display_warning = resolve_image_display_scale(
@@ -2444,7 +2452,7 @@ class myWindow(QWidget,Ui_Form):
             vmax=self.beam_image_vmax,
             preserve_manual_limits=True,
         )
-        widget.axes.imshow(
+        image_artist = widget.axes.imshow(
             display_image,
             cmap=self.beam_image_colormap,
             norm=display_norm,
@@ -2452,6 +2460,12 @@ class myWindow(QWidget,Ui_Form):
             extent=extent,
             aspect="auto",
         )
+        if self.beam_image_show_colorbar:
+            self.beam_image_colorbar = widget.fig.colorbar(
+                image_artist, ax=widget.axes, pad=0.02, fraction=0.046
+            )
+            self.beam_image_colorbar.set_label("Intensity", color=palette["plot_text"])
+            self.beam_image_colorbar.ax.tick_params(colors=palette["plot_text"])
 
         height = abs(extent[3] - extent[2])
         width = abs(extent[1] - extent[0])
@@ -4152,6 +4166,18 @@ class myWindow(QWidget,Ui_Form):
             )
             layout.addWidget(self.beam_image_log_checkbox)
 
+            self.beam_image_colorbar_checkbox = QCheckBox("Show colorbar", dialog)
+            self.beam_image_colorbar_checkbox.setChecked(
+                self.beam_image_show_colorbar
+            )
+            self.beam_image_colorbar_checkbox.setToolTip(
+                "Show the current image intensity scale beside the PRF image."
+            )
+            self.beam_image_colorbar_checkbox.toggled.connect(
+                self._set_beam_image_colorbar_visible
+            )
+            layout.addWidget(self.beam_image_colorbar_checkbox)
+
             close_button = QPushButton("Close", dialog)
             close_button.setProperty("compact", True)
             close_button.clicked.connect(dialog.hide)
@@ -4170,6 +4196,10 @@ class myWindow(QWidget,Ui_Form):
 
     def _set_beam_image_logarithmic(self, checked):
         self.beam_image_logarithmic = bool(checked)
+        self._redraw_latest_beam_image()
+
+    def _set_beam_image_colorbar_visible(self, checked):
+        self.beam_image_show_colorbar = bool(checked)
         self._redraw_latest_beam_image()
 
     def _set_beam_image_limits(self, *, refit=True):

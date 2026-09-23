@@ -140,6 +140,20 @@ class WidthMethodTests(unittest.TestCase):
         self.assertIn('Apply background', w.beam_image_background_checkbox.text())
         w.background_dialog.hide()
 
+    def test_display_colorbar_can_be_toggled_without_duplicate_axes(self):
+        w = self.window
+        paras = w.get_setting()
+        image = self.image(paras)
+        self.pv.side_effect = lambda pv, *args, **kwargs: image.ravel() if pv == paras.flagImagePV else None
+        self.assertTrue(w.refresh_current_beam_image_fit(paras))
+        self.assertEqual(len(w.beam_image_widget.fig.axes), 1)
+        w._set_beam_image_colorbar_visible(True)
+        self.assertEqual(len(w.beam_image_widget.fig.axes), 2)
+        w._redraw_latest_beam_image()
+        self.assertEqual(len(w.beam_image_widget.fig.axes), 2)
+        w._set_beam_image_colorbar_visible(False)
+        self.assertEqual(len(w.beam_image_widget.fig.axes), 1)
+
     def test_method_locked_during_scan_and_enabled_afterwards(self):
         w = self.window
         w.scan = Mock(isRunning=Mock(return_value=True))
