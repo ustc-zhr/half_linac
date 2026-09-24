@@ -515,6 +515,19 @@ class OptimizationDialog(QDialog):
         self.rcds_step.setToolTip('Initial RCDS step as a fraction of each variable range.')
         rcds_layout.addWidget(rcds_label)
         rcds_layout.addWidget(self.rcds_step)
+        noise_label = QLabel('Noise', self.rcds_settings)
+        noise_label.setProperty('role', 'caption')
+        self.rcds_noise = QDoubleSpinBox(self.rcds_settings)
+        self.rcds_noise.setDecimals(4)
+        self.rcds_noise.setRange(0.0, 1.0)
+        self.rcds_noise.setSingleStep(0.001)
+        self.rcds_noise.setValue(OptimizationConfig.__dataclass_fields__['rcds_noise'].default)
+        self.rcds_noise.setFixedHeight(32)
+        self.rcds_noise.setToolTip(
+            'Noise amplitude of the normalized objective: emittance / (emittance + baseline). '
+            'Default 0. Near baseline, 2% emittance variation corresponds to about 0.005.')
+        rcds_layout.addWidget(noise_label)
+        rcds_layout.addWidget(self.rcds_noise)
 
         self.bo_settings = QWidget(self.algorithm_settings)
         bo_layout = QHBoxLayout(self.bo_settings)
@@ -645,6 +658,7 @@ class OptimizationDialog(QDialog):
         self.minutes.valueChanged.connect(self.settings_changed)
         self.solenoid_settle.valueChanged.connect(self.settings_changed)
         self.rcds_step.valueChanged.connect(self.settings_changed)
+        self.rcds_noise.valueChanged.connect(self.settings_changed)
         self.bo_initial_samples.valueChanged.connect(self.bo_initial_samples_changed)
         self.bo_exploration.valueChanged.connect(self.settings_changed)
         self.bo_seed.valueChanged.connect(self.settings_changed)
@@ -918,6 +932,7 @@ class OptimizationDialog(QDialog):
                 self.selected_variables(), self.plane.currentData(), other_limit,
                 self.count.value(), self.minutes.value(), settle_time=self.solenoid_settle.value(),
                 algorithm=self.algorithm.currentData(), rcds_initial_step=self.rcds_step.value(),
+                rcds_noise=self.rcds_noise.value(),
                 bo_initial_samples=self.bo_initial_samples.value(),
                 bo_exploration=self.bo_exploration.value(), bo_random_seed=self.bo_seed.value())
             config.validate()

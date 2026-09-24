@@ -52,6 +52,7 @@ class OptimizationConfig:
     bo_initial_samples: int | None = None
     bo_exploration: float = 0.01
     bo_random_seed: int = 0
+    rcds_noise: float = 0.0
 
     def validate(self):
         if not self.variables or self.plane not in ('x', 'y'):
@@ -63,7 +64,7 @@ class OptimizationConfig:
         if not all(math.isfinite(v) for v in (
             self.other_limit, self.max_minutes, self.readback_tolerance,
             self.motion_timeout, self.settle_time, self.rcds_initial_step,
-            self.bo_exploration,
+            self.bo_exploration, self.rcds_noise,
         )):
             raise ValueError('Settings must be finite.')
         if self.other_limit <= 0:
@@ -76,6 +77,8 @@ class OptimizationConfig:
             raise ValueError('Optimization algorithm must be RCDS or BO.')
         if not 0 < self.rcds_initial_step <= 1:
             raise ValueError('RCDS initial step fraction must be greater than 0 and at most 1.')
+        if self.rcds_noise < 0:
+            raise ValueError('RCDS noise must be non-negative.')
         if self.bo_exploration < 0:
             raise ValueError('BO exploration must be non-negative.')
         if (self.bo_initial_samples is not None and
@@ -109,6 +112,7 @@ class OptimizationConfig:
         return {
             'name': 'rcds', 'backend': 'GOTAcc',
             'initial_step_fraction': self.rcds_initial_step,
+            'noise': self.rcds_noise,
         }
 
     def point(self, values, *, bounded=True):
@@ -182,6 +186,7 @@ class OptimizationSession:
                 optimizer = lambda evaluate, low, high, initial, budget: optimize_currents(
                     evaluate, low, high, initial, budget,
                     initial_step=config.rcds_initial_step,
+                    noise=config.rcds_noise,
                 )
             else:
                 from half_linac.src.optimization.emittance_bo import optimize_currents

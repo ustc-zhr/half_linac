@@ -209,6 +209,10 @@ class SessionTests(unittest.TestCase):
                           algorithm='bo').validate()
         with self.assertRaisesRegex(ValueError, 'initial step'):
             single_config('SS01', 1, 9, 'x', 3, rcds_initial_step=0).validate()
+        self.assertEqual(self.config.rcds_noise, 0.0)
+        for noise in (-.001, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                single_config('SS01', 1, 9, 'x', 3, rcds_noise=noise).validate()
         with self.assertRaisesRegex(ValueError, 'exploration'):
             single_config('SS01', 1, 9, 'x', 3, bo_exploration=-.1).validate()
         with self.assertRaisesRegex(ValueError, 'random seed'):
@@ -226,11 +230,13 @@ class SessionTests(unittest.TestCase):
         })
 
         rcds = unittest.mock.Mock()
-        rcds_config = single_config('SS01', 1, 9, 'x', 3, rcds_initial_step=.35)
+        rcds_config = single_config('SS01', 1, 9, 'x', 3, rcds_initial_step=.35, rcds_noise=.005)
         with patch('half_linac.src.optimization.emittance_rcds.optimize_currents', rcds):
             session = OptimizationSession(rcds_config, self.device, None, Path(self.temp.name) / 'rcds-params')
         session.optimizer(lambda *_: 0, (1,), (9,), (5,), 10)
-        self.assertEqual(rcds.call_args.kwargs, {'initial_step': .35})
+        self.assertEqual(rcds.call_args.kwargs, {'initial_step': .35, 'noise': .005})
+        self.assertEqual(session.summary['optimizer']['noise'], .005)
+        self.assertEqual(session.summary['config']['rcds_noise'], .005)
 
     def test_fatal_scan_failure_is_not_retried(self):
         s = self.session(measure=lambda *_: {'restored': True, 'error': 'QL09 scan write failed', 'fatal': True})

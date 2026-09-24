@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 
-def optimize_currents(evaluate, low, high, initial, max_evaluations, *, initial_step=0.2):
+def optimize_currents(evaluate, low, high, initial, max_evaluations, *, initial_step=0.2, noise=0.0):
     import numpy as np
     from .GOTAcc.src.gotacc.algorithms.single_objective.rcds import RCDSOptimizer
 
@@ -18,6 +18,7 @@ def optimize_currents(evaluate, low, high, initial, max_evaluations, *, initial_
         bounds=np.column_stack((low, high)),
         x0=(initial - low) / (high - low),
         step=float(initial_step),
+        noise=float(noise),
         maximize=False, maxEval=max_evaluations, maxIt=max_evaluations, verbose=False,
     )
     optimizer.optimize()
