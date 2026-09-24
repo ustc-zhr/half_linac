@@ -11,7 +11,7 @@ from uuid import uuid4
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractButton, QAbstractItemView, QComboBox, QDialog, QDoubleSpinBox,
-    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton,
+    QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton,
     QProgressBar, QScrollArea, QSizePolicy, QSplitter,
     QSpinBox, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
@@ -20,6 +20,11 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from half_linac.src.shared.machine_profile import LimitRange, resolve_channel, resolve_app_runtime_paths
 from .optimization import OptimizationConfig, OptimizationVariable, OptimizationSession, EpicsVariableGroup
+from .optimization_diagnostics import (
+    load_measurement_diagnostics,
+    load_optimization_run,
+    plane_metric,
+)
 
 
 class CompactScrollContent(QWidget):
@@ -91,6 +96,219 @@ class CurrentReadWorker(QThread):
             self.failed.emit(str(exc))
 
 
+def _format_number(value, precision=4):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return '—'
+    return f'{number:.{precision}g}' if math.isfinite(number) else '—'
+
+
+def _record_cells(record):
+    values = record.get('values', {})
+    if record.get('valid'):
+        state = 'Valid' if record.get('feasible') else 'Other-plane limit exceeded'
+    else:
+        state = record.get('error', 'Invalid' if record.get('finished_at') else 'Measuring')
+    currents = record.get('currents', {})
+    current_text = ' · '.join(f'{name}={_format_number(value, 5)}' for name, value in currents.items())
+    return [
+        f"{record.get('index', '—')} / {record.get('stage', '—')}",
+        current_text or '—',
+        _format_number(values.get('x')),
+        _format_number(values.get('y')),
+        str(state),
+        Path(record.get('archive', '')).name or '—',
+    ]
+
+
+def _populate_record_table(table, records):
+    table.setRowCount(len(records))
+    for row, record in enumerate(records):
+        for column, value in enumerate(_record_cells(record)):
+            item = QTableWidgetItem(value)
+            if column == 5:
+                item.setToolTip(str(record.get('archive', '')))
+            elif column == 4 and record.get('finished_at'):
+                item.setToolTip('Double-click this row to inspect the archived fit diagnostics.')
+            else:
+                item.setToolTip(value)
+            if column in (1, 2, 3):
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            table.setItem(row, column, item)
+
+
+class MeasurementDiagnosticsDialog(QDialog):
+    """Read-only evidence behind one optimization measurement result."""
+    def __init__(self, record, *, run_dir=None, parent=None):
+        super().__init__(parent)
+        self.diagnostics = load_measurement_diagnostics(record, run_dir=run_dir)
+        self.setWindowTitle(f"Measurement Diagnostics · Scan {record.get('index', '—')}")
+        self.resize(980, 680)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        rating = self.diagnostics['rating']
+        heading = QLabel(f"{rating} · {record.get('stage', 'Measurement')}", self)
+        heading.setStyleSheet('font-size: 17px; font-weight: bold;')
+        layout.addWidget(heading)
+        reason = QLabel(' '.join(self.diagnostics['reasons']), self)
+        reason.setWordWrap(True)
+        layout.addWidget(reason)
+
+        constraint = (
+            ('Satisfied' if record.get('feasible') else 'Exceeded')
+            if record.get('valid') else 'Not evaluated'
+        )
+        path = self.diagnostics.get('results_path') or self.diagnostics['archive']
+        context = QLabel(
+            f"Other-plane constraint: {constraint} · Archive: {path}", self)
+        context.setWordWrap(True)
+        context.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(context)
+
+        self.metrics = QTableWidget(0, 3, self)
+        self.metrics.setHorizontalHeaderLabels(['Diagnostic', 'X', 'Y'])
+        self.metrics.verticalHeader().hide()
+        self.metrics.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.metrics.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        rows = (
+            ('Reconstruction', 'status'),
+            ('Adaptive validation', 'validation_status'),
+            ('Normalized emittance (mm·mrad)', 'exn'),
+            ('Beta', 'beta'),
+            ('Alpha', 'alpha'),
+            ('Rank', 'rank'),
+            ('Condition number', 'condition_number'),
+            ('Residual RMS', 'residual_rms'),
+            ('Points used / total', 'fit_selection'),
+            ('Coverage left / right', 'coverage'),
+            ('Low / high growth ratio', 'growth'),
+        )
+        self.metrics.setRowCount(len(rows))
+        for row, (label, key) in enumerate(rows):
+            self.metrics.setItem(row, 0, QTableWidgetItem(label))
+            for column, plane_name in enumerate(('x', 'y'), 1):
+                plane = self.diagnostics['planes'][plane_name]
+                self.metrics.setItem(row, column, QTableWidgetItem(self._metric_text(plane, key)))
+        self.metrics.resizeRowsToContents()
+        self.metrics.setMaximumHeight(min(330, self.metrics.sizeHint().height() + 50))
+        layout.addWidget(self.metrics)
+
+        figure = Figure(figsize=(8, 3), tight_layout=True)
+        canvas = FigureCanvasQTAgg(figure)
+        axes = figure.subplots(1, 2)
+        self._draw_plane(axes[0], 'x', 1)
+        self._draw_plane(axes[1], 'y', 2)
+        layout.addWidget(canvas, 1)
+
+        note = QLabel(
+            'Diagnostics are read-only and do not change optimization acceptance. '
+            'Raw PRF images are not stored in this archive.', self)
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        close_button = QPushButton('Close', self)
+        close_button.clicked.connect(self.accept)
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(close_button)
+        layout.addLayout(row)
+
+    @staticmethod
+    def _metric_text(plane, key):
+        if key == 'exn':
+            return _format_number(plane_metric(plane, 'exn'))
+        if key == 'fit_selection':
+            selection = plane.get('fit_selection', {})
+            if not isinstance(selection, dict):
+                return '—'
+            return f"{selection.get('points_used', '—')} / {selection.get('points_total', '—')} ({selection.get('status', '—')})"
+        if key == 'coverage':
+            return f"{plane.get('left_points', '—')} / {plane.get('right_points', '—')}"
+        if key == 'growth':
+            return f"{_format_number(plane.get('low_growth_ratio'), 3)} / {_format_number(plane.get('high_growth_ratio'), 3)}"
+        value = plane.get(key)
+        if key in {'condition_number', 'residual_rms', 'beta', 'alpha'}:
+            return _format_number(value)
+        return str(value) if value is not None else '—'
+
+    def _draw_plane(self, axes, plane, sigma_column):
+        points = self.diagnostics['points']
+        axes.set_title(f'{plane.upper()} scan evidence')
+        axes.set_xlabel('K1 (m⁻²)')
+        axes.set_ylabel(f'σ{plane} (mm)')
+        axes.grid(alpha=.25)
+        if not len(points):
+            axes.text(.5, .5, 'Scan points unavailable', ha='center', va='center', transform=axes.transAxes)
+            return
+        summary = self.diagnostics['planes'][plane]
+        selection = summary.get('fit_selection', {})
+        selected_k1 = selection.get('selected_k1', []) if isinstance(selection, dict) else []
+        accepted_x, accepted_y, excluded_x, excluded_y = [], [], [], []
+        for index, point in enumerate(points):
+            quality = self.diagnostics['point_quality'][index][plane]
+            usable = not quality or bool(quality.get('usable'))
+            selected = not selected_k1 or any(math.isclose(float(point[0]), float(value), rel_tol=0, abs_tol=1e-10)
+                                              for value in selected_k1)
+            target = (accepted_x, accepted_y) if usable and selected else (excluded_x, excluded_y)
+            target[0].append(float(point[0]))
+            target[1].append(float(point[sigma_column]))
+        if accepted_x:
+            axes.plot(accepted_x, accepted_y, 'o', markersize=4, label='Used')
+        if excluded_x:
+            axes.plot(excluded_x, excluded_y, 'x', markersize=5, label='Rejected / excluded')
+        if accepted_x or excluded_x:
+            axes.legend(frameon=False, fontsize=8)
+
+
+class OptimizationRunReviewDialog(QDialog):
+    """Read-only browser for a completed optimization.json archive."""
+    def __init__(self, payload, run_dir, parent=None):
+        super().__init__(parent)
+        self.payload, self.run_dir = payload, Path(run_dir)
+        self.records = list(payload.get('records', ()))
+        self.setWindowTitle(f'Optimization Run Review · {self.run_dir.name}')
+        self.resize(980, 620)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        heading = QLabel('Emittance Optimization Run', self)
+        heading.setStyleSheet('font-size: 17px; font-weight: bold;')
+        layout.addWidget(heading)
+        summary = payload.get('status', 'unknown')
+        confirmed = 'verified improvement' if payload.get('confirmed') else 'no verified improvement'
+        label = QLabel(f"{summary} · {confirmed} · {len(self.records)} measurements\n{self.run_dir}", self)
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(label)
+        self.table = QTableWidget(0, 6, self)
+        self.table.setHorizontalHeaderLabels(['Scan / Stage', 'Currents (A)', 'εnx', 'εny', 'Status', 'Archive'])
+        self.table.verticalHeader().hide()
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setAlternatingRowColors(True)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        _populate_record_table(self.table, self.records)
+        self.table.cellDoubleClicked.connect(self.open_diagnostics)
+        layout.addWidget(self.table, 1)
+        note = QLabel('Double-click a completed measurement to inspect its archived fit evidence.', self)
+        layout.addWidget(note)
+        close_button = QPushButton('Close', self)
+        close_button.clicked.connect(self.accept)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        buttons.addWidget(close_button)
+        layout.addLayout(buttons)
+
+    def open_diagnostics(self, row, _column=0):
+        if row < 0 or row >= len(self.records):
+            return
+        record = self.records[row]
+        if not record.get('finished_at'):
+            return
+        MeasurementDiagnosticsDialog(record, run_dir=self.run_dir, parent=self).exec_()
+
+
 class OptimizationDialog(QDialog):
     def __init__(self, host):
         super().__init__(host)
@@ -101,6 +319,7 @@ class OptimizationDialog(QDialog):
         self.fault = False
         self.worker_error = None
         self.close_pending = False
+        self._visible_records = []
         self.locked_widgets = []
         self.locked_tables = []
         self.locked_items = []
@@ -376,7 +595,12 @@ class OptimizationDialog(QDialog):
         layout.addWidget(results_card, 1)
         self.results = QLabel('Initial currents: —    ·    Baseline: —    ·    Best candidate: —', self)
         self.results.setWordWrap(True)
-        results_layout.addWidget(self.results)
+        self.open_run_button = QPushButton('Open Run…', self)
+        self.open_run_button.setToolTip('Open an archived optimization.json in a read-only review window.')
+        results_header = QHBoxLayout()
+        results_header.addWidget(self.results, 1)
+        results_header.addWidget(self.open_run_button, 0, Qt.AlignTop)
+        results_layout.addLayout(results_header)
 
         splitter = QSplitter(Qt.Vertical, self)
         splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Ignored)
@@ -400,6 +624,7 @@ class OptimizationDialog(QDialog):
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(30)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.setToolTip('Double-click a completed row to inspect fit diagnostics.')
         splitter.addWidget(self.table)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
@@ -409,6 +634,8 @@ class OptimizationDialog(QDialog):
         self.stop_button.clicked.connect(self.stop)
         self.apply_button.clicked.connect(lambda: self.manual('best'))
         self.restore_button.clicked.connect(lambda: self.manual('initial'))
+        self.open_run_button.clicked.connect(self.open_run_archive)
+        self.table.cellDoubleClicked.connect(self.open_current_diagnostics)
         for edit in (self.other_limit,):
             edit.textChanged.connect(self.settings_changed)
         self.algorithm.currentIndexChanged.connect(self.algorithm_changed)
@@ -606,6 +833,7 @@ class OptimizationDialog(QDialog):
         self.read_button.setEnabled(not busy and not self.fault and self.host.machine_type == 'real' and bool(self.selected_names()))
         self.apply_button.setEnabled(not busy and not self.fault and bool(self.session and self.session.confirmed))
         self.restore_button.setEnabled(not busy and bool(self.session and self.session.initial is not None))
+        self.open_run_button.setEnabled(not busy)
         if self.host.machine_type != 'real' and not self.session:
             self.status.setText('Unavailable in VM: solenoid current channels are not configured.')
 
@@ -701,6 +929,7 @@ class OptimizationDialog(QDialog):
                                                background=self.paras.background_image,
                                                recover_quad=lambda: self.paras.restore_quad(self.paras.restore_quad.initial_k1))
             self.table.setRowCount(0)
+            self._visible_records = []
             self.progress_bar.setRange(0, config.max_measurements)
             self.progress_bar.setValue(0)
             self.results.setText('Initial currents: —    ·    Baseline: —    ·    Best candidate: —')
@@ -742,6 +971,14 @@ class OptimizationDialog(QDialog):
             paras = deepcopy(self.paras)
             paras.scan_latest_dir = request['path'] / 'latest'
             paras.scan_archive_dir = request['path'] / 'runs'
+            # Reuse the ordinary main-window presentation while keeping the
+            # optimization scan and its private archive independently owned.
+            # The ordinary _on_scan_finished callback is deliberately not
+            # connected, so a completed optimization measurement cannot
+            # trigger the automatic switch to the Analysis tab.
+            self.host.display({'clear': True, 'preserve_beam_image': True})
+            if getattr(paras, 'scan_strategy', None):
+                self.host._begin_scan_progress(paras)
             self.scan = scanThread(paras)
             self.scan.trigger.connect(self.scan_progress)
             self.scan.finished.connect(self.measurement_finished)
@@ -758,11 +995,24 @@ class OptimizationDialog(QDialog):
             progress = payload['scan_progress']
             self.status.setText(f"Scan {len(self.session.records)} · {progress.get('stage', '')} · "
                                 f"{progress.get('completed_points', 0)} scan points")
+        self.host.display(payload)
 
     def measurement_finished(self):
         # QThread.finished can precede native thread-local cleanup; join before release.
         self.scan.wait()
-        self.request['result'] = self.scan.terminal_result
+        result = self.scan.terminal_result
+        self.request['result'] = result
+        if result.get('restored') and not result.get('error'):
+            self.host._finish_scan_progress('complete')
+            points = self.host._scan_points_counts()[1]
+            self.host.scan_strategy_status_label.setText(
+                f'Optimization measurement complete · {points} points')
+            self.host.scan_strategy_status_label.setToolTip(
+                'Displayed from the current optimization measurement. '
+                'The ordinary latest scan archive was not changed.')
+        else:
+            self.host._finish_scan_progress(
+                'stopped' if result.get('error') == 'Scan stopped.' else 'failed')
         self.request['done'].set()
         self.scan.deleteLater()
         self.scan = self.request = None
@@ -783,19 +1033,8 @@ class OptimizationDialog(QDialog):
         self.progress_bar.setValue(payload['count'])
         self.progress_bar.setFormat('%v / %m scans')
         records = payload.get('records', [])
-        self.table.setRowCount(len(records))
-        for row, record in enumerate(records):
-            values = record.get('values', {})
-            state = ('Valid' if record.get('feasible') else 'Other-plane limit exceeded') if record.get('valid') else record.get('error', 'Measuring')
-            cells = [f"{row + 1} / {record['stage']}", self.format_currents(record['currents']),
-                     f"{values['x']:.4g}" if 'x' in values else '—',
-                     f"{values['y']:.4g}" if 'y' in values else '—', state, Path(record['archive']).name]
-            for column, text in enumerate(cells):
-                item = QTableWidgetItem(text)
-                item.setToolTip(record['archive'] if column == 5 else text)
-                if column in (1, 2, 3):
-                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                self.table.setItem(row, column, item)
+        self._visible_records = list(records)
+        _populate_record_table(self.table, self._visible_records)
         valid = [r for r in records if r.get('valid')]
         self.axes.clear()
         for plane in ('x', 'y'):
@@ -807,6 +1046,36 @@ class OptimizationDialog(QDialog):
         self.style_plot()
         self.canvas.draw_idle()
         self.show_results()
+
+    def open_current_diagnostics(self, row, _column=0):
+        if row < 0 or row >= len(self._visible_records):
+            return
+        record = self._visible_records[row]
+        if not record.get('finished_at'):
+            self.status.setText('Diagnostics are available after the current measurement completes.')
+            return
+        run_dir = self.session.run_dir if self.session is not None else None
+        try:
+            MeasurementDiagnosticsDialog(record, run_dir=run_dir, parent=self).exec_()
+        except ValueError as exc:
+            self.error(exc)
+
+    def open_run_archive(self):
+        root = resolve_app_runtime_paths(Path(__file__).parent, self.host.app_context)['runs_dir']
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            'Open Emittance Optimization Run',
+            str(root),
+            'Emittance optimization (optimization.json);;JSON files (*.json)',
+        )
+        if not path:
+            return
+        try:
+            payload, run_dir = load_optimization_run(path)
+        except ValueError as exc:
+            self.error(exc)
+            return
+        OptimizationRunReviewDialog(payload, run_dir, self).exec_()
 
     def show_results(self):
         s = self.session

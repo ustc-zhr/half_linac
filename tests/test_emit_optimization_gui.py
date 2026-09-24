@@ -40,6 +40,13 @@ class FakeScan(QThread):
         self.stopped = True
 
 
+class LiveDisplayScan(FakeScan):
+    def run(self):
+        self.trigger.emit({'method': None, 'k1': 0.25, 'sigx': 1.2, 'sigy': 1.4})
+        self.trigger.emit({'method': 'leastSquares', **result(1)})
+        self.terminal_result = result(1)
+
+
 class DialogTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -302,6 +309,23 @@ class DialogTests(unittest.TestCase):
         self.assertTrue(request['result']['restored'])
         self.dialog.session = None
 
+    def test_optimization_scan_updates_main_without_switching_to_analysis(self):
+        self.dialog.paras = main.structData()
+        self.dialog.session = Mock(records=[], cancelled=Mock())
+        self.dialog.session.cancelled.is_set.return_value = False
+        request = {'path': Path('/tmp/emit-test-live-display'), 'done': Event()}
+        self.host.tabWidget.setCurrentWidget(self.host.X_Plane)
+        with patch.object(main, 'scanThread', LiveDisplayScan):
+            self.dialog.start_measurement(request)
+            self.pump(request['done'].is_set)
+            self.app.processEvents()
+        self.assertEqual(self.host.scan_points_table.rowCount(), 1)
+        self.assertTrue(self.host._scan_result_ready)
+        self.assertIs(self.host.tabWidget.currentWidget(), self.host.X_Plane)
+        self.assertIn('Optimization measurement complete', self.host.scan_strategy_status_label.text())
+        main.epics.caput.assert_not_called()
+        self.dialog.session = None
+
     def test_close_during_scan_waits_for_restore(self):
         temp = TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -367,6 +391,36 @@ class DialogTests(unittest.TestCase):
         self.assertFalse(session.confirmed)
         self.assertFalse(self.dialog.apply_button.isEnabled())
         self.assertTrue(self.dialog.restore_button.isEnabled())
+
+    def test_completed_result_opens_read_only_diagnostics(self):
+        record = {'index': 1, 'stage': 'Baseline', 'archive': '/tmp/measurement_001',
+                  'finished_at': 1, 'valid': True, 'feasible': True,
+                  'currents': {'SS01': 5.}, 'values': {'x': 1., 'y': 2.}}
+        self.dialog._visible_records = [record]
+        self.dialog.session = Mock(run_dir=Path('/tmp/run'))
+        viewer = Mock()
+        with patch('half_linac.src.apps.emit_measure.optimization_gui.MeasurementDiagnosticsDialog',
+                   return_value=viewer) as diagnostics:
+            self.dialog.open_current_diagnostics(0)
+        diagnostics.assert_called_once_with(record, run_dir=Path('/tmp/run'), parent=self.dialog)
+        viewer.exec_.assert_called_once_with()
+        main.epics.caput.assert_not_called()
+
+    def test_open_run_uses_separate_read_only_viewer(self):
+        payload = {'schema_version': 'emit_optimization_v2', 'records': []}
+        run_dir = Path('/tmp/optimization_archive')
+        viewer = Mock()
+        session_before = self.dialog.session
+        with patch('half_linac.src.apps.emit_measure.optimization_gui.QFileDialog.getOpenFileName',
+                   return_value=(str(run_dir / 'optimization.json'), '')), \
+             patch('half_linac.src.apps.emit_measure.optimization_gui.load_optimization_run',
+                   return_value=(payload, run_dir)), \
+             patch('half_linac.src.apps.emit_measure.optimization_gui.OptimizationRunReviewDialog',
+                   return_value=viewer):
+            self.dialog.open_run_archive()
+        self.assertIs(self.dialog.session, session_before)
+        viewer.exec_.assert_called_once_with()
+        main.epics.caput.assert_not_called()
 
 
 if __name__ == '__main__':
