@@ -3425,7 +3425,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self._latest_energy_center * self._latest_energy_spread
         )
         self.label_energyspread.setText(
-            f"{self._latest_energy_spread * 1e2:.4f}% · "
+            f"{self._latest_energy_spread * 1e2:.3f}% · "
             f"{self._format_mev(energy_spread_mev)} MeV"
         )
 
@@ -3480,7 +3480,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         relative = abs(rms / mean * 100.0) if not np.isclose(mean, 0.0) else float("nan")
         if hasattr(self, "stability_rms_label"):
             self.stability_rms_label.setText(
-                f"{self._format_mev(rms)} MeV · {relative:.4f}%"
+                f"{self._format_mev(rms)} MeV · {relative:.3f}%"
             )
             self.stability_progress_label.setText(
                 f"{values.size}/{window} frames"
