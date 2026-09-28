@@ -899,6 +899,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.sigx = None
         self.sigy = None
         self.energy_stability_history = []
+        self._latest_energy_center = None
+        self._latest_energy_spread = None
         self.bg_image = None
         self.bg_metadata = {}
         self.bg_image_path = None
@@ -3361,6 +3363,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.horizontalLayout_6.setStretch(2, 3)
         self.horizontalLayout_6.setStretch(4, 3)
 
+        precision_tooltip = (
+            "Number of decimal places used for MeV readouts. This changes "
+            "display formatting only; calculations and saved results keep full precision."
+        )
+        self.energy_decimals_label = QLabel("MeV decimals", self.frame_3)
+        self.energy_decimals_label.setProperty("role", "field")
+        self.energy_decimals_label.setToolTip(precision_tooltip)
+        self.energy_decimals_spin = QSpinBox(self.frame_3)
+        self.energy_decimals_spin.setRange(0, 6)
+        self.energy_decimals_spin.setValue(1)
+        self.energy_decimals_spin.setFixedWidth(56)
+        self.energy_decimals_spin.setProperty("dense", True)
+        self.energy_decimals_spin.setToolTip(precision_tooltip)
+        self.energy_decimals_spin.setAccessibleName("MeV display decimal places")
+
         self.stability_window_label = QLabel("Window", self.frame_3)
         self.stability_window_label.setProperty("role", "field")
         self.stability_window_spin = QSpinBox(self.frame_3)
@@ -3376,11 +3393,46 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.stability_clear_button.setAccessibleName(
             "Clear energy stability history"
         )
+        self.stability_header_layout.addWidget(self.energy_decimals_label)
+        self.stability_header_layout.addWidget(self.energy_decimals_spin)
         self.stability_header_layout.addWidget(self.stability_window_label)
         self.stability_header_layout.addWidget(self.stability_window_spin)
         self.stability_header_layout.addWidget(self.stability_clear_button)
+        self.energy_decimals_spin.valueChanged.connect(
+            self._on_energy_display_precision_changed
+        )
         self.stability_window_spin.valueChanged.connect(self._update_energy_stability_view)
         self.stability_clear_button.clicked.connect(self._clear_energy_stability_history)
+
+    def _energy_display_decimals(self):
+        if hasattr(self, "energy_decimals_spin"):
+            return self.energy_decimals_spin.value()
+        return 1
+
+    def _format_mev(self, value):
+        return f"{float(value):.{self._energy_display_decimals()}f}"
+
+    def _render_energy_readouts(self):
+        if self._latest_energy_center is None:
+            self.label_energy.setText("N/A")
+        else:
+            self.label_energy.setText(self._format_mev(self._latest_energy_center))
+
+        if self._latest_energy_center is None or self._latest_energy_spread is None:
+            self.label_energyspread.setText("N/A")
+            return
+        energy_spread_mev = abs(
+            self._latest_energy_center * self._latest_energy_spread
+        )
+        self.label_energyspread.setText(
+            f"{self._latest_energy_spread * 1e2:.4f}% · "
+            f"{self._format_mev(energy_spread_mev)} MeV"
+        )
+
+    def _on_energy_display_precision_changed(self, _value):
+        self._render_energy_readouts()
+        self._update_energy_stability_view()
+        self._refresh_status()
 
     def _clear_energy_stability_history(self):
         self.energy_stability_history.clear()
@@ -3428,7 +3480,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         relative = abs(rms / mean * 100.0) if not np.isclose(mean, 0.0) else float("nan")
         if hasattr(self, "stability_rms_label"):
             self.stability_rms_label.setText(
-                f"{rms:.4f} MeV · {relative:.4f}%"
+                f"{self._format_mev(rms)} MeV · {relative:.4f}%"
             )
             self.stability_progress_label.setText(
                 f"{values.size}/{window} frames"
@@ -3500,20 +3552,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _set_energy_outputs(self, energy_center, energy_spread):
         self._clear_readout_status()
-        self.label_energy.setText("{:.4f}".format(energy_center))
-        energy_spread_mev = abs(energy_center * energy_spread)
-        self.label_energyspread.setText(
-            "{:.4f}% · {:.4f} MeV".format(energy_spread * 1e2, energy_spread_mev)
-        )
+        self._latest_energy_center = float(energy_center)
+        self._latest_energy_spread = float(energy_spread)
+        self._render_energy_readouts()
         self._record_energy_stability(energy_center)
         self._refresh_status()
 
     def _set_energy_unavailable(self, status_text=None, tooltip=None, *, energy_center=None):
-        if energy_center is None:
-            self.label_energy.setText("N/A")
-        else:
-            self.label_energy.setText("{:.4f}".format(energy_center))
-        self.label_energyspread.setText("N/A")
+        self._latest_energy_center = (
+            None if energy_center is None else float(energy_center)
+        )
+        self._latest_energy_spread = None
+        self._render_energy_readouts()
         if status_text:
             self._set_readout_status(status_text, "warning", tooltip)
         else:
