@@ -47,6 +47,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QSplitter,
     QStyle,
     QStyleOptionSlider,
     QToolButton,
@@ -221,6 +222,28 @@ QWidget#ESAflag_image, QWidget#energy_plot, QWidget#background_plot {{
     border: none;
 }}
 
+QWidget#ESAflag_image QToolBar, QWidget#energy_plot QToolBar,
+QWidget#background_plot QToolBar {{
+    background-color: {plot_card_bg};
+    border: none;
+    spacing: 2px;
+}}
+
+QWidget#ESAflag_image QToolBar QToolButton,
+QWidget#energy_plot QToolBar QToolButton,
+QWidget#background_plot QToolBar QToolButton {{
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 3px;
+}}
+
+QWidget#ESAflag_image QToolBar QToolButton:hover,
+QWidget#energy_plot QToolBar QToolButton:hover,
+QWidget#background_plot QToolBar QToolButton:hover {{
+    background-color: {button_hover_bg};
+}}
+
 QGroupBox#workspaceCard {{
     margin-top: 0;
     padding-top: 0;
@@ -308,6 +331,15 @@ QFrame#resultSeparator {{
     border: none;
     min-width: 1px;
     max-width: 1px;
+}}
+
+QSplitter#workspaceSplitter::handle {{
+    background-color: {panel_border};
+    border-radius: 2px;
+}}
+
+QSplitter#workspaceSplitter::handle:hover {{
+    background-color: {metric_active_fg};
 }}
 
 QLabel {{
@@ -437,7 +469,7 @@ QSlider::handle:horizontal {{
     border: 1px solid {button_border};
 }}
 
-QToolButton#themeToggleButton {{
+QToolButton#themeToggleButton, QToolButton#panelToggleButton {{
     background-color: {button_bg};
     border: 1px solid {button_border};
     border-radius: 11px;
@@ -450,11 +482,11 @@ QToolButton#themeToggleButton {{
     font-weight: 700;
 }}
 
-QToolButton#themeToggleButton:hover {{
+QToolButton#themeToggleButton:hover, QToolButton#panelToggleButton:hover {{
     background-color: {button_hover_bg};
 }}
 
-QToolButton#themeToggleButton:pressed {{
+QToolButton#themeToggleButton:pressed, QToolButton#panelToggleButton:pressed {{
     background-color: {button_pressed_bg};
 }}
 
@@ -822,17 +854,28 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         """Dispersion expressed along the unchanged camera-image x axis."""
         return self.flag_geometry.model_x_to_image_x(self.model_eta_m)
 
+    def _selected_fit_method(self):
+        method = self.comboBox_fitmethod.currentData()
+        return str(method) if method is not None else self.comboBox_fitmethod.currentText()
+
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.comboBox_fitmethod.addItem("Peak")
+        direct_index = self.comboBox_fitmethod.findText("direct")
+        if direct_index >= 0:
+            self.comboBox_fitmethod.setItemData(direct_index, "direct")
+            self.comboBox_fitmethod.setItemText(direct_index, "Direct")
+        gauss_fit_index = self.comboBox_fitmethod.findText("Gauss fit")
+        if gauss_fit_index >= 0:
+            self.comboBox_fitmethod.setItemData(gauss_fit_index, "Gauss fit")
+            self.comboBox_fitmethod.setItemText(gauss_fit_index, "Gaussian fit")
+        self.comboBox_fitmethod.addItem("Peak", "Peak")
         self.comboBox_fitmethod.setToolTip(
-            "Gauss fit: fitted peak energy and Gaussian width.\n"
-            "direct: whole-projection mean energy and RMS width.\n"
+            "Gaussian fit: fitted peak energy and Gaussian width.\n"
+            "Direct: whole-projection mean energy and RMS width.\n"
             "Peak: raw projection maximum energy; whole-projection RMS width. "
             "Peak position has pixel resolution and is sensitive to noise."
         )
-        gauss_fit_index = self.comboBox_fitmethod.findText("Gauss fit")
         if gauss_fit_index >= 0:
             self.comboBox_fitmethod.setCurrentIndex(gauss_fit_index)
         install_qt_window_raise_handler(self)
@@ -873,7 +916,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.bend_readback_pv = self._resolve_bend_readback_pv()
         self.auto_tune_target = self._load_auto_tune_actuator()
         self.auto_tune_pv = self.auto_tune_target.pv_name
-        self.auto_tune_unit = self.auto_tune_target.unit or "a.u."
+        self.auto_tune_unit = self._configured_auto_tune_unit()
         self.auto_tune_mode = self._load_auto_tune_scan_mode()
 
         self.current_theme = resolve_initial_theme()
@@ -938,8 +981,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         else:
             self._use_design_eta(tooltip=self._model_tooltip)
             self._refresh_status()
-        self.fit_method = self.comboBox_fitmethod.currentText()
+        self.fit_method = self._selected_fit_method()
         self.ESA_running(write_latest=False)
+        # Apply the final theme only after every generated widget has been
+        # renamed and assigned its runtime styling properties.
+        self._apply_theme()
+        # Qt can retain selector matches from the generated .ui stylesheet
+        # until the first event-loop pass. Reapply once after that pass so the
+        # initial paint uses the same complete theme as later theme switches.
+        QTimer.singleShot(0, self._apply_theme)
 
     def _load_energy_spectrum_config(self):
         workflow = dict(get_workflow(self.machine_profile, "energy_spectrum"))
@@ -1114,7 +1164,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.bend_readback_pv = self._resolve_bend_readback_pv()
         self.auto_tune_target = self._load_auto_tune_actuator()
         self.auto_tune_pv = self.auto_tune_target.pv_name
-        self.auto_tune_unit = self.auto_tune_target.unit or "a.u."
+        self.auto_tune_unit = self._configured_auto_tune_unit()
         self.auto_tune_mode = self._load_auto_tune_scan_mode()
         self.init_ESAflag()
         self._roi_updates_suspended = True
@@ -1428,6 +1478,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _auto_tune_scan_config(self):
         return dict(resolve_energy_spectrum_auto_tune(self.energy_config).get("scan", {}))
 
+    def _configured_auto_tune_unit(self):
+        configured = str(self._auto_tune_scan_config().get("unit", "")).strip()
+        return configured or self.auto_tune_target.unit or "a.u."
+
     def _load_auto_tune_scan_mode(self):
         mode = str(self._auto_tune_scan_config().get("mode", "absolute")).strip().lower()
         if mode not in {"absolute", "relative"}:
@@ -1520,7 +1574,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.latest_model_snapshot_path = None
         self.lineEdit_eta_ESAflag.setText(str(round(self.image_eta_m, 5)))
         self._update_model_status(
-            status_text or f"design image eta {self.image_eta_m:.4f} m",
+            status_text or f"Design · ηₓ = {self.image_eta_m:.4f} m",
             "warning",
             self._eta_coordinate_tooltip(tooltip),
         )
@@ -1559,9 +1613,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _snapshot_status_label(self, snapshot):
         labels = {
-            "live_from_vm": "VM snap",
-            "live_from_real": "Real snap",
-            "saved": "Saved snap",
+            "live_from_vm": "VM snapshot",
+            "live_from_real": "Machine snapshot",
+            "saved": "Saved snapshot",
             "design": "Design",
         }
         return labels.get(snapshot.source, str(snapshot.source))
@@ -1615,9 +1669,27 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.verticalLayout_2.setContentsMargins(10, 10, 10, 10)
         self.verticalLayout_2.setSpacing(12)
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
-        self.horizontalLayout_2.setSpacing(12)
-        self.horizontalLayout_2.setStretch(0, 5)
-        self.horizontalLayout_2.setStretch(1, 3)
+        self.horizontalLayout_2.setSpacing(0)
+        self.horizontalLayout_2.removeWidget(self.frame)
+        self.horizontalLayout_2.removeWidget(self.frame_2)
+        self.workspace_splitter = QSplitter(Qt.Horizontal, self.centralwidget)
+        self.workspace_splitter.setObjectName("workspaceSplitter")
+        self.workspace_splitter.setHandleWidth(7)
+        self.workspace_splitter.setChildrenCollapsible(True)
+        self.frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.frame_2.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+        self.workspace_splitter.addWidget(self.frame)
+        self.workspace_splitter.addWidget(self.frame_2)
+        self.workspace_splitter.setCollapsible(0, False)
+        self.workspace_splitter.setCollapsible(1, True)
+        self.workspace_splitter.setStretchFactor(0, 5)
+        self.workspace_splitter.setStretchFactor(1, 3)
+        self.workspace_splitter.setSizes([1000, 600])
+        self._control_panel_last_width = 600
+        self.workspace_splitter.splitterMoved.connect(
+            self._sync_control_panel_toggle
+        )
+        self.horizontalLayout_2.addWidget(self.workspace_splitter)
 
         self.frame.setFrameShape(QFrame.NoFrame)
         self.frame_2.setFrameShape(QFrame.NoFrame)
@@ -1634,7 +1706,37 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self._configure_plot_card()
         self._configure_workspace_cards()
         self._configure_workspace_content()
-        self._apply_theme()
+
+    def _sync_control_panel_toggle(self, *_args):
+        if not hasattr(self, "panel_toggle_button"):
+            return
+        sizes = self.workspace_splitter.sizes()
+        panel_visible = len(sizes) > 1 and sizes[1] > 0
+        if panel_visible:
+            self._control_panel_last_width = sizes[1]
+            self.panel_toggle_button.setText("▶")
+            self.panel_toggle_button.setToolTip("Hide the control panel")
+            self.panel_toggle_button.setAccessibleName("Hide control panel")
+        else:
+            self.panel_toggle_button.setText("◀")
+            self.panel_toggle_button.setToolTip("Restore the control panel")
+            self.panel_toggle_button.setAccessibleName("Restore control panel")
+
+    def _toggle_control_panel(self):
+        sizes = self.workspace_splitter.sizes()
+        if len(sizes) < 2:
+            return
+        total = sum(sizes) or max(self.workspace_splitter.width(), 1)
+        if sizes[1] > 0:
+            self._control_panel_last_width = sizes[1]
+            self.workspace_splitter.setSizes([total, 0])
+        else:
+            panel_width = min(
+                max(self._control_panel_last_width, 320),
+                max(total - 480, 320),
+            )
+            self.workspace_splitter.setSizes([max(total - panel_width, 1), panel_width])
+        self._sync_control_panel_toggle()
 
     def _build_summary_panel(self):
         panel = QFrame(self.centralwidget)
@@ -1663,7 +1765,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             )
         )
 
-        self.station_label = QLabel("Spectrum Station", panel)
+        self.station_label = QLabel("Station", panel)
         self.station_label.setProperty("role", "field")
         header_layout.addWidget(self.station_label)
         self.station_combo = QComboBox(panel)
@@ -1682,6 +1784,15 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         multiple_stations = len(self.energy_station_configs) > 1
         self.station_label.setVisible(multiple_stations)
         self.station_combo.setVisible(multiple_stations)
+
+        self.panel_toggle_button = QToolButton(panel)
+        self.panel_toggle_button.setObjectName("panelToggleButton")
+        self.panel_toggle_button.setFixedSize(
+            HEADER_ACTION_HEIGHT, HEADER_ACTION_HEIGHT
+        )
+        self.panel_toggle_button.clicked.connect(self._toggle_control_panel)
+        header_layout.addWidget(self.panel_toggle_button)
+        self._sync_control_panel_toggle()
 
         self.theme_toggle_button = QToolButton(panel)
         self.theme_toggle_button.setObjectName("themeToggleButton")
@@ -1731,7 +1842,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.stability_header_layout.addWidget(self.stability_plot_title)
         self.stability_header_layout.addStretch(1)
         self.stability_plot = QWidget(self.frame_3)
-        self.stability_plot.fig = Figure(figsize=(4, 1.2))
+        self.stability_plot.fig = Figure(figsize=(4, 1.2), constrained_layout=True)
         self.stability_plot.axes = self.stability_plot.fig.add_subplot(111)
         self.stability_plot.canvas = FigureCanvas(self.stability_plot.fig)
         stability_layout = QVBoxLayout(self.stability_plot)
@@ -2324,7 +2435,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "verification_min_valid_frames": self.auto_tune_verification_min_valid_spin.value(),
             "frame_interval_s": self.auto_tune_frame_interval_spin.value(),
             "pixel_width_mm": self.flag_pixel_width_mm,
-            "profile_fit_method": self.comboBox_fitmethod.currentText(),
+            "profile_fit_method": self._selected_fit_method(),
             "min_fit_r_squared": float(measurement.get("min_fit_r_squared", 0.3)),
             "beam_presence_sigma": float(
                 beam_presence.get("sigma_threshold", 6.0)
@@ -2342,17 +2453,17 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         }
 
     def _configure_workspace_content(self):
-        self.label.setText("Exposure (s)")
+        self.label.setText("Exposure (s)" if self.control_backend == "real" else "Exposure")
         self.label_2.setText("Colormap")
         self.label_3.setText("Refresh (s)")
-        self.label_10.setText("Fit Method")
+        self.label_10.setText("Fit method")
         self.label_4.setText("Energy (MeV)")
-        self.label_6.setText("Spread")
-        self.label_9.setText("Input @")
+        self.label_6.setText("Energy spread (RMS)")
+        self.label_9.setText("Input at")
         self.label_11.setText("Target")
         self.label_14.setText("Energy setpoint")
-        self.label_eta.setText("Image eta x (m)")
-        self.pushButton_cal_disp.setText("Update eta")
+        self.label_eta.setText("Image dispersion ηₓ (m)")
+        self.pushButton_cal_disp.setText("Update dispersion")
         self.pushButton_cal_twiss_disp.setText("Update optics")
         self.pushButton_autoFind.setText("Auto Find")
         self.pushButton_sample_bg.setText("Sample BG")
@@ -2439,18 +2550,19 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.gridLayout.addWidget(self.label_3, 0, 2)
         self.gridLayout.addWidget(self.lineEdit_refresh, 0, 3)
         self.gridLayout.addWidget(self.label_2, 1, 0)
+        self.gridLayout.addWidget(self.comboBox_colormap, 1, 1)
+        self.gridLayout.addWidget(self.label_10, 1, 2)
+        self.gridLayout.addWidget(self.comboBox_fitmethod, 1, 3)
+        display_options_label = QLabel("Display", self.groupBox_4)
+        display_options_label.setProperty("role", "field")
         image_display_layout = QHBoxLayout()
         image_display_layout.setContentsMargins(0, 0, 0, 0)
         image_display_layout.setSpacing(6)
-        image_display_layout.addWidget(self.comboBox_colormap, 1)
         self.log_intensity_checkbox = QCheckBox("Log intensity", self.groupBox_4)
         self.log_intensity_checkbox.setToolTip(
             "Use logarithmic image colors without changing spectrum analysis."
         )
         image_display_layout.addWidget(self.log_intensity_checkbox)
-        self.gridLayout.addLayout(image_display_layout, 1, 1)
-        self.gridLayout.addWidget(self.label_10, 1, 2)
-        self.gridLayout.addWidget(self.comboBox_fitmethod, 1, 3)
         self.image_levels_dialog = QDialog(self)
         self.image_levels_dialog.setObjectName("energySpectrumDialog")
         self.image_levels_dialog.setWindowTitle("Image color limits")
@@ -2477,10 +2589,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.image_levels_button.setToolTip("Set image vmin / vmax; blank limits use automatic colors.")
         self.image_levels_button.clicked.connect(self._show_image_levels)
         image_display_layout.addWidget(self.image_levels_button)
+        image_display_layout.addStretch(1)
+        self.gridLayout.addWidget(display_options_label, 2, 0)
+        self.gridLayout.addLayout(image_display_layout, 2, 1, 1, 3)
         self.image_scale_warning = QLabel(self.groupBox_4)
         self.image_scale_warning.setWordWrap(True)
         self.image_scale_warning.hide()
-        self.gridLayout.addWidget(self.image_scale_warning, 3, 0, 1, 4)
+        self.gridLayout.addWidget(self.image_scale_warning, 4, 0, 1, 4)
         self.gridLayout.removeWidget(self.checkBox_emit)
         self.verticalLayout_13.removeWidget(self.checkBox_emit)
         self.verticalLayout_9.insertWidget(1, self.checkBox_emit)
@@ -2640,7 +2755,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.background_status_label = QLabel("Background: None", self.groupBox_7)
         self.background_status_label.setWordWrap(True)
         self.background_status_label.setProperty("role", "field")
-        self.background_settings_button = QPushButton("Background...", self.groupBox_7)
+        self.background_settings_button = QPushButton("Manage…", self.groupBox_7)
         self.background_settings_button.setObjectName("pushButton_backgroundSettings")
         self.background_settings_button.setAccessibleName("Open background settings")
         self.pushButton_load_latest_bg.setAccessibleName("Load latest background")
@@ -2664,8 +2779,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.roi_edit_button.setProperty("tight", True)
         roi_row.addWidget(self.roi_summary_label, 1)
         roi_row.addWidget(self.roi_edit_button)
-        self.gridLayout.addWidget(roi_label, 2, 0)
-        self.gridLayout.addLayout(roi_row, 2, 1, 1, 3)
+        self.gridLayout.addWidget(roi_label, 3, 0)
+        self.gridLayout.addLayout(roi_row, 3, 1, 1, 3)
         self._update_roi_summary()
         self.groupBox_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self._sync_energy_control_state()
@@ -2769,7 +2884,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.doubleSpinBox_emi_in: "Input emittance x",
             self.lineEdit_alpha_ESAflag: "Target alpha x readout",
             self.lineEdit_beta_ESAflag: "Target beta x readout",
-            self.lineEdit_eta_ESAflag: "Image-coordinate eta x readout",
+            self.lineEdit_eta_ESAflag: "Image-coordinate dispersion x readout",
             self.pushButton_cal_disp: "Update dispersion button",
             self.pushButton_cal_twiss_disp: "Update optics button",
             self.slider_energy: "Target energy slider",
@@ -2784,12 +2899,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.auto_tune_fine_steps_spin: "Auto Find fine scan points",
             self.auto_tune_settle_spin: "Auto Find settle time",
             self.auto_tune_objective_combo: "Auto Find tuning pipeline",
-            self.auto_tune_frame_samples_spin: "Auto Find Fine and center frame count",
+            self.auto_tune_frame_samples_spin: "Auto Find fine and center frame count",
             self.auto_tune_min_valid_frames_spin: "Auto Find minimum valid frame count",
             self.auto_tune_verification_frames_spin: "Auto Find verification frame count",
             self.auto_tune_verification_min_valid_spin: "Auto Find verification minimum valid frames",
             self.auto_tune_frame_interval_spin: "Interval between fine-scan camera frames",
-            self.auto_tune_probe_step_spin: "Fixed A3 step used by fitted-center search",
+            self.auto_tune_probe_step_spin: "Center-lock actuator step",
             self.auto_tune_center_tolerance_spin: "Final fitted-center tolerance",
             self.auto_tune_max_offset_spin: "Maximum fitted-center energy offset",
             self.auto_tune_settings_button: "Open Auto Find settings",
@@ -3052,6 +3167,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _apply_theme(self):
         palette = self._palette()
         theme = build_energy_spectrum_theme(palette)
+        # setupUi() installs the legacy light stylesheet on the main window.
+        # Clear it first so Qt invalidates selector matches for widgets whose
+        # object names and roles are assigned while building the new shell.
+        self.setStyleSheet("")
         self.setStyleSheet(theme)
         for dialog_name in (
             "auto_tune_settings_dialog",
@@ -3075,6 +3194,14 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         if hasattr(self, "status_panel"):
             self.status_panel.apply_theme(palette)
             self.status_panel.setFixedHeight(self.status_panel.sizeHint().height())
+        for plot_widget in (
+            self.ESAflag_image,
+            self.energy_plot,
+            self.background_plot,
+        ):
+            plot_widget.set_toolbar_colors(
+                palette["plot_card_bg"], palette["plot_text"]
+            )
         self._update_theme_toggle_button()
         self._apply_combo_palette()
         self._style_all_plots()
@@ -3087,10 +3214,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             return
         if self.current_theme == "dark":
             self.theme_toggle_button.setText("\u2600")
-            self.theme_toggle_button.setToolTip("switch to light theme.")
+            self.theme_toggle_button.setToolTip("Switch to light theme")
         else:
             self.theme_toggle_button.setText("\u263D")
-            self.theme_toggle_button.setToolTip("switch to dark theme.")
+            self.theme_toggle_button.setToolTip("Switch to dark theme")
 
     def _toggle_theme(self):
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
@@ -3184,8 +3311,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
     def _style_all_plots(self):
         for widget, xlabel, ylabel in (
             (self.ESAflag_image, "x (mm)", "y (mm)"),
-            (self.energy_plot, "E (MeV)", "Spectrum (arb. units)"),
-            (self.stability_plot, "Frame", "E (MeV)"),
+            (self.energy_plot, "E (MeV)", "Normalized intensity"),
+            (self.stability_plot, "Frame", "ΔE (MeV)"),
             (self.background_plot, "x (mm)", "y (mm)"),
         ):
             self._style_axes(widget, xlabel, ylabel)
@@ -3215,7 +3342,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.energy_plot,
             None,
             "E (MeV)",
-            "Spectrum (arb. units)",
+            "Normalized intensity",
             note=note,
         )
         self._update_energy_stability_view()
@@ -3338,7 +3465,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         stability_meta_layout = QHBoxLayout()
         stability_meta_layout.setContentsMargins(0, 0, 0, 0)
         stability_meta_layout.setSpacing(7)
-        self.stability_metric_label = QLabel("Stability RMS", stability_group)
+        self.stability_metric_label = QLabel("Energy jitter (RMS)", stability_group)
         self.stability_metric_label.setProperty("role", "metricLabel")
         self.stability_rms_label = QLabel("N/A", stability_group)
         self.stability_rms_label.setObjectName("metricValue")
@@ -3359,9 +3486,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 separator.setFrameShadow(QFrame.Plain)
                 self.horizontalLayout_6.addWidget(separator)
             self.horizontalLayout_6.addWidget(group)
-        self.horizontalLayout_6.setStretch(0, 2)
-        self.horizontalLayout_6.setStretch(2, 3)
-        self.horizontalLayout_6.setStretch(4, 3)
+        self.horizontalLayout_6.setStretch(0, 1)
+        self.horizontalLayout_6.setStretch(2, 1)
+        self.horizontalLayout_6.setStretch(4, 1)
 
         precision_tooltip = (
             "Number of decimal places used for MeV readouts. This changes "
@@ -3378,7 +3505,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.energy_decimals_spin.setToolTip(precision_tooltip)
         self.energy_decimals_spin.setAccessibleName("MeV display decimal places")
 
-        self.stability_window_label = QLabel("Window", self.frame_3)
+        self.stability_window_label = QLabel("Frames", self.frame_3)
         self.stability_window_label.setProperty("role", "field")
         self.stability_window_spin = QSpinBox(self.frame_3)
         self.stability_window_spin.setRange(2, 10000)
@@ -3456,7 +3583,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         window = self.stability_window_spin.value() if hasattr(self, "stability_window_spin") else 100
         values = np.asarray(self.energy_stability_history[-window:], dtype=float)
         self.stability_plot.axes.clear()
-        self._style_axes(self.stability_plot, "Frame", "E (MeV)")
+        self._style_axes(self.stability_plot, "Frame", "ΔE (MeV)")
         if values.size < 2:
             if hasattr(self, "stability_rms_label"):
                 self.stability_rms_label.setText("N/A")
@@ -3478,6 +3605,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         mean = float(np.mean(values))
         rms = float(np.std(values))
         relative = abs(rms / mean * 100.0) if not np.isclose(mean, 0.0) else float("nan")
+        deviations = values - mean
         if hasattr(self, "stability_rms_label"):
             self.stability_rms_label.setText(
                 f"{self._format_mev(rms)} MeV · {relative:.3f}%"
@@ -3487,11 +3615,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             )
         x = np.arange(1, values.size + 1)
         palette = self._palette()
-        self.stability_plot.axes.plot(x, values, color=palette["plot_energy"], linewidth=1.2)
-        self.stability_plot.axes.axhline(mean, color=palette["plot_fit"], linewidth=1.0, alpha=0.8)
-        padding = max(float(np.ptp(values)) * 0.15, 1e-6)
+        self.stability_plot.axes.plot(
+            x, deviations, color=palette["plot_energy"], linewidth=1.2
+        )
+        self.stability_plot.axes.axhline(
+            0.0, color=palette["plot_fit"], linewidth=1.0, alpha=0.8
+        )
+        padding = max(float(np.ptp(deviations)) * 0.15, 1e-6)
         self.stability_plot.axes.set_xlim(1, max(values.size, 2))
-        self.stability_plot.axes.set_ylim(float(np.min(values)) - padding, float(np.max(values)) + padding)
+        self.stability_plot.axes.set_ylim(
+            float(np.min(deviations)) - padding,
+            float(np.max(deviations)) + padding,
+        )
         self.stability_plot.canvas.draw_idle()
 
     def _refresh_status(self):
@@ -3504,7 +3639,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "neutral",
         )
         if self._pv_available:
-            self.status_panel.set_item("connection", "Live PV", "success")
+            self.status_panel.set_item("connection", "PV connected", "success")
         else:
             self.status_panel.set_item("connection", "Offline shell", "warning")
 
@@ -4057,7 +4192,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 self._mark_pv_unavailable(exc)
             self.lineEdit_expotime.setText(str(expotime) if expotime is not None else "--")
         elif self.control_backend != "real":
-            self.lineEdit_expotime.setText("VM")
+            self.lineEdit_expotime.setText("Simulated")
         else:
             self.lineEdit_expotime.setText("--")
 
@@ -4082,9 +4217,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _eta_coordinate_tooltip(self, prefix=None):
         detail = (
-            f"Model eta {self.model_eta_m:.6g} m × coordinate sign "
+            f"Model dispersion {self.model_eta_m:.6g} m × coordinate sign "
             f"{self.flag_geometry.model_to_image_x_sign:+d} = "
-            f"image eta {self.image_eta_m:.6g} m. The camera image is not flipped."
+            f"image dispersion {self.image_eta_m:.6g} m. The camera image is not flipped."
         )
         return f"{prefix}\n{detail}" if prefix else detail
   
@@ -4134,18 +4269,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 self._refresh_status()
 
         else:
-            self.lineEdit_expotime.setText("VM")
+            self.lineEdit_expotime.setText("Simulated")
 
 
     def ESA_running(self, write_latest=True, archive_result=False):
         palette = self._palette()
-        self.fit_method = self.comboBox_fitmethod.currentText()
-        self._update_fit_status(self.fit_method)
+        self.fit_method = self._selected_fit_method()
+        self._update_fit_status(self.comboBox_fitmethod.currentText())
         self._clear_readout_status()
 
         # get colormap
         colormap = self.comboBox_colormap.currentText()  
-        fit_method = self.comboBox_fitmethod.currentText()  
+        fit_method = self._selected_fit_method()
         # get flag image data from PV
         tmp = self._latest_flag_image_frame()
         if tmp is None:
@@ -4230,7 +4365,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.sigy = None
             print("Warning: ESA projection is empty; skipping spectrum update.")
             self.ESAflag_image.canvas.draw()
-            self._draw_placeholder_plot(self.energy_plot, "Energy Spectrum", "E (MeV)", "Spectrum (arb. units)")
+            self._draw_placeholder_plot(self.energy_plot, "Energy Spectrum", "E (MeV)", "Normalized intensity")
             self._update_fit_status("No beam", "warning", "Projection inside the selected image region is empty.")
             self._set_energy_unavailable("No beam", "Projection inside the selected image region is empty.")
             self._refresh_status()
@@ -4242,7 +4377,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         norm_deny = deny0/np.max(deny0)
         denx = norm_denx *self.height *0.3  +self.ylim[0]*0.98
         deny = norm_deny *self.width  *0.3  +self.xlim[0]*0.98
-        self.ESAflag_image.axes.plot(x, denx, "--", color=palette["plot_trace"], linewidth=1.4, label="projection")
+        self.ESAflag_image.axes.plot(x, denx, "--", color=palette["plot_trace"], linewidth=1.4, label="Projection")
         # self.ESAflag_image.axes.plot(deny,y,'--c')
 
         
@@ -4273,13 +4408,13 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         if profile_fit.fallback_error is not None:
             print(
-                "Gauss fit failed, falling back to direct moments: "
+                "Gaussian fit failed, falling back to direct moments: "
                 f"{profile_fit.fallback_error}"
             )
             self._update_fit_status(
                 "Direct fallback",
                 "warning",
-                f"Gauss fit failed: {profile_fit.fallback_error}",
+                f"Gaussian fit failed: {profile_fit.fallback_error}",
             )
         if fit_method == "Gauss fit":
             fit_denx = fit_norm_denx * self.height * 0.3 + self.ylim[0] * 0.98
@@ -4292,11 +4427,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             )
             if profile_fit.quality_warning:
                 self._update_fit_status(
-                    "Gauss poor", "warning",
+                    "Poor fit", "warning",
                     profile_fit.quality_warning + " Fitted energy and spread are shown for reference.",
                 )
             elif profile_fit.fallback_error is None:
-                self._update_fit_status("Gauss OK", "success")
+                self._update_fit_status("Fit OK", "success")
         elif fit_method == "Peak":
             self._update_fit_status(
                 "Peak", "success",
@@ -4334,8 +4469,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # self.cal_disp()
         if np.isclose(self.image_eta_m, 0.0):
             print("Warning: image eta is zero; skipping energy calculation.")
-            self._draw_placeholder_plot(self.energy_plot, "Energy Spectrum", "E (MeV)", "Spectrum (arb. units)")
-            self._set_energy_unavailable("No eta", "ESA dispersion is zero. Run Update eta or Update optics.")
+            self._draw_placeholder_plot(self.energy_plot, "Energy Spectrum", "E (MeV)", "Normalized intensity")
+            self._set_energy_unavailable(
+                "No dispersion",
+                "ESA dispersion is zero. Run Update dispersion or Update optics.",
+            )
             self._refresh_status()
             return
 
@@ -4356,8 +4494,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 energy_center=energy_center,
             )
             self.energy_plot.axes.clear()
-            self._style_axes(self.energy_plot, "E (MeV)", "Spectrum (arb. units)")
-            self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="projection")
+            self._style_axes(self.energy_plot, "E (MeV)", "Normalized intensity")
+            self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="Projection")
             self.energy_plot.canvas.draw()
             self._refresh_status()
             return
@@ -4376,8 +4514,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 energy_center=energy_center,
             )
             self.energy_plot.axes.clear()
-            self._style_axes(self.energy_plot, "E (MeV)", "Spectrum (arb. units)")
-            self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="projection")
+            self._style_axes(self.energy_plot, "E (MeV)", "Normalized intensity")
+            self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="Projection")
             self.energy_plot.canvas.draw()
             self._refresh_status()
             return
@@ -4399,12 +4537,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         # plot energy profile in another figure
         self.energy_plot.axes.clear()
-        self._style_axes(self.energy_plot, "E (MeV)", "Spectrum (arb. units)")
-        self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="projection")
+        self._style_axes(self.energy_plot, "E (MeV)", "Normalized intensity")
+        self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="Projection")
         if fit_method == "direct":
-            self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="spline fit")
+            self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="Spline fit")
         elif fit_method.lower() in ("gauss", "gauss fit"):
-            self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="Gauss fit")
+            self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="Gaussian fit")
         elif fit_method == "Peak":
             self.energy_plot.axes.axvline(
                 energy_center, color=palette["plot_fit"], linestyle="--",
@@ -4444,8 +4582,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 f"image eta {self.image_eta_m:.6g} m",
             )
             self._update_model_status(
-                f"{self._snapshot_status_label(snapshot)} image eta "
-                f"{self.image_eta_m:.4f} m",
+                f"{self._snapshot_status_label(snapshot)} · "
+                f"ηₓ = {self.image_eta_m:.4f} m",
                 "success",
                 self._eta_coordinate_tooltip(
                     self._snapshot_status_tooltip(snapshot)
@@ -4473,7 +4611,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
                 f"image eta {self.image_eta_m:.6g} m"
             )
             self._update_model_status(
-                f"design image eta {self.image_eta_m:.4f} m",
+                f"Design · ηₓ = {self.image_eta_m:.4f} m",
                 "warning",
                 self._eta_coordinate_tooltip(),
             )
@@ -4550,8 +4688,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         # self.lineEdit_emi_ESAflag.setText(str(self.emi_flag*1e9))
         self.lineEdit_eta_ESAflag.setText(str(round(self.image_eta_m,5)))
         self._update_model_status(
-            f"{self._snapshot_status_label(snapshot)} image eta "
-            f"{self.image_eta_m:.4f} m",
+            f"{self._snapshot_status_label(snapshot)} · "
+            f"ηₓ = {self.image_eta_m:.4f} m",
             "success",
             self._eta_coordinate_tooltip(
                 self._snapshot_status_tooltip(snapshot)

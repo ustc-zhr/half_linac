@@ -189,5 +189,5 @@ def fit_projection_profile(
         )
     except (RuntimeError, ValueError, ZeroDivisionError, FloatingPointError) as exc:
         if not allow_direct_fallback:
-            raise SpectrumProfileError(f"Gauss fit failed: {exc}") from exc
+            raise SpectrumProfileError(f"Gaussian fit failed: {exc}") from exc
         return _direct_fit(x_mm, normalized, fallback_error=str(exc))
