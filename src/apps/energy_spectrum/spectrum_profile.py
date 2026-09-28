@@ -73,7 +73,18 @@ def gaussian(x, amplitude, center, sigma, offset=0.0):
     return amplitude * np.exp(-((x - center) ** 2) / (2.0 * sigma ** 2)) + offset
 
 
-def _direct_fit(x_mm, normalized_density, *, fallback_error=None):
+def apply_fit_threshold(image, vmin=None):
+    """Return the analysis image with values below an optional vmin removed."""
+    image = np.asarray(image, dtype=float)
+    if vmin is None:
+        return image
+    threshold = float(vmin)
+    if not np.isfinite(threshold):
+        raise SpectrumProfileError("Fit threshold must be finite.")
+    return np.where(image >= threshold, image, 0.0)
+
+
+def _projection_rms_fit(x_mm, normalized_density, *, fallback_error=None):
     total = float(np.sum(normalized_density))
     if not np.isfinite(total) or total <= 0:
         raise SpectrumProfileError("ESA x projection is empty.")
@@ -85,7 +96,7 @@ def _direct_fit(x_mm, normalized_density, *, fallback_error=None):
         sigma_mm=float(np.sqrt(max(variance, 0.0))),
         normalized_density=normalized_density,
         fitted_density=normalized_density.copy(),
-        method="direct",
+        method="Projection RMS",
         r_squared=None,
         fallback_error=fallback_error,
     )
@@ -102,7 +113,7 @@ def fit_projection_profile(
     """Measure the Gaussian center, whole-profile mean, or raw projection peak.
 
     Peak uses the maximum sampled bin for energy and the whole-profile RMS
-    about the weighted mean for width, just like Direct.
+    about the weighted mean for width, just like Projection RMS.
     Set reject_poor_fit=False to display converged fits with quality warnings;
     automated center locking keeps the default rejection behavior.
     """
@@ -117,12 +128,12 @@ def fit_projection_profile(
         raise SpectrumProfileError("ESA x projection is empty.")
     normalized = density_x / peak
     normalized_method = str(method).strip().lower()
-    if normalized_method == "direct":
-        return _direct_fit(x_mm, normalized)
+    if normalized_method in {"direct", "projection rms", "rms moments"}:
+        return _projection_rms_fit(x_mm, normalized)
     if normalized_method == "peak":
         if float(np.ptp(normalized)) <= 1e-8:
             raise SpectrumProfileError("Projection has no distinguishable peak.")
-        moments = _direct_fit(x_mm, normalized)
+        moments = _projection_rms_fit(x_mm, normalized)
         return ProfileFit(
             center_mm=float(x_mm[int(np.argmax(normalized))]),
             sigma_mm=moments.sigma_mm,
@@ -190,4 +201,4 @@ def fit_projection_profile(
     except (RuntimeError, ValueError, ZeroDivisionError, FloatingPointError) as exc:
         if not allow_direct_fallback:
             raise SpectrumProfileError(f"Gaussian fit failed: {exc}") from exc
-        return _direct_fit(x_mm, normalized, fallback_error=str(exc))
+        return _projection_rms_fit(x_mm, normalized, fallback_error=str(exc))

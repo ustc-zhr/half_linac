@@ -22,7 +22,6 @@ ensure_repo_import_path(__file__)
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from scipy.interpolate import UnivariateSpline
 from epics import caget, caget_many, caput, caput_many, PV
 
 from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
@@ -73,6 +72,7 @@ from half_linac.src.apps.energy_spectrum.profile_runtime import (
 )
 from half_linac.src.apps.energy_spectrum.spectrum_profile import (
     SpectrumProfileError,
+    apply_fit_threshold,
     fit_projection_profile,
     project_image_profiles,
 )
@@ -791,6 +791,7 @@ class ESAAutoTuneThread(QThread):
                     self.bend_scan.get("min_fit_correlation", 0.7)
                 ),
                 pixel_width_mm=float(self.bend_scan["pixel_width_mm"]),
+                fit_vmin=self.bend_scan.get("fit_vmin"),
                 profile_fit_method=str(
                     self.bend_scan.get("profile_fit_method", "Gauss fit")
                 ),
@@ -863,8 +864,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.setupUi(self)
         direct_index = self.comboBox_fitmethod.findText("direct")
         if direct_index >= 0:
-            self.comboBox_fitmethod.setItemData(direct_index, "direct")
-            self.comboBox_fitmethod.setItemText(direct_index, "Direct")
+            self.comboBox_fitmethod.setItemData(direct_index, "Projection RMS")
+            self.comboBox_fitmethod.setItemText(direct_index, "Projection RMS")
         gauss_fit_index = self.comboBox_fitmethod.findText("Gauss fit")
         if gauss_fit_index >= 0:
             self.comboBox_fitmethod.setItemData(gauss_fit_index, "Gauss fit")
@@ -872,7 +873,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.comboBox_fitmethod.addItem("Peak", "Peak")
         self.comboBox_fitmethod.setToolTip(
             "Gaussian fit: fitted peak energy and Gaussian width.\n"
-            "Direct: whole-projection mean energy and RMS width.\n"
+            "Projection RMS: intensity-weighted mean energy and RMS width.\n"
             "Peak: raw projection maximum energy; whole-projection RMS width. "
             "Peak position has pixel resolution and is sensitive to noise."
         )
@@ -1877,7 +1878,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             (self.groupBox_5, None),
             (self.groupBox_6, "Optics Model"),
             (self.groupBox_8, "Energy Tuning"),
-            (self.groupBox_7, "Background Reference"),
         )
         self.workspace_card_title_labels = []
         for group_box, title in card_titles:
@@ -2435,6 +2435,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "verification_min_valid_frames": self.auto_tune_verification_min_valid_spin.value(),
             "frame_interval_s": self.auto_tune_frame_interval_spin.value(),
             "pixel_width_mm": self.flag_pixel_width_mm,
+            "fit_vmin": self._fit_vmin(),
             "profile_fit_method": self._selected_fit_method(),
             "min_fit_r_squared": float(measurement.get("min_fit_r_squared", 0.3)),
             "beam_presence_sigma": float(
@@ -2563,6 +2564,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "Use logarithmic image colors without changing spectrum analysis."
         )
         image_display_layout.addWidget(self.log_intensity_checkbox)
+        self.fit_vmin_checkbox = QCheckBox("Use vmin for fit", self.groupBox_4)
+        self.fit_vmin_checkbox.setToolTip(
+            "Remove image values below Display vmin before projection and fitting. "
+            "The displayed image is unchanged."
+        )
+        image_display_layout.addWidget(self.fit_vmin_checkbox)
         self.image_levels_dialog = QDialog(self)
         self.image_levels_dialog.setObjectName("energySpectrumDialog")
         self.image_levels_dialog.setWindowTitle("Image color limits")
@@ -2572,13 +2579,24 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         for edit, name in ((self.image_vmin_edit, "vmin"), (self.image_vmax_edit, "vmax")):
             edit.setPlaceholderText("Auto")
             edit.setAccessibleName(f"Image {name}")
-            edit.setToolTip("Image intensity limit; blank = Auto. Display only. Log limits must be positive.")
+            edit.setToolTip(
+                "Image intensity limit; blank = Auto. Log limits must be positive. "
+                + (
+                    "vmin also becomes the fit threshold when enabled."
+                    if name == "vmin"
+                    else "vmax only changes image colors."
+                )
+            )
             edit.editingFinished.connect(self._handle_intensity_limits_change)
         levels_layout.addWidget(QLabel("vmin", self.image_levels_dialog), 0, 0)
         levels_layout.addWidget(self.image_vmin_edit, 0, 1)
         levels_layout.addWidget(QLabel("vmax", self.image_levels_dialog), 1, 0)
         levels_layout.addWidget(self.image_vmax_edit, 1, 1)
-        levels_hint = QLabel("Blank = Auto. Changes apply immediately; display only.", self.image_levels_dialog)
+        levels_hint = QLabel(
+            "Blank = Auto. Display limits do not affect analysis unless "
+            "Use vmin for fit is enabled.",
+            self.image_levels_dialog,
+        )
         levels_hint.setWordWrap(True)
         levels_layout.addWidget(levels_hint, 2, 0, 1, 2)
         levels_close = QDialogButtonBox(QDialogButtonBox.Close, self.image_levels_dialog)
@@ -2586,7 +2604,9 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         levels_layout.addWidget(levels_close, 3, 0, 1, 2)
         self.image_levels_button = QPushButton("Levels…", self.groupBox_4)
         self.image_levels_button.setProperty("tight", True)
-        self.image_levels_button.setToolTip("Set image vmin / vmax; blank limits use automatic colors.")
+        self.image_levels_button.setToolTip(
+            "Set image vmin / vmax; blank limits use automatic colors."
+        )
         self.image_levels_button.clicked.connect(self._show_image_levels)
         image_display_layout.addWidget(self.image_levels_button)
         image_display_layout.addStretch(1)
@@ -2595,7 +2615,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.image_scale_warning = QLabel(self.groupBox_4)
         self.image_scale_warning.setWordWrap(True)
         self.image_scale_warning.hide()
-        self.gridLayout.addWidget(self.image_scale_warning, 4, 0, 1, 4)
+        self.gridLayout.addWidget(self.image_scale_warning, 5, 0, 1, 4)
         self.gridLayout.removeWidget(self.checkBox_emit)
         self.verticalLayout_13.removeWidget(self.checkBox_emit)
         self.verticalLayout_9.insertWidget(1, self.checkBox_emit)
@@ -2752,10 +2772,10 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.lineEdit_3.hide()
         while self.verticalLayout_12.count():
             self.verticalLayout_12.takeAt(0)
-        self.background_status_label = QLabel("Background: None", self.groupBox_7)
+        self.background_status_label = QLabel("None", self.groupBox_4)
         self.background_status_label.setWordWrap(True)
         self.background_status_label.setProperty("role", "field")
-        self.background_settings_button = QPushButton("Manage…", self.groupBox_7)
+        self.background_settings_button = QPushButton("Manage…", self.groupBox_4)
         self.background_settings_button.setObjectName("pushButton_backgroundSettings")
         self.background_settings_button.setAccessibleName("Open background settings")
         self.pushButton_load_latest_bg.setAccessibleName("Load latest background")
@@ -2765,9 +2785,21 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         ):
             button.setProperty("tight", True)
             self._refresh_widget_style(button)
-        self.verticalLayout_12.addWidget(self.checkBox_bg)
-        self.verticalLayout_12.addWidget(self.background_status_label)
-        self.verticalLayout_12.addWidget(self.background_settings_button)
+        self.verticalLayout_12.removeWidget(self.checkBox_bg)
+        self.checkBox_bg.setParent(self.groupBox_4)
+        self.checkBox_bg.setText("Subtract")
+        background_row = QHBoxLayout()
+        background_row.setContentsMargins(0, 0, 0, 0)
+        background_row.setSpacing(7)
+        background_row.addWidget(self.checkBox_bg)
+        background_row.addWidget(self.background_status_label, 1)
+        background_row.addWidget(self.background_settings_button)
+        background_label = QLabel("Background", self.groupBox_4)
+        background_label.setProperty("role", "field")
+        self.gridLayout.addWidget(background_label, 4, 0)
+        self.gridLayout.addLayout(background_row, 4, 1, 1, 3)
+        self.verticalLayout_7.removeWidget(self.groupBox_7)
+        self.groupBox_7.hide()
         roi_row = QHBoxLayout()
         roi_row.setContentsMargins(0, 0, 0, 0)
         roi_row.setSpacing(7)
@@ -2782,7 +2814,6 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.gridLayout.addWidget(roi_label, 3, 0)
         self.gridLayout.addLayout(roi_row, 3, 1, 1, 3)
         self._update_roi_summary()
-        self.groupBox_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self._sync_energy_control_state()
 
     def _apply_optics_input_preset(self, element_id):
@@ -2823,6 +2854,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.log_intensity_checkbox.toggled.connect(
             self._handle_log_intensity_change
         )
+        self.fit_vmin_checkbox.toggled.connect(self._handle_fit_vmin_change)
         self.comboBox_start_element.currentTextChanged.connect(
             self._apply_optics_input_preset
         )
@@ -3110,6 +3142,8 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.comboBox_fitmethod.setEnabled(not display_locked)
         self.comboBox_colormap.setEnabled(not display_locked)
         self.log_intensity_checkbox.setEnabled(not display_locked)
+        self.fit_vmin_checkbox.setEnabled(not display_locked)
+        self.image_levels_button.setEnabled(not display_locked)
         self.roi_edit_button.setEnabled(not display_locked)
         self.lineEdit_refresh.setEnabled(not self._roi_edit_active)
         self.theme_toggle_button.setEnabled(not self._roi_edit_active)
@@ -3259,9 +3293,36 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             self.image_scale_warning.setText(f"Invalid color limits: {exc} Previous limits retained.")
             self.image_scale_warning.show()
             return
+        threshold_was_enabled = self.fit_vmin_checkbox.isChecked()
         self._image_intensity_limits = limits
+        threshold_cleared = threshold_was_enabled and limits[0] is None
+        if threshold_cleared:
+            blocked = self.fit_vmin_checkbox.blockSignals(True)
+            self.fit_vmin_checkbox.setChecked(False)
+            self.fit_vmin_checkbox.blockSignals(blocked)
         self.image_scale_warning.hide()
         self._refresh_image_colors()
+        if (
+            (self.fit_vmin_checkbox.isChecked() or threshold_cleared)
+            and self._pv_available
+        ):
+            self.ESA_running(write_latest=False)
+
+    def _fit_vmin(self):
+        if not self.fit_vmin_checkbox.isChecked():
+            return None
+        return self._image_intensity_limits[0]
+
+    def _handle_fit_vmin_change(self, enabled):
+        if enabled and self._image_intensity_limits[0] is None:
+            blocked = self.fit_vmin_checkbox.blockSignals(True)
+            self.fit_vmin_checkbox.setChecked(False)
+            self.fit_vmin_checkbox.blockSignals(blocked)
+            self._warn("Set vmin in Levels before using it as a fit threshold.")
+            self._show_image_levels()
+            return
+        if self._pv_available:
+            self.ESA_running(write_latest=False)
 
     def _refresh_image_colors(self):
         # Recolor the current frame without reacquiring, fitting, or archiving it.
@@ -3726,6 +3787,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             "station_id": self.energy_station_id,
             "flag_element": self.energy_config["flag_element"],
             "fit_method": fit_method,
+            "fit_vmin": self._fit_vmin(),
             "x_reference_mm": self.x_reference_mm,
             "meanx_mm": float(self.meanx),
             "sigx_mm": float(self.sigx),
@@ -3829,14 +3891,18 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
     def _update_background_status(self):
         if self.bg_image is None:
-            summary = "Background: None"
+            summary = "None"
             detail = "No background loaded"
         else:
             created_at = str(self.bg_metadata.get("created_at", "unknown time"))
             filename = self.bg_image_path.name if self.bg_image_path else "in memory"
-            summary = f"Background: {filename} · {created_at}"
-            detail = str(self.bg_image_path or "Sampled background is not saved")
+            summary = f"Loaded · {filename}"
+            detail = (
+                f"{self.bg_image_path or 'Sampled background is not saved'}\n"
+                f"Created: {created_at}"
+            )
         self.background_status_label.setText(summary)
+        self.background_status_label.setToolTip(detail)
         self.background_path_label.setText(detail)
 
     def _show_background_dialog(self):
@@ -4345,7 +4411,12 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         # sample out only the selected region data
         try:
-            projection = project_image_profiles(data, self.flag_pixel_width_mm, self.roi_control.active_roi())
+            fit_data = apply_fit_threshold(data, self._fit_vmin())
+            projection = project_image_profiles(
+                fit_data,
+                self.flag_pixel_width_mm,
+                self.roi_control.active_roi(),
+            )
         except SpectrumProfileError as exc:
             self.sigx = None
             self.sigy = None
@@ -4408,11 +4479,11 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
 
         if profile_fit.fallback_error is not None:
             print(
-                "Gaussian fit failed, falling back to direct moments: "
+                "Gaussian fit failed, falling back to projection RMS moments: "
                 f"{profile_fit.fallback_error}"
             )
             self._update_fit_status(
-                "Direct fallback",
+                "RMS fallback",
                 "warning",
                 f"Gaussian fit failed: {profile_fit.fallback_error}",
             )
@@ -4442,22 +4513,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
             )
         else:
             if self._fit_text == self.comboBox_fitmethod.currentText():
-                self._update_fit_status("Direct", "success")
-            # Keep the existing spline only as a display curve; it does not define center.
-            try:
-                spline = UnivariateSpline(x, norm_denx, s=0.1)
-                fit_norm_denx = spline(x)
-                fit_denx = fit_norm_denx * self.height * 0.3 + self.ylim[0] * 0.98
-                self.ESAflag_image.axes.plot(
-                    x,
-                    fit_denx,
-                    "--",
-                    color=palette["plot_fit"],
-                    linewidth=1.4,
-                    alpha=0.8,
-                )
-            except (ValueError, RuntimeError, FloatingPointError) as exc:
-                print(f"spline fit failed: {exc}")
+                self._update_fit_status("RMS moments", "success")
         self.ESAflag_image.canvas.draw()
 
 
@@ -4539,9 +4595,7 @@ class EnergySpectrumApp(QMainWindow,Ui_MainWindow):
         self.energy_plot.axes.clear()
         self._style_axes(self.energy_plot, "E (MeV)", "Normalized intensity")
         self.energy_plot.axes.plot(energy_all, norm_denx, "--", color=palette["plot_energy"], linewidth=1.4, label="Projection")
-        if fit_method == "direct":
-            self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="Spline fit")
-        elif fit_method.lower() in ("gauss", "gauss fit"):
+        if fit_method.lower() in ("gauss", "gauss fit"):
             self.energy_plot.axes.plot(energy_all, fit_norm_denx, "--", color=palette["plot_fit"], linewidth=1.4, label="Gaussian fit")
         elif fit_method == "Peak":
             self.energy_plot.axes.axvline(

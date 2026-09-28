@@ -4,6 +4,7 @@ from epics import PV, caget, caput
 
 from half_linac.src.apps.energy_spectrum.spectrum_profile import (
     SpectrumProfileError,
+    apply_fit_threshold,
     fit_projection_profile,
     project_image_profiles,
 )
@@ -81,6 +82,7 @@ class ESA_AutoTuner:
                  target_tolerance_pixel=np.inf,
                  min_fit_correlation=0.7,
                  pixel_width_mm=None,
+                 fit_vmin=None,
                  profile_fit_method="Gauss fit",
                  allow_direct_fallback=True,
                  min_profile_fit_r_squared=None,
@@ -152,11 +154,20 @@ class ESA_AutoTuner:
         self.target_tolerance_pixel = float(target_tolerance_pixel)
         self.min_fit_correlation = float(min_fit_correlation)
         self.pixel_width_mm = None if pixel_width_mm is None else float(pixel_width_mm)
+        self.fit_vmin = None if fit_vmin is None else float(fit_vmin)
+        if self.fit_vmin is not None and not np.isfinite(self.fit_vmin):
+            raise ValueError("fit_vmin must be finite.")
         self.profile_fit_method = str(profile_fit_method).strip()
         self.allow_direct_fallback = bool(allow_direct_fallback)
         self.min_profile_fit_r_squared = (
             None
-            if min_profile_fit_r_squared is None or self.profile_fit_method.lower() in {"direct", "peak"}
+            if min_profile_fit_r_squared is None
+            or self.profile_fit_method.lower() in {
+                "direct",
+                "projection rms",
+                "rms moments",
+                "peak",
+            }
             else float(min_profile_fit_r_squared)
         )
         self.beam_presence_sigma = float(beam_presence_sigma)
@@ -177,7 +188,11 @@ class ESA_AutoTuner:
                 min_fit_r_squared=self.min_profile_fit_r_squared,
                 detect_presence=lambda image: self._beam_presence(image),
                 sleep=self._wait,
-                project_profiles=project_image_profiles,
+                project_profiles=lambda image, pixel_width_mm, roi: project_image_profiles(
+                    apply_fit_threshold(image, self.fit_vmin),
+                    pixel_width_mm,
+                    roi,
+                ),
                 fit_profile=fit_projection_profile,
             )
             if self.pixel_width_mm is not None
@@ -771,7 +786,11 @@ class ESA_AutoTuner:
             image = self._get_flag_image()
             self._raise_if_cancelled()
             try:
-                projection = project_image_profiles(image, self.pixel_width_mm, self.roi)
+                projection = project_image_profiles(
+                    apply_fit_threshold(image, self.fit_vmin),
+                    self.pixel_width_mm,
+                    self.roi,
+                )
                 profile_fit = fit_projection_profile(
                     projection.x_mm,
                     projection.density_x,

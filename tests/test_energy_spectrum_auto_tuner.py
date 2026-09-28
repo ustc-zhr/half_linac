@@ -17,6 +17,7 @@ from half_linac.src.apps.energy_spectrum.esa_auto_tuner import (
 )
 from half_linac.src.apps.energy_spectrum.spectrum_profile import (
     SpectrumProfileError,
+    apply_fit_threshold,
     fit_projection_profile,
     gaussian,
     project_image_profiles,
@@ -169,8 +170,20 @@ class ESAAutoTunerTests(unittest.TestCase):
         self.assertGreater(abs(peak.center_mm - direct.center_mm), 2.0)
         self.assertEqual(peak.sigma_mm, direct.sigma_mm)
         self.assertEqual(peak.method, "Peak")
+        self.assertEqual(direct.method, "Projection RMS")
         self.assertIsNone(peak.r_squared)
         np.testing.assert_array_equal(peak.fitted_density, peak.normalized_density)
+
+    def test_fit_threshold_removes_only_values_below_vmin(self):
+        image = np.array([[0.0, 2.0], [3.0, 5.0]])
+
+        thresholded = apply_fit_threshold(image, 3.0)
+
+        np.testing.assert_array_equal(
+            thresholded,
+            np.array([[0.0, 0.0], [3.0, 5.0]]),
+        )
+        np.testing.assert_array_equal(image, np.array([[0.0, 2.0], [3.0, 5.0]]))
 
     def test_peak_rejects_flat_projection(self):
         with self.assertRaisesRegex(SpectrumProfileError, "no distinguishable peak"):
@@ -206,7 +219,7 @@ class ESAAutoTunerTests(unittest.TestCase):
         with self.assertRaises(SpectrumProfileError):
             fit_projection_profile(x, np.ones_like(x), "Gauss fit", allow_direct_fallback=False)
         fallback = fit_projection_profile(x, np.ones_like(x), "Gauss fit")
-        self.assertEqual(fallback.method, "direct")
+        self.assertEqual(fallback.method, "Projection RMS")
         self.assertIsNotNone(fallback.fallback_error)
 
     def test_poor_fit_can_be_displayed_but_remains_rejected_by_default(self):
