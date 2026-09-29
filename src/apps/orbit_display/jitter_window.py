@@ -8,7 +8,6 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import FixedLocator, MaxNLocator
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -19,7 +18,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from jitter_data import JitterSamples
+from jitter_data import JitterSamples, MAX_WINDOW_SIZE, MIN_WINDOW_SIZE
 
 
 class JitterWindow(QMainWindow):
@@ -82,12 +81,18 @@ class JitterWindow(QMainWindow):
         clear_button.clicked.connect(self._clear)
         control_layout.addWidget(clear_button)
         control_layout.addWidget(QLabel("Window", controls))
-        self.window_combo = QComboBox(controls)
-        self.window_combo.setFixedHeight(28)
-        for count in (30, 60, 120):
-            self.window_combo.addItem(f"{count} samples", count)
-        self.window_combo.currentIndexChanged.connect(self._change_window)
-        control_layout.addWidget(self.window_combo)
+        self.window_spin = QSpinBox(controls)
+        self.window_spin.setRange(MIN_WINDOW_SIZE, MAX_WINDOW_SIZE)
+        self.window_spin.setValue(self.data.window_size)
+        self.window_spin.setSuffix(" samples")
+        self.window_spin.setSingleStep(1)
+        self.window_spin.setFixedSize(112, 28)
+        self.window_spin.setToolTip(
+            f"Number of recent samples used for RMS and trend plots "
+            f"({MIN_WINDOW_SIZE}–{MAX_WINDOW_SIZE})."
+        )
+        self.window_spin.valueChanged.connect(self._change_window)
+        control_layout.addWidget(self.window_spin)
         layout.addWidget(controls)
 
         self.explanation = QLabel(central)
@@ -119,7 +124,7 @@ class JitterWindow(QMainWindow):
                 border: 1px solid {p['summary_border']}; border-radius: 10px; }}
             QLabel#jitterTitle {{ font-size: 19px; font-weight: 700; }}
             QLabel#jitterMeta {{ color: {p['muted_fg']}; }}
-            QPushButton, QComboBox, QSpinBox {{ background: {p['button_bg']}; color: {p['button_fg']};
+            QPushButton, QSpinBox {{ background: {p['button_bg']}; color: {p['button_fg']};
                 border: 1px solid {p['button_border']}; border-radius: 6px; padding: 2px 7px; }}
             QPushButton {{ min-height: 0px; max-height: 28px; padding: 0px 8px; }}
         """)
@@ -156,8 +161,8 @@ class JitterWindow(QMainWindow):
         self._update_meta()
         self._redraw()
 
-    def _change_window(self):
-        self.data.set_window_size(self.window_combo.currentData())
+    def _change_window(self, value):
+        self.data.set_window_size(value)
         self._update_meta()
         self._redraw()
 

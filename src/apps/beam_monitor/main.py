@@ -170,13 +170,17 @@ QFrame#summaryPanel {{
     border-radius: 14px;
 }}
 
-QFrame#plotCard, QFrame#controlCard {{
+QFrame#plotCard, QFrame#controlCard, QFrame#resultCard {{
     background-color: {panel_bg};
     border: 1px solid {panel_border};
     border-radius: 14px;
 }}
 
 QWidget[role="controlSection"] {{
+    background-color: transparent;
+}}
+
+QWidget#resultSection, QWidget#resultSection QLabel {{
     background-color: transparent;
 }}
 
@@ -208,6 +212,24 @@ QLabel[role="field"] {{
     color: {muted_fg};
     font-size: 11px;
     font-weight: 600;
+}}
+
+QLabel[role="metricValue"] {{
+    background-color: transparent;
+    color: {summary_title_fg};
+    font-size: 15px;
+    font-weight: 700;
+}}
+
+QLabel[role="metricValue"][tone="active"] {{
+    color: {metric_active_fg};
+}}
+
+QFrame#resultDivider {{
+    background-color: {panel_border};
+    border: none;
+    min-width: 1px;
+    max-width: 1px;
 }}
 
 QPushButton {{
@@ -324,6 +346,22 @@ QToolButton#themeToggleButton:hover {{
 
 QToolButton#themeToggleButton:pressed {{
     background-color: {button_pressed_bg};
+}}
+
+QToolButton#settingsToggleButton {{
+    background-color: {button_bg};
+    border: 1px solid {button_border};
+    border-radius: 8px;
+    color: {button_fg};
+    min-width: 86px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0 10px;
+    font-weight: 600;
+}}
+
+QToolButton#settingsToggleButton:hover {{
+    background-color: {button_hover_bg};
 }}
 """.format_map(theme_values)
 
@@ -512,6 +550,7 @@ class myWindow(QWidget, Ui_Form):
         self.background_preview = None
         self.display_settings_dialog = None
         self.log_intensity_enabled = False
+        self.show_colorbar_enabled = False
         self._image_display_warning = None
         self.roi_dialog = None
         self.roi_control = None
@@ -641,15 +680,10 @@ class myWindow(QWidget, Ui_Form):
         self.widget_2.setObjectName("workspacePanel")
         self.control_grid = QVBoxLayout(self.widget_2)
         self.control_grid.setContentsMargins(0, 0, 0, 0)
-        self.controls_card = QFrame(self.widget_2)
-        self.controls_card.setObjectName("controlCard")
-        self.control_grid.addWidget(self.controls_card)
-        outer = QVBoxLayout(self.controls_card)
-        outer.setContentsMargins(12, 10, 12, 10)
-        outer.setSpacing(10)
+        self.control_grid.setSpacing(8)
 
-        def group(*widgets):
-            panel = QWidget(self.controls_card)
+        def group(parent, *widgets):
+            panel = QWidget(parent)
             panel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             panel.setObjectName("controlGroup")
             panel.setStyleSheet("QWidget#controlGroup, QWidget#controlGroup QLabel { background: transparent; }")
@@ -660,43 +694,123 @@ class myWindow(QWidget, Ui_Form):
                 row.addWidget(widget)
             return panel
 
-        def label(text):
-            widget = QLabel(text, self.controls_card)
+        def label(text, parent):
+            widget = QLabel(text, parent)
             widget.setProperty("role", "field")
             return widget
 
-        def button(text):
-            widget = QPushButton(text, self.controls_card)
+        def button(text, parent):
+            widget = QPushButton(text, parent)
             widget.setProperty("compact", True)
             widget.setFixedHeight(32)
             return widget
 
-        # Keep the existing update paths, but present sizes as selectable text.
+        self.fit_result_card = QFrame(self.widget_2)
+        self.fit_result_card.setObjectName("resultCard")
+        self.fit_result_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        result_layout = QHBoxLayout(self.fit_result_card)
+        result_layout.setContentsMargins(12, 9, 12, 9)
+        result_layout.setSpacing(18)
+
+        def metric_tile(title_text, value_label):
+            tile = QWidget(self.fit_result_card)
+            tile.setObjectName("resultSection")
+            tile_layout = QVBoxLayout(tile)
+            tile_layout.setContentsMargins(0, 0, 0, 0)
+            tile_layout.setSpacing(3)
+            metric_title = QLabel(title_text, tile)
+            metric_title.setProperty("role", "field")
+            tile_layout.addWidget(metric_title)
+            value_row = QHBoxLayout()
+            value_row.setContentsMargins(0, 0, 0, 0)
+            value_row.setSpacing(6)
+            value_row.addWidget(value_label)
+            value_row.addWidget(label("mm", tile))
+            value_row.addStretch(1)
+            tile_layout.addLayout(value_row)
+            return tile
+
+        # Keep existing update paths while presenting values as compact metrics.
         self.lineEdit_5.hide()
         self.lineEdit_6.hide()
-        self.lineEdit_5 = QLabel("--", self.controls_card)
-        self.lineEdit_6 = QLabel("--", self.controls_card)
-        self.size_pv_sigx_label = label("--")
-        self.size_pv_sigy_label = label("--")
+        self.lineEdit_5 = QLabel("--", self.fit_result_card)
+        self.lineEdit_6 = QLabel("--", self.fit_result_card)
+        self.size_pv_sigx_label = QLabel("--", self.fit_result_card)
+        self.size_pv_sigy_label = QLabel("--", self.fit_result_card)
         for value in (self.lineEdit_5, self.lineEdit_6,
                       self.size_pv_sigx_label, self.size_pv_sigy_label):
+            value.setProperty("role", "metricValue")
             value.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            value.setMinimumWidth(54)
+            value.setMinimumWidth(48)
         for value in (self.lineEdit_5, self.lineEdit_6):
-            font = value.font()
-            font.setPointSize(font.pointSize() + 2)
-            font.setBold(True)
-            value.setFont(font)
+            value.setProperty("tone", "active")
         published_tip = (
             "Optional sigx/sigy channel values. Their calculation and background "
             "treatment are determined by the data provider."
         )
-        local = group(label("X"), self.lineEdit_5,
-                      label("Y"), self.lineEdit_6, label("mm"))
-        local.setToolTip("Local RMS beam sizes σx and σy from the selected analysis method.")
-        published = group(label("Published σ (mm)"), label("X"),
-                          self.size_pv_sigx_label, label("Y"), self.size_pv_sigy_label)
-        published.setToolTip(published_tip)
+        analyzed_tip = "Beam size calculated with the selected analysis method."
+        metric_specs = (
+            ("ANALYZED · σx", self.lineEdit_5, analyzed_tip),
+            ("ANALYZED · σy", self.lineEdit_6, analyzed_tip),
+            ("PUBLISHED · σx", self.size_pv_sigx_label, published_tip),
+            ("PUBLISHED · σy", self.size_pv_sigy_label, published_tip),
+        )
+        for index, (metric_title, value_label, tooltip) in enumerate(metric_specs):
+            if index == 2:
+                divider = QFrame(self.fit_result_card)
+                divider.setObjectName("resultDivider")
+                divider.setFrameShape(QFrame.VLine)
+                result_layout.addWidget(divider)
+            tile = metric_tile(metric_title, value_label)
+            tile.setToolTip(tooltip)
+            result_layout.addWidget(tile, 1)
+
+        self.settings_toggle_button = QToolButton(self.fit_result_card)
+        self.settings_toggle_button.setObjectName("settingsToggleButton")
+        self.settings_toggle_button.setText("Settings")
+        self.settings_toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.settings_toggle_button.setCheckable(True)
+        self.settings_toggle_button.setChecked(False)
+        self.settings_toggle_button.setArrowType(Qt.RightArrow)
+        self.settings_toggle_button.setToolTip("Show settings")
+        self.settings_toggle_button.setAccessibleName("Show settings")
+        self.settings_toggle_button.toggled.connect(self._set_settings_expanded)
+        result_layout.addWidget(self.settings_toggle_button, 0, Qt.AlignVCenter)
+        self.control_grid.addWidget(self.fit_result_card)
+
+        self.controls_card = QFrame(self.widget_2)
+        self.controls_card.setObjectName("controlCard")
+        self.controls_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.control_grid.addWidget(self.controls_card)
+        outer = QVBoxLayout(self.controls_card)
+        outer.setContentsMargins(12, 10, 12, 10)
+        outer.setSpacing(0)
+
+        self.settings_content = QWidget(self.controls_card)
+        self.settings_content.setProperty("role", "controlSection")
+        settings_content_layout = QVBoxLayout(self.settings_content)
+        settings_content_layout.setContentsMargins(0, 2, 0, 0)
+        settings_content_layout.setSpacing(0)
+        outer.addWidget(self.settings_content)
+
+        self.profile_method_combo = QComboBox(self.settings_content)
+        self.profile_method_combo.setObjectName("profileMethodComboBox")
+        self.profile_method_combo.addItems(("Gaussian fit", "RMS moments"))
+        configured_method = str(
+            self.beam_monitor_config.get("profile_method", "Gaussian fit")
+        ).strip()
+        method_index = self.profile_method_combo.findText(configured_method)
+        if method_index < 0:
+            raise MachineProfileError(
+                f"Unsupported beam monitor profile_method: {configured_method!r}."
+            )
+        self.profile_method_combo.setCurrentIndex(method_index)
+        self.profile_method_combo.setFixedWidth(150)
+        self.profile_method_combo.setToolTip(
+            "Changes beam-size analysis. Gaussian fit reports the fitted core width; "
+            "RMS moments reports the intensity-weighted second central moment."
+        )
+
         self.label_10.setText("Flag")
         self.label.setText("Exposure (s)")
         self.label_9.setText("Refresh (s)")
@@ -713,32 +827,19 @@ class myWindow(QWidget, Ui_Form):
         self.monitor_toggle_button.setProperty("compact", True)
         self.pushButton_2.hide()
         self._sync_monitor_toggle_button()
-        self.profile_method_combo = QComboBox(self.controls_card)
-        self.profile_method_combo.setObjectName("profileMethodComboBox")
-        self.profile_method_combo.addItems(("Gaussian fit", "RMS moments"))
-        configured_method = str(self.beam_monitor_config.get("profile_method", "Gaussian fit")).strip()
-        method_index = self.profile_method_combo.findText(configured_method)
-        if method_index < 0:
-            raise MachineProfileError(f"Unsupported beam monitor profile_method: {configured_method!r}.")
-        self.profile_method_combo.setCurrentIndex(method_index)
-        self.profile_method_combo.setFixedWidth(150)
-        self.profile_method_combo.setToolTip(
-            "Gaussian fit reports the fitted core width. RMS moments reports the "
-            "square root of the intensity-weighted second central moment."
-        )
-        self.roi_status_label = label("Full image")
-        self.roi_button = button("Edit…")
-        self.background_subtract_checkbox = QCheckBox("Subtract background", self.controls_card)
+        self.roi_status_label = label("Full image", self.settings_content)
+        self.roi_button = button("Edit…", self.settings_content)
+        self.background_subtract_checkbox = QCheckBox("Subtract background", self.settings_content)
         self.background_subtract_checkbox.setObjectName("subtractBackgroundCheckBox")
         self.background_subtract_checkbox.setToolTip(
             "Subtract the current flag's saved background before display and analysis."
         )
-        self.background_status_label = label("No background loaded")
-        self.background_button = button("Manage…")
+        self.background_status_label = label("No background loaded", self.settings_content)
+        self.background_button = button("Manage…", self.settings_content)
         self.background_button.setObjectName("backgroundButton")
-        self.display_settings_button = button("Display settings…")
+        self.display_settings_button = button("Display settings…", self.settings_content)
         self.display_settings_button.setToolTip("Set colormap and intensity limits.")
-        self.reset_view_button = button("Full image")
+        self.reset_view_button = button("Full image", self.settings_content)
         self.reset_view_button.setObjectName("fullImageButton")
         self.reset_view_button.setToolTip("Restore the full physical image extent for the selected flag.")
         toolbar = self.widget.layout().itemAt(0).widget()
@@ -749,7 +850,7 @@ class myWindow(QWidget, Ui_Form):
         self.comboBox_2.clear()
         self.comboBox_2.addItems(BEAM_IMAGE_COLORMAPS)
         self.comboBox_2.setCurrentText(DEFAULT_BEAM_IMAGE_COLORMAP)
-        self.log_intensity_checkbox = QCheckBox("Log intensity", self.controls_card)
+        self.log_intensity_checkbox = QCheckBox("Log intensity", self.settings_content)
         self.log_intensity_checkbox.setToolTip("Change image colors without changing profile analysis.")
         for widget in (self.label_2, self.comboBox_2,
                        self.label_3, self.label_4, self.lineEdit_3, self.lineEdit_4,
@@ -757,25 +858,32 @@ class myWindow(QWidget, Ui_Form):
                        self.label_5, self.label_6, self.label_7, self.label_8, self.textEdit):
             widget.hide()
 
-        self.control_row_labels = tuple(label(text) for text in ("Size", "Camera", "Analysis"))
+        self.control_row_labels = tuple(
+            label(text, self.settings_content) for text in ("Camera", "Analysis")
+        )
         for row_label in self.control_row_labels:
             row_label.setFixedWidth(70)
         self.control_groups = (
-            (local, published, group(label("Method"), self.profile_method_combo)),
-            (group(self.label, self.lineEdit), group(self.label_9, self.lineEdit_9),
-             group(self.log_intensity_checkbox, self.display_settings_button)),
-            (group(label("ROI:"), self.roi_status_label, self.roi_button),
-             group(self.background_subtract_checkbox, self.background_button),
-             group(self.background_status_label)),
+            (group(self.settings_content, self.label, self.lineEdit),
+             group(self.settings_content, self.label_9, self.lineEdit_9),
+             group(self.settings_content, self.log_intensity_checkbox, self.display_settings_button)),
+            (group(self.settings_content, label("Method", self.settings_content),
+                   self.profile_method_combo),
+             group(self.settings_content, label("ROI:", self.settings_content),
+                   self.roi_status_label, self.roi_button),
+             group(self.settings_content, self.background_subtract_checkbox,
+                   self.background_button),
+             group(self.settings_content, self.background_status_label)),
         )
         self.compact_control_grid = QGridLayout()
         self.compact_control_grid.setHorizontalSpacing(18)
         self.compact_control_grid.setVerticalSpacing(8)
-        outer.addLayout(self.compact_control_grid)
+        settings_content_layout.addLayout(self.compact_control_grid)
         for widget in (self.flag_selec, self.lineEdit, self.lineEdit_9,
                        self.monitor_toggle_button, self.profile_method_combo):
             widget.setFixedHeight(32)
         self._update_control_workspace_layout()
+        self._set_settings_expanded(False)
 
     def _show_display_settings_dialog(self):
         if self.display_settings_dialog is None:
@@ -797,6 +905,16 @@ class myWindow(QWidget, Ui_Form):
             display_row.addWidget(self.comboBox_2, 1)
             self.comboBox_2.show()
             layout.addLayout(display_row)
+
+            self.show_colorbar_checkbox = QCheckBox("Show colorbar", dialog)
+            self.show_colorbar_checkbox.setChecked(self.show_colorbar_enabled)
+            self.show_colorbar_checkbox.setToolTip(
+                "Show or hide the image intensity color scale without changing analysis."
+            )
+            self.show_colorbar_checkbox.toggled.connect(
+                self._set_colorbar_visible
+            )
+            layout.addWidget(self.show_colorbar_checkbox)
 
             form = QGridLayout()
             self.label_3.setParent(dialog)
@@ -847,6 +965,11 @@ class myWindow(QWidget, Ui_Form):
 
     def _set_log_intensity_enabled(self, enabled):
         self.log_intensity_enabled = bool(enabled)
+        if self._pv_available:
+            self.plot_beamprofile()
+
+    def _set_colorbar_visible(self, visible):
+        self.show_colorbar_enabled = bool(visible)
         if self._pv_available:
             self.plot_beamprofile()
 
@@ -1452,6 +1575,24 @@ class myWindow(QWidget, Ui_Form):
         self._profile_status_text = text
         self._profile_status_tone = tone
 
+    def _set_settings_expanded(self, expanded):
+        if not hasattr(self, "settings_content"):
+            return
+        expanded = bool(expanded)
+        self.controls_card.setVisible(expanded)
+        self.settings_content.setVisible(expanded)
+        self.settings_toggle_button.blockSignals(True)
+        self.settings_toggle_button.setChecked(expanded)
+        self.settings_toggle_button.setArrowType(
+            Qt.DownArrow if expanded else Qt.RightArrow
+        )
+        action = "Hide settings" if expanded else "Show settings"
+        self.settings_toggle_button.setToolTip(action)
+        self.settings_toggle_button.setAccessibleName(action)
+        self.settings_toggle_button.blockSignals(False)
+        self.controls_card.updateGeometry()
+        self.widget_2.updateGeometry()
+
     def _update_control_workspace_layout(self):
         if not hasattr(self, "compact_control_grid"):
             return
@@ -2006,10 +2147,11 @@ class myWindow(QWidget, Ui_Form):
             extent=display_extent,
             aspect="auto",
         )
-        self.colorbar = self.widget.fig.colorbar(self.h)
-        self.colorbar.ax.yaxis.set_tick_params(color=self._palette()["plot_text"])
-        for tick in self.colorbar.ax.get_yticklabels():
-            tick.set_color(self._palette()["plot_text"])
+        if self.show_colorbar_enabled:
+            self.colorbar = self.widget.fig.colorbar(self.h)
+            self.colorbar.ax.yaxis.set_tick_params(color=self._palette()["plot_text"])
+            for tick in self.colorbar.ax.get_yticklabels():
+                tick.set_color(self._palette()["plot_text"])
 
         profile_method = self.profile_method_combo.currentText()
         background_marker = " • BG" if self.subtract_background_enabled else ""

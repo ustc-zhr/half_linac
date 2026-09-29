@@ -2,7 +2,10 @@
 
 import pytest
 
-from half_linac.src.apps.orbit_display.jitter_data import JitterSamples
+from half_linac.src.apps.orbit_display.jitter_data import (
+    JitterSamples,
+    MAX_WINDOW_SIZE,
+)
 
 
 def test_mean_centered_rms_and_valid_count():
@@ -19,7 +22,7 @@ def test_invalid_values_leave_gaps_and_window_rolls():
     for index in range(121):
         data.add(index, [index, None] if index != 120 else [float("nan"), "bad"],
                  [float("inf"), 2], 1)
-    assert len(data.samples) == 120
+    assert len(data.samples) == 121
     assert len(data.visible()) == 30
     assert data.series(0, "x")[-1] == (120, None)
     assert data.rms(0, "x")[1] == 29
@@ -28,6 +31,22 @@ def test_invalid_values_leave_gaps_and_window_rolls():
     assert data.visible()[0][0] == 1
     data.clear()
     assert data.visible() == []
+
+
+def test_window_accepts_custom_sample_count_and_remains_bounded():
+    data = JitterSamples(1)
+    data.set_window_size(45)
+    for index in range(50):
+        data.add(index, [index], [index], 1)
+    assert data.window_size == 45
+    assert len(data.visible()) == 45
+    assert data.visible()[0][0] == 5
+    assert data.samples.maxlen == MAX_WINDOW_SIZE
+
+    with pytest.raises(ValueError, match="between 10 and 3600"):
+        data.set_window_size(9)
+    with pytest.raises(ValueError, match="between 10 and 3600"):
+        data.set_window_size(MAX_WINDOW_SIZE + 1)
 
 
 def test_short_samples_do_not_produce_jitter_value():

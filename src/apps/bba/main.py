@@ -33,6 +33,7 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QProgressBar,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -338,6 +339,20 @@ QComboBox QAbstractItemView {{
     color: {input_fg};
     border: 1px solid {input_border};
     selection-background-color: {button_hover_bg};
+}}
+
+QProgressBar {{
+    background-color: {input_bg};
+    border: 1px solid {input_border};
+    border-radius: 7px;
+    color: {window_fg};
+    min-height: 14px;
+    text-align: center;
+}}
+
+QProgressBar::chunk {{
+    background-color: {metric_active_fg};
+    border-radius: 6px;
 }}
 
 QToolButton#themeToggleButton {{
@@ -945,6 +960,22 @@ class myWindow(QWidget, Ui_Form):
             controls.addWidget(button)
         layout.addLayout(controls)
 
+        self.bba1_progress_widget = QWidget(self.frame)
+        progress_layout = QHBoxLayout(self.bba1_progress_widget)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        progress_layout.setSpacing(8)
+        self.bba1_progress_label = QLabel("Preparing scan…", self.bba1_progress_widget)
+        self.bba1_progress_label.setProperty("role", "field")
+        self.bba1_progress_label.setMinimumWidth(150)
+        self.bba1_progress_bar = QProgressBar(self.bba1_progress_widget)
+        self.bba1_progress_bar.setRange(0, 100)
+        self.bba1_progress_bar.setValue(0)
+        self.bba1_progress_bar.setFormat("%p%")
+        progress_layout.addWidget(self.bba1_progress_label)
+        progress_layout.addWidget(self.bba1_progress_bar, 1)
+        self.bba1_progress_widget.hide()
+        layout.addWidget(self.bba1_progress_widget)
+
     def _rebuild_bba1_run_panel(self):
         layout = QVBoxLayout(self.frame_2)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -1006,19 +1037,14 @@ class myWindow(QWidget, Ui_Form):
         self.lineEdit_10.setParent(self.frame_2)
         self.lineEdit_10.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         result_row.addWidget(self.lineEdit_10, 0, 1)
+        self.bba1_diagnostics_button = QPushButton("Diagnostics…", self.frame_2)
+        self.bba1_diagnostics_button.setProperty("compact", True)
+        self.bba1_diagnostics_button.clicked.connect(self._show_bba1_diagnostics)
+        result_row.addWidget(self.bba1_diagnostics_button, 0, 2)
         result_row.setColumnStretch(1, 1)
-        layout.addWidget(self._make_panel_title("Result & Diagnostics", self.frame_2))
+        layout.addWidget(self._make_panel_title("Result", self.frame_2))
         layout.addLayout(result_row)
-        self.bba1_inner_summary_label = QLabel(self.frame_2)
-        self.bba1_inner_summary_label.setProperty("role", "field")
-        self.bba1_inner_summary_label.setWordWrap(True)
-        self.bba1_inner_summary_label.setText("Inner diagnostics unavailable")
-        layout.addWidget(self.bba1_inner_summary_label)
-        self.bba1_scan_guidance_label = QLabel(self.frame_2)
-        self.bba1_scan_guidance_label.setWordWrap(True)
-        self.bba1_scan_guidance_label.setProperty("role", "field")
-        self.bba1_scan_guidance_label.setText("Scan guidance unavailable")
-        layout.addWidget(self.bba1_scan_guidance_label)
+        self._clear_bba1_diagnostics()
 
     def _rebuild_bba2_setup_panel(self):
         layout = QVBoxLayout(self.frame_3)
@@ -1798,11 +1824,54 @@ class myWindow(QWidget, Ui_Form):
         label.setText(f"{active} active / {total} total")
 
     def _clear_bba1_diagnostics(self):
-        if hasattr(self, "bba1_inner_summary_label"):
-            self.bba1_inner_summary_label.setText("Inner diagnostics unavailable")
-            self.bba1_inner_summary_label.setToolTip("")
-        if hasattr(self, "bba1_scan_guidance_label"):
-            self.bba1_scan_guidance_label.setText("Scan guidance unavailable")
+        self.bba1_inner_diagnostics_text = "Inner diagnostics are unavailable."
+        self.bba1_scan_guidance_text = "Scan guidance is unavailable."
+        if hasattr(self, "bba1_diagnostics_button"):
+            self.bba1_diagnostics_button.setToolTip(
+                "Inner diagnostics and scan guidance are available after a BBA-1 fit."
+            )
+
+    def _show_bba1_diagnostics(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("BBA-1 Diagnostics")
+        dialog.setMinimumWidth(520)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 12)
+        layout.setSpacing(10)
+
+        layout.addWidget(self._make_panel_title("Inner Diagnostics", dialog))
+        inner_label = QLabel(self.bba1_inner_diagnostics_text, dialog)
+        inner_label.setProperty("role", "field")
+        inner_label.setWordWrap(True)
+        inner_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(inner_label)
+
+        layout.addWidget(self._make_panel_title("Scan Guidance", dialog))
+        guidance_label = QLabel(self.bba1_scan_guidance_text, dialog)
+        guidance_label.setProperty("role", "field")
+        guidance_label.setWordWrap(True)
+        guidance_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(guidance_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+
+    def _set_bba1_progress(self, value, text):
+        if not hasattr(self, "bba1_progress_widget"):
+            return
+        self.bba1_progress_bar.setValue(max(0, min(100, int(value))))
+        self.bba1_progress_label.setText(text)
+        self.bba1_progress_widget.show()
+
+    def _reset_bba1_progress(self, *, hide=True):
+        if not hasattr(self, "bba1_progress_widget"):
+            return
+        self.bba1_progress_bar.setValue(0)
+        self.bba1_progress_label.setText("Preparing scan…")
+        self.bba1_progress_widget.setVisible(not hide)
 
     def _on_bba1_scan_point_item_changed(self, item):
         if item.column() != 0:
@@ -2290,6 +2359,17 @@ class myWindow(QWidget, Ui_Form):
         self._refresh_status()
 
     def _on_scan_finished(self):
+        finished_scan = self.scan
+        finished_family = self.scan_family
+        outcome = getattr(finished_scan, "outcome", None)
+        if finished_family == "bba1" and isinstance(outcome, Mapping):
+            status = outcome.get("status")
+            if status == "success":
+                self._set_bba1_progress(100, "Complete")
+            elif status == "stopped":
+                self._set_bba1_progress(self.bba1_progress_bar.value(), "Stopped · setpoints restored")
+            elif status == "failed":
+                self._set_bba1_progress(self.bba1_progress_bar.value(), "Failed")
         self.scan = None
         self.scan_mode = None
         self.scan_family = None
@@ -2505,6 +2585,7 @@ class myWindow(QWidget, Ui_Form):
         self.bba1_loaded_source_dir = params.bba1_metadata_path.parent
         self.scan_mode = "scan"
         self.scan_family = "bba1"
+        self._set_bba1_progress(0, "Preparing scan…")
         self._attach_scan(BBAScanThread(params), self.display)
 
     def startScan_bba2(self):
@@ -2531,6 +2612,8 @@ class myWindow(QWidget, Ui_Form):
     def stopScan(self):
         if self._scan_is_running():
             self.scan.stop()
+            if self.scan_family == "bba1":
+                self._set_bba1_progress(self.bba1_progress_bar.value(), "Stopping · restoring setpoints…")
             self.status_panel.set_item("scan", "Stopping / restoring", "warning")
             return
         self._refresh_status()
@@ -2558,6 +2641,7 @@ class myWindow(QWidget, Ui_Form):
         params.bba1_metadata_path = source_dir / "metadata.json"
         self.scan_mode = "recalculate"
         self.scan_family = "bba1"
+        self._set_bba1_progress(0, "Preparing recalculation…")
         self._attach_scan(BBAScanThread(params), self.display)
 
     def recalculate_bba2(self):
@@ -2628,6 +2712,12 @@ class myWindow(QWidget, Ui_Form):
         self._start_clear(self.display_bba2)
 
     def display(self, data):
+        progress = data.get("progress")
+        if isinstance(progress, Mapping):
+            self._set_bba1_progress(progress.get("value", 0), progress.get("text", "Working…"))
+            if len(data) == 1:
+                return
+
         if "error" in data:
             self._warn(data["error"])
             return
@@ -2639,6 +2729,8 @@ class myWindow(QWidget, Ui_Form):
             self._clear_bba1_diagnostics()
             if data.get("clear_points"):
                 self._clear_bba1_scan_points()
+            if not self._scan_is_running():
+                self._reset_bba1_progress()
             self._refresh_status()
             return
 
@@ -2701,16 +2793,19 @@ class myWindow(QWidget, Ui_Form):
             self.lineEdit_10.setText(value)
             summary = quality.get("inner_summary")
             if summary:
-                self.bba1_inner_summary_label.setText(
+                self.bba1_inner_diagnostics_text = (
                     f"Inner fits: {summary.get('good', 0)} good · "
                     f"{summary.get('weak', 0)} weak · "
                     f"{summary.get('review', 0)} review · "
                     f"{summary.get('invalid', 0)} invalid"
                 )
             else:
-                self.bba1_inner_summary_label.setText("Inner diagnostics unavailable")
+                self.bba1_inner_diagnostics_text = "Inner diagnostics are unavailable."
             guidance = quality.get("scan_guidance") or build_bba1_scan_guidance(quality)
-            self.bba1_scan_guidance_label.setText("Scan guidance: " + " ".join(guidance))
+            self.bba1_scan_guidance_text = " ".join(guidance)
+            self.bba1_diagnostics_button.setToolTip(
+                self.bba1_inner_diagnostics_text + "\n" + self.bba1_scan_guidance_text
+            )
             self.lineEdit_10.setToolTip(
                 "1σ statistical uncertainty. " + "; ".join(quality.get("reasons", [])) +
                 ("\nGuidance: " + " ".join(guidance) if guidance else "")
@@ -2914,6 +3009,11 @@ class BBAScanThread(BBABaseThread):
         self.raw_rows = []
         self.restore_readbacks = []
         self.inner_fits = []
+        self._progress_value = 0
+
+    def _emit_progress(self, value, text):
+        self._progress_value = max(0, min(100, int(value)))
+        self._emit({"progress": {"value": self._progress_value, "text": text}})
 
     def _capture_restore_readbacks(self):
         if not self.params.batch or self.params.control_backend != "real":
@@ -2973,6 +3073,7 @@ class BBAScanThread(BBABaseThread):
     def run(self):
         self.outcome["status"] = "running"
         try:
+            self._emit_progress(2, "Preparing recalculation…" if self.params.recal else "Preparing scan…")
             if self.params.recal:
                 metadata = self._load_json(self.params.bba1_metadata_path)
                 reference = metadata.get("bpm1_reference", {})
@@ -2996,9 +3097,11 @@ class BBAScanThread(BBABaseThread):
                 scan_result = self._perform_scan()
                 if scan_result is None:
                     self.outcome["status"] = "stopped"
+                    self._emit_progress(self._progress_value, "Stopped · setpoints restored")
                     return
                 x, y = scan_result
 
+            self._emit_progress(97, "Analyzing result…")
             quality = fit_bba1_center(x, y)
             if self.inner_fits:
                 quality["inner_fits"] = self.inner_fits
@@ -3012,9 +3115,12 @@ class BBAScanThread(BBABaseThread):
                 "yvals": quality["fitted"],
                 "offset": quality["offset_m"],
                 "fit_quality": quality,
+                "progress": {"value": 100, "text": "Complete"},
             })
+            self._progress_value = 100
         except Exception as exc:
             self.outcome.update(status="failed", error=str(exc))
+            self._emit_progress(self._progress_value, "Failed")
             self._emit({"error": str(exc)})
         finally:
             if not self.params.recal:
@@ -3059,7 +3165,8 @@ class BBAScanThread(BBABaseThread):
         m1_results = []
         slope_results = []
         self.inner_fits = []
-        for kick in self._ordered_unique(kick_values):
+        ordered_kicks = self._ordered_unique(kick_values)
+        for kick_index, kick in enumerate(ordered_kicks, start=1):
             kick_mask = kick_values == kick
             group_quad_k1 = quad_k1_values[kick_mask]
             group_bpm1 = bpm1_values[kick_mask]
@@ -3099,6 +3206,11 @@ class BBAScanThread(BBABaseThread):
                 "slope_k1": slope,
                 "mm1": reference_samples,
             })
+            if hasattr(self, "_emit_progress"):
+                self._emit_progress(
+                    10 + round(80 * kick_index / len(ordered_kicks)),
+                    f"Recalculating COR {kick_index}/{len(ordered_kicks)}",
+                )
 
         return np.asarray(m1_results, dtype=float), np.asarray(slope_results, dtype=float)
 
@@ -3233,9 +3345,24 @@ class BBAScanThread(BBABaseThread):
         self.inner_fits = []
         quad_scan_rows = []
         self.raw_rows = quad_scan_rows
+        reference_points = (
+            len(kick_values) * self.params.samples
+            if self.params.bba1_bpm1_mode == "initial_k1"
+            else 0
+        )
+        total_points = reference_points + len(kick_values) * len(k1_values) * self.params.samples
+        completed_points = 0
+
+        def report_point(text):
+            nonlocal completed_points
+            completed_points += 1
+            self._emit_progress(
+                5 + round(85 * completed_points / max(1, total_points)),
+                text,
+            )
 
         try:
-            for kick in kick_values:
+            for kick_index, kick in enumerate(kick_values, start=1):
                 if not self.is_running:
                     return None
                 if self.params.bba1_bpm1_mode == "initial_k1":
@@ -3252,11 +3379,15 @@ class BBAScanThread(BBABaseThread):
                         if sample_index > 0 and not self._sleep_or_stop(self.params.sample_interval):
                             return None
                         reference_samples.append(self._read_bpm_m(bpm1, self.params.bpm1PV))
+                        report_point(
+                            f"COR {kick_index}/{len(kick_values)} · BPM1 reference "
+                            f"{sample_index + 1}/{self.params.samples}"
+                        )
                     self.bpm1_reference_samples[float(kick)] = reference_samples
 
                 bpm2_samples = []
                 bpm1_samples = []
-                for k1 in k1_values:
+                for k1_index, k1 in enumerate(k1_values, start=1):
                     if not self.is_running:
                         return None
                     self._safe_put(quad, k1)
@@ -3289,6 +3420,10 @@ class BBAScanThread(BBABaseThread):
                             "quad_k1": quad_k1,
                             "m2": bpm2_value,
                         })
+                        report_point(
+                            f"COR {kick_index}/{len(kick_values)} · K1 {k1_index}/{len(k1_values)} · "
+                            f"sample {sample_index + 1}/{self.params.samples}"
+                        )
 
                 bpm2_matrix = np.asarray(bpm2_samples, dtype=float).reshape(self.params.quad_steps, self.params.samples)
                 bpm2_mean = np.mean(bpm2_matrix, axis=1)
@@ -3337,6 +3472,7 @@ class BBAScanThread(BBABaseThread):
             print("Scan finished, corrector and quad are back to initial values.")
             return np.asarray(m1_results, dtype=float), np.asarray(slope_results, dtype=float)
         finally:
+            self._emit_progress(94, "Restoring initial setpoints…")
             self._restore(((quad, initial_quad), (cor, initial_kick)))
 
 
