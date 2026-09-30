@@ -120,7 +120,7 @@ SCAN_RESULTS_FILENAME = "scanResults.txt"
 TWISS_RESULTS_FILENAME = "twissResults.jsonl"
 APP_DIR = Path(__file__).resolve().parent
 SCAN_DATA_SCHEMA_VERSION = "emit_scan_v2"
-SCAN_POINT_COLUMNS = ("Use", "K1", "sigx (mm)", "sigy (mm)")
+SCAN_POINT_COLUMNS = ("Use", "K₁ (m⁻²)", "σₓ (mm)", "σᵧ (mm)")
 TWISS_TRANSPORT_TOOLTIP = (
     "Calculate the complete Elegant Twiss profile using the measured Twiss as an "
     "interior boundary condition. RF acceleration is included; particle tracking "
@@ -135,6 +135,56 @@ QUALITY_MIN_SIGMA_PIXELS = 1.5
 QUALITY_MIN_CONTAINMENT_SIGMA = 3.0
 QUALITY_MAX_EDGE_RATIO = 0.05
 QUALITY_MAX_FIT_RESIDUAL = 0.15
+
+K1_AXIS_LABEL = r"$K_1$ (m$^{-2}$)"
+NEGATIVE_KL_AXIS_LABEL = r"$-K = K_1 L_q$ (m$^{-1}$)"
+POSITIVE_KL_AXIS_LABEL = r"$K = K_1 L_q$ (m$^{-1}$)"
+SIGMA_X_AXIS_LABEL = r"$\sigma_x$ (mm)"
+SIGMA_Y_AXIS_LABEL = r"$\sigma_y$ (mm)"
+SIGMA_X_SQUARED_AXIS_LABEL = r"$\sigma_x^2$ (mm$^2$)"
+SIGMA_Y_SQUARED_AXIS_LABEL = r"$\sigma_y^2$ (mm$^2$)"
+
+FIT_METHOD_DISPLAY_NAMES = {
+    "leastSquares": "Least-squares fit",
+    "parabolic": "Quadratic fit",
+    "fit": "Fit",
+    "scan": "Scan",
+}
+
+FIT_STATUS_DISPLAY_NAMES = {
+    "valid": "Valid",
+    "validated": "Validated",
+    "partial": "Partial result",
+    "unresolved": "No valid result",
+    "unknown": "Unknown",
+    "error": "Error",
+    "failed": "Fit failed",
+    "fit_failed": "Fit failed",
+    "non_physical": "Non-physical solution",
+    "rank_deficient": "Rank-deficient fit",
+    "ill_conditioned": "Ill-conditioned fit",
+    "insufficient_quality_points": "Insufficient valid points",
+    "insufficient_points": "Insufficient points",
+    "insufficient_window": "Insufficient points in fit window",
+    "needs_both_sides": "Needs coverage on both sides",
+    "needs_low_k_coverage": "Needs lower-K₁ coverage",
+    "needs_high_k_coverage": "Needs higher-K₁ coverage",
+    "bound_limited": "Limited by scan bounds",
+    "fit_unresolved": "Fit unresolved",
+    "all_points": "All valid points",
+    "missing_window": "Fit window unavailable",
+    "missing_window_all_points": "Fit window unavailable; using all points",
+    "expanded_window": "Expanded fit window",
+    "window": "Fit window",
+    "skipped": "Not calculated",
+    "usable": "Usable",
+    "clipped": "Beam image clipped",
+    "underresolved": "Beam under-resolved",
+    "poor_fit": "Poor fit",
+    "empty_window": "Empty ROI",
+    "low_signal": "Low signal",
+    "running": "Running",
+}
 
 
 def _image_extent_from_geometry(geometry):
@@ -224,6 +274,75 @@ def _finite_float_or_none(value):
     return number if math.isfinite(number) else None
 
 
+def _display_fit_method(value):
+    text = str(value or "fit").strip()
+    return FIT_METHOD_DISPLAY_NAMES.get(text, text.replace("_", " ").strip().title())
+
+
+def _display_fit_status(value):
+    text = str(value or "unresolved").strip()
+    return FIT_STATUS_DISPLAY_NAMES.get(text, text.replace("_", " ").strip().capitalize())
+
+
+def _display_k1_unit(value):
+    text = str(value or "").strip()
+    return {
+        "1/m^2": "m⁻²",
+        "1/m²": "m⁻²",
+        "m^-2": "m⁻²",
+        "1/m": "m⁻¹",
+        "m^-1": "m⁻¹",
+    }.get(text, text)
+
+
+def _display_twiss_direction(value):
+    text = str(value or "").strip()
+    return {
+        "full": "Full line",
+        "forward": "Forward",
+        "backward": "Backward",
+    }.get(text, text.replace("_", " ").strip().title())
+
+
+def _display_diagnostic_message(value):
+    text = str(value or "").strip()
+    for source, replacement in (
+        ("sigma-squared", "σ²"),
+        ("sigx", "σₓ"),
+        ("sigy", "σᵧ"),
+        ("lower-K measurement", "lower-K₁ measurement"),
+        ("higher-K measurement", "higher-K₁ measurement"),
+        ("low-K leverage", "low-K₁ leverage"),
+        ("high-K leverage", "high-K₁ leverage"),
+        ("K1", "K₁"),
+        ("m12", "M₁₂"),
+        ("4ac-b^2", "4ac − b²"),
+        ("determinant=", "determinant = "),
+        ("rank=", "rank = "),
+        ("condition=", "condition number = "),
+    ):
+        text = text.replace(source, replacement)
+    return text[:1].upper() + text[1:] if text else ""
+
+
+def _format_quadratic_equation(symbol, result):
+    coefficients = tuple(_finite_float_or_none(result.get(key)) for key in ("a", "b", "c"))
+    if any(value is None for value in coefficients):
+        return f"{symbol} = unavailable"
+    a, b, c = coefficients
+
+    def number(value):
+        return f"{abs(value):.6g}".replace("-", "−")
+
+    a_text = f"{a:.6g}".replace("-", "−")
+    b_sign = "+" if b >= 0 else "−"
+    c_sign = "+" if c >= 0 else "−"
+    return (
+        f"{symbol} = {a_text} K² {b_sign} {number(b)} K "
+        f"{c_sign} {number(c)}"
+    )
+
+
 def _status_from_plane_result(result):
     status = _read_result_field(result, "status")
     if status:
@@ -304,7 +423,7 @@ def _invalid_plane_result(status, message):
 def _compact_status_text(message, limit=120):
     text = str(message or "").strip()
     if not text:
-        return "unresolved"
+        return "No details available"
     if len(text) <= limit:
         return text
     return text[: limit - 3].rstrip() + "..."
@@ -318,31 +437,34 @@ def _least_squares_diagnostic_text(result, *, include_message=False):
         total = fit_selection.get("points_total")
         status = fit_selection.get("status")
         if used is not None and total is not None:
-            details.append(f"fit points {used}/{total} ({status})")
+            details.append(f"Fit points: {used}/{total} ({_display_fit_status(status)})")
     validation_status = _read_result_field(result, "validation_status")
     if validation_status:
-        details.append(f"validation {validation_status}")
+        details.append(f"Validation: {_display_fit_status(validation_status)}")
     coverage_message = str(_read_result_field(result, "coverage_message", "") or "").strip()
     if coverage_message:
-        details.append(coverage_message)
+        details.append(_display_diagnostic_message(coverage_message))
     solver = _read_result_field(result, "solver")
     if solver:
-        details.append(str(solver))
+        solver_name = {
+            "numpy.linalg.lstsq": "Linear least squares",
+        }.get(str(solver), str(solver))
+        details.append(f"Solver: {solver_name}")
     rank = _read_result_field(result, "rank")
     if rank is not None:
-        details.append(f"rank {int(rank)}/{LEAST_SQUARES_REQUIRED_RANK}")
+        details.append(f"Rank: {int(rank)}/{LEAST_SQUARES_REQUIRED_RANK}")
     condition = _finite_float_or_none(_read_result_field(result, "condition_number"))
     if condition is not None:
-        details.append(f"condition {condition:.3e}")
+        details.append(f"Condition number: {condition:.3e}")
     elif rank is not None and int(rank) < LEAST_SQUARES_REQUIRED_RANK:
-        details.append("condition infinite")
+        details.append("Condition number: infinite")
     residual_rms = _finite_float_or_none(_read_result_field(result, "residual_rms"))
     if residual_rms is not None:
-        details.append(f"residual RMS {residual_rms:.3e} mm²")
+        details.append(f"Residual RMS: {residual_rms:.3e} mm²")
     if include_message:
         message = str(_read_result_field(result, "message", "") or "").strip()
         if message:
-            details.append(message)
+            details.append(_display_diagnostic_message(message))
     return "; ".join(details)
 
 
@@ -1237,7 +1359,7 @@ class myWindow(QWidget,Ui_Form):
         self.status_panel.add_item("scan", "SCAN", "Idle")
         self.status_panel.add_item("twiss", "TWISS", "Idle")
         self.status_panel.add_item("fit", "PRF FIT", "No image")
-        self.status_panel.add_item("emit", "EMIT", "No result")
+        self.status_panel.add_item("emit", "EMITTANCE", "No result")
         self.status_panel.add_item("data", "DATA", "No scan file")
         self.status_panel.add_item("multi", "MULTI", "Configuring")
         self.status_panel.finish()
@@ -1250,7 +1372,7 @@ class myWindow(QWidget,Ui_Form):
         self._wrap_plot_card(
             self.gridLayout_2,
             self.widget,
-            "X Sigma Scan",
+            "Horizontal Beam-Size Scan",
             0,
             0,
             self.X_Plane,
@@ -1258,7 +1380,7 @@ class myWindow(QWidget,Ui_Form):
         self._wrap_plot_card(
             self.gridLayout_2,
             self.widget_2,
-            "X Parabolic Fit",
+            "Horizontal Quadratic Fit",
             0,
             1,
             self.X_Plane,
@@ -1266,7 +1388,7 @@ class myWindow(QWidget,Ui_Form):
         self._wrap_plot_card(
             self.gridLayout_4,
             self.widget_8,
-            "Y Sigma Scan",
+            "Vertical Beam-Size Scan",
             0,
             0,
             self.tab_2,
@@ -1274,7 +1396,7 @@ class myWindow(QWidget,Ui_Form):
         self._wrap_plot_card(
             self.gridLayout_4,
             self.widget_9,
-            "Y Parabolic Fit",
+            "Vertical Quadratic Fit",
             0,
             1,
             self.tab_2,
@@ -1392,7 +1514,7 @@ class myWindow(QWidget,Ui_Form):
         self.beam_fit_sigy_label = QLabel("--", card)
         self.beam_fit_status_label = QLabel("No image", card)
         published_size_tooltip = (
-            "Optional cross-check values read from the configured sigx/sigy channels. "
+            "Optional cross-check values read from the configured σₓ/σᵧ channels. "
             "They are not used for scan points or emittance calculations."
         )
         self.beam_size_pv_source_label = QLabel("Published size", card)
@@ -1417,7 +1539,7 @@ class myWindow(QWidget,Ui_Form):
             self.beam_size_pv_status_label,
         ):
             label.setToolTip(published_size_tooltip)
-        for col, text in enumerate(("Source", "σx (mm)", "σy (mm)", "Status")):
+        for col, text in enumerate(("Source", "σₓ (mm)", "σᵧ (mm)", "Status")):
             label = QLabel(text, card)
             label.setProperty("role", "field")
             status_grid.addWidget(label, 0, col)
@@ -1537,15 +1659,35 @@ class myWindow(QWidget,Ui_Form):
         self.widget_13.setMaximumWidth(580)
 
         self.label_9.setText("Scan Control")
-        self.label_15.setText("X Plane Results")
-        self.label_42.setText("Y Plane Results")
+        self.label_15.setText("Horizontal Plane Results")
+        self.label_42.setText("Vertical Plane Results")
         self.label_8.setText("Twiss Transport")
         for title in (self.label_9, self.label_15, self.label_42, self.label_8):
             title.setObjectName("panelTitle")
         for title in (self.twiss_initial_title, self.twiss_result_title):
             title.setProperty("role", "sectionTitle")
-        for label in (self.label_19, self.label_44, self.label_49, self.label_50):
-            label.setText("gamma (1/m)")
+        display_labels = (
+            (self.label, "Quadratic Fit"),
+            (self.label_2, "Least-Squares Fit"),
+            (self.label_5, "Quadratic Fit"),
+            (self.label_6, "Least-Squares Fit"),
+            (self.label_16, "εₓ (mm·mrad)"),
+            (self.label_21, "εₙ,ₓ (mm·mrad)"),
+            (self.label_17, "βₓ (m)"),
+            (self.label_18, "αₓ"),
+            (self.label_19, "γₓ (m⁻¹)"),
+            (self.label_23, "Fit Equation"),
+            (self.label_39, "εᵧ (mm·mrad)"),
+            (self.label_43, "εₙ,ᵧ (mm·mrad)"),
+            (self.label_40, "βᵧ (m)"),
+            (self.label_41, "αᵧ"),
+            (self.label_44, "γᵧ (m⁻¹)"),
+            (self.label_47, "Fit Equation"),
+            (self.label_49, "γ (m⁻¹)"),
+            (self.label_50, "γ (m⁻¹)"),
+        )
+        for label, text in display_labels:
+            label.setText(text)
 
         self.textEdit.hide()
         self.label_3.hide()
@@ -1631,7 +1773,7 @@ class myWindow(QWidget,Ui_Form):
         self.twiss_map_edit.setFixedHeight(58)
         self.twiss_map_edit.setLineWrapMode(QTextEdit.NoWrap)
         self.lineEdit_6.setReadOnly(True)
-        self.lineEdit_6.setToolTip("Derived from beta and alpha using gamma = (1 + alpha²) / beta.")
+        self.lineEdit_6.setToolTip("Derived from β and α using γ = (1 + α²) / β.")
         self.label_49.setToolTip(self.lineEdit_6.toolTip())
 
         self._result_fields = [
@@ -1662,10 +1804,10 @@ class myWindow(QWidget,Ui_Form):
         self.pushButton_5.setToolTip("Stop the running scan and restore the quadrupole setting.")
         self.use_result_button.setToolTip("Load initial Twiss values from a measurement result.")
         self.use_quad_scan_result_action.setToolTip(
-            "Copy beta, alpha and gamma from the latest valid emittance fit for the selected Twiss plane."
+            "Copy β, α, and γ from the latest valid emittance fit for the selected Twiss plane."
         )
         self.use_multi_screen_result_action.setToolTip(
-            "Copy beta, alpha and gamma from the latest valid Multi-Screen reconstruction."
+            "Copy β, α, and γ from the latest valid Multi-Screen reconstruction."
         )
         self.beam_image_auto_refresh_checkbox.setToolTip(
             "Read and fit the current PRF image every 2 seconds outside scans. "
@@ -1674,20 +1816,20 @@ class myWindow(QWidget,Ui_Form):
         self.load_points_button.setToolTip("Open an archived emittance scan for review or recalculation.")
         self.exclude_points_button.setToolTip("Disable the selected scan points without deleting the rows.")
         self.restore_points_button.setToolTip("Enable all scan points in the table.")
-        self.lineEdit_24.setToolTip("Wait time after each K1 change before taking the first sample.")
+        self.lineEdit_24.setToolTip("Wait time after each K₁ change before taking the first sample.")
         self.label_32.setToolTip(self.lineEdit_24.toolTip())
         self.lineEdit_2.setToolTip(
             "Kinetic beam energy at the emittance measurement point. Twiss uses this "
             "value as the reference energy when the transport path includes RF acceleration."
         )
         self.label_22.setToolTip(self.lineEdit_2.toolTip())
-        self.sample_interval_edit.setToolTip("Wait time between repeated PRF image samples at the same K1.")
+        self.sample_interval_edit.setToolTip("Wait time between repeated PRF image samples at the same K₁.")
         self.sample_interval_label.setToolTip(self.sample_interval_edit.toolTip())
-        self.lineEdit_10.setToolTip("Number of PRF image samples collected at each K1 value.")
+        self.lineEdit_10.setToolTip("Number of PRF image samples collected at each K₁ value.")
         self.label_14.setToolTip(self.lineEdit_10.toolTip())
         self.scan_strategy_combo.setToolTip(
             "Grid uses the existing fixed range. Adaptive uses From/To as a small "
-            "initial probe, selects additional K1 values inside the editable search bounds, "
+            "initial probe, selects additional K₁ values inside the editable search bounds, "
             "then fits X/Y from their own adaptive windows."
         )
         self.scan_strategy_label.setToolTip(self.scan_strategy_combo.toolTip())
@@ -1778,8 +1920,8 @@ class myWindow(QWidget,Ui_Form):
         form.addWidget(self.sample_interval_edit, 6, 1)
         self.k1_range_mode_label = QLabel("", self.widget_4)
         self.k1_range_mode_label.setToolTip(
-            "Adaptive low/high inherit the same K1 unit and range mode. "
-            "Relative ranges use the K1 value read at scan start."
+            "Adaptive bounds inherit the same K₁ unit and range mode. "
+            "Relative ranges use the K₁ value read at scan start."
         )
         k1_range_mode_title = QLabel("Range mode", self.widget_4)
         k1_range_mode_title.setProperty("role", "field")
@@ -1810,7 +1952,7 @@ class myWindow(QWidget,Ui_Form):
         self.scan_progress.setValue(0)
         self.scan_progress.setFormat("Idle")
         self.scan_progress.setToolTip(
-            "Grid shows exact K1 progress. Adaptive shows consumed point budget."
+            "Grid shows exact K₁ progress. Adaptive shows consumed point budget."
         )
         layout.addWidget(self.scan_progress)
 
@@ -1932,9 +2074,9 @@ class myWindow(QWidget,Ui_Form):
         values_grid.addWidget(self.twiss_result_title, 0, 2)
         for row, (name, unit, initial, result) in enumerate(
             (
-                ("beta", "m", self.lineEdit, self.lineEdit_17),
-                ("alpha", "", self.lineEdit_3, self.lineEdit_21),
-                ("gamma", "1/m", self.lineEdit_6, self.lineEdit_22),
+                ("β", "m", self.lineEdit, self.lineEdit_17),
+                ("α", "", self.lineEdit_3, self.lineEdit_21),
+                ("γ", "m⁻¹", self.lineEdit_6, self.lineEdit_22),
             ),
             start=1,
         ):
@@ -2051,7 +2193,7 @@ class myWindow(QWidget,Ui_Form):
         labels = {
             "beta": "β (m)",
             "alpha": "α",
-            "gamma": "γ (1/m)",
+            "gamma": "γ (m⁻¹)",
         }
         self._style_axes(self.twiss_plot_widget, ylabel=labels[metric])
         self.twiss_plot_widget.axes.tick_params(labelbottom=False)
@@ -2061,17 +2203,17 @@ class myWindow(QWidget,Ui_Form):
         axes.set_facecolor(palette["plot_bg"])
         axes.set_ylim(0, 1.15)
         axes.set_yticks([])
-        axes.set_xlabel("Distance from Line Start (m)", color=palette["plot_text"])
+        axes.set_xlabel("Distance from line start (m)", color=palette["plot_text"])
         axes.tick_params(colors=palette["plot_text"], which="both", labelsize=9)
         for spine in axes.spines.values():
             spine.set_edgecolor(palette["plot_spine"])
         axes.grid(False)
 
     def _style_all_plots(self):
-        self._style_axes(self.widget, "$K_1 (m^{-2})$", "sigx (mm)")
-        self._style_axes(self.widget_2, "$-K= K_1 L_q (m^{-1})$", "$sigx^2 (mm^2)$")
-        self._style_axes(self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)")
-        self._style_axes(self.widget_9, "$K= K_1 L_q (m^{-1})$", "$sigy^2 (mm^2)$")
+        self._style_axes(self.widget, K1_AXIS_LABEL, SIGMA_X_AXIS_LABEL)
+        self._style_axes(self.widget_2, NEGATIVE_KL_AXIS_LABEL, SIGMA_X_SQUARED_AXIS_LABEL)
+        self._style_axes(self.widget_8, K1_AXIS_LABEL, SIGMA_Y_AXIS_LABEL)
+        self._style_axes(self.widget_9, POSITIVE_KL_AXIS_LABEL, SIGMA_Y_SQUARED_AXIS_LABEL)
         if hasattr(self, "beam_image_widget"):
             self._style_axes(self.beam_image_widget, "x (mm)", "y (mm)")
         if hasattr(self, "twiss_plot_widget"):
@@ -2138,7 +2280,7 @@ class myWindow(QWidget,Ui_Form):
             values,
             color=palette["plot_fit"],
             linewidth=1.8,
-            label="Current K1",
+            label="Current K₁ model",
         )
         source_element = (self.latest_twiss_summary or {}).get("source_element")
         source_row = next(
@@ -2314,15 +2456,16 @@ class myWindow(QWidget,Ui_Form):
 
     @staticmethod
     def _format_twiss_profile_point(row, metric):
-        units = {"beta": "m", "alpha": "", "gamma": "1/m"}
+        symbols = {"beta": "β", "alpha": "α", "gamma": "γ"}
+        units = {"beta": "m", "alpha": "", "gamma": "m⁻¹"}
         suffix = f" {units[metric]}" if units[metric] else ""
         text = (
             f"{row['element_name']} · {row['distance_m']:.3f} m · "
-            f"{metric} {row[metric]:.5g}{suffix}"
+            f"{symbols[metric]} = {row[metric]:.5g}{suffix}"
         )
         k1 = float(row.get("element_k1_m2", float("nan")))
         if math.isfinite(k1):
-            text += f" · K1 {k1:.5g} 1/m²"
+            text += f" · K₁ = {k1:.5g} m⁻²"
         return text
 
     def _set_twiss_cursor_point(self, row, metric):
@@ -2373,10 +2516,10 @@ class myWindow(QWidget,Ui_Form):
         self._draw_beam_image_placeholder()
 
     def _draw_scan_fit_placeholder_plots(self):
-        self._draw_placeholder(self.widget, "$K_1 (m^{-2})$", "sigx (mm)", "Waiting for scan points")
-        self._draw_placeholder(self.widget_2, "$-K= K_1 L_q (m^{-1})$", "$sigx^2 (mm^2)$", "Waiting for fit")
-        self._draw_placeholder(self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)", "Waiting for scan points")
-        self._draw_placeholder(self.widget_9, "$K= K_1 L_q (m^{-1})$", "$sigy^2 (mm^2)$", "Waiting for fit")
+        self._draw_placeholder(self.widget, K1_AXIS_LABEL, SIGMA_X_AXIS_LABEL, "Waiting for scan points")
+        self._draw_placeholder(self.widget_2, NEGATIVE_KL_AXIS_LABEL, SIGMA_X_SQUARED_AXIS_LABEL, "Waiting for fit")
+        self._draw_placeholder(self.widget_8, K1_AXIS_LABEL, SIGMA_Y_AXIS_LABEL, "Waiting for scan points")
+        self._draw_placeholder(self.widget_9, POSITIVE_KL_AXIS_LABEL, SIGMA_Y_SQUARED_AXIS_LABEL, "Waiting for fit")
 
     def _draw_beam_image_placeholder(self, note="Update PRF image before scan"):
         if not hasattr(self, "beam_image_widget"):
@@ -2486,7 +2629,7 @@ class myWindow(QWidget,Ui_Form):
 
         if k1 is not None:
             widget.axes.set_title(
-                f"K1 {float(k1):.6g}",
+                f"K₁ = {float(k1):.6g} m⁻²",
                 color=palette["plot_text"],
                 fontsize=10,
                 loc="left",
@@ -2503,14 +2646,17 @@ class myWindow(QWidget,Ui_Form):
         self.latest_beam_background_status = background_status
         self.beam_image_title_label.setText(f"Current PRF Image · {flag_name}")
         fit_status = "valid" if fit_result.valid else fit_result.status
-        self.beam_fit_summary_label.setText(f"Width: {fit_result.method} · {fit_status}")
+        display_fit_status = _display_fit_status(fit_status)
+        self.beam_fit_summary_label.setText(
+            f"Width: {fit_result.method} · {display_fit_status}"
+        )
         self.beam_fit_flag_label.setText("Local fit")
         self.beam_fit_sigx_label.setText(f"{fit_result.sigx_mm:.3f}" if fit_result.sigx_mm is not None else "--")
         self.beam_fit_sigy_label.setText(f"{fit_result.sigy_mm:.3f}" if fit_result.sigy_mm is not None else "--")
         if fit_result.valid:
-            self.beam_fit_status_label.setText("valid")
+            self.beam_fit_status_label.setText("Valid")
         else:
-            self.beam_fit_status_label.setText(fit_result.status)
+            self.beam_fit_status_label.setText(display_fit_status)
         size_sigx, size_sigy = size_pv
         self.beam_size_pv_sigx_label.setText(
             f"{size_sigx:.3f}" if size_sigx is not None else "--"
@@ -2601,13 +2747,15 @@ class myWindow(QWidget,Ui_Form):
         elif self.latest_beam_fit_result.valid:
             self.status_panel.set_item(
                 "fit",
-                f"{self.latest_beam_fit_flag} sx {self.latest_beam_fit_result.sigx_mm:.3f} sy {self.latest_beam_fit_result.sigy_mm:.3f}",
+                f"{self.latest_beam_fit_flag} · σₓ = {self.latest_beam_fit_result.sigx_mm:.3f} mm "
+                f"· σᵧ = {self.latest_beam_fit_result.sigy_mm:.3f} mm",
                 "success",
             )
         else:
             self.status_panel.set_item(
                 "fit",
-                f"{self.latest_beam_fit_flag} {self.latest_beam_fit_result.status}",
+                f"{self.latest_beam_fit_flag} · "
+                f"{_display_fit_status(self.latest_beam_fit_result.status)}",
                 "warning",
             )
         self._refresh_emit_fit_status()
@@ -2617,7 +2765,7 @@ class myWindow(QWidget,Ui_Form):
             if total:
                 self.status_panel.set_item("data", f"{active}/{total} points", "success")
             else:
-                self.status_panel.set_item("data", "runtime latest", "success")
+                self.status_panel.set_item("data", "Latest saved scan", "success")
         else:
             self.status_panel.set_item("data", "No scan file", "warning")
         self._update_scan_run_controls()
@@ -2628,7 +2776,7 @@ class myWindow(QWidget,Ui_Form):
             self.status_panel.set_item("emit", "No result", "subtle")
             return
         status = summary.get("quality_status", summary.get("status", "unresolved"))
-        method = summary.get("method", "fit")
+        method = _display_fit_method(summary.get("method", "fit"))
         if status in {"valid", "validated"}:
             tone = "success"
         elif status == "error":
@@ -2641,9 +2789,16 @@ class myWindow(QWidget,Ui_Form):
         x_status = x_summary.get("validation_status", x_summary.get("status", "unknown"))
         y_status = y_summary.get("validation_status", y_summary.get("status", "unknown"))
         if status == "error":
-            text = _compact_status_text(summary.get("message", "error"), limit=90)
+            text = _compact_status_text(
+                _display_diagnostic_message(summary.get("message", "error")),
+                limit=90,
+            )
         else:
-            text = f"{method}: {status} (x {x_status}, y {y_status})"
+            text = (
+                f"{method} · {_display_fit_status(status)} "
+                f"· X: {_display_fit_status(x_status)} "
+                f"· Y: {_display_fit_status(y_status)}"
+            )
         diagnostic_lines = []
         for plane_label, plane_key in (("X", "xplane"), ("Y", "yplane")):
             plane_summary = summary.get(plane_key, {})
@@ -2670,7 +2825,7 @@ class myWindow(QWidget,Ui_Form):
         plane_label = self._format_twiss_plane_label(summary.get("plane"))
         direction = summary.get("direction")
         if direction:
-            return f"{plane_label} {direction}"
+            return f"{plane_label} · {_display_twiss_direction(direction)}"
         return plane_label
 
     def _format_twiss_status_tooltip(self, summary):
@@ -2684,15 +2839,18 @@ class myWindow(QWidget,Ui_Form):
         energy = summary.get("measurement_energy_mev")
         parts = [f"{plane_label} plane"]
         if direction:
-            parts.append(direction)
+            parts.append(_display_twiss_direction(direction))
         if from_element and to_element:
-            parts.append(f"{from_element} -> {to_element}")
+            parts.append(f"{from_element} → {to_element}")
         if energy is not None:
-            parts.append(f"measurement energy {energy:g} MeV kinetic")
+            parts.append(f"Measurement kinetic energy: {energy:g} MeV")
         entrance_energy = summary.get("entrance_energy_mev")
         if entrance_energy is not None:
             entrance = summary.get("entrance_element") or "line start"
-            parts.append(f"inferred entrance energy ({entrance}) {entrance_energy:.6f} MeV kinetic")
+            parts.append(
+                f"Inferred entrance kinetic energy at {entrance}: "
+                f"{entrance_energy:.6f} MeV"
+            )
         if status == "error":
             parts.append(_compact_status_text(summary.get("message", "error"), limit=100))
         return ", ".join(parts)
@@ -3189,8 +3347,8 @@ class myWindow(QWidget,Ui_Form):
         self.custom_k1_mode = mode
         self.custom_k1_unit = str(metadata["k1_unit"])
         mode_text = "Relative to initial setpoint" if mode == "relative" else "Absolute setpoints"
-        unit = self.custom_k1_unit
-        self.k1_range_mode_label.setText(f"K1: {mode_text} ({unit}) · Loaded archive")
+        unit = _display_k1_unit(self.custom_k1_unit)
+        self.k1_range_mode_label.setText(f"K₁: {mode_text} ({unit}) · Loaded archive")
         self.preset_modified_label.setText("Loaded")
         self._draw_beam_image_placeholder()
         self._sync_emit_background_for_flag()
@@ -3208,7 +3366,9 @@ class myWindow(QWidget,Ui_Form):
             self._validate_scan_metadata(metadata, expected_metadata, str(results_path))
         data = np.loadtxt(results_path, ndmin=2)
         if data.ndim != 2 or data.shape[1] < 3:
-            raise RuntimeError(f"{results_path.name} must contain K1, sigx and sigy columns.")
+            raise RuntimeError(
+                f"{results_path.name} must contain K₁, σₓ, and σᵧ columns."
+            )
         self._clear_scan_points()
         for k1, sigx, sigy in data[:, :3]:
             self._append_scan_point(k1, sigx, sigy)
@@ -3322,9 +3482,9 @@ class myWindow(QWidget,Ui_Form):
 
         palette = self._palette()
         self.widget.axes.clear()
-        self._style_axes(self.widget, "$K_1 (m^{-2})$", "sigx (mm)")
+        self._style_axes(self.widget, K1_AXIS_LABEL, SIGMA_X_AXIS_LABEL)
         self.widget_8.axes.clear()
-        self._style_axes(self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)")
+        self._style_axes(self.widget_8, K1_AXIS_LABEL, SIGMA_Y_AXIS_LABEL)
 
         if excluded:
             k1, sigx, sigy = np.array(excluded).T
@@ -3367,10 +3527,10 @@ class myWindow(QWidget,Ui_Form):
             self._draw_placeholder_plots()
             return
         for plot, xlabel, ylabel in (
-            (self.widget, "$K_1 (m^{-2})$", "sigx (mm)"),
-            (self.widget_2, "$-K= K_1 L_q (m^{-1})$", "$sigx^2 (mm^2)$"),
-            (self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)"),
-            (self.widget_9, "$K= K_1 L_q (m^{-1})$", "$sigy^2 (mm^2)$"),
+            (self.widget, K1_AXIS_LABEL, SIGMA_X_AXIS_LABEL),
+            (self.widget_2, NEGATIVE_KL_AXIS_LABEL, SIGMA_X_SQUARED_AXIS_LABEL),
+            (self.widget_8, K1_AXIS_LABEL, SIGMA_Y_AXIS_LABEL),
+            (self.widget_9, POSITIVE_KL_AXIS_LABEL, SIGMA_Y_SQUARED_AXIS_LABEL),
         ):
             self._style_axes(plot, xlabel, ylabel)
             for line in plot.axes.lines:
@@ -3646,10 +3806,17 @@ class myWindow(QWidget,Ui_Form):
             self._warn_twiss(f"No latest fit summary is available for {self._format_twiss_plane_label(plane)} plane.")
             return
         if plane_summary.get("status") != "valid":
-            message = plane_summary.get("message") or plane_summary.get("status") or "unresolved"
+            fit_status = _display_fit_status(plane_summary.get("status"))
+            message = str(plane_summary.get("message") or "").strip()
+            status_detail = (
+                f"{fit_status}. "
+                f"{_compact_status_text(_display_diagnostic_message(message))}"
+                if message
+                else fit_status
+            )
             self._warn_twiss(
                 f"Latest {self._format_twiss_plane_label(plane)} plane fit is not valid: "
-                f"{_compact_status_text(message)}"
+                f"{status_detail}"
             )
             return
 
@@ -3893,10 +4060,10 @@ class myWindow(QWidget,Ui_Form):
             self._update_adaptive_search_status()
 
     def _set_adaptive_search_bounds(self, lower, upper, *, mark_modified=False):
-        lower = self._parse_finite_float(str(lower), "Adaptive K1 min")
-        upper = self._parse_finite_float(str(upper), "Adaptive K1 max")
+        lower = self._parse_finite_float(str(lower), "Adaptive K₁ minimum")
+        upper = self._parse_finite_float(str(upper), "Adaptive K₁ maximum")
         if lower >= upper:
-            raise ValueError("Adaptive K1 min must be smaller than K1 max.")
+            raise ValueError("Adaptive K₁ minimum must be smaller than its maximum.")
         self.adaptive_search_min = lower
         self.adaptive_search_max = upper
         if mark_modified:
@@ -3940,12 +4107,12 @@ class myWindow(QWidget,Ui_Form):
             else adaptive.waist_size_squared_ratio
         )
         waist_ratio_spin.setToolTip(
-            "Defines each plane's fitting window by the allowed sigma-squared "
+            "Defines each plane's fitting window by the allowed σ² "
             "growth relative to its estimated waist."
         )
-        form.addWidget(QLabel("K1 min", dialog), 0, 0)
+        form.addWidget(QLabel("K₁ minimum (m⁻²)", dialog), 0, 0)
         form.addWidget(lower_edit, 0, 1)
-        form.addWidget(QLabel("K1 max", dialog), 1, 0)
+        form.addWidget(QLabel("K₁ maximum (m⁻²)", dialog), 1, 0)
         form.addWidget(upper_edit, 1, 1)
         form.addWidget(QLabel("Initial points", dialog), 2, 0)
         form.addWidget(initial_points_spin, 2, 1)
@@ -3965,15 +4132,15 @@ class myWindow(QWidget,Ui_Form):
 
         def apply_settings():
             try:
-                lower = self._parse_finite_float(lower_edit.text(), "Adaptive K1 min")
-                upper = self._parse_finite_float(upper_edit.text(), "Adaptive K1 max")
+                lower = self._parse_finite_float(lower_edit.text(), "Adaptive K₁ minimum")
+                upper = self._parse_finite_float(upper_edit.text(), "Adaptive K₁ maximum")
                 if lower >= upper:
-                    raise ValueError("Adaptive K1 min must be smaller than K1 max.")
-                seed_from = self._parse_finite_float(self.lineEdit_7.text(), "K1 From")
-                seed_to = self._parse_finite_float(self.lineEdit_8.text(), "K1 To")
+                    raise ValueError("Adaptive K₁ minimum must be smaller than its maximum.")
+                seed_from = self._parse_finite_float(self.lineEdit_7.text(), "K₁ start")
+                seed_to = self._parse_finite_float(self.lineEdit_8.text(), "K₁ end")
                 if not lower <= seed_from < seed_to <= upper:
                     raise ValueError(
-                        "Adaptive range must satisfy K1 min <= From < To <= K1 max."
+                        "Adaptive range must satisfy minimum ≤ start < end ≤ maximum."
                     )
                 initial_points = initial_points_spin.value()
                 max_points = self._parse_positive_int(
@@ -4360,7 +4527,7 @@ class myWindow(QWidget,Ui_Form):
         self.preset_combo.blockSignals(False)
         self.preset_modified_label.setText("Custom")
         self.k1_range_mode_label.setText(
-            "K1: Absolute setpoints (1/m^2) · Custom selection"
+            "K₁: Absolute setpoints (m⁻²) · Custom selection"
         )
 
     def _sync_emit_preset_defaults(self):
@@ -4375,9 +4542,9 @@ class myWindow(QWidget,Ui_Form):
             if scan.mode == "relative"
             else "Absolute setpoints"
         )
-        unit_suffix = f" ({scan.unit})" if scan.unit else ""
+        unit_suffix = f" ({_display_k1_unit(scan.unit)})" if scan.unit else ""
         self.k1_range_mode_label.setText(
-            f"K1: {mode_text}{unit_suffix} · Adaptive inherits this setting"
+            f"K₁: {mode_text}{unit_suffix} · Adaptive inherits this setting"
         )
         if scan.k1_from is not None:
             self.lineEdit_7.setText(str(scan.k1_from))
@@ -4547,7 +4714,7 @@ class myWindow(QWidget,Ui_Form):
             steps_name = (
                 "Max points"
                 if para.scan_strategy in ADAPTIVE_SCAN_STRATEGIES
-                else "K1 steps"
+                else "K₁ steps"
             )
             para.k1_steps = self._parse_positive_int(self.lineEdit_9.text(), steps_name)
             para.adaptive_config = None
@@ -4555,7 +4722,7 @@ class myWindow(QWidget,Ui_Form):
                 search_min = self.adaptive_search_min
                 search_max = self.adaptive_search_max
                 if search_min is None or search_max is None:
-                    raise ValueError("Set the adaptive K1 search range before scanning.")
+                    raise ValueError("Set the adaptive K₁ search range before scanning.")
                 initial_points = self.adaptive_initial_points
                 waist_ratio = self.adaptive_waist_size_squared_ratio
                 if initial_points is None or waist_ratio is None:
@@ -4590,7 +4757,7 @@ class myWindow(QWidget,Ui_Form):
                     <= para.adaptive_config.k1_max
                 ):
                     raise ValueError(
-                        "Adaptive range must satisfy K1 min <= From < To <= K1 max "
+                        "Adaptive range must satisfy minimum ≤ start < end ≤ maximum "
                         f"([{para.adaptive_config.k1_min:g}, "
                         f"{para.adaptive_config.k1_max:g}])."
                     )
@@ -4646,7 +4813,10 @@ class myWindow(QWidget,Ui_Form):
         if not fit_result.valid:
             if show_warning:
                 detail = f": {fit_result.message}" if fit_result.message else ""
-                self._warn(f"Current PRF image fit is not valid ({fit_result.status}){detail}.")
+                self._warn(
+                    "Current PRF image fit is not valid "
+                    f"({_display_fit_status(fit_result.status)}){detail}."
+                )
             return False
         return True
 
@@ -5256,11 +5426,11 @@ class myWindow(QWidget,Ui_Form):
             return
         if beta0 <= 0:
             self.twiss_status_edit.setText("Invalid input")
-            self._warn_twiss("Initial beta must be positive.")
+            self._warn_twiss("Initial β must be positive.")
             return
         if gamma0 <= 0:
             self.twiss_status_edit.setText("Invalid input")
-            self._warn_twiss("Initial gamma must be positive.")
+            self._warn_twiss("Initial γ must be positive.")
             return
 
         para = {}
@@ -5452,13 +5622,13 @@ class myWindow(QWidget,Ui_Form):
             palette = self._palette()
             if not self.widget.axes.lines:
                 self.widget.axes.clear()
-                self._style_axes(self.widget, "$K_1 (m^{-2})$", "sigx (mm)")
+                self._style_axes(self.widget, K1_AXIS_LABEL, SIGMA_X_AXIS_LABEL)
             self.widget.axes.plot(k1, sigx, marker="x", linestyle="None", color=palette["plot_point"])
             self.widget.canvas.draw()
 
             if not self.widget_8.axes.lines:
                 self.widget_8.axes.clear()
-                self._style_axes(self.widget_8, "$K_1 (m^{-2})$", "sigy (mm)")
+                self._style_axes(self.widget_8, K1_AXIS_LABEL, SIGMA_Y_AXIS_LABEL)
             self.widget_8.axes.plot(k1, sigy, marker="x", linestyle="None", color=palette["plot_point"])
             self.widget_8.canvas.draw()
 
@@ -5482,20 +5652,20 @@ class myWindow(QWidget,Ui_Form):
         palette = self._palette()
         if plane == "xplane":
             widget = self.widget_2
-            xlabel = "$-K= K_1 L_q (m^{-1})$"
-            ylabel = "$sigx^2 (mm^2)$"
+            xlabel = NEGATIVE_KL_AXIS_LABEL
+            ylabel = SIGMA_X_SQUARED_AXIS_LABEL
             plot_sign = -1
             fields = (self.lineEdit_11, self.lineEdit_12, self.lineEdit_13, self.lineEdit_14, self.lineEdit_15)
             text_field = self.lineEdit_16
-            curve_name = "sigx^2"
+            curve_name = "σₓ²"
         else:
             widget = self.widget_9
-            xlabel = "$K= K_1 L_q (m^{-1})$"
-            ylabel = "$sigy^2 (mm^2)$"
+            xlabel = POSITIVE_KL_AXIS_LABEL
+            ylabel = SIGMA_Y_SQUARED_AXIS_LABEL
             plot_sign = 1
             fields = (self.lineEdit_39, self.lineEdit_35, self.lineEdit_40, self.lineEdit_36, self.lineEdit_38)
             text_field = self.lineEdit_37
-            curve_name = "sigy^2"
+            curve_name = "σᵧ²"
 
         widget.axes.clear()
         self._style_axes(widget, xlabel, ylabel)
@@ -5529,7 +5699,7 @@ class myWindow(QWidget,Ui_Form):
                     fit_y[fit_order],
                     "--",
                     color=palette["plot_fit"],
-                    label="fitting curve",
+                    label="Fitted curve",
                 )
                 legend = widget.axes.legend(frameon=False)
                 if legend is not None:
@@ -5539,7 +5709,7 @@ class myWindow(QWidget,Ui_Form):
             widget.axes.text(
                 0.5,
                 0.5,
-                _compact_status_text(result.get("message", "fit failed"), limit=60),
+                _display_fit_status(result.get("status", "fit_failed")),
                 transform=widget.axes.transAxes,
                 ha="center",
                 va="center",
@@ -5552,18 +5722,22 @@ class myWindow(QWidget,Ui_Form):
             for field, key in zip(fields, ("ex", "beta", "alpha", "gamma", "exn")):
                 field.setText(str(result.get(key)))
             text_field.setText(
-                f"{curve_name}={result.get('a')}K^2+{result.get('b')}K+{result.get('c')}"
+                _format_quadratic_equation(curve_name, result)
             )
+            text_field.setToolTip("")
             return
 
-        fields[0].setText(
-            "Non-physical fit"
-            if result.get("status") == "non_physical"
-            else "Fit failed"
+        display_status = _display_fit_status(result.get("status", "fit_failed"))
+        diagnostic_text = _compact_status_text(
+            _display_diagnostic_message(
+                result.get("message", result.get("status"))
+            )
         )
+        fields[0].setText(display_status)
         for field in fields[1:]:
             field.setText("--")
-        text_field.setText(_compact_status_text(result.get("message", result.get("status"))))
+        text_field.setText(display_status)
+        text_field.setToolTip(diagnostic_text)
 
     def _display_least_square_plane(self, plane, result):
         if plane == "xplane":
@@ -5583,15 +5757,9 @@ class myWindow(QWidget,Ui_Form):
                 field.setText(str(result.get(key)))
             return
 
-        failure_labels = {
-            "non_physical": "Non-physical fit",
-            "rank_deficient": "Rank-deficient fit",
-            "ill_conditioned": "Ill-conditioned fit",
-        }
-        fields[0].setText(failure_labels.get(result.get("status"), "Fit failed"))
-        for field in fields[1:-1]:
+        fields[0].setText(_display_fit_status(result.get("status", "fit_failed")))
+        for field in fields[1:]:
             field.setText("--")
-        fields[-1].setText(_compact_status_text(result.get("message", result.get("status"))))
 
     def showTwiss(self, dict):
         if "error" in dict:
@@ -5650,11 +5818,11 @@ class myWindow(QWidget,Ui_Form):
         self._draw_twiss_profile()
         status_text = self._format_twiss_status_tooltip(self.latest_twiss_summary)
         try:
-            log_path = self._append_twiss_result_log(dict)
+            self._append_twiss_result_log(dict)
         except Exception as exc:
             print(f"Warning: failed to write Twiss result log: {exc}")
         else:
-            status_text = f"{status_text}; logged to {log_path.name}"
+            status_text = f"{status_text}; result saved"
         if dict.get("design_error"):
             status_text = f"{status_text}; design reference unavailable"
         self.twiss_status_edit.setText(status_text)
@@ -5897,8 +6065,8 @@ class scanThread(QThread):
     def _acquire_k1(self, k1, *, adaptive=False):
         if self.effective_k1_limit is not None and not self.effective_k1_limit.contains(k1):
             raise MachineProfileError(
-                f"Planned K1 {float(k1):g} is outside effective limit "
-                f"{self.effective_k1_limit.describe()} for {self.quad_name}.K1."
+                f"Planned K₁ = {float(k1):g} m⁻² is outside the effective limit "
+                f"{self.effective_k1_limit.describe()} for {self.quad_name}.K₁."
             )
         if self.restore_quad_callback is not None:
             def check_running():
@@ -5939,14 +6107,15 @@ class scanThread(QThread):
                     if not adaptive or retry >= self.adaptive_config.max_retries:
                         if adaptive:
                             self._emit_adaptive_status(
-                                f"Rejected K1 {k1:g}: image unavailable",
+                                f"Rejected K₁ = {k1:g} m⁻²: image unavailable",
                                 k1=k1,
                             )
                             return None
                         raise
                     retry += 1
                     self._emit_adaptive_status(
-                        f"Retrying K1 {k1:g} ({retry}/{self.adaptive_config.max_retries})",
+                        f"Retrying K₁ = {k1:g} m⁻² "
+                        f"({retry}/{self.adaptive_config.max_retries})",
                         k1=k1,
                         retry_reason=str(exc),
                     )
@@ -5977,17 +6146,18 @@ class scanThread(QThread):
                 if not adaptive or retry >= self.adaptive_config.max_retries:
                     if adaptive:
                         self._emit_adaptive_status(
-                            f"Rejected K1 {k1:g}: invalid image fit",
+                            f"Rejected K₁ = {k1:g} m⁻²: invalid image fit",
                             k1=k1,
                         )
                         return None
                     raise RuntimeError(
                         f"Flag image fit failed for {self.flag_name} "
-                        f"({fit_result.status}){detail}."
+                        f"({_display_fit_status(fit_result.status)}){detail}."
                     )
                 retry += 1
                 self._emit_adaptive_status(
-                    f"Retrying K1 {k1:g} ({retry}/{self.adaptive_config.max_retries})",
+                    f"Retrying K₁ = {k1:g} m⁻² "
+                    f"({retry}/{self.adaptive_config.max_retries})",
                     k1=k1,
                 )
                 if self.sample_interval > 0 and not self._sleep_or_stop(self.sample_interval):
@@ -6011,7 +6181,9 @@ class scanThread(QThread):
                 not x_quality["usable"] or not y_quality["usable"]
             ):
                 self._emit_adaptive_status(
-                    f"Quality K1 {k1:g} · X {x_quality['status']} · Y {y_quality['status']}",
+                    f"Quality at K₁ = {k1:g} m⁻² "
+                    f"· X: {_display_fit_status(x_quality['status'])} "
+                    f"· Y: {_display_fit_status(y_quality['status'])}",
                     k1=k1,
                     plane_quality=point["plane_quality"],
                 )
@@ -6067,7 +6239,7 @@ class scanThread(QThread):
             if not self.is_running:
                 return
             self._emit_adaptive_status(
-                f"Seed {index}/{len(initial_values)} · K1 {k1:g}",
+                f"Seed {index}/{len(initial_values)} · K₁ = {k1:g} m⁻²",
                 adaptive_stage="seed",
             )
             observation = self._acquire_k1(k1, adaptive=True)
@@ -6092,7 +6264,7 @@ class scanThread(QThread):
                         return
                     recovery_values.append(k1)
                     self._emit_adaptive_status(
-                        f"Seed recovery {len(recovery_values)} · K1 {k1:g}",
+                        f"Seed recovery {len(recovery_values)} · K₁ = {k1:g} m⁻²",
                         adaptive_stage="seed_recovery",
                     )
                     observation = self._acquire_k1(k1, adaptive=True)
@@ -6112,8 +6284,8 @@ class scanThread(QThread):
             raise
         self._emit_adaptive_status(
             "Adapted ranges · "
-            f"X [{plan.x.k1_from:.3g}, {plan.x.k1_to:.3g}] · "
-            f"Y [{plan.y.k1_from:.3g}, {plan.y.k1_to:.3g}]",
+            f"X [{plan.x.k1_from:.3g}, {plan.x.k1_to:.3g}] m⁻² · "
+            f"Y [{plan.y.k1_from:.3g}, {plan.y.k1_to:.3g}] m⁻²",
             adaptive_stage="adapt_range",
             adaptive_plan={
                 "x": [plan.x.k1_from, plan.x.k1_to],
@@ -6124,21 +6296,22 @@ class scanThread(QThread):
             if not self.is_running:
                 return
             self._emit_adaptive_status(
-                f"Refine {index}/{len(plan.new_values)} · K1 {k1:g}",
+                f"Refine {index}/{len(plan.new_values)} · K₁ = {k1:g} m⁻²",
                 adaptive_stage="refine",
             )
             observation = self._acquire_k1(k1, adaptive=True)
             if observation is not None:
                 observations.append(observation)
         if len({round(point.k1, 12) for point in observations}) < 3:
-            raise RuntimeError("Adaptive scan has fewer than 3 valid unique K1 values.")
+            raise RuntimeError("Adaptive scan has fewer than 3 valid unique K₁ values.")
 
         validation = validate_adaptive_scan(observations, self.adaptive_config)
         supplement_values = validation.new_values
         if supplement_values:
             self._emit_adaptive_status(
                 "Validation supplement · "
-                f"X {validation.x.status} · Y {validation.y.status}",
+                f"X: {_display_fit_status(validation.x.status)} · "
+                f"Y: {_display_fit_status(validation.y.status)}",
                 adaptive_stage="validation_supplement",
                 plane_validation=validation.as_dict(),
             )
@@ -6146,7 +6319,8 @@ class scanThread(QThread):
                 if not self.is_running:
                     return
                 self._emit_adaptive_status(
-                    f"Validate {index}/{len(supplement_values)} · K1 {k1:g}",
+                    f"Validate {index}/{len(supplement_values)} "
+                    f"· K₁ = {k1:g} m⁻²",
                     adaptive_stage="validation_supplement",
                 )
                 observation = self._acquire_k1(k1, adaptive=True)
@@ -6180,7 +6354,7 @@ class scanThread(QThread):
                     self._emit_adaptive_status(
                         "Quality supplement "
                         f"{len(quality_supplement_attempted)}/{MAX_QUALITY_SUPPLEMENT_POINTS} "
-                        f"· K1 {k1:g}",
+                        f"· K₁ = {k1:g} m⁻²",
                         adaptive_stage="quality_supplement",
                     )
                     observation = self._acquire_k1(k1, adaptive=True)
@@ -6227,13 +6401,14 @@ class scanThread(QThread):
                 if quality_counts[plane] < MIN_FINAL_POINTS_PER_PLANE:
                     validation_payload[plane]["status"] = "insufficient_quality_points"
                     validation_payload[plane]["message"] = (
-                        f"only {quality_counts[plane]} quality-approved unique K1 points "
+                        f"only {quality_counts[plane]} quality-approved unique K₁ points "
                         f"are available; at least {MIN_FINAL_POINTS_PER_PLANE} are required"
                     )
         self.adaptive_plane_validation = validation_payload
         self._emit_adaptive_status(
             "Adaptive validation · "
-            f"X {validation.x.status} · Y {validation.y.status}",
+            f"X: {_display_fit_status(validation.x.status)} · "
+            f"Y: {_display_fit_status(validation.y.status)}",
             adaptive_stage="validate",
             plane_validation=validation_payload,
         )
@@ -6346,7 +6521,7 @@ class scanThread(QThread):
                     with open(source_path,"r") as f:
                         data = np.loadtxt(f, ndmin=2)
                 if data.ndim != 2 or data.shape[1] < 3:
-                    raise RuntimeError("Scan data must contain K1, sigx and sigy columns.")
+                    raise RuntimeError("Scan data must contain K₁, σₓ, and σᵧ columns.")
                 self.k1l   = data[:,0]
                 self.sigxl = data[:,1]   #[mm]
                 self.sigyl = data[:,2]   #[mm]
@@ -6429,7 +6604,7 @@ class scanThread(QThread):
                         "parabolic": {
                             "method": "parabolic",
                             "status": "skipped",
-                            "message": "scan points cannot be reshaped into equal samples per K1",
+                            "message": "Scan points cannot be grouped into equal samples per K₁.",
                         }
                     }
                 else:
@@ -6641,7 +6816,7 @@ class scanThread(QThread):
         except ValueError:
             result = _invalid_plane_result(
                 "fit_failed",
-                "selected scan points cannot be reshaped into equal samples per K1",
+                "Selected scan points cannot be grouped into equal samples per K₁.",
             )
         else:
             result = self._parabolic_plane_result(
@@ -7009,7 +7184,7 @@ class scanThread(QThread):
         alpha = (-b+2*a*m11/m12)/fac
         beta  = 2*a/fac
         if not math.isfinite(beta) or beta == 0:
-            tmp.update(_invalid_plane_result("failed", f"invalid beta={beta}"))
+            tmp.update(_invalid_plane_result("failed", f"Invalid β = {beta}"))
             return tmp
         gamma = (1+alpha**2)/beta
         
