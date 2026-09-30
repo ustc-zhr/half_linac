@@ -14,7 +14,7 @@ from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src/apps/emit_measure'))
 from PyQt5.QtCore import QPoint, Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QTableWidget, QTableWidgetItem
 from half_linac.src.apps.emit_measure import main
 from half_linac.src.apps.emit_measure.optimization_gui import OptimizationDialog, OptimizationWorker
 from half_linac.src.apps.emit_measure.optimization import OptimizationConfig, OptimizationSession
@@ -133,6 +133,41 @@ class DialogTests(unittest.TestCase):
         self.assertTrue(self.dialog.settings.isEnabled())
         self.dialog.unlock_host()
         self.assertEqual(button.isEnabled(), before)
+
+    def test_unlock_after_scan_replaces_table_items(self):
+        table = self.host.scan_points_table
+        self.host._append_scan_point(0.1, 1.2, 1.4)
+        surviving_table = QTableWidget(1, 1, self.host)
+        surviving_item = QTableWidgetItem('Keep')
+        surviving_table.setItem(0, 0, surviving_item)
+        original_flags = surviving_item.flags()
+        original_triggers = table.editTriggers()
+        timer = QTimer(self.host)
+        timer.start(60000)
+        button_enabled = self.host.pushButton.isEnabled()
+
+        self.dialog.lock_host()
+        self.assertFalse(timer.isActive())
+        self.assertFalse(surviving_item.flags() & Qt.ItemIsEditable)
+        self.host._clear_scan_points()
+        self.host._append_scan_point(0.2, 1.3, 1.5)
+        replacement_flags = table.item(0, 0).flags()
+        self.dialog.unlock_host()
+
+        self.assertEqual(table.item(0, 0).flags(), replacement_flags)
+        self.assertEqual(surviving_item.flags(), original_flags)
+        self.assertEqual(table.editTriggers(), original_triggers)
+        self.assertFalse(table.signalsBlocked())
+        self.assertFalse(surviving_table.signalsBlocked())
+        self.assertEqual(self.host.pushButton.isEnabled(), button_enabled)
+        self.assertTrue(timer.isActive())
+        self.assertEqual(timer.interval(), 60000)
+        self.assertFalse(self.host._optimization_locked)
+        for saved in (self.dialog.locked_items, self.dialog.locked_tables,
+                      self.dialog.locked_widgets, self.dialog.stopped_timers):
+            self.assertEqual(saved, [])
+        self.dialog.unlock_host()
+        main.epics.caput.assert_not_called()
 
     def test_real_variable_table_supports_independent_selected_bounds(self):
         ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')

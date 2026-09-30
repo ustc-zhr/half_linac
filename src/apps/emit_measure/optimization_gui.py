@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import Event
 from uuid import uuid4
 
+from PyQt5 import sip
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractButton, QAbstractItemView, QComboBox, QDialog, QDoubleSpinBox,
@@ -897,15 +898,23 @@ class OptimizationDialog(QDialog):
     def unlock_host(self):
         self.host._optimization_locked = False
         for widget, enabled in self.locked_widgets:
-            widget.setEnabled(enabled)
+            if not sip.isdeleted(widget):
+                widget.setEnabled(enabled)
         for table, triggers in self.locked_tables:
-            table.setEditTriggers(triggers)
+            if not sip.isdeleted(table):
+                table.setEditTriggers(triggers)
         for table, item, flags in self.locked_items:
+            # Scan refreshes can delete cached items while the host is locked.
+            if sip.isdeleted(table) or sip.isdeleted(item):
+                continue
             blocked = table.blockSignals(True)
-            item.setFlags(flags)
-            table.blockSignals(blocked)
+            try:
+                item.setFlags(flags)
+            finally:
+                table.blockSignals(blocked)
         for timer, interval in self.stopped_timers:
-            timer.start(interval)
+            if not sip.isdeleted(timer):
+                timer.start(interval)
         self.locked_widgets.clear()
         self.locked_tables.clear()
         self.locked_items.clear()
