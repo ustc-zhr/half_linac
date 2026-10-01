@@ -66,7 +66,9 @@ class OptimizationConfig:
     algorithm: str = 'rcds'
     rcds_initial_step: float = 0.2
     bo_initial_samples: int | None = None
+    bo_acquisition: str = 'ei'
     bo_exploration: float = 0.01
+    bo_kappa: float = 2.0
     bo_random_seed: int = 0
     rcds_noise: float = 0.0
     charge_constraint: ChargeConstraint | None = None
@@ -81,7 +83,7 @@ class OptimizationConfig:
         if not all(math.isfinite(v) for v in (
             self.other_limit, self.max_minutes, self.readback_tolerance,
             self.motion_timeout, self.settle_time, self.rcds_initial_step,
-            self.bo_exploration, self.rcds_noise,
+            self.bo_exploration, self.bo_kappa, self.rcds_noise,
         )):
             raise ValueError('Settings must be finite.')
         if self.other_limit <= 0:
@@ -98,6 +100,10 @@ class OptimizationConfig:
             self.charge_constraint.validate()
         elif self.charge_constraint is not None:
             raise ValueError('Charge constraints are only available with Constrained BO.')
+        if self.bo_acquisition not in ('ei', 'lcb'):
+            raise ValueError('BO acquisition must be EI or LCB.')
+        if self.bo_kappa < 0:
+            raise ValueError('BO LCB kappa must be non-negative.')
         if not 0 < self.rcds_initial_step <= 1:
             raise ValueError('RCDS initial step fraction must be greater than 0 and at most 1.')
         if self.rcds_noise < 0:
@@ -125,15 +131,21 @@ class OptimizationConfig:
 
     def optimizer_settings(self):
         if self.algorithm in ('bo', 'cbo'):
-            return {
+            acquisition = ('constrained expected improvement' if self.algorithm == 'cbo'
+                           else ('lower confidence bound'
+                                 if self.bo_acquisition == 'lcb' else 'expected improvement'))
+            settings = {
                 'name': self.algorithm, 'backend': 'scikit-learn',
                 'surrogate': 'Gaussian process / Matérn 5/2',
-                'acquisition': ('constrained expected improvement'
-                                if self.algorithm == 'cbo' else 'expected improvement'),
+                'acquisition': acquisition,
                 'initial_samples': self.effective_bo_initial_samples(),
-                'exploration': self.bo_exploration,
                 'random_seed': int(self.bo_random_seed),
             }
+            if self.algorithm == 'cbo' or self.bo_acquisition == 'ei':
+                settings['exploration'] = self.bo_exploration
+            else:
+                settings['kappa'] = self.bo_kappa
+            return settings
         return {
             'name': 'rcds', 'backend': 'GOTAcc',
             'initial_step_fraction': self.rcds_initial_step,
@@ -233,6 +245,8 @@ class OptimizationSession:
                     initial_samples=config.effective_bo_initial_samples(),
                     exploration=config.bo_exploration,
                     random_seed=int(config.bo_random_seed),
+                    acquisition=config.bo_acquisition,
+                    kappa=config.bo_kappa,
                 )
             else:
                 from half_linac.src.optimization.emittance_constrained_bo import optimize_currents

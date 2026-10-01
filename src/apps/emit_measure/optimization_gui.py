@@ -642,8 +642,17 @@ class OptimizationDialog(QDialog):
         self.bo_initial_samples.setRange(3, 996)
         self.bo_initial_samples.setFixedHeight(32)
         self.bo_initial_samples.setToolTip('Includes the current machine point. Must not exceed Max. scans minus 4.')
-        exploration_label = QLabel('Exploration', self.bo_settings)
-        exploration_label.setProperty('role', 'caption')
+        self.bo_acquisition_label = QLabel('Acquisition', self.bo_settings)
+        self.bo_acquisition_label.setProperty('role', 'caption')
+        self.bo_acquisition = QComboBox(self.bo_settings)
+        self.bo_acquisition.addItem('EI', 'ei')
+        self.bo_acquisition.addItem('LCB', 'lcb')
+        self.bo_acquisition.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.bo_acquisition.setMinimumContentsLength(4)
+        self.bo_acquisition.setFixedHeight(32)
+        self.bo_acquisition.setToolTip('EI uses expected improvement; LCB uses mean minus κ times uncertainty.')
+        self.bo_exploration_label = QLabel('Exploration ξ', self.bo_settings)
+        self.bo_exploration_label.setProperty('role', 'caption')
         self.bo_exploration = QDoubleSpinBox(self.bo_settings)
         self.bo_exploration.setRange(0, 10)
         self.bo_exploration.setSingleStep(0.01)
@@ -651,12 +660,27 @@ class OptimizationDialog(QDialog):
         self.bo_exploration.setValue(OptimizationConfig.__dataclass_fields__['bo_exploration'].default)
         self.bo_exploration.setFixedHeight(32)
         self.bo_exploration.setToolTip('Expected Improvement exploration offset. Larger values favor less-sampled regions.')
-        for column, (label, control) in enumerate(((initial_label, self.bo_initial_samples),
-                                                 (exploration_label, self.bo_exploration))):
+        self.bo_kappa_label = QLabel('Exploration κ', self.bo_settings)
+        self.bo_kappa_label.setProperty('role', 'caption')
+        self.bo_kappa = QDoubleSpinBox(self.bo_settings)
+        self.bo_kappa.setRange(0, 10)
+        self.bo_kappa.setSingleStep(0.25)
+        self.bo_kappa.setDecimals(2)
+        self.bo_kappa.setValue(OptimizationConfig.__dataclass_fields__['bo_kappa'].default)
+        self.bo_kappa.setFixedHeight(32)
+        self.bo_kappa.setToolTip('LCB exploration weight. Larger values favor uncertain regions.')
+        for column, (label, control) in enumerate((
+                (initial_label, self.bo_initial_samples),
+                (self.bo_acquisition_label, self.bo_acquisition),
+        )):
             bo_layout.addWidget(label, 0, column)
             bo_layout.addWidget(control, 1, column)
             bo_layout.setColumnStretch(column, 1)
 
+        bo_layout.addWidget(self.bo_exploration_label, 2, 0, 1, 2)
+        bo_layout.addWidget(self.bo_exploration, 3, 0, 1, 2)
+        bo_layout.addWidget(self.bo_kappa_label, 2, 0, 1, 2)
+        bo_layout.addWidget(self.bo_kappa, 3, 0, 1, 2)
         self.advanced_button = QToolButton(self.algorithm_settings)
         self.advanced_button.setText('Advanced')
         self.advanced_button.setCheckable(True)
@@ -797,7 +821,9 @@ class OptimizationDialog(QDialog):
         self.bo_initial_samples.valueChanged.connect(self.bo_initial_samples_changed)
         self.bo_exploration.valueChanged.connect(self.settings_changed)
         self.bo_seed.valueChanged.connect(self.settings_changed)
+        self.bo_acquisition.currentIndexChanged.connect(self.bo_acquisition_changed)
         self.charge_retention.valueChanged.connect(self.settings_changed)
+        self.bo_kappa.valueChanged.connect(self.settings_changed)
         self.advanced_button.toggled.connect(self.advanced_changed)
         self._bo_initial_samples_custom = False
         for widget in host.findChildren(QWidget):
@@ -855,6 +881,23 @@ class OptimizationDialog(QDialog):
         self.charge_settings.setVisible(is_cbo)
         self.advanced_button.setVisible(is_bo)
         self.bo_advanced.setVisible(is_bo and self.advanced_button.isChecked())
+        self.update_bo_acquisition_settings()
+
+    def bo_acquisition_changed(self, *_args):
+        self.update_bo_acquisition_settings()
+        self.settings_changed()
+
+    def update_bo_acquisition_settings(self):
+        algorithm = self.algorithm.currentData()
+        ordinary_bo = algorithm == 'bo'
+        use_lcb = ordinary_bo and self.bo_acquisition.currentData() == 'lcb'
+        self.bo_acquisition_label.setVisible(ordinary_bo)
+        self.bo_acquisition.setVisible(ordinary_bo)
+        show_exploration = algorithm == 'cbo' or (ordinary_bo and not use_lcb)
+        self.bo_exploration_label.setVisible(show_exploration)
+        self.bo_exploration.setVisible(show_exploration)
+        self.bo_kappa_label.setVisible(use_lcb)
+        self.bo_kappa.setVisible(use_lcb)
 
     def advanced_changed(self, checked):
         self.advanced_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
@@ -1125,7 +1168,9 @@ class OptimizationDialog(QDialog):
                 algorithm=self.algorithm.currentData(), rcds_initial_step=self.rcds_step.value(),
                 rcds_noise=self.rcds_noise.value(),
                 bo_initial_samples=self.bo_initial_samples.value(),
-                bo_exploration=self.bo_exploration.value(), bo_random_seed=self.bo_seed.value(),
+                bo_acquisition=self.bo_acquisition.currentData(),
+                bo_exploration=self.bo_exploration.value(), bo_kappa=self.bo_kappa.value(),
+                bo_random_seed=self.bo_seed.value(),
                 charge_constraint=charge_constraint)
             config.validate()
             self.paras = self.host.optimization_parameters(config.variables)

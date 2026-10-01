@@ -3,12 +3,13 @@ from __future__ import annotations
 
 
 def optimize_currents(evaluate, low, high, initial, max_evaluations, *,
-                      initial_samples=None, exploration=0.01, random_seed=0):
+                      initial_samples=None, acquisition='ei', exploration=0.01,
+                      kappa=2.0, random_seed=0):
     """Minimize an expensive scalar objective within independent bounds.
 
-    The current machine point is always evaluated first.  A seeded Latin
-    hypercube supplies the rest of the initial design, then a Matérn Gaussian
-    process proposes one point at a time using expected improvement.
+    The current machine point is always evaluated first. A seeded Latin
+    hypercube supplies the initial design, then a Matérn Gaussian process uses
+    expected improvement (EI) or lower confidence bound (LCB).
     """
     import warnings
 
@@ -35,9 +36,17 @@ def optimize_currents(evaluate, low, high, initial, max_evaluations, *,
     if initial_count < 3 or initial_count > budget:
         raise ValueError('BO initial samples must be between 3 and the evaluation budget.')
     exploration = float(exploration)
+    acquisition = str(acquisition).strip().lower()
+    if acquisition not in ('ei', 'lcb'):
+        raise ValueError("BO acquisition must be 'ei' or 'lcb'.")
+
     if not np.isfinite(exploration) or exploration < 0:
         raise ValueError('BO exploration must be finite and non-negative.')
     random_seed = int(random_seed)
+    kappa = float(kappa)
+    if not np.isfinite(kappa) or kappa < 0:
+        raise ValueError('BO LCB kappa must be finite and non-negative.')
+
     if random_seed < 0:
         raise ValueError('BO random seed must be non-negative.')
 
@@ -81,11 +90,18 @@ def optimize_currents(evaluate, low, high, initial, max_evaluations, *,
 
         candidates = candidate_engine.random(2048)
         mean, sigma = model.predict(candidates, return_std=True)
-        improvement = np.min(y) - mean - exploration
-        z = np.divide(improvement, sigma, out=np.zeros_like(improvement), where=sigma > 1e-12)
-        expected_improvement = improvement * norm.cdf(z) + sigma * norm.pdf(z)
-        expected_improvement[sigma <= 1e-12] = 0.0
         # Do not spend a full scan on an already sampled current vector.
         separation = np.min(np.linalg.norm(candidates[:, None, :] - x[None, :, :], axis=2), axis=1)
-        expected_improvement[separation < 1e-6] = -np.inf
-        sample(candidates[int(np.argmax(expected_improvement))])
+        if acquisition == 'ei':
+            improvement = np.min(y) - mean - exploration
+            z = np.divide(
+                improvement, sigma, out=np.zeros_like(improvement), where=sigma > 1e-12)
+            score = improvement * norm.cdf(z) + sigma * norm.pdf(z)
+            score[sigma <= 1e-12] = 0.0
+            score[separation < 1e-6] = -np.inf
+            next_index = int(np.argmax(score))
+        else:
+            score = mean - kappa * sigma
+            score[separation < 1e-6] = np.inf
+            next_index = int(np.argmin(score))
+        sample(candidates[next_index])

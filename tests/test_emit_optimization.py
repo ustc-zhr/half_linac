@@ -300,6 +300,11 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.summary['optimizer']['initial_samples'], 4)
         self.assertEqual(session.summary['optimizer']['exploration'], .05)
         self.assertEqual(session.summary['optimizer']['random_seed'], 7)
+        lcb = single_config('SS01', 1, 9, 'x', 3, algorithm='bo',
+                            bo_acquisition='lcb', bo_kappa=2.5).optimizer_settings()
+        self.assertEqual(lcb['acquisition'], 'lower confidence bound')
+        self.assertEqual(lcb['kappa'], 2.5)
+        self.assertNotIn('exploration', lcb)
         with self.assertRaisesRegex(ValueError, 'requires a charge constraint'):
             single_config('SS01', 1, 9, 'x', 3, algorithm='cbo').validate()
         with self.assertRaisesRegex(ValueError, 'only available'):
@@ -322,6 +327,10 @@ class SessionTests(unittest.TestCase):
             single_config('SS01', 1, 9, 'x', 3, bo_exploration=-.1).validate()
         with self.assertRaisesRegex(ValueError, 'random seed'):
             single_config('SS01', 1, 9, 'x', 3, bo_random_seed=-1).validate()
+        with self.assertRaisesRegex(ValueError, 'EI or LCB'):
+            single_config('SS01', 1, 9, 'x', 3, bo_acquisition='ucb').validate()
+        with self.assertRaisesRegex(ValueError, 'kappa'):
+            single_config('SS01', 1, 9, 'x', 3, bo_kappa=-1).validate()
 
     def test_session_passes_effective_parameters_to_algorithm_adapters(self):
         bo = unittest.mock.Mock()
@@ -331,7 +340,8 @@ class SessionTests(unittest.TestCase):
             session = OptimizationSession(bo_config, self.device, None, Path(self.temp.name) / 'bo-params')
         session.optimizer(lambda *_: 0, (1,), (9,), (5,), 10)
         self.assertEqual(bo.call_args.kwargs, {
-            'initial_samples': 4, 'exploration': .03, 'random_seed': 9,
+            'initial_samples': 4, 'acquisition': 'ei', 'exploration': .03,
+            'kappa': 2., 'random_seed': 9,
         })
 
         rcds = unittest.mock.Mock()

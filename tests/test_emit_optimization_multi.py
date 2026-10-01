@@ -159,6 +159,26 @@ class MultiTests(unittest.TestCase):
         self.assertTrue(all(2 <= x <= 10 and 1 <= y <= 9 for x, y in points))
         self.assertLess(min((x - 4)**2 + (y - 3)**2 for x, y in points), .1)
 
+    def test_bo_lcb_is_repeatable_and_uses_full_budget(self):
+        from half_linac.src.optimization.emittance_bo import optimize_currents as optimize_bo
+
+        def run():
+            points = []
+            optimize_bo(
+                lambda point: points.append(point) or (point[0] - 4) ** 2 + (point[1] - 3) ** 2,
+                (2., 1.), (10., 9.), (6., 5.), 20,
+                acquisition='lcb', kappa=2.0, random_seed=11,
+            )
+            return points
+
+        first, second = run(), run()
+        self.assertEqual(first, second)
+        self.assertEqual(first[0], (6., 5.))
+        self.assertEqual(len(first), 20)
+        self.assertTrue(all(2 <= x <= 10 and 1 <= y <= 9 for x, y in first))
+        self.assertLess(min((x - 4) ** 2 + (y - 3) ** 2 for x, y in first), .1)
+
+
     def test_constrained_bo_avoids_lower_unconstrained_charge_region(self):
         from half_linac.src.optimization.emittance_constrained_bo import optimize_currents as optimize_cbo
         points = []
