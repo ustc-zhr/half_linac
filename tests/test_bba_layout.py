@@ -225,9 +225,9 @@ class BbaLayoutTests(unittest.TestCase):
                 window.lineEdit_10.x(),
             )
             self.assertTrue(window.bba1_progress_widget.isHidden())
-            window.display({"progress": {"value": 42, "text": "COR 2/4 · K1 3/5"}})
+            window.display({"progress": {"value": 42, "text": "Corrector 2/4 · K₁ 3/5"}})
             self.assertEqual(window.bba1_progress_bar.value(), 42)
-            self.assertEqual(window.bba1_progress_label.text(), "COR 2/4 · K1 3/5")
+            self.assertEqual(window.bba1_progress_label.text(), "Corrector 2/4 · K₁ 3/5")
             self.assertFalse(window.bba1_progress_widget.isHidden())
         finally:
             window.close()

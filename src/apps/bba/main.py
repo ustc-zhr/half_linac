@@ -84,7 +84,7 @@ def bba1_saved_k1_sign(data_path):
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise RuntimeError(
-            f"Cannot determine legacy BBA-1 K1 sign: restore metadata.json beside {data_path.name}."
+            f"Cannot determine legacy BBA-1 K₁ sign: restore metadata.json beside {data_path.name}."
         ) from exc
     if not isinstance(metadata, dict):
         raise RuntimeError("Invalid BBA-1 metadata.")
@@ -97,28 +97,45 @@ def bba1_saved_k1_sign(data_path):
 
 K1LQ_FACTOR = 0.15
 HEADER_ACTION_HEIGHT = 32
-BBA1_QUAD_X_LABEL = "$K_1 (m^{-2})$"
-BBA1_SLOPE_LABEL = "dBPM2/dK1"
-BBA2_QUAD_X_LABEL = "$K_1L_q (m^{-1})$"
-BBA1_SCAN_POINT_COLUMNS = ("Use", "Corrector", "K1 (m⁻²)", "BPM1 (mm)", "BPM2 (mm)")
+BBA1_QUAD_X_LABEL = r"$K_1$ (m$^{-2}$)"
+BBA1_SLOPE_LABEL = r"$d\,\mathrm{BPM}_2/dK_1$ (m$^3$)"
+BBA2_QUAD_X_LABEL = r"$K_1L_{\mathrm{eff}}$ (m$^{-1}$)"
+BPM1_POSITION_LABEL = "BPM 1 position (mm)"
+BPM2_POSITION_LABEL = "BPM 2 position (mm)"
+CORRECTOR_KICK_LABEL = r"Corrector kick, $\theta$ (mrad)"
+BBA1_SCAN_POINT_COLUMNS = (
+    "Use",
+    "Corrector",
+    "K₁ (m⁻²)",
+    "BPM 1 position (mm)",
+    "BPM 2 position (mm)",
+)
 BBA2_SCAN_POINT_COLUMNS = {
-    "quad": ("Use", "K1Leff", "BPM2 (mm)"),
-    "bpm1": ("Use", "BPM1 (mm)"),
-    "corrector": ("Use", "COR", "theta", "BPM2 (mm)"),
+    "quad": ("Use", "K₁L_eff (m⁻¹)", "BPM 2 position (mm)"),
+    "bpm1": ("Use", "BPM 1 position (mm)"),
+    "corrector": ("Use", "Corrector", "θ (mrad)", "BPM 2 position (mm)"),
 }
 BBA2_SCAN_POINT_LABELS = {
-    "quad": "Quad Scan",
-    "bpm1": "BPM1 Samples",
-    "corrector": "COR Scan",
+    "quad": "Quadrupole Scan",
+    "bpm1": "BPM 1 Samples",
+    "corrector": "Corrector Scan",
 }
 BBA1_TOOLTIP = (
-    "BBA-1 scans quad K1 at several COR settings, fits dBPM2/dK1 versus BPM1, "
-    "and reports the BPM1 reading at the quad center."
+    "BBA-1 scans quadrupole K₁ at several corrector settings, fits the BPM 2 "
+    "response to K₁ versus BPM 1, and reports the BPM 1 reading at the quadrupole center."
 )
 BBA2_TOOLTIP = (
-    "BBA-2 fits BPM2 versus quad K1Leff and corrector kick, then reports "
-    "the BPM1 reading at the quad center."
+    "BBA-2 fits BPM 2 versus quadrupole K₁L_eff and corrector kick, then reports "
+    "the BPM 1 reading at the quadrupole center."
 )
+
+
+def _display_unit(unit):
+    return {
+        "1/m^2": "m⁻²",
+        "1/m²": "m⁻²",
+        "m^-2": "m⁻²",
+    }.get(str(unit), str(unit))
 
 
 DARK_THEME = {
@@ -632,6 +649,10 @@ class myWindow(QWidget, Ui_Form):
         for combo in self.findChildren(QComboBox):
             for index in range(combo.count()):
                 combo.setItemText(index, normalize(combo.itemText(index)))
+        for combo in (self.comboBox_5, self.comboBox_10):
+            if combo.count() >= 2:
+                combo.setItemText(0, "X plane")
+                combo.setItemText(1, "Y plane")
         bba1_tab_index = self.tabWidget.indexOf(self.tab)
         if bba1_tab_index >= 0:
             self.tabWidget.setTabToolTip(bba1_tab_index, BBA1_TOOLTIP)
@@ -741,10 +762,10 @@ class myWindow(QWidget, Ui_Form):
         self.gridLayout.addWidget(panel, 0, 0, 1, 1)
 
     def _style_plot_cards(self):
-        self._wrap_plot_card(self.gridLayout_2, self.widget, "BBA-1 Quad Sweep", 0, 0, self.tab)
-        self._wrap_plot_card(self.gridLayout_2, self.widget_2, "BBA-1 Offset Fit", 0, 1, self.tab)
-        self._wrap_plot_card(self.gridLayout_3, self.widget_3, "BBA-2 Quad Sweep", 0, 0, self.tab_2)
-        self._wrap_plot_card(self.gridLayout_3, self.widget_4, "BBA-2 Corrector Sweep", 0, 1, self.tab_2)
+        self._wrap_plot_card(self.gridLayout_2, self.widget, "BBA-1 Quadrupole Scan", 0, 0, self.tab)
+        self._wrap_plot_card(self.gridLayout_2, self.widget_2, "BBA-1 Alignment Fit", 0, 1, self.tab)
+        self._wrap_plot_card(self.gridLayout_3, self.widget_3, "BBA-2 Quadrupole Scan", 0, 0, self.tab_2)
+        self._wrap_plot_card(self.gridLayout_3, self.widget_4, "BBA-2 Corrector Scan", 0, 1, self.tab_2)
 
     def _wrap_plot_card(self, layout, widget, title_text, row, col, parent):
         layout.removeWidget(widget)
@@ -773,7 +794,8 @@ class myWindow(QWidget, Ui_Form):
         self.frame_4.setObjectName("resultCard")
 
         for widget in (self.frame, self.frame_2, self.frame_3, self.frame_4):
-            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+            widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
+            widget.setMinimumWidth(0)
 
         self.gridLayout_2.setAlignment(self.frame, Qt.AlignTop)
         self.gridLayout_2.setAlignment(self.frame_2, Qt.AlignTop)
@@ -837,7 +859,10 @@ class myWindow(QWidget, Ui_Form):
             )
             return f"{mode_text} ({unit})" if unit else mode_text
 
-        return f"COR: {describe(corr_mode, corr_unit)}  ·  Quad: {describe(quad_mode, quad_unit)}"
+        return (
+            f"Corrector: {describe(corr_mode, _display_unit(corr_unit))}  ·  "
+            f"Quadrupole: {describe(quad_mode, _display_unit(quad_unit))}"
+        )
 
     def _refresh_scan_mode_labels(self):
         if hasattr(self, "bba1_scan_mode_label") and hasattr(self, "_bba1_corr_mode"):
@@ -915,10 +940,10 @@ class myWindow(QWidget, Ui_Form):
             widget.setMinimumWidth(72)
 
         rows = [
-            ("COR", self.comboBox, "From", self.lineEdit, "To", self.lineEdit_2, "Steps", self.lineEdit_3),
-            ("Quad", self.comboBox_2, "From", self.lineEdit_6, "To", self.lineEdit_4, "Steps", self.lineEdit_5),
-            ("BPM1", self.comboBox_3, "BPM2", self.comboBox_4, "Settle Time (s)", self.lineEdit_7, "Samples/step", self.lineEdit_8),
-            ("Sample Interval (s)", self.bba1_sample_interval_edit, "", None, "", None, "", None),
+            ("Corrector", self.comboBox, "From", self.lineEdit, "To", self.lineEdit_2, "Steps", self.lineEdit_3),
+            ("Quadrupole", self.comboBox_2, "From", self.lineEdit_6, "To", self.lineEdit_4, "Steps", self.lineEdit_5),
+            ("BPM 1", self.comboBox_3, "BPM 2", self.comboBox_4, "Settle time (s)", self.lineEdit_7, "Samples per point", self.lineEdit_8),
+            ("Sample interval (s)", self.bba1_sample_interval_edit, "", None, "", None, "", None),
         ]
         for row, items in enumerate(rows, start=2):
             for col in range(0, len(items), 2):
@@ -943,8 +968,8 @@ class myWindow(QWidget, Ui_Form):
 
         self.bba1_bpm1_mode_combo = QComboBox(self.frame)
         self.bba1_bpm1_mode_combo.addItem("Scan average", "scan_mean")
-        self.bba1_bpm1_mode_combo.addItem("Initial K1", "initial_k1")
-        form.addWidget(self._make_field_label("BPM1 mode", self.frame), 1, 4)
+        self.bba1_bpm1_mode_combo.addItem("Initial K₁", "initial_k1")
+        form.addWidget(self._make_field_label("BPM 1 reference", self.frame), 1, 4)
         form.addWidget(self.bba1_bpm1_mode_combo, 1, 5, 1, 3)
 
         for column in (1, 3, 5, 7):
@@ -1033,7 +1058,7 @@ class myWindow(QWidget, Ui_Form):
         result_row = QGridLayout()
         result_row.setHorizontalSpacing(8)
         result_row.setVerticalSpacing(6)
-        result_row.addWidget(self._make_field_label("BPM1 Reading at Quad Center (mm)", self.frame_2), 0, 0)
+        result_row.addWidget(self._make_field_label("BPM 1 at quadrupole center (mm)", self.frame_2), 0, 0)
         self.lineEdit_10.setParent(self.frame_2)
         self.lineEdit_10.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         result_row.addWidget(self.lineEdit_10, 0, 1)
@@ -1042,7 +1067,7 @@ class myWindow(QWidget, Ui_Form):
         self.bba1_diagnostics_button.clicked.connect(self._show_bba1_diagnostics)
         result_row.addWidget(self.bba1_diagnostics_button, 0, 2)
         result_row.setColumnStretch(1, 1)
-        layout.addWidget(self._make_panel_title("Result", self.frame_2))
+        layout.addWidget(self._make_panel_title("Alignment Result", self.frame_2))
         layout.addLayout(result_row)
         self._clear_bba1_diagnostics()
 
@@ -1084,21 +1109,21 @@ class myWindow(QWidget, Ui_Form):
 
         self.bba2_sample_interval_edit = QLineEdit(self.frame_3)
         rows = [
-            ("Quad", self.comboBox_7, "From", self.lineEdit_14, "To", self.lineEdit_17, "Steps", self.lineEdit_16),
-            ("COR", self.comboBox_9, "From", self.lineEdit_11, "To", self.lineEdit_13, "Steps", self.lineEdit_12),
-            ("1st BPM", self.comboBox_8, "2nd BPM", self.comboBox_6, "BPM1 samples", self.lineEdit_22, "", None),
+            ("Quadrupole", self.comboBox_7, "From", self.lineEdit_14, "To", self.lineEdit_17, "Steps", self.lineEdit_16),
+            ("Corrector", self.comboBox_9, "From", self.lineEdit_11, "To", self.lineEdit_13, "Steps", self.lineEdit_12),
+            ("BPM 1", self.comboBox_8, "BPM 2", self.comboBox_6, "BPM 1 samples", self.lineEdit_22, "", None),
             (
-                "Settle Time (s)",
+                "Settle time (s)",
                 self.lineEdit_15,
-                "Samples/step",
+                "Samples per point",
                 self.lineEdit_9,
-                "Sample Interval (s)",
+                "Sample interval (s)",
                 self.bba2_sample_interval_edit,
                 "",
                 None,
             ),
             (
-                "Quad Leff (m)",
+                "Quadrupole effective length, L_eff (m)",
                 self.bba2_quad_leff_edit,
                 "",
                 None,
@@ -1155,7 +1180,7 @@ class myWindow(QWidget, Ui_Form):
         model_layout.setContentsMargins(0, 0, 0, 0)
         model_layout.setSpacing(8)
 
-        model_title = QLabel("Corrector model", self.bba2_corrector_model_widget)
+        model_title = QLabel("Corrector Model", self.bba2_corrector_model_widget)
         model_title.setObjectName("panelTitle")
         model_layout.addWidget(model_title)
         self.bba2_corrector_model_summary_label = QLabel("", self.bba2_corrector_model_widget)
@@ -1164,7 +1189,7 @@ class myWindow(QWidget, Ui_Form):
         self.bba2_corrector_model_summary_label.setMinimumWidth(0)
         self.bba2_corrector_model_summary_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         model_layout.addWidget(self.bba2_corrector_model_summary_label, 1)
-        self.bba2_corrector_model_edit_button = QPushButton("Edit...", self.bba2_corrector_model_widget)
+        self.bba2_corrector_model_edit_button = QPushButton("Edit…", self.bba2_corrector_model_widget)
         self.bba2_corrector_model_edit_button.setProperty("compact", True)
         self.bba2_corrector_model_edit_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.bba2_corrector_model_edit_button.clicked.connect(self._open_bba2_corrector_model_dialog)
@@ -1237,7 +1262,7 @@ class myWindow(QWidget, Ui_Form):
         layout.addLayout(point_actions)
         self._render_bba2_scan_points_table()
 
-        layout.addWidget(self._make_panel_title("Run & Readout", self.frame_4))
+        layout.addWidget(self._make_panel_title("Run and Results", self.frame_4))
 
         controls = QHBoxLayout()
         controls.setContentsMargins(0, 0, 0, 0)
@@ -1257,9 +1282,9 @@ class myWindow(QWidget, Ui_Form):
         for widget in (self.lineEdit_19, self.bba2_model_r12_edit, self.lineEdit_18):
             widget.setParent(self.frame_4)
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        r12_results.addWidget(self._make_field_label("Measured R12 (m)", self.frame_4), 0, 0)
+        r12_results.addWidget(self._make_field_label("Measured R₁₂ (m)", self.frame_4), 0, 0)
         r12_results.addWidget(self.lineEdit_19, 0, 1)
-        r12_results.addWidget(self._make_field_label("Model R12 (m)", self.frame_4), 0, 2)
+        r12_results.addWidget(self._make_field_label("Model R₁₂ (m)", self.frame_4), 0, 2)
         r12_results.addWidget(self.bba2_model_r12_edit, 0, 3)
         r12_results.setColumnStretch(1, 1)
         r12_results.setColumnStretch(3, 1)
@@ -1268,7 +1293,7 @@ class myWindow(QWidget, Ui_Form):
         bpm_readout = QGridLayout()
         bpm_readout.setHorizontalSpacing(8)
         bpm_readout.setVerticalSpacing(6)
-        bpm_readout.addWidget(self._make_field_label("BPM1 Reading at Quad Center (mm)", self.frame_4), 0, 0)
+        bpm_readout.addWidget(self._make_field_label("BPM 1 at quadrupole center (mm)", self.frame_4), 0, 0)
         bpm_readout.addWidget(self.lineEdit_18, 0, 1)
         bpm_readout.setColumnStretch(1, 1)
         layout.addLayout(bpm_readout)
@@ -1333,18 +1358,18 @@ class myWindow(QWidget, Ui_Form):
         widget.canvas.draw()
 
     def _draw_placeholder_plots(self):
-        self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-1 scan points")
-        self._draw_placeholder(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL, "Waiting for BBA-1 fit")
-        self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-2 quad scan")
-        self._draw_placeholder(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)", "Waiting for BBA-2 corrector scan")
+        self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-1 scan points")
+        self._draw_placeholder(self.widget_2, BPM1_POSITION_LABEL, BBA1_SLOPE_LABEL, "Waiting for BBA-1 fit")
+        self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-2 quadrupole scan")
+        self._draw_placeholder(self.widget_4, CORRECTOR_KICK_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-2 corrector scan")
 
     def _restyle_current_plots(self):
         palette = self._palette()
         plot_specs = (
-            (self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)"),
-            (self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL),
-            (self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)"),
-            (self.widget_4, "corrector kick (mrad)", "BPM2 (mm)"),
+            (self.widget, BBA1_QUAD_X_LABEL, BPM2_POSITION_LABEL),
+            (self.widget_2, BPM1_POSITION_LABEL, BBA1_SLOPE_LABEL),
+            (self.widget_3, BBA2_QUAD_X_LABEL, BPM2_POSITION_LABEL),
+            (self.widget_4, CORRECTOR_KICK_LABEL, BPM2_POSITION_LABEL),
         )
         if not any(plot.axes.lines for plot, _, _ in plot_specs):
             self._draw_placeholder_plots()
@@ -1394,14 +1419,22 @@ class myWindow(QWidget, Ui_Form):
         label = getattr(self, "bba2_corrector_model_summary_label", None)
         if label is None:
             return
+
+        def display_formula(value):
+            return (value.strip() or "—").replace("current", "I").replace("*", " × ")
+
         label.setText(
-            "E={energy} MeV | By={by} | Bx={bx} | Leff(By/Bx)={leff_by}/{leff_bx} m".format(
-                energy=self.lineEdit_20.text().strip() or "-",
-                by=self.lineEdit_23.text().strip() or "-",
-                bx=self.lineEdit_24.text().strip() or "-",
-                leff_by=self.lineEdit_25.text().strip() or "-",
-                leff_bx=self.lineEdit_26.text().strip() or "-",
+            "Energy: {energy} MeV · Bᵧ(I): {by} G · Bₓ(I): {bx} G · "
+            "L_eff,y / L_eff,x: {leff_by} / {leff_bx} m".format(
+                energy=self.lineEdit_20.text().strip() or "—",
+                by=display_formula(self.lineEdit_23.text()),
+                bx=display_formula(self.lineEdit_24.text()),
+                leff_by=self.lineEdit_25.text().strip() or "—",
+                leff_bx=self.lineEdit_26.text().strip() or "—",
             )
+        )
+        label.setToolTip(
+            "The summary uses I for current. Formula edit fields retain the parser variable 'current'."
         )
 
     def _model_backend_status_text(self):
@@ -1412,7 +1445,7 @@ class myWindow(QWidget, Ui_Form):
 
     def _model_backend_status_tooltip(self):
         if self._model_backend_available:
-            return "Model backend is available for optional BBA-2 Model R12 calculation."
+            return "Model backend is available for the optional BBA-2 model R₁₂ calculation."
         return f"Model backend unavailable: {self._model_backend_error}"
 
     def _reset_bba2_model_r12_readout(self):
@@ -1421,7 +1454,7 @@ class myWindow(QWidget, Ui_Form):
         self.bba2_model_r12_edit.setText("")
         if self._model_backend_available:
             self.bba2_model_r12_edit.setToolTip(
-                "BBA-2 Model R12 is calculated after the corrector scan."
+                "BBA-2 model R₁₂ is calculated after the corrector scan."
             )
         else:
             self.bba2_model_r12_edit.setToolTip(self._model_backend_status_tooltip())
@@ -1444,21 +1477,21 @@ class myWindow(QWidget, Ui_Form):
             "leff_bx": QLineEdit(self.lineEdit_26.text(), dialog),
         }
 
-        grid.addWidget(self._make_field_label("Energy@COR (MeV)", dialog), 0, 0)
+        grid.addWidget(self._make_field_label("Beam energy at corrector (MeV)", dialog), 0, 0)
         grid.addWidget(fields["energy"], 0, 1, 1, 3)
-        x_title = QLabel("X Plane", dialog)
+        x_title = QLabel("Horizontal Plane", dialog)
         x_title.setObjectName("panelTitle")
         grid.addWidget(x_title, 1, 0, 1, 4)
-        grid.addWidget(self._make_field_label("By formula (Gauss)", dialog), 2, 0)
+        grid.addWidget(self._make_field_label("Vertical field relation, Bᵧ(I) (G)", dialog), 2, 0)
         grid.addWidget(fields["by"], 2, 1)
-        grid.addWidget(self._make_field_label("Leff By (m)", dialog), 2, 2)
+        grid.addWidget(self._make_field_label("Effective length, L_eff,y (m)", dialog), 2, 2)
         grid.addWidget(fields["leff_by"], 2, 3)
-        y_title = QLabel("Y Plane", dialog)
+        y_title = QLabel("Vertical Plane", dialog)
         y_title.setObjectName("panelTitle")
         grid.addWidget(y_title, 3, 0, 1, 4)
-        grid.addWidget(self._make_field_label("Bx formula (Gauss)", dialog), 4, 0)
+        grid.addWidget(self._make_field_label("Horizontal field relation, Bₓ(I) (G)", dialog), 4, 0)
         grid.addWidget(fields["bx"], 4, 1)
-        grid.addWidget(self._make_field_label("Leff Bx (m)", dialog), 4, 2)
+        grid.addWidget(self._make_field_label("Effective length, L_eff,x (m)", dialog), 4, 2)
         grid.addWidget(fields["leff_bx"], 4, 3)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(3, 1)
@@ -1539,6 +1572,10 @@ class myWindow(QWidget, Ui_Form):
         self._bba1_quad_mode = preset.scan.quad_mode or "absolute"
         self._bba1_corr_unit = preset.scan.corr_unit or ""
         self._bba1_quad_unit = preset.scan.quad_unit or ""
+        if hasattr(self, "bba1_scan_points_table"):
+            unit = _display_unit(self._bba1_corr_unit)
+            heading = f"Corrector ({unit})" if unit else "Corrector"
+            self.bba1_scan_points_table.horizontalHeaderItem(1).setText(heading)
         self._refresh_scan_mode_labels()
         self._set_combo_current_plane(self.comboBox_5, preset.plane)
         self._refresh_corrector_combo(
@@ -1840,7 +1877,7 @@ class myWindow(QWidget, Ui_Form):
         layout.setContentsMargins(16, 16, 16, 12)
         layout.setSpacing(10)
 
-        layout.addWidget(self._make_panel_title("Inner Diagnostics", dialog))
+        layout.addWidget(self._make_panel_title("Inner-Fit Diagnostics", dialog))
         inner_label = QLabel(self.bba1_inner_diagnostics_text, dialog)
         inner_label.setProperty("role", "field")
         inner_label.setWordWrap(True)
@@ -1950,7 +1987,7 @@ class myWindow(QWidget, Ui_Form):
             raise RuntimeError(f"{raw_path} not found.")
         data = np.loadtxt(raw_path, ndmin=2)
         if data.ndim != 2 or data.shape[1] < 4:
-            raise RuntimeError(f"{raw_path.name} must contain corrector, K1, BPM1 and BPM2 columns.")
+            raise RuntimeError(f"{raw_path.name} must contain corrector, K₁, BPM 1, and BPM 2 columns.")
         data[:, 1] *= bba1_saved_k1_sign(raw_path)
         self._clear_bba1_scan_points()
         self.bba1_loaded_source_dir = raw_path.parent
@@ -2045,7 +2082,7 @@ class myWindow(QWidget, Ui_Form):
             else:
                 excluded.append(point)
 
-        self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-1 scan points")
+        self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-1 scan points")
         palette = self._palette()
         if active:
             data = np.asarray(active, dtype=float)
@@ -2094,7 +2131,7 @@ class myWindow(QWidget, Ui_Form):
         if point_type == "bpm1":
             return (values[0] * 1e3,)
         if point_type == "corrector":
-            return (values[0], values[1], values[2] * 1e3)
+            return (values[0], values[1] * 1e3, values[2] * 1e3)
         raise ValueError(f"Unknown BBA-2 point type: {point_type}")
 
     def _append_bba2_scan_point(self, point_type, values, *, enabled=True, render=True):
@@ -2140,7 +2177,10 @@ class myWindow(QWidget, Ui_Form):
         if table is None:
             return
         point_type = self._current_bba2_point_type()
-        columns = BBA2_SCAN_POINT_COLUMNS[point_type]
+        columns = list(BBA2_SCAN_POINT_COLUMNS[point_type])
+        if point_type == "corrector":
+            unit = _display_unit(getattr(self, "_bba2_corr_unit", ""))
+            columns[1] = f"Corrector ({unit})" if unit else "Corrector"
         rows = self.bba2_scan_points.get(point_type, [])
 
         table.blockSignals(True)
@@ -2190,7 +2230,7 @@ class myWindow(QWidget, Ui_Form):
 
         quad_data = np.loadtxt(source_dir / "bba2_k1Lqm2.txt", ndmin=2)
         if quad_data.ndim != 2 or quad_data.shape[1] < 2:
-            raise RuntimeError("bba2_k1Lqm2.txt must contain K1Leff and BPM2 columns.")
+            raise RuntimeError("bba2_k1Lqm2.txt must contain K₁L_eff and BPM 2 columns.")
         self.bba2_scan_points["quad"] = [
             {"enabled": True, "values": (float(k1_lq), float(bpm2))}
             for k1_lq, bpm2 in quad_data[:, :2]
@@ -2204,7 +2244,7 @@ class myWindow(QWidget, Ui_Form):
 
         corrector_data = np.loadtxt(source_dir / "bba2_thetam2.txt", ndmin=2)
         if corrector_data.ndim != 2 or corrector_data.shape[1] < 2:
-            raise RuntimeError("bba2_thetam2.txt must contain theta and BPM2 columns.")
+            raise RuntimeError("bba2_thetam2.txt must contain θ and BPM 2 columns.")
         corr_values = None
         try:
             corr_steps = int(scan.get("corr_steps") or 0)
@@ -2281,12 +2321,12 @@ class myWindow(QWidget, Ui_Form):
     def _redraw_bba2_scan_points_from_table(self, point_type=None):
         point_type = point_type or self._current_bba2_point_type()
         if point_type == "quad":
-            self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-2 quad scan")
+            self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-2 quadrupole scan")
             axes = self.widget_3.axes
             x_index, y_index = 0, 1
             canvas = self.widget_3.canvas
         elif point_type == "corrector":
-            self._draw_placeholder(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)", "Waiting for BBA-2 corrector scan")
+            self._draw_placeholder(self.widget_4, CORRECTOR_KICK_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-2 corrector scan")
             axes = self.widget_4.axes
             x_index, y_index = 1, 2
             canvas = self.widget_4.canvas
@@ -2475,8 +2515,8 @@ class myWindow(QWidget, Ui_Form):
                     setattr(params, name, value)
 
             for label, unit, target in (
-                ("COR", params.corr_unit, params.corr_target),
-                ("Quad", params.quad_unit, params.quad_target),
+                ("Corrector", params.corr_unit, params.corr_target),
+                ("Quadrupole", params.quad_unit, params.quad_target),
             ):
                 if unit and target.unit and unit != target.unit:
                     raise ValueError(f"{label} scan unit {unit!r} does not match {target.unit!r}.")
@@ -2489,11 +2529,11 @@ class myWindow(QWidget, Ui_Form):
             if params.corr_from >= params.corr_end or params.quad_from >= params.quad_end:
                 raise ValueError("Scan From must be less than To.")
             if params.corr_steps < 2 or params.quad_steps < 2:
-                raise ValueError("BBA-1 requires at least two COR and Quad steps.")
+                raise ValueError("BBA-1 requires at least two corrector and quadrupole steps.")
 
             self._validate_positive_int(params.corr_steps, "Corrector steps")
-            self._validate_positive_int(params.quad_steps, "Quad steps")
-            self._validate_positive_int(params.samples, "Samples per step")
+            self._validate_positive_int(params.quad_steps, "Quadrupole steps")
+            self._validate_positive_int(params.samples, "Samples per point")
             self._validate_non_negative_float(params.settle_time, "Settle time")
             self._validate_non_negative_float(params.sample_interval, "Sample interval")
             return params
@@ -2551,16 +2591,16 @@ class myWindow(QWidget, Ui_Form):
             params.corr_unit = self._bba2_corr_unit
             params.quad_unit = self._bba2_quad_unit
 
-            self._validate_positive_int(params.quad_steps, "Quad steps")
+            self._validate_positive_int(params.quad_steps, "Quadrupole steps")
             self._validate_positive_int(params.corr_steps, "Corrector steps")
-            self._validate_positive_int(params.samples, "Samples per step")
-            self._validate_positive_int(params.bpm1_samples, "BPM1 sample count")
+            self._validate_positive_int(params.samples, "Samples per point")
+            self._validate_positive_int(params.bpm1_samples, "BPM 1 sample count")
             self._validate_non_negative_float(params.settle_time, "Settle time")
             self._validate_non_negative_float(params.sample_interval, "Sample interval")
             if params.energy_mev <= 0:
                 raise ValueError("Energy must be positive.")
             if params.quad_leff <= 0:
-                raise ValueError("BBA-2 quad effective length must be positive.")
+                raise ValueError("BBA-2 quadrupole effective length must be positive.")
             return params
         except ValueError as exc:
             self._warn(str(exc))
@@ -2666,13 +2706,13 @@ class myWindow(QWidget, Ui_Form):
             bpm1_points = self._enabled_bba2_scan_points("bpm1")
             corrector_points = self._enabled_bba2_scan_points("corrector")
             if len(quad_points) < 2:
-                self._warn("At least 2 active BBA-2 quad scan points are required for recalculation.")
+                self._warn("At least 2 active BBA-2 quadrupole scan points are required for recalculation.")
                 return
             if len(bpm1_points) < 1:
-                self._warn("At least 1 active BBA-2 BPM1 sample is required for recalculation.")
+                self._warn("At least 1 active BBA-2 BPM 1 sample is required for recalculation.")
                 return
             if len(corrector_points) < 2:
-                self._warn("At least 2 active BBA-2 COR scan points are required for recalculation.")
+                self._warn("At least 2 active BBA-2 corrector scan points are required for recalculation.")
                 return
             params.bba2_recal_quad_points = [(k1_lq, bpm2) for k1_lq, bpm2 in quad_points]
             params.bba2_recal_bpm1_points = [bpm1 for (bpm1,) in bpm1_points]
@@ -2723,8 +2763,8 @@ class myWindow(QWidget, Ui_Form):
             return
 
         if "clear" in data:
-            self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-1 scan points")
-            self._draw_placeholder(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL, "Waiting for BBA-1 fit")
+            self._draw_placeholder(self.widget, BBA1_QUAD_X_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-1 scan points")
+            self._draw_placeholder(self.widget_2, BPM1_POSITION_LABEL, BBA1_SLOPE_LABEL, "Waiting for BBA-1 fit")
             self.lineEdit_10.setText("")
             self._clear_bba1_diagnostics()
             if data.get("clear_points"):
@@ -2748,7 +2788,7 @@ class myWindow(QWidget, Ui_Form):
         if show_type == "k1m2":
             if not self.widget.axes.lines:
                 self.widget.axes.clear()
-                self._style_axes(self.widget, BBA1_QUAD_X_LABEL, "BPM2 (mm)")
+                self._style_axes(self.widget, BBA1_QUAD_X_LABEL, BPM2_POSITION_LABEL)
             self.widget.axes.plot(
                 data["quad_k1"],
                 np.asarray(data["m2"]) * 1e3,
@@ -2765,7 +2805,7 @@ class myWindow(QWidget, Ui_Form):
             slope = data["slope_k1"]
             mm1 = data["mm1"]
             self.widget_2.axes.clear()
-            self._style_axes(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL)
+            self._style_axes(self.widget_2, BPM1_POSITION_LABEL, BBA1_SLOPE_LABEL)
             self.widget_2.axes.plot(
                 np.asarray(mm1) * 1e3,
                 np.ones(len(mm1)) * slope,
@@ -2777,7 +2817,7 @@ class myWindow(QWidget, Ui_Form):
             self.widget_2.canvas.draw()
         elif show_type == "m1S":
             self.widget_2.axes.clear()
-            self._style_axes(self.widget_2, "BPM1 (mm)", BBA1_SLOPE_LABEL)
+            self._style_axes(self.widget_2, BPM1_POSITION_LABEL, BBA1_SLOPE_LABEL)
             m1_mm = np.asarray(data["m1"]) * 1e3
             self.widget_2.axes.plot(m1_mm, data["slope_k1"], marker="o", linestyle="None", color=palette["plot_point"])
             if len(data["yvals"]) == len(m1_mm):
@@ -2795,8 +2835,8 @@ class myWindow(QWidget, Ui_Form):
             if summary:
                 self.bba1_inner_diagnostics_text = (
                     f"Inner fits: {summary.get('good', 0)} good · "
-                    f"{summary.get('weak', 0)} weak · "
-                    f"{summary.get('review', 0)} review · "
+                    f"{summary.get('weak', 0)} weak signal · "
+                    f"{summary.get('review', 0)} need review · "
                     f"{summary.get('invalid', 0)} invalid"
                 )
             else:
@@ -2807,7 +2847,7 @@ class myWindow(QWidget, Ui_Form):
                 self.bba1_inner_diagnostics_text + "\n" + self.bba1_scan_guidance_text
             )
             self.lineEdit_10.setToolTip(
-                "1σ statistical uncertainty. " + "; ".join(quality.get("reasons", [])) +
+                "Approximate 1σ fit uncertainty. " + "; ".join(quality.get("reasons", [])) +
                 ("\nGuidance: " + " ".join(guidance) if guidance else "")
             )
         self._refresh_status()
@@ -2818,8 +2858,8 @@ class myWindow(QWidget, Ui_Form):
             return
 
         if "clear" in data:
-            self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)", "Waiting for BBA-2 quad scan")
-            self._draw_placeholder(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)", "Waiting for BBA-2 corrector scan")
+            self._draw_placeholder(self.widget_3, BBA2_QUAD_X_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-2 quadrupole scan")
+            self._draw_placeholder(self.widget_4, CORRECTOR_KICK_LABEL, BPM2_POSITION_LABEL, "Waiting for BBA-2 corrector scan")
             self.lineEdit_18.setText("")
             self.lineEdit_19.setText("")
             self.lineEdit_19.setToolTip("")
@@ -2839,7 +2879,7 @@ class myWindow(QWidget, Ui_Form):
                 self._update_bba2_scan_points_summary()
             if not self.widget_3.axes.lines:
                 self.widget_3.axes.clear()
-                self._style_axes(self.widget_3, BBA2_QUAD_X_LABEL, "BPM2 (mm)")
+                self._style_axes(self.widget_3, BBA2_QUAD_X_LABEL, BPM2_POSITION_LABEL)
             self.widget_3.axes.plot(
                 data["K1Lq"],
                 np.asarray(data["m2"]) * 1e3,
@@ -2872,7 +2912,7 @@ class myWindow(QWidget, Ui_Form):
                 self._update_bba2_scan_points_summary()
             if not self.widget_4.axes.lines:
                 self.widget_4.axes.clear()
-                self._style_axes(self.widget_4, "corrector kick (mrad)", "BPM2 (mm)")
+                self._style_axes(self.widget_4, CORRECTOR_KICK_LABEL, BPM2_POSITION_LABEL)
             self.widget_4.axes.plot(
                 np.asarray(data["theta"]) * 1e3,
                 np.asarray(data["m2"]) * 1e3,
@@ -2891,16 +2931,16 @@ class myWindow(QWidget, Ui_Form):
             self.widget_4.canvas.draw()
             self.lineEdit_21.setText(str(data["m1_ave"] * 1e3))
             self.lineEdit_19.setText(str(data["R12"]))
-            self.lineEdit_19.setToolTip(f"Measured R12: {data['R12']:.6g} m")
+            self.lineEdit_19.setToolTip(f"Measured R₁₂: {data['R12']:.6g} m")
             model_r12 = data.get("model_R12")
             if model_r12 is not None:
                 self.bba2_model_r12_edit.setText(str(model_r12))
-                self.bba2_model_r12_edit.setToolTip(f"Model R12: {model_r12:.6g} m")
+                self.bba2_model_r12_edit.setToolTip(f"Model R₁₂: {model_r12:.6g} m")
             else:
                 self._reset_bba2_model_r12_readout()
             model_r12_error = data.get("model_R12_error")
             if model_r12_error:
-                self.bba2_model_r12_edit.setToolTip(f"Model R12 unavailable: {model_r12_error}")
+                self.bba2_model_r12_edit.setToolTip(f"Model R₁₂ unavailable: {model_r12_error}")
             self.lineEdit_18.setText(str(data["b1q1"] * 1e3))
         self._refresh_status()
 
@@ -3138,7 +3178,7 @@ class BBAScanThread(BBABaseThread):
                     self._emit({"error": self.outcome["error"]})
 
     def _recalculate_from_quad_scan(self):
-        quad_scan_path = self._require_path(self.params.bba1_quad_scan_path, "BBA-1 quad scan data")
+        quad_scan_path = self._require_path(self.params.bba1_quad_scan_path, "BBA-1 quadrupole scan data")
         if not quad_scan_path.exists():
             return None
 
@@ -3151,7 +3191,7 @@ class BBAScanThread(BBABaseThread):
     def _recalculate_from_points(self, points):
         data = np.asarray(points, dtype=float)
         if data.ndim != 2 or data.shape[1] < 4:
-            raise RuntimeError("BBA-1 scan points must contain corrector, K1, BPM1 and BPM2 columns.")
+            raise RuntimeError("BBA-1 scan points must contain corrector, K₁, BPM 1, and BPM 2 columns.")
         kick_values = np.asarray(data[:, 0], dtype=float)
         quad_k1_values = np.asarray(data[:, 1], dtype=float)
         bpm1_values = np.asarray(data[:, 2], dtype=float)
@@ -3180,7 +3220,7 @@ class BBAScanThread(BBABaseThread):
                 bpm2_means.append(float(np.mean(group_bpm2[quad_mask])))
 
             if len(quad_means) < 2:
-                raise RuntimeError("Need at least two K1 points per corrector setting to recalculate BBA-1.")
+                raise RuntimeError("Need at least two K₁ points per corrector setting to recalculate BBA-1.")
 
             quad_means = np.asarray(quad_means, dtype=float)
             bpm2_means = np.asarray(bpm2_means, dtype=float)
@@ -3209,7 +3249,7 @@ class BBAScanThread(BBABaseThread):
             if hasattr(self, "_emit_progress"):
                 self._emit_progress(
                     10 + round(80 * kick_index / len(ordered_kicks)),
-                    f"Recalculating COR {kick_index}/{len(ordered_kicks)}",
+                    f"Recalculating corrector {kick_index}/{len(ordered_kicks)}",
                 )
 
         return np.asarray(m1_results, dtype=float), np.asarray(slope_results, dtype=float)
@@ -3219,7 +3259,7 @@ class BBAScanThread(BBABaseThread):
         if mode == "scan_mean":
             return np.asarray(scan_samples, dtype=float)
         if mode != "initial_k1":
-            raise RuntimeError(f"Unknown BBA-1 BPM1 reference mode: {mode}")
+            raise RuntimeError(f"Unknown BBA-1 BPM 1 reference mode: {mode}")
         key = float(kick)
         if key not in self.bpm1_reference_samples:
             # Legacy text scans rounded setpoints to %.6e, while JSON kept
@@ -3229,12 +3269,12 @@ class BBAScanThread(BBABaseThread):
                 if float(format(value, ".6e")) == key
             ]
             if len(matches) > 1:
-                raise RuntimeError(f"Ambiguous initial-K1 BPM1 reference for corrector {kick}.")
+                raise RuntimeError(f"Ambiguous initial-K₁ BPM 1 reference for corrector {kick}.")
             if matches:
                 key = matches[0]
         samples = np.asarray(self.bpm1_reference_samples.get(key, []), dtype=float)
         if samples.size == 0 or not np.all(np.isfinite(samples)):
-            raise RuntimeError(f"Missing or invalid initial-K1 BPM1 samples for corrector {kick}.")
+            raise RuntimeError(f"Missing or invalid initial-K₁ BPM 1 samples for corrector {kick}.")
         return samples
 
     @staticmethod
@@ -3380,7 +3420,7 @@ class BBAScanThread(BBABaseThread):
                             return None
                         reference_samples.append(self._read_bpm_m(bpm1, self.params.bpm1PV))
                         report_point(
-                            f"COR {kick_index}/{len(kick_values)} · BPM1 reference "
+                            f"Corrector {kick_index}/{len(kick_values)} · BPM 1 reference "
                             f"{sample_index + 1}/{self.params.samples}"
                         )
                     self.bpm1_reference_samples[float(kick)] = reference_samples
@@ -3421,7 +3461,7 @@ class BBAScanThread(BBABaseThread):
                             "m2": bpm2_value,
                         })
                         report_point(
-                            f"COR {kick_index}/{len(kick_values)} · K1 {k1_index}/{len(k1_values)} · "
+                            f"Corrector {kick_index}/{len(kick_values)} · K₁ {k1_index}/{len(k1_values)} · "
                             f"sample {sample_index + 1}/{self.params.samples}"
                         )
 
@@ -3520,9 +3560,9 @@ class BBAScanThreadBBA2(BBABaseThread):
                 else:
                     quad_scan_path = self._require_path(
                         self.params.bba2_quad_scan_path,
-                        "BBA-2 quad scan data",
+                        "BBA-2 quadrupole scan data",
                     )
-                    k1_lq, quad_m2 = self._load_two_column(quad_scan_path, "BBA-2 quad scan data")
+                    k1_lq, quad_m2 = self._load_two_column(quad_scan_path, "BBA-2 quadrupole scan data")
                 self._emit({"show": "k1m2", "K1Lq": k1_lq, "m2": quad_m2})
                 if not self._sleep_or_stop(1):
                     return
@@ -3544,8 +3584,8 @@ class BBAScanThreadBBA2(BBABaseThread):
                 if self.params.bba2_recal_bpm1_points is not None:
                     bpm1_values = np.asarray(self.params.bba2_recal_bpm1_points, dtype=float)
                 else:
-                    bpm1_path = self._require_path(self.params.bba2_bpm1_path, "BBA-2 BPM1 data")
-                    bpm1_values = self._load_one_column(bpm1_path, "BBA-2 BPM1 data")
+                    bpm1_path = self._require_path(self.params.bba2_bpm1_path, "BBA-2 BPM 1 data")
+                    bpm1_values = self._load_one_column(bpm1_path, "BBA-2 BPM 1 data")
             else:
                 bpm1_values = baseline_bpm1_values
             self.m1_ave = float(np.mean(bpm1_values))
@@ -3846,7 +3886,7 @@ class BBAScanThreadBBA2(BBABaseThread):
         coeff = np.polyfit(theta_mean, m2_mean, deg=1)
         self.R12 = float(coeff[0])
         if np.isclose(self.R12, 0.0):
-            raise RuntimeError("BBA-2 corrector fit slope is zero; cannot compute BPM1 reading at quad center.")
+            raise RuntimeError("BBA-2 corrector fit slope is zero; cannot compute the BPM 1 reading at the quadrupole center.")
         if self.S is None or self.m1_ave is None:
             raise RuntimeError("BBA-2 fit inputs are incomplete.")
 

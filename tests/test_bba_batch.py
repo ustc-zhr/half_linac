@@ -181,7 +181,7 @@ class BbaBatchTests(unittest.TestCase):
             record = dict(status="success", offset_m=quality["offset_m"], fit_quality=quality, archive="/tmp/bba-review-test")
             dialog.selected_rows = [0]
             dialog._progress(0, record)
-            self.assertEqual(dialog.table.item(0, 8).text(), "Review")
+            self.assertEqual(dialog.table.item(0, 8).text(), "Needs review")
             self.assertIn("Guidance:", dialog.table.item(0, 8).toolTip())
             self.assertIn("±", dialog.table.item(0, 6).text())
             dialog._select_review()
@@ -283,7 +283,7 @@ class BbaBatchTests(unittest.TestCase):
                     time.sleep(0.001)
                 self.assertIsNone(window.scan)
                 self.assertEqual(dialog.worker.status, "success")
-                self.assertEqual(dialog.table.item(0, 5).text(), "success")
+                self.assertEqual(dialog.table.item(0, 5).text(), "Completed")
                 self.assertTrue(window.tabWidget.isEnabled())
                 dialog.close()
         finally:

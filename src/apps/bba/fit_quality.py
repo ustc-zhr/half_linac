@@ -4,7 +4,7 @@ import numpy as np
 
 
 def analyze_bba1_inner_fit(k1_values, bpm2_samples):
-    """Diagnose one BPM2-vs-K1 fit without changing the production fit."""
+    """Diagnose one BPM 2-versus-K₁ fit without changing the production fit."""
     result = {
         "slope": None, "slope_sigma": None, "slope_significance": None,
         "r_squared": None, "residual_rms_m": None, "noise_mean_m": None,
@@ -18,14 +18,14 @@ def analyze_bba1_inner_fit(k1_values, bpm2_samples):
         result["reasons"] = ["Inner fit data is malformed."]
         return result
     if len(x) != len(groups) or len(x) < 3 or any(values.size == 0 for values in groups):
-        result["reasons"] = ["At least three K1 points are required."]
+        result["reasons"] = ["At least three K₁ points are required."]
         return result
     if not np.all(np.isfinite(x)) or any(not np.all(np.isfinite(values)) for values in groups):
         result["reasons"] = ["Inner fit data contains non-finite values."]
         return result
     means = np.asarray([np.mean(values) for values in groups], dtype=float)
     if np.ptp(x) <= np.finfo(float).eps * max(np.max(np.abs(x)), 1.0):
-        result["reasons"] = ["K1 scan has no usable span."]
+        result["reasons"] = ["K₁ scan has no usable span."]
         return result
     coeff = np.polyfit(x, means, deg=1)
     slope = float(coeff[0])
@@ -105,11 +105,11 @@ def build_bba1_scan_guidance(fit_quality):
     review = summary.get("review", 0)
     usable_endpoints = [item.get("quality") == "good" for item in inner_fits]
     if weak >= max(1, total - 1):
-        guidance.append("Most inner signals are weak; consider widening the K1 range or increasing repeated samples.")
+        guidance.append("Most inner signals are weak; consider widening the K₁ range or increasing repeated samples.")
     elif weak and usable_endpoints and all(usable_endpoints[edge] for edge in (0, -1)):
-        guidance.append("Weak inner points are concentrated near the response crossing; this may be expected and is not by itself a K1 failure.")
+        guidance.append("Weak inner points are concentrated near the response crossing; this may be expected and is not by itself a K₁ failure.")
     if review:
-        guidance.append("Reviewed inner fits have excess residuals; inspect K1 nonlinearity or outliers, and consider narrowing the K1 range or increasing settling time.")
+        guidance.append("Reviewed inner fits have excess residuals; inspect K₁ nonlinearity or outliers, and consider narrowing the K₁ range or increasing settling time.")
 
     positions = np.asarray(fit_quality.get("positions_m", []), dtype=float)
     offset = fit_quality.get("offset_m")
@@ -127,11 +127,11 @@ def build_bba1_scan_guidance(fit_quality):
                 if abs(coefficients[0]) > np.finfo(float).eps:
                     crossing = float(-coefficients[1] / coefficients[0])
                     if crossing < np.min(correctors):
-                        direction = "lower COR setpoints"
+                        direction = "lower corrector setpoints"
                     elif crossing > np.max(correctors):
-                        direction = "higher COR setpoints"
-            target = direction or ("lower BPM1 positions" if offset < low else "higher BPM1 positions")
-            guidance.append(f"The response crossing is near or outside the scan edge; extend the COR range toward {target}.")
+                        direction = "higher corrector setpoints"
+            target = direction or ("lower BPM 1 positions" if offset < low else "higher BPM 1 positions")
+            guidance.append(f"The response crossing is near or outside the scan edge; extend the corrector range toward {target}.")
     if not guidance:
         guidance.append("No scan range change is indicated by the current diagnostics.")
     return guidance
@@ -152,7 +152,7 @@ def fit_bba1_center(positions, responses):
     result.update(positions_m=positions.tolist(), responses=responses.tolist())
     span = float(np.ptp(positions))
     if span <= np.finfo(float).eps * max(float(np.max(np.abs(positions))), np.finfo(float).tiny):
-        result["reasons"] = ["BPM1 scan has no usable span."]
+        result["reasons"] = ["BPM 1 scan has no usable span."]
         return result
     center = float(np.mean(positions))
     design = np.column_stack(((positions - center) / span, np.ones(len(positions))))
@@ -189,8 +189,8 @@ def fit_bba1_center(positions, responses):
     if result["r_squared"] is None or result["r_squared"] < 0.95:
         reasons.append("R² < 0.95.")
     if sigma > 0.1 * span:
-        reasons.append("Center 1σ exceeds 10% of the BPM1 scan span.")
+        reasons.append("Center 1σ exceeds 10% of the BPM 1 scan span.")
     if not float(np.min(positions)) <= offset <= float(np.max(positions)):
-        reasons.append("Center is outside the scanned BPM1 range (extrapolation).")
+        reasons.append("Center is outside the scanned BPM 1 range (extrapolation).")
     result.update(quality="review" if reasons else "good", reasons=reasons)
     return result

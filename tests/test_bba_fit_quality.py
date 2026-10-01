@@ -60,21 +60,21 @@ class BbaFitQualityTests(unittest.TestCase):
             {"corrector": 0.0, "slope": 0.0, "quality": "weak"},
             {"corrector": 1.0, "slope": 0.1, "quality": "good"},
         ])
-        self.assertIn("widening the K1 range", " ".join(build_bba1_scan_guidance(weak)))
+        self.assertIn("widening the K₁ range", " ".join(build_bba1_scan_guidance(weak)))
 
         review = dict(base, inner_fits=[
             {"corrector": -1.0, "slope": -1.0, "quality": "review"},
             {"corrector": 0.0, "slope": 0.0, "quality": "good"},
             {"corrector": 1.0, "slope": 1.0, "quality": "good"},
         ])
-        self.assertIn("K1 nonlinearity", " ".join(build_bba1_scan_guidance(review)))
+        self.assertIn("K₁ nonlinearity", " ".join(build_bba1_scan_guidance(review)))
 
         outside = dict(base, offset_m=-0.002, inner_fits=[
             {"corrector": 0.0, "slope": 1.0, "quality": "good"},
             {"corrector": 1.0, "slope": 2.0, "quality": "good"},
             {"corrector": 2.0, "slope": 3.0, "quality": "good"},
         ])
-        self.assertIn("lower COR setpoints", " ".join(build_bba1_scan_guidance(outside)))
+        self.assertIn("lower corrector setpoints", " ".join(build_bba1_scan_guidance(outside)))
 
     def test_exact_center_and_covariance_uncertainty(self):
         positions = np.arange(-2, 3) * 0.001
