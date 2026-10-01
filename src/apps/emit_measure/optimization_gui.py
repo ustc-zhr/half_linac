@@ -19,8 +19,14 @@ from PyQt5.QtWidgets import (
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
-from half_linac.src.shared.machine_profile import LimitRange, resolve_channel, resolve_app_runtime_paths
-from .optimization import OptimizationConfig, OptimizationVariable, OptimizationSession, EpicsVariableGroup
+from half_linac.src.shared.machine_profile import (
+    LimitRange, load_app_context, resolve_channel, resolve_app_runtime_paths,
+    resolve_ct_monitor_workflow,
+)
+from .optimization import (
+    ChargeConstraint, OptimizationConfig, OptimizationVariable, OptimizationSession,
+    EpicsVariableGroup,
+)
 from .optimization_diagnostics import (
     load_measurement_diagnostics,
     load_optimization_run,
@@ -105,36 +111,52 @@ def _format_number(value, precision=4):
     return f'{number:.{precision}g}' if math.isfinite(number) else '—'
 
 
-def _record_cells(record):
+def _record_cells(record, *, include_charge=False):
     values = record.get('values', {})
     if record.get('valid'):
-        state = 'Valid' if record.get('feasible') else 'Other-plane limit exceeded'
+        failures = record.get('constraint_failures', ())
+        if len(failures) > 1:
+            state = 'Multiple constraints exceeded'
+        elif not record.get('feasible') and 'charge_limit' in failures:
+            state = 'ICT01 charge limit exceeded'
+        else:
+            state = 'Valid' if record.get('feasible') else 'Other-plane limit exceeded'
     else:
         state = record.get('error', 'Invalid' if record.get('finished_at') else 'Measuring')
     currents = record.get('currents', {})
     current_text = ' · '.join(f'{name}={_format_number(value, 5)}' for name, value in currents.items())
-    return [
+    cells = [
         f"{record.get('index', '—')} / {record.get('stage', '—')}",
         current_text or '—',
         _format_number(values.get('x')),
         _format_number(values.get('y')),
-        str(state),
-        Path(record.get('archive', '')).name or '—',
     ]
+    if include_charge:
+        cells.append(_format_number(record.get('charge')))
+    cells.extend((str(state), Path(record.get('archive', '')).name or '—'))
+    return cells
 
 
 def _populate_record_table(table, records):
+    include_charge = any('charge' in record for record in records)
+    headers = ['Scan / Stage', 'Currents (A)', 'εnx', 'εny']
+    if include_charge:
+        headers.append('ICT01 (nC)')
+    headers.extend(['Status', 'Archive'])
+    table.setColumnCount(len(headers))
+    table.setHorizontalHeaderLabels(headers)
     table.setRowCount(len(records))
     for row, record in enumerate(records):
-        for column, value in enumerate(_record_cells(record)):
+        for column, value in enumerate(_record_cells(record, include_charge=include_charge)):
             item = QTableWidgetItem(value)
-            if column == 5:
+            if column == len(headers) - 1:
                 item.setToolTip(str(record.get('archive', '')))
-            elif column == 4 and record.get('finished_at'):
+            elif column == len(headers) - 2 and record.get('finished_at'):
                 item.setToolTip('Double-click this row to inspect the archived fit diagnostics.')
             else:
                 item.setToolTip(value)
-            if column in (1, 2, 3):
+            numeric_columns = (1, 2, 3, 4) if include_charge else (1, 2, 3)
+            if column in numeric_columns:
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             table.setItem(row, column, item)
 
@@ -270,7 +292,7 @@ class OptimizationRunReviewDialog(QDialog):
         self.payload, self.run_dir = payload, Path(run_dir)
         self.records = list(payload.get('records', ()))
         self.setWindowTitle(f'Optimization Run Review · {self.run_dir.name}')
-        self.resize(980, 620)
+        self.resize(980, 780)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
         heading = QLabel('Emittance Optimization Run', self)
@@ -282,6 +304,42 @@ class OptimizationRunReviewDialog(QDialog):
         label.setWordWrap(True)
         label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(label)
+        self.figure = Figure(figsize=(8, 3), tight_layout=True)
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        self.axes = self.figure.add_subplot(111)
+        self.charge_axes = None
+        valid = [record for record in self.records if record.get('valid')]
+        if valid:
+            for plane in ('x', 'y'):
+                self.axes.plot([record['index'] for record in valid],
+                               [record['values'][plane] for record in valid],
+                               '.-', label=plane.upper())
+            self.axes.legend(loc='upper right')
+        else:
+            self.axes.text(.5, .5, 'No valid measurements in this archive',
+                           ha='center', va='center', transform=self.axes.transAxes)
+            self.axes.set_xticks([])
+            self.axes.set_yticks([])
+        self.axes.set_xlabel('Measurement')
+        self.axes.set_ylabel('εn (mm·mrad)')
+        self.axes.grid(axis='y', alpha=.25)
+        charged = [record for record in valid if record.get('charge') is not None]
+        self.charge_axes = None
+        if charged:
+            self.charge_axes = self.axes.twinx()
+            self.charge_axes.plot(
+                [record['index'] for record in charged],
+                [record['charge'] for record in charged], '.-', color='#f0b45a', label='ICT01',
+            )
+            constraint = payload.get('charge_constraint', {})
+            if constraint.get('minimum') is not None:
+                self.charge_axes.axhline(constraint['minimum'], color='#f0b45a', linestyle='--',
+                                         linewidth=1, label='ICT01 minimum')
+            self.charge_axes.set_ylabel(f"ICT01 ({constraint.get('unit', 'nC')})")
+            lines = self.axes.lines + self.charge_axes.lines
+            self.axes.legend(lines, [line.get_label() for line in lines], loc='upper right')
+        self.canvas.setMinimumHeight(220)
+        layout.addWidget(self.canvas, 1)
         self.table = QTableWidget(0, 6, self)
         self.table.setHorizontalHeaderLabels(['Scan / Stage', 'Currents (A)', 'εnx', 'εny', 'Status', 'Archive'])
         self.table.verticalHeader().hide()
@@ -354,6 +412,12 @@ class OptimizationDialog(QDialog):
             }}
             QDialog#emitOptimization QLabel {{ background: transparent; border: none; }}
             QDialog#emitOptimization QWidget#optSettings,
+            QDialog#emitOptimization QWidget#optOptionsPanel,
+            QDialog#emitOptimization QWidget#optVariablePanel,
+            QDialog#emitOptimization QWidget#optRcdsSettings,
+            QDialog#emitOptimization QWidget#optBoSettings,
+            QDialog#emitOptimization QWidget#optBoAdvanced,
+            QDialog#emitOptimization QWidget#optChargeSettings,
             QDialog#emitOptimization QWidget#optAlgorithmSettings {{ background: transparent; }}
         """)
         outer_layout = QVBoxLayout(self)
@@ -432,10 +496,10 @@ class OptimizationDialog(QDialog):
                 for column in (3, 4):
                     self.variables.item(row, column).setToolTip(f'Absolute current in A. Machine range: {limit.describe()}')
         self.variable_panel = QWidget(self.settings)
+        self.variable_panel.setObjectName('optVariablePanel')
         variable_layout = QVBoxLayout(self.variable_panel)
         variable_layout.setContentsMargins(0, 0, 0, 0)
         variable_layout.setSpacing(6)
-        variable_layout.addWidget(self.variables)
         self.read_button = QPushButton('Read Currents', self.settings)
         self.read_button.setToolTip('Read selected setpoints only. Initial values are captured again at run start.')
         self.read_button.clicked.connect(self.read_currents)
@@ -443,23 +507,53 @@ class OptimizationDialog(QDialog):
         self.budget_note.setProperty('role', 'caption')
         self.budget_note.setWordWrap(True)
         variable_actions = QHBoxLayout()
+        variable_heading = QLabel('Variables · current (A)', self.settings)
+        variable_heading.setProperty('role', 'caption')
+        variable_actions.addWidget(variable_heading)
+        variable_actions.addStretch()
         variable_actions.addWidget(self.read_button)
-        variable_actions.addWidget(self.budget_note, 1)
         variable_layout.addLayout(variable_actions)
+        variable_layout.addWidget(self.variables)
+        offset_layout = QGridLayout()
+        offset_layout.setHorizontalSpacing(10)
+        offset_layout.setVerticalSpacing(4)
+        self.lower_offset = QDoubleSpinBox(self.settings)
+        self.upper_offset = QDoubleSpinBox(self.settings)
+        for column, (label, spin) in enumerate((('Below initial (A)', self.lower_offset), ('Above initial (A)', self.upper_offset))):
+            spin.setRange(0, 1e6)
+            spin.setDecimals(3)
+            spin.setToolTip('Offset from the displayed initial current for each checked variable.')
+            spin.setFixedHeight(32)
+            caption = QLabel(label, self.settings)
+            caption.setProperty('role', 'caption')
+            offset_layout.addWidget(caption, 0, column)
+            offset_layout.addWidget(spin, 1, column)
+            offset_layout.setColumnStretch(column, 1)
+        self.range_button = QPushButton('Set Bounds', self.settings)
+        self.range_button.setToolTip('Fill checked rows with Initial − Below and Initial + Above. No device writes.')
+        self.range_button.clicked.connect(self.set_relative_bounds)
+        offset_layout.addWidget(self.range_button, 1, 2)
+        variable_layout.addLayout(offset_layout)
+        variable_layout.addStretch()
         settings_layout.addWidget(self.variable_panel, 3)
 
         self.options_panel = QWidget(self.settings)
+        self.options_panel.setObjectName('optOptionsPanel')
         options_grid = QGridLayout(self.options_panel)
         options_grid.setContentsMargins(0, 0, 0, 0)
         options_grid.setHorizontalSpacing(14)
         options_grid.setVerticalSpacing(4)
+        options_grid.setAlignment(Qt.AlignTop)
         self.plane = QComboBox(self.settings)
-        self.plane.addItem('Horizontal X', 'x')
-        self.plane.addItem('Vertical Y', 'y')
+        self.plane.addItem('X (horizontal)', 'x')
+        self.plane.addItem('Y (vertical)', 'y')
         self.algorithm = QComboBox(self.settings)
         self.algorithm.addItem('RCDS', 'rcds')
-        self.algorithm.addItem('Bayesian Optimization (BO)', 'bo')
-        self.algorithm.setToolTip('RCDS is the default local search. BO uses a Matérn Gaussian process with expected improvement.')
+        self.algorithm.addItem('BO', 'bo')
+        self.algorithm.addItem('Constrained BO', 'cbo')
+        self.algorithm.setToolTip(
+            'RCDS is the default local search. BO uses expected improvement. '
+            'Constrained BO also models the other-plane and ICT01 charge limits.')
         self.other_limit = QLineEdit(self.settings)
         self.other_limit.setPlaceholderText('Required')
         self.other_limit.setToolTip('Upper limit for the other plane, in mm·mrad.')
@@ -488,10 +582,11 @@ class OptimizationDialog(QDialog):
             label = QLabel(text, self.settings)
             label.setProperty('role', 'caption')
             label.setBuddy(control)
+            label.setWordWrap(True)
             options_grid.addWidget(label, row * 2, column, alignment=Qt.AlignBottom)
             control.setMinimumWidth(0)
             control.setFixedHeight(32)
-            control.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            control.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
             options_grid.addWidget(control, row * 2 + 1, column, alignment=Qt.AlignTop)
             options_grid.setColumnStretch(column, 1)
         settings_layout.addWidget(self.options_panel, 2)
@@ -499,12 +594,15 @@ class OptimizationDialog(QDialog):
 
         self.algorithm_settings = QWidget(self)
         self.algorithm_settings.setObjectName('optAlgorithmSettings')
-        algorithm_layout = QHBoxLayout(self.algorithm_settings)
+        algorithm_layout = QVBoxLayout(self.algorithm_settings)
         algorithm_layout.setContentsMargins(0, 0, 0, 0)
         algorithm_layout.setSpacing(10)
         self.rcds_settings = QWidget(self.algorithm_settings)
-        rcds_layout = QHBoxLayout(self.rcds_settings)
+        self.rcds_settings.setObjectName('optRcdsSettings')
+        rcds_layout = QGridLayout(self.rcds_settings)
         rcds_layout.setContentsMargins(0, 0, 0, 0)
+        rcds_layout.setHorizontalSpacing(14)
+        rcds_layout.setVerticalSpacing(4)
         rcds_label = QLabel('Initial step fraction', self.rcds_settings)
         rcds_label.setProperty('role', 'caption')
         self.rcds_step = QDoubleSpinBox(self.rcds_settings)
@@ -514,8 +612,8 @@ class OptimizationDialog(QDialog):
         self.rcds_step.setValue(OptimizationConfig.__dataclass_fields__['rcds_initial_step'].default)
         self.rcds_step.setFixedHeight(32)
         self.rcds_step.setToolTip('Initial RCDS step as a fraction of each variable range.')
-        rcds_layout.addWidget(rcds_label)
-        rcds_layout.addWidget(self.rcds_step)
+        rcds_layout.addWidget(rcds_label, 0, 0)
+        rcds_layout.addWidget(self.rcds_step, 1, 0)
         noise_label = QLabel('Noise', self.rcds_settings)
         noise_label.setProperty('role', 'caption')
         self.rcds_noise = QDoubleSpinBox(self.rcds_settings)
@@ -527,12 +625,17 @@ class OptimizationDialog(QDialog):
         self.rcds_noise.setToolTip(
             'Noise amplitude of the normalized objective: emittance / (emittance + baseline). '
             'Default 0. Near baseline, 2% emittance variation corresponds to about 0.005.')
-        rcds_layout.addWidget(noise_label)
-        rcds_layout.addWidget(self.rcds_noise)
+        rcds_layout.addWidget(noise_label, 0, 1)
+        rcds_layout.addWidget(self.rcds_noise, 1, 1)
+        rcds_layout.setColumnStretch(0, 1)
+        rcds_layout.setColumnStretch(1, 1)
 
         self.bo_settings = QWidget(self.algorithm_settings)
-        bo_layout = QHBoxLayout(self.bo_settings)
+        self.bo_settings.setObjectName('optBoSettings')
+        bo_layout = QGridLayout(self.bo_settings)
         bo_layout.setContentsMargins(0, 0, 0, 0)
+        bo_layout.setHorizontalSpacing(14)
+        bo_layout.setVerticalSpacing(4)
         initial_label = QLabel('Initial samples', self.bo_settings)
         initial_label.setProperty('role', 'caption')
         self.bo_initial_samples = QSpinBox(self.bo_settings)
@@ -548,8 +651,11 @@ class OptimizationDialog(QDialog):
         self.bo_exploration.setValue(OptimizationConfig.__dataclass_fields__['bo_exploration'].default)
         self.bo_exploration.setFixedHeight(32)
         self.bo_exploration.setToolTip('Expected Improvement exploration offset. Larger values favor less-sampled regions.')
-        for widget in (initial_label, self.bo_initial_samples, exploration_label, self.bo_exploration):
-            bo_layout.addWidget(widget)
+        for column, (label, control) in enumerate(((initial_label, self.bo_initial_samples),
+                                                 (exploration_label, self.bo_exploration))):
+            bo_layout.addWidget(label, 0, column)
+            bo_layout.addWidget(control, 1, column)
+            bo_layout.setColumnStretch(column, 1)
 
         self.advanced_button = QToolButton(self.algorithm_settings)
         self.advanced_button.setText('Advanced')
@@ -558,6 +664,7 @@ class OptimizationDialog(QDialog):
         self.advanced_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.advanced_button.setFixedHeight(26)
         self.bo_advanced = QWidget(self.algorithm_settings)
+        self.bo_advanced.setObjectName('optBoAdvanced')
         advanced_layout = QHBoxLayout(self.bo_advanced)
         advanced_layout.setContentsMargins(0, 0, 0, 0)
         seed_label = QLabel('Random seed', self.bo_advanced)
@@ -569,12 +676,38 @@ class OptimizationDialog(QDialog):
         self.bo_seed.setToolTip('Controls repeatable initial and candidate sampling.')
         advanced_layout.addWidget(seed_label)
         advanced_layout.addWidget(self.bo_seed)
+        self.charge_settings = QWidget(self.algorithm_settings)
+        self.charge_settings.setObjectName('optChargeSettings')
+        charge_layout = QGridLayout(self.charge_settings)
+        charge_layout.setContentsMargins(0, 0, 0, 0)
+        charge_layout.setHorizontalSpacing(14)
+        charge_monitor_label = QLabel('Charge monitor', self.charge_settings)
+        charge_monitor_label.setProperty('role', 'caption')
+        self.charge_monitor = QLabel('ICT01', self.charge_settings)
+        self.charge_monitor.setFixedHeight(32)
+        self.charge_retention = QDoubleSpinBox(self.charge_settings)
+        self.charge_retention.setRange(0.1, 100.0)
+        self.charge_retention.setDecimals(1)
+        self.charge_retention.setSingleStep(1.0)
+        self.charge_retention.setValue(95.0)
+        self.charge_retention.setSuffix(' %')
+        self.charge_retention.setFixedHeight(32)
+        self.charge_retention.setToolTip('Minimum ICT01 charge retained relative to the two baseline scans.')
+        retention_label = QLabel('Minimum retained charge', self.charge_settings)
+        retention_label.setProperty('role', 'caption')
+        charge_layout.addWidget(charge_monitor_label, 0, 0)
+        charge_layout.addWidget(self.charge_monitor, 1, 0)
+        charge_layout.addWidget(retention_label, 0, 1)
+        charge_layout.addWidget(self.charge_retention, 1, 1)
+        charge_layout.setColumnStretch(0, 1)
+        charge_layout.setColumnStretch(1, 1)
         algorithm_layout.addWidget(self.rcds_settings)
         algorithm_layout.addWidget(self.bo_settings)
-        algorithm_layout.addWidget(self.advanced_button)
+        algorithm_layout.addWidget(self.charge_settings)
+        algorithm_layout.addWidget(self.advanced_button, alignment=Qt.AlignLeft)
         algorithm_layout.addWidget(self.bo_advanced)
-        algorithm_layout.addStretch()
-        setup_layout.addWidget(self.algorithm_settings)
+        options_grid.addWidget(self.algorithm_settings, 8, 0, 1, 2)
+        setup_layout.addWidget(self.budget_note)
         self.measurement_note = QLabel(self)
         self.measurement_note.setProperty('role', 'caption')
         self.measurement_note.setWordWrap(True)
@@ -625,6 +758,7 @@ class OptimizationDialog(QDialog):
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.canvas.setMinimumHeight(140)
         self.axes = self.figure.add_subplot(111)
+        self.charge_axes = None
         self.style_plot()
         self.draw_empty_plot()
         splitter.addWidget(self.canvas)
@@ -663,6 +797,7 @@ class OptimizationDialog(QDialog):
         self.bo_initial_samples.valueChanged.connect(self.bo_initial_samples_changed)
         self.bo_exploration.valueChanged.connect(self.settings_changed)
         self.bo_seed.valueChanged.connect(self.settings_changed)
+        self.charge_retention.valueChanged.connect(self.settings_changed)
         self.advanced_button.toggled.connect(self.advanced_changed)
         self._bo_initial_samples_custom = False
         for widget in host.findChildren(QWidget):
@@ -713,15 +848,17 @@ class OptimizationDialog(QDialog):
         self.settings_changed()
 
     def update_algorithm_settings(self):
-        is_bo = self.algorithm.currentData() == 'bo'
+        is_bo = self.algorithm.currentData() in ('bo', 'cbo')
+        is_cbo = self.algorithm.currentData() == 'cbo'
         self.rcds_settings.setVisible(not is_bo)
         self.bo_settings.setVisible(is_bo)
+        self.charge_settings.setVisible(is_cbo)
         self.advanced_button.setVisible(is_bo)
         self.bo_advanced.setVisible(is_bo and self.advanced_button.isChecked())
 
     def advanced_changed(self, checked):
         self.advanced_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        self.bo_advanced.setVisible(bool(checked) and self.algorithm.currentData() == 'bo')
+        self.bo_advanced.setVisible(bool(checked) and self.algorithm.currentData() in ('bo', 'cbo'))
 
     def bo_initial_samples_changed(self, *_args):
         self._bo_initial_samples_custom = True
@@ -753,11 +890,14 @@ class OptimizationDialog(QDialog):
         n = len(self.selected_names())
         search = max(0, self.count.value() - 4)
         bo_note = (f' · {self.bo_initial_samples.value()} initial samples'
-                   if self.algorithm.currentData() == 'bo' else '')
+                   if self.algorithm.currentData() in ('bo', 'cbo') else '')
         invalid_note = (' Initial samples exceed the search budget.'
-                        if self.algorithm.currentData() == 'bo'
-                        and self.bo_initial_samples.value() > search else '')
-        self.budget_note.setText(f'{n} selected · {self.algorithm.currentText()}{bo_note} · up to {search} search scans; 4 reserved for baseline / verification.'
+                        if self.algorithm.currentData() in ('bo', 'cbo')
+                        and self.bo_initial_samples.value() > search + (self.algorithm.currentData() == 'cbo') else '')
+        algorithm_name = {
+            'bo': 'Bayesian Optimization', 'cbo': 'Constrained Bayesian Optimization',
+        }.get(self.algorithm.currentData(), 'RCDS')
+        self.budget_note.setText(f'{n} selected · {algorithm_name}{bo_note} · up to {search} search scans; 4 reserved for baseline / verification.'
                                 + invalid_note
                                 + (' More variables usually need more scans.' if n > 1 else ''))
 
@@ -766,8 +906,47 @@ class OptimizationDialog(QDialog):
         try:
             for name, value in values.items():
                 self.variables.item(self.variable_rows[name], 2).setText(f'{value:.6g}')
+                self.variables.item(self.variable_rows[name], 2).setData(Qt.UserRole, float(value))
         finally:
             self.variables.blockSignals(blocked)
+
+    def set_relative_bounds(self):
+        if self.busy() or self.fault:
+            return
+        try:
+            names = self.selected_names()
+            if not names:
+                raise ValueError('Select at least one variable first.')
+            below, above = self.lower_offset.value(), self.upper_offset.value()
+            if below + above <= 0:
+                raise ValueError('Enter a positive Below or Above offset in A.')
+            elements = {element.id: element for element in self.host.machine_profile.elements}
+            bounds = []
+            for name in names:
+                row = self.variable_rows[name]
+                current = self.variables.item(row, 2).data(Qt.UserRole)
+                if current is None or not math.isfinite(current):
+                    raise ValueError(f'{name}: use Read Currents before setting relative bounds.')
+                low, high = current - below, current + above
+                OptimizationVariable(name, low, high).validate()
+                limits = elements[name].limits.get('current_set')
+                if limits is not None:
+                    limit = LimitRange.from_mapping(limits)
+                    if not limit.contains(low) or not limit.contains(high):
+                        raise ValueError(f'{name}: requested current range exceeds machine range {limit.describe()}.')
+                bounds.append((row, low, high))
+        except ValueError as exc:
+            self.error(exc)
+            return
+        blocked = self.variables.blockSignals(True)
+        try:
+            for row, low, high in bounds:
+                self.variables.item(row, 3).setText(f'{low:.12g}')
+                self.variables.item(row, 4).setText(f'{high:.12g}')
+        finally:
+            self.variables.blockSignals(blocked)
+        self.settings_changed()
+        self.status.setText('Bounds set from displayed initial currents. Review Lower / Upper before starting.')
 
     def read_currents(self):
         if self.busy() or self.fault or self.host.machine_type != 'real':
@@ -846,6 +1025,7 @@ class OptimizationDialog(QDialog):
         self.start_button.setEnabled(not busy and not self.fault and self.host.machine_type == 'real')
         self.stop_button.setEnabled(bool(self.worker and self.worker.isRunning() and self.worker.action is None))
         self.read_button.setEnabled(not busy and not self.fault and self.host.machine_type == 'real' and bool(self.selected_names()))
+        self.range_button.setEnabled(not busy and not self.fault and bool(self.selected_names()))
         self.apply_button.setEnabled(not busy and not self.fault and bool(self.session and self.session.confirmed))
         self.restore_button.setEnabled(not busy and bool(self.session and self.session.initial is not None))
         self.open_run_button.setEnabled(not busy)
@@ -937,15 +1117,37 @@ class OptimizationDialog(QDialog):
                     f'Enter a positive Other-plane limit (mm·mrad) for the {other_plane} plane '
                     'before starting optimization.'
                 ) from None
+            charge_constraint = (ChargeConstraint(retention=self.charge_retention.value() / 100.0)
+                                 if self.algorithm.currentData() == 'cbo' else None)
             config = OptimizationConfig(
                 self.selected_variables(), self.plane.currentData(), other_limit,
                 self.count.value(), self.minutes.value(), settle_time=self.solenoid_settle.value(),
                 algorithm=self.algorithm.currentData(), rcds_initial_step=self.rcds_step.value(),
                 rcds_noise=self.rcds_noise.value(),
                 bo_initial_samples=self.bo_initial_samples.value(),
-                bo_exploration=self.bo_exploration.value(), bo_random_seed=self.bo_seed.value())
+                bo_exploration=self.bo_exploration.value(), bo_random_seed=self.bo_seed.value(),
+                charge_constraint=charge_constraint)
             config.validate()
             self.paras = self.host.optimization_parameters(config.variables)
+            if charge_constraint is not None:
+                backend = self.host.app_context.control_backend.name
+                ct_context = load_app_context(
+                    'ct_monitor', machine_id=self.host.machine_profile.machine.id,
+                    control_backend=backend,
+                )
+                workflow = resolve_ct_monitor_workflow(ct_context.profile)
+                self.paras.charge_monitor = {
+                    'element_id': charge_constraint.element_id,
+                    'channel': charge_constraint.channel,
+                    'pv': resolve_channel(self.host.app_context, charge_constraint.element_id,
+                                          charge_constraint.channel),
+                    'unit': workflow['measurement_unit'],
+                    'scale': float(workflow['scale_to_display_unit'][backend]),
+                    'stale_timeout_s': workflow['stale_timeout_s'][backend],
+                    'trim_fraction': charge_constraint.trim_fraction,
+                    'minimum_samples': 3,
+                    'minimum_valid_fraction': 0.8,
+                }
             root = resolve_app_runtime_paths(Path(__file__).parent, self.host.app_context)['runs_dir']
             run_dir = root / ('optimization_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid4().hex[:8])
             self.session = OptimizationSession(config, EpicsVariableGroup(self.host.app_context, config),
@@ -957,6 +1159,9 @@ class OptimizationDialog(QDialog):
             self.progress_bar.setRange(0, config.max_measurements)
             self.progress_bar.setValue(0)
             self.results.setText('Initial currents: —    ·    Baseline: —    ·    Best candidate: —')
+            if self.charge_axes is not None:
+                self.charge_axes.remove()
+                self.charge_axes = None
             self.axes.clear()
             self.draw_empty_plot()
             self.style_plot()
@@ -1019,6 +1224,11 @@ class OptimizationDialog(QDialog):
             progress = payload['scan_progress']
             self.status.setText(f"Scan {len(self.session.records)} · {progress.get('stage', '')} · "
                                 f"{progress.get('completed_points', 0)} scan points")
+        elif payload.get('charge_sample', {}).get('status') == 'valid':
+            sample = payload['charge_sample']
+            self.status.setText(
+                f"Scan {len(self.session.records)} · ICT01={sample['value']:.4g} nC"
+            )
         self.host.display(payload)
 
     def measurement_finished(self):
@@ -1052,7 +1262,13 @@ class OptimizationDialog(QDialog):
             self.status.setText('Stopping. Waiting for the scan quadrupole and all selected solenoids to restore.')
 
     def show_progress(self, payload):
-        self.status.setText(f"{payload['stage']} · {payload['count']}/{self.session.config.max_measurements}")
+        status = f"{payload['stage']} · {payload['count']}/{self.session.config.max_measurements}"
+        record = payload.get('record')
+        if isinstance(record, dict) and record.get('charge') is not None:
+            status += f" · ICT01={record['charge']:.4g} nC"
+            if self.session.charge_minimum is not None:
+                status += f" (minimum {self.session.charge_minimum:.4g})"
+        self.status.setText(status)
         self.progress_bar.setRange(0, self.session.config.max_measurements)
         self.progress_bar.setValue(payload['count'])
         self.progress_bar.setFormat('%v / %m scans')
@@ -1060,11 +1276,30 @@ class OptimizationDialog(QDialog):
         self._visible_records = list(records)
         _populate_record_table(self.table, self._visible_records)
         valid = [r for r in records if r.get('valid')]
+        if self.charge_axes is not None:
+            self.charge_axes.remove()
+            self.charge_axes = None
         self.axes.clear()
         for plane in ('x', 'y'):
             self.axes.plot([r['index'] for r in valid], [r['values'][plane] for r in valid], '.-', label=plane.upper())
+        charged = [record for record in valid if record.get('charge') is not None]
+        if charged:
+            self.charge_axes = self.axes.twinx()
+            self.charge_axes.plot(
+                [record['index'] for record in charged],
+                [record['charge'] for record in charged], '.-',
+                color='#f0b45a', label='ICT01',
+            )
+            if self.session.charge_minimum is not None:
+                self.charge_axes.axhline(
+                    self.session.charge_minimum, color='#f0b45a', linestyle='--',
+                    linewidth=1, label='ICT01 minimum',
+                )
+            self.charge_axes.set_ylabel('ICT01 (nC)', color='#f0b45a')
+            self.charge_axes.tick_params(colors='#f0b45a', labelsize=8)
         if valid:
-            self.axes.legend(loc='upper right')
+            lines = self.axes.lines + (self.charge_axes.lines if self.charge_axes is not None else [])
+            self.axes.legend(lines, [line.get_label() for line in lines], loc='upper right')
         else:
             self.draw_empty_plot()
         self.style_plot()
@@ -1110,9 +1345,13 @@ class OptimizationDialog(QDialog):
         text = f'Initial currents: {self.format_currents(initial) if initial else "—"} A'
         if baseline:
             text += f' · Baseline εnx={baseline["x"]:.4g}, εny={baseline["y"]:.4g}'
+        if s.charge_baseline is not None:
+            text += f' · ICT01 baseline={s.charge_baseline:.4g}, minimum={s.charge_minimum:.4g} nC'
         if best:
             text += (f'\nBest candidate: {self.format_currents(best["currents"])} A · '
                      f'εnx={best["values"]["x"]:.4g}, εny={best["values"]["y"]:.4g}')
+            if best.get('charge') is not None:
+                text += f' · ICT01={best["charge"]:.4g} nC'
         if 'verification_mean' in s.summary:
             text += f' · Verified objective mean={s.summary["verification_mean"]:.4g}'
         self.results.setText(text)

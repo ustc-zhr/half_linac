@@ -6006,6 +6006,11 @@ class scanThread(QThread):
         self.effective_k1_limit = None
         self.terminal_result = {"restored": False}
         self.restore_quad_callback = getattr(paras, "restore_quad", None)
+        self.charge_monitor = deepcopy(getattr(paras, "charge_monitor", None))
+        self.charge_pv = None
+        self.charge_connection_error = None
+        self.charge_samples = []
+        self.charge_attempts = 0
 
     def _sleep_or_stop(self, seconds):
         end_time = time.time() + seconds
@@ -6061,6 +6066,87 @@ class scanThread(QThread):
                 ),
             }
         )
+
+    def _prepare_charge_monitor(self):
+        if not self.charge_monitor:
+            return
+        pv = epics.PV(
+            self.charge_monitor["pv"], form="time", auto_monitor=False,
+        )
+        if pv.wait_for_connection(timeout=2):
+            self.charge_pv = pv
+        else:
+            self.charge_connection_error = (
+                f"{self.charge_monitor['element_id']} charge channel is disconnected."
+            )
+
+    def _read_charge_sample(self):
+        if self.charge_pv is None:
+            return None
+        self.charge_attempts += 1
+        received_at = time.time()
+        sample = {"received_at": received_at, "status": "invalid"}
+        try:
+            metadata = self.charge_pv.get_with_metadata(
+                use_monitor=False, timeout=2, with_ctrlvars=False,
+            )
+            if not isinstance(metadata, Mapping):
+                raise ValueError("read returned no metadata")
+            value = float(metadata.get("value")) * float(self.charge_monitor["scale"])
+            source_timestamp = float(metadata.get("timestamp", received_at))
+            stale_timeout = self.charge_monitor.get("stale_timeout_s")
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError("value is not finite and positive")
+            if stale_timeout is not None and received_at - source_timestamp > float(stale_timeout):
+                raise ValueError("sample is stale")
+            sample.update(
+                status="valid", value=value, source_timestamp=source_timestamp,
+                severity=metadata.get("severity"), status_code=metadata.get("status"),
+            )
+        except Exception as exc:
+            sample["error"] = str(exc)
+        self.charge_samples.append(sample)
+        return sample
+
+    def _charge_summary(self):
+        if not self.charge_monitor:
+            return None
+        valid = [sample["value"] for sample in self.charge_samples
+                 if sample.get("status") == "valid"]
+        minimum_count = int(self.charge_monitor.get("minimum_samples", 3))
+        minimum_fraction = float(self.charge_monitor.get("minimum_valid_fraction", 0.8))
+        coverage = len(valid) / self.charge_attempts if self.charge_attempts else 0.0
+        summary = {
+            "element_id": self.charge_monitor["element_id"],
+            "channel": self.charge_monitor["channel"],
+            "unit": self.charge_monitor["unit"],
+            "attempted_samples": self.charge_attempts,
+            "valid_samples": len(valid),
+            "valid_fraction": coverage,
+            "trim_fraction": float(self.charge_monitor["trim_fraction"]),
+            "samples": self.charge_samples,
+        }
+        if self.charge_connection_error:
+            summary["connection_error"] = self.charge_connection_error
+        if len(valid) < minimum_count or coverage < minimum_fraction:
+            summary.update(
+                status="invalid",
+                error=(self.charge_connection_error or
+                       f"{self.charge_monitor['element_id']} charge samples are insufficient "
+                       f"({len(valid)}/{self.charge_attempts} valid)."),
+            )
+            return summary
+        ordered = np.sort(np.asarray(valid, dtype=float))
+        trim_count = int(math.floor(len(ordered) * summary["trim_fraction"]))
+        used = ordered[trim_count:len(ordered) - trim_count] if trim_count else ordered
+        summary.update(
+            status="valid", value=float(np.mean(used)),
+            mean=float(np.mean(ordered)), median=float(np.median(ordered)),
+            minimum=float(np.min(ordered)), maximum=float(np.max(ordered)),
+            standard_deviation=(float(np.std(ordered, ddof=1)) if len(ordered) > 1 else 0.0),
+            trimmed_each_side=trim_count, used_samples=len(used),
+        )
+        return summary
 
     def _acquire_k1(self, k1, *, adaptive=False):
         if self.effective_k1_limit is not None and not self.effective_k1_limit.contains(k1):
@@ -6165,6 +6251,9 @@ class scanThread(QThread):
 
             if not self.is_running:
                 return None
+            charge_sample = self._read_charge_sample()
+            if charge_sample is not None:
+                point["charge_sample"] = charge_sample
             sigx = float(fit_result.sigx_mm)
             sigy = float(fit_result.sigy_mm)
             if self.scan_strategy == "adaptive_quality":
@@ -6463,6 +6552,7 @@ class scanThread(QThread):
                 self.x_quality_usable = []
                 self.y_quality_usable = []
                 self.point_quality = []
+                self._prepare_charge_monitor()
 
                 iniK1 = epics.caget(self.quadPV)
                 if iniK1 is None:
@@ -6506,6 +6596,11 @@ class scanThread(QThread):
                 self._emit_scan_progress(stage="finalizing")
                 print("Scan finished, quad is back to initial values, K1=",iniK1)
 
+                charge_summary = self._charge_summary()
+                if charge_summary is not None:
+                    self.terminal_result["charge_summary"] = deepcopy(charge_summary)
+                    self.scan_metadata = dict(self.scan_metadata or {})
+                    self.scan_metadata["charge_monitor"] = deepcopy(charge_summary)
                 txt = np.matrix([self.k1l,self.sigxl,self.sigyl]).transpose()
                 self._write_scan_results(txt)
             

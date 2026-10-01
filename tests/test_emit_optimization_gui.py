@@ -16,7 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src/apps/emit_meas
 from PyQt5.QtCore import QPoint, Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QApplication, QTableWidget, QTableWidgetItem
 from half_linac.src.apps.emit_measure import main
-from half_linac.src.apps.emit_measure.optimization_gui import OptimizationDialog, OptimizationWorker
+from half_linac.src.apps.emit_measure.optimization_gui import (
+    OptimizationDialog, OptimizationWorker, OptimizationRunReviewDialog,
+)
 from half_linac.src.apps.emit_measure.optimization import OptimizationConfig, OptimizationSession
 from half_linac.src.shared.machine_profile import load_app_context
 from test_emit_optimization import Device, result, single_config
@@ -111,18 +113,31 @@ class DialogTests(unittest.TestCase):
                 table = dialog_rect(self.dialog.variables)
                 read = dialog_rect(self.dialog.read_button)
                 budget = dialog_rect(self.dialog.budget_note)
-                settings = dialog_rect(self.dialog.settings)
+                variables = dialog_rect(self.dialog.variable_panel)
+                options = dialog_rect(self.dialog.options_panel)
                 algorithm = dialog_rect(self.dialog.algorithm_settings)
                 note = dialog_rect(self.dialog.measurement_note)
-                self.assertLessEqual(table.bottom(), read.top())
+                self.assertLessEqual(read.bottom(), table.top())
                 self.assertFalse(read.intersects(budget))
-                self.assertLessEqual(settings.bottom(), algorithm.top())
+                self.assertLessEqual(variables.right(), options.left())
+                self.assertTrue(options.contains(algorithm))
+                self.assertLessEqual(table.bottom(), dialog_rect(self.dialog.lower_offset).top())
+                self.assertLessEqual(variables.bottom(), budget.top())
                 self.assertLessEqual(algorithm.bottom(), note.top())
                 self.assertGreaterEqual(self.dialog.variables.height(), 148)
                 if height == 720:
                     self.assertGreater(self.dialog.scroll_area.verticalScrollBar().maximum(), 0)
                 else:
                     self.assertEqual(self.dialog.scroll_area.verticalScrollBar().maximum(), 0)
+
+        self.dialog.algorithm.setCurrentIndex(self.dialog.algorithm.findData('bo'))
+        self.dialog.advanced_button.setChecked(True)
+        self.app.processEvents()
+        self.assertLessEqual(self.dialog.scroll_content.width(), self.dialog.scroll_area.viewport().width())
+        self.assertLessEqual(dialog_rect(self.dialog.bo_settings).bottom(),
+                             dialog_rect(self.dialog.advanced_button).top())
+        self.assertLessEqual(dialog_rect(self.dialog.advanced_button).bottom(),
+                             dialog_rect(self.dialog.bo_advanced).top())
 
     def test_host_controls_and_timers_restored_exactly(self):
         button = self.host.pushButton
@@ -197,6 +212,41 @@ class DialogTests(unittest.TestCase):
         error.assert_called_once()
         self.assertFalse(getattr(self.host, '_optimization_locked', False))
 
+    def test_relative_bounds_use_each_selected_current_and_validate_atomically(self):
+        ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')
+        self.dialog.close()
+        self.host.app_context, self.host.machine_profile, self.host.machine_type = ctx, ctx.profile, 'real'
+        self.dialog = OptimizationDialog(self.host)
+        for name, row in self.dialog.variable_rows.items():
+            self.dialog.variables.item(row, 0).setCheckState(
+                Qt.Checked if name in ('SS01', 'SS02') else Qt.Unchecked)
+        self.dialog.lower_offset.setValue(1)
+        self.dialog.upper_offset.setValue(2)
+        self.dialog.display_initial({'SS01': 5.})
+        with patch.object(self.dialog, 'error') as error:
+            self.dialog.set_relative_bounds()
+        error.assert_called_once()
+        self.assertEqual(self.dialog.variables.item(self.dialog.variable_rows['SS01'], 3).text(), '')
+        self.dialog.display_initial({'SS02': 7.})
+        self.dialog.set_relative_bounds()
+        self.assertEqual({v.element_id: (v.low, v.high) for v in self.dialog.selected_variables()},
+                         {'SS01': (4., 7.), 'SS02': (6., 9.)})
+        for name, row in self.dialog.variable_rows.items():
+            if name not in ('SS01', 'SS02'):
+                self.assertEqual(self.dialog.variables.item(row, 3).text(), '')
+        self.dialog.upper_offset.setValue(1e6)
+        with patch.object(self.dialog, 'error') as error:
+            self.dialog.set_relative_bounds()
+        error.assert_called_once()
+        self.assertEqual({v.element_id: (v.low, v.high) for v in self.dialog.selected_variables()},
+                         {'SS01': (4., 7.), 'SS02': (6., 9.)})
+        self.dialog.lower_offset.setValue(0)
+        self.dialog.upper_offset.setValue(0)
+        with patch.object(self.dialog, 'error') as error:
+            self.dialog.set_relative_bounds()
+        error.assert_called_once()
+        main.epics.caput.assert_not_called()
+
     def test_solenoid_settle_is_passed_to_session_independently(self):
         from half_linac.src.apps.emit_measure.optimization import OptimizationVariable
         self.assertEqual(self.dialog.solenoid_settle.value(), 2.)
@@ -217,6 +267,7 @@ class DialogTests(unittest.TestCase):
         self.assertEqual(self.dialog.session.config.bo_initial_samples, 4)
         self.assertEqual(self.dialog.session.config.bo_exploration, .025)
         self.assertEqual(self.dialog.session.config.bo_random_seed, 12)
+        self.assertNotIn('charge_monitor', paras.__dict__)
         self.assertIn('Bayesian Optimization', self.dialog.budget_note.text())
         self.assertEqual(self.host.lineEdit_24.text(), '8')
         self.dialog.session.confirmed = True
@@ -242,6 +293,72 @@ class DialogTests(unittest.TestCase):
         self.dialog.algorithm.setCurrentIndex(self.dialog.algorithm.findData('rcds'))
         self.assertFalse(self.dialog.rcds_settings.isHidden())
         self.assertTrue(self.dialog.bo_settings.isHidden())
+
+    def test_constrained_bo_settings_create_optional_ict01_monitor(self):
+        from half_linac.src.apps.emit_measure.optimization import OptimizationVariable
+        ctx = load_app_context('emit_measure', machine_id='half', control_backend='real')
+        self.host.app_context, self.host.machine_profile, self.host.machine_type = ctx, ctx.profile, 'real'
+        self.dialog.algorithm.setCurrentIndex(self.dialog.algorithm.findData('cbo'))
+        self.dialog.charge_retention.setValue(93.)
+        self.dialog.other_limit.setText('3')
+        self.assertFalse(self.dialog.charge_settings.isHidden())
+        self.assertFalse(self.dialog.bo_settings.isHidden())
+        paras = Mock(scan_metadata={}, background_image=None)
+        with patch.object(self.dialog, 'error') as error, \
+             patch.object(self.dialog, 'selected_variables',
+                          return_value=(OptimizationVariable('SS01', 1, 9),)), \
+             patch.object(self.host, 'optimization_parameters', return_value=paras), \
+             patch.object(self.dialog, 'launch'):
+            self.dialog.start()
+        self.assertFalse(error.called, error.call_args)
+        config = self.dialog.session.config
+        self.assertEqual(config.algorithm, 'cbo')
+        self.assertAlmostEqual(config.charge_constraint.retention, .93)
+        self.assertEqual(paras.charge_monitor['element_id'], 'ICT01')
+        self.assertEqual(paras.charge_monitor['pv'], 'IN:BD:ICT1:C')
+        self.assertEqual(paras.charge_monitor['unit'], 'nC')
+        self.assertEqual(paras.charge_monitor['trim_fraction'], .1)
+        main.epics.caput.assert_not_called()
+
+    def test_charge_summary_uses_trimmed_mean_and_rejects_low_coverage(self):
+        scan = main.scanThread.__new__(main.scanThread)
+        QThread.__init__(scan)
+        scan.charge_connection_error = None
+        scan.charge_monitor = {
+            'element_id': 'ICT01', 'channel': 'charge', 'unit': 'nC',
+            'trim_fraction': .1, 'minimum_samples': 3, 'minimum_valid_fraction': .8,
+        }
+        scan.charge_attempts = 10
+        scan.charge_samples = [
+            {'status': 'valid', 'value': value}
+            for value in (.1, 1, 1, 1, 1, 1, 1, 1, 1, 10)
+        ]
+        summary = scan._charge_summary()
+        self.assertEqual(summary['status'], 'valid')
+        self.assertEqual(summary['trimmed_each_side'], 1)
+        self.assertAlmostEqual(summary['value'], 1.)
+        scan.charge_attempts = 4
+        scan.charge_samples = [{'status': 'valid', 'value': 1.}] * 3
+        self.assertEqual(scan._charge_summary()['status'], 'invalid')
+
+    def test_charge_sampler_rejects_stale_and_nonpositive_values(self):
+        scan = main.scanThread.__new__(main.scanThread)
+        QThread.__init__(scan)
+        scan.charge_samples = []
+        scan.charge_attempts = 0
+        scan.charge_monitor = {
+            'element_id': 'ICT01', 'channel': 'charge', 'unit': 'nC',
+            'scale': 1., 'stale_timeout_s': 3.,
+        }
+        scan.charge_pv = Mock()
+        for metadata, error_text in (({'value': 1., 'timestamp': 1.}, 'stale'),
+                                     ({'value': 0., 'timestamp': 10.}, 'positive')):
+            scan.charge_pv.get_with_metadata.return_value = metadata
+            with patch('half_linac.src.apps.emit_measure.main.time.time', return_value=10.):
+                sample = scan._read_charge_sample()
+            self.assertEqual(sample['status'], 'invalid')
+            self.assertIn(error_text, sample['error'])
+        main.epics.caput.assert_not_called()
 
     def test_parameters_follow_main_selection_and_freeze_background(self):
         import numpy as np
@@ -456,6 +573,53 @@ class DialogTests(unittest.TestCase):
         self.assertIs(self.dialog.session, session_before)
         viewer.exec_.assert_called_once_with()
         main.epics.caput.assert_not_called()
+
+    def test_archive_review_restores_both_emittance_curves(self):
+        records = [
+            {'index': 1, 'valid': True, 'feasible': True, 'values': {'x': 3., 'y': 2.}},
+            {'index': 2, 'valid': False, 'values': {}},
+            {'index': 3, 'valid': True, 'feasible': False, 'values': {'x': 1., 'y': 4.}},
+            {'index': 4, 'stage': 'Candidate'},
+        ]
+        viewer = OptimizationRunReviewDialog({'records': records}, '/tmp/run', self.dialog)
+        self.addCleanup(viewer.close)
+        self.assertEqual(viewer.table.rowCount(), 4)
+        self.assertEqual(len(viewer.axes.lines), 2)
+        for line, label, values in zip(viewer.axes.lines, ('X', 'Y'), ([3., 1.], [2., 4.])):
+            self.assertEqual(line.get_label(), label)
+            self.assertEqual(list(line.get_xdata()), [1, 3])
+            self.assertEqual(list(line.get_ydata()), values)
+        viewer.canvas.draw()
+        main.epics.caput.assert_not_called()
+
+    def test_archive_review_without_valid_measurements(self):
+        for records in ([], [{'index': 1, 'valid': False}]):
+            with self.subTest(records=records):
+                viewer = OptimizationRunReviewDialog({'records': records}, '/tmp/run', self.dialog)
+                self.addCleanup(viewer.close)
+                self.assertEqual(len(viewer.axes.lines), 0)
+                self.assertIn('No valid measurements', viewer.axes.texts[0].get_text())
+                viewer.canvas.draw()
+
+    def test_archive_review_restores_charge_curve_and_limit(self):
+        records = [
+            {'index': 1, 'valid': True, 'feasible': True,
+             'values': {'x': 3., 'y': 2.}, 'charge': 1.0},
+            {'index': 2, 'valid': True, 'feasible': False,
+             'constraint_failures': ['charge_limit'],
+             'values': {'x': 2., 'y': 2.}, 'charge': .9},
+        ]
+        payload = {
+            'records': records,
+            'charge_constraint': {'minimum': .95, 'unit': 'nC'},
+        }
+        viewer = OptimizationRunReviewDialog(payload, '/tmp/run', self.dialog)
+        self.addCleanup(viewer.close)
+        self.assertEqual(viewer.table.columnCount(), 7)
+        self.assertIsNotNone(viewer.charge_axes)
+        self.assertEqual(len(viewer.charge_axes.lines), 2)
+        self.assertEqual(list(viewer.charge_axes.lines[0].get_ydata()), [1., .9])
+        viewer.canvas.draw()
 
 
 if __name__ == '__main__':

@@ -8,8 +8,8 @@ from unittest.mock import patch
 from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 from half_linac.src.apps.emit_measure.optimization import (
-    OptimizationConfig, OptimizationVariable, OptimizationSession, EpicsVariableGroup, measurement_values,
-    RestoreFailure, Stopped, VerifiedQuadRestore,
+    ChargeConstraint, OptimizationConfig, OptimizationVariable, OptimizationSession,
+    EpicsVariableGroup, measurement_values, RestoreFailure, Stopped, VerifiedQuadRestore,
 )
 from half_linac.src.shared.machine_profile import load_app_context, resolve_channel
 
@@ -21,6 +21,13 @@ def single_config(name, low, high, plane, other_limit, **kwargs):
 def result(x, y=2, **extra):
     return dict(restored=True, xplane=dict(status='valid', validation_status='validated', exn_raw=x),
                 yplane=dict(status='valid', validation_status='validated', exn_raw=y), **extra)
+
+
+def charged_result(x, y=2, charge=1., **extra):
+    return result(x, y, charge_summary={
+        'status': 'valid', 'value': charge, 'unit': 'nC',
+        'attempted_samples': 10, 'valid_samples': 10,
+    }, **extra)
 
 
 class Device:
@@ -87,6 +94,99 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(scores[0], 2)
         self.assertLess(scores[1], 1)
         self.assertEqual(s.best['currents']['SS01'], 4)
+
+    def test_constrained_bo_models_charge_and_other_plane_without_penalty(self):
+        config = single_config(
+            'SS01', 1, 9, 'x', 3, algorithm='cbo', bo_initial_samples=3,
+            charge_constraint=ChargeConstraint(retention=.95),
+        )
+        evaluations = []
+
+        def optimizer(fn, low, high, initial, budget, **kwargs):
+            self.assertEqual(kwargs['constraint_bounds'][0], (None, 3))
+            self.assertAlmostEqual(kwargs['constraint_bounds'][1][0], .95)
+            self.assertEqual(len(kwargs['seed_observations']), 1)
+            evaluations.extend((fn(3), fn(4)))
+
+        def measure(*_):
+            value = self.device.value
+            return charged_result(
+                (value - 3) ** 2 + 1,
+                y=2 if value != 3 else 4,
+                charge=1 if value != 3 else .8,
+            )
+
+        session = OptimizationSession(
+            config, self.device, measure, Path(self.temp.name) / 'cbo-run', optimizer=optimizer,
+        )
+        self.assertEqual(session.run()['status'], 'complete')
+        self.assertAlmostEqual(evaluations[0][0], 1 / 6)
+        self.assertEqual(evaluations[0][1], (4., .8))
+        self.assertTrue(evaluations[1][0] < .5)
+        self.assertEqual(evaluations[1][1], (2., 1.))
+        self.assertEqual(session.best['currents']['SS01'], 4)
+        self.assertAlmostEqual(session.charge_baseline, 1.)
+        self.assertAlmostEqual(session.charge_minimum, .95)
+        self.assertTrue(session.confirmed)
+
+    def test_constrained_bo_retries_missing_charge_then_restores(self):
+        config = single_config(
+            'SS01', 1, 9, 'x', 3, algorithm='cbo', bo_initial_samples=3,
+            charge_constraint=ChargeConstraint(),
+        )
+        calls = []
+
+        def measure(*_):
+            calls.append(1)
+            return result(1)
+
+        session = OptimizationSession(
+            config, self.device, measure, Path(self.temp.name) / 'cbo-invalid',
+            optimizer=lambda *args, **kwargs: None,
+        )
+        self.assertEqual(session.run()['status'], 'failed')
+        self.assertEqual(len(calls), 2)
+        self.assertIn('ICT01 charge summary', session.summary['error'])
+        self.assertEqual(self.device.restores, [5])
+
+    def test_constrained_bo_rejects_unstable_charge_baseline(self):
+        config = single_config(
+            'SS01', 1, 9, 'x', 3, algorithm='cbo', bo_initial_samples=3,
+            charge_constraint=ChargeConstraint(retention=.95),
+        )
+        charges = iter((1., .8))
+        optimizer = unittest.mock.Mock()
+        session = OptimizationSession(
+            config, self.device, lambda *_: charged_result(2, charge=next(charges)),
+            Path(self.temp.name) / 'cbo-unstable', optimizer=optimizer,
+        )
+        self.assertEqual(session.run()['status'], 'failed')
+        self.assertIn('unstable', session.summary['error'])
+        optimizer.assert_not_called()
+        self.assertEqual(self.device.restores, [5])
+
+    def test_constrained_bo_low_charge_verification_disables_apply(self):
+        config = single_config(
+            'SS01', 1, 9, 'x', 3, algorithm='cbo', bo_initial_samples=3,
+            charge_constraint=ChargeConstraint(retention=.95),
+        )
+        charges = iter((1., 1., 1., .9, .9))
+
+        def measure(*_):
+            return charged_result((self.device.value - 3) ** 2 + 1, charge=next(charges))
+
+        def optimizer(fn, *_args, **_kwargs):
+            fn(3.)
+
+        session = OptimizationSession(
+            config, self.device, measure, Path(self.temp.name) / 'cbo-verify',
+            optimizer=optimizer,
+        )
+        self.assertEqual(session.run()['status'], 'complete')
+        self.assertEqual(session.best['currents']['SS01'], 3.)
+        self.assertFalse(session.confirmed)
+        self.assertTrue(all('charge_limit' in record['constraint_failures']
+                            for record in session.records[-2:]))
 
     def test_invalid_measurement_retried_once_then_aborts(self):
         calls = []
@@ -200,6 +300,11 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.summary['optimizer']['initial_samples'], 4)
         self.assertEqual(session.summary['optimizer']['exploration'], .05)
         self.assertEqual(session.summary['optimizer']['random_seed'], 7)
+        with self.assertRaisesRegex(ValueError, 'requires a charge constraint'):
+            single_config('SS01', 1, 9, 'x', 3, algorithm='cbo').validate()
+        with self.assertRaisesRegex(ValueError, 'only available'):
+            single_config('SS01', 1, 9, 'x', 3,
+                          charge_constraint=ChargeConstraint()).validate()
 
     def test_algorithm_parameter_validation_and_dynamic_bo_default(self):
         config = single_config('SS01', 1, 9, 'x', 3, algorithm='bo')

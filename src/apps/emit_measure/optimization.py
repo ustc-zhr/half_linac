@@ -38,6 +38,22 @@ class OptimizationVariable:
 
 
 @dataclass(frozen=True)
+class ChargeConstraint:
+    element_id: str = 'ICT01'
+    channel: str = 'charge'
+    retention: float = 0.95
+    trim_fraction: float = 0.10
+
+    def validate(self):
+        if not self.element_id or not self.channel:
+            raise ValueError('Charge monitor element and channel are required.')
+        if not math.isfinite(self.retention) or not 0 < self.retention <= 1:
+            raise ValueError('Minimum retained charge must be greater than 0% and at most 100%.')
+        if not math.isfinite(self.trim_fraction) or not 0 <= self.trim_fraction < 0.5:
+            raise ValueError('Charge trim fraction must be at least 0 and less than 0.5.')
+
+
+@dataclass(frozen=True)
 class OptimizationConfig:
     variables: tuple[OptimizationVariable, ...]
     plane: str
@@ -53,6 +69,7 @@ class OptimizationConfig:
     bo_exploration: float = 0.01
     bo_random_seed: int = 0
     rcds_noise: float = 0.0
+    charge_constraint: ChargeConstraint | None = None
 
     def validate(self):
         if not self.variables or self.plane not in ('x', 'y'):
@@ -73,8 +90,14 @@ class OptimizationConfig:
             raise ValueError('Allow at least five measurements and a positive time budget.')
         if self.readback_tolerance <= 0 or self.motion_timeout <= 0 or self.settle_time < 0:
             raise ValueError('Invalid motion settings.')
-        if self.algorithm not in ('rcds', 'bo'):
-            raise ValueError('Optimization algorithm must be RCDS or BO.')
+        if self.algorithm not in ('rcds', 'bo', 'cbo'):
+            raise ValueError('Optimization algorithm must be RCDS or BO (including Constrained BO).')
+        if self.algorithm == 'cbo':
+            if self.charge_constraint is None:
+                raise ValueError('Constrained BO requires a charge constraint.')
+            self.charge_constraint.validate()
+        elif self.charge_constraint is not None:
+            raise ValueError('Charge constraints are only available with Constrained BO.')
         if not 0 < self.rcds_initial_step <= 1:
             raise ValueError('RCDS initial step fraction must be greater than 0 and at most 1.')
         if self.rcds_noise < 0:
@@ -87,12 +110,13 @@ class OptimizationConfig:
             raise ValueError('BO initial samples must be an integer.')
         if int(self.bo_random_seed) != self.bo_random_seed or self.bo_random_seed < 0:
             raise ValueError('BO random seed must be a non-negative integer.')
-        if self.algorithm == 'bo':
+        if self.algorithm in ('bo', 'cbo'):
             initial_samples = self.effective_bo_initial_samples()
             search_budget = self.max_measurements - 4
-            if initial_samples < 3 or initial_samples > search_budget:
+            maximum = search_budget + (1 if self.algorithm == 'cbo' else 0)
+            if initial_samples < 3 or initial_samples > maximum:
                 raise ValueError(
-                    f'BO initial samples must be between 3 and the search budget ({search_budget}).'
+                    f'BO initial samples must be between 3 and the search budget design size ({maximum}).'
                 )
 
     def effective_bo_initial_samples(self):
@@ -100,11 +124,12 @@ class OptimizationConfig:
                 if self.bo_initial_samples is None else int(self.bo_initial_samples))
 
     def optimizer_settings(self):
-        if self.algorithm == 'bo':
+        if self.algorithm in ('bo', 'cbo'):
             return {
-                'name': 'bo', 'backend': 'scikit-learn',
+                'name': self.algorithm, 'backend': 'scikit-learn',
                 'surrogate': 'Gaussian process / Matérn 5/2',
-                'acquisition': 'expected improvement',
+                'acquisition': ('constrained expected improvement'
+                                if self.algorithm == 'cbo' else 'expected improvement'),
                 'initial_samples': self.effective_bo_initial_samples(),
                 'exploration': self.bo_exploration,
                 'random_seed': int(self.bo_random_seed),
@@ -152,6 +177,19 @@ def measurement_values(result, strategy=None):
     return values
 
 
+def charge_measurement(result):
+    """Read a validated scan-level charge summary from a terminal scan result."""
+    summary = result.get('charge_summary')
+    if not isinstance(summary, dict):
+        raise ValueError('ICT01 charge summary is unavailable.')
+    if summary.get('status') != 'valid':
+        raise ValueError(str(summary.get('error') or 'ICT01 charge samples are insufficient.'))
+    value = float(summary.get('value', float('nan')))
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError('ICT01 charge is not finite and positive.')
+    return value, deepcopy(summary)
+
+
 def json_safe(value):
     if isinstance(value, dict):
         return {str(k): json_safe(v) for k, v in value.items()}
@@ -188,7 +226,7 @@ class OptimizationSession:
                     initial_step=config.rcds_initial_step,
                     noise=config.rcds_noise,
                 )
-            else:
+            elif config.algorithm == 'bo':
                 from half_linac.src.optimization.emittance_bo import optimize_currents
                 optimizer = lambda evaluate, low, high, initial, budget: optimize_currents(
                     evaluate, low, high, initial, budget,
@@ -196,12 +234,23 @@ class OptimizationSession:
                     exploration=config.bo_exploration,
                     random_seed=int(config.bo_random_seed),
                 )
+            else:
+                from half_linac.src.optimization.emittance_constrained_bo import optimize_currents
+                optimizer = lambda evaluate, low, high, initial, budget, **kwargs: optimize_currents(
+                    evaluate, low, high, initial, budget,
+                    initial_samples=config.effective_bo_initial_samples(),
+                    exploration=config.bo_exploration,
+                    random_seed=int(config.bo_random_seed),
+                    **kwargs,
+                )
         self.optimizer = optimizer
         self.records = []
         self.initial = None
         self.best = None
         self.confirmed = False
         self.baseline = None
+        self.charge_baseline = None
+        self.charge_minimum = None
         self.deadline = float('inf')
         self.summary = {'schema_version': 'emit_optimization_v2',
                         'variable_order': [v.element_id for v in config.variables],
@@ -265,6 +314,9 @@ class OptimizationSession:
                 self.checkpoint()
             try:
                 values = measurement_values(result, self.summary['measurement'].get('scan_strategy'))
+                charge = charge_summary = None
+                if self.config.algorithm == 'cbo':
+                    charge, charge_summary = charge_measurement(result)
             except (ValueError, TypeError) as exc:
                 record['error'] = str(exc)
                 self.save()
@@ -273,13 +325,26 @@ class OptimizationSession:
                 if attempt:
                     raise RuntimeError(f'Measurement failed twice: {exc}') from exc
                 continue
-            record.update(values=values, valid=True,
-                          feasible=values['y' if self.config.plane == 'x' else 'x'] <= self.config.other_limit)
+            record.update(values=values, valid=True)
+            if charge_summary is not None:
+                record.update(charge=charge, charge_summary=charge_summary)
+            self._update_record_feasibility(record)
             self.save()
             self.emit(stage, record=record)
             self.checkpoint()
             return record
         raise AssertionError('unreachable')
+
+    def _update_record_feasibility(self, record):
+        other_plane = 'y' if self.config.plane == 'x' else 'x'
+        reasons = []
+        if record['values'][other_plane] > self.config.other_limit:
+            reasons.append('other_plane_limit')
+        if self.config.algorithm == 'cbo' and self.charge_minimum is not None:
+            if record.get('charge', float('-inf')) < self.charge_minimum:
+                reasons.append('charge_limit')
+        record['constraint_failures'] = reasons
+        record['feasible'] = not reasons
 
     def run(self):
         self.run_dir.mkdir(parents=True, exist_ok=False)
@@ -296,7 +361,25 @@ class OptimizationSession:
             self.summary['initial_readback'] = self.config.named(self.config.point(self.device.readback(), bounded=False))
             self.save()
             baseline = [self.acquire(self.initial, 'Baseline', reserve=2) for _ in range(2)]
+            if self.config.algorithm == 'cbo':
+                self.charge_baseline = sum(r['charge'] for r in baseline) / len(baseline)
+                self.charge_minimum = self.charge_baseline * self.config.charge_constraint.retention
+                self.summary['charge_constraint'] = {
+                    'element_id': self.config.charge_constraint.element_id,
+                    'channel': self.config.charge_constraint.channel,
+                    'unit': baseline[0]['charge_summary'].get('unit', 'nC'),
+                    'retention': self.config.charge_constraint.retention,
+                    'trim_fraction': self.config.charge_constraint.trim_fraction,
+                    'baseline': self.charge_baseline,
+                    'minimum': self.charge_minimum,
+                }
+                for record in baseline:
+                    self._update_record_feasibility(record)
+                self.save()
             if not all(r['feasible'] for r in baseline):
+                failures = {failure for record in baseline for failure in record['constraint_failures']}
+                if 'charge_limit' in failures:
+                    raise RuntimeError('Baseline ICT01 charge is unstable at the configured retention limit.')
                 raise RuntimeError('Baseline exceeds the other-plane limit.')
             self.baseline = {p: sum(r['values'][p] for r in baseline) / 2 for p in ('x', 'y')}
             self.summary['baseline_difference'] = {
@@ -309,12 +392,29 @@ class OptimizationSession:
                 if r['feasible'] and (self.best is None or value < self.best['values'][self.config.plane]):
                     self.best = r
                 self.save()
-                return value / (value + self.baseline[self.config.plane]) if r['feasible'] else 2.0
+                normalized = value / (value + self.baseline[self.config.plane])
+                if self.config.algorithm == 'cbo':
+                    other_plane = 'y' if self.config.plane == 'x' else 'x'
+                    return normalized, (r['values'][other_plane], r['charge'])
+                return normalized if r['feasible'] else 2.0
 
             try:
-                self.optimizer(evaluate, tuple(v.low for v in self.config.variables),
-                               tuple(v.high for v in self.config.variables), self.initial,
-                               self.config.max_measurements - len(self.records) - 2)
+                optimizer_args = (
+                    evaluate, tuple(v.low for v in self.config.variables),
+                    tuple(v.high for v in self.config.variables), self.initial,
+                    self.config.max_measurements - len(self.records) - 2,
+                )
+                if self.config.algorithm == 'cbo':
+                    other_plane = 'y' if self.config.plane == 'x' else 'x'
+                    self.optimizer(
+                        *optimizer_args,
+                        constraint_bounds=((None, self.config.other_limit),
+                                           (self.charge_minimum, None)),
+                        seed_observations=((self.initial, 0.5,
+                                            (self.baseline[other_plane], self.charge_baseline)),),
+                    )
+                else:
+                    self.optimizer(*optimizer_args)
             except BudgetExhausted:
                 self.checkpoint()  # Measurement budget reserves verification; time does not.
             if self.best is not None:

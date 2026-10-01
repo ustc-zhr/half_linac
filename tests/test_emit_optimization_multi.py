@@ -159,6 +159,65 @@ class MultiTests(unittest.TestCase):
         self.assertTrue(all(2 <= x <= 10 and 1 <= y <= 9 for x, y in points))
         self.assertLess(min((x - 4)**2 + (y - 3)**2 for x, y in points), .1)
 
+    def test_constrained_bo_avoids_lower_unconstrained_charge_region(self):
+        from half_linac.src.optimization.emittance_constrained_bo import optimize_currents as optimize_cbo
+        points = []
+
+        def evaluate(point):
+            x = point[0]
+            points.append(x)
+            return (x - .2) ** 2, (0., x)
+
+        optimize_cbo(
+            evaluate, (0.,), (1.,), (.8,), 12,
+            constraint_bounds=((None, 1.), (.6, None)),
+            initial_samples=3, random_seed=4,
+            seed_observations=(((.8,), (.8 - .2) ** 2, (0., .8)),),
+        )
+        feasible = [x for x in points if x >= .6]
+        self.assertEqual(len(points), 12)
+        self.assertTrue(all(0 <= x <= 1 for x in points))
+        self.assertLess(min(feasible), .65)
+
+    def test_constrained_bo_without_seeded_feasible_point_searches_for_feasibility(self):
+        from half_linac.src.optimization.emittance_constrained_bo import optimize_currents as optimize_cbo
+        points = []
+
+        def evaluate(point):
+            x = point[0]
+            points.append(x)
+            return (x - .1) ** 2, (x,)
+
+        optimize_cbo(
+            evaluate, (0.,), (1.,), (.1,), 8,
+            constraint_bounds=((.8, None),), initial_samples=3, random_seed=2,
+            seed_observations=(((.1,), 0., (.1,)),),
+        )
+        self.assertTrue(any(x >= .8 for x in points))
+
+    def test_constrained_bo_multivariable_bounds_and_seed_are_deterministic(self):
+        from half_linac.src.optimization.emittance_constrained_bo import optimize_currents as optimize_cbo
+
+        def run():
+            points = []
+
+            def evaluate(point):
+                points.append(point)
+                x, y = point
+                return (x - 4) ** 2 + (y - 3) ** 2, (x + y,)
+
+            optimize_cbo(
+                evaluate, (2., 1.), (10., 9.), (6., 5.), 8,
+                constraint_bounds=((5., None),), initial_samples=5, random_seed=6,
+                seed_observations=(((6., 5.), 8., (11.,)),),
+            )
+            return points
+
+        first, second = run(), run()
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 8)
+        self.assertTrue(all(2 <= x <= 10 and 1 <= y <= 9 for x, y in first))
+
 
 if __name__ == '__main__':
     unittest.main()
