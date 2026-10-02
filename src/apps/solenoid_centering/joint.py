@@ -42,6 +42,8 @@ class JointPlan:
     response_floor_mm: float = 0.01
     minimum_improvement: float = 0.05
     max_target_degradation: float = 0.2
+    validation_points: int = 5
+    process_scan_mode: str = "two_point"
     samples_per_point: int | None = None
     sample_interval_s: float | None = None
     settle_time_s: float | None = None
@@ -69,6 +71,11 @@ class JointPlan:
         if (type(self.max_iterations) is not int or not 1 <= self.max_iterations <= 10
                 or self.probe_a > self.max_excursion_a):
             raise MachineProfileError("Invalid iteration count or probe exceeds excursion limit.")
+        if (type(self.validation_points) is not int
+                or not 3 <= self.validation_points <= 101):
+            raise MachineProfileError("Joint validation points must be an integer from 3 to 101.")
+        if self.process_scan_mode not in ("two_point", "full"):
+            raise MachineProfileError("Joint process scan mode must be two_point or full.")
         if (self.samples_per_point is not None and
                 (type(self.samples_per_point) is not int or self.samples_per_point < 1)):
             raise MachineProfileError("Joint samples per point must be a positive integer.")
@@ -212,8 +219,10 @@ class JointScanner:
                 self._read(pv)
         # Upper bound on point count, excluding readback/communication latency.
         passes = 2 + 2 * len(self.correctors) + self.plan.max_iterations
-        points = len(self.solenoids) * (10 + 2 * passes)
-        point_time = sum((10 + 2 * passes) * (p.settle_time_s +
+        process_points = self._process_point_count()
+        points_per_target = 2 * self.plan.validation_points + process_points * passes
+        points = len(self.solenoids) * points_per_target
+        point_time = sum(points_per_target * (p.settle_time_s +
                          (p.samples_per_point - 1) * p.sample_interval_s) for p in self.presets)
         settling_s = (sum(p.settle_time_s for p in self.presets) * (passes + 2)
                       + self.presets[0].settle_time_s * (3 * len(self.correctors)
@@ -244,10 +253,14 @@ class JointScanner:
             self._write(e, value)
         self.helper._sleep(self.presets[0].settle_time_s)
 
-    def _measure(self, label, *, full=False):
+    def _process_point_count(self):
+        return self.plan.validation_points if self.plan.process_scan_mode == "full" else 2
+
+    def _measure(self, label, *, point_count=2):
         self.progress(label)
         self._check_state(self.expected)
-        offsets = np.linspace(-1, 1, 5) if full else np.array([-1., 1.])
+        offsets = np.linspace(-1, 1, point_count)
+        full = point_count > 2
         residual, scores = [], []
         for p, target in zip(self.presets, self.plan.targets):
             e = p.solenoid
@@ -255,6 +268,7 @@ class JointScanner:
             currents = self.original[e] + offsets * target.modulation_a
             record = {"label": label, "solenoid": e, "bpms": list(target.bpms),
                       "correctors": {c: self.expected[c] for c in self.correctors},
+                      "point_count": point_count,
                       "currents_a": [], "samples_mm": []}
             self.records.append(record)
             for value in currents:
@@ -333,9 +347,17 @@ class JointScanner:
                   "recommendation_available": False, "iterations": []}
         error = None
         try:
-            _, baseline_full = self._measure("Baseline: five-point validation", full=True)
+            validation_points = self.plan.validation_points
+            process_points = self._process_point_count()
+            _, baseline_full = self._measure(
+                f"Baseline: {validation_points}-point validation",
+                point_count=validation_points,
+            )
             baseline_record = self.records[-1] if self.plan.mode == "response_diagnostic" else None
-            base, base_scores = self._measure("Baseline: two-point modulation")
+            base, base_scores = self._measure(
+                f"Baseline: {process_points}-point process scan",
+                point_count=process_points,
+            )
             baseline_probe_record = self.records[-1] if self.plan.mode == "response_diagnostic" else None
             current = np.array([self.original[c] for c in self.correctors])
             columns = []
@@ -347,7 +369,10 @@ class JointScanner:
                     probe = current.copy()
                     probe[j] += sign * self.plan.probe_a
                     self._set_correctors(probe)
-                    pair.append(self._measure(f"Response: {c} {sign * self.plan.probe_a:+g} A")[0])
+                    pair.append(self._measure(
+                        f"Response: {c} {sign * self.plan.probe_a:+g} A",
+                        point_count=process_points,
+                    )[0])
                     if self.plan.mode == "response_diagnostic":
                         probe_records.append(self.records[-1])
                 columns.append((pair[1] - pair[0]) / 2)
@@ -365,7 +390,10 @@ class JointScanner:
                 self._set_correctors(current)
             matrix = np.column_stack(columns)
             # Recheck baseline after identification; do not fit against stale data.
-            base, base_scores = self._measure("Recheck baseline after response measurement")
+            base, base_scores = self._measure(
+                "Recheck baseline after response measurement",
+                point_count=process_points,
+            )
             recheck_record = self.records[-1] if self.plan.mode == "response_diagnostic" else None
             result["response_matrix"] = matrix.tolist()
             if self.plan.mode == "response_diagnostic":
@@ -426,7 +454,10 @@ class JointScanner:
                 break
             candidate = current + step
             self._set_correctors(candidate)
-            measured, scores = self._measure(f"Iteration {iteration + 1}")
+            measured, scores = self._measure(
+                f"Iteration {iteration + 1}",
+                point_count=self._process_point_count(),
+            )
             accepted, improvement = self._acceptable(base_scores, scores)
             result["iterations"].append({"correctors_a": candidate.tolist(), "scores_mm": scores,
                                           "accepted": accepted, "improvement": improvement})
@@ -435,7 +466,10 @@ class JointScanner:
                 result["termination"] = "Candidate failed measured improvement/protection gate"
                 break
             current, base, base_scores = candidate, measured, scores
-        _, final_full = self._measure("Final: five-point validation", full=True)
+        _, final_full = self._measure(
+            f"Final: {self.plan.validation_points}-point validation",
+            point_count=self.plan.validation_points,
+        )
         accepted, improvement = self._acceptable(baseline_full, final_full)
         accepted = accepted and any(item["accepted"] for item in result["iterations"])
         result.update(baseline_scores_mm=baseline_full, final_scores_mm=final_full,

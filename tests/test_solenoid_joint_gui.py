@@ -38,12 +38,37 @@ class JointGuiTests(unittest.TestCase):
         window.show()
         self.app.processEvents()
         header = window.status_strip.parentWidget()
+        single_page = window.mode_tabs.widget(0)
+        single_margins = single_page.layout().contentsMargins()
+        joint_margins = window.joint_view.layout().contentsMargins()
+        self.assertEqual((joint_margins.left(), joint_margins.top(),
+                          joint_margins.right(), joint_margins.bottom()),
+                         (single_margins.left(), single_margins.top(),
+                          single_margins.right(), single_margins.bottom()))
+        single_controls = window.splitter.widget(0)
+        self.assertEqual(window.joint_view.configuration_panel.minimumWidth(),
+                         single_controls.minimumWidth())
+        self.assertEqual(window.joint_view.configuration_panel.maximumWidth(),
+                         single_controls.maximumWidth())
+        self.assertEqual(window.joint_view.workspace_panel.objectName(),
+                         window.splitter.widget(1).objectName())
+        self.assertEqual(window.joint_view.result_card.objectName(),
+                         window.result_card.objectName())
+        self.assertEqual(window.check_button.height(), 32)
+        self.assertEqual(window.joint_view.preflight_button.height(), window.check_button.height())
         self.assertGreater(window.mode_tabs.geometry().top(), header.geometry().bottom())
         single_readiness = window.status_strip.items['READINESS'].value_label.text()
         window.mode_tabs.setCurrentIndex(1)
         self.app.processEvents()
         self.assertTrue(window.status_strip.isVisible())
-        self.assertFalse(window.log_button.isVisible())
+        self.assertTrue(window.log_button.isVisible())
+        self.assertEqual(window.log_button.text(), "Log")
+        self.assertIsNone(window.joint_view.log_button)
+        window.log_button.click()
+        self.app.processEvents()
+        self.assertFalse(window.joint_view.log.isHidden())
+        self.assertTrue(window.log_view.isHidden())
+        window.log_button.click()
         self.assertEqual(window.status_strip.items['PRESET'].title_label.text(), 'Group')
         self.assertEqual(window.status_strip.items['READINESS'].title_label.text(), 'Readiness')
         self.assertEqual(window.status_strip.items['READBACK VERIFIED'].title_label.text(), 'Readback')
@@ -103,8 +128,24 @@ class JointGuiTests(unittest.TestCase):
         self.assertLess(abs(preset_y - combo_y), 15)
         self.assertLess(self.dialog.preflight_button.mapToGlobal(
             self.dialog.preflight_button.rect().center()).y(), combo_y)
+        self.assertEqual(self.dialog.preflight_button.height(), 32)
+        self.assertNotEqual(self.dialog.preflight_button.property("role"), "primary")
+        self.assertEqual(self.dialog.start_button.property("role"), "primary")
         self.assertLessEqual(self.dialog.start_button.height(), 36)
+        self.assertIs(self.dialog.start_button.parentWidget(),
+                      self.dialog.advanced_panel.parentWidget())
+        self.assertTrue(self.dialog.status.isHidden())
+        self.assertEqual(self.dialog.status.text(), "")
         self.assertLessEqual(self.dialog.log_button.height(), 36)
+        self.assertEqual(self.dialog.log_button.text(), "Log")
+        self.assertEqual(self.dialog.log_button.objectName(), "headerLogButton")
+        log_center = self.dialog.log_button.mapToGlobal(
+            self.dialog.log_button.rect().center()
+        )
+        state_center = self.dialog.state_label.mapToGlobal(
+            self.dialog.state_label.rect().center()
+        )
+        self.assertLess(abs(log_center.y() - state_center.y()), 15)
 
     def test_default_and_full_group_plan(self):
         self.assertEqual(len(self.dialog._plan().targets), 3)
@@ -221,6 +262,18 @@ class JointGuiTests(unittest.TestCase):
         self.assertFalse(self.dialog.advanced_panel.isVisible())
         self.assertIs(self.dialog.result_stack.currentWidget(), self.dialog.empty_results)
 
+    def test_validation_points_and_process_scan_are_editable(self):
+        self.assertEqual(self.dialog.validation_points.value(), 5)
+        self.assertEqual(self.dialog.process_scan_mode.currentData(), 'two_point')
+        self.dialog.validation_points.setValue(7)
+        self.dialog.process_scan_mode.setCurrentIndex(
+            self.dialog.process_scan_mode.findData('full')
+        )
+        plan = self.dialog._plan()
+        self.assertEqual(plan.validation_points, 7)
+        self.assertEqual(plan.process_scan_mode, 'full')
+        self.assertEqual(self.dialog.group_display_name(), 'Custom')
+
     def test_applied_state_keeps_restore_available_and_locks_inputs(self):
         self.dialog.result = {'recommendation_available': True, 'applied': True}
         self.dialog._refresh()
@@ -235,6 +288,7 @@ class JointGuiTests(unittest.TestCase):
         modal.assert_not_called()
         self.assertIn('no settings changed', self.dialog.status.text())
         self.assertIn('example:current:ao', self.dialog.status.text())
+        self.assertFalse(self.dialog.status.isHidden())
         self.assertEqual(self.dialog.state_label.text(), 'CHECK FAILED')
         self.assertTrue(self.dialog.log_button.isChecked())
         self.assertEqual(self.dialog.log.objectName(), 'logView')

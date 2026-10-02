@@ -1,6 +1,6 @@
 {
   "control_backends": ["real"],
-  "sampling": {"samples_per_point": 3, "settle_time_s": 2, "sample_interval_s": 0.2},
+  "sampling": {"samples_per_point": 3, "settle_time_s": 2, "sample_interval_s": 1},
   "max_iters": 2,
   "readback_verification": {
     "solenoid_readback_tolerance": 0.01,
@@ -76,6 +76,8 @@
       "max_step_a": 0.25,
       "max_excursion_a": 0.5,
       "max_iterations": 2,
+      "validation_points": 5,
+      "process_scan_mode": "two_point",
       "response_floor_mm": 0.01
     },
     "groups": [

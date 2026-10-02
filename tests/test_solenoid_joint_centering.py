@@ -146,6 +146,33 @@ class JointTests(unittest.TestCase):
         self.assertIn(0.7, waits)
         self.assertIn(1.3, waits)
 
+    def test_editable_validation_points_keep_two_point_process_scan(self):
+        plan = replace(self.plan, validation_points=7, max_iterations=1)
+        scanner = JointScanner(self.context, plan, io=object())
+        io = CoupledIO(scanner)
+        scanner.io = scanner.helper.io = io
+        scanner.helper._sleep = lambda _: scanner.helper._raise_if_stopped()
+        result = scanner.run()
+        validation = [record for record in result['records']
+                      if 'validation' in record['label']]
+        process = [record for record in result['records']
+                   if 'validation' not in record['label']]
+        self.assertTrue(validation)
+        self.assertTrue(process)
+        self.assertTrue(all(record['point_count'] == 7 for record in validation))
+        self.assertTrue(all(record['point_count'] == 2 for record in process))
+
+    def test_full_process_scan_uses_validation_point_count(self):
+        plan = replace(self.plan, validation_points=7, process_scan_mode='full',
+                       max_iterations=1)
+        scanner = JointScanner(self.context, plan, io=object())
+        io = CoupledIO(scanner)
+        scanner.io = scanner.helper.io = io
+        scanner.helper._sleep = lambda _: scanner.helper._raise_if_stopped()
+        result = scanner.run()
+        self.assertTrue(result['records'])
+        self.assertTrue(all(record['point_count'] == 7 for record in result['records']))
+
     def test_preflight_is_read_only_and_limits_are_enforced(self):
         report = self.scanner.preflight()
         self.assertGreater(report['estimated_minimum_seconds'], 0)
@@ -248,7 +275,9 @@ class JointTests(unittest.TestCase):
         self.assertFalse(self.scanner.last_result['recommendation_available'])
 
     def test_plan_rejects_bad_numeric_options(self):
-        for changes in ({'probe_a': float('nan')}, {'max_iterations': 0}, {'probe_a': 1.}):
+        for changes in ({'probe_a': float('nan')}, {'max_iterations': 0}, {'probe_a': 1.},
+                        {'validation_points': 2}, {'validation_points': 102},
+                        {'process_scan_mode': 'adaptive'}):
             with self.assertRaises(ValueError):
                 replace(self.plan, **changes).validate()
 

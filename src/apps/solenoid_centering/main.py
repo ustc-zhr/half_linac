@@ -422,6 +422,7 @@ class MainWindow(QMainWindow):
             self.joint_view.setWindowFlags(Qt.Widget)
             self.joint_view.busy_changed.connect(self._joint_busy_changed)
             self.joint_view.status_changed.connect(self._sync_joint_status)
+            self.joint_view.log_visibility_changed.connect(self._sync_joint_log_button)
             self.mode_tabs.addTab(self.joint_view, "Joint Centering")
         outer_layout.addWidget(self.mode_tabs, 1)
         self.mode_tabs.currentChanged.connect(self._on_mode_changed)
@@ -431,7 +432,12 @@ class MainWindow(QMainWindow):
     def _on_mode_changed(self, index):
         single_mode = index == 0
         self.status_strip.set_scope("single" if single_mode else "joint")
-        self.log_button.setVisible(single_mode)
+        log_visible = (not self.log_view.isHidden() if single_mode
+                       else bool(self.joint_view and not self.joint_view.log.isHidden()))
+        self.log_button.blockSignals(True)
+        self.log_button.setChecked(log_visible)
+        self.log_button.blockSignals(False)
+        self.log_button.setVisible(True)
         if not single_mode:
             self._sync_joint_status()
 
@@ -510,6 +516,7 @@ class MainWindow(QMainWindow):
         heading.addStretch(1)
         self.check_button = QPushButton("Check PVs", panel)
         self.check_button.setProperty("compact", True)
+        self.check_button.setFixedHeight(HEADER_ACTION_HEIGHT)
         self.check_button.clicked.connect(self.run_preflight)
         heading.addWidget(self.check_button)
         layout.addLayout(heading)
@@ -694,7 +701,9 @@ class MainWindow(QMainWindow):
         self.start_button = QPushButton("Start Scan", self.run_card)
         self.stop_button = QPushButton("Abort", self.run_card)
         self.start_button.setProperty("role", "primary")
+        self.start_button.setProperty("compact", True)
         self.stop_button.setProperty("role", "danger")
+        self.stop_button.setProperty("compact", True)
         self.stop_button.setEnabled(False)
         self.stop_button.setVisible(False)
         self.start_button.clicked.connect(self.start_scan)
@@ -1211,7 +1220,17 @@ class MainWindow(QMainWindow):
         return "Preflight failed; see Log for details."
 
     def _toggle_log(self, checked: bool) -> None:
-        self.log_view.setVisible(checked)
+        if self.mode_tabs.currentIndex() == 0 or self.joint_view is None:
+            self.log_view.setVisible(checked)
+        else:
+            self.joint_view._toggle_log(checked)
+
+    def _sync_joint_log_button(self, visible: bool) -> None:
+        if self.mode_tabs.currentIndex() != 1:
+            return
+        self.log_button.blockSignals(True)
+        self.log_button.setChecked(visible)
+        self.log_button.blockSignals(False)
 
     def _append_log(self, message: str) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")

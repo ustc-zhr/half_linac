@@ -13,7 +13,11 @@ from PyQt5.QtWidgets import (
 
 from half_linac.src.apps.solenoid_centering.joint import JointScanner, JointTarget, load_joint_plans
 from half_linac.src.apps.solenoid_centering.scan import StopRequested
-from half_linac.src.apps.solenoid_centering.gui.theme import build_stylesheet, theme_palette
+from half_linac.src.apps.solenoid_centering.gui.theme import (
+    HEADER_ACTION_HEIGHT,
+    build_stylesheet,
+    theme_palette,
+)
 from half_linac.src.shared.app_theme import resolve_initial_theme
 from half_linac.src.shared.machine_profile import list_elements
 
@@ -38,6 +42,7 @@ class JointWorker(QThread):
 class JointCenteringDialog(QDialog):
     busy_changed = pyqtSignal(bool)
     status_changed = pyqtSignal()
+    log_visibility_changed = pyqtSignal(bool)
 
     def __init__(self, context, parent=None, *, embedded=False):
         super().__init__(parent)
@@ -66,9 +71,11 @@ class JointCenteringDialog(QDialog):
         self.palette_colors = theme_palette(getattr(parent, "current_theme", resolve_initial_theme()))
         self.setStyleSheet(self._stylesheet())
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        page_margin = 12 if embedded else 16
+        layout.setContentsMargins(page_margin, page_margin, page_margin, page_margin)
+        layout.setSpacing(10 if embedded else 12)
 
+        self.log_button = None
         self.state_label = QLabel("NOT CHECKED", self)
         self.state_label.setProperty("role", "statusValue")
         if embedded:
@@ -82,25 +89,36 @@ class JointCenteringDialog(QDialog):
             context_label = QLabel(f"{context.machine.display_name}  /  {context.control_backend.name.upper()}")
             context_label.setProperty("muted", True)
             header.addWidget(context_label)
+            self.log_button = QToolButton(self)
+            self.log_button.setObjectName("headerLogButton")
+            self.log_button.setText("Log")
+            self.log_button.setCheckable(True)
+            self.log_button.setFixedSize(48, HEADER_ACTION_HEIGHT)
+            self.log_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            self.log_button.toggled.connect(self._toggle_log)
+            header.addWidget(self.log_button)
             header.addSpacing(16)
             header.addWidget(self.state_label)
             layout.addLayout(header)
 
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(8)
         layout.addWidget(self.splitter, 1)
         configuration = QFrame()
         configuration.setObjectName("controlCard")
+        self.configuration_panel = configuration
         config_layout = QVBoxLayout(configuration)
-        config_layout.setContentsMargins(14, 14, 14, 14)
+        config_layout.setContentsMargins(12, 12, 12, 12)
         config_layout.setSpacing(7)
         config_header = QHBoxLayout()
-        heading = QLabel("Joint configuration")
+        heading = QLabel("Configuration")
         heading.setObjectName("panelTitle")
         config_header.addWidget(heading)
         config_header.addStretch()
         self.preflight_button = QPushButton("Check PVs")
         self.preflight_button.setProperty("compact", True)
+        self.preflight_button.setFixedHeight(HEADER_ACTION_HEIGHT)
         self.preflight_button.setAutoDefault(False)
         self.preflight_button.setToolTip("Check connections and current limits, then estimate scan time.")
         self.preflight_button.clicked.connect(self.preflight)
@@ -200,6 +218,11 @@ class JointCenteringDialog(QDialog):
         self.max_target_worsening = self._spin(0.1, 99.9, decimals=1)
         self.max_target_worsening.setSingleStep(1)
         self.max_target_worsening.setSuffix(" %")
+        self.validation_points = QSpinBox()
+        self.validation_points.setRange(3, 101)
+        self.process_scan_mode = QComboBox()
+        self.process_scan_mode.addItem("Two-point (fast)", "two_point")
+        self.process_scan_mode.addItem("Full points", "full")
         self.samples_per_point = QSpinBox()
         self.samples_per_point.setRange(1, 100)
         self.sample_interval = self._spin(0, 60)
@@ -215,6 +238,10 @@ class JointCenteringDialog(QDialog):
             ("Response tolerance (mm)", self.floor, "Confirm this threshold against measured BPM noise."),
             ("Max. target worsening (%)", self.max_target_worsening,
              "Each target must stay at or below max(previous response × (1 + this percentage), response tolerance)."),
+            ("Start / final points", self.validation_points,
+             "Equally spaced solenoid-current points used for both initial and final validation."),
+            ("Process scan", self.process_scan_mode,
+             "Use two endpoint currents for speed, or the full start/final point count throughout the scan."),
             ("Samples / point", self.samples_per_point, "BPM readings averaged at each solenoid current point."),
             ("Sample interval (s)", self.sample_interval, "Wait between BPM readings at the same point."),
             ("Settle after change (s)", self.settle_time, "Wait after changing a solenoid or corrector before measuring."),
@@ -222,8 +249,11 @@ class JointCenteringDialog(QDialog):
         )):
             widget.setMaximumWidth(150)
             widget.setToolTip(tip)
-            (form if index < 5 else advanced_form).addRow(label, widget)
-            widget.valueChanged.connect(self._mark_custom)
+            (form if index < 7 else advanced_form).addRow(label, widget)
+            if isinstance(widget, QComboBox):
+                widget.currentIndexChanged.connect(self._mark_custom)
+            else:
+                widget.valueChanged.connect(self._mark_custom)
         settings_layout.addLayout(form)
         self.advanced_panel = QWidget()
         self.advanced_panel.setLayout(advanced_form)
@@ -236,21 +266,40 @@ class JointCenteringDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setWidget(settings_card)
         config_layout.addWidget(scroll, 1)
-        configuration.setMinimumWidth(490)
-        configuration.setMaximumWidth(560)
+        configuration.setMinimumWidth(390)
+        configuration.setMaximumWidth(460)
         self.splitter.addWidget(configuration)
 
-        workspace = QWidget()
+        workspace = QFrame()
+        workspace.setObjectName("workspacePanel")
+        self.workspace_panel = workspace
         workspace_layout = QVBoxLayout(workspace)
-        workspace_layout.setContentsMargins(8, 0, 0, 0)
-        workspace_layout.setSpacing(10)
-        self.result_summary = QLabel("No scan results yet")
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(0)
+        self.result_card = QFrame(workspace)
+        self.result_card.setObjectName("resultCard")
+        result_layout = QVBoxLayout(self.result_card)
+        result_layout.setContentsMargins(12, 10, 12, 10)
+        result_layout.setSpacing(7)
+        result_header = QHBoxLayout()
+        self.result_summary = QLabel("Scan Results")
         self.result_summary.setObjectName("panelTitle")
-        workspace_layout.addWidget(self.result_summary)
+        result_header.addWidget(self.result_summary)
+        result_header.addStretch()
+        self.apply_button = QPushButton("Apply Recommended")
+        self.restore_button = QPushButton("Restore Initial")
+        for button, handler in ((self.apply_button, self.apply),
+                                (self.restore_button, self.restore)):
+            button.setAutoDefault(False)
+            button.setProperty("compact", True)
+            result_header.addWidget(button)
+            button.clicked.connect(handler)
+        result_layout.addLayout(result_header)
+        workspace_layout.addWidget(self.result_card, 1)
         self.result_hint = QLabel("Run preflight to check connections, current limits and scan time.")
         self.result_hint.setWordWrap(True)
         self.result_hint.setProperty("muted", True)
-        workspace_layout.addWidget(self.result_hint)
+        result_layout.addWidget(self.result_hint)
         overview = QFrame()
         overview.setObjectName("jointOverview")
         overview_layout = QHBoxLayout(overview)
@@ -270,7 +319,7 @@ class JointCenteringDialog(QDialog):
             metric_layout.addWidget(value)
             overview_layout.addWidget(metric, 1)
             setattr(self, attr, value)
-        workspace_layout.addWidget(overview)
+        result_layout.addWidget(overview)
         self.tabs = QTabWidget()
         self.responses = self._table(["Solenoid", "Initial RMS\n(mm)", "Final RMS\n(mm)", "Improvement"])
         self.results = self._table(["Corrector", "Initial (A)", "Candidate (A)", "Change (A)"])
@@ -286,7 +335,7 @@ class JointCenteringDialog(QDialog):
         self.tabs.addTab(self.sensitivities, "Sensitivity")
         self.result_stack = QStackedWidget()
         self.empty_results = QFrame()
-        self.empty_results.setObjectName("resultCard")
+        self.empty_results.setObjectName("jointResultBody")
         empty_layout = QVBoxLayout(self.empty_results)
         empty_layout.setAlignment(Qt.AlignCenter)
         empty_layout.setSpacing(10)
@@ -300,14 +349,17 @@ class JointCenteringDialog(QDialog):
         empty_layout.addWidget(self.empty_detail)
         self.result_stack.addWidget(self.empty_results)
         self.result_stack.addWidget(self.tabs)
-        workspace_layout.addWidget(self.result_stack, 1)
+        result_layout.addWidget(self.result_stack, 1)
         self.splitter.addWidget(workspace)
-        self.splitter.setSizes([520, 800])
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([410, 1000])
 
-        self.status = QLabel("Review scan amplitudes, then run preflight.")
+        self.status = QLabel()
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.PlainText)
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.status.hide()
         layout.addWidget(self.status)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 0)
@@ -317,32 +369,24 @@ class JointCenteringDialog(QDialog):
         self.progress_bar.hide()
         layout.addWidget(self.progress_bar)
 
-        row = QHBoxLayout()
+        scan_actions = QHBoxLayout()
         self.start_button = QPushButton("Start Joint Scan")
+        self.start_button.setProperty("role", "primary")
         self.stop_button = QPushButton("Stop and Restore")
         self.stop_button.setProperty("role", "danger")
-        self.apply_button = QPushButton("Apply Recommended")
-        self.restore_button = QPushButton("Restore Initial")
-        for button, handler in ((self.start_button, self.start), (self.stop_button, self.stop),
-                                (self.apply_button, self.apply), (self.restore_button, self.restore)):
+        for button, handler in ((self.start_button, self.start), (self.stop_button, self.stop)):
             button.setAutoDefault(False)
             button.setProperty("compact", True)
-            row.addWidget(button)
+            scan_actions.addWidget(button)
             button.clicked.connect(handler)
-        row.addStretch()
-        self.log_button = QPushButton("Show log")
-        self.log_button.setCheckable(True)
-        self.log_button.setAutoDefault(False)
-        self.log_button.setProperty("compact", True)
-        row.addWidget(self.log_button)
-        layout.addLayout(row)
+        settings_layout.addLayout(scan_actions)
+
         self.log = QPlainTextEdit()
         self.log.setObjectName("logView")
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(3000)
         self.log.setMaximumHeight(150)
         self.log.hide()
-        self.log_button.toggled.connect(self._toggle_log)
         layout.addWidget(self.log)
         self.group.currentIndexChanged.connect(self._load_group)
         self._load_group()
@@ -444,7 +488,11 @@ QLabel#jointEmptyDetail {{
 
     def _toggle_log(self, visible):
         self.log.setVisible(visible)
-        self.log_button.setText("Hide log" if visible else "Show log")
+        self.log_visibility_changed.emit(visible)
+
+    def _set_status(self, text):
+        self.status.setText(text)
+        self.status.setVisible(bool(text))
 
     def _state(self, text, tone="subtle"):
         self.state_label.setText(text)
@@ -579,7 +627,7 @@ QLabel#jointEmptyDetail {{
 
     def _load_group(self, *_):
         if not self.plans:
-            self.status.setText("No joint centering groups configured for this machine.")
+            self._set_status("No joint centering groups configured for this machine.")
             self._refresh()
             return
         plan = self.plans[self.group.currentIndex()]
@@ -599,6 +647,7 @@ QLabel#jointEmptyDetail {{
         for widget, value in ((self.probe, plan.probe_a), (self.step, plan.max_step_a),
                               (self.excursion, plan.max_excursion_a), (self.floor, plan.response_floor_mm),
                               (self.max_target_worsening, plan.max_target_degradation * 100),
+                              (self.validation_points, plan.validation_points),
                               (self.samples_per_point, plan.samples_per_point or first_preset.samples_per_point),
                               (self.sample_interval, first_preset.sample_interval_s if plan.sample_interval_s is None
                                else plan.sample_interval_s),
@@ -606,6 +655,9 @@ QLabel#jointEmptyDetail {{
                                else plan.settle_time_s),
                               (self.iterations, plan.max_iterations)):
             widget.setValue(value)
+        self.process_scan_mode.setCurrentIndex(
+            self.process_scan_mode.findData(plan.process_scan_mode)
+        )
         self._loading = False
         self._custom = False
         self.plan_source.setText("Preset plan")
@@ -630,9 +682,9 @@ QLabel#jointEmptyDetail {{
         self.sensitivities.setRowCount(0)
         self.result_stack.setCurrentWidget(self.empty_results)
         self.empty_detail.setText("Configure targets  →  Check PVs  →  Scan")
-        self.result_summary.setText("Results")
-        self.result_hint.setText("Check connections and limits before scanning.")
-        self.status.setText("Configuration changed. Run preflight before scanning.")
+        self.result_summary.setText("Scan Results")
+        self.result_hint.clear()
+        self._set_status("")
         self._state("NOT CHECKED")
         self._refresh()
 
@@ -652,6 +704,8 @@ QLabel#jointEmptyDetail {{
                        probe_a=self.probe.value(), max_step_a=self.step.value(),
                        max_excursion_a=self.excursion.value(), response_floor_mm=self.floor.value(),
                        max_target_degradation=self.max_target_worsening.value() / 100,
+                       validation_points=self.validation_points.value(),
+                       process_scan_mode=self.process_scan_mode.currentData(),
                        samples_per_point=self.samples_per_point.value(),
                        sample_interval_s=self.sample_interval.value(),
                        settle_time_s=self.settle_time.value(),
@@ -660,7 +714,8 @@ QLabel#jointEmptyDetail {{
     def _refresh(self):
         busy = self.worker is not None
         applied = bool(self.result and self.result.get("applied"))
-        for widget in (self.group, self.targets, self.probe, self.samples_per_point,
+        for widget in (self.group, self.targets, self.probe, self.validation_points,
+                       self.process_scan_mode, self.samples_per_point,
                        self.sample_interval, self.settle_time, self.reset_button):
             widget.setEnabled(not busy and not applied)
         diagnostic = bool(self.plans and self.plans[self.group.currentIndex()].mode == "response_diagnostic")
@@ -688,17 +743,16 @@ QLabel#jointEmptyDetail {{
         self.apply_button.setVisible(bool(self.result) and not applied and not diagnostic)
         self.tabs.setTabEnabled(1, not diagnostic)
         self.tabs.setTabEnabled(2, diagnostic)
-        for button, primary in ((self.preflight_button, not self.ready and not self.result and not busy),
-                                (self.start_button, self.ready and not busy),
-                                (self.apply_button, self.apply_button.isEnabled())):
-            button.setProperty("role", "primary" if primary else "")
-            button.style().unpolish(button)
-            button.style().polish(button)
+        self.apply_button.setProperty(
+            "role", "primary" if self.apply_button.isEnabled() else ""
+        )
+        self.apply_button.style().unpolish(self.apply_button)
+        self.apply_button.style().polish(self.apply_button)
 
     def _launch(self, action, callback, operation):
         self.operation = operation
         self._state(operation.upper())
-        self.status.setText({"preflight": "Checking PV connections, readbacks and current limits…",
+        self._set_status({"preflight": "Checking PV connections, readbacks and current limits…",
                              "scanning": "Starting joint scan…",
                              "applying": "Applying candidate currents and verifying readbacks…",
                              "restoring": "Restoring initial currents and verifying readbacks…"}[operation])
@@ -718,7 +772,7 @@ QLabel#jointEmptyDetail {{
     def _progress(self, message):
         self.log.appendPlainText(message)
         if not self.worker or not self.worker.stop_requested:
-            self.status.setText(message)
+            self._set_status(message)
 
     def _done(self):
         self.worker.deleteLater()
@@ -735,17 +789,20 @@ QLabel#jointEmptyDetail {{
         restore = self.result.get("restore", "unknown") if self.result else None
         if cancelled and restore == "verified":
             self._state("STOPPED", "warning")
-            self.status.setText("Scan stopped. Initial settings restored and verified.")
+            self._set_status("Scan stopped. Initial settings restored and verified.")
             self.result_hint.setText("Scan stopped before validation; no candidate can be applied.")
             self.log.appendPlainText(self.status.text())
             return
         detail = ("Preflight failed; no settings changed." if self.operation == "preflight"
                   else f"Operation failed. Restore status: {restore or 'unavailable'}.")
-        self.status.setText(detail + "\n" + message)
+        self._set_status(detail + "\n" + message)
         self._state("CHECK FAILED" if self.operation == "preflight" else "FAILED", "danger")
         self.result_hint.setText(detail)
         self.log.appendPlainText(message)
-        self.log_button.setChecked(True)
+        if self.log_button is not None:
+            self.log_button.setChecked(True)
+        else:
+            self._toggle_log(True)
         if self.result:
             self.log.appendPlainText(f"Restore status: {self.result.get('restore', 'unknown')}")
         if self.operation != "preflight":
@@ -766,7 +823,7 @@ QLabel#jointEmptyDetail {{
         self.scanner.prepared_state = dict(report["original"])
         text = (f"Preflight passed. {len(report['correctors'])} corrector channels, up to {report['points_upper_bound']} measurement points. "
                 f"Estimated waiting time: {report['estimated_minimum_seconds'] / 60:.1f} min; actual duration may be longer.")
-        self.status.setText(text)
+        self._set_status(text)
         self._state("READY", "success")
         self.result_summary.setText(f"Estimated scan time: {report['estimated_minimum_seconds'] / 60:.1f} min")
         self._update_overview(f"{report['estimated_minimum_seconds'] / 60:.1f} min")
@@ -797,7 +854,7 @@ QLabel#jointEmptyDetail {{
         self.result_summary.setText(f"Overall response improvement: {result['relative_improvement']:.1%}")
         self.result_hint.setText("Initial settings restored. Review each solenoid before applying."
                                 if available else "Initial settings restored. Candidate did not pass validation.")
-        self.status.setText(f"Scan complete. Initial settings restored. Improvement: {result['relative_improvement']:.1%}; "
+        self._set_status(f"Scan complete. Initial settings restored. Improvement: {result['relative_improvement']:.1%}; "
                             + ("Validation passed; recommended values can be applied." if available else "Validation failed; applying results is disabled."))
         self.log.appendPlainText(str(result.get("diagnostics", {})))
         self.log.appendPlainText(result["archive_path"])
@@ -837,7 +894,7 @@ QLabel#jointEmptyDetail {{
             "Downstream BPM slopes do not uniquely determine SS01 entrance position or angle. "
             "Initial settings restored; no correction is proposed."
         )
-        self.status.setText("Response scan complete. Initial settings restored and verified.")
+        self._set_status("Response scan complete. Initial settings restored and verified.")
         self.log.appendPlainText(result["archive_path"])
         baseline = result["baseline_slopes_mm_per_a"]
         rows = result["sensitivities"]
@@ -861,14 +918,14 @@ QLabel#jointEmptyDetail {{
         if self.worker:
             self.worker.stop_requested = True
             self._state("STOPPING", "warning")
-            self.status.setText("Stopping and restoring. Waiting for readback verification.")
+            self._set_status("Stopping and restoring. Waiting for readback verification.")
 
     def apply(self):
         if QMessageBox.question(self, "Apply Joint Result", "Apply the recommended corrector currents shown in the table?") == QMessageBox.Yes:
             self._launch(lambda: self.scanner.apply(self.result), self._applied, "applying")
 
     def _applied(self, _):
-        self.status.setText("Recommended values applied. Initial values can be restored.")
+        self._set_status("Recommended values applied. Initial values can be restored.")
         self._state("APPLIED", "success")
         self.result_hint.setText("Candidate corrector currents are now applied to the machine.")
 
@@ -876,7 +933,7 @@ QLabel#jointEmptyDetail {{
         self._launch(lambda: self.scanner.restore_applied(self.result), self._restored, "restoring")
 
     def _restored(self, _):
-        self.status.setText("Initial corrector currents restored.")
+        self._set_status("Initial corrector currents restored.")
         self._state("RESTORED", "success")
         self.result_hint.setText("Initial settings restored. The validated candidate remains available.")
 
