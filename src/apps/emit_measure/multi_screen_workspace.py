@@ -129,6 +129,9 @@ class MultiScreenWorkspace(QWidget):
         self.beam_width_method = "Gaussian fit"
         self.roi_status = "Off"
         self.background_status = "Off"
+        self._image_settings_by_screen = {}
+        self._image_settings_screen = None
+        self._legacy_image_settings = False
         self._background_image = None
         self._background_screen = None
         self._background_metadata = {}
@@ -519,6 +522,81 @@ class MultiScreenWorkspace(QWidget):
     def _screen_id(item):
         return item.data(Qt.UserRole) or item.text()
 
+    def _current_screen(self) -> str | None:
+        item = self.screen_list.currentItem()
+        return self._screen_id(item) if item is not None else None
+
+    def _screen_has_samples(self, screen: str | None) -> bool:
+        return bool(
+            self.session is not None
+            and screen
+            and any(
+                sample.screen == screen
+                for sample in self.session.acquisition.samples
+            )
+        )
+
+    def _image_settings_payload(self, screen: str | None = None) -> dict[str, object]:
+        if screen is None:
+            screen = self._current_screen()
+        return {
+            "vmin": self.beam_image_vmin,
+            "vmax": self.beam_image_vmax,
+            "use_vmin_for_fit": bool(self.fit_uses_vmin),
+        }
+
+    def _save_image_settings_for_screen(self, screen: str | None = None) -> None:
+        if screen is None:
+            screen = self._image_settings_screen
+        if not screen:
+            return
+        self._image_settings_by_screen[screen] = self._image_settings_payload(screen)
+        if self.session is not None:
+            self.session = replace(
+                self.session,
+                image_settings_by_screen=dict(self._image_settings_by_screen),
+                fit_vmin=self.beam_image_vmin if self.fit_uses_vmin else None,
+            )
+
+    def _load_image_settings_for_screen(self, screen: str | None) -> None:
+        if not screen:
+            self._image_settings_screen = None
+            return
+        settings = self._image_settings_by_screen.get(screen)
+        if settings is None and self.session is not None:
+            settings = self.session.image_settings_by_screen.get(screen)
+        if settings is None and self.session is not None and self._legacy_image_settings:
+            settings = {
+                "vmin": self.session.fit_vmin,
+                "vmax": None,
+                "use_vmin_for_fit": self.session.fit_vmin is not None,
+            }
+        settings = settings or {}
+        self.beam_image_vmin = settings.get("vmin")
+        self.beam_image_vmax = settings.get("vmax")
+        self.fit_uses_vmin = bool(settings.get("use_vmin_for_fit", False))
+        self.fit_intensity_checkbox.blockSignals(True)
+        self.fit_intensity_checkbox.setChecked(self.fit_uses_vmin)
+        self.fit_intensity_checkbox.blockSignals(False)
+        self._image_settings_screen = screen
+        self._save_image_settings_for_screen(screen)
+
+    def _prepare_image_settings(self, screens) -> dict[str, dict[str, object]]:
+        self._legacy_image_settings = False
+        self._save_image_settings_for_screen(self._image_settings_screen)
+        settings = {}
+        for screen in screens:
+            current = self._image_settings_by_screen.get(screen)
+            if current is None:
+                current = {
+                    "vmin": None,
+                    "vmax": None,
+                    "use_vmin_for_fit": False,
+                }
+                self._image_settings_by_screen[screen] = current
+            settings[screen] = dict(current)
+        return settings
+
     def _refresh_screen_counts(self):
         counts = self.session.acquisition.sample_counts if self.session else {}
         for row in range(self.screen_list.count()):
@@ -531,12 +609,14 @@ class MultiScreenWorkspace(QWidget):
             )
 
     def _screen_changed(self, *_args) -> None:
+        self._save_image_settings_for_screen()
         self._update_button_state()
         item = self.screen_list.currentItem()
         if item is None:
             self._clear_image_display()
             return
         screen = self._screen_id(item)
+        self._load_image_settings_for_screen(screen)
         if self._background_screen != screen and self.beam_image_background_checkbox.isChecked():
             blocked = self.beam_image_background_checkbox.blockSignals(True)
             self.beam_image_background_checkbox.setChecked(False)
@@ -647,8 +727,8 @@ class MultiScreenWorkspace(QWidget):
         self.remove_screen_button.setEnabled(
             not self._archive_review and self.screen_list.count() > 3
         )
-        can_change_fit = not self._archive_review and not (
-            self.session is not None and self.session.acquisition.samples
+        can_change_fit = not self._archive_review and not self._screen_has_samples(
+            self._current_screen()
         )
         self.width_method_combo.setEnabled(can_change_fit)
         self.fit_intensity_checkbox.setEnabled(can_change_fit)
@@ -727,6 +807,7 @@ class MultiScreenWorkspace(QWidget):
                 self.session,
                 beam_width_method=self.beam_width_method,
                 fit_vmin=self.beam_image_vmin if self.fit_uses_vmin else None,
+                image_settings_by_screen=self._prepare_image_settings(screens),
             )
             if observability.status in {"invalid", "poor"}:
                 self._set_state("Invalid", observability.message)
@@ -770,6 +851,7 @@ class MultiScreenWorkspace(QWidget):
             self._set_state("Ready", f"{screen}: {exc}")
             return
         quality = self._fit_quality(fit, payload.get("pv_sigx"), payload.get("pv_sigy"))
+        quality["image_settings"] = self._image_settings_payload(screen)
         rejected = (
             not fit.valid
             or any(quality.get(f"{plane}_status") in {"clipped", "underresolved", "poor_fit"} for plane in ("x", "y"))
@@ -1310,11 +1392,18 @@ class MultiScreenWorkspace(QWidget):
                 self.status_label.setText(f"Image range: {exc}")
             return
         if self._archive_review or (self.session is not None and self.session.acquisition.samples):
-            if self.fit_uses_vmin and limits[0] != self.beam_image_vmin:
+            if (
+                self.fit_uses_vmin
+                and limits[0] != self.beam_image_vmin
+                and self._screen_has_samples(self._current_screen())
+            ):
                 if refit:
-                    self.status_label.setText("Start a new measurement to change fit vmin")
+                    self.status_label.setText(
+                        "This screen already has samples; fit vmin is locked"
+                    )
                 return
         self.beam_image_vmin, self.beam_image_vmax = limits
+        self._save_image_settings_for_screen(self._current_screen())
         self._redraw_image()
         if refit and self.fit_uses_vmin and self.session is not None:
             self.session = replace(self.session, fit_vmin=self.beam_image_vmin)
@@ -1327,12 +1416,13 @@ class MultiScreenWorkspace(QWidget):
             self.fit_intensity_checkbox.blockSignals(False)
             self.status_label.setText("Set vmin in Display before using it for fit")
             return
-        if self._archive_review or (self.session is not None and self.session.acquisition.samples):
+        if self._archive_review or self._screen_has_samples(self._current_screen()):
             self.fit_intensity_checkbox.blockSignals(True)
             self.fit_intensity_checkbox.setChecked(self.fit_uses_vmin)
             self.fit_intensity_checkbox.blockSignals(False)
             return
         self.fit_uses_vmin = bool(enabled)
+        self._save_image_settings_for_screen(self._current_screen())
         if self.session is not None:
             self.session = replace(
                 self.session,
@@ -1712,6 +1802,12 @@ class MultiScreenWorkspace(QWidget):
         if self.session is None:
             return
         self.beam_width_method = self.session.beam_width_method
+        self._legacy_image_settings = not bool(self.session.image_settings_by_screen)
+        self._image_settings_by_screen = {
+            str(screen): dict(settings)
+            for screen, settings in self.session.image_settings_by_screen.items()
+        }
+        self._image_settings_screen = None
         self.beam_image_vmin = self.session.fit_vmin
         self.fit_uses_vmin = self.session.fit_vmin is not None
         self.width_method_combo.blockSignals(True)

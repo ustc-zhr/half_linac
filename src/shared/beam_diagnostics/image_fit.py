@@ -275,10 +275,20 @@ def analyze_raw_beam_image(
     full_frame_for_roi=False,
     analyzer=None,
 ):
-    """Prepare a raw camera frame and run the standard beam-image analysis."""
+    """Prepare a raw camera frame and run the standard beam-image analysis.
+
+    When ``full_frame_for_roi`` is true, return the oriented, background-
+    subtracted full frame for display while the fit result still comes from
+    the selected ROI. Fit thresholds remain analysis-only.
+    """
     image = reshape_beam_image(raw_image, pixel_shape, flip_y=flip_y)
     if flip_y and background is not None:
         background = np.flipud(np.asarray(background))
+    display_image = (
+        subtract_background(image, background)
+        if background is not None
+        else image
+    )
     analyze = analyze_beam_image if analyzer is None else analyzer
     analysis = analyze(
         image,
@@ -286,8 +296,8 @@ def analyze_raw_beam_image(
         background=background,
         roi=roi,
     )
-    if full_frame_for_roi and roi is not None:
-        return image, analysis[1]
+    if full_frame_for_roi:
+        return display_image, analysis[1]
     return analysis
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import json
 import math
@@ -295,6 +295,9 @@ class MultiScreenMeasurementSession:
     schema: str = "emit_multi_screen_v1"
     beam_width_method: str = "Gaussian fit"
     fit_vmin: float | None = None
+    image_settings_by_screen: Mapping[str, Mapping[str, object]] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def create(
@@ -346,6 +349,10 @@ def measurement_archive_payload(
         "schema": session.schema,
         "beam_width_method": session.beam_width_method,
         "fit_vmin": session.fit_vmin,
+        "image_settings_by_screen": {
+            str(screen): dict(settings)
+            for screen, settings in session.image_settings_by_screen.items()
+        },
         "created_at": session.created_at,
         "machine": session.machine,
         "backend": session.backend,
@@ -438,6 +445,14 @@ def load_multi_screen_archive(path: Path | str) -> MultiScreenMeasurementSession
     if isinstance(target, bool) or not isinstance(target, int):
         raise ValueError("archive target_samples_per_screen must be an integer")
     acquisition = MultiScreenAcquisition.create(elements, target)
+    raw_image_settings = payload.get("image_settings_by_screen", {})
+    if not isinstance(raw_image_settings, dict):
+        raise ValueError("archive image_settings_by_screen must be an object")
+    image_settings_by_screen = {
+        str(screen): dict(settings)
+        for screen, settings in raw_image_settings.items()
+        if str(screen) in elements and isinstance(settings, dict)
+    }
     samples = payload.get("samples", ())
     if not isinstance(samples, list):
         raise ValueError("archive samples must be a list")
@@ -473,6 +488,7 @@ def load_multi_screen_archive(path: Path | str) -> MultiScreenMeasurementSession
         created_at=str(payload.get("created_at", "")),
         beam_width_method=str(payload.get("beam_width_method", "Gaussian fit")),
         fit_vmin=payload.get("fit_vmin"),
+        image_settings_by_screen=image_settings_by_screen,
     )
 
 

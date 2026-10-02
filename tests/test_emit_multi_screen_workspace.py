@@ -158,7 +158,7 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
             path.write_text(json.dumps(payload))
             self.assertEqual(load_multi_screen_archive(path).beam_width_method, "Gaussian fit")
 
-    def test_vmin_fit_control_is_frozen_with_multi_screen_samples(self):
+    def test_vmin_fit_control_is_per_screen_and_locks_only_sampled_screen(self):
         axis = np.linspace(-3, 3, 201)
         profile = np.exp(-axis**2 / .08) + .08 * np.exp(-axis**2 / .8)
         image = np.outer(profile, profile)
@@ -175,9 +175,19 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         workspace.acquire_sample()
         self.assertEqual(workspace.session.fit_vmin, 0.03)
         self.assertFalse(workspace.fit_intensity_checkbox.isEnabled())
+        workspace.screen_list.setCurrentRow(1)
+        self.assertTrue(workspace.fit_intensity_checkbox.isEnabled())
+        self.assertIsNone(workspace.beam_image_vmin)
+        self.assertFalse(workspace.fit_uses_vmin)
+        workspace.beam_image_vmin = 0.07
+        workspace.fit_intensity_checkbox.setChecked(True)
+        self.assertEqual(workspace._image_settings_by_screen["PRF07"]["vmin"], 0.07)
+        self.assertTrue(workspace._image_settings_by_screen["PRF07"]["use_vmin_for_fit"])
         with TemporaryDirectory() as directory:
             path = save_multi_screen_archive(Path(directory) / "threshold.json", workspace.session)
-            self.assertEqual(load_multi_screen_archive(path).fit_vmin, 0.03)
+            restored = load_multi_screen_archive(path)
+            self.assertEqual(restored.image_settings_by_screen["PRF06"]["vmin"], 0.03)
+            self.assertEqual(restored.image_settings_by_screen["PRF07"]["vmin"], 0.07)
 
     def test_background_apply_control_lives_in_manage_dialog(self):
         workspace = self._workspace(np.zeros((20, 20)))

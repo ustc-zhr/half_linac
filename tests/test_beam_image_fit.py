@@ -11,10 +11,43 @@ PARENT = REPO_ROOT.parent
 if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
-from half_linac.src.shared.beam_diagnostics import analyze_beam_image, fit_beam_image
+from half_linac.src.shared.beam_diagnostics import (
+    ImageROI,
+    analyze_beam_image,
+    analyze_raw_beam_image,
+    fit_beam_image,
+)
 
 
 class BeamImageFitTests(unittest.TestCase):
+    def test_full_frame_preview_applies_background_while_fit_uses_roi(self):
+        image = np.full((8, 10), 5.0)
+        image[2:6, 2:8] = 20.0
+        background = np.full_like(image, 3.0)
+        roi = ImageROI(x=2, y=2, width=6, height=4)
+
+        displayed, fit = analyze_raw_beam_image(
+            image.ravel(),
+            pixel_shape=(10, 8),
+            extent=(-5.0, 5.0, -4.0, 4.0),
+            background=background,
+            roi=roi,
+            full_frame_for_roi=True,
+            analyzer=lambda frame, **kwargs: analyze_beam_image(
+                frame,
+                method="RMS moments",
+                fit_vmin=10.0,
+                **kwargs,
+            ),
+        )
+
+        expected = np.full_like(image, 2.0)
+        expected[2:6, 2:8] = 17.0
+        np.testing.assert_array_equal(displayed, expected)
+        self.assertEqual(displayed.shape, image.shape)
+        self.assertLess(fit.cropped_image.shape[0], image.shape[0])
+        self.assertLess(fit.cropped_image.shape[1], image.shape[1])
+
     def test_fit_vmin_removes_halo_after_background_without_changing_display_image(self):
         axis = np.linspace(-5, 5, 201)
         core = np.exp(-axis**2 / (2 * 0.45**2))
