@@ -66,6 +66,7 @@ from half_linac.src.apps.orbit_correct.profile_runtime import (
 HEADER_ACTION_HEIGHT = 32
 TARGET_BPM_DECIMALS = 3
 TARGET_BPM_STEP_MM = 0.001
+TASKBAR_GROUP_NAME = "main.py"
 logger = logging.getLogger(__name__)
 
 DARK_THEME = {
@@ -2595,7 +2596,8 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
+    # Match the launcher and other app entrypoints so WSLg groups their windows.
+    app = QApplication([TASKBAR_GROUP_NAME, *sys.argv[1:]])
     window = myWindow()
     window.show()
     sys.exit(app.exec_())
