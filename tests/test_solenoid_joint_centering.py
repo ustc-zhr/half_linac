@@ -82,6 +82,70 @@ class JointTests(unittest.TestCase):
         five = JointScanner(self.context, load_joint_plans(self.context)[1], io=object())
         self.assertEqual(len(five.correctors), 10)
 
+    def test_ss01_response_diagnostic_reports_slopes_and_restores(self):
+        plan = load_joint_plans(self.context)[2]
+        self.assertEqual(plan.mode, "response_diagnostic")
+        self.assertEqual(plan.correctors, ("XC00", "YC00", "XC01", "YC01"))
+        scanner = JointScanner(self.context, plan, io=object())
+        io = CoupledIO(scanner)
+        scanner.io = scanner.helper.io = io
+        scanner.helper._sleep = lambda _: scanner.helper._raise_if_stopped()
+        result = scanner.run()
+        self.assertFalse(result["recommendation_available"])
+        self.assertNotIn("recommended", result)
+        self.assertEqual(result["restore"], "verified")
+        self.assertEqual(io.values, io.initial)
+        self.assertEqual(len(result["sensitivities"]), 16)
+        for planes in result["baseline_recheck_difference_mm_per_a"].values():
+            for difference in planes.values():
+                self.assertAlmostEqual(difference, 0.0, places=8)
+        for row in result["sensitivities"]:
+            axis = ("x", "y").index(row["plane"])
+            corrector = scanner.correctors.index(row["corrector"])
+            self.assertAlmostEqual(row["sensitivity_mm_per_a2"],
+                                   io.matrix[0, axis, corrector], places=8)
+            self.assertAlmostEqual(
+                result["baseline_slopes_mm_per_a"][row["bpm"]][row["plane"]],
+                io.matrix[0, axis] @ -io.goal, places=8)
+
+    def test_custom_plan_is_used_and_archived(self):
+        plan = replace(self.plan, id='custom', display_name='Custom joint centering',
+                       targets=(replace(self.plan.targets[0], bpms=('BPM01', 'BPM02'),
+                                        modulation_a=0.4),),
+                       correctors=('XC02', 'YC02'))
+        scanner = JointScanner(self.context, plan, io=object())
+        io = CoupledIO(scanner)
+        scanner.io = scanner.helper.io = io
+        scanner.helper._sleep = lambda _: scanner.helper._raise_if_stopped()
+        report = scanner.preflight()
+        self.assertEqual(io.writes, [])
+        self.assertEqual(report['plan']['targets'][0]['bpms'], ('BPM01', 'BPM02'))
+        self.assertEqual(report['correctors'], ['XC02', 'YC02'])
+        result = scanner.run()
+        self.assertEqual(result['restore'], 'verified')
+        self.assertEqual(io.values, io.initial)
+        self.assertEqual(result['preflight']['plan']['id'], 'custom')
+        self.assertEqual(result['preflight']['plan']['targets'][0]['modulation_a'], 0.4)
+
+    def test_sampling_overrides_are_recorded_and_used(self):
+        plan = replace(self.plan, samples_per_point=2, sample_interval_s=0.7,
+                       settle_time_s=1.3)
+        scanner = JointScanner(self.context, plan, io=object())
+        io = CoupledIO(scanner)
+        scanner.io = scanner.helper.io = io
+        waits = []
+        scanner.helper._sleep = waits.append
+        result = scanner.run()
+        self.assertEqual(result['restore'], 'verified')
+        for settings in result['preflight']['sampling'].values():
+            self.assertEqual(settings, {'samples_per_point': 2,
+                                        'sample_interval_s': 0.7,
+                                        'settle_time_s': 1.3})
+        self.assertTrue(all(len(point) == 2 for record in result['records']
+                            for point in record['samples_mm']))
+        self.assertIn(0.7, waits)
+        self.assertIn(1.3, waits)
+
     def test_preflight_is_read_only_and_limits_are_enforced(self):
         report = self.scanner.preflight()
         self.assertGreater(report['estimated_minimum_seconds'], 0)

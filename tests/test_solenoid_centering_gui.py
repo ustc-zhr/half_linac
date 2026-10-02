@@ -129,7 +129,7 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         self.assertTrue(self.window.restore_button.isHidden())
         self.assertEqual(
             self.window.status_strip.items["RESULT QUALITY"].value_label.text(),
-            "NO VALID RECOMMENDATION",
+            "No valid recommendation",
         )
 
     def test_valid_result_shows_only_header_apply_action(self):
@@ -285,11 +285,11 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
 
         self.assertEqual(
             self.window.status_strip.items["READINESS"].value_label.text(),
-            "NOT READY",
+            "Not ready",
         )
         self.assertEqual(
             self.window.status_strip.items["READBACK VERIFIED"].value_label.text(),
-            "FAILED",
+            "Failed",
         )
         self.assertIn("readback mismatch", self.window.log_view.toPlainText())
         show_report.assert_called_once_with(
@@ -307,7 +307,7 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
         self.assertTrue(self.window.start_button.isEnabled())
         self.assertEqual(
             self.window.status_strip.items["READINESS"].value_label.text(),
-            "UNCHECKED",
+            "Unchecked",
         )
 
     def test_start_without_preflight_prompts_for_check_pvs(self):
@@ -353,11 +353,11 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
 
         self.assertEqual(
             self.window.status_strip.items["READINESS"].value_label.text(),
-            "STOPPED",
+            "Stopped",
         )
         self.assertEqual(
             self.window.status_strip.items["READBACK VERIFIED"].value_label.text(),
-            "VERIFIED",
+            "Verified",
         )
         log = self.window.log_view.toPlainText()
         self.assertIn("Scan termination: operator_stopped", log)
@@ -379,7 +379,7 @@ class SolenoidCenteringGuiTests(unittest.TestCase):
 
         self.assertEqual(
             self.window.status_strip.items["READINESS"].value_label.text(),
-            "RESTORE FAILED",
+            "Restore failed",
         )
         self.assertIn("HCOR (TEST:HCOR:SP): timeout", self.window.log_view.toPlainText())
 

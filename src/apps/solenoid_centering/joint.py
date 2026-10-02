@@ -5,7 +5,7 @@ are contacted until a caller explicitly requests preflight or a scan.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import time
 from typing import Callable
 
@@ -31,6 +31,8 @@ class JointPlan:
     id: str
     display_name: str
     targets: tuple[JointTarget, ...]
+    mode: str = "centering"
+    correctors: tuple[str, ...] = ()
     probe_a: float = 0.2
     max_step_a: float = 0.25
     max_excursion_a: float = 0.5
@@ -40,8 +42,17 @@ class JointPlan:
     response_floor_mm: float = 0.01
     minimum_improvement: float = 0.05
     max_target_degradation: float = 0.2
+    samples_per_point: int | None = None
+    sample_interval_s: float | None = None
+    settle_time_s: float | None = None
 
     def validate(self):
+        if self.mode not in ("centering", "response_diagnostic"):
+            raise MachineProfileError("Unknown joint scan mode.")
+        if len(set(self.correctors)) != len(self.correctors):
+            raise MachineProfileError("Joint correctors must be unique.")
+        if self.mode == "response_diagnostic" and (len(self.targets) != 1 or not self.correctors):
+            raise MachineProfileError("Response diagnostic requires one solenoid and explicit correctors.")
         if not self.targets or len({t.preset_id for t in self.targets}) != len(self.targets):
             raise MachineProfileError("Joint targets must be nonempty and unique.")
         for target in self.targets:
@@ -58,6 +69,12 @@ class JointPlan:
         if (type(self.max_iterations) is not int or not 1 <= self.max_iterations <= 10
                 or self.probe_a > self.max_excursion_a):
             raise MachineProfileError("Invalid iteration count or probe exceeds excursion limit.")
+        if (self.samples_per_point is not None and
+                (type(self.samples_per_point) is not int or self.samples_per_point < 1)):
+            raise MachineProfileError("Joint samples per point must be a positive integer.")
+        for value in (self.sample_interval_s, self.settle_time_s):
+            if value is not None and (not np.isfinite(value) or value < 0):
+                raise MachineProfileError("Joint sampling times must be nonnegative.")
 
 
 def load_joint_plans(context) -> tuple[JointPlan, ...]:
@@ -66,6 +83,8 @@ def load_joint_plans(context) -> tuple[JointPlan, ...]:
     for group in raw.get("groups", []):
         options = dict(raw.get("defaults", {}))
         options.update(group.get("options", {}))
+        if "correctors" in options:
+            options["correctors"] = tuple(options["correctors"])
         plan = JointPlan(
             id=group["id"], display_name=group.get("display_name", group["id"]),
             targets=tuple(JointTarget(t["preset"], tuple(t["bpms"]), float(t["modulation_a"]))
@@ -78,6 +97,9 @@ def load_joint_plans(context) -> tuple[JointPlan, ...]:
             for bpm in target.bpms:
                 if context.profile.get_element(bpm).kind != "bpm":
                     raise MachineProfileError(f"{bpm} is not a BPM.")
+        for corrector in plan.correctors:
+            if context.profile.get_element(corrector).kind != "corr":
+                raise MachineProfileError(f"{corrector} is not a corrector.")
         plans.append(plan)
     if len({p.id for p in plans}) != len(plans):
         raise MachineProfileError("Duplicate joint group ids.")
@@ -105,17 +127,34 @@ class JointScanner:
         self.context, self.plan = context, plan
         self.progress = progress or (lambda message: None)
         workflow = context.solenoid_centering_workflow
-        self.presets = [workflow.presets_by_id[t.preset_id] for t in plan.targets]
+        for target in plan.targets:
+            if target.preset_id not in workflow.presets_by_id:
+                raise MachineProfileError(f"Unknown joint preset: {target.preset_id}")
+            for bpm in target.bpms:
+                if context.profile.get_element(bpm).kind != "bpm":
+                    raise MachineProfileError(f"{bpm} is not a BPM.")
+        for corrector in plan.correctors:
+            if context.profile.get_element(corrector).kind != "corr":
+                raise MachineProfileError(f"{corrector} is not a corrector.")
+        timing = {name: value for name, value in (
+            ("samples_per_point", plan.samples_per_point),
+            ("sample_interval_s", plan.sample_interval_s),
+            ("settle_time_s", plan.settle_time_s),
+        ) if value is not None}
+        self.presets = [replace(workflow.presets_by_id[t.preset_id], **timing)
+                        for t in plan.targets]
         self.helper = SolenoidCenteringScanner(context, self.presets[0], io=io,
                                               stop_requested=stop_requested)
         self.io = self.helper.io
-        self.correctors = tuple(dict.fromkeys(c for p in self.presets for c in (p.hcorr, p.vcorr)))
+        self.correctors = (plan.correctors or
+                           tuple(dict.fromkeys(c for p in self.presets for c in (p.hcorr, p.vcorr))))
         self.solenoids = tuple(p.solenoid for p in self.presets)
         if None in self.solenoids or len(set(self.solenoids)) != len(self.solenoids):
             raise MachineProfileError("Joint scan requires distinct machine-profile solenoid elements.")
         # Guard other configured front-end optics too, even for a smaller group.
-        ids = tuple(dict.fromkeys(e for p in workflow.presets
-                                 for e in (p.solenoid, p.hcorr, p.vcorr) if e))
+        guarded = [e for p in workflow.presets
+                   for e in (p.solenoid, p.hcorr, p.vcorr) if e]
+        ids = tuple(dict.fromkeys([*self.correctors, *guarded]))
         self.devices = {e: resolve_write_target(context, e) for e in ids}
         self.readbacks = {e: resolve_channel(context, e, "current_readback") for e in ids}
         self.tolerances = {}
@@ -126,6 +165,9 @@ class JointScanner:
                 self.tolerances[e] = p.motion_verification.corrector_readback_tolerance
             if p.solenoid:
                 self.tolerances[p.solenoid] = p.motion_verification.solenoid_readback_tolerance
+        for e in self.correctors:
+            if e not in self.tolerances:
+                raise MachineProfileError(f"Missing readback verification for {e}.")
         for e in (*self.correctors, *self.solenoids):
             if self.devices[e].unit != "A":
                 raise MachineProfileError("Joint centering currently requires current channels in A.")
@@ -178,7 +220,11 @@ class JointScanner:
                                                         + self.plan.max_iterations + 1))
         return {"original": original, "ranges_a": ranges, "points_upper_bound": points,
                 "estimated_minimum_seconds": point_time + settling_s,
-                "correctors": list(self.correctors), "plan": asdict(self.plan)}
+                "correctors": list(self.correctors), "plan": asdict(self.plan),
+                "sampling": {p.id: {"samples_per_point": p.samples_per_point,
+                                    "sample_interval_s": p.sample_interval_s,
+                                    "settle_time_s": p.settle_time_s}
+                             for p in self.presets}}
 
     def _write(self, e, value, *, restoring=False):
         if not restoring:
@@ -257,6 +303,17 @@ class JointScanner:
         resolved = np.max(before) > self.plan.response_floor_mm
         return bool(resolved and protected and improvement >= self.plan.minimum_improvement), float(improvement)
 
+    @staticmethod
+    def _slopes(record):
+        """Measured BPM x/y slope in mm per solenoid ampere."""
+        currents = np.asarray(record["currents_a"], dtype=float)
+        means = np.asarray(record["samples_mm"], dtype=float).mean(axis=1)
+        centered = currents - currents.mean()
+        slopes = centered @ means / (centered @ centered)
+        return {bpm: {plane: float(slopes[2 * i + axis])
+                      for axis, plane in enumerate(("x", "y"))}
+                for i, bpm in enumerate(record["bpms"])}
+
     def run(self):
         self.last_result = None
         if self.prepared_state is not None:
@@ -267,67 +324,66 @@ class JointScanner:
         self.expected = dict(self.original)
         self.touched = set()
         self.records = []
-        result = {"schema_version": 1, "mode": "joint_centering", "preset_id": "joint_" + self.plan.id,
+        result = {"schema_version": 1,
+                  "mode": ("response_diagnostic" if self.plan.mode == "response_diagnostic"
+                           else "joint_centering"),
+                  "preset_id": "joint_" + self.plan.id,
                   "machine_id": self.context.machine.id, "backend": self.context.control_backend.name,
                   "preflight": report, "original": dict(self.original), "records": self.records,
                   "recommendation_available": False, "iterations": []}
         error = None
         try:
             _, baseline_full = self._measure("Baseline: five-point validation", full=True)
+            baseline_record = self.records[-1] if self.plan.mode == "response_diagnostic" else None
             base, base_scores = self._measure("Baseline: two-point modulation")
+            baseline_probe_record = self.records[-1] if self.plan.mode == "response_diagnostic" else None
             current = np.array([self.original[c] for c in self.correctors])
             columns = []
+            sensitivities = []
             for j, c in enumerate(self.correctors):
                 pair = []
+                probe_records = []
                 for sign in (-1, 1):
                     probe = current.copy()
                     probe[j] += sign * self.plan.probe_a
                     self._set_correctors(probe)
                     pair.append(self._measure(f"Response: {c} {sign * self.plan.probe_a:+g} A")[0])
+                    if self.plan.mode == "response_diagnostic":
+                        probe_records.append(self.records[-1])
                 columns.append((pair[1] - pair[0]) / 2)
+                if probe_records:
+                    minus, plus = map(self._slopes, probe_records)
+                    for bpm in self.plan.targets[0].bpms:
+                        for plane in ("x", "y"):
+                            sensitivities.append({
+                                "corrector": c, "bpm": bpm, "plane": plane,
+                                "slope_minus_mm_per_a": minus[bpm][plane],
+                                "slope_plus_mm_per_a": plus[bpm][plane],
+                                "sensitivity_mm_per_a2":
+                                    (plus[bpm][plane] - minus[bpm][plane]) / (2 * self.plan.probe_a),
+                            })
                 self._set_correctors(current)
             matrix = np.column_stack(columns)
             # Recheck baseline after identification; do not fit against stale data.
             base, base_scores = self._measure("Recheck baseline after response measurement")
+            recheck_record = self.records[-1] if self.plan.mode == "response_diagnostic" else None
             result["response_matrix"] = matrix.tolist()
-            for iteration in range(self.plan.max_iterations):
-                step, diagnostics = solve_joint_step(matrix, base, cutoff=self.plan.svd_cutoff,
-                                                     damping=self.plan.damping)
-                result["diagnostics"] = diagnostics
-                if diagnostics["rank"] == 0:
-                    result["termination"] = "No measurable corrector response"
-                    break
-                step *= self.plan.probe_a
-                step *= min(1., self.plan.max_step_a / max(np.max(np.abs(step)), 1e-15))
-                origin = np.array([self.original[c] for c in self.correctors])
-                # Scale the whole step to preserve the SVD direction within total bounds.
-                factors = [1.]
-                for value, delta, initial in zip(current, step, origin):
-                    if abs(delta) > 1e-15:
-                        edge = initial + np.sign(delta) * self.plan.max_excursion_a
-                        factors.append(max(0., (edge - value) / delta))
-                step *= min(factors)
-                if np.max(np.abs(step)) < 1e-6:
-                    result["termination"] = "Correction too small or excursion bound reached"
-                    break
-                candidate = current + step
-                self._set_correctors(candidate)
-                measured, scores = self._measure(f"Iteration {iteration + 1}")
-                accepted, improvement = self._acceptable(base_scores, scores)
-                result["iterations"].append({"correctors_a": candidate.tolist(), "scores_mm": scores,
-                                              "accepted": accepted, "improvement": improvement})
-                if not accepted:
-                    self._set_correctors(current)
-                    result["termination"] = "Candidate failed measured improvement/protection gate"
-                    break
-                current, base, base_scores = candidate, measured, scores
-            _, final_full = self._measure("Final: five-point validation", full=True)
-            accepted, improvement = self._acceptable(baseline_full, final_full)
-            accepted = accepted and any(item["accepted"] for item in result["iterations"])
-            result.update(baseline_scores_mm=baseline_full, final_scores_mm=final_full,
-                          relative_improvement=improvement,
-                          recommended={c: float(v) for c, v in zip(self.correctors, current)},
-                          recommendation_available=accepted, operation_status="completed")
+            if self.plan.mode == "response_diagnostic":
+                before = self._slopes(baseline_probe_record)
+                after = self._slopes(recheck_record)
+                drift = {bpm: {plane: after[bpm][plane] - before[bpm][plane]
+                               for plane in ("x", "y")}
+                         for bpm in before}
+                result.update(
+                    baseline_slopes_mm_per_a=self._slopes(baseline_record),
+                    baseline_recheck_difference_mm_per_a=drift,
+                    sensitivities=sensitivities,
+                    baseline_scores_mm=baseline_full,
+                    operation_status="completed",
+                    termination="Response diagnostic complete; no correction proposed",
+                )
+            else:
+                self._optimize(matrix, base, base_scores, baseline_full, current, result)
         except Exception as exc:
             error = exc
             result.update(operation_status="failed", error=str(exc), recommendation_available=False)
@@ -338,7 +394,7 @@ class JointScanner:
             except Exception as exc:
                 result.update(restore="failed", restore_error=str(exc), recommendation_available=False)
                 error = exc
-            # Separate filename namespace from single-solenoid results.
+            # Keep joint archives separate from single-solenoid scans.
             result["preset_id"] = "joint_" + self.plan.id
             self.last_result = result
             result["elapsed_seconds"] = time.monotonic() - started
@@ -346,6 +402,46 @@ class JointScanner:
         if error is not None:
             raise error
         return result
+
+    def _optimize(self, matrix, base, base_scores, baseline_full, current, result):
+        for iteration in range(self.plan.max_iterations):
+            step, diagnostics = solve_joint_step(matrix, base, cutoff=self.plan.svd_cutoff,
+                                                 damping=self.plan.damping)
+            result["diagnostics"] = diagnostics
+            if diagnostics["rank"] == 0:
+                result["termination"] = "No measurable corrector response"
+                break
+            step *= self.plan.probe_a
+            step *= min(1., self.plan.max_step_a / max(np.max(np.abs(step)), 1e-15))
+            origin = np.array([self.original[c] for c in self.correctors])
+            # Scale the whole step to preserve the SVD direction within total bounds.
+            factors = [1.]
+            for value, delta, initial in zip(current, step, origin):
+                if abs(delta) > 1e-15:
+                    edge = initial + np.sign(delta) * self.plan.max_excursion_a
+                    factors.append(max(0., (edge - value) / delta))
+            step *= min(factors)
+            if np.max(np.abs(step)) < 1e-6:
+                result["termination"] = "Correction too small or excursion bound reached"
+                break
+            candidate = current + step
+            self._set_correctors(candidate)
+            measured, scores = self._measure(f"Iteration {iteration + 1}")
+            accepted, improvement = self._acceptable(base_scores, scores)
+            result["iterations"].append({"correctors_a": candidate.tolist(), "scores_mm": scores,
+                                          "accepted": accepted, "improvement": improvement})
+            if not accepted:
+                self._set_correctors(current)
+                result["termination"] = "Candidate failed measured improvement/protection gate"
+                break
+            current, base, base_scores = candidate, measured, scores
+        _, final_full = self._measure("Final: five-point validation", full=True)
+        accepted, improvement = self._acceptable(baseline_full, final_full)
+        accepted = accepted and any(item["accepted"] for item in result["iterations"])
+        result.update(baseline_scores_mm=baseline_full, final_scores_mm=final_full,
+                      relative_improvement=improvement,
+                      recommended={c: float(v) for c, v in zip(self.correctors, current)},
+                      recommendation_available=accepted, operation_status="completed")
 
     def apply(self, result):
         require_workflow_write_allowed(self.context, "solenoid_centering", "Apply joint result")

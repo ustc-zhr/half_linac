@@ -150,6 +150,41 @@
             "modulation_a": 0.5
           }
         ]
+      },
+      {
+        "id": "ss01_entrance_response",
+        "display_name": "SS01 entrance response (diagnostic)",
+        "options": {
+          "mode": "response_diagnostic",
+          "correctors": ["XC00", "YC00", "XC01", "YC01"]
+        },
+        "targets": [
+          {
+            "preset": "ss01_centering",
+            "bpms": ["BPM01", "BPM02"],
+            "modulation_a": 0.2
+          }
+        ]
+      },
+      {
+        "id": "ss01_joint_centering",
+        "display_name": "SS01 joint centering",
+        "options": {
+          "correctors": ["XC00", "YC00", "XC01", "YC01"],
+          "probe_a": 1.0,
+          "max_step_a": 0.5,
+          "max_excursion_a": 2.0,
+          "max_iterations": 3,
+          "sample_interval_s": 1.0,
+          "settle_time_s": 2.0
+        },
+        "targets": [
+          {
+            "preset": "ss01_centering",
+            "bpms": ["BPM01", "BPM02"],
+            "modulation_a": 0.2
+          }
+        ]
       }
     ]
   },

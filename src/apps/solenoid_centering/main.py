@@ -39,6 +39,7 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -245,6 +246,7 @@ class MainWindow(QMainWindow):
         self.workflow = self.context.solenoid_centering_workflow
         self.worker: ScanWorker | None = None
         self.preflight_worker: PreflightWorker | None = None
+        self._single_operation_active = False
         self.preflight_ready = False
         self.configuration_revision = 0
         self.active_preflight_revision: int | None = None
@@ -265,7 +267,14 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         central = QWidget(self)
         central.setObjectName("centralRoot")
-        layout = QVBoxLayout(central)
+        outer_layout = QVBoxLayout(central)
+        outer_layout.setContentsMargins(12, 12, 12, 12)
+        outer_layout.setSpacing(10)
+        self.mode_tabs = QTabWidget(central)
+        self.mode_tabs.setObjectName("centeringModes")
+        self.mode_tabs.tabBar().setStyleSheet("QTabBar::tab { min-width: 180px; }")
+        single_page = QWidget(self.mode_tabs)
+        layout = QVBoxLayout(single_page)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
@@ -279,12 +288,6 @@ class MainWindow(QMainWindow):
         title.setObjectName("summaryTitle")
         title_row.addWidget(title)
         title_row.addStretch(1)
-        self.joint_button = QPushButton("Joint Centering", header)
-        self.joint_button.setVisible(bool(
-            self.context.profile.workflows.get("solenoid_centering", {}).get("joint_centering")
-        ))
-        self.joint_button.clicked.connect(self._open_joint_centering)
-        title_row.addWidget(self.joint_button)
         title_row.addWidget(
             RuntimeContextWidget(
                 machine_id=self.context.machine.id,
@@ -320,9 +323,9 @@ class MainWindow(QMainWindow):
             header,
         )
         header_layout.addWidget(self.status_strip)
-        layout.addWidget(header)
+        outer_layout.addWidget(header)
 
-        self.splitter = QSplitter(Qt.Horizontal, central)
+        self.splitter = QSplitter(Qt.Horizontal, single_page)
         self.splitter.setChildrenCollapsible(False)
         self.splitter.setHandleWidth(8)
         self.splitter.addWidget(self._build_control_panel(self.splitter))
@@ -400,7 +403,7 @@ class MainWindow(QMainWindow):
         self.splitter.setSizes([410, 1000])
         layout.addWidget(self.splitter, 1)
 
-        self.log_view = QPlainTextEdit(central)
+        self.log_view = QPlainTextEdit(single_page)
         self.log_view.setObjectName("logView")
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumBlockCount(700)
@@ -411,19 +414,84 @@ class MainWindow(QMainWindow):
         self.log_view.setVisible(False)
         layout.addWidget(self.log_view)
 
+        self.mode_tabs.addTab(single_page, "Single Solenoid")
+        self.joint_view = None
+        if self.context.profile.workflows.get("solenoid_centering", {}).get("joint_centering"):
+            from half_linac.src.apps.solenoid_centering.joint_gui import JointCenteringDialog
+            self.joint_view = JointCenteringDialog(self.context, self, embedded=True)
+            self.joint_view.setWindowFlags(Qt.Widget)
+            self.joint_view.busy_changed.connect(self._joint_busy_changed)
+            self.joint_view.status_changed.connect(self._sync_joint_status)
+            self.mode_tabs.addTab(self.joint_view, "Joint Centering")
+        outer_layout.addWidget(self.mode_tabs, 1)
+        self.mode_tabs.currentChanged.connect(self._on_mode_changed)
         self.setCentralWidget(central)
+        self._on_mode_changed(0)
 
-    def _open_joint_centering(self):
-        if self.worker is not None or self.preflight_worker is not None:
-            QMessageBox.information(self, "Joint Centering", "Please wait for the current operation to finish.")
+    def _on_mode_changed(self, index):
+        single_mode = index == 0
+        self.status_strip.set_scope("single" if single_mode else "joint")
+        self.log_button.setVisible(single_mode)
+        if not single_mode:
+            self._sync_joint_status()
+
+    def _sync_joint_status(self):
+        view = self.joint_view
+        if view is None:
             return
-        from half_linac.src.apps.solenoid_centering.joint_gui import JointCenteringDialog
-        try:
-            dialog = JointCenteringDialog(self.context, self)
-            dialog.exec_()
-        except Exception as exc:
-            QMessageBox.critical(self, "Joint Centering", str(exc))
-        self._invalidate_preflight()
+        result = view.result or {}
+        state = view.state_label.text()
+        tone = view.state_label.property("tone") or "subtle"
+        group_name = view.group_display_name()
+        allowed = workflow_writes_allowed(self.context, "solenoid_centering")
+        readiness = {
+            "READY": "READY", "VALIDATED": "RESULT READY",
+            "NOT VALIDATED": "RESULT READY", "MEASURED": "MEASURED",
+            "CHECK FAILED": "NOT READY", "FAILED": "NOT READY",
+            "STOPPED": "NOT READY", "APPLIED": "RESULT READY",
+            "RESTORED": "RESULT READY",
+        }.get(state, state)
+        restore = result.get("restore")
+        readback = ("VERIFIED" if restore == "verified" or view.ready else
+                    "FAILED" if restore == "failed" else "UNCHECKED")
+        readback_tone = ("success" if readback == "VERIFIED" else
+                         "danger" if readback == "FAILED" else "subtle")
+        if result.get("recommendation_available"):
+            quality, quality_tone = "VALID", "success"
+        elif result.get("mode") == "response_diagnostic" and result.get("operation_status") == "completed":
+            quality, quality_tone = "MEASURED", "success"
+        elif result.get("operation_status") == "completed":
+            quality, quality_tone = "NO VALID RECOMMENDATION", "warning"
+        else:
+            quality, quality_tone = "NOT EVALUATED", "subtle"
+        if "relative_improvement" in result:
+            last_result = f"{result['relative_improvement']:+.1%} response"
+        elif quality == "MEASURED":
+            last_result = "Response measured"
+        else:
+            last_result = "--"
+        for title, value, item_tone in (
+            ("PRESET", group_name, "subtle"),
+            ("ACCESS", "WRITE ENABLED" if allowed else "READ ONLY",
+             "success" if allowed else "warning"),
+            ("WORKFLOW", state, tone),
+            ("READINESS", readiness, tone),
+            ("READBACK VERIFIED", readback, readback_tone),
+            ("RESULT QUALITY", quality, quality_tone),
+            ("LAST RESULT", last_result, quality_tone),
+        ):
+            self.status_strip.set_value(title, value, item_tone, scope="joint")
+
+    def _joint_busy_changed(self, busy):
+        if not busy and self.joint_view.operation in ("scanning", "applying", "restoring"):
+            self._invalidate_preflight()
+        self._refresh_mode_access()
+
+    def _refresh_mode_access(self):
+        if self.joint_view is None:
+            return
+        self.mode_tabs.setTabEnabled(0, self.joint_view.worker is None)
+        self.mode_tabs.setTabEnabled(1, not self._single_operation_active)
 
     def _build_control_panel(self, parent):
         panel = QFrame(parent)
@@ -705,6 +773,8 @@ class MainWindow(QMainWindow):
         palette = theme_palette(self.current_theme)
         self.setStyleSheet(build_stylesheet(palette))
         self.plot.set_theme(palette)
+        if self.joint_view is not None:
+            self.joint_view.set_theme(self.current_theme)
         if self.current_theme == "dark":
             self.theme_toggle_button.setText("\u2600")
             self.theme_toggle_button.setToolTip("Switch to light theme.")
@@ -900,8 +970,8 @@ class MainWindow(QMainWindow):
         self.configuration_revision += 1
         self.preflight_ready = False
         self._set_result_action(None)
-        self.status_strip.set_value("READINESS", "UNCHECKED", "warning")
-        self.status_strip.set_value("READBACK VERIFIED", "UNCHECKED", "warning")
+        self.status_strip.set_value("READINESS", "UNCHECKED", "warning", scope="single")
+        self.status_strip.set_value("READBACK VERIFIED", "UNCHECKED", "warning", scope="single")
         self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
 
     def _set_preflight_inputs_enabled(self, enabled: bool) -> None:
@@ -936,6 +1006,8 @@ class MainWindow(QMainWindow):
         self.preflight_worker.finished_ok.connect(self._on_preflight_finished)
         self.preflight_worker.failed.connect(self._on_preflight_failed)
         self.preflight_worker.finished.connect(self._on_preflight_done)
+        self._single_operation_active = True
+        self._refresh_mode_access()
         self.preflight_worker.start()
         self.check_button.setEnabled(False)
         self.start_button.setEnabled(False)
@@ -981,6 +1053,8 @@ class MainWindow(QMainWindow):
         self.worker.finished_ok.connect(self._on_scan_finished)
         self.worker.failed.connect(self._on_scan_failed)
         self.worker.finished.connect(self._on_worker_done)
+        self._single_operation_active = True
+        self._refresh_mode_access()
         self.worker.start()
         self.check_button.setEnabled(False)
         self.start_button.setEnabled(False)
@@ -1147,6 +1221,8 @@ class MainWindow(QMainWindow):
             self.log_view.appendPlainText(f"         {line}")
 
     def _on_preflight_done(self):
+        self._single_operation_active = False
+        self._refresh_mode_access()
         self._set_preflight_inputs_enabled(True)
         self.check_button.setEnabled(True)
         self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
@@ -1289,6 +1365,8 @@ class MainWindow(QMainWindow):
         return display("HCOR"), display("VCOR")
 
     def _on_worker_done(self):
+        self._single_operation_active = False
+        self._refresh_mode_access()
         self._set_preflight_inputs_enabled(True)
         self.check_button.setEnabled(True)
         self.start_button.setEnabled(workflow_writes_allowed(self.context, "solenoid_centering"))
@@ -1344,6 +1422,19 @@ class MainWindow(QMainWindow):
             for col, value in enumerate(values, start=1):
                 self.result_table.setItem(row, col, QTableWidgetItem(value))
         self.result_table.resizeColumnsToContents()
+
+
+    def closeEvent(self, event):
+        if self.joint_view is not None and self.joint_view.worker is not None:
+            self.joint_view.stop()
+            event.ignore()
+            return
+        if self._single_operation_active:
+            if self.worker is not None and self.worker.isRunning():
+                self.stop_scan()
+            event.ignore()
+            return
+        super().closeEvent(event)
 
 
 def main() -> int:
