@@ -78,7 +78,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.last_run_dialog.isHidden()
     assert window.iteration_history_dialog.isHidden()
     assert not hasattr(window, "iteration_history_button")
-    assert window.history_button.text() == "History…"
+    assert window.history_button.text() == "Correction History…"
     assert window.last_run_button is window.history_button
     assert not window.history_button.isEnabled()
     assert window.offline_demo_button.isHidden()
@@ -110,7 +110,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         window.calibration_button.parentWidget()
         is window.energy_calibration_controls
     )
-    assert window.calibration_button.text() == "Edit Energy Knob Calibration…"
+    assert window.calibration_button.text() == "Edit Energy Calibration…"
     assert window.calibration_status_label.text() == "Calibration: Not required"
     assert window.calibration_status_label.isHidden()
     calibration_editor_args = {}
@@ -143,7 +143,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.review_button.isHidden()
     assert not hasattr(window, "connection_controls")
     assert window.preflight_button.isHidden()
-    assert window.preflight_button.text() == "Check PVs"
+    assert window.preflight_button.text() == "Check Connections"
     assert window.preflight_button.parentWidget().objectName() == "controlCard"
     assert window.machine_card_title.text() == "Machine"
     assert window.measurement_card_title.text() == "Measurement"
@@ -161,13 +161,13 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.run_button.objectName() == "automaticCorrectionButton"
     assert window.apply_recommendation_button.parentWidget() is window.correction_page
     assert not window.apply_recommendation_button.isHidden()
-    assert window.apply_recommendation_button.text() == "Apply and Verify"
+    assert window.apply_recommendation_button.text() == "Apply Reviewed Targets and Verify"
     assert window.measurement_action_button.text() == "Measure Dispersion"
     assert window.measurement_action_button.isEnabled()
     assert window.measurement_status_label.text() == (
         "No valid dispersion measurement"
     )
-    assert window.next_action_button.text() == "Correction…"
+    assert window.next_action_button.text() == "Start Correction…"
     assert window.next_action_button.property("workflowAction") == ""
     assert not window.next_action_button.isEnabled()
     assert window.run_button.isEnabled()
@@ -176,7 +176,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     window._start_task = lambda task: next_actions.append(task)
     window.measurement_action_button.click()
     assert next_actions == ["measure"]
-    assert window.run_button.text() == "Correction…"
+    assert window.run_button.text() == "Start Correction…"
     automatic_dialog, iterations, response_policy, minimum_improvement = (
         window._build_automatic_correction_dialog()
     )
@@ -223,7 +223,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert window.recommendation_dialog.isHidden()
     assert window.measurement_action_button.text() == "Remeasure Dispersion"
     assert "RMS" in window.measurement_status_label.text()
-    assert window.next_action_button.text() == "Correction…"
+    assert window.next_action_button.text() == "Start Correction…"
     assert window.next_action_button.property("workflowAction") == ""
     assert window.run_button.isEnabled()
     assert not window.back_to_correction_methods_button.isVisibleTo(window)
@@ -256,7 +256,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     app.processEvents()
     assert window.response_dialog.isVisible()
     window.response_dialog.close()
-    assert window.next_action_button.text() == "Correction…"
+    assert window.next_action_button.text() == "Start Correction…"
     assert window.next_action_button.property("workflowAction") == ""
     assert not window.run_button.isHidden()
     assert window.back_to_correction_methods_button.isVisibleTo(window)
@@ -270,7 +270,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         response.bpm_names
     )
     assert window.apply_recommendation_button.isEnabled()
-    assert window.next_action_button.text() == "Correction…"
+    assert window.next_action_button.text() == "Start Correction…"
     assert window.next_action_button.property("workflowAction") == ""
     assert "Predicted residual RMS" in window.workflow_summary_label.text()
     assert "no backend" in window.correction_state_label.text().lower()
@@ -349,8 +349,8 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         is calibration_dialog.reference_energy_row
     )
     assert calibration_dialog.paste_button.text() == "Paste Data"
-    assert calibration_dialog.load_button.text() == "Load Latest"
-    assert calibration_dialog.open_button.text() == "Open Draft..."
+    assert calibration_dialog.load_button.text() == "Load Latest Draft"
+    assert calibration_dialog.open_button.text() == "Open Draft…"
     assert calibration_dialog.table.verticalHeader().defaultSectionSize() == 36
     assert calibration_dialog.table.verticalHeader().minimumSectionSize() == 36
     assert calibration_dialog.table.minimumHeight() >= 184
@@ -511,7 +511,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     )
     assert "iteration 1/5 accepted" in window.plot_state_label.text().lower()
     window._set_running(False, "")
-    assert window.run_button.text() == "Correction…"
+    assert window.run_button.text() == "Start Correction…"
     window.close()
 
     from half_linac.src.apps.dispersion_correction.profile_runtime import load_profile_run_config
@@ -666,7 +666,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         )
         <= 1
     )
-    assert profile_window.next_action_button.text() == "Correction…"
+    assert profile_window.next_action_button.text() == "Start Correction…"
     assert profile_window.next_action_button.property("workflowAction") == ""
     assert not profile_window.next_action_button.isEnabled()
     assert profile_window.next_action_button.isHidden()
@@ -771,7 +771,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
         "Calibration: Session override"
     )
     assert not profile_window.measurement_action_button.isEnabled()
-    assert "Click Check PVs" in profile_window.measurement_action_button.toolTip()
+    assert "Click Check Connections" in profile_window.measurement_action_button.toolTip()
     profile_window._live_preflight_completed(
         LivePreflightResult(
             static=PreflightResult(
@@ -1019,7 +1019,7 @@ def test_main_window_constructs_offscreen(tmp_path, monkeypatch) -> None:
     assert "Energy knob PV is not configured" in half_window.operation_banner.text()
     assert half_window.online_page.isVisibleTo(half_window)
     assert half_window.model_dialog.isHidden()
-    assert half_window.next_action_button.text() == "Correction…"
+    assert half_window.next_action_button.text() == "Start Correction…"
     assert half_window.next_action_button.property("workflowAction") == ""
     assert not hasattr(half_window, "connection_controls")
     assert half_window.preflight_button.isVisibleTo(half_window)
@@ -1245,7 +1245,7 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
     assert demo.status_strip.items["ACCESS"].value_label.text() == "OFFLINE DEMO"
     assert demo.measurement_action_button.text() == "Measure Dispersion"
     assert demo.measurement_action_button.isVisibleTo(demo)
-    assert demo.next_action_button.text() == "Correction…"
+    assert demo.next_action_button.text() == "Start Correction…"
     assert not demo.next_action_button.isEnabled()
 
     response = AchromatWorkflow(
@@ -1254,12 +1254,12 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
     demo._task_completed("measure", response.measurement)
     demo._set_running(False, "")
     assert demo.measurement_action_button.text() == "Remeasure Dispersion"
-    assert demo.next_action_button.text() == "Correction…"
+    assert demo.next_action_button.text() == "Start Correction…"
     assert demo.run_button.isEnabled()
 
     demo._task_completed("response", response)
     demo._set_running(False, "")
-    assert demo.next_action_button.text() == "Correction…"
+    assert demo.next_action_button.text() == "Start Correction…"
     assert not demo.run_button.isHidden()
     assert demo.back_to_correction_methods_button.isVisibleTo(demo)
     assert demo.correction_recommendation is not None
@@ -1296,7 +1296,7 @@ def test_offline_demo_runs_the_reviewed_workflow() -> None:
     app.processEvents()
     assert len(demo.iteration_history_curve.measurement_overlays) == 1
     demo.iteration_history_dialog.close()
-    assert demo.next_action_button.text() == "Correction…"
+    assert demo.next_action_button.text() == "Start Correction…"
 
     automatic = AchromatWorkflow(demo._config_from_widgets()).run()
     demo._task_completed("run", automatic)
@@ -1511,7 +1511,7 @@ def test_history_can_apply_a_selected_generation(monkeypatch, accepted, measured
     assert window.restore_history_state_button.isVisibleTo(
         window.iteration_history_dialog
     )
-    assert window.restore_history_state_button.text() == "Apply…"
+    assert window.restore_history_state_button.text() == "Review and Restore…"
     if not measured:
         assert not window.restore_history_state_button.isEnabled()
         window.close()
@@ -1702,7 +1702,7 @@ def test_offline_demo_confirms_automatic_correction_settings(monkeypatch) -> Non
     assert demo._config_from_widgets().solver.min_step_improvement == pytest.approx(
         0.075
     )
-    assert demo.run_button.text() == "Correction…"
+    assert demo.run_button.text() == "Start Correction…"
     assert demo.run_button.parentWidget() is demo.correction_mode_actions
     demo.close()
 

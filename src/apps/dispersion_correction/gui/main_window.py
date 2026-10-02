@@ -1339,7 +1339,7 @@ class MainWindow(QMainWindow):
         self.config_title_label.setFixedHeight(34)
         heading_layout.addWidget(self.config_title_label, 0, Qt.AlignVCenter)
         heading_layout.addStretch(1)
-        self.preflight_button = QPushButton("Check PVs")
+        self.preflight_button = QPushButton("Check Connections")
         self.preflight_button.setObjectName("preflightButton")
         self.preflight_button.clicked.connect(self._start_live_preflight)
         heading_layout.addWidget(self.preflight_button)
@@ -1467,12 +1467,12 @@ class MainWindow(QMainWindow):
         calibration_actions = QHBoxLayout()
         calibration_actions.setContentsMargins(0, 0, 0, 0)
         calibration_actions.setSpacing(6)
-        self.restore_calibration_button = QPushButton("Restore Configured")
+        self.restore_calibration_button = QPushButton("Restore Calibration")
         self.restore_calibration_button.clicked.connect(
             self._restore_configured_calibration
         )
         calibration_actions.addWidget(self.restore_calibration_button)
-        self.calibration_button = QPushButton("Edit Energy Knob Calibration…")
+        self.calibration_button = QPushButton("Edit Energy Calibration…")
         self.calibration_button.clicked.connect(self._open_calibration_editor)
         calibration_actions.addWidget(self.calibration_button, 1)
         calibration_layout.addLayout(calibration_actions)
@@ -1636,7 +1636,7 @@ class MainWindow(QMainWindow):
         )
         self.response_update_combo.hide()
 
-        self.run_button = QPushButton("Correction…")
+        self.run_button = QPushButton("Start Correction…")
         self.run_button.setObjectName("automaticCorrectionButton")
         self.run_button.setProperty("role", "control")
         self.run_button.setToolTip(
@@ -1727,7 +1727,7 @@ class MainWindow(QMainWindow):
         )
         self.restore_initial_state_button.hide()
         workflow_header.addWidget(self.restore_initial_state_button)
-        self.history_button = QPushButton("History…")
+        self.history_button = QPushButton("Correction History…")
         self.history_button.setObjectName("workflowSecondaryButton")
         self.history_button.clicked.connect(self._show_iteration_history)
         # Keep the former attribute as a compatibility alias for callers that
@@ -1787,7 +1787,7 @@ class MainWindow(QMainWindow):
             self.back_to_correction_methods_button
         )
         workflow_secondary_actions.addStretch(1)
-        self.measure_q_response_button = QPushButton("Measure Q Response…")
+        self.measure_q_response_button = QPushButton("Measure Quadrupole Response…")
         self.measure_q_response_button.setObjectName("workflowSecondaryButton")
         self.measure_q_response_button.setProperty("role", "control")
         self.measure_q_response_button.clicked.connect(self._measure_q_response)
@@ -1807,7 +1807,7 @@ class MainWindow(QMainWindow):
         self.measure_button = QPushButton("Measure Dispersion", self.online_content)
         self.measure_button.clicked.connect(lambda: self._start_task("measure"))
         self.measure_button.hide()
-        self.response_button = QPushButton("Measure Q Response", self.online_content)
+        self.response_button = QPushButton("Measure Quadrupole Response", self.online_content)
         self.response_button.clicked.connect(lambda: self._start_task("response"))
         self.response_button.hide()
         self.review_button = QPushButton("Review Recommendation", self.online_content)
@@ -1847,7 +1847,7 @@ class MainWindow(QMainWindow):
         response_dialog_actions = QHBoxLayout()
         response_dialog_actions.addStretch(1)
         self.apply_joint_recommendation_button = QPushButton(
-            "Apply and Verify"
+            "Apply Reviewed Targets and Verify"
         )
         self.apply_joint_recommendation_button.setProperty("role", "control")
         self.apply_joint_recommendation_button.clicked.connect(
@@ -1921,7 +1921,7 @@ class MainWindow(QMainWindow):
         self.compute_recommendation_button.hide()
         correction_actions.addStretch(1)
         self.apply_recommendation_button = QPushButton(
-            "Apply and Verify",
+            "Apply Reviewed Targets and Verify",
             self.correction_page,
         )
         self.apply_recommendation_button.setProperty("role", "control")
@@ -2017,10 +2017,10 @@ class MainWindow(QMainWindow):
         model_layout.addWidget(self.model_info, 1)
         model_dialog_layout.addWidget(self.model_page, 1)
         model_dialog_actions = QHBoxLayout()
-        self.apply_design_k1_button = QPushButton("Apply Design K1…")
+        self.apply_design_k1_button = QPushButton("Review Design K₁ Targets…")
         self.apply_design_k1_button.setProperty("role", "control")
         self.apply_design_k1_button.setToolTip(
-            "Review and write the lattice design K1 values for the active correction quadrupoles."
+            "Review and write the lattice design K₁ values for the active correction quadrupoles."
         )
         self.apply_design_k1_button.clicked.connect(self._apply_design_k1)
         model_dialog_actions.addWidget(self.apply_design_k1_button)
@@ -2148,7 +2148,7 @@ class MainWindow(QMainWindow):
             1,
         )
         iteration_history_actions = QHBoxLayout()
-        self.restore_history_state_button = QPushButton("Apply…")
+        self.restore_history_state_button = QPushButton("Review and Restore…")
         self.restore_history_state_button.setProperty("role", "control")
         self.restore_history_state_button.clicked.connect(
             self._restore_selected_history_state
@@ -2503,7 +2503,7 @@ class MainWindow(QMainWindow):
     def _update_history_restore_action(self) -> None:
         initial_selected = self.iteration_history_generation_combo.currentData() == "initial"
         self.restore_history_state_button.setText(
-            "Restore Initial…" if initial_selected else "Apply…"
+            "Review and Restore Initial…" if initial_selected else "Review and Restore…"
         )
         request = self._selected_history_restore_request()
         entry = self._selected_correction_run()
@@ -5258,7 +5258,7 @@ class MainWindow(QMainWindow):
         self.apply_joint_recommendation_button.setEnabled(can_apply)
         self.response_info.setPlainText(
             (
-                "Review the joint recommendation before Apply and Verify.\n"
+                "Review the joint recommendation before selecting “Apply Reviewed Targets and Verify”.\n"
                 if can_apply
                 else "Read-only recommendation preview; no Apply action is available.\n"
             )
@@ -5312,7 +5312,7 @@ class MainWindow(QMainWindow):
             )
             answer = QMessageBox.question(
                 self,
-                "Measure Q Response",
+                "Measure Quadrupole Response",
                 (
                     "This operation writes temporary quadrupole scan settings and "
                     "performs a full ±energy scan at each setting.\n\n"
@@ -5628,7 +5628,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Correction",
-                "Click Check PVs before starting correction.",
+                "Click Check Connections before starting correction.",
             )
             return
 
@@ -5764,7 +5764,7 @@ class MainWindow(QMainWindow):
         )
         self.correction_state_label.setText(
             "Prediction only — no backend read or write occurred. Review every target "
-            "before choosing Apply and Verify."
+            "before selecting “Apply Reviewed Targets and Verify”."
         )
         knob_lines = [
             f"{name}: {value:+.6g}"
@@ -5893,7 +5893,7 @@ class MainWindow(QMainWindow):
             return None
         if self.last_live_preflight is None or not self.last_live_preflight.ok:
             return (
-                "Click Check PVs after the most recent configuration change "
+                "Click Check Connections after the most recent configuration change "
                 "before applying the recommendation."
             )
         required = set(recommendation.device_deltas)
@@ -6016,7 +6016,7 @@ class MainWindow(QMainWindow):
         if operation_reason is not None:
             return operation_reason
         if self.last_live_preflight is None or not self.last_live_preflight.ok:
-            return "Click Check PVs before applying design K1 targets."
+            return "Click Check Connections before applying design K1 targets."
         try:
             request = self._design_k1_request()
         except Exception as exc:
@@ -6176,10 +6176,10 @@ class MainWindow(QMainWindow):
             if reason is None and self.config.backend.type.lower() == "epics" and (
                 self.last_live_preflight is None or not self.last_live_preflight.ok
             ):
-                reason = "Click Check PVs before starting correction."
+                reason = "Click Check Connections before starting correction."
             return (
                 None,
-                "Correction…",
+                "Start Correction…",
                 "Correction unavailable" if reason else "Ready for correction",
                 reason or "Set one iteration for a single correction step, or more for repeated measure → solve → apply → verify cycles.",
             )
@@ -6258,7 +6258,7 @@ class MainWindow(QMainWindow):
                     "Review Joint Recommendation…",
                     "Joint recommendation ready",
                     "Review every predicted ηx/ηy target and quadrupole change "
-                    "before Apply and Verify.",
+                    "before selecting “Apply Reviewed Targets and Verify”.",
                 )
             return (
                 None,
@@ -6284,7 +6284,7 @@ class MainWindow(QMainWindow):
                 None,
                 "Manual Correction",
                 "Connection check required",
-                "Click Check PVs in the Configuration header before "
+                "Click Check Connections in the Configuration header before "
                 "starting an online measurement.",
             )
         if self.latest_measurement is None:
@@ -6319,7 +6319,7 @@ class MainWindow(QMainWindow):
             return (
                 "prepare",
                 (
-                    "Measure Q Response…"
+                    "Measure Quadrupole Response…"
                     if self.latest_response is None
                     else "Calculate Recommendation"
                 ),
@@ -6337,7 +6337,7 @@ class MainWindow(QMainWindow):
             ),
             (
                 "Review the predicted dispersion and every quadrupole target, then "
-                "choose Apply and Verify in the review window."
+                "select “Apply Reviewed Targets and Verify” in the review window."
                 if apply_reason is None
                 else apply_reason
             ),
@@ -6678,7 +6678,7 @@ class MainWindow(QMainWindow):
         elif block_reason is not None:
             tooltip = block_reason
         elif not connection_ready:
-            tooltip = "Click Check PVs before measuring dispersion."
+            tooltip = "Click Check Connections before measuring dispersion."
         else:
             tooltip = (
                 "Run the configured ±energy scan and update the persistent "
@@ -6801,7 +6801,7 @@ class MainWindow(QMainWindow):
         if running and task in {"run", "joint-run"}:
             self.run_button.setText("Correction · 0%")
         elif not running:
-            self.run_button.setText("Correction…")
+            self.run_button.setText("Start Correction…")
         self.run_button.setEnabled(
             not running
             and operation_allowed
@@ -6814,7 +6814,7 @@ class MainWindow(QMainWindow):
             not running and operation_allowed and automatic_connection_ready and correction_enabled
         )
         self.measure_q_response_button.setToolTip(
-            "Measure and save the Q response; temporary Q and energy changes are restored."
+            "Measure and save the quadrupole response; temporary quadrupole and energy changes are restored."
         )
         recommendation_inputs_ready = (
             correction_enabled
@@ -6843,7 +6843,7 @@ class MainWindow(QMainWindow):
             automatic_tooltip = block_reason
         elif not automatic_connection_ready:
             automatic_tooltip = (
-                "Click Check PVs before starting correction."
+                "Click Check Connections before starting correction."
             )
         else:
             automatic_tooltip = self._automatic_correction_settings_tooltip()
@@ -7276,7 +7276,7 @@ class MainWindow(QMainWindow):
             self.calibration_status_label
         )
         self.restore_calibration_button.setText(
-            "Restore Profile" if self.app_context is not None else "Restore Configured"
+            "Restore Calibration"
         )
 
     def _open_calibration_editor(self) -> None:
