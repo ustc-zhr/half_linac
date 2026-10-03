@@ -102,6 +102,36 @@ class WidthMethodTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'cannot be converted'):
             w._validate_scan_metadata(metadata, expected, 'legacy archive')
 
+    def test_robust_rms_is_available_for_quad_scan(self):
+        w = self.window
+        index = w.beam_width_method_combo.findData('Robust RMS moments')
+        self.assertGreaterEqual(index, 0)
+        w.beam_width_method_combo.setCurrentIndex(index)
+        paras = w.get_setting()
+        self.assertEqual(paras.beam_width_method, 'Robust RMS moments')
+        image = self.image(paras)
+        image[5, 7] += 100.0
+        self.pv.side_effect = (
+            lambda pv, *args, **kwargs: image.ravel()
+            if pv == paras.flagImagePV else None
+        )
+        self.assertTrue(w.refresh_current_beam_image_fit(paras))
+        preview = w.latest_beam_fit_result
+        self.assertGreater(np.count_nonzero(preview.x_projection.outlier_mask), 0)
+        paras.recal = False
+        paras.samples = 1
+        paras.settle_time = paras.sample_interval = 0
+        paras.scan_strategy = 'grid'
+        worker = main.scanThread(paras)
+        worker.k1l, worker.sigxl, worker.sigyl = [], [], []
+        observation = worker._acquire_k1(0)
+        self.assertAlmostEqual(observation.sigx, preview.sigx_mm)
+        self.assertAlmostEqual(observation.sigy, preview.sigy_mm)
+        self.assertEqual(
+            w._scan_metadata_from_paras(paras)['beam_width_method'],
+            'Robust RMS moments',
+        )
+
     def test_display_limits_only_affect_fit_when_enabled(self):
         w = self.window
         paras = w.get_setting()

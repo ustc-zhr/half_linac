@@ -12,14 +12,43 @@ if str(PARENT) not in sys.path:
     sys.path.insert(0, str(PARENT))
 
 from half_linac.src.shared.beam_diagnostics import (
+    GaussianProjectionFit,
     ImageROI,
     analyze_beam_image,
     analyze_raw_beam_image,
+    assess_projection_quality,
     fit_beam_image,
 )
 
 
 class BeamImageFitTests(unittest.TestCase):
+    @staticmethod
+    def _projection_with_containment(containment):
+        axis = np.linspace(-containment, containment, 401)
+        values = np.exp(-(axis**2) / 2.0)
+        return GaussianProjectionFit(
+            axis=axis,
+            projection=values,
+            normalized_projection=values,
+            fitted_projection=values,
+            center=0.0,
+            sigma=1.0,
+            offset=0.0,
+            residual_rms=0.0,
+        )
+
+    def test_containment_between_2_8_and_3_sigma_is_usable_with_warning(self):
+        quality = assess_projection_quality(self._projection_with_containment(2.9))
+
+        self.assertEqual(quality["status"], "containment_warning")
+        self.assertTrue(quality["usable"])
+
+    def test_containment_below_2_8_sigma_is_clipped(self):
+        quality = assess_projection_quality(self._projection_with_containment(2.7))
+
+        self.assertEqual(quality["status"], "clipped")
+        self.assertFalse(quality["usable"])
+
     def test_full_frame_preview_applies_background_while_fit_uses_roi(self):
         image = np.full((8, 10), 5.0)
         image[2:6, 2:8] = 20.0
@@ -147,6 +176,59 @@ class BeamImageFitTests(unittest.TestCase):
         self.assertAlmostEqual(result.sigx_mm, 1.1, places=2)
         self.assertAlmostEqual(result.sigy_mm, 1.6, places=2)
         self.assertIsNone(result.x_projection.fitted_projection)
+
+    def test_robust_rms_removes_narrow_projection_spikes(self):
+        x = np.linspace(-8.0, 8.0, 321)
+        y = np.linspace(-7.0, 7.0, 281)
+        xx, yy = np.meshgrid(x, y)
+        image = np.exp(-((xx - 0.6) ** 2) / (2 * 1.1**2)) * np.exp(
+            -((yy + 0.3) ** 2) / (2 * 1.6**2)
+        )
+        image[12, 18] += 100.0
+        image[-15, -21] += 80.0
+
+        ordinary = fit_beam_image(
+            image,
+            extent=(-8.0, 8.0, -7.0, 7.0),
+            method="RMS moments",
+        )
+        robust = fit_beam_image(
+            image,
+            extent=(-8.0, 8.0, -7.0, 7.0),
+            method="Robust RMS moments",
+        )
+
+        self.assertTrue(robust.valid, robust.message)
+        self.assertEqual(robust.method, "Robust RMS moments")
+        self.assertGreater(ordinary.sigx_mm, robust.sigx_mm * 1.5)
+        self.assertGreater(ordinary.sigy_mm, robust.sigy_mm * 1.2)
+        self.assertAlmostEqual(robust.sigx_mm, 1.1, places=2)
+        self.assertAlmostEqual(robust.sigy_mm, 1.6, places=2)
+        self.assertGreater(np.count_nonzero(robust.x_projection.outlier_mask), 0)
+        self.assertGreater(np.count_nonzero(robust.y_projection.outlier_mask), 0)
+        self.assertIsNotNone(robust.x_projection.fitted_projection)
+
+    def test_robust_rms_preserves_clean_broad_profiles(self):
+        axis = np.linspace(-8.0, 8.0, 321)
+        profile = (
+            np.exp(-axis**2 / (2 * 0.8**2))
+            + 0.08 * np.exp(-axis**2 / (2 * 2.8**2))
+        )
+        image = np.outer(profile, profile)
+
+        ordinary = fit_beam_image(
+            image, extent=(-8.0, 8.0, -8.0, 8.0), method="RMS moments"
+        )
+        robust = fit_beam_image(
+            image,
+            extent=(-8.0, 8.0, -8.0, 8.0),
+            method="Robust Projection RMS",
+        )
+
+        self.assertAlmostEqual(robust.sigx_mm, ordinary.sigx_mm, places=10)
+        self.assertAlmostEqual(robust.sigy_mm, ordinary.sigy_mm, places=10)
+        self.assertEqual(np.count_nonzero(robust.x_projection.outlier_mask), 0)
+        self.assertEqual(np.count_nonzero(robust.y_projection.outlier_mask), 0)
 
     def test_fit_beam_image_rejects_unknown_profile_method(self):
         with self.assertRaisesRegex(ValueError, "Unsupported beam profile method"):

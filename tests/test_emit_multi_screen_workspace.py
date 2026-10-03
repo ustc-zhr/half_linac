@@ -158,6 +158,34 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
             path.write_text(json.dumps(payload))
             self.assertEqual(load_multi_screen_archive(path).beam_width_method, "Gaussian fit")
 
+    def test_robust_rms_is_available_for_multi_screen(self):
+        axis = np.linspace(-3, 3, 201)
+        image = np.outer(np.exp(-axis**2 / .08), np.exp(-axis**2 / .08))
+        image[10, 12] += 100.0
+        workspace = self._workspace(image)
+        workspace.image_reader = lambda _screen: {
+            "image": image, "extent": (-3., 3., -3., 3.),
+        }
+
+        workspace._set_beam_width_method("Robust RMS moments")
+
+        self.assertEqual(workspace.beam_width_method, "Robust RMS moments")
+        self.assertEqual(workspace.session.beam_width_method, "Robust RMS moments")
+        self.assertEqual(workspace._last_fit.method, "Robust RMS moments")
+        self.assertGreater(
+            np.count_nonzero(workspace._last_fit.x_projection.outlier_mask), 0
+        )
+        workspace.acquire_sample()
+        sample = workspace.session.acquisition.samples[0]
+        self.assertTrue(sample.enabled)
+        self.assertEqual(sample.quality["beam_width_method"], "Robust RMS moments")
+        with TemporaryDirectory() as directory:
+            path = save_multi_screen_archive(
+                Path(directory) / "robust-width.json", workspace.session
+            )
+            restored = load_multi_screen_archive(path)
+            self.assertEqual(restored.beam_width_method, "Robust RMS moments")
+
     def test_vmin_fit_control_is_per_screen_and_locks_only_sampled_screen(self):
         axis = np.linspace(-3, 3, 201)
         profile = np.exp(-axis**2 / .08) + .08 * np.exp(-axis**2 / .8)
@@ -358,6 +386,21 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         self.assertTrue(sample.quality["rejected"])
         workspace.samples_table.item(0, 0).setCheckState(Qt.Checked)
         self.assertEqual(workspace.session.acquisition.sample_counts["PRF06"], 1)
+
+    def test_containment_warning_sample_remains_enabled(self):
+        workspace = self._workspace(np.ones((20, 20)))
+        from half_linac.src.apps.emit_measure.multi_screen_workspace import _SyntheticFit
+        fit = _SyntheticFit(0.4, 0.2)
+        with patch.object(workspace, "_read_image_payload", return_value={"fit": fit}), \
+             patch.object(workspace, "_display_payload"), \
+             patch.object(workspace, "_fit_quality", return_value={
+                 "x_status": "containment_warning", "y_status": "usable"
+             }):
+            workspace.acquire_sample()
+
+        sample = workspace.session.acquisition.samples[0]
+        self.assertTrue(sample.enabled)
+        self.assertNotIn("rejected", sample.quality)
 
 
 if __name__ == "__main__":

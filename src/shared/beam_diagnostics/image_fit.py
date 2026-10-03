@@ -36,6 +36,8 @@ class GaussianProjectionFit:
     offset: float | None = None
     residual_rms: float | None = None
     error: str | None = None
+    raw_projection: np.ndarray | None = None
+    outlier_mask: np.ndarray | None = None
 
     @property
     def valid(self) -> bool:
@@ -80,7 +82,8 @@ def assess_projection_quality(
     projection: GaussianProjectionFit,
     *,
     min_sigma_pixels: float = 1.5,
-    min_containment_sigma: float = 3.0,
+    min_containment_sigma: float = 2.8,
+    warning_containment_sigma: float = 3.0,
     max_edge_ratio: float = 0.05,
     max_fit_residual: float = 0.15,
 ) -> dict[str, float | str | bool | None]:
@@ -121,12 +124,14 @@ def assess_projection_quality(
         status = "underresolved"
     elif residual is not None and residual > max_fit_residual:
         status = "poor_fit"
+    elif containment < warning_containment_sigma:
+        status = "containment_warning"
     else:
         status = "usable"
     payload.update(
         {
             "status": status,
-            "usable": status == "usable",
+            "usable": status in {"usable", "containment_warning"},
             "sigma_pixels": sigma_pixels,
             "containment_sigma": containment,
             "edge_ratio": edge_ratio,
@@ -148,6 +153,13 @@ def fit_beam_image(
         resolved_method = "Gaussian fit"
     elif normalized_method in {"rms", "rms moments", "moments"}:
         resolved_method = "RMS moments"
+    elif normalized_method in {
+        "robust rms",
+        "robust rms moments",
+        "robust projection rms",
+        "despiked rms",
+    }:
+        resolved_method = "Robust RMS moments"
     else:
         raise ValueError(f"Unsupported beam profile method: {method!r}.")
 
@@ -201,9 +213,11 @@ def fit_beam_image(
             message="beam image projections do not contain positive signal",
         )
 
-    projection_handler = (
-        _fit_projection if resolved_method == "Gaussian fit" else _moment_projection
-    )
+    projection_handler = {
+        "Gaussian fit": _fit_projection,
+        "RMS moments": _moment_projection,
+        "Robust RMS moments": _robust_moment_projection,
+    }[resolved_method]
     x_fit = projection_handler(x_axis, x_projection)
     y_fit = projection_handler(y_axis, y_projection)
     errors = [fit.error for fit in (x_fit, y_fit) if fit.error]
@@ -328,6 +342,95 @@ def _moment_projection(axis: np.ndarray, projection: np.ndarray) -> GaussianProj
         normalized_projection=normalized,
         center=center,
         sigma=float(np.sqrt(max(variance, 0.0))),
+    )
+
+
+def _robust_moment_projection(
+    axis: np.ndarray,
+    projection: np.ndarray,
+    *,
+    half_window: int = 4,
+    threshold_sigma: float = 6.0,
+    max_spike_width: int = 3,
+) -> GaussianProjectionFit:
+    """Calculate RMS moments after replacing only narrow positive outliers.
+
+    A local median supplies the smooth trend and the local MAD supplies the
+    noise scale. Runs wider than ``max_spike_width`` are retained so that
+    broad, potentially physical beam structure is not silently removed.
+    """
+    if axis.size == 0 or projection.size == 0:
+        return GaussianProjectionFit(
+            axis=axis,
+            projection=projection,
+            error="projection is empty",
+        )
+
+    raw = np.clip(np.asarray(projection, dtype=float), 0.0, None)
+    total = float(np.sum(raw))
+    peak = float(np.max(raw)) if raw.size else 0.0
+    if not np.isfinite(total) or total <= 0.0 or not np.isfinite(peak) or peak <= 0.0:
+        return GaussianProjectionFit(
+            axis=axis,
+            projection=projection,
+            error="projection does not contain positive signal",
+        )
+
+    trend = np.empty_like(raw)
+    local_scale = np.empty_like(raw)
+    for index in range(raw.size):
+        start = max(0, index - half_window)
+        stop = min(raw.size, index + half_window + 1)
+        window = raw[start:stop]
+        median = float(np.median(window))
+        trend[index] = median
+        local_scale[index] = 1.4826 * float(np.median(np.abs(window - median)))
+
+    numerical_floor = max(
+        np.finfo(float).eps * max(peak, 1.0) * 32.0,
+        1.0e-12 * max(peak, 1.0),
+    )
+    candidate = (raw - trend) > np.maximum(
+        threshold_sigma * local_scale,
+        numerical_floor,
+    )
+    outlier_mask = np.zeros(raw.shape, dtype=bool)
+    candidate_indices = np.flatnonzero(candidate)
+    if candidate_indices.size:
+        run_starts = np.r_[0, np.flatnonzero(np.diff(candidate_indices) > 1) + 1]
+        run_stops = np.r_[run_starts[1:], candidate_indices.size]
+        for start, stop in zip(run_starts, run_stops):
+            run = candidate_indices[start:stop]
+            if run.size <= max_spike_width:
+                outlier_mask[run] = True
+
+    cleaned = raw.copy()
+    cleaned[outlier_mask] = trend[outlier_mask]
+    cleaned_total = float(np.sum(cleaned))
+    if not np.isfinite(cleaned_total) or cleaned_total <= 0.0:
+        return GaussianProjectionFit(
+            axis=axis,
+            projection=cleaned,
+            raw_projection=np.asarray(projection, dtype=float),
+            outlier_mask=outlier_mask,
+            error="despiked projection does not contain positive signal",
+        )
+
+    center = float(np.sum(axis * cleaned) / cleaned_total)
+    variance = float(np.sum(cleaned * (axis - center) ** 2) / cleaned_total)
+    raw_normalized = raw / peak
+    cleaned_normalized = cleaned / peak
+    residual_rms = float(np.sqrt(np.mean((raw_normalized - cleaned_normalized) ** 2)))
+    return GaussianProjectionFit(
+        axis=axis,
+        projection=cleaned,
+        normalized_projection=raw_normalized,
+        fitted_projection=cleaned_normalized,
+        center=center,
+        sigma=float(np.sqrt(max(variance, 0.0))),
+        residual_rms=residual_rms,
+        raw_projection=np.asarray(projection, dtype=float),
+        outlier_mask=outlier_mask,
     )
 
 

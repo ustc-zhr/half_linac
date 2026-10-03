@@ -132,7 +132,8 @@ LEAST_SQUARES_REQUIRED_RANK = 3
 LEAST_SQUARES_MAX_CONDITION = 1.0e12
 ADAPTIVE_SCAN_STRATEGIES = frozenset(("adaptive", "adaptive_quality"))
 QUALITY_MIN_SIGMA_PIXELS = 1.5
-QUALITY_MIN_CONTAINMENT_SIGMA = 3.0
+QUALITY_MIN_CONTAINMENT_SIGMA = 2.8
+QUALITY_WARNING_CONTAINMENT_SIGMA = 3.0
 QUALITY_MAX_EDGE_RATIO = 0.05
 QUALITY_MAX_FIT_RESIDUAL = 0.15
 
@@ -178,6 +179,7 @@ FIT_STATUS_DISPLAY_NAMES = {
     "window": "Fit window",
     "skipped": "Not calculated",
     "usable": "Usable",
+    "containment_warning": "Usable · edge coverage warning",
     "clipped": "Beam image clipped",
     "underresolved": "Beam under-resolved",
     "poor_fit": "Poor fit",
@@ -199,6 +201,7 @@ def _projection_measurement_quality(projection):
         projection,
         min_sigma_pixels=QUALITY_MIN_SIGMA_PIXELS,
         min_containment_sigma=QUALITY_MIN_CONTAINMENT_SIGMA,
+        warning_containment_sigma=QUALITY_WARNING_CONTAINMENT_SIGMA,
         max_edge_ratio=QUALITY_MAX_EDGE_RATIO,
         max_fit_residual=QUALITY_MAX_FIT_RESIDUAL,
     )
@@ -1456,9 +1459,13 @@ class myWindow(QWidget,Ui_Form):
         self.beam_width_method_combo = QComboBox(card)
         self.beam_width_method_combo.addItem("Gaussian fit", "Gaussian fit")
         self.beam_width_method_combo.addItem("Projection RMS", "RMS moments")
+        self.beam_width_method_combo.addItem(
+            "Robust Projection RMS", "Robust RMS moments"
+        )
         self.beam_width_method_combo.setToolTip(
             "Beam width used for preview and quad scans. Projection RMS uses intensity-weighted "
-            "second moments and is sensitive to background and ROI clipping. "
+            "second moments and is sensitive to background and ROI clipping. Robust Projection "
+            "RMS replaces only narrow positive projection spikes before calculating the moments. "
             "Changing this does not reprocess archived beam widths."
         )
         self.beam_width_method_combo.currentIndexChanged.connect(self._beam_width_method_changed)
@@ -3102,6 +3109,7 @@ class myWindow(QWidget,Ui_Form):
             metadata["quality_limits"] = {
                 "min_sigma_pixels": QUALITY_MIN_SIGMA_PIXELS,
                 "min_containment_sigma": QUALITY_MIN_CONTAINMENT_SIGMA,
+                "warning_containment_sigma": QUALITY_WARNING_CONTAINMENT_SIGMA,
                 "max_edge_ratio": QUALITY_MAX_EDGE_RATIO,
                 "max_fit_residual": QUALITY_MAX_FIT_RESIDUAL,
             }

@@ -344,6 +344,13 @@ class MultiScreenWorkspace(QWidget):
         self.width_method_combo = QComboBox(image_box)
         self.width_method_combo.addItem("Gaussian fit", "Gaussian fit")
         self.width_method_combo.addItem("Projection RMS", "RMS moments")
+        self.width_method_combo.addItem(
+            "Robust Projection RMS", "Robust RMS moments"
+        )
+        self.width_method_combo.setToolTip(
+            "Robust Projection RMS replaces only narrow positive projection spikes before "
+            "calculating intensity-weighted second moments."
+        )
         self.width_method_combo.currentIndexChanged.connect(
             lambda _index: self._set_beam_width_method(self.width_method_combo.currentData())
         )
@@ -1133,7 +1140,11 @@ class MultiScreenWorkspace(QWidget):
                         x_projection.axis,
                         self._last_frame_extent[2] + x_projection.fitted_projection * height * 0.25,
                         color="orange",
-                        label="Gaussian fit",
+                        label=(
+                            "Gaussian fit"
+                            if fit.method == "Gaussian fit"
+                            else "despiked projection"
+                        ),
                     )
                 if self.beam_image_overlays and y_projection.normalized_projection is not None:
                     self.image_axes.plot(
@@ -1431,7 +1442,7 @@ class MultiScreenWorkspace(QWidget):
             self.preview_sample()
 
     def _set_beam_width_method(self, value: str) -> None:
-        if value not in {"Gaussian fit", "RMS moments"}:
+        if value not in {"Gaussian fit", "RMS moments", "Robust RMS moments"}:
             raise ValueError(f"Unsupported beam width method: {value}")
         if self._archive_review or (self.session is not None and self.session.acquisition.samples):
             return
@@ -1500,6 +1511,10 @@ class MultiScreenWorkspace(QWidget):
             "fit_message": fit.message,
             "x_status": x_quality["status"],
             "y_status": y_quality["status"],
+            "x_containment_sigma": x_quality["containment_sigma"],
+            "y_containment_sigma": y_quality["containment_sigma"],
+            "x_edge_ratio": x_quality["edge_ratio"],
+            "y_edge_ratio": y_quality["edge_ratio"],
             "x_residual_rms": fit.x_projection.residual_rms,
             "y_residual_rms": fit.y_projection.residual_rms,
             "pv_sigx_mm": pv_sigx,
