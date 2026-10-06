@@ -590,7 +590,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
             field.returnPressed.connect(self._apply_shared_bpm_range)
             field.editingFinished.connect(self._apply_shared_bpm_range)
 
-        self.detail_button = QPushButton("BPM Detail", panel)
+        self.detail_button = QPushButton("BPM Signal", panel)
         self.detail_button.setObjectName("headerButton")
         self.detail_button.setFixedHeight(HEADER_ACTION_HEIGHT)
         self.detail_button.clicked.connect(self.start_bpmvalue_btn)
@@ -1264,9 +1264,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
     def start_bpmvalue_btn(self):
         if self._bpm_detail_window is None:
-            from submain import myWindow as BpmDetailWindow
+            from submain import myWindow as BpmSignalWindow
 
-            self._bpm_detail_window = BpmDetailWindow(
+            self._bpm_detail_window = BpmSignalWindow(
                 refresh_interval_ms=self.refresh_interval_ms,
                 palette=self._palette(),
                 parent=self,
@@ -1280,7 +1280,7 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._bpm_detail_window.show()
         self._bpm_detail_window.raise_()
         self._bpm_detail_window.activateWindow()
-        self._notify("BPM detail window opened.")
+        self._notify("BPM signal window opened.")
 
     def open_jitter_window(self):
         if self._jitter_window is None:
