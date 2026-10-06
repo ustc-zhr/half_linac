@@ -74,7 +74,7 @@ class HvControlWindow(QMainWindow):
 
         controls = QFrame(root); controls.setObjectName("panel"); row = QHBoxLayout(controls); row.setContentsMargins(10,8,10,8)
         row.addWidget(QLabel("Set all HV:"))
-        self.global_spin = QDoubleSpinBox(controls); self.global_spin.setRange(runtime.low, runtime.high); self.global_spin.setDecimals(1); self.global_spin.setSuffix(f" {runtime.unit}"); self.global_spin.setKeyboardTracking(False); row.addWidget(self.global_spin)
+        self.global_spin = QDoubleSpinBox(controls); self.global_spin.setRange(self.runtime.low, self.runtime.high); self.global_spin.setDecimals(1); self.global_spin.setSuffix(f" {self.runtime.unit}"); self.global_spin.setKeyboardTracking(False); row.addWidget(self.global_spin)
         self.fill_button = QPushButton("Fill all", controls); self.fill_button.clicked.connect(self._fill_all); row.addWidget(self.fill_button)
         self.apply_button = QPushButton("Apply all", controls); self.apply_button.clicked.connect(self._apply_all); row.addWidget(self.apply_button)
         self.read_button = QPushButton("Read back", controls); self.read_button.clicked.connect(self._read_back); row.addWidget(self.read_button)
