@@ -11,12 +11,12 @@ if str(_ROOT) not in sys.path:
 from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 
-from PyQt5.QtCore import QSignalBlocker
+from PyQt5.QtCore import QSignalBlocker, Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QApplication, QFileDialog, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
     QMainWindow, QMessageBox, QPushButton, QStatusBar, QTableWidget,
-    QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
+    QTableWidgetItem, QToolButton, QVBoxLayout, QWidget, QSizePolicy,
 )
 
 from half_linac.src.apps.hv_control.epics_client import BatchWorker, HvMonitor
@@ -32,10 +32,13 @@ LIGHT = {"window":"#f2ede5", "panel":"#fffdf9", "input":"#fffdf9", "border":"#d7
 def stylesheet(p):
     return f'''QMainWindow, QWidget {{ background:{p["window"]}; color:{p["text"]}; font-family:"IBM Plex Sans","Segoe UI",sans-serif; font-size:12px; }}
 QFrame#panel {{ background:{p["panel"]}; border:1px solid {p["border"]}; border-radius:8px; }}
-QLabel {{ background:transparent; }} QHeaderView::section {{ background:{p["panel"]}; color:{p["muted"]}; padding:6px; border:0; }}
-QPushButton, QToolButton, QDoubleSpinBox {{ background:{p["input"]}; color:{p["text"]}; border:1px solid {p["border"]}; border-radius:6px; min-height:28px; padding:2px 8px; }}
+QLabel {{ background:transparent; }} QLabel#subtitle, QLabel#sectionLabel {{ color:{p["muted"]}; }} QHeaderView::section {{ background:{p["panel"]}; color:{p["muted"]}; padding:8px 10px; border:0; border-bottom:1px solid {p["border"]}; font-weight:600; }}
+QPushButton, QToolButton, QDoubleSpinBox {{ background:{p["input"]}; color:{p["text"]}; border:1px solid {p["border"]}; border-radius:6px; min-height:30px; padding:2px 10px; }}
+QPushButton#toolbarAction {{ font-weight:700; }}
+QPushButton#enableToggleButton {{ min-height:22px; padding:0 6px; }}
 QPushButton:hover, QToolButton:hover, QDoubleSpinBox:focus {{ border-color:{p["accent"]}; }} QPushButton:disabled {{ color:{p["muted"]}; }}
-QTableWidget {{ background:{p["input"]}; alternate-background-color:{p["panel"]}; gridline-color:{p["border"]}; border:1px solid {p["border"]}; }}
+QTableWidget {{ background:{p["input"]}; alternate-background-color:{p["panel"]}; gridline-color:{p["border"]}; border:1px solid {p["border"]}; selection-background-color:{p["panel"]}; }}
+QTableWidget::item {{ padding:4px 8px; }}
 QStatusBar {{ background:{p["panel"]}; color:{p["muted"]}; }}'''
 
 
@@ -58,49 +61,54 @@ class HvControlWindow(QMainWindow):
 
     def _build_ui(self):
         self.setWindowTitle(f"{self.runtime.context.machine.display_name} - HV Modulator Control")
-        self.resize(1360, 760)
-        self.setMinimumSize(1050, 620)
+        self.resize(1420, 800)
+        self.setMinimumSize(1180, 650)
         root = QWidget(self)
         outer = QVBoxLayout(root); outer.setContentsMargins(12, 10, 12, 8); outer.setSpacing(8)
         heading = QHBoxLayout()
+        title_box = QVBoxLayout(); title_box.setSpacing(1)
         title = QLabel("HV Modulator Control", root); title.setStyleSheet("font-size:22px;font-weight:700;")
-        heading.addWidget(title); heading.addStretch(1)
+        subtitle = QLabel("20 modulators  ·  setpoints, readback, and enable state", root); subtitle.setObjectName("subtitle"); subtitle.setStyleSheet("font-size:11px;")
+        title_box.addWidget(title); title_box.addWidget(subtitle); heading.addLayout(title_box); heading.addStretch(1)
         self.save_button = QPushButton("Save", root); self.restore_button = QPushButton("Restore", root)
+        self.save_button.setObjectName("toolbarAction"); self.restore_button.setObjectName("toolbarAction")
         self.save_button.clicked.connect(self._save); self.restore_button.clicked.connect(self._restore)
         heading.addWidget(self.save_button); heading.addWidget(self.restore_button)
         heading.addWidget(RuntimeContextWidget(machine_id=self.runtime.context.machine.id, machine_display_name=self.runtime.context.machine.display_name, control_backend=self.runtime.context.control_backend.name, parent=root))
         self.theme_button = QToolButton(root); self.theme_button.setFixedSize(32, 32); self.theme_button.clicked.connect(self._toggle_theme); heading.addWidget(self.theme_button)
         outer.addLayout(heading)
 
-        controls = QFrame(root); controls.setObjectName("panel"); row = QHBoxLayout(controls); row.setContentsMargins(10,8,10,8)
-        row.addWidget(QLabel("Set all HV:"))
+        controls = QFrame(root); controls.setObjectName("panel"); row = QHBoxLayout(controls); row.setContentsMargins(12,10,12,10); row.setSpacing(7)
+        set_label = QLabel("SETPOINT", controls); set_label.setObjectName("sectionLabel"); set_label.setStyleSheet("font-weight:700;font-size:10px;"); row.addWidget(set_label)
         self.global_spin = QDoubleSpinBox(controls); self.global_spin.setRange(self.runtime.low, self.runtime.high); self.global_spin.setDecimals(1); self.global_spin.setSuffix(f" {self.runtime.unit}"); self.global_spin.setKeyboardTracking(False); row.addWidget(self.global_spin)
-        self.fill_button = QPushButton("Fill all", controls); self.fill_button.clicked.connect(self._fill_all); row.addWidget(self.fill_button)
-        self.apply_button = QPushButton("Apply all", controls); self.apply_button.clicked.connect(self._apply_all); row.addWidget(self.apply_button)
-        self.read_button = QPushButton("Read back", controls); self.read_button.clicked.connect(self._read_back); row.addWidget(self.read_button)
-        row.addSpacing(14)
+        self.fill_button = QPushButton("Fill all rows", controls); self.fill_button.setObjectName("toolbarAction"); self.fill_button.clicked.connect(self._fill_all); row.addWidget(self.fill_button)
+        self.apply_button = QPushButton("Apply all", controls); self.apply_button.setObjectName("toolbarAction"); self.apply_button.clicked.connect(self._apply_all); row.addWidget(self.apply_button)
+        self.read_button = QPushButton("Refresh", controls); self.read_button.setObjectName("toolbarAction"); self.read_button.clicked.connect(self._read_back); row.addWidget(self.read_button)
+        divider = QFrame(controls); divider.setFrameShape(QFrame.VLine); divider.setStyleSheet("color:#2a3943;"); row.addWidget(divider)
+        enable_label = QLabel("ENABLE", controls); enable_label.setObjectName("sectionLabel"); enable_label.setStyleSheet("font-weight:700;font-size:10px;"); row.addWidget(enable_label)
         for text, field, value in (("Enable all 1", "enable_1", 1), ("Disable all 1", "enable_1", 0), ("Enable all 2", "enable_2", 1), ("Disable all 2", "enable_2", 0)):
-            button = QPushButton(text, controls); button.clicked.connect(lambda _=False, f=field, v=value, t=text: self._batch_enable(f, v, t)); row.addWidget(button)
+            button = QPushButton(text, controls); button.setObjectName("toolbarAction"); button.clicked.connect(lambda _=False, f=field, v=value, t=text: self._batch_enable(f, v, t)); row.addWidget(button)
         row.addStretch(1); outer.addWidget(controls)
 
-        self.table = QTableWidget(len(self.runtime.modulators), 8, root)
-        self.table.setHorizontalHeaderLabels(("Modulator", "HV set", "HV readback", "Enable 1", "Enable 2", "Connection", "Operation", ""))
-        self.table.verticalHeader().setVisible(False); self.table.setAlternatingRowColors(True); self.table.setSelectionMode(QTableWidget.NoSelection)
-        widths = (120, 150, 150, 150, 150, 120, 260, 100)
+        self.table = QTableWidget(len(self.runtime.modulators), 7, root)
+        self.table.setHorizontalHeaderLabels(("MODULATOR", "HV SET", "HV READBACK", "ENABLE 1", "ENABLE 2", "CONNECTION", "OPERATION"))
+        self.table.verticalHeader().setVisible(False); self.table.verticalHeader().setDefaultSectionSize(42); self.table.setAlternatingRowColors(True); self.table.setSelectionMode(QTableWidget.NoSelection); self.table.setFocusPolicy(Qt.NoFocus)
+        header = self.table.horizontalHeader(); header.setFixedHeight(36); header.setDefaultAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        widths = (125, 190, 190, 205, 205, 150, 300)
         for i, width in enumerate(widths): self.table.setColumnWidth(i, width)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        header.setStretchLastSection(True)
         for row_index, mod in enumerate(self.runtime.modulators): self._build_row(row_index, mod)
         outer.addWidget(self.table, 1)
         self.setCentralWidget(root); self.setStatusBar(QStatusBar(self)); self.statusBar().showMessage("Connecting to HV PVs")
 
     def _build_row(self, row, mod):
         self.table.setItem(row, 0, QTableWidgetItem(mod.name))
-        set_spin = QDoubleSpinBox(self.table); set_spin.setRange(self.runtime.low, self.runtime.high); set_spin.setDecimals(1); set_spin.setSuffix(f" {self.runtime.unit}"); set_spin.setKeyboardTracking(False); set_spin.setEnabled(False); self.table.setCellWidget(row, 1, set_spin)
+        set_spin = QDoubleSpinBox(self.table); set_spin.setAlignment(Qt.AlignLeft | Qt.AlignVCenter); set_spin.setRange(self.runtime.low, self.runtime.high); set_spin.setDecimals(1); set_spin.setSuffix(f" {self.runtime.unit}"); set_spin.setKeyboardTracking(False); set_spin.setEnabled(False); self.table.setCellWidget(row, 1, set_spin)
         for col in (2, 5, 6): self.table.setItem(row, col, QTableWidgetItem("--"))
         for field, col in (("enable_1",3),("enable_2",4)):
-            cell = QWidget(self.table); layout = QHBoxLayout(cell); layout.setContentsMargins(3,2,3,2)
-            label = QLabel("--", cell); button = QPushButton("Set", cell); button.setEnabled(False); button.clicked.connect(lambda _=False, n=mod.name, f=field: self._toggle_enable(n, f))
-            layout.addWidget(label); layout.addWidget(button); self.table.setCellWidget(row, col, cell); self.status_labels[(mod.name, field)] = label; self.enable_buttons[(mod.name, field)] = button
+            cell = QWidget(self.table); layout = QHBoxLayout(cell); layout.setContentsMargins(8,3,8,3); layout.setSpacing(6)
+            label = QLabel("--", cell); label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter); button = QPushButton("Set", cell); button.setObjectName("enableToggleButton"); button.setFixedSize(82, 26); button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed); button.setEnabled(False); button.clicked.connect(lambda _=False, n=mod.name, f=field: self._toggle_enable(n, f))
+            layout.addWidget(label, 1); layout.addWidget(button, 0); self.table.setCellWidget(row, col, cell); self.status_labels[(mod.name, field)] = label; self.enable_buttons[(mod.name, field)] = button
         set_spin.valueChanged.connect(lambda value, n=mod.name: self._set_target(n, value))
         self.values[(mod.name, "target_widget")] = set_spin
 
