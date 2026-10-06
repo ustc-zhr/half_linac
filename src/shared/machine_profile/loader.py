@@ -56,6 +56,7 @@ SUPPORTED_APP_NAMES = {
     "ct_monitor",
     "power_source_timing",
     "llrf_control",
+    "hv_control",
     "machine_snapshot",
     "symmetric_quad_adjust",
     "magnet_cycle",
@@ -78,6 +79,7 @@ APP_WORKFLOW_FILES = {
     "ct_monitor": "ct_monitor.json",
     "power_source_timing": "power_source_timing.json",
     "llrf_control": "llrf_control.json",
+    "hv_control": "hv_control.json",
     "symmetric_quad_adjust": "symmetric_quad_adjust.json",
     "magnet_cycle": "magnet_cycle.json",
 }
@@ -96,6 +98,7 @@ APP_WORKFLOW_NAMES_BY_APP = {
     "ct_monitor": ("ct_monitor",),
     "power_source_timing": ("power_source_timing",),
     "llrf_control": ("llrf_control",),
+    "hv_control": ("hv_control",),
     "machine_snapshot": ("control_points",),
     "symmetric_quad_adjust": ("symmetric_quad_adjust",),
     "magnet_cycle": ("magnet_cycle",),
