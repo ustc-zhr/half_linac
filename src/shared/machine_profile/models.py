@@ -362,6 +362,14 @@ class EmitMeasureWorkflowConfig:
     presets_by_id: Mapping[str, EmitPreset]
     twiss_quads: tuple[str, ...]
     default_preset: str
+    matching_initial_evaluations: int = 100
+    matching_max_evaluations: int = 100
+    matching_default_tolerance: float = 0.01
+    matching_remeasurement_tolerance: float = 0.01
+    matching_default_envelope_mm: Mapping[str, float | None] = field(
+        default_factory=lambda: {"x": None, "y": None}
+    )
+    matching_magnet_groups: tuple[tuple[str, ...], ...] = ()
     multi_screen_presets: tuple[EmitMultiScreenPreset, ...] = ()
     multi_screen_presets_by_id: Mapping[str, EmitMultiScreenPreset] = field(
         default_factory=dict
@@ -844,6 +852,67 @@ def _validate_emit_measure_workflow(
     if raw_workflow is None:
         return
     workflow = _expect_mapping(raw_workflow, "workflows.emit_measure")
+    matching = _expect_optional_mapping(
+        workflow.get("matching"),
+        "workflows.emit_measure.matching",
+    )
+    for key in ("initial_evaluations", "max_evaluations"):
+        if key in matching:
+            value = matching[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise MachineProfileError(
+                    f"workflows.emit_measure.matching.{key} must be a positive integer."
+                )
+    if matching.get("initial_evaluations", 100) > matching.get("max_evaluations", 100):
+        raise MachineProfileError(
+            "workflows.emit_measure.matching.initial_evaluations must not exceed "
+            "max_evaluations."
+        )
+    for key in ("default_tolerance", "remeasurement_tolerance"):
+        if key in matching:
+            value = matching[key]
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or float(value) <= 0
+            ):
+                raise MachineProfileError(
+                    f"workflows.emit_measure.matching.{key} must be finite and positive."
+                )
+    envelope = _expect_optional_mapping(
+        matching.get("default_envelope_mm"),
+        "workflows.emit_measure.matching.default_envelope_mm",
+    )
+    for plane in ("x", "y"):
+        value = envelope.get(plane)
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or float(value) <= 0
+        ):
+            raise MachineProfileError(
+                f"workflows.emit_measure.matching.default_envelope_mm.{plane} "
+                "must be null or finite and positive."
+            )
+    if "magnet_groups" in matching:
+        groups = _expect_list(
+            matching["magnet_groups"],
+            "workflows.emit_measure.matching.magnet_groups",
+        )
+        for index, raw_group in enumerate(groups):
+            location = f"workflows.emit_measure.matching.magnet_groups[{index}]"
+            names = _expect_string_list(raw_group, location)
+            if len(set(names)) != len(names):
+                raise MachineProfileError(f"{location} must not contain duplicate elements.")
+            for item_index, name in enumerate(names):
+                _validate_element_ref(
+                    name,
+                    elements_by_id,
+                    f"{location}[{item_index}]",
+                    expected_kind="quad",
+                )
     presets = _expect_list(workflow.get("presets"), "workflows.emit_measure.presets")
     _validate_unique_ids(presets, "workflows.emit_measure.presets")
     for index, raw_preset in enumerate(presets):

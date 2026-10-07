@@ -19,6 +19,7 @@ import numpy as np
 from scipy.optimize import least_squares
 
 SCHEMA = "emit_matching_v1"
+FAILURE_SCHEMA = "emit_matching_failure_v1"
 
 
 class Cancelled(RuntimeError):
@@ -120,6 +121,7 @@ class MatchingRequest:
     magnets: dict[str, MagnetLimit]
     tolerance: float = 0.01
     envelope_m: dict[str, float | None] = field(default_factory=lambda: {"x": None, "y": None})
+    initial_evaluations: int | None = None
     max_evaluations: int = 100
 
 
@@ -159,7 +161,9 @@ def solve_matching(model, request: MatchingRequest, cancelled: Callable[[], bool
     baseline = deepcopy(request.measurement)
     positive(request.tolerance, "matching tolerance")
     if request.max_evaluations < 1:
-        raise ValueError("Evaluation budget must be positive")
+        raise ValueError("Maximum evaluation budget must be positive")
+    if request.initial_evaluations is not None and request.initial_evaluations < 1:
+        raise ValueError("Initial evaluation budget must be positive")
     if not request.magnets:
         raise ValueError("Select matching quadrupoles")
     names = sorted(request.magnets, key=lambda name: model.position(Point(name)))
@@ -234,10 +238,95 @@ def solve_matching(model, request: MatchingRequest, cancelled: Callable[[], bool
         return result
 
     current = evaluate(original)
-    fit = least_squares(residual, original, bounds=(bounds[:, 0], bounds[:, 1]),
-                        x_scale=scales, max_nfev=max(1, (request.max_evaluations - 2) // (len(names) + 1)),
-                        ftol=1e-7, xtol=1e-7, gtol=1e-7)
-    candidate = evaluate(fit.x)
+    initial_evaluations = (
+        request.max_evaluations
+        if request.initial_evaluations is None
+        else request.initial_evaluations
+    )
+    if initial_evaluations > request.max_evaluations:
+        raise ValueError("Initial evaluation budget must not exceed maximum budget")
+    minimum_attempt_budget = len(names) + 3
+    if request.max_evaluations < minimum_attempt_budget:
+        raise ValueError(
+            f"Evaluation budget must be at least {minimum_attempt_budget} "
+            f"for {len(names)} adjustable quadrupoles"
+        )
+
+    budget_limit = min(
+        request.max_evaluations,
+        max(initial_evaluations, minimum_attempt_budget),
+    )
+    attempt_start = original
+    attempts = []
+    fit = None
+    candidate = current
+    while True:
+        evaluations_before = calls
+        residual_before = residual(attempt_start)
+        remaining = budget_limit - calls
+        max_nfev = max(1, (remaining - 1) // (len(names) + 1))
+        fit = least_squares(
+            residual,
+            attempt_start,
+            bounds=(bounds[:, 0], bounds[:, 1]),
+            x_scale=scales,
+            max_nfev=max_nfev,
+            ftol=1e-7,
+            xtol=1e-7,
+            gtol=1e-7,
+        )
+        candidate = evaluate(fit.x)
+        residual_after = residual(fit.x)
+        attempt_target_met = all(
+            mismatch(endpoint(candidate[plane]), design[plane]) - 1 <= request.tolerance
+            for plane in ("x", "y")
+        )
+        norm_before = float(np.linalg.norm(residual_before))
+        norm_after = float(np.linalg.norm(residual_after))
+        improvement_floor = max(1e-12, norm_before * 1e-6)
+        residual_improved = norm_before - norm_after > improvement_floor
+        can_retry = (
+            fit.status == 0
+            and not attempt_target_met
+            and residual_improved
+            and budget_limit < request.max_evaluations
+        )
+        if can_retry:
+            retry_decision = "retry_with_larger_budget"
+        elif attempt_target_met:
+            retry_decision = "stop_target_met"
+        elif fit.status != 0:
+            retry_decision = "stop_solver_terminated"
+        elif not residual_improved:
+            retry_decision = "stop_no_residual_improvement"
+        else:
+            retry_decision = "stop_maximum_budget_reached"
+        attempts.append({
+            "attempt": len(attempts) + 1,
+            "evaluation_limit": budget_limit,
+            "evaluations_before": evaluations_before,
+            "evaluations_after": calls,
+            "solver_nfev": int(fit.nfev),
+            "solver_njev": None if fit.njev is None else int(fit.njev),
+            "solver_status": int(fit.status),
+            "solver_success": bool(fit.success),
+            "solver_message": str(fit.message),
+            "cost": float(fit.cost),
+            "optimality": float(fit.optimality),
+            "residual_norm_before": norm_before,
+            "residual_norm_after": norm_after,
+            "residual_improved": residual_improved,
+            "target_met": attempt_target_met,
+            "retry_decision": retry_decision,
+        })
+        if not can_retry:
+            break
+        attempt_start = fit.x.copy()
+        budget_limit = min(
+            request.max_evaluations,
+            max(budget_limit + 1, budget_limit * 2),
+        )
+    assert fit is not None
     # Exclude regularization/constraint rows: they must not mask optical rank loss.
     jac = np.asarray(fit.jac[:4]) * scales[np.newaxis, :]
     singular = np.linalg.svd(jac, compute_uv=False)
@@ -255,12 +344,30 @@ def solve_matching(model, request: MatchingRequest, cancelled: Callable[[], bool
             violations.append(f"{p}: RMS envelope constraint")
     satisfied = all(v - 1 <= request.tolerance for v in after.values())
     improved = sum(after.values()) < sum(before.values()) - 1e-9
+    active_bounds = {
+        name: "lower" if marker < 0 else "upper" if marker > 0 else None
+        for name, marker in zip(names, fit.active_mask)
+    }
+    termination_reason = (
+        "evaluation_budget_exhausted"
+        if fit.status == 0
+        else "solver_converged"
+        if fit.status > 0
+        else "solver_failed"
+    )
     status = "no_usable_suggestion"
-    if not violations and rank == 4:
-        if satisfied:
-            status = "model_target_met"
-        elif improved:
-            status = "model_improved"
+    if violations:
+        outcome_reason = "constraint_violation"
+    elif rank != 4:
+        outcome_reason = "rank_deficient"
+    elif satisfied:
+        status = "model_target_met"
+        outcome_reason = "target_met"
+    elif improved:
+        status = "model_improved"
+        outcome_reason = "improved_target_not_met"
+    else:
+        outcome_reason = "no_improvement"
     check()
     return MatchingResult(
         request=asdict(request), model=deepcopy(model.snapshot), start=asdict(start),
@@ -268,11 +375,32 @@ def solve_matching(model, request: MatchingRequest, cancelled: Callable[[], bool
         design=design_profiles, current=current, candidate=candidate,
         magnets={q: {"current": float(old), "suggested": float(new), "change": float(new-old)}
                  for q, old, new in zip(names, original, fit.x)}, status=status,
-        diagnostics={"before_bmag": before, "after_bmag": after, "rank": rank,
-                     "singular_values": singular.tolist(), "violations": violations,
-                     "evaluations": calls, "solver_success": bool(fit.success),
-                     "solver_message": str(fit.message),
-                     "envelope_sampling": "quadrupole analytic extrema + element boundaries; RF/other interiors not certified"})
+        diagnostics={
+            "before_bmag": before,
+            "after_bmag": after,
+            "rank": rank,
+            "singular_values": singular.tolist(),
+            "violations": violations,
+            "evaluations": calls,
+            "evaluation_budget": {
+                "initial": initial_evaluations,
+                "effective_initial": attempts[0]["evaluation_limit"],
+                "maximum": request.max_evaluations,
+            },
+            "attempts": attempts,
+            "retry_count": len(attempts) - 1,
+            "termination_reason": termination_reason,
+            "outcome_reason": outcome_reason,
+            "solver_status": int(fit.status),
+            "solver_success": bool(fit.success),
+            "solver_message": str(fit.message),
+            "solver_nfev": int(fit.nfev),
+            "solver_njev": None if fit.njev is None else int(fit.njev),
+            "cost": float(fit.cost),
+            "optimality": float(fit.optimality),
+            "active_bounds": active_bounds,
+            "envelope_sampling": "quadrupole analytic extrema + element boundaries; RF/other interiors not certified",
+        })
 
 
 def compare_measurement(model, result: MatchingResult, measurement: MeasurementBaseline, tolerance=None):
@@ -316,6 +444,21 @@ def save_result(path, result, comparison=None):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"schema": SCHEMA, "result": asdict(result), "comparison": comparison}
+    temp = path.with_suffix(path.suffix + ".tmp")
+    temp.write_text(json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8")
+    temp.replace(path)
+
+
+def save_failure(path, request, model, failure):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema": FAILURE_SCHEMA,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "request": asdict(request) if isinstance(request, MatchingRequest) else deepcopy(request),
+        "model": deepcopy(model),
+        "failure": deepcopy(failure),
+    }
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8")
     temp.replace(path)

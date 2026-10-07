@@ -5,6 +5,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/emittance_matching_test_mpl")
 from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -14,7 +15,9 @@ ensure_repo_import_path(__file__)
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 from half_linac.src.shared.machine_profile import load_app_context, resolve_write_target
-from half_linac.src.apps.emit_measure.matching import Point, Twiss, MeasurementBaseline, MatchingResult
+from half_linac.src.apps.emit_measure.matching import (
+    Point, Twiss, MeasurementBaseline, MagnetLimit, MatchingRequest, MatchingResult,
+)
 from half_linac.src.apps.emit_measure.matching_workspace import MatchingWorkspace
 from half_linac.src.apps.emit_measure.matching_import import import_measurement
 
@@ -40,6 +43,13 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIsNotNone(w.model)
         self.assertEqual(w.line.currentData(), "ALL_MAIN")
         self.assertEqual(w.presets.count(), 2)
+        self.assertEqual(w.tolerance.text(), "0.01")
+        self.assertEqual(w.acceptance.text(), "0.01")
+        self.assertTrue(all(not edit.text() for edit in w.envelopes.values()))
+        self.assertEqual(
+            tuple(w.presets.itemData(0)),
+            tuple(f"QL{i:02d}" for i in range(7, 13)),
+        )
         baseline = MeasurementBaseline(Point("QL09"), 114.15,
             {p: Twiss(3, 0.2, 2e-8) for p in ("x", "y")}, "half", "vm", "ALL_MAIN", {},
             {"kind": "manual"}, True)
@@ -50,11 +60,18 @@ class WorkspaceTests(unittest.TestCase):
         self.assertNotIn("declaration_at", w.measurement().provenance)
         self.assertAlmostEqual(w.measurement().planes["x"].emittance, 2e-8)
         w.select_group()
+        self.assertEqual(w.context.emit_measure_workflow.matching_initial_evaluations, 100)
+        self.assertEqual(w.context.emit_measure_workflow.matching_max_evaluations, 300)
         self.assertEqual(w.target.currentText(), "QL12")
-        selected = [w.table.item(r, 1).text() for r in range(w.table.rowCount())
-                    if w.table.item(r, 0).checkState() == Qt.Checked]
+        selected_rows = [r for r in range(w.table.rowCount())
+                         if w.table.item(r, 0).checkState() == Qt.Checked]
+        selected = [w.table.item(row, 1).text() for row in selected_rows]
         self.assertEqual(selected, [f"QL{i:02d}" for i in range(7, 13)])
-        self.assertTrue(all(not w.table.item(r, 3).text() for r in range(w.table.rowCount())))
+        self.assertTrue(all(
+            (w.table.item(row, 3).text(), w.table.item(row, 4).text(),
+             w.table.item(row, 5).text()) == ("-5", "5", "2")
+            for row in selected_rows
+        ))
         w.stale = False; w.energy.setText("115")
         self.assertTrue(w.stale)
 
@@ -76,6 +93,8 @@ class WorkspaceTests(unittest.TestCase):
                     if w.table.item(r, 0).checkState() == Qt.Checked]
         for row in selected:
             w.table.item(row, 2).setText("1")
+            for column in (3, 4, 5):
+                w.table.item(row, column).setText("")
         with patch.object(w, "error") as error, patch.object(w, "run_task") as run:
             w.calculate_match()
             message = str(error.call_args.args[0])
@@ -106,6 +125,45 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn("uncertainty", w.measurement().provenance)
         w.edits["x", "beta"].setText("4")
         self.assertNotIn("uncertainty", w.measurement().provenance)
+
+    def test_matching_failure_is_archived(self):
+        w = self.workspace
+        baseline = MeasurementBaseline(
+            Point("QL07"),
+            114.15,
+            {plane: Twiss(3, 0.2, 2e-8) for plane in ("x", "y")},
+            "half",
+            "vm",
+            "ALL_MAIN",
+            {"QL07": {"K1": 0.0}},
+            same_state_declared=True,
+        )
+        w.active_matching_request = MatchingRequest(
+            baseline,
+            Point("QL08", "exit"),
+            {"QL07": MagnetLimit(-5, 5, 2)},
+            initial_evaluations=100,
+            max_evaluations=300,
+        )
+        failure = {
+            "message": "backend failed",
+            "exception_type": "RuntimeError",
+            "cancelled": False,
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "half_linac.src.apps.emit_measure.matching_workspace.resolve_app_runtime_paths",
+                return_value={"runs_dir": Path(directory)},
+            ):
+                w.matching_failed(failure)
+            payload = json.loads(w.failure_archive_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["schema"], "emit_matching_failure_v1")
+        self.assertEqual(payload["failure"]["termination_reason"], "solver_exception")
+        self.assertEqual(payload["request"]["initial_evaluations"], 100)
+        self.assertIsNone(w.active_matching_request)
+        self.assertIn("Failure diagnostic archived", w.status.text())
 
     def test_apply_restore_buttons_and_durable_originals(self):
         w = self.workspace

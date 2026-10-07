@@ -311,6 +311,46 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
         "workflows.emit_measure",
     )
     presets_raw = _expect_list(workflow.get("presets"), "workflows.emit_measure.presets")
+    matching_raw = _expect_optional_mapping(
+        workflow.get("matching"),
+        "workflows.emit_measure.matching",
+    ) or {}
+    matching_envelope_raw = _expect_optional_mapping(
+        matching_raw.get("default_envelope_mm"),
+        "workflows.emit_measure.matching.default_envelope_mm",
+    )
+    matching_groups_raw = matching_raw.get("magnet_groups")
+    matching_magnet_groups = (
+        tuple(
+            tuple(
+                _expect_string_list(
+                    group,
+                    f"workflows.emit_measure.matching.magnet_groups[{index}]",
+                )
+            )
+            for index, group in enumerate(
+                _expect_list(
+                    matching_groups_raw,
+                    "workflows.emit_measure.matching.magnet_groups",
+                )
+            )
+        )
+        if matching_groups_raw is not None
+        else ()
+    )
+    matching_initial_evaluations = _required_positive_int(
+        matching_raw.get("initial_evaluations", 100),
+        "workflows.emit_measure.matching.initial_evaluations",
+    )
+    matching_max_evaluations = _required_positive_int(
+        matching_raw.get("max_evaluations", 100),
+        "workflows.emit_measure.matching.max_evaluations",
+    )
+    if matching_initial_evaluations > matching_max_evaluations:
+        raise MachineProfileError(
+            "workflows.emit_measure.matching.initial_evaluations must not exceed "
+            "max_evaluations."
+        )
 
     presets: list[EmitPreset] = []
     presets_by_id: dict[str, EmitPreset] = {}
@@ -351,6 +391,28 @@ def load_emit_measure_workflow(profile: MachineProfile) -> EmitMeasureWorkflowCo
             workflow.get("default_preset") or _infer_emit_default_preset(presets),
             "workflows.emit_measure.default_preset",
         ),
+        matching_initial_evaluations=matching_initial_evaluations,
+        matching_max_evaluations=matching_max_evaluations,
+        matching_default_tolerance=_required_positive_float(
+            matching_raw.get("default_tolerance", 0.01),
+            "workflows.emit_measure.matching.default_tolerance",
+        ),
+        matching_remeasurement_tolerance=_required_positive_float(
+            matching_raw.get("remeasurement_tolerance", 0.01),
+            "workflows.emit_measure.matching.remeasurement_tolerance",
+        ),
+        matching_default_envelope_mm={
+            plane: (
+                None
+                if matching_envelope_raw.get(plane) is None
+                else _required_positive_float(
+                    matching_envelope_raw[plane],
+                    f"workflows.emit_measure.matching.default_envelope_mm.{plane}",
+                )
+            )
+            for plane in ("x", "y")
+        },
+        matching_magnet_groups=matching_magnet_groups,
         multi_screen_presets=tuple(multi_screen_presets),
         multi_screen_presets_by_id=multi_screen_presets_by_id,
         default_multi_screen_preset=(

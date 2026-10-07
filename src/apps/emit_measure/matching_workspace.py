@@ -19,7 +19,7 @@ from half_linac.src.shared.machine_profile import (
     resolve_app_runtime_paths, resolve_write_target, resolve_channel, require_workflow_write_allowed,
 )
 from .matching import (Point, Twiss, MeasurementBaseline, MagnetLimit, MatchingRequest, Cancelled,
-                       solve_matching, compare_measurement, save_result, load_result, export_csv)
+                       solve_matching, compare_measurement, save_result, save_failure, load_result, export_csv)
 from .matching_model import ElegantMatchingModel
 from .matching_import import import_measurement, measurement_from_dict
 from .matching_execution import K1Execution, save_execution
@@ -27,7 +27,7 @@ from .matching_execution import K1Execution, save_execution
 
 class MatchingWorker(QThread):
     completed = pyqtSignal(object)
-    failed = pyqtSignal(str)
+    failed = pyqtSignal(object)
 
     def __init__(self, operation, parent):
         super().__init__(parent)
@@ -39,20 +39,24 @@ class MatchingWorker(QThread):
             if not self.isInterruptionRequested():
                 self.completed.emit(result)
             else:
-                self.failed.emit("Cancelled")
+                self.failed.emit({"message": "Cancelled", "exception_type": "Cancelled",
+                                  "cancelled": True})
         except Exception as exc:
-            self.failed.emit(str(exc))
+            self.failed.emit({"message": str(exc), "exception_type": type(exc).__name__,
+                              "cancelled": isinstance(exc, Cancelled)})
 
 
 class MatchingWorkspace(QWidget):
     def __init__(self, context, parent=None):
         super().__init__(parent)
         self.context = context
+        workflow = context.emit_measure_workflow
         self.owner = parent
         self.worker = None
         self.operation_buttons = []
         self.execution = None
         self.active_execution_record = None
+        self.active_matching_request = None
         self.result = None
         self.comparison = None
         self.stale = True
@@ -119,8 +123,12 @@ class MatchingWorkspace(QWidget):
         self.source_edge = QComboBox(); self.source_edge.addItems(["entrance", "exit"])
         self.target_edge = QComboBox(); self.target_edge.addItems(["exit", "entrance"])
         self.energy = QLineEdit()
-        self.tolerance = QLineEdit("0.01")
-        self.acceptance = QLineEdit("0.01")
+        self.tolerance = QLineEdit(str(
+            workflow.matching_default_tolerance if workflow else 0.01
+        ))
+        self.acceptance = QLineEdit(str(
+            workflow.matching_remeasurement_tolerance if workflow else 0.01
+        ))
         self.edits = {}
         for i, (label, widget) in enumerate([
             ("Model line", self.line), ("Energy [MeV]", self.energy),
@@ -167,7 +175,10 @@ class MatchingWorkspace(QWidget):
         self.envelope_button.clicked.connect(self.edit_envelope_limits)
         target_grid.addWidget(self.envelope_button, 2, 0, 1, 2)
         for plane in ("x", "y"):
-            edit = QLineEdit(self)
+            default_mm = (
+                workflow.matching_default_envelope_mm.get(plane) if workflow else None
+            )
+            edit = QLineEdit("" if default_mm is None else str(default_mm), self)
             edit.hide()
             edit.textChanged.connect(self.update_envelope_summary)
             self.envelopes[plane] = edit
@@ -455,7 +466,16 @@ class MatchingWorkspace(QWidget):
                         value = k1.get(key, k1.get(alias))
                         if value is not None: self.table.item(r, c).setText(str(value))
             self.presets.clear()
-            for names in ([f"QL{i:02d}" for i in range(7, 13)], [f"QT{i:02d}" for i in range(1, 7)]):
+            workflow = self.context.emit_measure_workflow
+            groups = (
+                workflow.matching_magnet_groups
+                if workflow and workflow.matching_magnet_groups
+                else (
+                    tuple(f"QL{i:02d}" for i in range(7, 13)),
+                    tuple(f"QT{i:02d}" for i in range(1, 7)),
+                )
+            )
+            for names in groups:
                 if set(names) <= set(quads): self.presets.addItem(names[0] + "–" + names[-1], names)
             self.updating = False
             self.invalidate()
@@ -576,7 +596,7 @@ class MatchingWorkspace(QWidget):
 
         self.run_task(read_snapshot, self.apply_snapshot)
 
-    def run_task(self, operation, completed):
+    def run_task(self, operation, completed, failed=None):
         if self.worker and self.worker.isRunning():
             self.error("A matching operation is already running"); return
         self.input_panel.setEnabled(False)
@@ -587,9 +607,12 @@ class MatchingWorkspace(QWidget):
         for button in self.operation_buttons: button.setEnabled(False)
         self.worker = MatchingWorker(operation, self)
         self.worker.completed.connect(completed)
-        self.worker.failed.connect(lambda message: self.status.setText(message))
+        self.worker.failed.connect(failed or self.task_failed)
         self.worker.finished.connect(self.task_finished)
         self.worker.start()
+
+    def task_failed(self, failure):
+        self.status.setText(failure["message"])
 
     def task_finished(self):
         self.cancel.setEnabled(False)
@@ -653,12 +676,32 @@ class MatchingWorkspace(QWidget):
             magnets = self.selected_magnet_limits()
             measurement = self.measurement()
             envelope = {p: float(edit.text()) * 1e-3 if edit.text().strip() else None for p, edit in self.envelopes.items()}
-            request = MatchingRequest(measurement, Point(self.target.currentText(), self.target_edge.currentText()),
-                                      magnets, float(self.tolerance.text()), envelope)
+            workflow = self.context.emit_measure_workflow
+            initial_evaluations = (
+                workflow.matching_initial_evaluations if workflow else 100
+            )
+            max_evaluations = workflow.matching_max_evaluations if workflow else 100
+            request = MatchingRequest(
+                measurement,
+                Point(self.target.currentText(), self.target_edge.currentText()),
+                magnets,
+                float(self.tolerance.text()),
+                envelope,
+                initial_evaluations=initial_evaluations,
+                max_evaluations=max_evaluations,
+            )
             self.model.assert_unchanged(self.model.fingerprint)
+            self.active_matching_request = request
             self.stale = True
-            self.status.setText("Calculating fixed-boundary dual-plane match…")
-            self.run_task(lambda cancel: solve_matching(self.model, request, cancel), self.show_result)
+            self.status.setText(
+                "Calculating fixed-boundary dual-plane match "
+                f"(adaptive budget {initial_evaluations}→{max_evaluations})…"
+            )
+            self.run_task(
+                lambda cancel: solve_matching(self.model, request, cancel),
+                self.show_result,
+                self.matching_failed,
+            )
         except Exception as exc: self.error(exc)
 
     def show_result(self, result):
@@ -667,14 +710,59 @@ class MatchingWorkspace(QWidget):
         self.draw_result()
         self.update_execution_buttons()
         self.archive()
+        self.active_matching_request = None
+
+    def matching_failed(self, failure):
+        request = self.active_matching_request
+        self.active_matching_request = None
+        if request is None:
+            self.task_failed(failure)
+            return
+        record = dict(failure)
+        message = failure["message"]
+        record["termination_reason"] = (
+            "cancelled" if failure.get("cancelled") else "solver_exception"
+        )
+        try:
+            paths = resolve_app_runtime_paths(Path(__file__).resolve().parent, self.context)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            self.failure_archive_path = (
+                paths["runs_dir"] / ("matching_failure_" + stamp) / "failure.json"
+            )
+            save_failure(
+                self.failure_archive_path,
+                request,
+                self.model.snapshot if self.model else {},
+                record,
+            )
+            self.status.setText(
+                f"{message} · Failure diagnostic archived."
+            )
+        except Exception as exc:
+            self.status.setText(
+                f"{message} · Failure archive failed: {exc}"
+            )
 
     def draw_result(self):
         result = self.result
         labels = {"model_target_met": "Model target met", "model_improved": "Model improved; target not met",
                   "no_usable_suggestion": "No usable suggestion"}
+        diagnostics = result.diagnostics
+        attempts = diagnostics.get("attempts", ())
+        active_bounds = [
+            f"{name}={bound}"
+            for name, bound in diagnostics.get("active_bounds", {}).items()
+            if bound
+        ]
         self.status.setText(f"{labels[result.status]} · Bmag X/Y: "
-            f"{result.diagnostics['after_bmag']['x']:.5g} / {result.diagnostics['after_bmag']['y']:.5g} · "
-            f"response rank {result.diagnostics['rank']}/4 · {result.diagnostics['solver_message']}\n"
+            f"{diagnostics['after_bmag']['x']:.5g} / {diagnostics['after_bmag']['y']:.5g} · "
+            f"response rank {diagnostics['rank']}/4\n"
+            f"Diagnosis: {diagnostics.get('outcome_reason', 'legacy_result')} · "
+            f"optimizer: {diagnostics.get('termination_reason', 'legacy_result')} · "
+            f"evaluations {diagnostics.get('evaluations', '?')}/"
+            f"{result.request.get('max_evaluations', '?')} in {len(attempts) or 1} attempt(s) · "
+            f"active bounds: {', '.join(active_bounds) if active_bounds else 'none'} · "
+            f"{diagnostics['solver_message']}\n"
             "Envelope: quadrupole extrema + boundaries; RF/other interiors are not certified. Design RMS uses measured normalized emittance.")
         self.figure.clear()
         axes = self.figure.subplots(3, 2)

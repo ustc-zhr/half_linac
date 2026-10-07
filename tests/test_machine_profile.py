@@ -1306,6 +1306,31 @@ class MachineProfileTests(unittest.TestCase):
         assert context.model_backend is not None
         self.assertEqual(context.model_backend.engine, "elegant")
 
+    def test_load_half_matching_evaluation_budget(self):
+        context = load_app_context("emit_measure", machine_id="half")
+        assert context.emit_measure_workflow is not None
+        self.assertEqual(context.emit_measure_workflow.matching_initial_evaluations, 100)
+        self.assertEqual(context.emit_measure_workflow.matching_max_evaluations, 300)
+        self.assertEqual(context.emit_measure_workflow.matching_default_tolerance, 0.01)
+        self.assertEqual(
+            context.emit_measure_workflow.matching_remeasurement_tolerance, 0.01
+        )
+        self.assertEqual(
+            context.emit_measure_workflow.matching_default_envelope_mm,
+            {"x": None, "y": None},
+        )
+        self.assertEqual(
+            context.emit_measure_workflow.matching_magnet_groups[0],
+            tuple(f"QL{i:02d}" for i in range(7, 13)),
+        )
+        for name in (f"QL{i:02d}" for i in range(7, 13)):
+            self.assertEqual(
+                context.profile.get_element(name).limits_for("K1"),
+                {"low": -5, "high": 5, "max_change": 2, "unit": "1/m^2"},
+            )
+            target = resolve_write_target(context, name, quantity="K1")
+            self.assertEqual((target.machine_limit.low, target.machine_limit.high), (-5.0, 5.0))
+
     def test_load_half_multi_screen_emit_preset(self):
         context = load_app_context("emit_measure")
         assert context.emit_measure_workflow is not None
@@ -1356,6 +1381,39 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(loaded.multi_screen_presets, ())
         self.assertEqual(loaded.multi_screen_presets_by_id, {})
         self.assertIsNone(loaded.default_multi_screen_preset)
+
+    def test_emit_loader_rejects_initial_budget_above_maximum(self):
+        profile = load_profile("half")
+        workflow = deepcopy(profile.workflows["emit_measure"])
+        workflow["matching"] = {
+            **workflow["matching"],
+            "initial_evaluations": 301,
+            "max_evaluations": 300,
+        }
+
+        with self.assertRaisesRegex(
+            MachineProfileError,
+            "initial_evaluations must not exceed max_evaluations",
+        ):
+            load_emit_measure_workflow(
+                replace(profile, workflows={**profile.workflows, "emit_measure": workflow})
+            )
+
+    def test_emit_loader_defaults_matching_evaluation_budget(self):
+        profile = load_profile("half")
+        workflow = deepcopy(profile.workflows["emit_measure"])
+        del workflow["matching"]
+
+        loaded = load_emit_measure_workflow(
+            replace(profile, workflows={**profile.workflows, "emit_measure": workflow})
+        )
+
+        self.assertEqual(loaded.matching_initial_evaluations, 100)
+        self.assertEqual(loaded.matching_max_evaluations, 100)
+        self.assertEqual(loaded.matching_default_tolerance, 0.01)
+        self.assertEqual(loaded.matching_remeasurement_tolerance, 0.01)
+        self.assertEqual(loaded.matching_default_envelope_mm, {"x": None, "y": None})
+        self.assertEqual(loaded.matching_magnet_groups, ())
 
     def test_resolve_expected_half_channels(self):
         profile = load_profile("half")

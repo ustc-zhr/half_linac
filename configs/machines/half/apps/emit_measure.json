@@ -107,6 +107,17 @@
     }
   ],
   "default_preset": "emit_qt02_prf07",
+  "matching": {
+    "initial_evaluations": 100,
+    "max_evaluations": 300,
+    "default_tolerance": 0.01,
+    "remeasurement_tolerance": 0.01,
+    "default_envelope_mm": {"x": null, "y": null},
+    "magnet_groups": [
+      ["QL07", "QL08", "QL09", "QL10", "QL11", "QL12"],
+      ["QT01", "QT02", "QT03", "QT04", "QT05", "QT06"]
+    ]
+  },
   "multi_screen": {
     "presets": [
       {

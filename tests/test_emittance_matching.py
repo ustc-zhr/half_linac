@@ -12,7 +12,7 @@ from repo_bootstrap import ensure_repo_import_path
 ensure_repo_import_path(__file__)
 from half_linac.src.apps.emit_measure.matching import (
     Point, Twiss, MeasurementBaseline, MatchingRequest, MagnetLimit, Cancelled,
-    solve_matching, compare_measurement, save_result, load_result, export_csv,
+    solve_matching, compare_measurement, save_result, save_failure, load_result, export_csv,
     propagate, mismatch,
 )
 from half_linac.src.apps.emit_measure.matching_import import import_measurement
@@ -80,6 +80,64 @@ class MatchingTests(unittest.TestCase):
         self.assertEqual(request.measurement.overrides["Q1"]["K1"], 0)
         self.assertEqual(result.design["x"][0]["beta"], 2)
         self.assertLessEqual(result.diagnostics["evaluations"], request.max_evaluations)
+
+    def test_adaptive_retry_records_attempt_diagnostics(self):
+        model, request = fixture()
+        request.initial_evaluations = 12
+        request.max_evaluations = 100
+        request.tolerance = 1e-8
+
+        result = solve_matching(model, request)
+
+        attempts = result.diagnostics["attempts"]
+        self.assertGreaterEqual(len(attempts), 2)
+        self.assertEqual(attempts[0]["evaluation_limit"], 12)
+        self.assertEqual(attempts[0]["retry_decision"], "retry_with_larger_budget")
+        self.assertTrue(attempts[0]["residual_improved"])
+        self.assertEqual(result.diagnostics["retry_count"], len(attempts) - 1)
+        self.assertEqual(result.diagnostics["termination_reason"], "solver_converged")
+        self.assertEqual(result.diagnostics["outcome_reason"], "target_met")
+        self.assertLessEqual(result.diagnostics["evaluations"], request.max_evaluations)
+        self.assertIn("cost", result.diagnostics)
+        self.assertIn("optimality", result.diagnostics)
+        self.assertEqual(set(result.diagnostics["active_bounds"]), set(request.magnets))
+
+    def test_budget_exhaustion_returns_diagnostic_result(self):
+        model, request = fixture()
+        request.initial_evaluations = 12
+        request.max_evaluations = 12
+        request.tolerance = 1e-8
+
+        result = solve_matching(model, request)
+
+        self.assertEqual(
+            result.diagnostics["termination_reason"],
+            "evaluation_budget_exhausted",
+        )
+        self.assertEqual(
+            result.diagnostics["attempts"][-1]["retry_decision"],
+            "stop_maximum_budget_reached",
+        )
+        self.assertLessEqual(result.diagnostics["evaluations"], 12)
+        self.assertIn(result.status, ("model_improved", "no_usable_suggestion"))
+
+    def test_failure_archive_contains_request_and_reason(self):
+        model, request = fixture()
+        failure = {
+            "message": "backend failed",
+            "exception_type": "RuntimeError",
+            "cancelled": False,
+            "termination_reason": "solver_exception",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "failure.json"
+            save_failure(path, request, model.snapshot, failure)
+            payload = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["schema"], "emit_matching_failure_v1")
+        self.assertEqual(payload["request"]["target"]["element"], "END")
+        self.assertEqual(payload["model"]["fingerprint"], model.fingerprint)
+        self.assertEqual(payload["failure"], failure)
 
     def test_bounded_unreachable(self):
         model, request = fixture()
