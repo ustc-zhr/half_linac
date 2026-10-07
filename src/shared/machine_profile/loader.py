@@ -1392,10 +1392,25 @@ def _load_directory_profile_raw(
                     raw_channel_limits,
                     f"{location}.limits.{channel_name}",
                 )
-                if set(channel_limits) != {"low", "high", "unit"}:
+                required_limit_fields = {"low", "high", "unit"}
+                allowed_limit_fields = (
+                    required_limit_fields | {"max_change"}
+                    if channel_name == "K1"
+                    else required_limit_fields
+                )
+                if (
+                    not required_limit_fields <= set(channel_limits)
+                    or set(channel_limits) - allowed_limit_fields
+                ):
+                    suffix = " with optional max_change" if channel_name == "K1" else ""
                     raise MachineProfileError(
-                        f"{location}.limits.{channel_name} must define exactly "
-                        "low, high, and unit."
+                        f"{location}.limits.{channel_name} must define low, high, and unit"
+                        f"{suffix}."
+                    )
+                if "max_change" in channel_limits:
+                    _required_positive_float(
+                        channel_limits["max_change"],
+                        f"{location}.limits.{channel_name}.max_change",
                     )
                 low = _expect_finite_number(
                     channel_limits.get("low"), f"{location}.limits.{channel_name}.low"
@@ -4066,6 +4081,13 @@ def _required_nonnegative_float(value: Any, location: str) -> float:
     selected = _required_finite_float(value, location)
     if selected < 0:
         raise MachineProfileError(f"{location} must be non-negative.")
+    return selected
+
+
+def _required_positive_float(value: Any, location: str) -> float:
+    selected = _required_finite_float(value, location)
+    if selected <= 0:
+        raise MachineProfileError(f"{location} must be positive.")
     return selected
 
 

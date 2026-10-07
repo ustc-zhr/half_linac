@@ -1430,7 +1430,7 @@
       "display_name": "QL07",
       "order": 146,
       "tags": ["bba", "emit"],
-      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}, "K1": {"low": -5, "high": 5, "max_change": 2, "unit": "1/m^2"}},
       "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
@@ -1439,7 +1439,7 @@
       "display_name": "QL08",
       "order": 147,
       "tags": ["bba", "emit"],
-      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}, "K1": {"low": -5, "high": 5, "max_change": 2, "unit": "1/m^2"}},
       "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
@@ -1448,7 +1448,7 @@
       "display_name": "QL09",
       "order": 148,
       "tags": ["bba", "emit"],
-      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}, "K1": {"low": -5, "high": 5, "max_change": 2, "unit": "1/m^2"}},
       "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
@@ -1457,7 +1457,7 @@
       "display_name": "QL10",
       "order": 149,
       "tags": ["bba", "emit"],
-      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}, "K1": {"low": -5, "high": 5, "max_change": 2, "unit": "1/m^2"}},
       "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
@@ -1466,7 +1466,7 @@
       "display_name": "QL11",
       "order": 150,
       "tags": ["bba", "emit"],
-      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}, "K1": {"low": -5, "high": 5, "max_change": 2, "unit": "1/m^2"}},
       "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
@@ -1475,7 +1475,7 @@
       "display_name": "QL12",
       "order": 151,
       "tags": ["bba", "emit"],
-      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}},
+      "limits": {"current_set": {"low": -20, "high": 20, "unit": "A"}, "K1": {"low": -5, "high": 5, "max_change": 2, "unit": "1/m^2"}},
       "logical_channels": ["K1", "K1_adj", "K1_total", "current_set", "current_readback"]
     },
     {
@@ -2087,7 +2087,7 @@
         "vm": {"shape": [360, 270], "pixel_width_mm": 0.1156, "default_roi": {"x": 0, "y": 0, "width": 360, "height": 270}},
         "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0289, "flip_y": true, "model_to_image_x_sign": -1, "default_roi": {"x": 350, "y": 200, "width": 750, "height": 700}}
       },
-      "logical_channels": ["image", "exposure_time", "sigx", "sigy"]
+      "logical_channels": ["image", "exposure_time", "sigx", "sigy", "energy_center", "energy_deviation", "energy_spread"]
     },
     {
       "id": "PRF03",
@@ -2269,7 +2269,7 @@
         "vm": {"shape": [720, 540], "pixel_width_mm": 0.0878, "default_roi": {"x": 0, "y": 0, "width": 720, "height": 540}},
         "real": {"shape": [1440, 1080], "pixel_width_mm": 0.0439, "flip_y": true, "model_to_image_x_sign": -1, "default_roi": {"x": 230, "y": 370, "width": 1000, "height": 330}}
       },
-      "logical_channels": ["image", "exposure_time"]
+      "logical_channels": ["image", "exposure_time", "energy_center", "energy_deviation", "energy_spread"]
     },
     {
       "id": "SS01",

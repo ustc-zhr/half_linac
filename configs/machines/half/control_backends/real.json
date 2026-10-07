@@ -1160,7 +1160,10 @@
       "image": "IN:BD:PRF02:image1:ArrayData",
       "exposure_time": "IN:BD:PRF02:cam1:AcquireTime",
       "sigx": "IN:BD:PRF02:H:SIZE",
-      "sigy": "IN:BD:PRF02:V:SIZE"
+      "sigy": "IN:BD:PRF02:V:SIZE",
+      "energy_center": "IN:BD:PRF02:H:E0",
+      "energy_deviation": "IN:BD:PRF02:H:E",
+      "energy_spread": "IN:BD:PRF02:H:DE"
     },
     "PRF03": {
       "image": "IN:BD:PRF03:image1:ArrayData",
@@ -1242,7 +1245,10 @@
     },
     "ENY": {
       "image": "IN:BD:ENY:image1:ArrayData",
-      "exposure_time": "IN:BD:ENY:cam1:AcquireTime"
+      "exposure_time": "IN:BD:ENY:cam1:AcquireTime",
+      "energy_center": "IN:BD:ENY:H:E0",
+      "energy_deviation": "IN:BD:ENY:H:E",
+      "energy_spread": "IN:BD:ENY:H:DE"
     },
     "PREINJECTOR_ENERGY": {
       "setpoint": "IN:L01:ENG"
