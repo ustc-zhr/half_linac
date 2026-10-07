@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sys
+from tempfile import TemporaryDirectory
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -9,6 +11,7 @@ from unittest.mock import patch
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from half_linac.src.apps.solenoid_centering import profile_runtime
 from half_linac.src.apps.solenoid_centering.joint import JointScanner, load_joint_plans, solve_joint_step
 from half_linac.src.apps.solenoid_centering.scan import StopRequested, StateDriftError, RestoreFailed
 from half_linac.src.shared.machine_profile import load_app_context
@@ -63,6 +66,68 @@ class CoupledIO:
             raise RuntimeError('write failed after reaching device')
 
 
+class ArchiveTests(unittest.TestCase):
+    def setUp(self):
+        self.context = load_app_context(
+            'solenoid_centering', machine_id='half', control_backend='real',
+        )
+
+    def test_joint_state_changes_update_one_archive_with_event_history(self):
+        with TemporaryDirectory() as directory, patch.object(
+                profile_runtime, 'SOLENOID_CENTERING_RUNTIME_ROOT', Path(directory)):
+            result = {
+                'preset_id': 'joint_custom',
+                'operation_status': 'completed',
+                'recommendation_available': True,
+                'restore': 'verified',
+            }
+            archive = profile_runtime.write_scan_result(
+                self.context, result, namespace='joint', event='scan_completed',
+            )
+            created_at = json.loads(archive.read_text(encoding='utf-8'))['created_at']
+
+            result.update(archive_path=str(archive), applied=True)
+            self.assertEqual(profile_runtime.write_scan_result(
+                self.context, result, namespace='joint', archive_path=archive,
+                event='apply_succeeded',
+            ), archive)
+            result['applied'] = False
+            self.assertEqual(profile_runtime.write_scan_result(
+                self.context, result, namespace='joint', archive_path=archive,
+                event='restore_succeeded',
+            ), archive)
+
+            paths = profile_runtime.resolve_solenoid_centering_runtime_paths(self.context)
+            joint_root = paths['runtime_dir'] / 'joint'
+            self.assertEqual(list((joint_root / 'scans').glob('scan_*.json')), [archive])
+            payload = json.loads(archive.read_text(encoding='utf-8'))
+            latest = json.loads(
+                (joint_root / 'latest' / profile_runtime.LATEST_RESULT_FILE).read_text(
+                    encoding='utf-8',
+                )
+            )
+            self.assertEqual(payload, latest)
+            self.assertEqual(payload['created_at'], created_at)
+            self.assertEqual(payload['archive_revision'], 3)
+            self.assertEqual(payload['archive_path'], str(archive))
+            self.assertEqual(
+                [entry['event'] for entry in payload['archive_events']],
+                ['scan_completed', 'apply_succeeded', 'restore_succeeded'],
+            )
+            self.assertFalse(payload['applied'])
+
+    def test_existing_archive_update_is_confined_to_scan_directory(self):
+        with TemporaryDirectory() as directory, patch.object(
+                profile_runtime, 'SOLENOID_CENTERING_RUNTIME_ROOT', Path(directory)):
+            outside = Path(directory) / 'outside.json'
+            outside.write_text('{}', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'configured scans directory'):
+                profile_runtime.write_scan_result(
+                    self.context, {'preset_id': 'joint_custom'}, namespace='joint',
+                    archive_path=outside, event='apply_succeeded',
+                )
+
+
 class JointTests(unittest.TestCase):
     def setUp(self):
         self.context = load_app_context('solenoid_centering', machine_id='half', control_backend='real')
@@ -73,7 +138,7 @@ class JointTests(unittest.TestCase):
         self.scanner.helper._sleep = lambda _: self.scanner.helper._raise_if_stopped()
         self.writer = patch('half_linac.src.apps.solenoid_centering.joint.write_scan_result',
                             return_value=Path('/tmp/joint-test.json'))
-        self.writer.start()
+        self.write_result = self.writer.start()
         self.addCleanup(self.writer.stop)
 
     def test_half_groups_and_corrector_mapping(self):
@@ -195,6 +260,24 @@ class JointTests(unittest.TestCase):
         self.scanner.restore_applied(result)
         self.assertEqual(self.io.values, self.io.initial)
         self.assertFalse(result['applied'])
+
+    def test_apply_and_restore_update_the_original_archive(self):
+        result = self.scanner.run()
+        self.write_result.reset_mock()
+        self.scanner.apply(result)
+        self.scanner.restore_applied(result)
+        calls = self.write_result.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0].kwargs, {
+            'namespace': 'joint',
+            'archive_path': result['archive_path'],
+            'event': 'apply_succeeded',
+        })
+        self.assertEqual(calls[1].kwargs, {
+            'namespace': 'joint',
+            'archive_path': result['archive_path'],
+            'event': 'restore_succeeded',
+        })
 
     def test_stop_restores_and_disables_recommendation(self):
         self.scanner.helper.stop_requested = lambda: len(self.io.writes) >= 4

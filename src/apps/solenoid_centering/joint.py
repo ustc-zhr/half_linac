@@ -426,7 +426,11 @@ class JointScanner:
             result["preset_id"] = "joint_" + self.plan.id
             self.last_result = result
             result["elapsed_seconds"] = time.monotonic() - started
-            result["archive_path"] = str(write_scan_result(self.context, result, namespace="joint"))
+            event = ("scan_completed" if result.get("operation_status") == "completed"
+                     and result.get("restore") == "verified" else "scan_failed")
+            result["archive_path"] = str(write_scan_result(
+                self.context, result, namespace="joint", event=event,
+            ))
         if error is not None:
             raise error
         return result
@@ -497,10 +501,16 @@ class JointScanner:
                               recommendation_available=False)
                 raise
             finally:
-                write_scan_result(self.context, result, namespace="joint")
+                write_scan_result(
+                    self.context, result, namespace="joint",
+                    archive_path=result["archive_path"], event="apply_failed",
+                )
             raise
         result["applied"] = True
-        write_scan_result(self.context, result, namespace="joint")
+        write_scan_result(
+            self.context, result, namespace="joint",
+            archive_path=result["archive_path"], event="apply_succeeded",
+        )
 
     def restore_applied(self, result):
         require_workflow_write_allowed(self.context, "solenoid_centering", "Restore joint result")
@@ -514,8 +524,14 @@ class JointScanner:
             self._restore(result["original"])
         except Exception as exc:
             result.update(restore="failed", restore_error=str(exc), recommendation_available=False)
-            write_scan_result(self.context, result, namespace="joint")
+            write_scan_result(
+                self.context, result, namespace="joint",
+                archive_path=result["archive_path"], event="restore_failed",
+            )
             raise
         result["restore"] = "verified"
         result["applied"] = False
-        write_scan_result(self.context, result, namespace="joint")
+        write_scan_result(
+            self.context, result, namespace="joint",
+            archive_path=result["archive_path"], event="restore_succeeded",
+        )
