@@ -674,7 +674,7 @@ class Ui_MainWindow(object):
         item = self.listWidget_navPages.item(0)
         item.setText(_translate("MainWindow", "Overview"))
         item = self.listWidget_navPages.item(1)
-        item.setText(_translate("MainWindow", "Configure"))
+        item.setText(_translate("MainWindow", "Setup"))
         item = self.listWidget_navPages.item(2)
         item.setText(_translate("MainWindow", "Run"))
         self.listWidget_navPages.setSortingEnabled(__sortingEnabled)

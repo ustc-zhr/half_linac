@@ -54,7 +54,7 @@
    </item>
    <item>
    <widget class="QGroupBox" name="groupBox_runtime">
-     <property name="title"><string>Snapshot</string></property>
+     <property name="title"><string/></property>
      <layout class="QGridLayout" name="gridLayout_runtime">
       <item row="0" column="0"><widget class="QFrame" name="frame_eval"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><layout class="QVBoxLayout" name="verticalLayout_eval"><item><widget class="QLabel" name="label_evalTitle"><property name="text"><string>Evaluations</string></property></widget></item><item><widget class="QLabel" name="label_evalValue"><property name="text"><string>0</string></property></widget></item></layout></widget></item>
       <item row="0" column="1"><widget class="QFrame" name="frame_elapsed"><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><layout class="QVBoxLayout" name="verticalLayout_elapsed"><item><widget class="QLabel" name="label_elapsedTitle"><property name="text"><string>Elapsed</string></property></widget></item><item><widget class="QLabel" name="label_elapsedValue"><property name="text"><string>00:00:00</string></property></widget></item></layout></widget></item>

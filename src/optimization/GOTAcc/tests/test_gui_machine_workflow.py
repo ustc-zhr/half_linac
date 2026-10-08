@@ -7,7 +7,6 @@ pytest.importorskip("PyQt5")
 from PyQt5.QtWidgets import QApplication, QDialog, QMessageBox
 
 from gotacc.gui.services.task_service import TaskService
-from gotacc.gui.services.machine_profile import MachineProfile, save_machine_profile
 from gotacc.gui.views.main_window import MainWindow
 from gotacc.gui.views.tool_dialogs import BoundsToolsDialog
 from gotacc.interfaces.policies import POLICY_REGISTRY
@@ -112,6 +111,8 @@ def test_mapping_master_detail_displays_library_signal_as_read_only(tmp_path, wi
 
 def test_new_tasks_use_mode_specific_defaults_without_mode_switch_data_loss(window):
     controller = window.task_builder_controller
+    window.machine_ui.doubleSpinBox_setInterval.setValue(0.75)
+    window.machine_ui.doubleSpinBox_sampleInterval.setValue(0.125)
 
     controller.create_new_online_task()
 
@@ -120,8 +121,10 @@ def test_new_tasks_use_mode_specific_defaults_without_mode_switch_data_loss(wind
     assert window.task_ui.tableWidget_constraints.rowCount() == 0
     assert window.machine_ui.tableWidget_mapping.rowCount() == 0
     assert window.machine_ui.tableWidget_writeLinks.rowCount() == 0
+    assert window.machine_ui.doubleSpinBox_setInterval.value() == 0.75
+    assert window.machine_ui.doubleSpinBox_sampleInterval.value() == 0.125
     assert not window.task_ui.label_variablesEmptyState.isHidden()
-    assert "Machine Profile" in window.task_ui.label_variablesEmptyState.text()
+    assert "PV Mapping" in window.task_ui.label_variablesEmptyState.text()
 
     controller.create_new_offline_task()
 
@@ -132,6 +135,8 @@ def test_new_tasks_use_mode_specific_defaults_without_mode_switch_data_loss(wind
     assert [row["Name"] for row in objectives] == ["rosenbrock"]
     assert window.task_ui.tableWidget_constraints.rowCount() == 0
     assert window.machine_ui.tableWidget_mapping.rowCount() == 0
+    assert window.machine_ui.doubleSpinBox_setInterval.value() == 0.75
+    assert window.machine_ui.doubleSpinBox_sampleInterval.value() == 0.125
     assert "constrained benchmarks" in window.task_ui.label_constraintsEmptyState.text()
     config = TaskService.build_task_config(window._current_task())
     assert config.backend.type == "offline"
@@ -234,80 +239,6 @@ def test_mapping_sync_preserves_parameters_by_name_and_can_undo(
     assert not window.machine_ui.pushButton_undoMappingSync.isEnabled()
 
 
-def test_machine_profile_load_is_independent_until_confirmed_task_sync(
-    tmp_path, window, monkeypatch
-):
-    window._apply_task_payload(_online_task(tmp_path), goto_builder=False)
-    profile = MachineProfile.create(
-        "Alternate Beamline",
-        {
-            "mapping": [
-                {
-                    "Role": "knob",
-                    "Name": "Q3",
-                    "PV Name": "ALT:Q3:SET",
-                    "Readback": "ALT:Q3:RB",
-                },
-                {
-                    "Role": "objective",
-                    "Name": "Energy",
-                    "PV Name": "ALT:ENERGY",
-                },
-            ],
-            "write_links": [],
-            "policy_bindings": [],
-            "policy_presets": [],
-        },
-        profile_id="alternate-beamline",
-    )
-    path = save_machine_profile(profile, tmp_path / "alternate.json")
-    monkeypatch.setattr(
-        window.machine_controller,
-        "_selected_machine_profile_path",
-        lambda: str(path),
-    )
-
-    window.machine_controller.open_machine_profile()
-
-    assert [
-        row["Name"]
-        for row in TaskService.table_to_records(window.machine_ui.tableWidget_mapping)
-    ] == ["Q3", "Energy"]
-    assert [
-        row["Name"]
-        for row in TaskService.table_to_records(window.task_ui.tableWidget_variables)
-    ] == ["Q1", "Q2"]
-    assert window.machine_ui.machine_profile["profile_id"] == "alternate-beamline"
-    assert window._current_task()["machine"]["profile"]["name"] == "Alternate Beamline"
-
-    previews = []
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        lambda _parent, _title, message, *_args, **_kwargs: (
-            previews.append(message) or QMessageBox.No
-        ),
-    )
-    window.machine_controller.apply_selected_pv_library_entries()
-    assert "Knobs: add Q3; remove Q1, Q2" in previews[0]
-    assert "Objectives: add Energy; remove Transmission" in previews[0]
-    assert [
-        row["Name"]
-        for row in TaskService.table_to_records(window.task_ui.tableWidget_variables)
-    ] == ["Q1", "Q2"]
-
-    monkeypatch.setattr(QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.Yes)
-    window.machine_controller.apply_selected_pv_library_entries()
-    assert [
-        row["Name"]
-        for row in TaskService.table_to_records(window.task_ui.tableWidget_variables)
-    ] == ["Q3"]
-    assert [
-        row["Name"]
-        for row in TaskService.table_to_records(window.task_ui.tableWidget_objectives)
-    ] == ["Energy"]
-
-
 def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, monkeypatch):
     task = _online_task(tmp_path)
     window._apply_task_payload(task, goto_builder=False)
@@ -315,6 +246,7 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
     monkeypatch.setattr(QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.Yes)
     window.machine_controller.apply_selected_pv_library_entries()
     assert window.ui.tabWidget_configure.currentIndex() == window.CONFIGURE_TAB_MACHINE
+    assert window.machine_ui.pushButton_test.isEnabled()
     reads = []
 
     def fake_caget(pvname, *, timeout):
@@ -333,7 +265,7 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
     }
     current = window._current_task()
     assert window.machine_controller.ensure_machine_ready_for_online(current)
-    assert window.machine_ui.label_statusValue.text() == "PV Check Passed"
+    assert window.machine_ui.label_statusValue.text() == "Passed"
 
     window.machine_ui.tableWidget_mapping.item(0, 2).setText("TEST:Q2:NEW")
     QApplication.processEvents()
@@ -342,6 +274,11 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
     assert window.state.last_test_read_status == "Stale"
     assert not window.state.machine_check_identity
     assert not window.machine_controller.ensure_machine_ready_for_online(window._current_task())
+
+    window.machine_ui.tableWidget_mapping.setRowCount(0)
+    window.machine_ui.tableWidget_writeLinks.setRowCount(0)
+    window.machine_controller.refresh_machine_summary()
+    assert not window.machine_ui.pushButton_test.isEnabled()
 
 
 @pytest.mark.parametrize("synced", [True, False])

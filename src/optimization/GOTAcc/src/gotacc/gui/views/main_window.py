@@ -88,6 +88,10 @@ try:
         theme_label,
         theme_palette,
     )
+    from ..preferences import (
+        load_machine_timing_preferences,
+        save_machine_timing_preferences,
+    )
     from ..state import GuiSessionState
     from ..services.task_service import TaskService
     from .controllers import (
@@ -115,6 +119,10 @@ except ImportError:  # pragma: no cover - local script fallback
         save_theme_key,
         theme_label,
         theme_palette,
+    )
+    from preferences import (
+        load_machine_timing_preferences,
+        save_machine_timing_preferences,
     )
     from state import GuiSessionState
     from task_service import TaskService
@@ -312,7 +320,7 @@ class MainWindow(QMainWindow):
         if self.state.run.phase in {"Running", "Stopping"}:
             task = self.state.latest_task_snapshot or self._current_task()
             is_online = str(task.get("mode", "")).strip().lower() == "online epics"
-            if is_online and bool((task.get("machine", {}) or {}).get("restore_on_abort", True)):
+            if is_online:
                 self.run_controller.abort_and_restore()
             else:
                 self.run_controller.stop_run()
@@ -322,9 +330,6 @@ class MainWindow(QMainWindow):
     def _confirm_close_active_run(self) -> bool:
         task = self.state.latest_task_snapshot or self._current_task()
         is_online = str(task.get("mode", "")).strip().lower() == "online epics"
-        restore_enabled = is_online and bool(
-            (task.get("machine", {}) or {}).get("restore_on_abort", True)
-        )
         already_stopping = self.state.run.phase in {"Abort Requested", "Restoring"}
 
         dialog = QMessageBox(self)
@@ -334,7 +339,7 @@ class MainWindow(QMainWindow):
         if already_stopping:
             detail = "The run is already stopping. Keep the window open until shutdown completes?"
             action_text = "Exit When Safe"
-        elif restore_enabled:
+        elif is_online:
             detail = "Abort the run, restore the initial machine state, and exit after restoration completes?"
             action_text = "Abort, Restore and Exit"
         else:
@@ -611,7 +616,7 @@ class MainWindow(QMainWindow):
         self.ui.label_statusTaskValue.setText("Untitled Task")
         self.ui.label_statusModeValue.setText("Offline")
         self.ui.label_statusAlgorithmValue.setText("BO")
-        self.ui.label_statusConnectionValue.setText("Disconnected")
+        self.ui.label_statusConnectionValue.setText("Not checked")
         self.ui.label_statusBestValue.setText("--")
 
         self.task_ui.lineEdit_taskName.setText("demo_task")
@@ -621,13 +626,17 @@ class MainWindow(QMainWindow):
         self.task_ui.comboBox_testFunction.setCurrentText("rosenbrock")
 
         self.machine_ui.lineEdit_caAddress.setText("")
-        self.machine_ui.label_statusValue.setText("Disconnected")
-        self.machine_ui.checkBox_restore.setChecked(True)
+        self.machine_ui.label_statusValue.setText("Not checked")
         self._set_readback_tolerance_enabled(
             self.machine_ui.checkBox_readbackCheck.isChecked()
         )
-        self.machine_ui.doubleSpinBox_setInterval.setValue(1.0)
-        self.machine_ui.doubleSpinBox_sampleInterval.setValue(0.2)
+        timing_preferences = load_machine_timing_preferences()
+        self.machine_ui.doubleSpinBox_setInterval.setValue(
+            timing_preferences["set_interval"]
+        )
+        self.machine_ui.doubleSpinBox_sampleInterval.setValue(
+            timing_preferences["sample_interval"]
+        )
         self.machine_ui.doubleSpinBox_timeout.setValue(2.0)
 
         self.run_ui.label_evalValue.setText("0")
@@ -644,6 +653,15 @@ class MainWindow(QMainWindow):
         self._set_run_buttons_enabled(start=True, stop=False)
         self.state.last_test_read_status = "Not checked"
         self.state.last_test_read_detail = ""
+
+    def _remember_machine_timing_preferences(self) -> None:
+        try:
+            save_machine_timing_preferences(
+                self.machine_ui.doubleSpinBox_setInterval.value(),
+                self.machine_ui.doubleSpinBox_sampleInterval.value(),
+            )
+        except OSError as exc:
+            self._log_console(f"Could not save machine timing preferences: {exc}")
 
     def _apply_half_linac_shell_conventions(self) -> None:
         self._align_workspace_card_grid()
@@ -898,9 +916,10 @@ class MainWindow(QMainWindow):
             frame.setFrameShape(QFrame.NoFrame)
 
     def _compact_run_snapshot(self) -> None:
-        self.run_ui.groupBox_runtime.setMaximumHeight(94)
+        self.run_ui.groupBox_runtime.setTitle("")
+        self.run_ui.groupBox_runtime.setMaximumHeight(56)
         self.run_ui.groupBox_runtime.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.run_ui.gridLayout_runtime.setContentsMargins(10, 22, 10, 8)
+        self.run_ui.gridLayout_runtime.setContentsMargins(0, 6, 0, 6)
         self.run_ui.gridLayout_runtime.setHorizontalSpacing(0)
         self.run_ui.gridLayout_runtime.setVerticalSpacing(0)
 
@@ -1078,10 +1097,11 @@ class MainWindow(QMainWindow):
         self.log_toggle_button.style().polish(self.log_toggle_button)
 
     def _compact_overview_panels(self) -> None:
-        self.ui.groupBox_dashboardSummary.setMaximumHeight(146)
-        self.ui.gridLayout_dashboardSummary.setContentsMargins(10, 10, 10, 8)
-        self.ui.gridLayout_dashboardSummary.setHorizontalSpacing(8)
+        self.ui.groupBox_dashboardSummary.setMaximumHeight(122)
+        self.ui.gridLayout_dashboardSummary.setContentsMargins(10, 8, 10, 8)
+        self.ui.gridLayout_dashboardSummary.setHorizontalSpacing(4)
         self.ui.gridLayout_dashboardSummary.setVerticalSpacing(8)
+        self.ui.gridLayout_dashboardSummary.setColumnStretch(4, 1)
 
         cards = (
             (self.ui.frame_cardCurrentTask, self.ui.verticalLayout_cardCurrentTask),
@@ -1089,11 +1109,16 @@ class MainWindow(QMainWindow):
             (self.ui.frame_cardAlgorithm, self.ui.verticalLayout_cardAlgorithm),
             (self.ui.frame_cardStatus, self.ui.verticalLayout_cardStatus),
         )
-        for frame, layout in cards:
-            frame.setFixedHeight(84)
-            frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            layout.setContentsMargins(8, 6, 8, 6)
-            layout.setSpacing(2)
+        for column, (frame, layout) in enumerate(cards):
+            frame.setFixedHeight(60)
+            frame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+            layout.setContentsMargins(10, 2, 14, 2)
+            layout.setSpacing(1)
+            self.ui.gridLayout_dashboardSummary.setColumnStretch(column, 0)
+            self.ui.gridLayout_dashboardSummary.setAlignment(
+                frame,
+                Qt.AlignLeft | Qt.AlignVCenter,
+            )
 
         for label in (
             self.ui.label_cardCurrentTaskTitle,
@@ -1109,7 +1134,8 @@ class MainWindow(QMainWindow):
             self.ui.label_cardAlgorithmValue,
             self.ui.label_cardStatusValue,
         ):
-            label.setWordWrap(True)
+            label.setWordWrap(False)
+            label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             label.setToolTip(label.text())
 
         self.ui.groupBox_environmentStatus.setVisible(False)
@@ -1139,7 +1165,7 @@ class MainWindow(QMainWindow):
     def _configure_navigation_cards(self) -> None:
         entries = [
             ("Overview", "Dashboard, current task summary and recent activity."),
-            ("Configure", "Build the task and wire machine settings."),
+            ("Setup", "Build the task and wire machine settings."),
             ("Run", "Start the run and inspect outputs."),
         ]
         nav = self.ui.listWidget_navPages
@@ -1312,12 +1338,6 @@ class MainWindow(QMainWindow):
         self._setup_table(self.machine_ui.tableWidget_writeLinks, write_headers, 0)
         self.machine_ui.policy_bindings = []
         self.machine_ui.policy_presets = []
-        self.machine_ui.machine_profile = {
-            "profile_id": "embedded",
-            "name": "Embedded Machine",
-            "version": 1,
-            "source": "",
-        }
         self.machine_ui.tableWidget_writeLinks.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
         self.task_builder_controller.refresh_write_link_editors()
@@ -1500,7 +1520,6 @@ class MainWindow(QMainWindow):
             lambda _text: self.machine_controller.refresh_machine_summary()
         )
         self.machine_ui.checkBox_autoConnect.toggled.connect(self._refresh_task_preview)
-        self.machine_ui.checkBox_restore.toggled.connect(self._refresh_task_preview)
         self.machine_ui.checkBox_readbackCheck.toggled.connect(
             self._set_readback_tolerance_enabled
         )
@@ -1508,6 +1527,12 @@ class MainWindow(QMainWindow):
         self.machine_ui.doubleSpinBox_readbackTol.valueChanged.connect(self._refresh_task_preview)
         self.machine_ui.doubleSpinBox_setInterval.valueChanged.connect(self._refresh_task_preview)
         self.machine_ui.doubleSpinBox_sampleInterval.valueChanged.connect(self._refresh_task_preview)
+        self.machine_ui.doubleSpinBox_setInterval.editingFinished.connect(
+            self._remember_machine_timing_preferences
+        )
+        self.machine_ui.doubleSpinBox_sampleInterval.editingFinished.connect(
+            self._remember_machine_timing_preferences
+        )
         self.machine_ui.doubleSpinBox_timeout.valueChanged.connect(self._refresh_task_preview)
         self.machine_ui.lineEdit_caAddress.textChanged.connect(self._refresh_task_preview)
 
@@ -2452,14 +2477,13 @@ class MainWindow(QMainWindow):
             backend_tooltip = "No machine connection is required for this task."
             backend_tone = "success"
         else:
-            machine_status = self.machine_ui.label_statusValue.text().strip() or "Disconnected"
             test_status = self.state.last_test_read_status or "Not checked"
-            backend_text = f"{machine_status} · PV {test_status}"
+            backend_text = f"PV Check {test_status}"
             backend_tooltip = self.state.last_test_read_detail or "Run PV Check before an Online start."
-            readiness_text = f"{machine_status} {test_status}".lower()
+            readiness_text = test_status.lower()
             if "failed" in readiness_text or "error" in readiness_text:
                 backend_tone = "danger"
-            elif "passed" in machine_status.lower() and "passed" in test_status.lower():
+            elif "passed" in test_status.lower():
                 backend_tone = "success"
             else:
                 backend_tone = "warning"
@@ -2531,7 +2555,7 @@ class MainWindow(QMainWindow):
             machine_text = "Offline"
             machine_tone = "subtle"
         else:
-            machine_text = self.machine_ui.label_statusValue.text().strip() or "Disconnected"
+            machine_text = self.machine_ui.label_statusValue.text().strip() or "Not checked"
             normalized_machine = machine_text.lower()
             if normalized_machine in {"ready", "connected"} or "passed" in normalized_machine:
                 machine_tone = "success"
@@ -2581,7 +2605,7 @@ class MainWindow(QMainWindow):
             epics_text = f"Unavailable ({type(exc).__name__})"
         self.ui.label_readinessEpicsValue.setText(epics_text)
 
-        machine_status = self.machine_ui.label_statusValue.text().strip() or "Disconnected"
+        machine_status = self.machine_ui.label_statusValue.text().strip() or "Not checked"
         if online_task:
             self.ui.label_readinessMachineValue.setText(machine_status)
         else:
@@ -2637,7 +2661,7 @@ class MainWindow(QMainWindow):
         if row < 0:
             return
         self.ui.stackedWidget_pages.setCurrentIndex(row)
-        labels = ["Overview", "Configure", "Run"]
+        labels = ["Overview", "Setup", "Run"]
         label = labels[row] if row < len(labels) else f"Page {row}"
         self.statusBar().showMessage(f"Switched to {label}")
 

@@ -810,16 +810,13 @@ class TaskService:
             "algorithm_params": TaskService.table_to_records(task_ui.tableWidget_dynamicParams),
             "machine": {
                 "ca_address": machine_ui.lineEdit_caAddress.text().strip(),
-                "restore_on_abort": machine_ui.checkBox_restore.isChecked(),
+                "restore_on_abort": True,
                 "readback_check": machine_ui.checkBox_readbackCheck.isChecked(),
                 "readback_tol": machine_ui.doubleSpinBox_readbackTol.value(),
                 "set_interval": machine_ui.doubleSpinBox_setInterval.value(),
                 "sample_interval": machine_ui.doubleSpinBox_sampleInterval.value(),
                 "write_timeout": machine_ui.doubleSpinBox_timeout.value(),
                 "write_policy": machine_ui.comboBox_policy.currentText(),
-                "profile": copy.deepcopy(
-                    getattr(machine_ui, "machine_profile", {})
-                ),
                 "policy_bindings": copy.deepcopy(
                     getattr(machine_ui, "policy_bindings", [])
                 ),
@@ -1867,9 +1864,7 @@ class TaskService:
             plot_path=str(save_dir / f"{task.get('task_name', 'task')}_plot.png"),
             set_best=False,
             restore_initial_on_error=True,
-            restore_initial_on_keyboard_interrupt=bool(
-                task.get("machine", {}).get("restore_on_abort", True)
-            ),
+            restore_initial_on_keyboard_interrupt=True,
             verbose=True,
         )
 
@@ -1910,7 +1905,7 @@ class TaskService:
         machine = task_copy.get("machine", {}) or {}
         plain["gui_run_contract"] = {
             "initial_values": [float(row.get("Initial", 0.0)) for row in variables],
-            "restore_on_abort": bool(machine.get("restore_on_abort", True)),
+            "restore_on_abort": True,
             "write_timeout": float(machine.get("write_timeout", 2.0)),
         }
         return plain

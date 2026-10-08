@@ -100,12 +100,13 @@ def test_normalized_identity_is_stable_and_detects_pv_changes(tmp_path):
     assert identity != TaskService.normalized_task_identity(changed_initial)
     changed_restore = copy.deepcopy(task)
     changed_restore["machine"]["restore_on_abort"] = False
-    assert identity != TaskService.normalized_task_identity(changed_restore)
-    assert TaskService.build_task_config(changed_restore).runtime.restore_initial_on_keyboard_interrupt is False
+    assert identity == TaskService.normalized_task_identity(changed_restore)
+    assert TaskService.build_task_config(changed_restore).runtime.restore_initial_on_keyboard_interrupt is True
 
 
 def test_machine_write_dialog_shows_online_write_contract(tmp_path, qapp):
     task = _online_task(tmp_path)
+    task["machine"]["restore_on_abort"] = False
     dialog = MachineWriteConfirmationDialog(
         task,
         mode=MachineWriteConfirmationDialog.ONLINE_START,
@@ -123,6 +124,9 @@ def test_machine_write_dialog_shows_online_write_contract(tmp_path, qapp):
         assert dialog.accept_button.property("primary") is True
         assert not dialog.accept_button.isDefault()
         assert "up to 5" in dialog.label_notice.text()
+        assert "Always enabled" in {
+            label.text() for label in dialog.findChildren(type(dialog.label_notice))
+        }
     finally:
         dialog.close()
 
@@ -378,6 +382,7 @@ def test_active_run_close_is_deferred_and_restore_failure_keeps_window_open(
 
     window = MainWindow()
     task = _online_task(tmp_path)
+    task["machine"]["restore_on_abort"] = False
     window.state.latest_task_snapshot = copy.deepcopy(task)
     window.state.run.phase = "Running"
     window.runtime_status_controller.sync_run_workspace(task)

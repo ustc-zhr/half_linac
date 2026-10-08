@@ -17,7 +17,6 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QHeaderView,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -38,12 +37,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from ..main_window import MainWindow
 
 try:
-    from ...services.machine_profile import (
-        MACHINE_PROFILE_VERSION,
-        MachineProfile,
-        load_machine_profile,
-        save_machine_profile,
-    )
     from ...services.pv_library import PVLibraryDocument, PVLibraryItem, load_pv_library_file
     from ...services.task_service import TaskService
     from ..tool_dialogs import PVLibrarySelectorDialog, PVMappingSelectorDialog
@@ -53,12 +46,6 @@ except ImportError:  # pragma: no cover - local script fallback
     for path in (GUI_ROOT, GUI_ROOT / "services", GUI_ROOT / "views"):
         if str(path) not in sys.path:
             sys.path.insert(0, str(path))
-    from machine_profile import (
-        MACHINE_PROFILE_VERSION,
-        MachineProfile,
-        load_machine_profile,
-        save_machine_profile,
-    )
     from pv_library import PVLibraryDocument, PVLibraryItem, load_pv_library_file
     from task_service import TaskService
     from tool_dialogs import PVLibrarySelectorDialog, PVMappingSelectorDialog
@@ -86,164 +73,11 @@ class MachineController:
         if hasattr(ui, "tab_advancedMachine"):
             return
 
-        self._configure_machine_profile_bar()
         self._configure_simple_connection_panel()
         self._configure_pv_mapping_actions()
         self._configure_pv_mapping_master_detail()
         self._configure_policy_options()
         self._move_advanced_machine_controls()
-
-    @staticmethod
-    def _machine_profile_directory() -> Path:
-        return Path(__file__).resolve().parents[5] / "config" / "machine_profiles"
-
-    def _configure_machine_profile_bar(self) -> None:
-        ui = self.window.machine_ui
-        frame = QFrame(self.window.machine_page)
-        frame.setObjectName("machineProfileBar")
-        layout = QHBoxLayout(frame)
-        layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(8)
-        title = QLabel("Machine Profile", frame)
-        summary = QFrame(frame)
-        summary_layout = QVBoxLayout(summary)
-        summary_layout.setContentsMargins(8, 0, 8, 0)
-        summary_layout.setSpacing(1)
-        name_label = QLabel("Embedded Machine · v1", summary)
-        name_label.setObjectName("machineProfileName")
-        name_label.setProperty("role", "value")
-        source_label = QLabel("Built-in", summary)
-        source_label.setObjectName("machineProfileSource")
-        source_label.setProperty("role", "title")
-        summary_layout.addWidget(name_label)
-        summary_layout.addWidget(source_label)
-        open_button = QPushButton("Open", frame)
-        save_button = QPushButton("Save As", frame)
-        for button in (open_button, save_button):
-            button.setProperty("inlineAction", True)
-            button.setFixedSize(88, 28)
-        layout.addWidget(title)
-        layout.addWidget(summary)
-        layout.addStretch(1)
-        layout.addWidget(open_button)
-        layout.addWidget(save_button)
-        frame.setMaximumHeight(54)
-        ui.verticalLayout_main.insertWidget(1, frame)
-        ui.frame_machineProfile = frame
-        ui.label_machineProfileName = name_label
-        ui.label_machineProfileSource = source_label
-        ui.label_machineProfileStatus = name_label
-        ui.pushButton_openMachineProfile = open_button
-        ui.pushButton_saveMachineProfile = save_button
-        open_button.clicked.connect(self.open_machine_profile)
-        save_button.clicked.connect(self.save_machine_profile_as)
-        self.refresh_machine_profile_bar()
-
-    def refresh_machine_profile_bar(self) -> None:
-        ui = self.window.machine_ui
-        if not hasattr(ui, "label_machineProfileName"):
-            return
-        current = getattr(ui, "machine_profile", {}) or {}
-        current_source = str(current.get("source", ""))
-        name = str(current.get("name", "Embedded Machine"))
-        version = int(current.get("version", MACHINE_PROFILE_VERSION) or MACHINE_PROFILE_VERSION)
-        source_text = Path(current_source).name if current_source else "Built-in"
-        ui.label_machineProfileName.setText(f"{name} · v{version}")
-        ui.label_machineProfileName.setToolTip(
-            f"Machine Profile: {name}, version {version}"
-        )
-        ui.label_machineProfileSource.setText(source_text)
-        ui.label_machineProfileSource.setToolTip(current_source or "Built-in Machine Profile")
-
-    def _selected_machine_profile_path(self) -> str:
-        path, _ = QFileDialog.getOpenFileName(
-            self.window,
-            "Open Machine Profile",
-            str(self._machine_profile_directory()),
-            "GOTAcc Machine Profile (*.json);;All Files (*)",
-        )
-        return path
-
-    def open_machine_profile(self) -> None:
-        path = self._selected_machine_profile_path()
-        if not path:
-            return
-        try:
-            profile = load_machine_profile(path)
-            machine = copy.deepcopy(profile.machine)
-            machine["profile"] = {
-                "profile_id": profile.profile_id,
-                "name": profile.name,
-                "version": profile.version,
-                "source": str(Path(path).resolve()),
-            }
-            old_suppress = self.window._suppress_autofill
-            self.window._suppress_autofill = True
-            try:
-                self.window.task_builder_controller.apply_machine_payload(
-                    machine,
-                    refresh=False,
-                )
-            finally:
-                self.window._suppress_autofill = old_suppress
-        except Exception as exc:
-            QMessageBox.critical(self.window, "Open Machine Profile Failed", str(exc))
-            return
-        self.refresh_selected_library_tables()
-        self.view.refresh_task_preview()
-        self.view.log_console(
-            f"Loaded Machine Profile {profile.name!r}; Task Builder remains unchanged until Sync To Task."
-        )
-        self.view.status_message(f"Machine Profile loaded: {profile.name}", 5000)
-
-    def save_machine_profile_as(self) -> None:
-        current = getattr(self.window.machine_ui, "machine_profile", {}) or {}
-        default_name = str(current.get("name", "")).strip()
-        if not default_name or current.get("profile_id") == "embedded":
-            default_name = "New Machine"
-        name, accepted = QInputDialog.getText(
-            self.window,
-            "Save Machine Profile",
-            "Profile name:",
-            text=default_name,
-        )
-        name = name.strip()
-        if not accepted or not name:
-            return
-        machine = copy.deepcopy(self.view.current_task().get("machine", {}) or {})
-        machine.pop("profile", None)
-        try:
-            profile = MachineProfile.create(name, machine)
-        except ValueError as exc:
-            QMessageBox.warning(self.window, "Save Machine Profile", str(exc))
-            return
-        profile_dir = self._machine_profile_directory()
-        profile_dir.mkdir(parents=True, exist_ok=True)
-        path, _ = QFileDialog.getSaveFileName(
-            self.window,
-            "Save Machine Profile",
-            str(profile_dir / f"{profile.profile_id}.json"),
-            "GOTAcc Machine Profile (*.json);;All Files (*)",
-        )
-        if not path:
-            return
-        if not path.lower().endswith(".json"):
-            path = f"{path}.json"
-        try:
-            save_machine_profile(profile, path)
-        except Exception as exc:
-            QMessageBox.critical(self.window, "Save Machine Profile Failed", str(exc))
-            return
-        self.window.machine_ui.machine_profile = {
-            "profile_id": profile.profile_id,
-            "name": profile.name,
-            "version": profile.version,
-            "source": str(Path(path).resolve()),
-        }
-        self.refresh_machine_profile_bar()
-        self.view.refresh_task_preview()
-        self.view.log_console(f"Machine Profile saved to: {path}")
-        self.view.status_message(f"Machine Profile saved: {Path(path).name}", 5000)
 
     def _configure_policy_options(self) -> None:
         combo = self.window.machine_ui.comboBox_policy
@@ -255,8 +89,7 @@ class MachineController:
 
     def _configure_simple_connection_panel(self) -> None:
         ui = self.window.machine_ui
-        ui.groupBox_connection.setTitle("EPICS")
-        ui.label_status.setText("Status")
+        ui.label_status.setText("EPICS")
         ui.label_caAddress.setVisible(False)
         ui.lineEdit_caAddress.setVisible(False)
         ui.checkBox_autoConnect.setVisible(False)
@@ -268,35 +101,55 @@ class MachineController:
         ui.pushButton_test.setFixedHeight(24)
         ui.pushButton_test.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         ui.label_statusValue.setProperty("role", "statusPill")
-        ui.label_statusValue.setMinimumWidth(104)
+        ui.label_statusValue.setProperty("tone", "warning")
+        ui.label_statusValue.setMinimumWidth(92)
         ui.label_statusValue.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         ui.label_timeout.setToolTip("Maximum wait time for GUI EPICS PV reads.")
         ui.doubleSpinBox_timeout.setToolTip(
             "Used by Check, current-knob reads and PV Monitor; it does not control PV writes."
         )
-        ui.doubleSpinBox_timeout.setMaximumWidth(110)
+        ui.doubleSpinBox_timeout.setMaximumWidth(160)
 
-        ui.verticalLayout_connectionBox.removeItem(ui.formLayout_connection)
-        connection_row = QHBoxLayout()
-        connection_row.setObjectName("horizontalLayout_connectionSummary")
-        ui.horizontalLayout_connectionSummary = connection_row
-        connection_row.setContentsMargins(0, 0, 0, 0)
-        connection_row.setSpacing(8)
-        ui.label_status.setParent(ui.groupBox_connection)
-        ui.label_statusValue.setParent(ui.groupBox_connection)
-        ui.label_timeout.setParent(ui.groupBox_connection)
-        ui.doubleSpinBox_timeout.setParent(ui.groupBox_connection)
-        ui.pushButton_test.setParent(ui.groupBox_connection)
-        connection_row.addWidget(ui.label_status)
-        connection_row.addWidget(ui.label_statusValue)
-        connection_row.addStretch(1)
-        connection_row.addWidget(ui.label_timeout)
-        connection_row.addWidget(ui.doubleSpinBox_timeout)
-        connection_row.addWidget(ui.pushButton_test)
-        ui.verticalLayout_connectionBox.addLayout(connection_row)
-        ui.horizontalLayout_buttons.setContentsMargins(0, 0, 0, 0)
-        ui.horizontalLayout_buttons.setSpacing(6)
-        ui.groupBox_connection.setMaximumHeight(82)
+        ui.verticalLayout_machineHero.removeWidget(ui.label_machineTitle)
+        header_row = QHBoxLayout()
+        header_row.setObjectName("horizontalLayout_machineHeader")
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(8)
+        ui.horizontalLayout_machineHeader = header_row
+        for widget in (
+            ui.label_machineTitle,
+            ui.label_status,
+            ui.label_statusValue,
+            ui.pushButton_test,
+        ):
+            widget.setParent(ui.frame_machineHero)
+        ui.label_status.setProperty("role", "title")
+        header_row.addWidget(ui.label_machineTitle)
+        header_row.addSpacing(10)
+        header_row.addWidget(ui.label_status, 0, Qt.AlignVCenter)
+        header_row.addWidget(ui.label_statusValue, 0, Qt.AlignVCenter)
+        header_row.addWidget(ui.pushButton_test, 0, Qt.AlignVCenter)
+        header_row.addStretch(1)
+        ui.verticalLayout_machineHero.insertLayout(0, header_row)
+
+        ui.formLayout_connection.removeWidget(ui.label_timeout)
+        ui.formLayout_connection.removeWidget(ui.doubleSpinBox_timeout)
+        ui.label_timeout.setParent(ui.groupBox_guard)
+        ui.doubleSpinBox_timeout.setParent(ui.groupBox_guard)
+        timeout_row = ui.formLayout_guard.rowCount()
+        ui.formLayout_guard.setWidget(
+            timeout_row,
+            QFormLayout.LabelRole,
+            ui.label_timeout,
+        )
+        ui.formLayout_guard.setWidget(
+            timeout_row,
+            QFormLayout.FieldRole,
+            ui.doubleSpinBox_timeout,
+        )
+
+        ui.groupBox_connection.hide()
+        ui.splitter_top.hide()
         ui.pushButton_test.style().unpolish(ui.pushButton_test)
         ui.pushButton_test.style().polish(ui.pushButton_test)
 
@@ -841,8 +694,7 @@ class MachineController:
         self.window.state.last_test_read_detail = (
             "PV configuration changed after the most recent check. Run PV Check again."
         )
-        self.window.machine_ui.label_statusValue.setText("Stale")
-        self.window.ui.label_statusConnectionValue.setText("Stale")
+        self.set_machine_status("Stale")
         return True
 
     def _enabled_task_rows(self, task: dict | None = None) -> tuple[list[dict], list[dict]]:
@@ -1686,16 +1538,27 @@ class MachineController:
     def set_machine_status(self, text: str) -> None:
         self.window.machine_ui.label_statusValue.setText(text)
         self.window.ui.label_statusConnectionValue.setText(text)
+        tone = {
+            "passed": "success",
+            "failed": "danger",
+            "unavailable": "danger",
+            "checking": "info",
+            "stale": "warning",
+            "not checked": "warning",
+        }.get(text.strip().lower(), "subtle")
+        self.window.machine_ui.label_statusValue.setProperty("tone", tone)
+        self.window.machine_ui.label_statusValue.style().unpolish(
+            self.window.machine_ui.label_statusValue
+        )
+        self.window.machine_ui.label_statusValue.style().polish(
+            self.window.machine_ui.label_statusValue
+        )
         self.refresh_machine_summary()
         self.view.refresh_overview_readiness()
 
     def refresh_machine_summary(self) -> None:
         if not hasattr(self.window.machine_ui, "label_machineSummary"):
             return
-        if hasattr(self.window.machine_ui, "frame_machineProfile"):
-            self.window.machine_ui.frame_machineProfile.setVisible(
-                self.is_online_task(self.view.current_task())
-            )
         write_policy = self.window.machine_ui.comboBox_policy.currentText().strip()
         bindings = getattr(self.window.machine_ui, "policy_bindings", [])
         enabled_objective_policies = [
@@ -1720,7 +1583,7 @@ class MachineController:
             if enabled_constraint_policies
             else "none"
         )
-        restore = "restore-on-abort on" if self.window.machine_ui.checkBox_restore.isChecked() else "restore-on-abort off"
+        restore = "interruption restore always on"
         readback = (
             f"readback on (tol {self.window.machine_ui.doubleSpinBox_readbackTol.value():g})"
             if self.window.machine_ui.checkBox_readbackCheck.isChecked()
@@ -1728,12 +1591,43 @@ class MachineController:
         )
         set_interval = f"set {self.window.machine_ui.doubleSpinBox_setInterval.value():g}s"
         sample_interval = f"sample {self.window.machine_ui.doubleSpinBox_sampleInterval.value():g}s"
-        status = self.window.machine_ui.label_statusValue.text().strip() or "Disconnected"
+        task = self.view.current_task()
+        check_pvnames = self.configured_epics_pvnames(task)
+        online = self.is_online_task(task)
+        self.window.machine_ui.pushButton_test.setEnabled(online and bool(check_pvnames))
+        if not online:
+            check_tooltip = "PV Check is available for Online EPICS tasks."
+        elif not check_pvnames:
+            check_tooltip = "Configure at least one PV Mapping entry before running PV Check."
+        else:
+            check_tooltip = f"Read {len(check_pvnames)} configured EPICS PV(s)."
+        self.window.machine_ui.pushButton_test.setToolTip(check_tooltip)
+        self.window.machine_ui.label_statusValue.setToolTip(
+            self.window.state.last_test_read_detail or "No PV Check has been run for the current mapping."
+        )
         self.window.machine_ui.label_machineSummary.setText(
-            f"PV status {status} · write policy {write_policy} · objective policies {objective_policy_summary} · "
+            f"write policy {write_policy} · objective policies {objective_policy_summary} · "
             f"constraint policies {constraint_policy_summary} · "
             f"{restore} · {readback} · {set_interval} · {sample_interval}"
         )
+
+    @staticmethod
+    def configured_epics_pvnames(task: dict) -> list[str]:
+        machine = task.get("machine", {}) or {}
+        pvnames: list[str] = []
+        for row in machine.get("mapping", []) or []:
+            for field in ("PV Name", "Readback"):
+                pvname = str(row.get(field, "")).strip()
+                if pvname:
+                    pvnames.append(pvname)
+        for row in machine.get("write_links", []) or []:
+            enabled = row.get("Enabled", "")
+            if enabled and not TaskService._is_enabled(enabled):
+                continue
+            target_text = str(row.get("Target PV", "")).strip()
+            if target_text:
+                pvnames.append(target_text)
+        return list(dict.fromkeys(pvnames))
 
     def resolve_epics_read_pv(self, task: dict) -> str:
         task_cfg = TaskService.build_task_config(task)
@@ -1750,7 +1644,7 @@ class MachineController:
         status = self.window.machine_ui.label_statusValue.text().strip().lower()
         current_identity = self.machine_check_identity(task)
         if (
-            status == "pv check passed"
+            status == "passed"
             and self.window.state.machine_check_identity == current_identity
         ):
             return True
@@ -1784,15 +1678,17 @@ class MachineController:
             self.view.log_warning(str(exc))
             QMessageBox.critical(self.window, "EPICS Unavailable", str(exc))
             return
-        self.set_machine_status("Ready")
+        self.set_machine_status("Not checked")
         self.view.log_console("EPICS module is available. Use Check PV to verify a configured PV.")
         self.view.append_overview_activity("Machine", status="EPICS backend available.")
 
     def disconnect_machine(self) -> None:
-        self.set_machine_status("Disconnected")
-        self.view.log_pv("Disconnected from machine backend.")
-        self.view.log_console("Machine disconnected.")
-        self.view.append_overview_activity("Machine", status="Disconnected.")
+        self.window.state.machine_check_identity.clear()
+        self.window.state.last_test_read_status = "Not checked"
+        self.window.state.last_test_read_detail = ""
+        self.set_machine_status("Not checked")
+        self.view.log_console("PV Check state cleared.")
+        self.view.append_overview_activity("Machine", status="PV Check cleared.")
 
     def test_machine_read(self) -> None:
         self.check_machine_pv(show_dialog=True)
@@ -1812,21 +1708,7 @@ class MachineController:
             caget = self._prepare_epics_caget()
             # Connectivity is independent of optimizer setup and mapping sync.
             # Read the configured signals directly, without building a runnable task.
-            machine = task.get("machine", {}) or {}
-            pvnames: list[str] = []
-            for row in machine.get("mapping", []) or []:
-                for field in ("PV Name", "Readback"):
-                    pvname = str(row.get(field, "")).strip()
-                    if pvname:
-                        pvnames.append(pvname)
-            for row in machine.get("write_links", []) or []:
-                enabled = row.get("Enabled", "")
-                if enabled and not TaskService._is_enabled(enabled):
-                    continue
-                target_text = str(row.get("Target PV", "")).strip()
-                if target_text:
-                    pvnames.append(target_text)
-            pvnames = list(dict.fromkeys(pvnames))
+            pvnames = self.configured_epics_pvnames(task)
             if not pvnames:
                 raise ValueError("No EPICS PV is configured for the current task.")
             self.set_machine_status("Checking")
@@ -1838,10 +1720,10 @@ class MachineController:
                     raise RuntimeError(f"{pvname} returned None")
                 checked_values.append((pvname, value))
         except Exception as exc:
-            self.set_machine_status("Failed")
             self.window.state.machine_check_identity.clear()
             self.window.state.last_test_read_status = "Failed"
             self.window.state.last_test_read_detail = f"Last PV check failed: {exc}"
+            self.set_machine_status("Failed")
             self.view.refresh_overview_readiness()
             self.view.append_overview_activity("Machine", status="PV check failed.")
             self.view.log_warning(f"EPICS PV check failed: {exc}")
@@ -1850,7 +1732,6 @@ class MachineController:
             return False
 
         self.window.state.machine_check_identity = self.machine_check_identity(task)
-        self.set_machine_status("PV Check Passed")
         self.window.state.last_test_read_status = "Passed"
         preview = ", ".join(f"{pv} = {value}" for pv, value in checked_values[:3])
         if len(checked_values) > 3:
@@ -1858,6 +1739,7 @@ class MachineController:
         self.window.state.last_test_read_detail = (
             f"Checked {len(checked_values)} required PV(s): {preview}"
         )
+        self.set_machine_status("Passed")
         self.view.refresh_overview_readiness()
         self.view.append_overview_activity(
             "Machine", status=f"PV check passed for {len(checked_values)} required PV(s)."

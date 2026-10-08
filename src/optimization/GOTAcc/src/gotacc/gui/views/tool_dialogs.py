@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import QItemSelectionModel, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -105,7 +105,7 @@ class MachineWriteConfirmationDialog(QDialog):
         summary_box = QGroupBox("Machine Write Authorization", self)
         summary_layout = QFormLayout(summary_box)
         machine = task.get("machine", {}) or {}
-        restore_text = "Enabled" if bool(machine.get("restore_on_abort", True)) else "Disabled"
+        restore_text = "Always enabled"
         readback_text = "Enabled" if bool(machine.get("readback_check", False)) else "Disabled"
         summary_rows = [
             ("Task", self.task_cfg.meta.name),
@@ -332,6 +332,9 @@ class PVMappingSelectorDialog(QDialog):
         }
         self._current_keys = current_keys or {}
         self._tables: dict[str, QTableWidget] = {}
+        self._search_boxes: dict[str, QLineEdit] = {}
+        self._group_boxes: dict[str, QComboBox] = {}
+        self._status_labels: dict[str, QLabel] = {}
 
         layout = QVBoxLayout(self)
         intro = QLabel(
@@ -347,18 +350,6 @@ class PVMappingSelectorDialog(QDialog):
             source.setWordWrap(True)
             layout.addWidget(source)
 
-        self.lineEdit_filter = QLineEdit(self)
-        self.lineEdit_filter.setObjectName("lineEdit_pvMappingFilter")
-        self.lineEdit_filter.setClearButtonEnabled(True)
-        self.lineEdit_filter.setPlaceholderText(
-            "Search by name, PV, readback, group or note..."
-        )
-        self.lineEdit_filter.setToolTip(
-            "Filters Knobs, Objectives and Constraints without clearing selected rows."
-        )
-        self.lineEdit_filter.textChanged.connect(self._apply_filter)
-        layout.addWidget(self.lineEdit_filter)
-
         tabs = QTabWidget(self)
         for role in ("knob", "objective", "constraint"):
             tabs.addTab(self._build_role_tab(role), self.ROLE_TITLES[role])
@@ -372,6 +363,30 @@ class PVMappingSelectorDialog(QDialog):
     def _build_role_tab(self, role: str) -> QWidget:
         tab = QWidget(self)
         layout = QVBoxLayout(tab)
+
+        filters = QHBoxLayout()
+        search = QLineEdit(tab)
+        search.setObjectName(f"lineEdit_pvMappingFilter_{role}")
+        search.setClearButtonEnabled(True)
+        search.setPlaceholderText("Search name, PV, readback, group, or note")
+        search.setToolTip("Filter this role without clearing selected rows.")
+
+        group_box = QComboBox(tab)
+        group_box.setObjectName(f"comboBox_pvMappingGroup_{role}")
+        group_box.addItem("All Groups", "")
+        for group in self._group_names(role):
+            group_box.addItem(group, group)
+
+        select_visible_button = QPushButton("Select Visible", tab)
+        select_visible_button.setObjectName(f"pushButton_selectVisible_{role}")
+        clear_selection_button = QPushButton("Clear Selection", tab)
+        clear_selection_button.setObjectName(f"pushButton_clearSelection_{role}")
+        filters.addWidget(search, 1)
+        filters.addWidget(group_box)
+        filters.addWidget(select_visible_button)
+        filters.addWidget(clear_selection_button)
+        layout.addLayout(filters)
+
         table = QTableWidget(tab)
         table.setColumnCount(5)
         table.setHorizontalHeaderLabels(["Name", "PV Name", "Readback", "Group", "Note"])
@@ -382,9 +397,45 @@ class PVMappingSelectorDialog(QDialog):
         table.verticalHeader().setVisible(False)
         table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(table)
+
+        status = QLabel(tab)
+        layout.addWidget(status)
+
         self._tables[role] = table
+        self._search_boxes[role] = search
+        self._group_boxes[role] = group_box
+        self._status_labels[role] = status
+        if role == "knob":
+            # Compatibility alias for callers that used the original global filter.
+            self.lineEdit_filter = search
+
+        search.textChanged.connect(lambda _text, target=role: self._apply_filters(target))
+        group_box.currentIndexChanged.connect(
+            lambda _index, target=role: self._apply_filters(target)
+        )
+        table.itemSelectionChanged.connect(lambda target=role: self._update_status(target))
+        table.doubleClicked.connect(
+            lambda index, target=role: self._toggle_row_selection(target, index.row())
+        )
+        select_visible_button.clicked.connect(
+            lambda _checked=False, target=role: self._select_visible(target)
+        )
+        clear_selection_button.clicked.connect(
+            lambda _checked=False, target=role: self._clear_selection(target)
+        )
+
         self._populate_table(role)
         return tab
+
+    def _group_names(self, role: str) -> list[str]:
+        return sorted(
+            {
+                str(entry.group).strip()
+                for entry in self._entries[role]
+                if str(entry.group).strip()
+            },
+            key=str.casefold,
+        )
 
     def _populate_table(self, role: str) -> None:
         table = self._tables[role]
@@ -401,21 +452,65 @@ class PVMappingSelectorDialog(QDialog):
                     True,
                 )
         table.resizeColumnsToContents()
+        self._apply_filters(role)
 
-    def _apply_filter(self, text: str) -> None:
-        tokens = str(text).strip().casefold().split()
-        for role, table in self._tables.items():
-            for row, entry in enumerate(self._entries[role]):
-                searchable = "\n".join(
-                    (
-                        entry.name,
-                        entry.pv_name,
-                        entry.readback,
-                        entry.group,
-                        entry.note,
-                    )
-                ).casefold()
-                table.setRowHidden(row, not all(token in searchable for token in tokens))
+    def _apply_filters(self, role: str) -> None:
+        table = self._tables[role]
+        tokens = self._search_boxes[role].text().strip().casefold().split()
+        group = str(self._group_boxes[role].currentData() or "").strip()
+        for row, entry in enumerate(self._entries[role]):
+            searchable = "\n".join(
+                (
+                    entry.name,
+                    entry.pv_name,
+                    entry.readback,
+                    entry.group,
+                    entry.note,
+                )
+            ).casefold()
+            matches_search = all(token in searchable for token in tokens)
+            matches_group = not group or entry.group == group
+            table.setRowHidden(row, not (matches_search and matches_group))
+        self._update_status(role)
+
+    def _update_status(self, role: str) -> None:
+        table = self._tables[role]
+        total = table.rowCount()
+        visible = sum(not table.isRowHidden(row) for row in range(total))
+        selected = len(self.selected_entries(role))
+        self._status_labels[role].setText(
+            f"Visible: {visible}/{total}    Selected: {selected}"
+        )
+
+    def _clear_selection(self, role: str) -> None:
+        self._tables[role].clearSelection()
+        self._update_status(role)
+
+    def _select_visible(self, role: str) -> None:
+        table = self._tables[role]
+        selection_model = table.selectionModel()
+        model = table.model()
+        if selection_model is None or model is None:
+            return
+        for row in range(table.rowCount()):
+            if not table.isRowHidden(row):
+                selection_model.select(
+                    model.index(row, 0),
+                    QItemSelectionModel.Select | QItemSelectionModel.Rows,
+                )
+        self._update_status(role)
+
+    def _toggle_row_selection(self, role: str, row: int) -> None:
+        table = self._tables[role]
+        selection_model = table.selectionModel()
+        model = table.model()
+        if selection_model is None or model is None or row < 0:
+            return
+        selection_model.select(
+            model.index(row, 0),
+            QItemSelectionModel.Toggle | QItemSelectionModel.Rows,
+        )
+        self._update_status(role)
 
     @staticmethod
     def _entry_matches_current(entry: PVLibraryItem, current_keys: set[str]) -> bool:
@@ -474,7 +569,7 @@ class BoundsToolsDialog(QDialog):
         ):
             button.setProperty("inlineAction", True)
             button.setFixedWidth(112)
-            button.setFixedHeight(28)
+            button.setFixedHeight(30)
         self.ui.buttonBox.rejected.connect(self.reject)
 
 

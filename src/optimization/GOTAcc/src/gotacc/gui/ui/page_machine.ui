@@ -46,7 +46,7 @@
          <item row="0" column="0"><widget class="QLabel" name="label_caAddress"><property name="text"><string>CA Address List</string></property></widget></item>
          <item row="0" column="1"><widget class="QLineEdit" name="lineEdit_caAddress"><property name="placeholderText"><string>optional: leave empty to inherit current EPICS environment</string></property></widget></item>
          <item row="1" column="0"><widget class="QLabel" name="label_status"><property name="text"><string>Status</string></property></widget></item>
-         <item row="1" column="1"><widget class="QLabel" name="label_statusValue"><property name="text"><string>Disconnected</string></property></widget></item>
+         <item row="1" column="1"><widget class="QLabel" name="label_statusValue"><property name="text"><string>Not checked</string></property></widget></item>
          <item row="2" column="1"><widget class="QCheckBox" name="checkBox_autoConnect"><property name="text"><string>Auto connect before online runs</string></property></widget></item>
          <item row="3" column="1">
           <layout class="QHBoxLayout" name="horizontalLayout_buttons">
@@ -66,10 +66,8 @@
       <layout class="QVBoxLayout" name="verticalLayout_guardBox">
        <item>
         <layout class="QFormLayout" name="formLayout_guard">
-         <item row="0" column="0"><widget class="QLabel" name="label_restore"><property name="text"><string>Restore</string></property></widget></item>
-         <item row="0" column="1"><widget class="QCheckBox" name="checkBox_restore"><property name="text"><string>Restore initial knob values</string></property></widget></item>
-         <item row="1" column="0"><widget class="QLabel" name="label_readbackCheck"><property name="text"><string>Readback Check</string></property></widget></item>
-         <item row="1" column="1">
+         <item row="0" column="0"><widget class="QLabel" name="label_readbackCheck"><property name="text"><string>Readback Check</string></property></widget></item>
+         <item row="0" column="1">
           <layout class="QHBoxLayout" name="horizontalLayout_readbackCheck">
            <item><widget class="QCheckBox" name="checkBox_readbackCheck"><property name="text"><string>Verify knob readback after write</string></property></widget></item>
            <item><spacer name="horizontalSpacer_readbackCheck"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeType"><enum>QSizePolicy::Fixed</enum></property><property name="sizeHint" stdset="0"><size><width>12</width><height>20</height></size></property></spacer></item>
@@ -78,10 +76,10 @@
            <item><spacer name="horizontalSpacer_readbackTrailing"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property></spacer></item>
           </layout>
          </item>
-         <item row="2" column="0"><widget class="QLabel" name="label_setInterval"><property name="text"><string>Set Interval [s]</string></property></widget></item>
-         <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBox_setInterval"><property name="maximumSize"><size><width>160</width><height>16777215</height></size></property><property name="decimals"><number>4</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>999999999.000000000000000</double></property><property name="singleStep"><double>0.100000000000000</double></property><property name="value"><double>1.000000000000000</double></property></widget></item>
-         <item row="3" column="0"><widget class="QLabel" name="label_sampleInterval"><property name="text"><string>Sample Interval [s]</string></property></widget></item>
-         <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBox_sampleInterval"><property name="maximumSize"><size><width>160</width><height>16777215</height></size></property><property name="decimals"><number>4</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>999999999.000000000000000</double></property><property name="singleStep"><double>0.100000000000000</double></property><property name="value"><double>0.200000000000000</double></property></widget></item>
+         <item row="1" column="0"><widget class="QLabel" name="label_setInterval"><property name="text"><string>Set Interval [s]</string></property></widget></item>
+         <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBox_setInterval"><property name="toolTip"><string>Delay after writing knob setpoints. The last edited value is used for new tasks and restored in the next GUI session.</string></property><property name="maximumSize"><size><width>160</width><height>16777215</height></size></property><property name="decimals"><number>4</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>999999999.000000000000000</double></property><property name="singleStep"><double>0.100000000000000</double></property><property name="value"><double>1.000000000000000</double></property></widget></item>
+         <item row="2" column="0"><widget class="QLabel" name="label_sampleInterval"><property name="text"><string>Sample Interval [s]</string></property></widget></item>
+         <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBox_sampleInterval"><property name="toolTip"><string>Delay between repeated objective samples. The last edited value is used for new tasks and restored in the next GUI session.</string></property><property name="maximumSize"><size><width>160</width><height>16777215</height></size></property><property name="decimals"><number>4</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>999999999.000000000000000</double></property><property name="singleStep"><double>0.100000000000000</double></property><property name="value"><double>0.200000000000000</double></property></widget></item>
         </layout>
        </item>
       </layout>

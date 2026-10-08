@@ -213,7 +213,7 @@ class Ui_RunMonitorPage(object):
         self.pushButton_abortRestore.setText(_translate("RunMonitorPage", "Abort && Restore"))
         self.pushButton_restoreInitial.setText(_translate("RunMonitorPage", "Restore Initial"))
         self.pushButton_setBest.setText(_translate("RunMonitorPage", "Set Best to Machine"))
-        self.groupBox_runtime.setTitle(_translate("RunMonitorPage", "Snapshot"))
+        self.groupBox_runtime.setTitle("")
         self.label_evalTitle.setText(_translate("RunMonitorPage", "Evaluations"))
         self.label_evalValue.setText(_translate("RunMonitorPage", "0"))
         self.label_elapsedTitle.setText(_translate("RunMonitorPage", "Elapsed"))

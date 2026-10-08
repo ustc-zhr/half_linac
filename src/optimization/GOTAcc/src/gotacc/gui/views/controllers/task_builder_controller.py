@@ -1621,17 +1621,17 @@ class TaskBuilderController:
         online = ui.comboBox_mode.currentText().strip() == "Online EPICS"
         messages = {
             "variables": (
-                "Load a Machine Profile, then Sync To Task."
+                "Configure PV Mapping, then Sync To Task."
                 if online
                 else "Add at least one benchmark variable."
             ),
             "objectives": (
-                "Load a Machine Profile, then Sync To Task."
+                "Configure PV Mapping, then Sync To Task."
                 if online
                 else "Add at least one benchmark objective."
             ),
             "constraints": (
-                "No constraints configured. Profile constraints appear after Sync To Task."
+                "No constraints configured. Mapped constraints appear after Sync To Task."
                 if online
                 else "No constraints configured. Add rows only for constrained benchmarks."
             ),
@@ -1709,9 +1709,6 @@ class TaskBuilderController:
 
     def apply_machine_payload(self, machine: dict, *, refresh: bool = True) -> None:
         self.window.machine_ui.lineEdit_caAddress.setText(str(machine.get("ca_address", "")))
-        self.window.machine_ui.checkBox_restore.setChecked(
-            bool(machine.get("restore_on_abort", True))
-        )
         self.window.machine_ui.checkBox_readbackCheck.setChecked(
             bool(machine.get("readback_check", False))
         )
@@ -1745,17 +1742,6 @@ class TaskBuilderController:
         )
         self.window._load_policy_presets(machine)
         self.window._load_policy_bindings(machine)
-        self.window.machine_ui.machine_profile = copy.deepcopy(
-            machine.get("profile", {})
-            or {
-                "profile_id": "embedded",
-                "name": "Embedded Machine",
-                "version": 1,
-                "source": "",
-            }
-        )
-        if hasattr(self.window, "machine_controller"):
-            self.window.machine_controller.refresh_machine_profile_bar()
         if refresh:
             self.refresh_task_preview()
 
@@ -1841,25 +1827,21 @@ class TaskBuilderController:
         self.view.append_overview_activity("Task", status="Created online task.")
 
     def _reset_machine_for_new_task(self) -> None:
+        set_interval = self.window.machine_ui.doubleSpinBox_setInterval.value()
+        sample_interval = self.window.machine_ui.doubleSpinBox_sampleInterval.value()
         self.apply_machine_payload(
             {
                 "restore_on_abort": True,
                 "readback_check": False,
                 "readback_tol": 1e-6,
-                "set_interval": 1.0,
-                "sample_interval": 0.2,
+                "set_interval": set_interval,
+                "sample_interval": sample_interval,
                 "write_timeout": 2.0,
                 "write_policy": "none",
                 "mapping": [],
                 "write_links": [],
                 "policy_bindings": [],
                 "policy_presets": [],
-                "profile": {
-                    "profile_id": "embedded",
-                    "name": "Embedded Machine",
-                    "version": 1,
-                    "source": "",
-                },
             },
             refresh=False,
         )
@@ -2041,12 +2023,12 @@ class TaskBuilderController:
         button_row.addStretch(1)
         export_button = QPushButton("Export TaskConfig", dialog)
         export_button.setProperty("inlineAction", True)
-        export_button.setFixedSize(142, 28)
+        export_button.setFixedSize(142, 30)
         export_button.clicked.connect(self.export_config)
         button_row.addWidget(export_button)
         close_button = QPushButton("Close", dialog)
         close_button.setProperty("inlineAction", True)
-        close_button.setFixedSize(104, 28)
+        close_button.setFixedSize(104, 30)
         close_button.clicked.connect(dialog.accept)
         button_row.addWidget(close_button)
         layout.addLayout(button_row)

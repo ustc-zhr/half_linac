@@ -1,6 +1,6 @@
 {
   "machine": "HALF",
-  "description": "HALF linac real-machine PV library generated from half_linac configs/machines/half/control_backends/real.json",
+  "description": "HALF linac real-machine PV library",
   "knobs": [
     {
       "name": "SM01-DX",
@@ -1071,102 +1071,6 @@
       "group": "bend"
     },
     {
-      "name": "PRF01_exposure",
-      "pv_name": "IN:BD:PRF01:cam1:AcquireTime",
-      "readback": "IN:BD:PRF01:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF02_exposure",
-      "pv_name": "IN:BD:PRF02:cam1:AcquireTime",
-      "readback": "IN:BD:PRF02:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF03_exposure",
-      "pv_name": "IN:BD:PRF03:cam1:AcquireTime",
-      "readback": "IN:BD:PRF03:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF04_exposure",
-      "pv_name": "IN:BD:PRF04:cam1:AcquireTime",
-      "readback": "IN:BD:PRF04:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF05_exposure",
-      "pv_name": "IN:BD:PRF05:cam1:AcquireTime",
-      "readback": "IN:BD:PRF05:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF06_exposure",
-      "pv_name": "IN:BD:PRF06:cam1:AcquireTime",
-      "readback": "IN:BD:PRF06:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF07_exposure",
-      "pv_name": "IN:BD:PRF07:cam1:AcquireTime",
-      "readback": "IN:BD:PRF07:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF08_exposure",
-      "pv_name": "IN:BD:PRF08:cam1:AcquireTime",
-      "readback": "IN:BD:PRF08:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF09_exposure",
-      "pv_name": "IN:BD:PRF09:cam1:AcquireTime",
-      "readback": "IN:BD:PRF09:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF10_exposure",
-      "pv_name": "IN:BD:PRF10:cam1:AcquireTime",
-      "readback": "IN:BD:PRF10:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF11_exposure",
-      "pv_name": "IN:BD:PRF11:cam1:AcquireTime",
-      "readback": "IN:BD:PRF11:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF12_exposure",
-      "pv_name": "IN:BD:PRF12:cam1:AcquireTime",
-      "readback": "IN:BD:PRF12:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF13_exposure",
-      "pv_name": "IN:BD:PRF13:cam1:AcquireTime",
-      "readback": "IN:BD:PRF13:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRF14_exposure",
-      "pv_name": "IN:BD:PRF14:cam1:AcquireTime",
-      "readback": "IN:BD:PRF14:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "PRFD_exposure",
-      "pv_name": "IN:BD:PRFD:cam1:AcquireTime",
-      "readback": "IN:BD:PRFD:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
-      "name": "ENY_exposure",
-      "pv_name": "IN:BD:ENY:cam1:AcquireTime",
-      "readback": "IN:BD:ENY:cam1:AcquireTime",
-      "group": "profile-exposure"
-    },
-    {
       "name": "PREINJECTOR_ENERGY",
       "pv_name": "IN:L01:ENG",
       "readback": "IN:L01:ENG",
@@ -1423,6 +1327,312 @@
       "pv_name": "HALF:IN-MW:LLRF20:SET_PHASE",
       "readback": "HALF:IN-MW:LLRF20:SET_PHASE",
       "group": "rf-phase"
+    },
+    {
+      "name": "QL01_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL01:K1",
+      "readback": "IN:MG:L002:QUAD:QL01:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL02_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL02:K1",
+      "readback": "IN:MG:L002:QUAD:QL02:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL03_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL03:K1",
+      "readback": "IN:MG:L002:QUAD:QL03:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL04_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL04:K1",
+      "readback": "IN:MG:L002:QUAD:QL04:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL05_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL05:K1",
+      "readback": "IN:MG:L002:QUAD:QL05:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL06_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL06:K1",
+      "readback": "IN:MG:L002:QUAD:QL06:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL07_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL07:K1",
+      "readback": "IN:MG:L002:QUAD:QL07:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL08_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL08:K1",
+      "readback": "IN:MG:L002:QUAD:QL08:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL09_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL09:K1",
+      "readback": "IN:MG:L002:QUAD:QL09:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL10_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL10:K1",
+      "readback": "IN:MG:L002:QUAD:QL10:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL11_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL11:K1",
+      "readback": "IN:MG:L002:QUAD:QL11:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QL12_K1",
+      "pv_name": "IN:MG:L002:QUAD:QL12:K1",
+      "readback": "IN:MG:L002:QUAD:QL12:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT01_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT01:K1",
+      "readback": "IN:MG:L002:QUAD:QT01:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT02_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT02:K1",
+      "readback": "IN:MG:L002:QUAD:QT02:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT03_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT03:K1",
+      "readback": "IN:MG:L002:QUAD:QT03:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT04_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT04:K1",
+      "readback": "IN:MG:L002:QUAD:QT04:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT05_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT05:K1",
+      "readback": "IN:MG:L002:QUAD:QT05:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT06_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT06:K1",
+      "readback": "IN:MG:L002:QUAD:QT06:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT07_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT07:K1",
+      "readback": "IN:MG:L002:QUAD:QT07:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT08_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT08:K1",
+      "readback": "IN:MG:L002:QUAD:QT08:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT09_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT09:K1",
+      "readback": "IN:MG:L002:QUAD:QT09:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT10_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT10:K1",
+      "readback": "IN:MG:L002:QUAD:QT10:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT11_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT11:K1",
+      "readback": "IN:MG:L002:QUAD:QT11:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT12_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT12:K1",
+      "readback": "IN:MG:L002:QUAD:QT12:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT13_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT13:K1",
+      "readback": "IN:MG:L002:QUAD:QT13:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT14_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT14:K1",
+      "readback": "IN:MG:L002:QUAD:QT14:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT15_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT15:K1",
+      "readback": "IN:MG:L002:QUAD:QT15:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT16_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT16:K1",
+      "readback": "IN:MG:L002:QUAD:QT16:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT17_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT17:K1",
+      "readback": "IN:MG:L002:QUAD:QT17:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT18_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT18:K1",
+      "readback": "IN:MG:L002:QUAD:QT18:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT19_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT19:K1",
+      "readback": "IN:MG:L002:QUAD:QT19:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT20_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT20:K1",
+      "readback": "IN:MG:L002:QUAD:QT20:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT21_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT21:K1",
+      "readback": "IN:MG:L002:QUAD:QT21:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT22_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT22:K1",
+      "readback": "IN:MG:L002:QUAD:QT22:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT23_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT23:K1",
+      "readback": "IN:MG:L002:QUAD:QT23:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT24_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT24:K1",
+      "readback": "IN:MG:L002:QUAD:QT24:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT25_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT25:K1",
+      "readback": "IN:MG:L002:QUAD:QT25:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT26_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT26:K1",
+      "readback": "IN:MG:L002:QUAD:QT26:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT27_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT27:K1",
+      "readback": "IN:MG:L002:QUAD:QT27:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT28_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT28:K1",
+      "readback": "IN:MG:L002:QUAD:QT28:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT29_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT29:K1",
+      "readback": "IN:MG:L002:QUAD:QT29:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT30_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT30:K1",
+      "readback": "IN:MG:L002:QUAD:QT30:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT31_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT31:K1",
+      "readback": "IN:MG:L002:QUAD:QT31:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT32_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT32:K1",
+      "readback": "IN:MG:L002:QUAD:QT32:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT33_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT33:K1",
+      "readback": "IN:MG:L002:QUAD:QT33:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT34_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT34:K1",
+      "readback": "IN:MG:L002:QUAD:QT34:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT35_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT35:K1",
+      "readback": "IN:MG:L002:QUAD:QT35:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QT36_K1",
+      "pv_name": "IN:MG:L002:QUAD:QT36:K1",
+      "readback": "IN:MG:L002:QUAD:QT36:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE01_K1",
+      "pv_name": "IN:MG:L002:QUAD:QE01:K1",
+      "readback": "IN:MG:L002:QUAD:QE01:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE02_K1",
+      "pv_name": "IN:MG:L002:QUAD:QE02:K1",
+      "readback": "IN:MG:L002:QUAD:QE02:K1",
+      "group": "magnet-model"
+    },
+    {
+      "name": "QE03_K1",
+      "pv_name": "IN:MG:L002:QUAD:QE03:K1",
+      "readback": "IN:MG:L002:QUAD:QE03:K1",
+      "group": "magnet-model"
     }
   ],
   "objectives": [
@@ -1943,936 +2153,6 @@
       "group": "BPM-y"
     },
     {
-      "name": "QL01_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL01:K1",
-      "readback": "IN:MG:L002:QUAD:QL01:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL01_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL01:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL01:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL01_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL01:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL01:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL02_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL02:K1",
-      "readback": "IN:MG:L002:QUAD:QL02:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL02_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL02:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL02:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL02_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL02:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL02:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL03_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL03:K1",
-      "readback": "IN:MG:L002:QUAD:QL03:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL03_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL03:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL03:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL03_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL03:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL03:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL04_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL04:K1",
-      "readback": "IN:MG:L002:QUAD:QL04:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL04_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL04:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL04:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL04_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL04:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL04:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL05_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL05:K1",
-      "readback": "IN:MG:L002:QUAD:QL05:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL05_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL05:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL05:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL05_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL05:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL05:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL06_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL06:K1",
-      "readback": "IN:MG:L002:QUAD:QL06:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL06_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL06:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL06:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL06_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL06:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL06:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL07_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL07:K1",
-      "readback": "IN:MG:L002:QUAD:QL07:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL07_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL07:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL07:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL07_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL07:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL07:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL08_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL08:K1",
-      "readback": "IN:MG:L002:QUAD:QL08:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL08_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL08:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL08:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL08_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL08:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL08:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL09_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL09:K1",
-      "readback": "IN:MG:L002:QUAD:QL09:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL09_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL09:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL09:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL09_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL09:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL09:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL10_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL10:K1",
-      "readback": "IN:MG:L002:QUAD:QL10:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL10_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL10:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL10:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL10_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL10:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL10:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL11_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL11:K1",
-      "readback": "IN:MG:L002:QUAD:QL11:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL11_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL11:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL11:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL11_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL11:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL11:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL12_K1",
-      "pv_name": "IN:MG:L002:QUAD:QL12:K1",
-      "readback": "IN:MG:L002:QUAD:QL12:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL12_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QL12:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QL12:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QL12_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QL12:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QL12:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT01_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT01:K1",
-      "readback": "IN:MG:L002:QUAD:QT01:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT01_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT01:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT01:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT01_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT01:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT01:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT02_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT02:K1",
-      "readback": "IN:MG:L002:QUAD:QT02:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT02_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT02:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT02:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT02_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT02:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT02:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT03_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT03:K1",
-      "readback": "IN:MG:L002:QUAD:QT03:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT03_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT03:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT03:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT03_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT03:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT03:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT04_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT04:K1",
-      "readback": "IN:MG:L002:QUAD:QT04:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT04_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT04:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT04:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT04_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT04:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT04:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT05_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT05:K1",
-      "readback": "IN:MG:L002:QUAD:QT05:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT05_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT05:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT05:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT05_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT05:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT05:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT06_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT06:K1",
-      "readback": "IN:MG:L002:QUAD:QT06:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT06_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT06:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT06:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT06_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT06:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT06:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT07_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT07:K1",
-      "readback": "IN:MG:L002:QUAD:QT07:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT07_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT07:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT07:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT07_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT07:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT07:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT08_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT08:K1",
-      "readback": "IN:MG:L002:QUAD:QT08:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT08_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT08:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT08:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT08_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT08:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT08:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT09_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT09:K1",
-      "readback": "IN:MG:L002:QUAD:QT09:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT09_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT09:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT09:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT09_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT09:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT09:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT10_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT10:K1",
-      "readback": "IN:MG:L002:QUAD:QT10:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT10_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT10:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT10:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT10_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT10:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT10:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT11_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT11:K1",
-      "readback": "IN:MG:L002:QUAD:QT11:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT11_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT11:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT11:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT11_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT11:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT11:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT12_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT12:K1",
-      "readback": "IN:MG:L002:QUAD:QT12:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT12_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT12:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT12:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT12_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT12:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT12:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT13_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT13:K1",
-      "readback": "IN:MG:L002:QUAD:QT13:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT13_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT13:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT13:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT13_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT13:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT13:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT14_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT14:K1",
-      "readback": "IN:MG:L002:QUAD:QT14:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT14_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT14:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT14:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT14_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT14:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT14:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT15_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT15:K1",
-      "readback": "IN:MG:L002:QUAD:QT15:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT15_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT15:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT15:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT15_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT15:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT15:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT16_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT16:K1",
-      "readback": "IN:MG:L002:QUAD:QT16:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT16_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT16:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT16:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT16_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT16:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT16:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT17_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT17:K1",
-      "readback": "IN:MG:L002:QUAD:QT17:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT17_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT17:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT17:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT17_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT17:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT17:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT18_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT18:K1",
-      "readback": "IN:MG:L002:QUAD:QT18:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT18_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT18:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT18:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT18_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT18:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT18:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT19_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT19:K1",
-      "readback": "IN:MG:L002:QUAD:QT19:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT19_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT19:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT19:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT19_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT19:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT19:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT20_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT20:K1",
-      "readback": "IN:MG:L002:QUAD:QT20:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT20_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT20:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT20:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT20_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT20:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT20:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT21_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT21:K1",
-      "readback": "IN:MG:L002:QUAD:QT21:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT21_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT21:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT21:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT21_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT21:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT21:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT22_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT22:K1",
-      "readback": "IN:MG:L002:QUAD:QT22:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT22_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT22:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT22:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT22_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT22:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT22:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT23_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT23:K1",
-      "readback": "IN:MG:L002:QUAD:QT23:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT23_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT23:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT23:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT23_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT23:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT23:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT24_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT24:K1",
-      "readback": "IN:MG:L002:QUAD:QT24:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT24_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT24:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT24:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT24_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT24:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT24:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT25_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT25:K1",
-      "readback": "IN:MG:L002:QUAD:QT25:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT25_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT25:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT25:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT25_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT25:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT25:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT26_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT26:K1",
-      "readback": "IN:MG:L002:QUAD:QT26:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT26_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT26:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT26:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT26_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT26:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT26:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT27_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT27:K1",
-      "readback": "IN:MG:L002:QUAD:QT27:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT27_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT27:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT27:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT27_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT27:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT27:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT28_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT28:K1",
-      "readback": "IN:MG:L002:QUAD:QT28:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT28_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT28:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT28:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT28_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT28:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT28:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT29_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT29:K1",
-      "readback": "IN:MG:L002:QUAD:QT29:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT29_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT29:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT29:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT29_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT29:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT29:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT30_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT30:K1",
-      "readback": "IN:MG:L002:QUAD:QT30:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT30_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT30:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT30:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT30_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT30:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT30:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT31_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT31:K1",
-      "readback": "IN:MG:L002:QUAD:QT31:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT31_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT31:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT31:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT31_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT31:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT31:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT32_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT32:K1",
-      "readback": "IN:MG:L002:QUAD:QT32:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT32_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT32:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT32:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT32_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT32:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT32:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT33_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT33:K1",
-      "readback": "IN:MG:L002:QUAD:QT33:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT33_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT33:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT33:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT33_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT33:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT33:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT34_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT34:K1",
-      "readback": "IN:MG:L002:QUAD:QT34:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT34_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT34:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT34:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT34_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT34:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT34:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT35_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT35:K1",
-      "readback": "IN:MG:L002:QUAD:QT35:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT35_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT35:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT35:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT35_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT35:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT35:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT36_K1",
-      "pv_name": "IN:MG:L002:QUAD:QT36:K1",
-      "readback": "IN:MG:L002:QUAD:QT36:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT36_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QT36:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QT36:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QT36_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QT36:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QT36:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE01_K1",
-      "pv_name": "IN:MG:L002:QUAD:QE01:K1",
-      "readback": "IN:MG:L002:QUAD:QE01:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE01_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QE01:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QE01:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE01_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QE01:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QE01:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE02_K1",
-      "pv_name": "IN:MG:L002:QUAD:QE02:K1",
-      "readback": "IN:MG:L002:QUAD:QE02:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE02_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QE02:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QE02:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE02_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QE02:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QE02:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE03_K1",
-      "pv_name": "IN:MG:L002:QUAD:QE03:K1",
-      "readback": "IN:MG:L002:QUAD:QE03:K1",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE03_K1_adj",
-      "pv_name": "IN:MG:L002:QUAD:QE03:K1:ADJ",
-      "readback": "IN:MG:L002:QUAD:QE03:K1:ADJ",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QE03_K1_total",
-      "pv_name": "IN:MG:L002:QUAD:QE03:K1:TOTAL",
-      "readback": "IN:MG:L002:QUAD:QE03:K1:TOTAL",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QDU01_K1",
-      "pv_name": "IN:PS:LE16:QDU01:current:ao",
-      "readback": "IN:PS:LE16:QDU01:current:ao",
-      "group": "magnet-model"
-    },
-    {
-      "name": "QDU02_K1",
-      "pv_name": "IN:PS:LE16:QDU02:current:ao",
-      "readback": "IN:PS:LE16:QDU02:current:ao",
-      "group": "magnet-model"
-    },
-    {
       "name": "PRF01_sigx",
       "pv_name": "IN:BD:PRF01:H:SIZE",
       "readback": "IN:BD:PRF01:H:SIZE",
@@ -2907,6 +2187,27 @@
       "pv_name": "IN:BD:PRF02:image1:ArrayData",
       "readback": "IN:BD:PRF02:image1:ArrayData",
       "group": "profile-image"
+    },
+    {
+      "name": "PRF02_energy_center",
+      "pv_name": "IN:BD:PRF02:H:E0",
+      "readback": "IN:BD:PRF02:H:E0",
+      "group": "energy-spectrum",
+      "note": "Center energy"
+    },
+    {
+      "name": "PRF02_energy_deviation",
+      "pv_name": "IN:BD:PRF02:H:E",
+      "readback": "IN:BD:PRF02:H:E",
+      "group": "energy-spectrum",
+      "note": "Energy deviation"
+    },
+    {
+      "name": "PRF02_energy_spread",
+      "pv_name": "IN:BD:PRF02:H:DE",
+      "readback": "IN:BD:PRF02:H:DE",
+      "group": "energy-spectrum",
+      "note": "Energy spread"
     },
     {
       "name": "PRF03_sigx",
@@ -3147,6 +2448,27 @@
       "pv_name": "IN:BD:ENY:image1:ArrayData",
       "readback": "IN:BD:ENY:image1:ArrayData",
       "group": "profile-image"
+    },
+    {
+      "name": "ENY_energy_center",
+      "pv_name": "IN:BD:ENY:H:E0",
+      "readback": "IN:BD:ENY:H:E0",
+      "group": "energy-spectrum",
+      "note": "Center energy"
+    },
+    {
+      "name": "ENY_energy_deviation",
+      "pv_name": "IN:BD:ENY:H:E",
+      "readback": "IN:BD:ENY:H:E",
+      "group": "energy-spectrum",
+      "note": "Energy deviation"
+    },
+    {
+      "name": "ENY_energy_spread",
+      "pv_name": "IN:BD:ENY:H:DE",
+      "readback": "IN:BD:ENY:H:DE",
+      "group": "energy-spectrum",
+      "note": "Energy spread"
     },
     {
       "name": "KLY01_voltage_readback",

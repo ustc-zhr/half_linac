@@ -588,7 +588,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.pushButton_openConfig.text() == "Open Project"
         assert window.ui.pushButton_saveProject.text() == "Save Project"
         assert window.label_workspace_run.text() == "Idle"
-        assert window.label_workspace_machine.text() == "Disconnected"
+        assert window.label_workspace_machine.text() == "Not checked"
         assert not hasattr(window, "label_workspace_best")
         assert window.ui.groupBox_dashboardSummary.title() == "Run Readiness"
         assert window.ui.label_cardCurrentTaskTitle.text() == "Task Readiness"
@@ -714,12 +714,14 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.gridLayout_runActions.getItemPosition(validate_index) == (1, 1, 1, 1)
         stop_index = window.ui.gridLayout_runActions.indexOf(window.ui.pushButton_stopRun)
         assert window.ui.gridLayout_runActions.getItemPosition(stop_index) == (2, 1, 1, 1)
-        assert window.machine_ui.groupBox_connection.title() == "EPICS"
-        assert window.machine_ui.label_machineProfileName.text() == "Embedded Machine · v1"
-        assert window.machine_ui.label_machineProfileSource.text() == "Built-in"
-        assert window.machine_ui.pushButton_openMachineProfile.text() == "Open"
-        assert window.machine_ui.pushButton_saveMachineProfile.text() == "Save As"
-        assert window.machine_ui.frame_machineProfile.isHidden()
+        assert window.machine_ui.groupBox_connection.isHidden()
+        assert window.machine_ui.splitter_top.isHidden()
+        assert window.machine_ui.label_machineTitle.parent() is window.machine_ui.frame_machineHero
+        assert window.machine_ui.label_status.parent() is window.machine_ui.frame_machineHero
+        assert window.machine_ui.label_status.text() == "EPICS"
+        assert window.machine_ui.label_statusValue.parent() is window.machine_ui.frame_machineHero
+        assert window.machine_ui.label_statusValue.text() == "Not checked"
+        assert window.machine_ui.pushButton_test.parent() is window.machine_ui.frame_machineHero
         assert not window.machine_ui.label_caAddress.isVisible()
         assert not window.machine_ui.lineEdit_caAddress.isVisible()
         assert not window.machine_ui.checkBox_autoConnect.isVisible()
@@ -727,20 +729,13 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert not window.machine_ui.pushButton_disconnect.isVisible()
         assert window.machine_ui.pushButton_test.text() == "Check"
         assert window.machine_ui.label_timeout.text() == "PV Read Timeout [s]"
-        assert window.machine_ui.label_timeout.parent() is window.machine_ui.groupBox_connection
-        assert window.machine_ui.doubleSpinBox_timeout.parent() is window.machine_ui.groupBox_connection
-        assert (
-            window.machine_ui.horizontalLayout_connectionSummary.itemAt(3).widget()
-            is window.machine_ui.label_timeout
-        )
-        assert (
-            window.machine_ui.horizontalLayout_connectionSummary.itemAt(4).widget()
-            is window.machine_ui.doubleSpinBox_timeout
-        )
+        assert window.machine_ui.label_timeout.parent() is window.machine_ui.groupBox_guard
+        assert window.machine_ui.doubleSpinBox_timeout.parent() is window.machine_ui.groupBox_guard
         assert not hasattr(window.machine_ui, "checkBox_confirm")
         assert "confirm_before_write" not in window._current_task()["machine"]
-        assert window.machine_ui.groupBox_connection.maximumHeight() == 82
+        assert "profile" not in window._current_task()["machine"]
         assert window.machine_ui.pushButton_test.property("inlineAction") is True
+        assert not window.machine_ui.pushButton_test.isEnabled()
         assert window.machine_ui.label_statusValue.property("role") == "statusPill"
         assert window.machine_ui.frame_pvPresetLibrary.maximumHeight() == 40
         assert window.machine_ui.pushButton_selectPvs.text() == "Select PVs"
@@ -773,7 +768,6 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert not window.machine_ui.label_readbackTol.isEnabled()
         assert not window.machine_ui.doubleSpinBox_readbackTol.isEnabled()
         window.task_ui.comboBox_mode.setCurrentText("Online EPICS")
-        assert not window.machine_ui.frame_machineProfile.isHidden()
         window.machine_ui.checkBox_readbackCheck.setChecked(True)
         assert window.machine_ui.label_readbackTol.isEnabled()
         assert window.machine_ui.doubleSpinBox_readbackTol.isEnabled()
@@ -891,6 +885,9 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.machine_ui.doubleSpinBox_readbackTol.maximumWidth() == 160
         assert window.machine_ui.doubleSpinBox_setInterval.maximumWidth() == 160
         assert window.machine_ui.doubleSpinBox_sampleInterval.maximumWidth() == 160
+        assert not hasattr(window.machine_ui, "checkBox_restore")
+        assert "last edited value" in window.machine_ui.doubleSpinBox_setInterval.toolTip()
+        assert "last edited value" in window.machine_ui.doubleSpinBox_sampleInterval.toolTip()
         assert (
             window.machine_ui.horizontalLayout_readbackCheck.itemAt(1)
             .spacerItem()
@@ -924,7 +921,9 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert not window.offline_ui.frame_offlineHero.isVisible()
         assert not window.offline_ui.frame_offlinePlaceholder.isVisible()
         assert window.offline_ui.groupBox_benchmark.title() == "Benchmark"
-        assert window.run_ui.groupBox_runtime.maximumHeight() == 94
+        assert window.run_ui.groupBox_runtime.title() == ""
+        assert window.run_ui.groupBox_runtime.maximumHeight() == 56
+        assert window.run_ui.gridLayout_runtime.contentsMargins().top() == 6
         assert window.run_ui.groupBox_actions.isHidden()
         assert window.run_ui.pushButton_stop.parent() is window.run_ui.groupBox_runtime
         assert window.run_ui.pushButton_abortRestore.parent() is window.run_ui.groupBox_runtime

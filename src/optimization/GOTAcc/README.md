@@ -61,8 +61,6 @@ and validating `TaskConfig` objects. It is not a repository location for machine
 task files; example task files live under `config/task_configs/`, and reusable
 machine PV lists live under `config/pv_libraries/`.
 GUI project drafts saved by `Save Project` live under `config/gui_projects/`.
-Versioned Machine Profiles saved from Machine Setup live under
-`config/machine_profiles/`.
 
 Module execution is also supported:
 
@@ -112,32 +110,15 @@ Profile/PV Mapping sync; `Remove Selected` remains available and a resulting
 selection mismatch is reported in Machine Setup. Empty-state guidance is
 displayed outside the serialized table data.
 
-The Configure footer opens `Preview Task` for the normalized runnable
+The Setup footer opens `Preview Task` for the normalized runnable
 configuration. `Export TaskConfig` is available from that preview and writes a
 standard YAML file for the runner, while project files retain the GUI editing
 state.
 
-Configure pages are mode-specific: `Machine Setup` is shown for Online EPICS
+Setup pages are mode-specific: `Machine Setup` is shown for Online EPICS
 tasks, while `Offline Setup` is shown for Offline tasks. Machine Setup uses a
 read-only EPICS PV check flow for connectivity verification; real online runs
 still require a reachable EPICS environment and the `epics` extra.
-
-## Machine Profiles
-
-Machine Setup can save and open independent, versioned Machine Profile JSON
-files. A profile owns the EPICS connection settings, safeguards, PV Mapping,
-write links, policy bindings, and machine-scoped custom presets. Profile files
-use the `gotacc.machine_profile` schema with an explicit `profile_id` and
-version; unversioned or unsupported profile formats are rejected instead of
-being guessed or silently converted.
-
-Opening a profile changes Machine Setup only. `Sync To Task` shows the exact
-knob, objective, and constraint names that will be added or removed and requires
-explicit confirmation before changing Task Builder. Matching task rows preserve
-their bounds, initial values, directions, sampling, and math settings. GUI
-projects retain the selected profile reference together with a frozen machine
-configuration snapshot, so a later profile-file edit cannot silently change a
-prepared or running task.
 
 For Online EPICS tasks, `Sync To Task` merges PV Mapping rows into Task Builder
 by role and name. Existing bounds, initial values, and objective settings are

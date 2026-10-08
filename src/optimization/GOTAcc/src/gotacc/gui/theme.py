@@ -230,6 +230,26 @@ QLabel[role="statusPill"] {
     font-weight: 700;
 }
 
+QLabel[role="statusPill"][tone="success"] {
+    border-color: $status_tone_success_bar;
+    color: $status_tone_success_fg;
+}
+
+QLabel[role="statusPill"][tone="info"] {
+    border-color: $status_tone_info_bar;
+    color: $status_tone_info_fg;
+}
+
+QLabel[role="statusPill"][tone="warning"] {
+    border-color: $status_tone_warning_bar;
+    color: $status_tone_warning_fg;
+}
+
+QLabel[role="statusPill"][tone="danger"] {
+    border-color: $status_tone_danger_bar;
+    color: $status_tone_danger_fg;
+}
+
 QToolButton#themeToggleButton,
 QToolButton#logToggleButton {
     background: $button_bg;
@@ -366,10 +386,6 @@ QFrame#frame_runHero {
     border-radius: 14px;
 }
 
-QFrame#frame_cardCurrentTask,
-QFrame#frame_cardMode,
-QFrame#frame_cardAlgorithm,
-QFrame#frame_cardStatus,
 QFrame#frame_eval,
 QFrame#frame_elapsed,
 QFrame#frame_best,
@@ -384,36 +400,38 @@ QFrame#frame_cardCurrentTask,
 QFrame#frame_cardMode,
 QFrame#frame_cardAlgorithm,
 QFrame#frame_cardStatus {
-    border-top-left-radius: 0px;
-    border-bottom-left-radius: 0px;
+    background: transparent;
+    border: none;
+    border-left: 4px solid $status_item_idle_bar;
+    border-radius: 0px;
 }
 
 QFrame#frame_cardCurrentTask[tone="info"],
 QFrame#frame_cardMode[tone="info"],
 QFrame#frame_cardAlgorithm[tone="info"],
 QFrame#frame_cardStatus[tone="info"] {
-    border-left: 3px solid $status_tone_info_bar;
+    border-left-color: $status_item_idle_bar;
 }
 
 QFrame#frame_cardCurrentTask[tone="success"],
 QFrame#frame_cardMode[tone="success"],
 QFrame#frame_cardAlgorithm[tone="success"],
 QFrame#frame_cardStatus[tone="success"] {
-    border-left: 3px solid $status_tone_success_bar;
+    border-left-color: $status_item_idle_bar;
 }
 
 QFrame#frame_cardCurrentTask[tone="warning"],
 QFrame#frame_cardMode[tone="warning"],
 QFrame#frame_cardAlgorithm[tone="warning"],
 QFrame#frame_cardStatus[tone="warning"] {
-    border-left: 3px solid $status_tone_warning_bar;
+    border-left-color: $status_tone_warning_bar;
 }
 
 QFrame#frame_cardCurrentTask[tone="danger"],
 QFrame#frame_cardMode[tone="danger"],
 QFrame#frame_cardAlgorithm[tone="danger"],
 QFrame#frame_cardStatus[tone="danger"] {
-    border-left: 3px solid $status_tone_danger_bar;
+    border-left-color: $status_tone_danger_bar;
 }
 
 QLabel#label_cardCurrentTaskValue[tone="success"],
@@ -454,7 +472,14 @@ QGroupBox#groupBox_guard {
     padding-top: 0px;
 }
 
-QGroupBox#groupBox_runtime,
+QGroupBox#groupBox_runtime {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+    margin-top: 0px;
+    padding: 0px;
+}
+
 QGroupBox#groupBox_actions,
 QGroupBox#groupBox_livePlots,
 QGroupBox#groupBox_events,
@@ -522,6 +547,13 @@ QLabel#label_phaseTitle {
     font-weight: 700;
 }
 
+QLabel#label_cardCurrentTaskTitle,
+QLabel#label_cardModeTitle,
+QLabel#label_cardAlgorithmTitle,
+QLabel#label_cardStatusTitle {
+    font-size: 9px;
+}
+
 QLabel#label_cardCurrentTaskValue,
 QLabel#label_cardModeValue,
 QLabel#label_cardAlgorithmValue,
@@ -535,6 +567,13 @@ QLabel#label_phaseValue {
     color: $card_value;
     font-size: 17px;
     font-weight: 700;
+}
+
+QLabel#label_cardCurrentTaskValue,
+QLabel#label_cardModeValue,
+QLabel#label_cardAlgorithmValue,
+QLabel#label_cardStatusValue {
+    font-size: 14px;
 }
 
 QFrame#statusItem QLabel[role="title"] {
@@ -610,6 +649,16 @@ QPushButton[inlineAction="true"] {
     min-height: 20px;
     max-height: 24px;
     font-size: 11px;
+}
+
+QDialog QPushButton,
+QDialog QPushButton[inlineAction="true"],
+QDialog QPushButton[compact="true"],
+QDialog QPushButton[runControl="true"] {
+    border-radius: 8px;
+    padding: 2px 10px;
+    min-height: 24px;
+    max-height: 24px;
 }
 
 QPushButton[primary="true"] {
