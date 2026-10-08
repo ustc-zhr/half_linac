@@ -17,6 +17,8 @@ class HvModulator:
     voltage_readback: str
     enable_1: str
     enable_2: str
+    enable_1_state: str
+    enable_2_state: str
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,6 @@ def load_hv_runtime() -> HvRuntime:
         selected = pvs.get(backend) or pvs.get("real")
         if not isinstance(selected, Mapping):
             raise MachineProfileError(f"{name} has no PV mapping for backend {backend!r}.")
-        values = {key: str(selected.get(key, "")).strip() for key in ("voltage_set", "voltage_readback", "enable_1", "enable_2")}
+        values = {key: str(selected.get(key, "")).strip() for key in ("voltage_set", "voltage_readback", "enable_1", "enable_2", "enable_1_state", "enable_2_state")}
         modulators.append(HvModulator(name, **values))
     return HvRuntime(context, tuple(modulators), low, high, unit)

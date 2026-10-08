@@ -18,7 +18,7 @@ class HvMonitor(QObject):
         self.close()
         generation = self._generation
         for mod in self.modulators:
-            for field in ("voltage_set", "voltage_readback", "enable_1", "enable_2"):
+            for field in ("voltage_set", "voltage_readback", "enable_1", "enable_2", "enable_1_state", "enable_2_state"):
                 pv_name = getattr(mod, field)
                 if not pv_name:
                     self.connection_changed.emit(mod.name, field, False)
@@ -32,6 +32,8 @@ class HvMonitor(QObject):
 
     def close(self):
         self._generation += 1
+        for name, field in tuple(self._pvs):
+            self.connection_changed.emit(name, field, False)
         for pv in self._pvs.values():
             try:
                 pv.clear_callbacks()

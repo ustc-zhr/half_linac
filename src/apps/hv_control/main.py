@@ -14,7 +14,7 @@ ensure_repo_import_path(__file__)
 from PyQt5.QtCore import QSignalBlocker, Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
-    QApplication, QFileDialog, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
+    QApplication, QFileDialog, QCheckBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
     QMainWindow, QMessageBox, QPushButton, QStatusBar, QTableWidget,
     QTableWidgetItem, QToolButton, QVBoxLayout, QWidget, QSizePolicy,
 )
@@ -36,6 +36,11 @@ QLabel {{ background:transparent; }} QLabel#subtitle, QLabel#sectionLabel {{ col
 QPushButton, QToolButton, QDoubleSpinBox {{ background:{p["input"]}; color:{p["text"]}; border:1px solid {p["border"]}; border-radius:6px; min-height:30px; padding:2px 10px; }}
 QPushButton#toolbarAction {{ font-weight:700; }}
 QPushButton#enableToggleButton {{ min-height:22px; padding:0 6px; }}
+QCheckBox#selectionCheck {{ spacing:7px; font-weight:700; color:{p["text"]}; }}
+QCheckBox#selectionCheck::indicator {{ width:18px; height:18px; border-radius:4px; border:1px solid {p["border"]}; background:{p["input"]}; }}
+QCheckBox#selectionCheck::indicator:hover {{ border-color:{p["accent"]}; }}
+QCheckBox#selectionCheck::indicator:checked {{ background:{p["accent"]}; border-color:{p["accent"]}; }}
+QCheckBox#selectionCheck::indicator:indeterminate {{ background:{p["accent"]}; border-color:{p["accent"]}; }}
 QPushButton:hover, QToolButton:hover, QDoubleSpinBox:focus {{ border-color:{p["accent"]}; }} QPushButton:disabled {{ color:{p["muted"]}; }}
 QTableWidget {{ background:{p["input"]}; alternate-background-color:{p["panel"]}; gridline-color:{p["border"]}; border:1px solid {p["border"]}; selection-background-color:{p["panel"]}; }}
 QTableWidget::item {{ padding:4px 8px; }}
@@ -53,6 +58,10 @@ class HvControlWindow(QMainWindow):
         self.connected = {}
         self.status_labels = {}
         self.enable_buttons = {}
+        self.batch_enable_buttons = {}
+        self.selection_boxes = {}
+        self.selection_count = None
+        self.select_all_box = None
         self._build_ui()
         self._apply_theme()
         self.monitor.value_changed.connect(self._on_value)
@@ -80,21 +89,28 @@ class HvControlWindow(QMainWindow):
 
         controls = QFrame(root); controls.setObjectName("panel"); row = QHBoxLayout(controls); row.setContentsMargins(12,10,12,10); row.setSpacing(7)
         set_label = QLabel("SETPOINT", controls); set_label.setObjectName("sectionLabel"); set_label.setStyleSheet("font-weight:700;font-size:10px;"); row.addWidget(set_label)
+        self.select_all_box = QCheckBox("Select all", controls); self.select_all_box.setObjectName("selectionCheck"); self.select_all_box.setTristate(True); self.select_all_box.setChecked(True); self.select_all_box.clicked.connect(self._set_all_selection); row.addWidget(self.select_all_box)
+        self.selection_count = QLabel("20 selected", controls); self.selection_count.setObjectName("sectionLabel"); row.addWidget(self.selection_count)
         self.global_spin = QDoubleSpinBox(controls); self.global_spin.setRange(self.runtime.low, self.runtime.high); self.global_spin.setDecimals(1); self.global_spin.setSuffix(f" {self.runtime.unit}"); self.global_spin.setKeyboardTracking(False); row.addWidget(self.global_spin)
-        self.fill_button = QPushButton("Fill all rows", controls); self.fill_button.setObjectName("toolbarAction"); self.fill_button.clicked.connect(self._fill_all); row.addWidget(self.fill_button)
-        self.apply_button = QPushButton("Apply all", controls); self.apply_button.setObjectName("toolbarAction"); self.apply_button.clicked.connect(self._apply_all); row.addWidget(self.apply_button)
+        self.fill_button = QPushButton("Fill selected", controls); self.fill_button.setObjectName("toolbarAction"); self.fill_button.clicked.connect(self._fill_all); row.addWidget(self.fill_button)
+        self.apply_button = QPushButton("Apply selected", controls); self.apply_button.setObjectName("toolbarAction"); self.apply_button.clicked.connect(self._apply_all); row.addWidget(self.apply_button)
         self.read_button = QPushButton("Refresh", controls); self.read_button.setObjectName("toolbarAction"); self.read_button.clicked.connect(self._read_back); row.addWidget(self.read_button)
         divider = QFrame(controls); divider.setFrameShape(QFrame.VLine); divider.setStyleSheet("color:#2a3943;"); row.addWidget(divider)
         enable_label = QLabel("ENABLE", controls); enable_label.setObjectName("sectionLabel"); enable_label.setStyleSheet("font-weight:700;font-size:10px;"); row.addWidget(enable_label)
-        for text, field, value in (("Enable all 1", "enable_1", 1), ("Disable all 1", "enable_1", 0), ("Enable all 2", "enable_2", 1), ("Disable all 2", "enable_2", 0)):
-            button = QPushButton(text, controls); button.setObjectName("toolbarAction"); button.clicked.connect(lambda _=False, f=field, v=value, t=text: self._batch_enable(f, v, t)); row.addWidget(button)
+        for field, title in (("enable_1", "Modulators"), ("enable_2", "HV")):
+            button = QPushButton(f"{title}: All ON", controls)
+            button.setObjectName("toolbarAction")
+            button.setEnabled(False)
+            button.clicked.connect(lambda _=False, f=field: self._toggle_all(f))
+            row.addWidget(button)
+            self.batch_enable_buttons[field] = button
         row.addStretch(1); outer.addWidget(controls)
 
         self.table = QTableWidget(len(self.runtime.modulators), 7, root)
-        self.table.setHorizontalHeaderLabels(("MODULATOR", "HV SET", "HV READBACK", "ENABLE 1", "ENABLE 2", "CONNECTION", "OPERATION"))
+        self.table.setHorizontalHeaderLabels(("MODULATOR", "HV SET", "HV READBACK", "MODULATOR ENABLE", "HV ENABLE", "CONNECTION", "OPERATION"))
         self.table.verticalHeader().setVisible(False); self.table.verticalHeader().setDefaultSectionSize(42); self.table.setAlternatingRowColors(True); self.table.setSelectionMode(QTableWidget.NoSelection); self.table.setFocusPolicy(Qt.NoFocus)
         header = self.table.horizontalHeader(); header.setFixedHeight(36); header.setDefaultAlignment(Qt.AlignCenter | Qt.AlignVCenter)
-        widths = (125, 190, 190, 205, 205, 150, 300)
+        widths = (180, 190, 190, 205, 205, 150, 300)
         for i, width in enumerate(widths): self.table.setColumnWidth(i, width)
         header.setStretchLastSection(True)
         for row_index, mod in enumerate(self.runtime.modulators): self._build_row(row_index, mod)
@@ -102,15 +118,45 @@ class HvControlWindow(QMainWindow):
         self.setCentralWidget(root); self.setStatusBar(QStatusBar(self)); self.statusBar().showMessage("Connecting to HV PVs")
 
     def _build_row(self, row, mod):
-        self.table.setItem(row, 0, QTableWidgetItem(mod.name))
+        select = QCheckBox(self.table)
+        select.setObjectName("selectionCheck")
+        select.setChecked(True)
+        select.stateChanged.connect(lambda _state, n=mod.name: self._selection_changed(n))
+        select_cell = QWidget(self.table); select_layout = QHBoxLayout(select_cell)
+        select_layout.setContentsMargins(8, 0, 8, 0); select_layout.setSpacing(8); select_layout.addWidget(select)
+        select_cell_label = QLabel(mod.name, select_cell); select_cell_label.setStyleSheet("font-weight:700;"); select_layout.addWidget(select_cell_label); select_layout.addStretch(1)
+        self.table.setCellWidget(row, 0, select_cell); self.selection_boxes[mod.name] = select
         set_spin = QDoubleSpinBox(self.table); set_spin.setAlignment(Qt.AlignLeft | Qt.AlignVCenter); set_spin.setRange(self.runtime.low, self.runtime.high); set_spin.setDecimals(1); set_spin.setSuffix(f" {self.runtime.unit}"); set_spin.setKeyboardTracking(False); set_spin.setEnabled(False); self.table.setCellWidget(row, 1, set_spin)
         for col in (2, 5, 6): self.table.setItem(row, col, QTableWidgetItem("--"))
         for field, col in (("enable_1",3),("enable_2",4)):
             cell = QWidget(self.table); layout = QHBoxLayout(cell); layout.setContentsMargins(8,3,8,3); layout.setSpacing(6)
-            label = QLabel("--", cell); label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter); button = QPushButton("Set", cell); button.setObjectName("enableToggleButton"); button.setFixedSize(82, 26); button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed); button.setEnabled(False); button.clicked.connect(lambda _=False, n=mod.name, f=field: self._toggle_enable(n, f))
+            label = QLabel("--", cell); label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter); button = QPushButton("ON", cell); button.setObjectName("enableToggleButton"); button.setFixedSize(82, 26); button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed); button.setEnabled(False); button.clicked.connect(lambda _=False, n=mod.name, f=field: self._toggle_enable(n, f))
             layout.addWidget(label, 1); layout.addWidget(button, 0); self.table.setCellWidget(row, col, cell); self.status_labels[(mod.name, field)] = label; self.enable_buttons[(mod.name, field)] = button
         set_spin.valueChanged.connect(lambda value, n=mod.name: self._set_target(n, value))
         self.values[(mod.name, "target_widget")] = set_spin
+
+    def _selected_names(self):
+        return [name for name, box in self.selection_boxes.items() if box.isChecked()]
+
+    def _selection_changed(self, _name=None):
+        selected = self._selected_names()
+        self.selection_count.setText(f"{len(selected)} selected")
+        if self.select_all_box is not None:
+            self.select_all_box.blockSignals(True)
+            self.select_all_box.setCheckState(Qt.Checked if len(selected) == len(self.runtime.modulators) else Qt.PartiallyChecked if selected else Qt.Unchecked)
+            self.select_all_box.blockSignals(False)
+        for field in self.batch_enable_buttons:
+            self._refresh_batch_enable(field)
+        self.apply_button.setEnabled(bool(selected) and self.worker is None)
+        self.fill_button.setEnabled(bool(selected) and self.worker is None)
+
+    def _set_all_selection(self, checked):
+        checked = bool(checked)
+        for box in self.selection_boxes.values():
+            box.blockSignals(True)
+            box.setChecked(checked)
+            box.blockSignals(False)
+        self._selection_changed()
 
     def _set_target(self, name, value): self.values[(name, "target")] = float(value)
 
@@ -123,37 +169,85 @@ class HvControlWindow(QMainWindow):
         if field == "voltage_set":
             widget = self.values[(name, "target_widget")]
             with QSignalBlocker(widget): widget.setValue(value)
-            self.table.item(row, 1).setText(f"{value:.1f} {self.runtime.unit}") if False else None
         elif field == "voltage_readback": self.table.item(row, 2).setText(f"{value:.1f} {self.runtime.unit}")
-        elif field.startswith("enable_"): self._refresh_enable(name, field, value)
+        elif field in ("enable_1_state", "enable_2_state"):
+            command = field.removesuffix("_state")
+            self._refresh_enable(name, command, value)
+            self._refresh_enable_button(name, command)
+            self._refresh_batch_enable(command)
         self._refresh_connection(name)
 
     def _on_connection(self, name, field, connected):
-        self.connected[(name, field)] = connected; self._refresh_connection(name)
-        if field.startswith("enable_"): self.enable_buttons[(name, field)].setEnabled(bool(connected) and self._can_write())
+        self.connected[(name, field)] = connected
+        if not connected and field in ("enable_1_state", "enable_2_state"):
+            self.values.pop((name, field), None)
+            label = self.status_labels[(name, field.removesuffix("_state"))]
+            label.setText("--")
+            label.setStyleSheet("")
+            self.enable_buttons[(name, field.removesuffix("_state"))].setText("ON")
+        self._refresh_connection(name)
+        if field in ("enable_1", "enable_2", "enable_1_state", "enable_2_state"):
+            command = field.removesuffix("_state")
+            self._refresh_enable_button(name, command)
+            self._refresh_batch_enable(command)
         if field == "voltage_set": self.values[(name, "target_widget")].setEnabled(bool(connected) and self._can_write())
 
     def _refresh_connection(self, name):
-        states = [self.connected.get((name, f), False) for f in ("voltage_set","voltage_readback","enable_1","enable_2")]
+        states = [self.connected.get((name, f), False) for f in ("voltage_set","voltage_readback","enable_1_state","enable_2_state")]
         item = self.table.item(self._row(name), 5); item.setText("Connected" if any(states) else "Disconnected"); item.setForeground(QColor("#45d0bc" if any(states) else "#e37878"))
 
     def _refresh_enable(self, name, field, value):
-        label = self.status_labels[(name, field)]; enabled = math.isclose(value, 1.0)
-        label.setText("Enable" if enabled else "Disable"); label.setStyleSheet("color:#45d0bc;font-weight:700;" if enabled else "color:#e37878;font-weight:700;")
-        self.enable_buttons[(name, field)].setText("Disable" if enabled else "Enable")
+        label = self.status_labels[(name, field)]
+        if value not in (0.0, 1.0):
+            label.setText("Unknown")
+            label.setStyleSheet("")
+            self.enable_buttons[(name, field)].setText("ON")
+            return
+        enabled = value == 1.0
+        label.setText("ON" if enabled else "OFF")
+        label.setStyleSheet("color:#45d0bc;font-weight:700;" if enabled else "color:#e37878;font-weight:700;")
+        self.enable_buttons[(name, field)].setText("OFF" if enabled else "ON")
+
+    def _refresh_enable_button(self, name, field):
+        state = self.values.get((name, f"{field}_state"))
+        self.enable_buttons[(name, field)].setEnabled(
+            self.connected.get((name, field), False)
+            and self.connected.get((name, f"{field}_state"), False)
+            and state in (0.0, 1.0)
+            and self._can_write()
+        )
+
+    def _refresh_batch_enable(self, field):
+        button = self.batch_enable_buttons[field]
+        names = self._selected_names()
+        states = [self.values.get((name, f"{field}_state")) for name in names]
+        ready = all(
+            self.connected.get((name, field), False)
+            and self.connected.get((name, f"{field}_state"), False)
+            and state in (0.0, 1.0)
+            for name, state in zip(names, states)
+        )
+        title = "Modulators" if field == "enable_1" else "HV"
+        button.setText(f"{title}: All {'OFF' if ready and all(state == 1.0 for state in states) else 'ON'}")
+        button.setEnabled(bool(names) and ready and self._can_write())
+        button.setToolTip(f"{sum(state == 1.0 for state in states)} of {len(names)} selected ON" if ready else "Select connected modulators with valid status PVs")
 
     def _row(self, name): return next(i for i, mod in enumerate(self.runtime.modulators) if mod.name == name)
     def _can_write(self): return self.runtime.context.control_backend.name == "real" and self.worker is None
 
     def _fill_all(self):
+        selected = set(self._selected_names())
         value = self.global_spin.value()
         for mod in self.runtime.modulators:
+            if mod.name not in selected:
+                continue
             with QSignalBlocker(self.values[(mod.name, "target_widget")]): self.values[(mod.name, "target_widget")].setValue(value)
             self.values[(mod.name, "target")] = value
-        self.statusBar().showMessage(f"Filled {value:g} {self.runtime.unit} into all rows")
+        self.statusBar().showMessage(f"Filled {value:g} {self.runtime.unit} into {len(selected)} selected rows")
 
     def _apply_all(self):
-        operations = [(m.name, "voltage_set", m.voltage_set, self.values.get((m.name,"target"), self.values.get((m.name,"voltage_set"), 0.0))) for m in self.runtime.modulators]
+        selected = set(self._selected_names())
+        operations = [(m.name, "voltage_set", m.voltage_set, self.values.get((m.name,"target"), self.values.get((m.name,"voltage_set"), 0.0))) for m in self.runtime.modulators if m.name in selected]
         self._start_worker(operations, "write")
 
     def _read_back(self):
@@ -161,12 +255,24 @@ class HvControlWindow(QMainWindow):
             self.values[(mod.name, "target_widget")].setEnabled(False)
         self.monitor.bind(); self.statusBar().showMessage("Refreshing HV readbacks")
 
+    def _toggle_all(self, field):
+        if not self.batch_enable_buttons[field].isEnabled(): return
+        names = self._selected_names()
+        states = [self.values[(name, f"{field}_state")] for name in names]
+        target = 0 if all(state == 1.0 for state in states) else 1
+        group = "modulator" if field == "enable_1" else "high voltage"
+        current = "all ON" if all(state == 1.0 for state in states) else "mixed" if any(state == 1.0 for state in states) else "all OFF"
+        self._batch_enable(field, target, f"Turn selected {group} enables {'ON' if target else 'OFF'} (currently {current})", names=names)
+
     def _toggle_enable(self, name, field):
-        current = self.values.get((name, field), 0.0); self._batch_enable(field, 0 if math.isclose(current,1) else 1, f"{name} {field}", names=[name])
+        current = self.values.get((name, f"{field}_state"))
+        if current not in (0.0, 1.0): return
+        self._batch_enable(field, 0 if current == 1.0 else 1, f"{name} {field}", names=[name])
 
     def _batch_enable(self, field, value, label, names=None):
-        names = names or [m.name for m in self.runtime.modulators]
-        if names == [m.name for m in self.runtime.modulators] and QMessageBox.question(self, "Confirm enable operation", f"{label} for {len(names)} modulators?", QMessageBox.Yes|QMessageBox.No, QMessageBox.No) != QMessageBox.Yes: return
+        names = self._selected_names() if names is None else names
+        if len(names) > 1 and QMessageBox.question(self, "Confirm enable operation", f"{label} for {len(names)} selected modulators?", QMessageBox.Yes|QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return
         mods = {m.name:m for m in self.runtime.modulators}
         self._start_worker([(name, field, getattr(mods[name], field), value) for name in names], "write")
 
@@ -197,8 +303,21 @@ class HvControlWindow(QMainWindow):
         self._set_busy(False)
 
     def _set_busy(self, busy):
-        for widget in (self.save_button,self.restore_button,self.fill_button,self.apply_button,self.read_button): widget.setEnabled(not busy)
+        for widget in (self.save_button, self.restore_button, self.fill_button, self.apply_button, self.read_button):
+            widget.setEnabled(not busy)
         self.global_spin.setEnabled(not busy)
+        if self.select_all_box is not None:
+            self.select_all_box.setEnabled(not busy)
+        if not busy:
+            self._selection_changed()
+        if busy:
+            for button in (*self.batch_enable_buttons.values(), *self.enable_buttons.values()):
+                button.setEnabled(False)
+        else:
+            for field in self.batch_enable_buttons:
+                self._refresh_batch_enable(field)
+            for name, field in self.enable_buttons:
+                self._refresh_enable_button(name, field)
 
     def _snapshot_dir(self):
         path = Path(__file__).resolve().parent / "runtime" / "snapshots"; path.mkdir(parents=True, exist_ok=True); return path
