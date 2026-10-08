@@ -2403,6 +2403,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2415,6 +2417,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2427,6 +2431,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2439,6 +2445,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2451,6 +2459,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2463,6 +2473,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2475,6 +2487,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2487,6 +2501,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2499,6 +2515,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2511,6 +2529,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2523,6 +2543,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2535,6 +2557,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2547,6 +2571,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2559,6 +2585,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2571,6 +2599,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2583,6 +2613,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2595,6 +2627,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2607,6 +2641,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2619,6 +2655,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
@@ -2631,6 +2669,8 @@
       "limits": {"voltage_set": {"low": 0, "high": 1050, "unit": "V"}},
       "logical_channels": [
         "voltage_set", "voltage_readback",
+        "modulator_enable_set", "modulator_enable_readback",
+        "hv_enable_set", "hv_enable_readback",
         "hv_delay_set", "hv_delay_readback", "hv_enable", "hv_width_set", "hv_width_readback", "llrf_delay_set", "llrf_delay_readback", "llrf_enable", "llrf_width_set", "llrf_width_readback", "ssa_delay_set", "ssa_delay_readback", "ssa_enable", "ssa_width_set", "ssa_width_readback", "kly_delay_set", "kly_delay_readback", "kly_enable", "kly_width_set", "kly_width_readback", "llrf_waveform", "ssa_waveform", "kly_waveform"
       ]
     },
