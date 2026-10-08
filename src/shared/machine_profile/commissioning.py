@@ -23,7 +23,7 @@ REAL_COMMISSIONING_STATUSES = (
 
 REAL_COMMISSIONING_WORKFLOWS_BY_APP = {
     "orbit_correct": "orbit",
-    "orbit_display": "orbit",
+    "orbit_display": "orbit_display",
     "beam_monitor": "beam_monitor",
     "energy_spectrum": "energy_spectrum",
     "rf_phase_scan": "rf_phase_scan",

@@ -17,7 +17,7 @@ from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QFrame, QHBoxLayout,
     QHeaderView, QLabel, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget)
-from half_linac.src.shared.machine_profile import list_elements, load_app_context, resolve_channel
+from half_linac.src.shared.machine_profile import load_app_context, resolve_channel
 from half_linac.src.shared.window_activation import install_qt_window_raise_handler
 
 MAX_HISTORY = 150
@@ -46,11 +46,14 @@ QComboBox QAbstractItemView {{ background:{input_bg}; color:{input_fg}; selectio
 QStatusBar {{ background-color:{status_bg}; color:{status_fg}; }}""".format_map(palette)
 
 class myWindow(QMainWindow):
-    def __init__(self, refresh_interval_ms=1000, palette=None, parent=None):
+    def __init__(self, refresh_interval_ms=None, palette=None, parent=None):
         super().__init__(parent); install_qt_window_raise_handler(self)
         self.app_context=load_app_context("orbit_display"); self.machine_profile=self.app_context.profile
-        self.control_backend=self.app_context.control_backend.name; self.refresh_interval_ms=max(100,int(refresh_interval_ms))
-        self.bpm_elements=list_elements(self.app_context,kind="bpm"); self.bpm_ids=[e.id for e in self.bpm_elements]
+        workflow=self.app_context.orbit_display_workflow; assert workflow is not None
+        self.control_backend=self.app_context.control_backend.name
+        if refresh_interval_ms is None: refresh_interval_ms=round(workflow.refresh_interval_s*1000)
+        self.refresh_interval_ms=max(100,int(refresh_interval_ms))
+        self.bpm_ids=list(workflow.bpms)
         self.bpm_position_scale_to_mm=self.machine_profile.machine.bpm_scale_to_mm(self.control_backend)
         self.bpm_x_pvs=[resolve_channel(self.app_context,i,"x") for i in self.bpm_ids]
         self.bpm_y_pvs=[resolve_channel(self.app_context,i,"y") for i in self.bpm_ids]

@@ -25,6 +25,7 @@ from .models import (
     MachineProfile,
     MachineProfileError,
     ModelBackendConfig,
+    OrbitDisplayWorkflowConfig,
     OrbitWorkflowConfig,
     SolenoidCenteringPreset,
     SolenoidCenteringScanRange,
@@ -66,6 +67,7 @@ APP_WORKFLOW_FILES = {
     "energy_buttons": "energy_buttons.json",
     "control_points": "control_points.json",
     "orbit": "orbit_correct.json",
+    "orbit_display": "orbit_display.json",
     "beam_monitor": "beam_monitor.json",
     "energy_spectrum": "energy_spectrum.json",
     "rf_phase_scan": "rf_phase_scan.json",
@@ -85,7 +87,7 @@ APP_WORKFLOW_FILES = {
 }
 APP_WORKFLOW_NAMES_BY_APP = {
     "orbit_correct": ("orbit",),
-    "orbit_display": ("orbit",),
+    "orbit_display": ("orbit_display",),
     "beam_monitor": ("beam_monitor",),
     "energy_spectrum": ("energy_spectrum",),
     "rf_phase_scan": ("rf_phase_scan",),
@@ -184,11 +186,16 @@ def load_app_context(
     )
 
     orbit_workflow = None
+    orbit_display_workflow = None
     bba_workflow = None
     emit_measure_workflow = None
     solenoid_centering_workflow = None
     if app_name == "orbit_correct":
         orbit_workflow = load_orbit_workflow(profile)
+    elif app_name == "orbit_display":
+        orbit_display_workflow = load_orbit_display_workflow(
+            profile, selected_control_backend.name
+        )
     elif app_name == "bba":
         bba_workflow = load_bba_workflow(profile, selected_control_backend.name)
     elif app_name == "emit_measure":
@@ -205,6 +212,7 @@ def load_app_context(
         control_backend=selected_control_backend,
         model_backend=selected_model_backend,
         orbit_workflow=orbit_workflow,
+        orbit_display_workflow=orbit_display_workflow,
         bba_workflow=bba_workflow,
         emit_measure_workflow=emit_measure_workflow,
         solenoid_centering_workflow=solenoid_centering_workflow,
@@ -246,6 +254,55 @@ def load_orbit_workflow(profile: MachineProfile) -> OrbitWorkflowConfig:
                 "workflows.orbit.default_target_bpms",
             )
         ),
+    )
+
+
+def load_orbit_display_workflow(
+    profile: MachineProfile,
+    control_backend: str,
+) -> OrbitDisplayWorkflowConfig:
+    workflow = _expect_mapping(
+        profile.workflows.get("orbit_display", {}),
+        "workflows.orbit_display",
+    )
+    configured_bpms = workflow.get("bpms")
+    if configured_bpms is None:
+        bpms = tuple(
+            element.id for element in profile.elements if element.kind == "bpm"
+        )
+    else:
+        bpms = tuple(
+            _expect_string_list(configured_bpms, "workflows.orbit_display.bpms")
+        )
+    if not bpms:
+        raise MachineProfileError("workflows.orbit_display.bpms must not be empty.")
+    _require_unique_ids(bpms, "workflows.orbit_display.bpms")
+
+    for bpm_id in bpms:
+        element = profile.get_element(bpm_id)
+        if element.kind != "bpm":
+            raise MachineProfileError(
+                f"workflows.orbit_display.bpms contains non-BPM element {bpm_id!r}."
+            )
+        for channel_name in ("x", "y"):
+            channel_modes = element.channels.get(channel_name, {})
+            if not channel_modes.get(control_backend):
+                raise MachineProfileError(
+                    f"workflows.orbit_display.bpms element {bpm_id!r} is missing "
+                    f"{channel_name!r} channel mapping for backend {control_backend!r}."
+                )
+
+    refresh_interval_s = _expect_finite_number(
+        workflow.get("refresh_interval_s", 1.0),
+        "workflows.orbit_display.refresh_interval_s",
+    )
+    if refresh_interval_s < 0.1:
+        raise MachineProfileError(
+            "workflows.orbit_display.refresh_interval_s must be at least 0.1."
+        )
+    return OrbitDisplayWorkflowConfig(
+        bpms=bpms,
+        refresh_interval_s=refresh_interval_s,
     )
 
 
@@ -857,10 +914,16 @@ def _validate_basic_app_support(
     app_name: str,
     control_backend: str | None = None,
 ) -> None:
-    if app_name in {"orbit_correct", "orbit_display"}:
+    if app_name == "orbit_correct":
         bpm_count = sum(1 for element in profile.elements if element.kind == "bpm")
         if bpm_count <= 0:
             raise MachineProfileError(f"{app_name} requires at least one BPM element.")
+        return
+
+    if app_name == "orbit_display":
+        load_orbit_display_workflow(
+            profile, control_backend or profile.machine.default_mode
+        )
         return
 
     if app_name == "beam_monitor":
@@ -1610,15 +1673,18 @@ def _load_directory_workflows(
             return {"orbit": {}}
         if workflow_names == ():
             return {}
-        if workflow_names == ("orbit",):
-            return {"orbit": {}}
+        if workflow_names in {("orbit",), ("orbit_display",)}:
+            return {workflow_names[0]: {}}
         raise MachineProfileError(f"Missing apps workflow directory: {apps_dir}")
 
     workflows: dict[str, Any] = {}
     for workflow_name in selected_names:
         filename = APP_WORKFLOW_FILES[workflow_name]
         workflow_path = apps_dir / filename
-        if workflow_name == "orbit" and not workflow_path.is_file():
+        if (
+            workflow_name in {"orbit", "orbit_display"}
+            and not workflow_path.is_file()
+        ):
             workflows[workflow_name] = {}
             continue
         if not workflow_path.is_file():

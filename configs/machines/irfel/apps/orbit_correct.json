@@ -25,6 +25,6 @@
     "matrix_response_kick_fraction": 0.02,
     "matrix_samples_per_step": 2
   },
-  "real_status": {"orbit_correct": "commissioned", "orbit_display": "read_only"},
+  "real_status": "commissioned",
   "write_control": {"vm": "allowed", "real": "allowed"}
 }

@@ -1,0 +1,4 @@
+{
+  "bpms": ["BPM01", "BPM02"],
+  "refresh_interval_s": 1.0
+}

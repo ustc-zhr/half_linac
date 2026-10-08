@@ -35,8 +35,6 @@ from PyQt5.QtWidgets import (
 
 from half_linac.src.shared.machine_profile import (
     RuntimeContextWidget,
-    get_workflow,
-    list_elements,
     load_app_context,
     resolve_channel,
 )
@@ -436,9 +434,10 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.app_context = load_app_context("orbit_display")
         self.machine_profile = self.app_context.profile
         self.control_backend = self.app_context.control_backend.name
+        self.orbit_display_workflow = self.app_context.orbit_display_workflow
+        assert self.orbit_display_workflow is not None
         self.bpm_position_scale_to_mm = self._resolve_bpm_position_scale_to_mm()
-        self.bpm_elements = list_elements(self.app_context, kind="bpm")
-        self.bpm_ids = [element.id for element in self.bpm_elements]
+        self.bpm_ids = list(self.orbit_display_workflow.bpms)
         self.bpm_x_pvs = [resolve_channel(self.app_context, bpm_id, "x") for bpm_id in self.bpm_ids]
         self.bpm_y_pvs = [resolve_channel(self.app_context, bpm_id, "y") for bpm_id in self.bpm_ids]
 
@@ -455,7 +454,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self._axis_ranges = {"x": (None, None), "y": (None, None)}
         self._bpm_detail_window = None
         self._jitter_window = None
-        self.refresh_interval_ms = 1000
+        self.refresh_interval_ms = int(
+            round(self.orbit_display_workflow.refresh_interval_s * 1000)
+        )
 
         self._configure_window()
         self._configure_controls()
@@ -554,7 +555,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
 
         self.refresh_interval_edit = QLineEdit(panel)
         self.refresh_interval_edit.setObjectName("refreshIntervalEdit")
-        self.refresh_interval_edit.setText("1.0")
+        self.refresh_interval_edit.setText(
+            f"{self.orbit_display_workflow.refresh_interval_s:g}"
+        )
         self.refresh_interval_edit.setFixedWidth(72)
         self.refresh_interval_edit.setFixedHeight(HEADER_ACTION_HEIGHT)
         self.refresh_interval_edit.setToolTip("Refresh interval in seconds.")
@@ -622,7 +625,9 @@ class myWindow(QMainWindow, Ui_MainWindow):
         self.status_panel.add_item("x", "X Orbit", "Idle")
         self.status_panel.add_item("y", "Y Orbit", "Idle")
         self.status_panel.add_item("hold", "History", "Off")
-        self.status_panel.add_item("refresh", "Refresh", "1.0 s")
+        self.status_panel.add_item(
+            "refresh", "Refresh", self._format_refresh_interval()
+        )
         self.status_panel.add_item("view", "BPM View", f"1-{len(self.bpm_ids)} default")
         self.status_panel.finish()
         self.status_panel.apply_theme(self._palette())

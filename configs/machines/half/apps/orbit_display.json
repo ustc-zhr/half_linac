@@ -1,0 +1,4 @@
+{
+  "bpms": ["BPM01", "BPM02", "BPM03", "BPM04", "BPM05", "BPM06", "BPM07", "BPM08", "BPM09", "BPM10", "BPM11", "BPM12", "BPM13", "BPM14", "BPM15", "BPM16", "BPM17", "BPM18", "BPM19", "BPM20", "BPM21", "BPM22", "BPM23", "BPM24", "BPM25", "BPM26", "BPM27", "BPM28", "BPM29", "BPM30", "BPM31", "BPM32", "BPM33", "BPM34", "BPM35", "BPM36", "BPM37", "BPM38", "BPM39", "BPM40", "BPM41", "BPM42", "BPM43"],
+  "refresh_interval_s": 1.0
+}

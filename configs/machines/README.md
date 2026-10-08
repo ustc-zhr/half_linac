@@ -14,6 +14,7 @@ configs/machines/<machine_id>/
     real.json
   apps/
     orbit_correct.json
+    orbit_display.json
     beam_monitor.json
     bba.json
     emit_measure.json
@@ -167,6 +168,11 @@ owner has approved publication. Do not make applications read Word, Excel, subst
 other reference files at runtime. The maintained runtime sources of truth remain `machine.json`,
 `control_backends/*.json`, `apps/*.json`, and `model_backends/*.json`.
 
+`apps/orbit_display.json` owns the ordered BPM subset shown by Orbit Display and its
+default refresh interval. Keep orbit-correction BPM/corrector choices in
+`apps/orbit_correct.json`; the two applications do not share workflow configuration. Older
+profiles without `orbit_display.json` retain the inferred all-BPM, 1-second defaults.
+
 ## Legacy `profile.json`
 
 Do not add or maintain `profile.json` for active machines.
@@ -184,6 +190,7 @@ the directory layout above. When `machine.json` exists, it is the runtime entryp
 - Add at least one `control_backends/<backend>.json`
 - Add `apps/orbit_correct.json` only when the inferred BPM/XCOR/YCOR lists or runtime
   defaults are not enough
+- Add `apps/orbit_display.json` to select an explicit display BPM order/subset or refresh interval
 
 2. Add VM support
 

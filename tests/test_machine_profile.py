@@ -39,6 +39,7 @@ from half_linac.src.shared.machine_profile import (
     list_elements,
     load_app_context,
     load_model_snapshot,
+    load_orbit_display_workflow,
     load_profile,
     load_solenoid_centering_workflow,
     real_commissioning_status,
@@ -369,6 +370,27 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(context.control_backend.name, "real")
         self.assertIsNone(context.model_backend)
         self.assertIsNone(context.orbit_workflow)
+        self.assertIsNotNone(context.orbit_display_workflow)
+        assert context.orbit_display_workflow is not None
+        self.assertEqual(len(context.orbit_display_workflow.bpms), 43)
+        self.assertEqual(context.orbit_display_workflow.bpms[0], "BPM01")
+        self.assertEqual(context.orbit_display_workflow.bpms[-1], "BPM43")
+        self.assertEqual(context.orbit_display_workflow.refresh_interval_s, 1.0)
+
+    def test_orbit_display_workflow_validation(self):
+        profile = load_profile("half")
+        invalid_workflows = (
+            ({"bpms": ["BPM01", "BPM01"], "refresh_interval_s": 1.0}, "duplicate"),
+            ({"bpms": ["XC00"], "refresh_interval_s": 1.0}, "non-BPM"),
+            ({"bpms": ["BPM01"], "refresh_interval_s": 0.05}, "at least 0.1"),
+        )
+        for workflow, expected_message in invalid_workflows:
+            with self.subTest(expected_message=expected_message):
+                configured_profile = replace(
+                    profile, workflows={"orbit_display": workflow}
+                )
+                with self.assertRaisesRegex(MachineProfileError, expected_message):
+                    load_orbit_display_workflow(configured_profile, "real")
 
     def test_load_beam_monitor_app_context(self):
         context = load_app_context("beam_monitor")
@@ -2076,7 +2098,12 @@ class MachineProfileTests(unittest.TestCase):
             real_commissioning_status(profile, "orbit_correct"),
             REAL_STATUS_COMMISSIONED,
         )
-        self.assertEqual(real_commissioning_status(profile, "orbit_display"), REAL_STATUS_READ_ONLY)
+        self.assertEqual(
+            real_commissioning_status(profile, "orbit_display"), REAL_STATUS_READ_ONLY
+        )
+        self.assertEqual(
+            real_commissioning_status(orbit_display_context), REAL_STATUS_READ_ONLY
+        )
         self.assertEqual(real_commissioning_status(profile, "beam_monitor"), REAL_STATUS_COMMISSIONED)
         self.assertEqual(real_commissioning_status(profile, "bba"), REAL_STATUS_WRITE_SMOKE_PASSED)
         self.assertEqual(
@@ -2233,6 +2260,15 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(vm_workflow.local_segments[2].parent_usedline, "ALL_DUMP")
         self.assertEqual(vm_workflow.local_segments[2].end_ids, ("PRF04",))
         self.assertIsNone(orbit_display_context.orbit_workflow)
+        self.assertIsNotNone(orbit_display_context.orbit_display_workflow)
+        assert orbit_display_context.orbit_display_workflow is not None
+        self.assertEqual(
+            orbit_display_context.orbit_display_workflow.bpms,
+            (
+                "BPM01", "BPM02", "BPM03", "BPM04", "BPM05",
+                "BPM06", "BPM07", "BPM08", "BPM09", "BPM10",
+            ),
+        )
         self.assertTrue(
             str(orbit_runtime_paths["response_matrix_dir"]).endswith(
                 "src/apps/orbit_correct/runtime/irfel/vm/matrices"
@@ -4067,6 +4103,14 @@ class MachineProfileTests(unittest.TestCase):
         self.assertEqual(profile.machine.id, "orbitonly")
         assert orbit_context.orbit_workflow is not None
         self.assertIsNone(orbit_display_context.orbit_workflow)
+        self.assertIsNotNone(orbit_display_context.orbit_display_workflow)
+        assert orbit_display_context.orbit_display_workflow is not None
+        self.assertEqual(
+            orbit_display_context.orbit_display_workflow.bpms, ("BPM01",)
+        )
+        self.assertEqual(
+            orbit_display_context.orbit_display_workflow.refresh_interval_s, 1.0
+        )
         self.assertTrue(supported_orbit)
         self.assertIsNone(orbit_reason)
         self.assertTrue(supported_orbit_display)

@@ -1,0 +1,5 @@
+{
+  "bpms": ["BPM01", "BPM02", "BPM03", "BPM04", "BPM05", "BPM06", "BPM07", "BPM08", "BPM09", "BPM10"],
+  "refresh_interval_s": 1.0,
+  "real_status": "read_only"
+}

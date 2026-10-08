@@ -203,6 +203,12 @@ class OrbitWorkflowConfig:
 
 
 @dataclass(frozen=True)
+class OrbitDisplayWorkflowConfig:
+    bpms: tuple[str, ...]
+    refresh_interval_s: float
+
+
+@dataclass(frozen=True)
 class BBAFamilyConfig:
     name: str
     correctors: tuple[str, ...]
@@ -426,6 +432,7 @@ class AppContext:
     control_backend: ControlBackendConfig
     model_backend: ModelBackendConfig | None = None
     orbit_workflow: OrbitWorkflowConfig | None = None
+    orbit_display_workflow: OrbitDisplayWorkflowConfig | None = None
     bba_workflow: BBAWorkflowConfig | None = None
     emit_measure_workflow: EmitMeasureWorkflowConfig | None = None
     solenoid_centering_workflow: SolenoidCenteringWorkflowConfig | None = None
