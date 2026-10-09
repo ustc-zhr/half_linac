@@ -30,7 +30,7 @@
       "order": 1,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM02",
@@ -39,7 +39,7 @@
       "order": 2,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM03",
@@ -48,7 +48,7 @@
       "order": 3,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM04",
@@ -57,7 +57,7 @@
       "order": 4,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM05",
@@ -66,7 +66,7 @@
       "order": 5,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM06",
@@ -75,7 +75,7 @@
       "order": 6,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM07",
@@ -84,7 +84,7 @@
       "order": 7,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM08",
@@ -93,7 +93,7 @@
       "order": 8,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM09",
@@ -102,7 +102,7 @@
       "order": 9,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM10",
@@ -111,7 +111,7 @@
       "order": 10,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM11",
@@ -120,7 +120,7 @@
       "order": 11,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM12",
@@ -129,7 +129,7 @@
       "order": 12,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM13",
@@ -138,7 +138,7 @@
       "order": 13,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM14",
@@ -147,7 +147,7 @@
       "order": 14,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM15",
@@ -156,7 +156,7 @@
       "order": 15,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM16",
@@ -165,7 +165,7 @@
       "order": 16,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM17",
@@ -174,7 +174,7 @@
       "order": 17,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM18",
@@ -183,7 +183,7 @@
       "order": 18,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM19",
@@ -192,7 +192,7 @@
       "order": 19,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM20",
@@ -201,7 +201,7 @@
       "order": 20,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM21",
@@ -210,7 +210,7 @@
       "order": 21,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM22",
@@ -219,7 +219,7 @@
       "order": 22,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM23",
@@ -228,7 +228,7 @@
       "order": 23,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM24",
@@ -237,7 +237,7 @@
       "order": 24,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM25",
@@ -246,7 +246,7 @@
       "order": 25,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM26",
@@ -255,7 +255,7 @@
       "order": 26,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM27",
@@ -264,7 +264,7 @@
       "order": 27,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM28",
@@ -273,7 +273,7 @@
       "order": 28,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM29",
@@ -282,7 +282,7 @@
       "order": 29,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM30",
@@ -291,7 +291,7 @@
       "order": 30,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM31",
@@ -300,7 +300,7 @@
       "order": 31,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM32",
@@ -309,7 +309,7 @@
       "order": 32,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM33",
@@ -318,7 +318,7 @@
       "order": 33,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM34",
@@ -327,7 +327,7 @@
       "order": 34,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM35",
@@ -336,7 +336,7 @@
       "order": 35,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM36",
@@ -345,7 +345,7 @@
       "order": 36,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM37",
@@ -354,7 +354,7 @@
       "order": 37,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM38",
@@ -363,7 +363,7 @@
       "order": 38,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM39",
@@ -372,7 +372,7 @@
       "order": 39,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM40",
@@ -381,7 +381,7 @@
       "order": 40,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM41",
@@ -390,7 +390,7 @@
       "order": 41,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM42",
@@ -399,7 +399,7 @@
       "order": 42,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "BPM43",
@@ -408,7 +408,7 @@
       "order": 43,
       "tags": ["orbit", "bba"],
       "limits": {},
-      "logical_channels": ["x", "y"]
+      "logical_channels": ["x", "y", "sum"]
     },
     {
       "id": "SM01-DX",
