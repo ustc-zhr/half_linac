@@ -2342,6 +2342,13 @@
       "note": "Energy spread"
     },
     {
+      "name": "PRF02_energy_spread_sigma",
+      "pv_name": "IN:BD:PRF02:H:sigma",
+      "readback": "IN:BD:PRF02:H:sigma",
+      "group": "energy-spectrum",
+      "note": "Energy spread (sigma)"
+    },
+    {
       "name": "PRF03_sigx",
       "pv_name": "IN:BD:PRF03:H:SIZE",
       "readback": "IN:BD:PRF03:H:SIZE",
@@ -2594,6 +2601,13 @@
       "readback": "IN:BD:ENY:H:E",
       "group": "energy-spectrum",
       "note": "Energy deviation"
+    },
+    {
+      "name": "ENY_energy_spread_sigma",
+      "pv_name": "IN:BD:ENY:H:sigma",
+      "readback": "IN:BD:ENY:H:sigma",
+      "group": "energy-spectrum",
+      "note": "Energy spread (sigma)"
     },
     {
       "name": "ENY_energy_spread",
