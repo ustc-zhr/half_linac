@@ -407,6 +407,7 @@ class EngineWorker(QObject):
             "eval_id": self._eval_count,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "status": normalized["status"],
+            "feasible": bool(normalized["feasible"]),
             "x_values": self._x_to_dict(x),
             "objective_value": float(scalar_for_display) if scalar_for_display is not None else None,
             "objective_values": objective_values.tolist(),

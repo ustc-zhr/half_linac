@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -488,25 +489,139 @@ class ResultsController:
             table.setItem(i, 1, QTableWidgetItem(str(x)))
             table.setItem(i, 2, QTableWidgetItem(str(y)))
 
-    def on_history_row_clicked(self, row) -> None:
-        if row >= len(self.window.state.eval_history):
-            return
+    @staticmethod
+    def _evaluation_record_for_row(table, row: int) -> dict[str, Any] | None:
+        if table is None or row < 0 or row >= table.rowCount():
+            return None
+        item = table.item(row, 0)
+        record = item.data(Qt.UserRole) if item is not None else None
+        return copy.deepcopy(record) if isinstance(record, dict) else None
 
-        x, y, c = self.window.state.eval_history[row]
+    @staticmethod
+    def evaluation_is_feasible(record: dict[str, Any]) -> bool:
+        status = str(record.get("status", "")).strip().lower()
+        successful_statuses = {"ok", "success", "successful", "feasible", "completed"}
+        if status and status not in successful_statuses:
+            return False
+        if "feasible" in record:
+            return str(record["feasible"]).strip().lower() in {"true", "1", "yes"}
+        return status in successful_statuses
 
+    def selected_evaluation_record(self) -> dict[str, Any] | None:
+        table = getattr(self.window.run_ui, "tableWidget_recent", None)
+        if table is None or not self.view.qobj_alive(table):
+            return None
+        selection_model = table.selectionModel()
+        selected_rows = selection_model.selectedRows() if selection_model is not None else []
+        if not selected_rows:
+            return None
+        return self._evaluation_record_for_row(table, int(selected_rows[0].row()))
+
+    def on_history_selection_changed(self) -> None:
+        record = self.selected_evaluation_record()
+        details = self.window.run_ui.plainTextEdit_selectedEvaluation
+        if record is not None:
+            self.show_evaluation_details(record)
+            details.setPlainText("\n".join(
+                f"{field}: {value}" for field, value in self._evaluation_detail_rows(record)
+            ))
+        else:
+            details.clear()
+        self.sync_evaluation_write_button()
+
+    def on_history_row_clicked(self, row, table=None) -> None:
+        record = self._evaluation_record_for_row(table, row)
+        if record is None:
+            if row < 0 or row >= len(self.window.state.eval_history):
+                return
+            x, y, c = self.window.state.eval_history[row]
+            record = {
+                "eval_id": row,
+                "x_values": x,
+                "objective_value": y,
+                "constraint_values": c,
+            }
+        self.show_evaluation_details(record)
+
+    def _evaluation_detail_rows(self, record: dict[str, Any]) -> list[tuple[str, str]]:
+        x_values = record.get("x_values") or {}
+        objective = record.get("objective_values")
+        if objective is None:
+            objective = record.get("objective_value")
+        if objective is None:
+            objective = record.get("objective_summary", "--")
+        constraints = record.get("constraint_values")
+        if constraints is None:
+            constraints = record.get("constraint_summary", "--")
+        evaluation = str(record.get("eval_id", "--"))
+        timestamp = str(record.get("timestamp", "")).strip()
+        status = str(record.get("status", "")).strip()
+        evaluation_meta = " · ".join(value for value in (evaluation, timestamp, status) if value)
+        return [
+            ("Evaluation", evaluation_meta),
+            ("Point", ", ".join(f"{name}={value!r}" for name, value in x_values.items())
+             if isinstance(x_values, dict) else str(x_values)),
+            ("Objective", str(objective)),
+            ("Constraints", str(constraints)),
+            ("Feasible", "yes" if self.evaluation_is_feasible(record) else "no"),
+        ]
+
+    def show_evaluation_details(self, record: dict[str, Any]) -> None:
         inspector = self.window.ui.tableWidget_solutionInspector
         if not self.view.qobj_alive(inspector):
             return
 
-        task_name = (self.window.state.latest_task_snapshot or {}).get(
-            "task_name",
-            self.window.task_ui.lineEdit_taskName.text().strip() or "untitled_task",
+        inspector.setRowCount(0)
+        for field, value in self._evaluation_detail_rows(record):
+            row = inspector.rowCount()
+            inspector.insertRow(row)
+            self.view.set_table_row(inspector, row, [field, value])
+
+    @staticmethod
+    def _evaluation_values_complete(record: dict[str, Any] | None, task: dict[str, Any]) -> bool:
+        values = record.get("x_values") if record else None
+        names = [
+            str(row.get("Name", "")).strip() or f"x{i}"
+            for i, row in enumerate(TaskService._enabled_rows(task.get("variables", [])))
+        ]
+        if not isinstance(values, dict) or not names or set(values) != set(names):
+            return False
+        try:
+            return all(math.isfinite(float(values[name])) for name in names)
+        except (TypeError, ValueError, OverflowError):
+            return False
+
+    def sync_evaluation_write_button(self) -> None:
+        button = getattr(self.window.run_ui, "pushButton_setSelectedEvaluation", None)
+        if button is None or not self.view.qobj_alive(button):
+            return
+        record = self.selected_evaluation_record()
+        task = self.window.state.latest_task_snapshot or self.view.current_task()
+        active = self.window.state.run.phase in {"Running", "Stopping", "Abort Requested", "Restoring"}
+        active = active or self.window.run_session.is_running()
+        is_online = self.view.is_online_task(task)
+        archived = self.window.state.viewing_archived_run
+        feasible = bool(record and self.evaluation_is_feasible(record))
+        complete = bool(
+            self.window.state.latest_task_snapshot and self.window.state.latest_task_identity
+            and self._evaluation_values_complete(record, task)
         )
-        inspector.setRowCount(4)
-        self.view.set_table_row(inspector, 0, ["Run", task_name])
-        self.view.set_table_row(inspector, 1, ["Point", str(x)])
-        self.view.set_table_row(inspector, 2, ["Objective", str(y)])
-        self.view.set_table_row(inspector, 3, ["Constraints", str(c)])
+        button.setEnabled(bool(record and is_online and not active and not archived and feasible and complete))
+        if not record:
+            tooltip = "Select one evaluation first."
+        elif archived:
+            tooltip = "Archived runs are read-only and cannot write to the machine."
+        elif not is_online:
+            tooltip = "Writing to machine is available for Online EPICS tasks."
+        elif active:
+            tooltip = "Stop or finish the current run before writing setpoints."
+        elif not feasible:
+            tooltip = "This evaluation is infeasible or has no successful evaluation status."
+        elif not complete:
+            tooltip = "The selected evaluation needs a run snapshot and complete finite variable values."
+        else:
+            tooltip = "Write the selected evaluation's variables to the machine."
+        button.setToolTip(tooltip)
 
     def append_recent_eval(self, payload: dict) -> None:
         eval_id = str(payload.get("eval_id", ""))
@@ -523,9 +638,15 @@ class ResultsController:
         c_summary = str(payload.get("constraint_summary", ""))
 
         for table in self.view.living_tables(self.window.run_ui.tableWidget_recent):
+            record = copy.deepcopy(payload)
             row = table.rowCount()
             table.insertRow(row)
             self.view.set_table_row(table, row, [eval_id, timestamp, status, x_summary, y_summary, c_summary])
+            for column in range(table.columnCount()):
+                item = table.item(row, column)
+                if item is not None:
+                    item.setData(Qt.UserRole, record)
+        self.sync_evaluation_write_button()
 
     def summarize_x_values(self, x_values: dict | None) -> str:
         if not x_values:
@@ -973,7 +1094,7 @@ class ResultsController:
             "objective_summary": payload.get("objective_summary", ""),
             "constraint_values": payload.get("constraint_values", []),
             "constraint_summary": payload.get("constraint_summary", ""),
-            "feasible": str(payload.get("status", "")).lower() != "infeasible",
+            "feasible": self.evaluation_is_feasible(payload),
             "feasibility_ratio": payload.get("feasibility_ratio"),
             "best_value": payload.get("best_value"),
             "best_changed": payload.get("best_changed", False),

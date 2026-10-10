@@ -1,3 +1,4 @@
+import copy
 import sys
 
 import pytest
@@ -266,6 +267,56 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
     current = window._current_task()
     assert window.machine_controller.ensure_machine_ready_for_online(current)
     assert window.machine_ui.label_statusValue.text() == "Passed"
+
+    window.task_ui.comboBox_algorithm.setCurrentText("TuRBO")
+    QApplication.processEvents()
+
+    assert window.machine_ui.label_statusValue.text() == "Passed"
+    assert window.state.machine_check_identity
+    assert window.machine_controller.ensure_machine_ready_for_online(window._current_task())
+
+    non_connection_change = copy.deepcopy(current)
+    non_connection_change["mode"] = "Offline"
+    non_connection_change["algorithm"] = "TuRBO"
+    non_connection_change["variables"][0]["Name"] = "Renamed Q1"
+    non_connection_change["objectives"][0]["Name"] = "Renamed Transmission"
+    non_connection_change["machine"]["mapping"][0]["Name"] = "Renamed Q2"
+    non_connection_change["machine"]["write_policy"] = "pvlink"
+    non_connection_change["machine"]["readback_check"] = False
+    non_connection_change["machine"]["write_links"] = [
+        {"Enabled": "Y", "Source Index": "1", "Target PV": ""}
+    ]
+    assert (
+        window.machine_controller.machine_check_identity(non_connection_change)
+        == window.state.machine_check_identity
+    )
+
+    for connection_change in (
+        {**current, "machine": {**current["machine"], "ca_address": "10.0.0.2"}},
+        {
+            **current,
+            "machine": {
+                **current["machine"],
+                "mapping": [
+                    {**current["machine"]["mapping"][0], "Readback": "TEST:Q2:RB:NEW"},
+                    *current["machine"]["mapping"][1:],
+                ],
+            },
+        },
+        {
+            **current,
+            "machine": {
+                **current["machine"],
+                "write_links": [
+                    {"Enabled": "Y", "Source Index": "0", "Target PV": "TEST:FOLLOW"}
+                ],
+            },
+        },
+    ):
+        assert (
+            window.machine_controller.machine_check_identity(connection_change)
+            != window.state.machine_check_identity
+        )
 
     window.machine_ui.tableWidget_mapping.item(0, 2).setText("TEST:Q2:NEW")
     QApplication.processEvents()

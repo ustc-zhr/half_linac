@@ -158,6 +158,46 @@ class RunController:
             f"Best point written to machine.\nBest={best_text}",
         )
 
+    def set_selected_evaluation_to_machine(self) -> None:
+        record = self.window.results_controller.selected_evaluation_record()
+        if not record:
+            QMessageBox.information(
+                self.window,
+                "Set Selected Evaluation",
+                "Select one evaluation first.",
+            )
+            return
+        if not self.window.results_controller.evaluation_is_feasible(record):
+            QMessageBox.warning(
+                self.window,
+                "Set Selected Evaluation",
+                "The selected evaluation is infeasible or has no successful evaluation status.",
+            )
+            return
+
+        values = record.get("x_values")
+        if not isinstance(values, Mapping) or not values:
+            QMessageBox.critical(
+                self.window,
+                "Set Selected Evaluation Failed",
+                "The selected evaluation has no complete writable variable values.",
+            )
+            return
+        if not self._write_snapshot_values(
+            action_title="Set Selected Evaluation",
+            values=values,
+        ):
+            return
+
+        eval_id = record.get("eval_id", "--")
+        self.view.log_pv(f"Selected evaluation written to machine: eval_id={eval_id}, values={values}")
+        self.view.log_event(f"Evaluation {eval_id} written to machine.")
+        QMessageBox.information(
+            self.window,
+            "Set Selected Evaluation",
+            f"Evaluation {eval_id} was written to the machine.",
+        )
+
     def set_selected_pareto_to_machine(self) -> None:
         solution = self.window.results_controller.selected_pareto_solution()
         if not solution:

@@ -2343,8 +2343,8 @@
     },
     {
       "name": "PRF02_energy_spread_sigma",
-      "pv_name": "IN:BD:PRF02:H:sigma",
-      "readback": "IN:BD:PRF02:H:sigma",
+      "pv_name": "IN:BD:PRF02:H:Sigma",
+      "readback": "IN:BD:PRF02:H:Sigma",
       "group": "energy-spectrum",
       "note": "Energy spread (sigma)"
     },
@@ -2604,8 +2604,8 @@
     },
     {
       "name": "ENY_energy_spread_sigma",
-      "pv_name": "IN:BD:ENY:H:sigma",
-      "readback": "IN:BD:ENY:H:sigma",
+      "pv_name": "IN:BD:ENY:H:Sigma",
+      "readback": "IN:BD:ENY:H:Sigma",
       "group": "energy-spectrum",
       "note": "Energy spread (sigma)"
     },

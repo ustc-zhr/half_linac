@@ -103,6 +103,34 @@ def test_engine_worker_preserves_numeric_constraints_for_live_plots(tmp_path):
     assert normalized["constraint_summary"] == "c0=-0.200000, c1=0.400000"
 
 
+@pytest.mark.parametrize("feasible", [True, False])
+def test_evaluation_history_preserves_explicit_feasibility(tmp_path, feasible):
+    import json
+    from types import SimpleNamespace
+    from gotacc.gui.views.controllers.results_controller import ResultsController
+
+    worker = EngineWorker(_offline_task(tmp_path))
+    worker._variable_names = ["x0"]
+    evaluations = []
+    worker.sig_evaluation.connect(evaluations.append)
+    worker._evaluate_one(np.asarray([0.25]), lambda _x: {
+        "objectives": [1.25], "constraints": [], "status": "ok", "feasible": feasible,
+    })
+    assert len(evaluations) == 1
+    payload = evaluations[0]
+    assert payload["status"] == "ok"
+    assert payload["feasible"] is feasible
+
+    window = SimpleNamespace(
+        state=SimpleNamespace(latest_task_snapshot={"run_archive_dir": str(tmp_path)}),
+        view_adapter=SimpleNamespace(),
+    )
+    ResultsController(window, canvas_class=None).archive_evaluation(payload)
+    archived = json.loads((tmp_path / "evaluations.jsonl").read_text(encoding="utf-8"))
+    assert archived["feasible"] is feasible
+    assert archived["x_values"] == {"x0": 0.25}
+
+
 def test_population_live_hypervolume_emits_only_new_generations(tmp_path):
     worker = EngineWorker(_offline_task(tmp_path))
     optimizer = type("PopulationOptimizer", (), {"hypervolume_history": [0.1]})()

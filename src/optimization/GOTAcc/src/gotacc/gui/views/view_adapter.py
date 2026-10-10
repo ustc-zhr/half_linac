@@ -91,6 +91,7 @@ class GuiViewAdapter:
         recent_table = self.window.run_ui.tableWidget_recent
         if self.qobj_alive(recent_table):
             recent_table.setRowCount(0)
+        self.window.results_controller.on_history_selection_changed()
 
     def clear_run_events(self) -> None:
         self.window.run_ui.plainTextEdit_events.clear()

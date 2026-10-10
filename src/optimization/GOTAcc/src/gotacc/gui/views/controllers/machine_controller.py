@@ -641,43 +641,34 @@ class MachineController:
     def machine_check_identity(task: dict) -> dict:
         machine = task.get("machine", {}) or {}
 
-        def enabled_names(field: str) -> list[str]:
-            return [
-                str(row.get("Name", "")).strip()
-                for row in TaskService._enabled_rows(task.get(field, []))
-            ]
-
+        # Tie readiness to the checked EPICS connection contract, not to
+        # optimizer/task semantics. Names, algorithms, bounds, policies, and
+        # write-link sources are validated elsewhere and do not change which
+        # channels were checked.
         mapping = [
             {
                 "role": str(row.get("Role", "")).strip().lower(),
-                "name": str(row.get("Name", "")).strip(),
                 "pv": str(row.get("PV Name", "")).strip(),
                 "readback": str(row.get("Readback", "")).strip(),
             }
             for row in machine.get("mapping", []) or []
-            if any(str(value).strip() for value in row.values())
+            if str(row.get("PV Name", "")).strip()
+            or str(row.get("Readback", "")).strip()
         ]
-        mapping.sort(key=lambda row: (row["role"], row["name"], row["pv"], row["readback"]))
+        mapping.sort(key=lambda row: (row["role"], row["pv"], row["readback"]))
         write_links = [
-            {
-                "source": str(row.get("Source Index", "")).strip(),
-                "target": str(row.get("Target PV", "")).strip(),
-            }
+            {"target": str(row.get("Target PV", "")).strip()}
             for row in machine.get("write_links", []) or []
-            if not str(row.get("Enabled", "")).strip()
-            or TaskService._is_enabled(row.get("Enabled", ""))
+            if (
+                not str(row.get("Enabled", "")).strip()
+                or TaskService._is_enabled(row.get("Enabled", ""))
+            )
+            and str(row.get("Target PV", "")).strip()
         ]
-        write_links.sort(key=lambda row: (row["source"], row["target"]))
+        write_links.sort(key=lambda row: row["target"])
         return {
-            "mode": str(task.get("mode", "")).strip(),
-            "algorithm": str(task.get("algorithm", "")).strip(),
-            "variables": enabled_names("variables"),
-            "objectives": enabled_names("objectives"),
-            "constraints": enabled_names("constraints"),
             "mapping": mapping,
             "write_links": write_links,
-            "write_policy": str(machine.get("write_policy", "none")).strip().lower(),
-            "readback_check": bool(machine.get("readback_check", False)),
             "ca_address": str(machine.get("ca_address", "")).strip(),
         }
 
@@ -692,7 +683,8 @@ class MachineController:
         self.window.state.machine_check_identity.clear()
         self.window.state.last_test_read_status = "Stale"
         self.window.state.last_test_read_detail = (
-            "PV configuration changed after the most recent check. Run PV Check again."
+            "Configured PVs, readback links, write targets, or CA address changed "
+            "after the most recent check. Run PV Check again."
         )
         self.set_machine_status("Stale")
         return True

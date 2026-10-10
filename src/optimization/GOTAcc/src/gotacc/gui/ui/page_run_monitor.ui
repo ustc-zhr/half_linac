@@ -92,6 +92,13 @@
        <property name="title"><string>Evaluation History</string></property>
        <layout class="QVBoxLayout" name="verticalLayout_table">
         <item><widget class="QTableWidget" name="tableWidget_recent"><column><property name="text"><string>Eval ID</string></property></column><column><property name="text"><string>Timestamp</string></property></column><column><property name="text"><string>Status</string></property></column><column><property name="text"><string>X Summary</string></property></column><column><property name="text"><string>Y Summary</string></property></column><column><property name="text"><string>Constraint Summary</string></property></column></widget></item>
+        <item><widget class="QPlainTextEdit" name="plainTextEdit_selectedEvaluation"><property name="maximumHeight"><number>140</number></property><property name="readOnly"><bool>true</bool></property><property name="placeholderText"><string>Select one evaluation to inspect its complete values.</string></property></widget></item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_historyActions">
+          <item><spacer name="horizontalSpacer_historyActions"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+          <item><widget class="QPushButton" name="pushButton_setSelectedEvaluation"><property name="enabled"><bool>false</bool></property><property name="machineWrite" stdset="0"><bool>true</bool></property><property name="text"><string>Set Selected to Machine</string></property></widget></item>
+         </layout>
+        </item>
        </layout>
       </widget>
      </widget>

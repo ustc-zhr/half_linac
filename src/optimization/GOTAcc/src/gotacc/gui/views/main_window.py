@@ -1541,6 +1541,12 @@ class MainWindow(QMainWindow):
         self.run_ui.pushButton_abortRestore.clicked.connect(self.abort_and_restore)
         self.run_ui.pushButton_restoreInitial.clicked.connect(self.restore_initial_to_machine)
         self.run_ui.pushButton_setBest.clicked.connect(self.set_best_to_machine)
+        self.run_ui.pushButton_setSelectedEvaluation.clicked.connect(
+            self.set_selected_evaluation_to_machine
+        )
+        self.run_ui.tableWidget_recent.itemSelectionChanged.connect(
+            self.results_controller.on_history_selection_changed
+        )
 
         self.ui.treeWidget_runList.itemDoubleClicked.connect(self._open_selected_result_item)
         self.ui.treeWidget_runList.itemSelectionChanged.connect(self._on_results_tree_selection_changed)
@@ -1576,6 +1582,9 @@ class MainWindow(QMainWindow):
 
     def _configure_recent_eval_table(self, table) -> None:
         table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SingleSelection)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         header = table.horizontalHeader()
         widths = (46, 76, 62, 90, 72, 104)
         for idx, width in enumerate(widths):
@@ -2841,6 +2850,9 @@ class MainWindow(QMainWindow):
 
     def set_best_to_machine(self) -> None:
         self.run_controller.set_best_to_machine()
+
+    def set_selected_evaluation_to_machine(self) -> None:
+        self.run_controller.set_selected_evaluation_to_machine()
 
     def set_selected_pareto_to_machine(self) -> None:
         self.run_controller.set_selected_pareto_to_machine()

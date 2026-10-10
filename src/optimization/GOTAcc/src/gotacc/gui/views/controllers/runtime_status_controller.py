@@ -213,6 +213,7 @@ class RuntimeStatusController:
             abort_text = "Abort && Restore"
         self.window.run_ui.pushButton_abortRestore.setText(abort_text)
         self.window.run_ui.groupBox_actions.setVisible(False)
+        self.window.results_controller.sync_evaluation_write_button()
 
     def _sync_plot_tab_visibility(self, task: dict[str, Any]) -> None:
         has_constraints = bool(self._enabled_rows(task.get("constraints", [])))

@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("PyQt5")
 
-from PyQt5.QtWidgets import QApplication, QDialog
+from PyQt5.QtWidgets import QAbstractItemView, QApplication, QDialog
 from PyQt5.QtGui import QCloseEvent
 
 from gotacc.gui.services.task_service import TaskService
@@ -260,7 +260,7 @@ def test_offline_start_does_not_request_machine_write_authorization(tmp_path, mo
     assert len(window.run_session.started) == 1
 
 
-@pytest.mark.parametrize("action", ["restore", "best", "pareto"])
+@pytest.mark.parametrize("action", ["restore", "best", "evaluation", "pareto"])
 def test_changed_pv_blocks_all_result_writes_before_backend_creation(tmp_path, monkeypatch, action):
     import gotacc.gui.views.controllers.run_controller as run_controller_module
 
@@ -279,6 +279,14 @@ def test_changed_pv_blocks_all_result_writes_before_backend_creation(tmp_path, m
             "y": [2.0],
         }
     )
+    window.results_controller.selected_evaluation_record = lambda: {
+        "eval_id": 3,
+        "feasible": True,
+        "x_values": {"Q1": 1.25},
+    }
+    window.results_controller.evaluation_is_feasible = lambda record: bool(
+        record.get("feasible", True)
+    )
     warnings = []
     monkeypatch.setattr(run_controller_module.QMessageBox, "warning", lambda *_args: warnings.append(_args[-1]))
 
@@ -289,6 +297,7 @@ def test_changed_pv_blocks_all_result_writes_before_backend_creation(tmp_path, m
     {
         "restore": controller.restore_initial_to_machine,
         "best": controller.set_best_to_machine,
+        "evaluation": controller.set_selected_evaluation_to_machine,
         "pareto": controller.set_selected_pareto_to_machine,
     }[action]()
 
@@ -341,6 +350,66 @@ def test_set_best_requires_confirmation_and_uses_snapshot_mapping(tmp_path, monk
     assert _FakeDialog.kwargs[0]["mode"] == MachineWriteConfirmationDialog.EXACT_VALUES
 
 
+
+def test_set_selected_evaluation_requires_confirmation_and_uses_full_history_values(
+    tmp_path,
+    monkeypatch,
+):
+    import gotacc.gui.views.controllers.run_controller as run_controller_module
+
+    task = _online_task(tmp_path)
+    for index in range(2, 5):
+        variable = dict(task["variables"][0], Name=f"Q{index}")
+        task["variables"].append(variable)
+        task["machine"]["mapping"].append({
+            "Role": "knob", "Name": f"Q{index}",
+            "PV Name": f"TEST:Q{index}:SET", "Readback": f"TEST:Q{index}:RB",
+        })
+    task["objective_type"] = "Multi Objective"
+    task["algorithm"] = "MOBO"
+    task["objectives"].append(dict(task["objectives"][0], Name="Energy"))
+    task["machine"]["mapping"].append({
+        "Role": "objective", "Name": "Energy", "PV Name": "TEST:ENERGY", "Readback": "",
+    })
+    window, logs = _controller_window(copy.deepcopy(task))
+    window.state.latest_task_snapshot = copy.deepcopy(task)
+    window.state.latest_task_identity = TaskService.normalized_task_identity(task)
+    values = {"Q4": 0.123456789012345, "Q3": 0.5, "Q2": -1.25, "Q1": -0.75}
+    record = {"eval_id": 4, "feasible": True, "x_values": values, "objective_values": [1.0, 2.0]}
+    window.results_controller = SimpleNamespace(
+        selected_evaluation_record=lambda: record,
+        evaluation_is_feasible=lambda value: bool(value.get("feasible", True)),
+    )
+    _FakeDialog.result = QDialog.Accepted
+    _FakeDialog.tasks = []
+    _FakeDialog.kwargs = []
+    monkeypatch.setattr(run_controller_module, "MachineWriteConfirmationDialog", _FakeDialog)
+    monkeypatch.setattr(run_controller_module.QMessageBox, "information", lambda *_args: None)
+    backend = _FakeBackend()
+    monkeypatch.setattr("gotacc.interfaces.factory.build_backend", lambda _cfg: backend)
+
+    controller = RunController(window)
+    controller.set_selected_evaluation_to_machine()
+
+    assert backend.vectors == [[-0.75, -1.25, 0.5, 0.123456789012345]]
+    assert backend.closed
+    assert _FakeDialog.kwargs[0]["values"] == values
+    assert _FakeDialog.kwargs[0]["mode"] == MachineWriteConfirmationDialog.EXACT_VALUES
+    assert any("eval_id=4" in message for message in logs)
+
+    record["feasible"] = False
+    warnings = []
+    monkeypatch.setattr(
+        run_controller_module.QMessageBox,
+        "warning",
+        lambda *_args: warnings.append(_args[-1]),
+    )
+    controller.set_selected_evaluation_to_machine()
+    assert len(backend.vectors) == 1
+    assert "infeasible" in warnings[-1]
+
+
+
 def test_set_best_cancel_and_nonfinite_values_never_build_backend(tmp_path, monkeypatch):
     import gotacc.gui.views.controllers.run_controller as run_controller_module
 
@@ -370,6 +439,178 @@ def test_set_best_cancel_and_nonfinite_values_never_build_backend(tmp_path, monk
     RunController(window).set_best_to_machine()
     assert backend_calls == []
     assert "finite" in critical_messages[-1]
+
+
+def test_evaluation_history_selection_controls_machine_write(tmp_path, qapp):
+    from gotacc.gui.views.main_window import MainWindow
+
+    task = _online_task(tmp_path)
+    window = MainWindow()
+    try:
+        window.view_adapter.current_task = lambda: task
+        window.state.latest_task_snapshot = copy.deepcopy(task)
+        window.state.latest_task_identity = TaskService.normalized_task_identity(task)
+        window.state.run.phase = "Finished"
+
+        window.results_controller.append_recent_eval(
+            {
+                "eval_id": 7,
+                "timestamp": "12:00:00",
+                "status": "ok",
+                "x_values": {"Q1": 0.625},
+                "objective_value": 1.5,
+                "constraint_values": [],
+                "feasible": True,
+            }
+        )
+        table = window.run_ui.tableWidget_recent
+        table.selectRow(0)
+        qapp.processEvents()
+
+        assert table.selectionMode() == QAbstractItemView.SingleSelection
+        assert table.selectionBehavior() == QAbstractItemView.SelectRows
+        assert window.results_controller.selected_evaluation_record()["x_values"] == {"Q1": 0.625}
+        assert window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
+        assert window.run_ui.pushButton_setSelectedEvaluation.property("machineWrite") is True
+        assert window.ui.tableWidget_solutionInspector.item(0, 0).text() == "Evaluation"
+        assert window.ui.tableWidget_solutionInspector.item(1, 1).text() == "Q1=0.625"
+
+        window.state.run.phase = "Running"
+        window.runtime_status_controller.sync_run_workspace(task)
+        assert not window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
+
+        window.state.run.phase = "Finished"
+        window.results_controller.append_recent_eval(
+            {
+                "eval_id": 8,
+                "status": "infeasible",
+                "x_values": {"Q1": -0.5},
+                "objective_value": 2.0,
+                "feasible": False,
+            }
+        )
+        table.selectRow(1)
+        qapp.processEvents()
+        assert not window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
+        assert "infeasible" in window.run_ui.pushButton_setSelectedEvaluation.toolTip()
+
+        window.state.viewing_archived_run = True
+        table.selectRow(0)
+        qapp.processEvents()
+        assert not window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
+        assert "read-only" in window.run_ui.pushButton_setSelectedEvaluation.toolTip()
+    finally:
+        window.close()
+
+
+@pytest.mark.parametrize("blocked_by", [
+    "cancel", "no_selection", "infeasible", "false_string", "failed", "unknown_status",
+    "missing", "extra", "nan", "inf", "not_numeric", "archived", "offline",
+    "no_snapshot", "Running", "Stopping", "Abort Requested", "Restoring", "thread_running",
+])
+def test_selected_evaluation_blockers_never_build_backend(tmp_path, monkeypatch, blocked_by):
+    import gotacc.gui.views.controllers.run_controller as run_controller_module
+
+    task = _online_task(tmp_path)
+    if blocked_by == "offline":
+        task["mode"] = "Offline"
+        task["test_function"] = "sphere"
+    window, logs = _controller_window(task)
+    window.state.latest_task_snapshot = copy.deepcopy(task)
+    window.state.latest_task_identity = TaskService.normalized_task_identity(task)
+    record = {"eval_id": 5, "status": "ok", "feasible": True, "x_values": {"Q1": 0.5}}
+    if blocked_by == "no_selection":
+        record = None
+    elif blocked_by in {"infeasible", "false_string"}:
+        record["feasible"] = False if blocked_by == "infeasible" else "false"
+    elif blocked_by in {"failed", "unknown_status"}:
+        record["status"] = blocked_by
+    elif blocked_by == "missing":
+        record["x_values"] = {}
+    elif blocked_by == "extra":
+        record["x_values"]["Q9"] = 1.0
+    elif blocked_by in {"nan", "inf", "not_numeric"}:
+        record["x_values"]["Q1"] = "bad" if blocked_by == "not_numeric" else float(blocked_by)
+    elif blocked_by == "archived":
+        window.state.viewing_archived_run = True
+    elif blocked_by == "no_snapshot":
+        window.state.latest_task_snapshot = {}
+    elif blocked_by in {"Running", "Stopping", "Abort Requested", "Restoring"}:
+        window.state.run.phase = blocked_by
+    elif blocked_by == "thread_running":
+        window.run_session.is_running = lambda: True
+    window.results_controller = SimpleNamespace(
+        selected_evaluation_record=lambda: record,
+        evaluation_is_feasible=ResultsController.evaluation_is_feasible,
+    )
+    _FakeDialog.result = QDialog.Rejected if blocked_by == "cancel" else QDialog.Accepted
+    _FakeDialog.tasks = []
+    _FakeDialog.kwargs = []
+    monkeypatch.setattr(run_controller_module, "MachineWriteConfirmationDialog", _FakeDialog)
+    messages = []
+    for name in ("information", "warning", "critical"):
+        monkeypatch.setattr(run_controller_module.QMessageBox, name, lambda *_args: messages.append(_args[-1]))
+    backend_calls = []
+    monkeypatch.setattr("gotacc.interfaces.factory.build_backend", lambda cfg: backend_calls.append(cfg))
+
+    RunController(window).set_selected_evaluation_to_machine()
+
+    assert backend_calls == []
+    assert len(_FakeDialog.tasks) == (1 if blocked_by == "cancel" else 0)
+    assert messages or any("cancelled" in message for message in logs)
+
+
+def test_history_record_keeps_complete_precision_and_selection_after_append(tmp_path, qapp):
+    from PyQt5.QtCore import Qt
+    from gotacc.gui.views.main_window import MainWindow
+
+    window = MainWindow()
+    task = _online_task(tmp_path)
+    for index in range(2, 5):
+        task["variables"].append(dict(task["variables"][0], Name=f"Q{index}"))
+        task["machine"]["mapping"].append({
+            "Role": "knob", "Name": f"Q{index}",
+            "PV Name": f"TEST:Q{index}:SET", "Readback": f"TEST:Q{index}:RB",
+        })
+    window.view_adapter.current_task = lambda: task
+    window.state.latest_task_snapshot = copy.deepcopy(task)
+    window.state.latest_task_identity = TaskService.normalized_task_identity(task)
+    values = {"Q1": 0.0, "Q2": 0.5, "Q3": -0.5, "Q4": 0.123456789012345}
+    record = {
+        "eval_id": 7, "status": "ok", "feasible": True, "x_values": copy.deepcopy(values),
+        "objective_value": 0.0, "objective_summary": "rounded",
+        "constraint_values": [0.123456789012345], "constraint_summary": "rounded",
+    }
+    try:
+        window.results_controller.append_recent_eval(record)
+        record["x_values"]["Q4"] = 9.0
+        table = window.run_ui.tableWidget_recent
+        table.selectRow(0)
+        assert window.results_controller.selected_evaluation_record()["x_values"] == values
+        details = window.run_ui.plainTextEdit_selectedEvaluation
+        assert details.isReadOnly()
+        assert "Q4=0.123456789012345" in details.toPlainText()
+        assert "Objective: 0.0" in details.toPlainText()
+        assert "Constraints: [0.123456789012345]" in details.toPlainText()
+        assert "Q4" not in table.item(0, 3).text()
+        assert window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
+
+        window.results_controller.append_recent_eval(dict(record, eval_id=8))
+        assert window.results_controller.selected_evaluation_record()["eval_id"] == 7
+        assert "Q4=0.123456789012345" in details.toPlainText()
+        table.sortItems(0, Qt.DescendingOrder)
+        assert window.results_controller.selected_evaluation_record()["eval_id"] == 7
+
+        for invalid in ({"Q1": 0.5}, dict(values, Q9=1.0), dict(values, Q4=float("nan"))):
+            window.results_controller.append_recent_eval(dict(record, x_values=invalid))
+            table.selectRow(table.rowCount() - 1)
+            assert not window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
+        window.view_adapter.clear_recent_evaluations()
+        assert details.toPlainText() == ""
+        assert window.results_controller.selected_evaluation_record() is None
+        assert not window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
+    finally:
+        window.close()
 
 
 def test_active_run_close_is_deferred_and_restore_failure_keeps_window_open(

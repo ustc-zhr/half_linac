@@ -966,6 +966,8 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.groupBox_convergencePlot.property("plotPanel") is True
         assert window.ui.frame_plotConvergence.property("plotHost") is True
         assert window.run_ui.groupBox_table.title() == "Evaluation History"
+        assert window.run_ui.pushButton_setSelectedEvaluation.text() == "Set Selected to Machine"
+        assert not window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
         assert window.ui.widget_resultsTables.isHidden()
         window.results_controller.append_recent_eval(
             {
@@ -1005,7 +1007,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         window.state.run.phase = "Idle"
         window.state.eval_history = [({"x0": 0.25}, 1.5, {"c0": 0.0})]
         window.results_controller.on_history_row_clicked(0)
-        assert window.ui.tableWidget_solutionInspector.rowCount() == 4
+        assert window.ui.tableWidget_solutionInspector.rowCount() == 5
         assert window.ui.tableWidget_solutionInspector.item(3, 0).text() == "Constraints"
         window.state.eval_history.clear()
         window.results_controller.update_results_summary_table()
@@ -1102,6 +1104,12 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.state.hypervolume_history == [0.1, 0.25]
         assert len(window.state.eval_history) == 2
         assert window.run_ui.tableWidget_recent.rowCount() == 2
+        window.run_ui.tableWidget_recent.selectRow(1)
+        selected = window.results_controller.selected_evaluation_record()
+        assert selected["eval_id"] == 2
+        assert selected["x_values"] == evaluation_records[1]["x_values"]
+        assert "x2=0.2" in window.run_ui.plainTextEdit_selectedEvaluation.toPlainText()
+        assert not window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
         assert window.label_results_source_outcome.text() == "Archived · Finished"
 
         window.state.latest_task_snapshot = _offline_task(tmp_path)
