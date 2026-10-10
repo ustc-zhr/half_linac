@@ -540,6 +540,7 @@ class WorkbenchMixin:
                 self._model_state = state
                 if version != self._version:
                     self._version = version
+                    self.lattice_editor.set_runtime_state(state)
                     elements = occurrences(state)
                     topology = lambda values: [(v['name'], v['kind'], v['s'], v['length']) for v in values]
                     if topology(elements) != topology(self._elements):
@@ -600,6 +601,7 @@ class WorkbenchMixin:
                        self.static_err, self.err_off):
             button.setEnabled(vm and phase != 'Starting' and not busy)
         self._refresh_beam_source_availability(config_running=busy)
+        self.lattice_editor.set_editor_enabled(not busy and not self._read_error)
         self.status_panel.set_item('connection', 'Process Running' if ioc else ('Failed' if 'softioc' in self._process_failures else 'Stopped'), 'info' if ioc else 'subtle')
         self.status_panel.set_item('mode', 'Stopping' if self._stopping else phase,
                                    'danger' if phase == 'Failed' else 'info')

@@ -59,6 +59,7 @@ from half_linac.src.virtual_machine.lattice_usedline import (
     describe_runtime_usedline,
     infer_usedline_context,
 )
+from half_linac.src.virtual_machine.lattice_editor import LatticeElementEditor
 
 
 PROCESS_REFRESH_INTERVAL_MS = 1000
@@ -908,6 +909,8 @@ class myWindow(WorkbenchMixin, QMainWindow, Ui_MainWindow):
         self._populate_predefined_usedline_combo()
         self._populate_segment_combo()
         self._refresh_segment_choices()
+        self.lattice_editor = LatticeElementEditor(self.runtime, self.groupBox_2)
+        self.lattice_editor.changed.connect(self._notify)
 
         self.QDXDYvalue.setMaximumWidth(110)
         self.QK1JITTER.setMaximumWidth(110)
@@ -1303,6 +1306,8 @@ QTabWidget#configurationTabs QScrollBar::sub-line:vertical { height: 0px; }
         grid.setRowMinimumHeight(9, 14)
         grid.addWidget(self.pushButton_FULLline, 10, 0, 1, 2)
         grid.addWidget(self.lattice_note, 11, 0, 1, 2)
+        grid.setRowMinimumHeight(12, 14)
+        grid.addWidget(self.lattice_editor, 13, 0, 1, 2)
         grid.setColumnStretch(1, 1)
 
     def _update_error_action_layout(self):

@@ -98,7 +98,7 @@ class HvControlWindow(QMainWindow):
         divider = QFrame(controls); divider.setFrameShape(QFrame.VLine); divider.setStyleSheet("color:#2a3943;"); row.addWidget(divider)
         enable_label = QLabel("ENABLE", controls); enable_label.setObjectName("sectionLabel"); enable_label.setStyleSheet("font-weight:700;font-size:10px;"); row.addWidget(enable_label)
         for field, title in (("enable_1", "Modulators"), ("enable_2", "HV")):
-            button = QPushButton(f"{title}: All ON", controls)
+            button = QPushButton(f"{title}: Turn Selected ON", controls)
             button.setObjectName("toolbarAction")
             button.setEnabled(False)
             button.clicked.connect(lambda _=False, f=field: self._toggle_all(f))
@@ -228,7 +228,8 @@ class HvControlWindow(QMainWindow):
             for name, state in zip(names, states)
         )
         title = "Modulators" if field == "enable_1" else "HV"
-        button.setText(f"{title}: All {'OFF' if ready and all(state == 1.0 for state in states) else 'ON'}")
+        action = "OFF" if ready and all(state == 1.0 for state in states) else "ON"
+        button.setText(f"{title}: Turn Selected {action}")
         button.setEnabled(bool(names) and ready and self._can_write())
         button.setToolTip(f"{sum(state == 1.0 for state in states)} of {len(names)} selected ON" if ready else "Select connected modulators with valid status PVs")
 
