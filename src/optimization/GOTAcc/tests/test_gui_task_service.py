@@ -962,6 +962,13 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.splitter_convergencePlots.orientation() == Qt.Horizontal
         assert window.ui.tabWidget_resultsViews.documentMode()
         assert window.ui.groupBox_runList.maximumWidth() == 300
+        for button in (
+            window.ui.pushButton_refreshRunArchives,
+            window.ui.pushButton_loadArchivedRun,
+            window.ui.pushButton_openRunArchive,
+        ):
+            assert button.property("compact") is True
+            assert button.height() <= 30
         assert window.ui.groupBox_convergencePlot.title() == ""
         assert window.ui.groupBox_convergencePlot.property("plotPanel") is True
         assert window.ui.frame_plotConvergence.property("plotHost") is True
@@ -1035,9 +1042,17 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         )
         assert window.ui.tabWidget_resultsViews.currentWidget() is window.ui.tab_pareto
         assert window.ui.tableWidget_paretoSolutions.rowCount() == 2
+        assert (
+            window.ui.tableWidget_paretoSolutions.item(0, 2).text()
+            == "f1 = -0.2, f2 = -1.4"
+        )
         window.ui.tableWidget_paretoSolutions.selectRow(1)
         assert window.ui.tableWidget_paretoSelectionDetail.item(0, 1).text() == "1"
         assert window.ui.tableWidget_paretoSelectionDetail.item(1, 1).text() == "no"
+        assert (
+            window.ui.tableWidget_paretoSelectionDetail.item(2, 1).text()
+            == "f1 = -0.5, f2 = -0.8"
+        )
 
         archived_task = TaskService.create_run_archive(multi_task)
         archive_dir = Path(archived_task["run_archive_dir"])
@@ -1117,7 +1132,8 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         window.state.objective_dim = 1
         window.runtime_status_controller.sync_run_workspace(window.state.latest_task_snapshot)
         window.runtime_status_controller.update_runtime_labels()
-        assert window.run_ui.label_bestTitle.text() == "Best Objective"
+        assert window.run_ui.label_bestTitle.text() == "Best sphere"
+        assert window.run_ui.label_bestTitle.toolTip() == "sphere: maximize."
         assert window.run_ui.tabWidget_plots.tabText(objective_tab) == "Objective"
         window.state.run.phase = "Running"
         window.runtime_status_controller.set_run_phase("Running")

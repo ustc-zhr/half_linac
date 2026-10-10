@@ -56,12 +56,14 @@ class RunResultsPresenter:
 
         x_values = payload.get("x_values", {})
         x_text = ", ".join(f"{k}={v:.4f}" for k, v in x_values.items()) if x_values else "--"
-        objective_text = str(payload.get("objective_summary", ""))
-        if not objective_text:
-            if payload.get("objective_value") is None:
-                objective_text = "--"
-            else:
-                objective_text = f"{float(payload.get('objective_value', 0.0)):.6f}"
+        objective = payload.get("objective_values")
+        if objective is None:
+            objective = payload.get("objective_value")
+        objective_text = (
+            str(payload.get("objective_summary", "--"))
+            if objective is None
+            else self.window.results_controller.format_objective_values(objective)
+        )
 
         self.view.set_table_row(
             inspector,

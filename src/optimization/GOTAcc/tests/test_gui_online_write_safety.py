@@ -590,7 +590,7 @@ def test_history_record_keeps_complete_precision_and_selection_after_append(tmp_
         details = window.run_ui.plainTextEdit_selectedEvaluation
         assert details.isReadOnly()
         assert "Q4=0.123456789012345" in details.toPlainText()
-        assert "Objective: 0.0" in details.toPlainText()
+        assert "Objective: Transmission [mean] = 0" in details.toPlainText()
         assert "Constraints: [0.123456789012345]" in details.toPlainText()
         assert "Q4" not in table.item(0, 3).text()
         assert window.run_ui.pushButton_setSelectedEvaluation.isEnabled()

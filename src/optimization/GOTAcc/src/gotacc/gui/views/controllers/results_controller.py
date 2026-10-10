@@ -68,6 +68,9 @@ class ResultsController:
         refresh = QPushButton("Refresh", self.window.ui.groupBox_runList)
         load = QPushButton("Load Run", self.window.ui.groupBox_runList)
         open_dir = QPushButton("Open Folder", self.window.ui.groupBox_runList)
+        for button in (refresh, load, open_dir):
+            button.setProperty("compact", True)
+            button.setFixedHeight(26)
         refresh.setToolTip("Refresh archived runs from the working directory.")
         load.setToolTip("Load the selected archived run in read-only mode.")
         open_dir.setToolTip("Open the selected run directory.")
@@ -287,12 +290,17 @@ class ResultsController:
         canvas.figure.clear()
         ax = canvas.figure.add_subplot(111)
         xs = list(range(1, len(state.objective_history) + 1))
-        ax.plot(xs, state.objective_history, label="objective")
+        objective_label = self.objective_labels(1)[0]
+        if title == "Objective History":
+            title = f"{objective_label} History"
+        elif title == "Convergence":
+            title = f"{objective_label} Convergence"
+        ax.plot(xs, state.objective_history, label=objective_label)
         if state.best_history:
             ax.plot(xs, state.best_history, label="best-so-far")
         ax.set_title(title)
         ax.set_xlabel("Evaluation")
-        ax.set_ylabel("Objective")
+        ax.set_ylabel(objective_label)
         ax.grid(True, alpha=0.3)
         ax.legend()
         canvas.apply_theme_to_axes(ax)
@@ -345,7 +353,7 @@ class ResultsController:
                 label="selected",
             )
         ax.set_title(title)
-        objective_labels = self._objective_labels(2)
+        objective_labels = self.objective_labels(2)
         ax.set_xlabel(objective_labels[0])
         ax.set_ylabel(objective_labels[1])
         ax.grid(True, alpha=0.3)
@@ -390,21 +398,106 @@ class ResultsController:
         except (TypeError, ValueError):
             return []
 
-    def _objective_labels(self, count: int) -> list[str]:
-        task = self.window.state.latest_task_snapshot or self.view.current_task()
+    def objective_labels(
+        self,
+        count: int,
+        *,
+        include_direction: bool = True,
+        task: dict[str, Any] | None = None,
+    ) -> list[str]:
+        current = task or self.window.state.latest_task_snapshot or self.view.current_task()
+        online = str(current.get("mode", "")).strip().lower() == "online epics"
         labels: list[str] = []
-        for row in task.get("objectives", []) or []:
-            if not isinstance(row, dict) or not self._row_enabled(row):
+        for row in current.get("objectives", []) or []:
+            if not isinstance(row, dict) or not self._objective_row_enabled(row):
                 continue
             name = str(row.get("Name", "")).strip() or f"f{len(labels)}"
-            direction = str(row.get("Direction", "")).strip().lower()
-            suffix = "max" if direction.startswith("max") else "min" if direction.startswith("min") else ""
-            labels.append(f"{name} ({suffix})" if suffix else name)
+            if online:
+                math_op = str(row.get("Math", "mean")).strip().lower() or "mean"
+                name = f"{name} [{math_op}]"
+            if include_direction:
+                direction = str(row.get("Direction", "")).strip().lower()
+                if direction.startswith("max"):
+                    name = f"{name} ↑"
+                elif direction.startswith("min"):
+                    name = f"{name} ↓"
+            labels.append(name)
             if len(labels) >= count:
                 break
         while len(labels) < count:
             labels.append(f"f{len(labels)}")
         return labels
+
+    def format_objective_values(
+        self,
+        values: Any,
+        *,
+        task: dict[str, Any] | None = None,
+        precision: int = 6,
+    ) -> str:
+        if values is None:
+            return "--"
+        if hasattr(values, "tolist"):
+            values = values.tolist()
+        sequence = list(values) if isinstance(values, (list, tuple)) else [values]
+        if not sequence:
+            return "--"
+        labels = self.objective_labels(
+            len(sequence), include_direction=False, task=task
+        )
+        formatted = []
+        for label, value in zip(labels, sequence):
+            try:
+                value_text = f"{float(value):.{precision}g}"
+            except (TypeError, ValueError):
+                value_text = str(value)
+            formatted.append(f"{label} = {value_text}")
+        return ", ".join(formatted)
+
+    def objective_sampling_tooltip(
+        self, count: int = 1, *, task: dict[str, Any] | None = None
+    ) -> str:
+        current = task or self.window.state.latest_task_snapshot or self.view.current_task()
+        online = str(current.get("mode", "")).strip().lower() == "online epics"
+        labels = self.objective_labels(count, include_direction=False, task=current)
+        details: list[str] = []
+        label_index = 0
+        for row in current.get("objectives", []) or []:
+            if not isinstance(row, dict) or not self._objective_row_enabled(row):
+                continue
+            if label_index >= count:
+                break
+            direction = str(row.get("Direction", "")).strip().lower()
+            direction_text = (
+                "maximize" if direction.startswith("max")
+                else "minimize" if direction.startswith("min")
+                else "unspecified direction"
+            )
+            if online:
+                math_op = str(row.get("Math", "mean")).strip().lower() or "mean"
+                try:
+                    samples = max(1, int(float(row.get("Samples", 1) or 1)))
+                except (TypeError, ValueError):
+                    samples = 1
+                aggregation = (
+                    "population standard deviation (ddof=0)"
+                    if math_op == "std"
+                    else "mean"
+                )
+                details.append(
+                    f"{labels[label_index]}: {aggregation} over {samples} sample(s); "
+                    f"{direction_text}."
+                )
+            else:
+                details.append(f"{labels[label_index]}: {direction_text}.")
+            label_index += 1
+        return "\n".join(details)
+
+    @staticmethod
+    def _objective_row_enabled(row: dict[str, Any]) -> bool:
+        value = row.get("Enable", row.get("Enabled", ""))
+        text = str(value).strip().lower()
+        return not text or text in {"y", "yes", "true", "1", "on", "enabled"}
 
     def _split_pareto_points_by_feasibility(
         self, points: list[tuple[float, float]]
@@ -487,7 +580,7 @@ class ResultsController:
         for i, (x, y, _) in enumerate(self.window.state.eval_history):
             table.setItem(i, 0, QTableWidgetItem(str(i)))
             table.setItem(i, 1, QTableWidgetItem(str(x)))
-            table.setItem(i, 2, QTableWidgetItem(str(y)))
+            table.setItem(i, 2, QTableWidgetItem(self.format_objective_values(y)))
 
     @staticmethod
     def _evaluation_record_for_row(table, row: int) -> dict[str, Any] | None:
@@ -548,8 +641,16 @@ class ResultsController:
         objective = record.get("objective_values")
         if objective is None:
             objective = record.get("objective_value")
-        if objective is None:
-            objective = record.get("objective_summary", "--")
+        objective_text = (
+            str(record.get("objective_summary", "--"))
+            if objective is None
+            else self.format_objective_values(objective)
+        )
+        objective_field = (
+            "Objectives"
+            if isinstance(objective, (list, tuple)) and len(objective) > 1
+            else "Objective"
+        )
         constraints = record.get("constraint_values")
         if constraints is None:
             constraints = record.get("constraint_summary", "--")
@@ -561,7 +662,7 @@ class ResultsController:
             ("Evaluation", evaluation_meta),
             ("Point", ", ".join(f"{name}={value!r}" for name, value in x_values.items())
              if isinstance(x_values, dict) else str(x_values)),
-            ("Objective", str(objective)),
+            (objective_field, objective_text),
             ("Constraints", str(constraints)),
             ("Feasible", "yes" if self.evaluation_is_feasible(record) else "no"),
         ]
@@ -629,12 +730,10 @@ class ResultsController:
         status = str(payload.get("status", ""))
         x_values = payload.get("x_values", {})
         x_summary = ", ".join(f"{k}={v:.3f}" for k, v in list(x_values.items())[:3])
-        if payload.get("objective_summary"):
-            y_summary = str(payload.get("objective_summary"))
-        elif payload.get("objective_value") is not None:
-            y_summary = f"y0={float(payload.get('objective_value', 0.0)):.6f}"
-        else:
-            y_summary = "--"
+        objective = payload.get("objective_values")
+        if objective is None:
+            objective = payload.get("objective_value")
+        y_summary = self.format_objective_values(objective)
         c_summary = str(payload.get("constraint_summary", ""))
 
         for table in self.view.living_tables(self.window.run_ui.tableWidget_recent):
@@ -754,7 +853,7 @@ class ResultsController:
                 values = [
                     str(solution.get("index", row)),
                     "yes" if solution.get("feasible", True) else "no",
-                    self._format_vector("f", solution.get("y", [])),
+                    self.format_objective_values(solution.get("y", [])),
                     self._format_vector("c", solution.get("constraints", [])),
                     self.summarize_x_values(solution.get("x", {})),
                 ]
@@ -800,7 +899,7 @@ class ResultsController:
         rows = [
             ("Selected Pareto", str(solution.get("index", "--"))),
             ("Feasible", "yes" if solution.get("feasible", True) else "no"),
-            ("Objectives", self._format_vector("f", solution.get("y", []))),
+            ("Objectives", self.format_objective_values(solution.get("y", []))),
             ("Constraints", self._format_vector("c", solution.get("constraints", []))),
             ("Point", self.summarize_x_values(solution.get("x", {}))),
         ]
@@ -888,9 +987,17 @@ class ResultsController:
         summary = QTreeWidgetItem(["Summary", ""])
         summary.setData(0, Qt.UserRole, {"kind": "summary"})
         run_item.addChild(summary)
+        best_label = (
+            "Hypervolume"
+            if state.objective_dim > 1
+            else f"Best {self.objective_labels(1, include_direction=False)[0]}"
+        )
         summary.addChild(
             QTreeWidgetItem(
-                ["Best Value", "--" if state.run.best_value is None else f"{state.run.best_value:.6f}"]
+                [
+                    best_label,
+                    "--" if state.run.best_value is None else f"{state.run.best_value:.6f}",
+                ]
             )
         )
         summary.addChild(QTreeWidgetItem(["Best Point", self.summarize_x_values(state.latest_best_x)]))
@@ -927,6 +1034,9 @@ class ResultsController:
         latest_eval.setData(0, Qt.UserRole, {"kind": "latest_eval"})
         run_item.addChild(latest_eval)
         if state.latest_eval_payload:
+            latest_objective = state.latest_eval_payload.get("objective_values")
+            if latest_objective is None:
+                latest_objective = state.latest_eval_payload.get("objective_value")
             latest_eval.addChild(
                 QTreeWidgetItem(
                     ["Point", self.summarize_x_values(state.latest_eval_payload.get("x_values", {}))]
@@ -936,11 +1046,7 @@ class ResultsController:
                 QTreeWidgetItem(
                     [
                         "Objective",
-                        str(
-                            state.latest_eval_payload.get("objective_summary")
-                            or state.latest_eval_payload.get("objective_value")
-                            or "--"
-                        ),
+                        self.format_objective_values(latest_objective),
                     ]
                 )
             )
@@ -1012,7 +1118,14 @@ class ResultsController:
                 else state.run.phase if state.latest_task_snapshot else "--",
             )
         )
-        rows.append(("Best Value", "--" if state.run.best_value is None else f"{state.run.best_value:.6f}"))
+        best_label = (
+            "Hypervolume"
+            if state.objective_dim > 1
+            else f"Best {self.objective_labels(1, include_direction=False)[0]}"
+        )
+        rows.append(
+            (best_label, "--" if state.run.best_value is None else f"{state.run.best_value:.6f}")
+        )
         rows.append(("Best Point", self.summarize_x_values(state.latest_best_x)))
         rows.append(("History Path", state.latest_history_path or "--"))
         rows.append(("Result Images", str(len(state.latest_result_plot_paths))))

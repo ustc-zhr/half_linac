@@ -332,6 +332,66 @@ def test_pv_check_covers_current_contract_and_becomes_stale(tmp_path, window, mo
     assert not window.machine_ui.pushButton_test.isEnabled()
 
 
+
+def test_objective_display_labels_include_online_aggregation(tmp_path, window):
+    task = _online_task(tmp_path)
+    task["objectives"][0]["Samples"] = "5"
+
+    assert window.results_controller.objective_labels(1, task=task) == [
+        "Transmission [mean] ↑"
+    ]
+    assert (
+        window.results_controller.format_objective_values([0.9821], task=task)
+        == "Transmission [mean] = 0.9821"
+    )
+    assert "mean over 5 sample(s)" in window.results_controller.objective_sampling_tooltip(
+        1, task=task
+    )
+
+    window.state.latest_task_snapshot = copy.deepcopy(task)
+    window.state.objective_dim = 1
+    window.state.objective_history = [0.9, 0.9821]
+    window.state.best_history = [0.9, 0.9821]
+    window.results_controller.draw_objective_plot(
+        window.obj_canvas, title="Objective History"
+    )
+    axis = window.obj_canvas.figure.axes[0]
+    assert axis.get_ylabel() == "Transmission [mean] ↑"
+    assert axis.get_title() == "Transmission [mean] ↑ History"
+    window.runtime_status_controller.update_runtime_labels()
+    assert window.run_ui.label_bestTitle.text() == "Best Transmission [mean]"
+    assert "mean over 5 sample(s)" in window.run_ui.label_bestTitle.toolTip()
+
+    task["objectives"][0]["Math"] = "std"
+    task["objectives"][0]["Direction"] = "minimize"
+    assert window.results_controller.objective_labels(1, task=task) == [
+        "Transmission [std] ↓"
+    ]
+    tooltip = window.results_controller.objective_sampling_tooltip(1, task=task)
+    assert "population standard deviation (ddof=0)" in tooltip
+
+    offline_task = copy.deepcopy(task)
+    offline_task["mode"] = "Offline"
+    assert window.results_controller.objective_labels(1, task=offline_task) == [
+        "Transmission ↓"
+    ]
+
+
+def test_online_std_objective_requires_multiple_samples(tmp_path):
+    task = _online_task(tmp_path)
+    task["objectives"][0]["Math"] = "std"
+    task["objectives"][0]["Samples"] = "1"
+
+    valid, errors = TaskService.validate_task_data(task)
+
+    assert not valid
+    assert "Objective row 1 uses std and requires Samples >= 2." in errors
+
+    task["objectives"][0]["Samples"] = "2"
+    _valid, errors = TaskService.validate_task_data(task)
+    assert "Objective row 1 uses std and requires Samples >= 2." not in errors
+
+
 @pytest.mark.parametrize("synced", [True, False])
 def test_pv_check_does_not_require_optimizer_setup(tmp_path, window, monkeypatch, synced):
     task = _online_task(tmp_path)

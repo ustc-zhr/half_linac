@@ -1436,12 +1436,26 @@ class TaskService:
                         f"Objective row {idx} has unsupported Math value {math_op!r}. "
                         "Use mean or std."
                     )
+                elif math_op == "std":
+                    try:
+                        samples = int(float(row.get("Samples", 1) or 1))
+                    except (TypeError, ValueError):
+                        samples = 0
+                    if samples == 1:
+                        errors.append(
+                            f"Objective row {idx} uses std and requires Samples >= 2."
+                        )
             for idx, row in enumerate(enabled_constraints, start=1):
                 math_op = str(row.get("Math", "mean")).strip().lower() or "mean"
                 if math_op not in {"mean", "std"}:
                     errors.append(
                         f"Constraint row {idx} has unsupported Math value {math_op!r}. "
                         "Use mean or std."
+                    )
+                elif math_op == "std" and sample_values and min(sample_values) < 2:
+                    errors.append(
+                        f"Constraint row {idx} uses std and requires shared objective "
+                        "Samples >= 2."
                     )
         elif objective_type == "Single Objective":
             test_function = str(task.get("test_function", "")).strip().lower() or "rosenbrock"

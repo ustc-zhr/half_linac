@@ -21,9 +21,21 @@ class RuntimeStatusController:
         ss = run.elapsed_seconds % 60
         self.window.run_ui.label_elapsedValue.setText(f"{hh:02d}:{mm:02d}:{ss:02d}")
         self.update_evaluation_label()
-        task = self._task_for_run_workspace()
+        task = self.window.state.latest_task_snapshot or self._task_for_run_workspace()
         multi = self._is_multi_objective_task(task)
-        self.window.run_ui.label_bestTitle.setText("Hypervolume" if multi else "Best Objective")
+        if multi:
+            best_title = "Hypervolume"
+            best_tooltip = "Dominated objective-space volume for the current Pareto front."
+        else:
+            objective_label = self.window.results_controller.objective_labels(
+                1, include_direction=False, task=task
+            )[0]
+            best_title = f"Best {objective_label}"
+            best_tooltip = self.window.results_controller.objective_sampling_tooltip(
+                1, task=task
+            )
+        self.window.run_ui.label_bestTitle.setText(best_title)
+        self.window.run_ui.label_bestTitle.setToolTip(best_tooltip)
         if multi:
             hv = self.window.state.hypervolume_history
             self.window.run_ui.label_bestValue.setText("--" if not hv else f"{hv[-1]:.6g}")
@@ -216,16 +228,27 @@ class RuntimeStatusController:
         self.window.results_controller.sync_evaluation_write_button()
 
     def _sync_plot_tab_visibility(self, task: dict[str, Any]) -> None:
-        has_constraints = bool(self._enabled_rows(task.get("constraints", [])))
-        is_multi_objective = self._is_multi_objective_task(task)
+        display_task = self.window.state.latest_task_snapshot or task
+        has_constraints = bool(self._enabled_rows(display_task.get("constraints", [])))
+        is_multi_objective = self._is_multi_objective_task(display_task)
         objective_index = self.window.run_ui.tabWidget_plots.indexOf(self.window.run_ui.tab_obj)
         if objective_index >= 0:
             self.window.run_ui.tabWidget_plots.setTabText(
                 objective_index, "Hypervolume" if is_multi_objective else "Objective"
             )
-        self.window.run_ui.label_bestTitle.setText(
-            "Hypervolume" if is_multi_objective else "Best Objective"
-        )
+        if is_multi_objective:
+            best_title = "Hypervolume"
+            best_tooltip = "Dominated objective-space volume for the current Pareto front."
+        else:
+            objective_label = self.window.results_controller.objective_labels(
+                1, include_direction=False, task=display_task
+            )[0]
+            best_title = f"Best {objective_label}"
+            best_tooltip = self.window.results_controller.objective_sampling_tooltip(
+                1, task=display_task
+            )
+        self.window.run_ui.label_bestTitle.setText(best_title)
+        self.window.run_ui.label_bestTitle.setToolTip(best_tooltip)
 
         self._set_tab_visible(
             self.window.run_ui.tabWidget_plots,
