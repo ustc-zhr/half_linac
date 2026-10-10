@@ -159,16 +159,31 @@ def _diagnostic_rating(record, metadata, planes, quality, messages):
 
     strategy = metadata.get("scan_strategy") if isinstance(metadata, Mapping) else None
     review = False
+    required_planes = set(record.get("required_planes", ("x", "y")))
     for plane_name, plane in planes.items():
         label = plane_name.upper()
         status = str(plane.get("status", "unavailable"))
         if status != "valid":
-            reasons.append(f"{label} reconstruction status is {status}.")
-            invalid = True
+            if plane_name in required_planes:
+                reasons.append(f"{label} reconstruction status is {status}.")
+                invalid = True
+            else:
+                reasons.append(
+                    f"{label} reconstruction status is {status}; this plane was not required."
+                )
+                review = True
+            continue
         validation = plane.get("validation_status")
         if strategy == "adaptive_quality" and validation != "validated":
-            reasons.append(f"{label} adaptive validation status is {validation or 'unavailable'}.")
-            invalid = True
+            if plane_name in required_planes:
+                reasons.append(f"{label} adaptive validation status is {validation or 'unavailable'}.")
+                invalid = True
+            else:
+                reasons.append(
+                    f"{label} adaptive validation status is {validation or 'unavailable'}; "
+                    "this plane was not required."
+                )
+                review = True
         selection = plane.get("fit_selection")
         if isinstance(selection, Mapping) and selection.get("status") == "expanded_window":
             reasons.append(f"{label} fit needed points outside its preferred adaptive window.")

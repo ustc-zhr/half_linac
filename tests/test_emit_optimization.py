@@ -95,6 +95,41 @@ class SessionTests(unittest.TestCase):
         self.assertLess(scores[1], 1)
         self.assertEqual(s.best['currents']['SS01'], 4)
 
+    def test_disabled_other_plane_constraint_accepts_missing_measurement(self):
+        self.config = single_config('SS01', 1, 9, 'x', None, settle_time=0)
+
+        def measure(*_):
+            measured = result((self.device.value - 3) ** 2 + 1)
+            measured.pop('yplane')
+            return measured
+
+        def optimizer(evaluate, *_args):
+            evaluate(3.)
+
+        session = self.session(measure=measure, optimizer=optimizer)
+        self.assertEqual(session.run()['status'], 'complete')
+        self.assertTrue(session.confirmed)
+        self.assertEqual(session.baseline, {'x': 5.})
+        self.assertEqual(session.summary['baseline_difference'], {'x': 0.})
+        self.assertEqual(session.summary['other_plane_constraint'], {
+            'enabled': False, 'plane': 'y', 'limit': None, 'unit': 'mm·mrad',
+        })
+        self.assertTrue(all(record['required_planes'] == ('x',)
+                            for record in session.records))
+        self.assertTrue(all('y' not in record['values']
+                            for record in session.records if record.get('valid')))
+
+    def test_enabled_other_plane_constraint_rejects_missing_measurement(self):
+        def measure(*_):
+            measured = result(1.)
+            measured.pop('yplane')
+            return measured
+
+        session = self.session(measure=measure)
+        self.assertEqual(session.run()['status'], 'failed')
+        self.assertEqual(len(session.records), 2)
+        self.assertIn('Y measurement reconstruction', session.summary['error'])
+
     def test_constrained_bo_models_charge_and_other_plane_without_penalty(self):
         config = single_config(
             'SS01', 1, 9, 'x', 3, algorithm='cbo', bo_initial_samples=3,
@@ -127,6 +162,32 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.best['currents']['SS01'], 4)
         self.assertAlmostEqual(session.charge_baseline, 1.)
         self.assertAlmostEqual(session.charge_minimum, .95)
+        self.assertTrue(session.confirmed)
+
+    def test_constrained_bo_can_model_charge_without_other_plane(self):
+        config = single_config(
+            'SS01', 1, 9, 'x', None, algorithm='cbo', bo_initial_samples=3,
+            charge_constraint=ChargeConstraint(retention=.95),
+        )
+        evaluations = []
+
+        def optimizer(fn, low, high, initial, budget, **kwargs):
+            self.assertEqual(kwargs['constraint_bounds'], ((.95, None),))
+            self.assertEqual(kwargs['seed_observations'], (((5.,), .5, (1.,)),))
+            evaluations.append(fn(3.))
+
+        def measure(*_):
+            measured = charged_result((self.device.value - 3) ** 2 + 1)
+            measured.pop('yplane')
+            return measured
+
+        session = OptimizationSession(
+            config, self.device, measure, Path(self.temp.name) / 'cbo-charge-only',
+            optimizer=optimizer,
+        )
+        self.assertEqual(session.run()['status'], 'complete')
+        self.assertEqual(evaluations[0][1], (1.,))
+        self.assertEqual(session.best['currents']['SS01'], 3.)
         self.assertTrue(session.confirmed)
 
     def test_constrained_bo_retries_missing_charge_then_restores(self):
@@ -371,6 +432,16 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(measurement_values(plain, 'grid')['x'], 1)
         with self.assertRaisesRegex(ValueError, 'adaptive quality'):
             measurement_values(plain, 'adaptive_quality')
+
+    def test_measurement_values_can_require_only_target_plane(self):
+        target_only = result(1.)
+        target_only['yplane'] = {'status': 'invalid'}
+        self.assertEqual(
+            measurement_values(target_only, 'adaptive_quality', required_planes=('x',)),
+            {'x': 1.},
+        )
+        with self.assertRaisesRegex(ValueError, 'Y measurement reconstruction'):
+            measurement_values(target_only, 'adaptive_quality')
 
     def test_baseline_constraint_failure_prevents_search(self):
         optimizer = unittest.mock.Mock()

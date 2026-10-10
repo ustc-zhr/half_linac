@@ -11,7 +11,7 @@ from uuid import uuid4
 from PyQt5 import sip
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
-    QAbstractButton, QAbstractItemView, QComboBox, QDialog, QDoubleSpinBox,
+    QAbstractButton, QAbstractItemView, QCheckBox, QComboBox, QDialog, QDoubleSpinBox,
     QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton,
     QProgressBar, QScrollArea, QSizePolicy, QSplitter,
     QSpinBox, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
@@ -119,8 +119,11 @@ def _record_cells(record, *, include_charge=False):
             state = 'Multiple constraints exceeded'
         elif not record.get('feasible') and 'charge_limit' in failures:
             state = 'ICT01 charge limit exceeded'
+        elif record.get('feasible'):
+            state = ('Valid' if record.get('other_plane_constraint_enabled', True)
+                     else 'Valid · other plane not limited')
         else:
-            state = 'Valid' if record.get('feasible') else 'Other-plane limit exceeded'
+            state = 'Other-plane limit exceeded'
     else:
         state = record.get('error', 'Invalid' if record.get('finished_at') else 'Measuring')
     currents = record.get('currents', {})
@@ -180,10 +183,13 @@ class MeasurementDiagnosticsDialog(QDialog):
         reason.setWordWrap(True)
         layout.addWidget(reason)
 
-        constraint = (
-            ('Satisfied' if record.get('feasible') else 'Exceeded')
-            if record.get('valid') else 'Not evaluated'
-        )
+        if not record.get('other_plane_constraint_enabled', True):
+            constraint = 'Not enabled'
+        else:
+            constraint = (
+                ('Satisfied' if record.get('feasible') else 'Exceeded')
+                if record.get('valid') else 'Not evaluated'
+            )
         path = self.diagnostics.get('results_path') or self.diagnostics['archive']
         context = QLabel(
             f"Other-plane constraint: {constraint} · Archive: {path}", self)
@@ -311,10 +317,14 @@ class OptimizationRunReviewDialog(QDialog):
         valid = [record for record in self.records if record.get('valid')]
         if valid:
             for plane in ('x', 'y'):
-                self.axes.plot([record['index'] for record in valid],
-                               [record['values'][plane] for record in valid],
-                               '.-', label=plane.upper())
-            self.axes.legend(loc='upper right')
+                available = [record for record in valid
+                             if record.get('values', {}).get(plane) is not None]
+                if available:
+                    self.axes.plot([record['index'] for record in available],
+                                   [record['values'][plane] for record in available],
+                                   '.-', label=plane.upper())
+            if self.axes.lines:
+                self.axes.legend(loc='upper right')
         else:
             self.axes.text(.5, .5, 'No valid measurements in this archive',
                            ha='center', va='center', transform=self.axes.transAxes)
@@ -553,9 +563,14 @@ class OptimizationDialog(QDialog):
         self.algorithm.addItem('Constrained BO', 'cbo')
         self.algorithm.setToolTip(
             'RCDS is the default local search. BO uses expected improvement. '
-            'Constrained BO also models the other-plane and ICT01 charge limits.')
+            'Constrained BO models ICT01 charge and, when enabled, the other-plane limit.')
+        self.other_limit_enabled = QCheckBox('Enabled', self.settings)
+        self.other_limit_enabled.setChecked(True)
+        self.other_limit_enabled.setToolTip(
+            'When disabled, only the minimized plane must reconstruct successfully. '
+            'The other plane is recorded when available but is not constrained.')
         self.other_limit = QLineEdit(self.settings)
-        self.other_limit.setPlaceholderText('Required')
+        self.other_limit.setPlaceholderText('Required when enabled')
         self.other_limit.setToolTip('Upper limit for the other plane, in mm·mrad.')
         self.count = QSpinBox(self.settings)
         self.count.setRange(5, 1000)
@@ -573,7 +588,8 @@ class OptimizationDialog(QDialog):
         self.energy = QLabel(self.settings)
         fields = (
             ('Algorithm', self.algorithm), ('Minimize', self.plane),
-            ('Other-plane limit (mm·mrad)', self.other_limit),
+            ('Limit other plane', self.other_limit_enabled),
+            ('Other-plane upper limit (mm·mrad)', self.other_limit),
             ('Max. scans', self.count), ('Time budget (min)', self.minutes),
             ('Main-window energy (MeV)', self.energy), ('Solenoid settle time (s)', self.solenoid_settle),
         )
@@ -810,6 +826,7 @@ class OptimizationDialog(QDialog):
         self.table.cellDoubleClicked.connect(self.open_current_diagnostics)
         for edit in (self.other_limit,):
             edit.textChanged.connect(self.settings_changed)
+        self.other_limit_enabled.toggled.connect(self.other_limit_toggled)
         self.algorithm.currentIndexChanged.connect(self.algorithm_changed)
         self.plane.currentIndexChanged.connect(self.settings_changed)
         self.variables.itemChanged.connect(self.settings_changed)
@@ -871,6 +888,12 @@ class OptimizationDialog(QDialog):
 
     def algorithm_changed(self, *_args):
         self.update_algorithm_settings()
+        self.settings_changed()
+
+    def other_limit_toggled(self, enabled):
+        self.other_limit.setEnabled(enabled)
+        self.other_limit.setPlaceholderText(
+            'Required when enabled' if enabled else 'Not limited')
         self.settings_changed()
 
     def update_algorithm_settings(self):
@@ -1148,18 +1171,20 @@ class OptimizationDialog(QDialog):
             return
         try:
             self.check_idle()
-            try:
-                other_limit = float(self.other_limit.text().strip())
-                if not math.isfinite(other_limit) or other_limit <= 0:
-                    raise ValueError
-            except ValueError:
-                self.other_limit.setFocus()
-                self.other_limit.selectAll()
-                other_plane = 'Y' if self.plane.currentData() == 'x' else 'X'
-                raise ValueError(
-                    f'Enter a positive Other-plane limit (mm·mrad) for the {other_plane} plane '
-                    'before starting optimization.'
-                ) from None
+            other_limit = None
+            if self.other_limit_enabled.isChecked():
+                try:
+                    other_limit = float(self.other_limit.text().strip())
+                    if not math.isfinite(other_limit) or other_limit <= 0:
+                        raise ValueError
+                except ValueError:
+                    self.other_limit.setFocus()
+                    self.other_limit.selectAll()
+                    other_plane = 'Y' if self.plane.currentData() == 'x' else 'X'
+                    raise ValueError(
+                        f'Enter a positive Other-plane limit (mm·mrad) for the {other_plane} plane '
+                        'or disable the other-plane constraint before starting optimization.'
+                    ) from None
             charge_constraint = (ChargeConstraint(retention=self.charge_retention.value() / 100.0)
                                  if self.algorithm.currentData() == 'cbo' else None)
             config = OptimizationConfig(
@@ -1326,7 +1351,12 @@ class OptimizationDialog(QDialog):
             self.charge_axes = None
         self.axes.clear()
         for plane in ('x', 'y'):
-            self.axes.plot([r['index'] for r in valid], [r['values'][plane] for r in valid], '.-', label=plane.upper())
+            available = [record for record in valid
+                         if record.get('values', {}).get(plane) is not None]
+            if available:
+                self.axes.plot([record['index'] for record in available],
+                               [record['values'][plane] for record in available],
+                               '.-', label=plane.upper())
         charged = [record for record in valid if record.get('charge') is not None]
         if charged:
             self.charge_axes = self.axes.twinx()
@@ -1389,12 +1419,18 @@ class OptimizationDialog(QDialog):
         self.display_initial(initial)
         text = f'Initial currents: {self.format_currents(initial) if initial else "—"} A'
         if baseline:
-            text += f' · Baseline εnx={baseline["x"]:.4g}, εny={baseline["y"]:.4g}'
+            baseline_values = ', '.join(
+                f'εn{plane}={baseline[plane]:.4g}'
+                for plane in ('x', 'y') if plane in baseline)
+            text += f' · Baseline {baseline_values}'
         if s.charge_baseline is not None:
             text += f' · ICT01 baseline={s.charge_baseline:.4g}, minimum={s.charge_minimum:.4g} nC'
         if best:
+            best_values = ', '.join(
+                f'εn{plane}={best["values"][plane]:.4g}'
+                for plane in ('x', 'y') if plane in best['values'])
             text += (f'\nBest candidate: {self.format_currents(best["currents"])} A · '
-                     f'εnx={best["values"]["x"]:.4g}, εny={best["values"]["y"]:.4g}')
+                     f'{best_values}')
             if best.get('charge') is not None:
                 text += f' · ICT01={best["charge"]:.4g} nC'
         if 'verification_mean' in s.summary:

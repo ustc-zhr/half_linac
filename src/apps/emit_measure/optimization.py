@@ -57,7 +57,7 @@ class ChargeConstraint:
 class OptimizationConfig:
     variables: tuple[OptimizationVariable, ...]
     plane: str
-    other_limit: float
+    other_limit: float | None
     max_measurements: int = 20
     max_minutes: float = 120
     readback_tolerance: float = 0.01
@@ -81,12 +81,13 @@ class OptimizationConfig:
         if len({v.element_id for v in self.variables}) != len(self.variables):
             raise ValueError('Optimization variables must be unique.')
         if not all(math.isfinite(v) for v in (
-            self.other_limit, self.max_minutes, self.readback_tolerance,
+            self.max_minutes, self.readback_tolerance,
             self.motion_timeout, self.settle_time, self.rcds_initial_step,
             self.bo_exploration, self.bo_kappa, self.rcds_noise,
         )):
             raise ValueError('Settings must be finite.')
-        if self.other_limit <= 0:
+        if (self.other_limit is not None and
+                (not math.isfinite(self.other_limit) or self.other_limit <= 0)):
             raise ValueError('Set a positive other-plane limit.')
         if self.max_measurements < 5 or self.max_minutes <= 0:
             raise ValueError('Allow at least five measurements and a positive time budget.')
@@ -167,7 +168,7 @@ class OptimizationConfig:
         return dict(zip((v.element_id for v in self.variables), point))
 
 
-def measurement_values(result, strategy=None):
+def measurement_values(result, strategy=None, required_planes=('x', 'y')):
     """Read a completed reconstruction using the active scan strategy."""
     if not result.get('restored', False):
         raise RestoreFailure(result.get('restore_error') or 'Scan quadrupole restoration not verified.')
@@ -175,16 +176,28 @@ def measurement_values(result, strategy=None):
         if result.get('fatal'):
             raise RuntimeError(result['error'])
         raise ValueError(result['error'])
+    required = set(required_planes)
+    if not required or not required <= {'x', 'y'}:
+        raise ValueError('Required measurement planes must be X and/or Y.')
     values = {}
     for plane in ('x', 'y'):
         item = result.get(plane + 'plane', {})
         if item.get('status') != 'valid':
-            raise ValueError(f'{plane.upper()} measurement reconstruction is not valid.')
+            if plane in required:
+                raise ValueError(f'{plane.upper()} measurement reconstruction is not valid.')
+            continue
         if strategy == 'adaptive_quality' and item.get('validation_status') != 'validated':
-            raise ValueError(f'{plane.upper()} measurement did not pass adaptive quality checks.')
-        value = float(item.get('exn_raw', item.get('exn', float('nan'))))
+            if plane in required:
+                raise ValueError(f'{plane.upper()} measurement did not pass adaptive quality checks.')
+            continue
+        try:
+            value = float(item.get('exn_raw', item.get('exn', float('nan'))))
+        except (TypeError, ValueError):
+            value = float('nan')
         if not math.isfinite(value) or value <= 0:
-            raise ValueError(f'{plane.upper()} normalized emittance is not finite and positive.')
+            if plane in required:
+                raise ValueError(f'{plane.upper()} normalized emittance is not finite and positive.')
+            continue
         values[plane] = value
     return values
 
@@ -266,9 +279,16 @@ class OptimizationSession:
         self.charge_baseline = None
         self.charge_minimum = None
         self.deadline = float('inf')
+        other_plane = 'y' if config.plane == 'x' else 'x'
         self.summary = {'schema_version': 'emit_optimization_v2',
                         'variable_order': [v.element_id for v in config.variables],
                         'config': asdict(config), 'measurement': metadata or {},
+                        'other_plane_constraint': {
+                            'enabled': config.other_limit is not None,
+                            'plane': other_plane,
+                            'limit': config.other_limit,
+                            'unit': 'mm\u00b7mrad',
+                        },
                         'optimizer': config.optimizer_settings(),
                         'status': 'ready', 'restored': False, 'confirmed': False}
 
@@ -314,8 +334,17 @@ class OptimizationSession:
             index = len(self.records) + 1
             path = self.run_dir / f'measurement_{index:03d}'
             path.mkdir()
-            record = dict(index=index, stage=stage, point=current, currents=self.config.named(current), attempt=attempt + 1,
-                          archive=str(path), started_at=time.time(), valid=False)
+            other_constraint_enabled = self.config.other_limit is not None
+            required_planes = ((self.config.plane,
+                                'y' if self.config.plane == 'x' else 'x')
+                               if other_constraint_enabled else (self.config.plane,))
+            record = dict(
+                index=index, stage=stage, point=current,
+                currents=self.config.named(current), attempt=attempt + 1,
+                archive=str(path), started_at=time.time(), valid=False,
+                required_planes=required_planes,
+                other_plane_constraint_enabled=other_constraint_enabled,
+            )
             self.records.append(record)
             self.save()
             self.emit(stage, current=current)
@@ -327,7 +356,11 @@ class OptimizationSession:
             if result.get('restored'):
                 self.checkpoint()
             try:
-                values = measurement_values(result, self.summary['measurement'].get('scan_strategy'))
+                values = measurement_values(
+                    result,
+                    self.summary['measurement'].get('scan_strategy'),
+                    required_planes=required_planes,
+                )
                 charge = charge_summary = None
                 if self.config.algorithm == 'cbo':
                     charge, charge_summary = charge_measurement(result)
@@ -352,7 +385,8 @@ class OptimizationSession:
     def _update_record_feasibility(self, record):
         other_plane = 'y' if self.config.plane == 'x' else 'x'
         reasons = []
-        if record['values'][other_plane] > self.config.other_limit:
+        if (self.config.other_limit is not None and
+                record['values'][other_plane] > self.config.other_limit):
             reasons.append('other_plane_limit')
         if self.config.algorithm == 'cbo' and self.charge_minimum is not None:
             if record.get('charge', float('-inf')) < self.charge_minimum:
@@ -395,9 +429,15 @@ class OptimizationSession:
                 if 'charge_limit' in failures:
                     raise RuntimeError('Baseline ICT01 charge is unstable at the configured retention limit.')
                 raise RuntimeError('Baseline exceeds the other-plane limit.')
-            self.baseline = {p: sum(r['values'][p] for r in baseline) / 2 for p in ('x', 'y')}
+            self.baseline = {
+                plane: sum(record['values'][plane] for record in baseline) / len(baseline)
+                for plane in ('x', 'y')
+                if all(plane in record['values'] for record in baseline)
+            }
             self.summary['baseline_difference'] = {
-                p: abs(baseline[0]['values'][p] - baseline[1]['values'][p]) for p in ('x', 'y')}
+                plane: abs(baseline[0]['values'][plane] - baseline[1]['values'][plane])
+                for plane in self.baseline
+            }
 
             def evaluate(current):
                 current = self.config.point(current)
@@ -409,7 +449,9 @@ class OptimizationSession:
                 normalized = value / (value + self.baseline[self.config.plane])
                 if self.config.algorithm == 'cbo':
                     other_plane = 'y' if self.config.plane == 'x' else 'x'
-                    return normalized, (r['values'][other_plane], r['charge'])
+                    constraints = (() if self.config.other_limit is None
+                                   else (r['values'][other_plane],))
+                    return normalized, constraints + (r['charge'],)
                 return normalized if r['feasible'] else 2.0
 
             try:
@@ -420,12 +462,15 @@ class OptimizationSession:
                 )
                 if self.config.algorithm == 'cbo':
                     other_plane = 'y' if self.config.plane == 'x' else 'x'
+                    constraint_bounds = (() if self.config.other_limit is None
+                                         else ((None, self.config.other_limit),))
+                    seed_constraints = (() if self.config.other_limit is None
+                                        else (self.baseline[other_plane],))
                     self.optimizer(
                         *optimizer_args,
-                        constraint_bounds=((None, self.config.other_limit),
-                                           (self.charge_minimum, None)),
+                        constraint_bounds=constraint_bounds + ((self.charge_minimum, None),),
                         seed_observations=((self.initial, 0.5,
-                                            (self.baseline[other_plane], self.charge_baseline)),),
+                                            seed_constraints + (self.charge_baseline,)),),
                     )
                 else:
                     self.optimizer(*optimizer_args)

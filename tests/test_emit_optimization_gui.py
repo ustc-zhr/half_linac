@@ -96,6 +96,8 @@ class DialogTests(unittest.TestCase):
     def test_default_size_and_compact_command_buttons(self):
         self.assertGreaterEqual(self.dialog.width(), 1120)
         self.assertGreaterEqual(self.dialog.height(), 940)
+        self.assertTrue(self.dialog.other_limit_enabled.isChecked())
+        self.assertTrue(self.dialog.other_limit.isEnabled())
         for button in (self.dialog.read_button, self.dialog.start_button,
                        self.dialog.stop_button, self.dialog.apply_button,
                        self.dialog.restore_button):
@@ -278,6 +280,25 @@ class DialogTests(unittest.TestCase):
         self.dialog.solenoid_settle.setValue(7.)
         self.assertFalse(self.dialog.session.confirmed)
         self.assertEqual(self.dialog.session.config.settle_time, 6.5)
+        main.epics.caput.assert_not_called()
+
+    def test_other_plane_constraint_can_be_explicitly_disabled(self):
+        from half_linac.src.apps.emit_measure.optimization import OptimizationVariable
+        self.host.lineEdit_24.setText('8')
+        self.dialog.other_limit.setText('')
+        self.dialog.other_limit_enabled.setChecked(False)
+        self.assertFalse(self.dialog.other_limit.isEnabled())
+        self.assertEqual(self.dialog.other_limit.placeholderText(), 'Not limited')
+        paras = Mock(scan_metadata={}, background_image=None)
+        with patch.object(
+                self.dialog, 'selected_variables',
+                return_value=(OptimizationVariable('SS01', 1, 9),)), \
+             patch.object(self.host, 'optimization_parameters', return_value=paras), \
+             patch.object(self.dialog, 'launch'):
+            self.dialog.start()
+        self.assertIsNone(self.dialog.session.config.other_limit)
+        self.assertFalse(
+            self.dialog.session.summary['other_plane_constraint']['enabled'])
         main.epics.caput.assert_not_called()
 
     def test_algorithm_settings_are_dynamic_and_bo_default_tracks_variables(self):
@@ -604,6 +625,21 @@ class DialogTests(unittest.TestCase):
             self.assertEqual(list(line.get_ydata()), values)
         viewer.canvas.draw()
         main.epics.caput.assert_not_called()
+
+    def test_archive_review_accepts_target_plane_only_records(self):
+        records = [
+            {'index': 1, 'valid': True, 'feasible': True,
+             'other_plane_constraint_enabled': False, 'values': {'x': 3.}},
+            {'index': 2, 'valid': True, 'feasible': True,
+             'other_plane_constraint_enabled': False, 'values': {'x': 2.}},
+        ]
+        viewer = OptimizationRunReviewDialog({'records': records}, '/tmp/run', self.dialog)
+        self.addCleanup(viewer.close)
+        self.assertEqual(len(viewer.axes.lines), 1)
+        self.assertEqual(viewer.axes.lines[0].get_label(), 'X')
+        self.assertEqual(list(viewer.axes.lines[0].get_ydata()), [3., 2.])
+        self.assertIn('not limited', viewer.table.item(0, 4).text())
+        viewer.canvas.draw()
 
     def test_archive_review_without_valid_measurements(self):
         for records in ([], [{'index': 1, 'valid': False}]):

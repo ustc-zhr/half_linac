@@ -87,6 +87,23 @@ class OptimizationDiagnosticsTests(unittest.TestCase):
         diagnostic = load_measurement_diagnostics(self.record, run_dir=self.run_dir)
         self.assertEqual(diagnostic["rating"], "Invalid")
 
+    def test_unrequired_other_plane_failure_is_review_not_invalid(self):
+        self.record.update(
+            required_planes=["x"],
+            other_plane_constraint_enabled=False,
+            values={"x": 0.4},
+        )
+        self.metadata["fit_summary"]["leastSquares"]["yplane"] = {
+            "status": "invalid",
+            "validation_status": "failed",
+        }
+        metadata_path = self.run_dir / "measurement_001" / "latest" / "metadata.json"
+        metadata_path.write_text(json.dumps(self.metadata), encoding="utf-8")
+        diagnostic = load_measurement_diagnostics(self.record, run_dir=self.run_dir)
+        self.assertEqual(diagnostic["rating"], "Review")
+        self.assertTrue(any("not required" in reason
+                            for reason in diagnostic["reasons"]))
+
     def test_run_loader_validates_schema(self):
         archive = self.run_dir / "optimization.json"
         archive.write_text(json.dumps({
