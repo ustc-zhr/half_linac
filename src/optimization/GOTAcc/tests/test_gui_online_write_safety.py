@@ -309,7 +309,11 @@ def test_changed_pv_blocks_all_result_writes_before_backend_creation(tmp_path, m
 class _FakeBackend:
     def __init__(self):
         self.vectors = []
+        self.policy_states = []
         self.closed = False
+
+    def load_write_policy_state(self, state):
+        self.policy_states.append(copy.deepcopy(state))
 
     def _apply_setpoints(self, vector):
         self.vectors.append(list(vector))
@@ -349,6 +353,96 @@ def test_set_best_requires_confirmation_and_uses_snapshot_mapping(tmp_path, monk
     assert _FakeDialog.kwargs[0]["values"] == {"Q1": 1.5}
     assert _FakeDialog.kwargs[0]["mode"] == MachineWriteConfirmationDialog.EXACT_VALUES
 
+
+
+
+def test_archived_delta_link_set_best_restores_state_and_previews_derived_value(
+    tmp_path,
+    monkeypatch,
+):
+    import gotacc.gui.views.controllers.run_controller as run_controller_module
+
+    task = _online_task(tmp_path)
+    task["machine"]["write_policy"] = "delta_link"
+    task["machine"]["write_links"] = [
+        {
+            "Source Index": "Q1",
+            "Target PV": "TEST:FOLLOW:SET",
+            "Target Readback": "TEST:FOLLOW:RB",
+            "Scale": "1.0",
+            "Readback Tol": "0.01",
+            "Enabled": "True",
+        }
+    ]
+    policy_state = {
+        "policy": "delta_link",
+        "version": 1,
+        "rules": [
+            {
+                "source_index": 0,
+                "target_pv": "TEST:FOLLOW:SET",
+                "target_readback_pv": "TEST:FOLLOW:RB",
+                "scale": 1.0,
+                "readback_tol": 0.01,
+            }
+        ],
+        "source_initial": [0.0],
+        "target_initial": [10.0],
+    }
+    window, _logs = _controller_window(copy.deepcopy(task))
+    window.state.latest_task_snapshot = copy.deepcopy(task)
+    window.state.latest_task_identity = TaskService.normalized_task_identity(task)
+    window.state.latest_write_policy_state = copy.deepcopy(policy_state)
+    window.state.latest_best_x = {"Q1": 1.5}
+    window.state.viewing_archived_run = True
+    window.ui = SimpleNamespace(label_statusBestValue=SimpleNamespace(text=lambda: "2.0"))
+    _FakeDialog.result = QDialog.Accepted
+    _FakeDialog.tasks = []
+    _FakeDialog.kwargs = []
+    monkeypatch.setattr(run_controller_module, "MachineWriteConfirmationDialog", _FakeDialog)
+    monkeypatch.setattr(run_controller_module.QMessageBox, "information", lambda *_args: None)
+    backend = _FakeBackend()
+    monkeypatch.setattr("gotacc.interfaces.factory.build_backend", lambda _cfg: backend)
+
+    RunController(window).set_best_to_machine()
+
+    assert backend.policy_states == [policy_state]
+    assert backend.vectors == [[1.5]]
+    assert _FakeDialog.kwargs[0]["linked_values"] == [
+        {
+            "source_index": 0,
+            "target_pv": "TEST:FOLLOW:SET",
+            "target_readback_pv": "TEST:FOLLOW:RB",
+            "scale": 1.0,
+            "readback_tol": 0.01,
+            "value": 11.5,
+        }
+    ]
+
+
+def test_machine_write_dialog_lists_delta_link_derived_values(tmp_path, qapp):
+    task = _online_task(tmp_path)
+    dialog = MachineWriteConfirmationDialog(
+        task,
+        mode=MachineWriteConfirmationDialog.EXACT_VALUES,
+        action_title="Set Best",
+        values={"Q1": 1.5},
+        linked_values=[
+            {
+                "source_index": 0,
+                "target_pv": "TEST:FOLLOW:SET",
+                "target_readback_pv": "TEST:FOLLOW:RB",
+                "value": 11.5,
+            }
+        ],
+    )
+    try:
+        assert dialog.table.rowCount() == 2
+        assert dialog.table.item(1, 0).text() == "delta_link ← Q1"
+        assert dialog.table.item(1, 1).text() == "TEST:FOLLOW:SET"
+        assert dialog.table.item(1, 3).text() == "11.5"
+    finally:
+        dialog.close()
 
 
 def test_set_selected_evaluation_requires_confirmation_and_uses_full_history_values(

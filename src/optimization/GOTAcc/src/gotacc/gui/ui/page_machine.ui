@@ -69,7 +69,7 @@
          <item row="0" column="0"><widget class="QLabel" name="label_readbackCheck"><property name="text"><string>Readback Check</string></property></widget></item>
          <item row="0" column="1">
           <layout class="QHBoxLayout" name="horizontalLayout_readbackCheck">
-           <item><widget class="QCheckBox" name="checkBox_readbackCheck"><property name="text"><string>Verify knob readback after write</string></property></widget></item>
+           <item><widget class="QCheckBox" name="checkBox_readbackCheck"><property name="text"><string>Verify knob and linked PV readback after write</string></property></widget></item>
            <item><spacer name="horizontalSpacer_readbackCheck"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeType"><enum>QSizePolicy::Fixed</enum></property><property name="sizeHint" stdset="0"><size><width>12</width><height>20</height></size></property></spacer></item>
            <item><widget class="QLabel" name="label_readbackTol"><property name="text"><string>Tolerance</string></property></widget></item>
            <item><widget class="QDoubleSpinBox" name="doubleSpinBox_readbackTol"><property name="minimumSize"><size><width>130</width><height>0</height></size></property><property name="maximumSize"><size><width>160</width><height>16777215</height></size></property><property name="decimals"><number>8</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>999999999.000000000000000</double></property><property name="singleStep"><double>0.000001000000000</double></property><property name="value"><double>0.000001000000000</double></property></widget></item>
@@ -339,7 +339,7 @@
          </item>
         </layout>
        </item>
-       <item><widget class="QTableWidget" name="tableWidget_writeLinks"><column><property name="text"><string>Source Index</string></property></column><column><property name="text"><string>Target PV</string></property></column><column><property name="text"><string>Enabled</string></property></column></widget></item>
+       <item><widget class="QTableWidget" name="tableWidget_writeLinks"><column><property name="text"><string>Source Index</string></property></column><column><property name="text"><string>Target PV</string></property></column><column><property name="text"><string>Target Readback</string></property></column><column><property name="text"><string>Scale</string></property></column><column><property name="text"><string>Readback Tol</string></property></column><column><property name="text"><string>Enabled</string></property></column></widget></item>
       </layout>
      </widget>
     </widget>

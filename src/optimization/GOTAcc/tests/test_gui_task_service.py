@@ -1094,6 +1094,8 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
                     "objective_dim": 2,
                     "best_value": None,
                     "best_x": {},
+                    "initial_x": {"x0": 0.1, "x1": 0.2, "x2": 0.3},
+                    "write_policy_state": {"policy": "delta_link", "version": 1},
                     "pareto_solutions": [
                         {
                             "index": 0,
@@ -1117,6 +1119,8 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.state.viewing_archived_run
         assert window.state.run.eval_count == 2
         assert window.state.hypervolume_history == [0.1, 0.25]
+        assert window.state.latest_initial_x == {"x0": 0.1, "x1": 0.2, "x2": 0.3}
+        assert window.state.latest_write_policy_state == {"policy": "delta_link", "version": 1}
         assert len(window.state.eval_history) == 2
         assert window.run_ui.tableWidget_recent.rowCount() == 2
         window.run_ui.tableWidget_recent.selectRow(1)

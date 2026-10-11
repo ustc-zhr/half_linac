@@ -815,3 +815,32 @@ def test_bounds_tool_previews_exact_plan_before_apply(tmp_path, window, monkeypa
     finally:
         controller._bounds_dialog = None
         dialog.close()
+
+
+def test_delta_link_gui_rows_build_declarative_policy_kwargs(tmp_path):
+    task = _online_task(tmp_path)
+    task["machine"]["write_policy"] = "delta_link"
+    task["machine"]["write_links"] = [
+        {
+            "Source Index": "Q1",
+            "Target PV": "TEST:FOLLOW:SET",
+            "Target Readback": "TEST:FOLLOW:RB",
+            "Scale": "-2.5",
+            "Readback Tol": "0.03",
+            "Enabled": "True",
+        }
+    ]
+
+    task_cfg = TaskService.build_task_config(task)
+    kwargs = task_cfg.backend.kwargs["write_policy_kwargs"]
+    assert kwargs == {
+        "links": [
+            {
+                "source_index": 0,
+                "target_pv": "TEST:FOLLOW:SET",
+                "target_readback_pv": "TEST:FOLLOW:RB",
+                "scale": -2.5,
+                "readback_tol": 0.03,
+            }
+        ]
+    }

@@ -182,18 +182,26 @@ class RuntimeStatusController:
         online_task = self._is_online_task(task)
         multi_objective = self._is_multi_objective_task(task)
         archived = self.window.state.viewing_archived_run
+        machine = (task.get("machine", {}) or {})
+        archived_writable = (
+            not archived
+            or (
+                str(machine.get("write_policy", "none")).lower() == "delta_link"
+                and bool(self.window.state.latest_write_policy_state)
+            )
+        )
         abort_visible = phase_active and online_task
         abort_enabled = online_task and (running or stopping)
         restore_visible = (
             not active
             and online_task
-            and not archived
+            and archived_writable
             and bool(self.window.state.latest_initial_x)
         )
         set_best_visible = (
             not active
             and online_task
-            and not archived
+            and archived_writable
             and not multi_objective
             and bool(self.window.state.latest_best_x)
         )

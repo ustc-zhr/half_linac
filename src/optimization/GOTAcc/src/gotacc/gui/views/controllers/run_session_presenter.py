@@ -49,6 +49,9 @@ class RunSessionPresenter:
         initial_x = payload.get("initial_x")
         if isinstance(initial_x, dict) and initial_x:
             self.window.state.latest_initial_x = dict(initial_x)
+        policy_state = payload.get("write_policy_state")
+        if isinstance(policy_state, dict) and policy_state:
+            self.window.state.latest_write_policy_state = dict(policy_state)
 
         if state in {"Running", "Abort Requested", "Restoring"}:
             run.phase = state

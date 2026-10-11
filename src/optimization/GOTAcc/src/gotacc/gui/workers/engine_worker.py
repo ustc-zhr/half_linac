@@ -125,6 +125,11 @@ class EngineWorker(QObject):
             backend = build_backend(backend_task_cfg)
             self._attach_policy_event_sink(backend)
             x0 = np.asarray(backend.init_knob_value(), dtype=float).reshape(-1)
+            write_policy_state = (
+                backend.export_write_policy_state()
+                if hasattr(backend, "export_write_policy_state")
+                else None
+            )
             bounds = resolve_bounds(task_cfg, x0)
             self._variable_names = list(task_cfg.backend.kwargs.get("variable_names", [])) or [f"x{i}" for i in range(len(x0))]
             self._constraint_bounds = list(task_cfg.optimizer.kwargs.get("constraint_bounds", []) or [])
@@ -179,6 +184,7 @@ class EngineWorker(QObject):
                     "best_value": None,
                     "feasibility_ratio": None,
                     "initial_x": self._x_to_dict(x0),
+                    "write_policy_state": write_policy_state,
                 }
             )
 
@@ -292,6 +298,7 @@ class EngineWorker(QObject):
                 "pareto_feasible": pareto_feasible,
                 "pareto_constraints": pareto_constraints,
                 "hypervolume_history": hypervolume_history,
+                "write_policy_state": write_policy_state,
             }
             self.sig_finished.emit(payload)
         except Exception as exc:  # pragma: no cover - runtime protection

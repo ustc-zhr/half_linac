@@ -27,7 +27,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -66,6 +66,29 @@ class BaseWritePolicy:
 
     def apply(self, backend: "EpicsObjective", x: np.ndarray) -> None:
         raise NotImplementedError
+
+    def capture_initial(self, backend: "EpicsObjective", initial_x: np.ndarray) -> None:
+        """Capture policy-specific initial state. Stateless policies do nothing."""
+        return None
+
+    def export_state(self) -> dict[str, Any] | None:
+        """Return JSON-serializable runtime state when the policy needs it."""
+        return None
+
+    def load_state(self, state: Mapping[str, Any]) -> None:
+        """Restore runtime state. Stateless policies reject unexpected state."""
+        if state:
+            raise ValueError(f"{type(self).__name__} does not accept runtime state")
+
+    def linked_readback_expectations(
+        self,
+        backend: "EpicsObjective",
+        x: np.ndarray,
+    ) -> list[tuple[str, float, float]]:
+        return []
+
+    def preview_linked_setpoints(self, x: np.ndarray) -> list[dict[str, Any]]:
+        return []
 
 
 class DefaultWritePolicy(BaseWritePolicy):
@@ -113,6 +136,218 @@ class EqualWritePolicy(BaseWritePolicy):
                     f"for x of length {len(x)}"
                 )
             backend._caput(target_pv, float(x[src_idx]))
+
+
+@dataclass(frozen=True)
+class DeltaLinkRule:
+    source_index: int
+    target_pv: str
+    target_readback_pv: str
+    scale: float = 1.0
+    readback_tol: float | None = None
+
+    def fingerprint(self) -> dict[str, Any]:
+        return {
+            "source_index": self.source_index,
+            "target_pv": self.target_pv,
+            "target_readback_pv": self.target_readback_pv,
+            "scale": self.scale,
+            "readback_tol": self.readback_tol,
+        }
+
+
+class DeltaLinkWritePolicy(BaseWritePolicy):
+    """Keep linked PV changes proportional to a source knob's change."""
+
+    STATE_VERSION = 1
+
+    def __init__(self, links: Sequence[Mapping[str, Any]] | None = None) -> None:
+        raw_links = list(links or [])
+        if not raw_links:
+            raise ValueError("DeltaLinkWritePolicy requires at least one link")
+
+        rules: list[DeltaLinkRule] = []
+        for index, raw in enumerate(raw_links):
+            if not isinstance(raw, Mapping):
+                raise TypeError(f"delta_link links[{index}] must be a mapping")
+            if "source_index" not in raw:
+                raise ValueError(f"delta_link links[{index}] requires source_index")
+            raw_source_index = raw["source_index"]
+            try:
+                source_index = int(raw_source_index)
+            except (TypeError, ValueError) as exc:
+                raise TypeError(
+                    f"delta_link links[{index}].source_index must be an integer"
+                ) from exc
+            if isinstance(raw_source_index, bool):
+                raise TypeError(
+                    f"delta_link links[{index}].source_index must be an integer"
+                )
+            if isinstance(raw_source_index, float) and not raw_source_index.is_integer():
+                raise TypeError(
+                    f"delta_link links[{index}].source_index must be an integer"
+                )
+            target_pv = str(raw.get("target_pv", "")).strip()
+            if not target_pv:
+                raise ValueError(f"delta_link links[{index}].target_pv cannot be empty")
+            target_readback_pv = str(raw.get("target_readback_pv", "")).strip() or target_pv
+            try:
+                scale = float(raw.get("scale", 1.0))
+            except (TypeError, ValueError) as exc:
+                raise TypeError(f"delta_link links[{index}].scale must be numeric") from exc
+            if not np.isfinite(scale):
+                raise ValueError(f"delta_link links[{index}].scale must be finite")
+
+            raw_tol = raw.get("readback_tol")
+            if raw_tol in {None, ""}:
+                readback_tol = None
+            else:
+                try:
+                    readback_tol = float(raw_tol)
+                except (TypeError, ValueError) as exc:
+                    raise TypeError(
+                        f"delta_link links[{index}].readback_tol must be numeric"
+                    ) from exc
+                if not np.isfinite(readback_tol) or readback_tol < 0:
+                    raise ValueError(
+                        f"delta_link links[{index}].readback_tol must be finite and non-negative"
+                    )
+            rules.append(
+                DeltaLinkRule(
+                    source_index=source_index,
+                    target_pv=target_pv,
+                    target_readback_pv=target_readback_pv,
+                    scale=scale,
+                    readback_tol=readback_tol,
+                )
+            )
+
+        targets = [rule.target_pv for rule in rules]
+        if len(set(targets)) != len(targets):
+            raise ValueError("delta_link target_pv values must be unique")
+
+        self.rules = rules
+        self._source_initial: np.ndarray | None = None
+        self._target_initial: np.ndarray | None = None
+
+    def _fingerprint(self) -> list[dict[str, Any]]:
+        return [rule.fingerprint() for rule in self.rules]
+
+    def _validate_backend(self, backend: "EpicsObjective", x: np.ndarray) -> None:
+        knob_pvs = set(backend.knobs_pvnames)
+        for rule in self.rules:
+            if rule.source_index < 0 or rule.source_index >= len(x):
+                raise IndexError(
+                    f"DeltaLinkWritePolicy: source index {rule.source_index} out of range "
+                    f"for x of length {len(x)}"
+                )
+            if rule.target_pv in knob_pvs:
+                raise ValueError(
+                    f"delta_link target PV {rule.target_pv!r} is also a knob setpoint PV"
+                )
+
+    def capture_initial(self, backend: "EpicsObjective", initial_x: np.ndarray) -> None:
+        if self._source_initial is not None:
+            return
+        x = np.asarray(initial_x, dtype=float).reshape(-1)
+        self._validate_backend(backend, x)
+        if not np.all(np.isfinite(x)):
+            raise ValueError("delta_link source initial values must be finite")
+        target_initial = backend._read_many_checked(
+            [rule.target_readback_pv for rule in self.rules],
+            what="delta_link initial target PV",
+        )
+        if not np.all(np.isfinite(target_initial)):
+            raise ValueError("delta_link target initial values must be finite")
+        self._source_initial = np.asarray(
+            [x[rule.source_index] for rule in self.rules], dtype=float
+        )
+        self._target_initial = target_initial.copy()
+
+    def _linked_values(self, x: np.ndarray) -> np.ndarray:
+        if self._source_initial is None or self._target_initial is None:
+            raise RuntimeError(
+                "delta_link baseline is unavailable; call init_knob_value() or load_write_policy_state() first"
+            )
+        vector = np.asarray(x, dtype=float).reshape(-1)
+        values = np.asarray(
+            [
+                target_initial
+                + rule.scale * (vector[rule.source_index] - source_initial)
+                for rule, source_initial, target_initial in zip(
+                    self.rules, self._source_initial, self._target_initial
+                )
+            ],
+            dtype=float,
+        )
+        if not np.all(np.isfinite(values)):
+            raise ValueError("delta_link derived target values must be finite")
+        return values
+
+    def apply(self, backend: "EpicsObjective", x: np.ndarray) -> None:
+        vector = np.asarray(x, dtype=float).reshape(-1)
+        self._validate_backend(backend, vector)
+        if not np.all(np.isfinite(vector)):
+            raise ValueError("delta_link knob values must be finite")
+        linked_values = self._linked_values(vector)
+        pvnames = [*backend.knobs_pvnames, *(rule.target_pv for rule in self.rules)]
+        values = [*vector.tolist(), *linked_values.tolist()]
+        backend._caput_many(pvnames, values)
+
+    def linked_readback_expectations(
+        self,
+        backend: "EpicsObjective",
+        x: np.ndarray,
+    ) -> list[tuple[str, float, float]]:
+        vector = np.asarray(x, dtype=float).reshape(-1)
+        linked_values = self._linked_values(vector)
+        knob_tol = backend._resolved_readback_tol(vector)
+        return [
+            (
+                rule.target_readback_pv,
+                float(value),
+                float(
+                    rule.readback_tol
+                    if rule.readback_tol is not None
+                    else knob_tol[rule.source_index]
+                ),
+            )
+            for rule, value in zip(self.rules, linked_values)
+        ]
+
+    def preview_linked_setpoints(self, x: np.ndarray) -> list[dict[str, Any]]:
+        linked_values = self._linked_values(np.asarray(x, dtype=float).reshape(-1))
+        return [
+            {**rule.fingerprint(), "value": float(value)}
+            for rule, value in zip(self.rules, linked_values)
+        ]
+
+    def export_state(self) -> dict[str, Any] | None:
+        if self._source_initial is None or self._target_initial is None:
+            return None
+        return {
+            "policy": "delta_link",
+            "version": self.STATE_VERSION,
+            "rules": self._fingerprint(),
+            "source_initial": self._source_initial.tolist(),
+            "target_initial": self._target_initial.tolist(),
+        }
+
+    def load_state(self, state: Mapping[str, Any]) -> None:
+        if not isinstance(state, Mapping):
+            raise TypeError("delta_link runtime state must be a mapping")
+        if state.get("policy") != "delta_link" or state.get("version") != self.STATE_VERSION:
+            raise ValueError("Unsupported delta_link runtime state")
+        if state.get("rules") != self._fingerprint():
+            raise ValueError("delta_link runtime state does not match the configured rules")
+        source_initial = np.asarray(state.get("source_initial", []), dtype=float).reshape(-1)
+        target_initial = np.asarray(state.get("target_initial", []), dtype=float).reshape(-1)
+        if len(source_initial) != len(self.rules) or len(target_initial) != len(self.rules):
+            raise ValueError("delta_link runtime state has invalid baseline lengths")
+        if not np.all(np.isfinite(source_initial)) or not np.all(np.isfinite(target_initial)):
+            raise ValueError("delta_link runtime state baselines must be finite")
+        self._source_initial = source_initial.copy()
+        self._target_initial = target_initial.copy()
 
 
 # =============================================================================
@@ -761,6 +996,7 @@ class EpicsObjective(ObjectiveBackend):
         """
         knob_values = self._read_many_checked(self.knob_readback_pvnames, what="initial knob PV")
         if self.initial_knob_values is None:
+            self.write_policy.capture_initial(self, knob_values)
             self.initial_knob_values = knob_values.copy()
         return knob_values
 
@@ -807,6 +1043,36 @@ class EpicsObjective(ObjectiveBackend):
             )
         self.write_policy.apply(self, x)
 
+    def export_write_policy_state(self) -> dict[str, Any] | None:
+        return self.write_policy.export_state()
+
+    def load_write_policy_state(self, state: Mapping[str, Any]) -> None:
+        self.write_policy.load_state(state)
+
+    def preview_linked_setpoints(
+        self, x: np.ndarray | Sequence[float]
+    ) -> list[dict[str, Any]]:
+        vector = np.asarray(x, dtype=float).reshape(-1)
+        if len(vector) != len(self.knobs_pvnames):
+            raise ValueError(
+                f"Setpoint dimension mismatch: got {len(vector)} value(s), "
+                f"expected {len(self.knobs_pvnames)} knob(s)."
+            )
+        return self.write_policy.preview_linked_setpoints(vector)
+
+    def _resolved_readback_tol(self, target_x: np.ndarray) -> np.ndarray:
+        target = np.asarray(target_x, dtype=float).reshape(-1)
+        if self.readback_tol is None:
+            return np.zeros_like(target)
+        tol = np.asarray(self.readback_tol, dtype=float)
+        if tol.ndim == 0:
+            return np.full_like(target, float(tol))
+        if tol.shape != target.shape:
+            raise ValueError(
+                "readback_tol must be a scalar or an array with the same length as knobs"
+            )
+        return tol
+
     def _check_readback(self, target_x: np.ndarray) -> None:
         """
         可选 readback 检查：
@@ -815,16 +1081,7 @@ class EpicsObjective(ObjectiveBackend):
         rb = self._read_many_checked(self.knob_readback_pvnames, what="knob readback")
         target_x = np.asarray(target_x, dtype=float).reshape(-1)
 
-        if self.readback_tol is None:
-            tol = np.zeros_like(target_x)
-        else:
-            tol = np.asarray(self.readback_tol, dtype=float)
-            if tol.ndim == 0:
-                tol = np.full_like(target_x, float(tol))
-            elif tol.shape != target_x.shape:
-                raise ValueError(
-                    "readback_tol must be a scalar or an array with the same length as knobs"
-                )
+        tol = self._resolved_readback_tol(target_x)
 
         diff = np.abs(rb - target_x)
         ok = np.all(diff <= tol)
@@ -837,6 +1094,23 @@ class EpicsObjective(ObjectiveBackend):
                 f"abs diff = {diff}\n"
                 f"tol      = {tol}"
             )
+
+        linked = self.write_policy.linked_readback_expectations(self, target_x)
+        if linked:
+            linked_pvs = [item[0] for item in linked]
+            linked_target = np.asarray([item[1] for item in linked], dtype=float)
+            linked_tol = np.asarray([item[2] for item in linked], dtype=float)
+            linked_rb = self._read_many_checked(linked_pvs, what="delta_link readback")
+            linked_diff = np.abs(linked_rb - linked_target)
+            if not np.all(linked_diff <= linked_tol):
+                raise RuntimeError(
+                    "Linked PV readback check failed.\n"
+                    f"pv       = {linked_pvs}\n"
+                    f"target   = {linked_target}\n"
+                    f"readback = {linked_rb}\n"
+                    f"abs diff = {linked_diff}\n"
+                    f"tol      = {linked_tol}"
+                )
 
     def _reduce_columns(self, total: np.ndarray, math_ops: Sequence[str], *, what: str) -> np.ndarray:
         """

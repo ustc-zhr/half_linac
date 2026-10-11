@@ -207,6 +207,29 @@ sentinel value derived from the configured constraint bounds.
 
 ## Policies
 
+Online write policies are configured separately under Machine Setup -> Write
+Policy. `equal` copies a source knob value to linked PVs. `delta_link` captures
+source and target baselines at run initialization and applies
+`target = target_initial + scale * (source - source_initial)`. For example:
+
+```python
+"write_policy": "delta_link",
+"write_policy_kwargs": {
+    "links": [
+        {
+            "source_index": 0,
+            "target_pv": "TEST:Q2:SET",
+            "target_readback_pv": "TEST:Q2:RB",
+            "scale": 1.0,
+            "readback_tol": 1.0e-6,
+        }
+    ]
+}
+```
+
+The saved baseline state is rule-specific: post-run and archived-result writes
+are rejected when it is missing or does not match the current link rules.
+
 Machine Setup -> PV Mapping is the primary assignment point for objective and
 constraint policies. The page uses a compact machine-signal list with a selected
 signal detail panel. Role, name, PV, readback, group, and note are read-only

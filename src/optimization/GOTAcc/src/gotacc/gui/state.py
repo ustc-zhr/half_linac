@@ -39,6 +39,7 @@ class GuiSessionState:
     latest_eval_payload: dict[str, Any] = field(default_factory=dict)
     latest_finish_payload: dict[str, Any] = field(default_factory=dict)
     latest_initial_x: dict[str, Any] = field(default_factory=dict)
+    latest_write_policy_state: dict[str, Any] = field(default_factory=dict)
     latest_best_x: dict[str, Any] = field(default_factory=dict)
     latest_pareto_solutions: list[dict[str, Any]] = field(default_factory=list)
     selected_pareto_index: Optional[int] = None
@@ -81,6 +82,7 @@ class GuiSessionState:
         self.eval_x_history.clear()
         self.eval_y_history.clear()
         self.latest_initial_x.clear()
+        self.latest_write_policy_state.clear()
         self.latest_result_plot_paths.clear()
 
     def reset_results_snapshot(self) -> None:
@@ -90,6 +92,7 @@ class GuiSessionState:
         self.latest_eval_payload.clear()
         self.latest_finish_payload.clear()
         self.latest_initial_x.clear()
+        self.latest_write_policy_state.clear()
         self.latest_best_x.clear()
         self.latest_pareto_solutions.clear()
         self.selected_pareto_index = None

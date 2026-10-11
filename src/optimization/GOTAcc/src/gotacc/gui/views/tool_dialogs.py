@@ -76,6 +76,7 @@ class MachineWriteConfirmationDialog(QDialog):
         mode: str,
         action_title: str,
         values: dict[str, float] | None = None,
+        linked_values: list[dict] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -134,7 +135,7 @@ class MachineWriteConfirmationDialog(QDialog):
         self.table.verticalHeader().setVisible(False)
         root.addWidget(self.table, 1)
 
-        self._populate_rows(values or {})
+        self._populate_rows(values or {}, linked_values or [])
 
         budget = int(task.get("max_evaluations", 0) or 0)
         self.label_notice = QLabel(self)
@@ -175,7 +176,7 @@ class MachineWriteConfirmationDialog(QDialog):
             return
         super().keyPressEvent(event)
 
-    def _populate_rows(self, values: dict[str, float]) -> None:
+    def _populate_rows(self, values: dict[str, float], linked_values: list[dict]) -> None:
         kwargs = self.task_cfg.backend.kwargs
         variable_names = list(kwargs.get("variable_names", []))
         setpoint_pvs = list(kwargs.get("knobs_pvnames", []))
@@ -199,7 +200,7 @@ class MachineWriteConfirmationDialog(QDialog):
 
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
-        self.table.setRowCount(count)
+        self.table.setRowCount(count + (len(linked_values) if self.mode == self.EXACT_VALUES else 0))
         self.table.setMinimumHeight(100)
         self.table.setMaximumHeight(min(330, 72 + 30 * max(1, count)))
         for row, name in enumerate(variable_names):
@@ -221,6 +222,26 @@ class MachineWriteConfirmationDialog(QDialog):
                 if column == 0 or column >= 3:
                     item.setTextAlignment(Qt.AlignCenter)
                 self.table.setItem(row, column, item)
+
+        if self.mode == self.EXACT_VALUES:
+            for offset, link in enumerate(linked_values, start=count):
+                source_index = int(link["source_index"])
+                source_name = (
+                    variable_names[source_index]
+                    if 0 <= source_index < len(variable_names)
+                    else f"x[{source_index}]"
+                )
+                row_values = [
+                    f"delta_link ← {source_name}",
+                    link["target_pv"],
+                    link["target_readback_pv"],
+                    link["value"],
+                ]
+                for column, value in enumerate(row_values):
+                    item = QTableWidgetItem(str(value))
+                    if column == 0 or column >= 3:
+                        item.setTextAlignment(Qt.AlignCenter)
+                    self.table.setItem(offset, column, item)
 
         header = self.table.horizontalHeader()
         header.setStretchLastSection(True)

@@ -261,12 +261,15 @@ class RunController:
 
         state = self.window.state
         if state.viewing_archived_run:
-            QMessageBox.warning(
-                self.window,
-                action_title,
-                "Archived runs are read-only. Start the task again before writing to the machine.",
-            )
-            return None
+            archived_machine = (state.latest_task_snapshot.get("machine", {}) or {})
+            archived_policy = str(archived_machine.get("write_policy", "none")).lower()
+            if archived_policy != "delta_link" or not state.latest_write_policy_state:
+                QMessageBox.warning(
+                    self.window,
+                    action_title,
+                    "This archived run has no reusable delta_link baseline state and remains read-only.",
+                )
+                return None
         if not state.latest_task_snapshot or not state.latest_task_identity:
             QMessageBox.warning(
                 self.window,
@@ -327,6 +330,25 @@ class RunController:
             if not all(math.isfinite(value) for value in vector):
                 raise ValueError("Writable values must all be finite numbers.")
             exact_values = dict(zip(variable_names, vector))
+
+            policy_name = str(task_cfg.backend.kwargs.get("write_policy", "none")).lower()
+            policy_state = copy.deepcopy(state.latest_write_policy_state)
+            linked_values = []
+            if policy_name == "delta_link":
+                if not policy_state:
+                    raise ValueError(
+                        "The saved run has no delta_link baseline state. Run the task again before writing setpoints."
+                    )
+                from gotacc.interfaces.factory import build_write_policy
+
+                preview_policy = build_write_policy(
+                    policy_name,
+                    dict(task_cfg.backend.kwargs.get("write_policy_kwargs", {})),
+                )
+                if preview_policy is None:
+                    raise RuntimeError("delta_link policy could not be built")
+                preview_policy.load_state(policy_state)
+                linked_values = preview_policy.preview_linked_setpoints(vector)
         except Exception as exc:
             self.view.log_warning(f"{action_title} preparation failed: {exc}")
             QMessageBox.critical(self.window, f"{action_title} Failed", str(exc))
@@ -346,6 +368,7 @@ class RunController:
                 mode=MachineWriteConfirmationDialog.EXACT_VALUES,
                 action_title=action_title,
                 values=exact_values,
+                linked_values=linked_values,
                 parent=self.window,
             )
         except Exception as exc:
@@ -355,7 +378,7 @@ class RunController:
         if dialog.exec_() != QDialog.Accepted:
             self.view.log_event(f"{action_title} cancelled by operator.")
             return None
-        return task_cfg, vector
+        return task_cfg, vector, policy_state
 
     def _write_snapshot_values(
         self,
@@ -366,7 +389,7 @@ class RunController:
         prepared = self._prepare_snapshot_write(action_title=action_title, values=values)
         if prepared is None:
             return False
-        task_cfg, vector = prepared
+        task_cfg, vector, policy_state = prepared
 
         backend = None
         try:
@@ -377,6 +400,10 @@ class RunController:
             backend = build_backend(backend_task_cfg)
             if not hasattr(backend, "_apply_setpoints"):
                 raise TypeError("Current backend does not expose GUI setpoint writing support.")
+            if policy_state:
+                if not hasattr(backend, "load_write_policy_state"):
+                    raise TypeError("Current backend cannot restore write policy state.")
+                backend.load_write_policy_state(policy_state)
             backend._apply_setpoints(vector)
         except Exception as exc:
             self.view.log_warning(f"{action_title} failed: {exc}")

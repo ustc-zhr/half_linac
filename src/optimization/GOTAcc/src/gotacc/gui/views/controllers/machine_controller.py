@@ -657,7 +657,13 @@ class MachineController:
         ]
         mapping.sort(key=lambda row: (row["role"], row["pv"], row["readback"]))
         write_links = [
-            {"target": str(row.get("Target PV", "")).strip()}
+            {
+                "source": str(row.get("Source Index", "")).strip(),
+                "target": str(row.get("Target PV", "")).strip(),
+                "readback": str(row.get("Target Readback", "")).strip(),
+                "scale": str(row.get("Scale", "")).strip() or "1.0",
+                "readback_tol": str(row.get("Readback Tol", "")).strip(),
+            }
             for row in machine.get("write_links", []) or []
             if (
                 not str(row.get("Enabled", "")).strip()
@@ -665,7 +671,7 @@ class MachineController:
             )
             and str(row.get("Target PV", "")).strip()
         ]
-        write_links.sort(key=lambda row: row["target"])
+        write_links.sort(key=lambda row: (row["target"], row["source"]))
         return {
             "mapping": mapping,
             "write_links": write_links,
@@ -1616,9 +1622,10 @@ class MachineController:
             enabled = row.get("Enabled", "")
             if enabled and not TaskService._is_enabled(enabled):
                 continue
-            target_text = str(row.get("Target PV", "")).strip()
-            if target_text:
-                pvnames.append(target_text)
+            for field in ("Target PV", "Target Readback"):
+                pvname = str(row.get(field, "")).strip()
+                if pvname:
+                    pvnames.append(pvname)
         return list(dict.fromkeys(pvnames))
 
     def resolve_epics_read_pv(self, task: dict) -> str:

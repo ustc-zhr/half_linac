@@ -72,7 +72,7 @@ class ResultsController:
             button.setProperty("compact", True)
             button.setFixedHeight(26)
         refresh.setToolTip("Refresh archived runs from the working directory.")
-        load.setToolTip("Load the selected archived run in read-only mode.")
+        load.setToolTip("Load the selected archived run and its saved write-policy state.")
         open_dir.setToolTip("Open the selected run directory.")
         refresh.clicked.connect(self.populate_results_tree)
         load.clicked.connect(self.load_selected_archive)
@@ -702,16 +702,24 @@ class ResultsController:
         active = active or self.window.run_session.is_running()
         is_online = self.view.is_online_task(task)
         archived = self.window.state.viewing_archived_run
+        machine = (task.get("machine", {}) or {})
+        archived_writable = (
+            not archived
+            or (
+                str(machine.get("write_policy", "none")).lower() == "delta_link"
+                and bool(self.window.state.latest_write_policy_state)
+            )
+        )
         feasible = bool(record and self.evaluation_is_feasible(record))
         complete = bool(
             self.window.state.latest_task_snapshot and self.window.state.latest_task_identity
             and self._evaluation_values_complete(record, task)
         )
-        button.setEnabled(bool(record and is_online and not active and not archived and feasible and complete))
+        button.setEnabled(bool(record and is_online and not active and archived_writable and feasible and complete))
         if not record:
             tooltip = "Select one evaluation first."
-        elif archived:
-            tooltip = "Archived runs are read-only and cannot write to the machine."
+        elif archived and not archived_writable:
+            tooltip = "Archived runs without reusable delta_link baseline state are read-only."
         elif not is_online:
             tooltip = "Writing to machine is available for Online EPICS tasks."
         elif active:
@@ -924,10 +932,18 @@ class ResultsController:
         is_online = self.view.is_online_task(task)
         feasible = bool(solution and solution.get("feasible", True))
         archived = self.window.state.viewing_archived_run
-        button.setVisible(is_online and not archived)
-        button.setEnabled(bool(solution and feasible and is_online and not archived))
-        if archived:
-            button.setToolTip("Archived runs are read-only and cannot write to the machine.")
+        machine = (task.get("machine", {}) or {})
+        archived_writable = (
+            not archived
+            or (
+                str(machine.get("write_policy", "none")).lower() == "delta_link"
+                and bool(self.window.state.latest_write_policy_state)
+            )
+        )
+        button.setVisible(is_online and archived_writable)
+        button.setEnabled(bool(solution and feasible and is_online and archived_writable))
+        if archived and not archived_writable:
+            button.setToolTip("Archived runs without reusable delta_link baseline state are read-only.")
         elif not solution:
             button.setToolTip("Select a Pareto solution first.")
         elif not is_online:
@@ -1177,6 +1193,7 @@ class ResultsController:
         state.latest_eval_payload.clear()
         state.latest_finish_payload.clear()
         state.latest_initial_x.clear()
+        state.latest_write_policy_state.clear()
         state.latest_best_x.clear()
         state.latest_pareto_solutions.clear()
         state.selected_pareto_index = None
@@ -1314,6 +1331,8 @@ class ResultsController:
             "objective_dim": state.objective_dim,
             "best_value": state.run.best_value,
             "best_x": state.latest_best_x,
+            "initial_x": state.latest_initial_x,
+            "write_policy_state": state.latest_write_policy_state,
             "pareto_solutions": state.latest_pareto_solutions,
             "hypervolume_history": state.hypervolume_history,
             "history_path": state.latest_history_path,
@@ -1393,6 +1412,8 @@ class ResultsController:
         best_value = summary.get("best_value")
         state.run.best_value = None if best_value is None else float(best_value)
         state.latest_best_x = dict(summary.get("best_x") or {})
+        state.latest_initial_x = dict(summary.get("initial_x") or {})
+        state.latest_write_policy_state = dict(summary.get("write_policy_state") or {})
         state.latest_finish_payload = {"state": state.run.phase}
         state.latest_history_path = str(summary.get("history_path") or "")
         state.latest_plot_path = str(summary.get("plot_path") or "")

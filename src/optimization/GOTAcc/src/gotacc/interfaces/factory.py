@@ -116,6 +116,7 @@ def build_write_policy(
     当前内置支持：
         None / "none"        -> 不启用特殊写入策略
         "equal"              -> 让某个指定pv与某指定knob相等
+        "delta_link"         -> 让目标 PV 相对运行初值按比例跟随 knob 变化
     """
     if kwargs is None:
         kwargs = {}

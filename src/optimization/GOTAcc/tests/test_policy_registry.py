@@ -5,6 +5,7 @@ from gotacc.configs.validators import validate_task_config_strict
 from gotacc.interfaces.epics import (
     BPMGuardConstraintPolicy,
     CompositeObjectivePolicy,
+    DeltaLinkWritePolicy,
     EqualWritePolicy,
     FelEnergyGuardPolicy,
     ZeroGuardPolicy,
@@ -19,7 +20,7 @@ from gotacc.interfaces.policies import POLICY_REGISTRY, PolicyDefinition, Policy
 
 
 def test_builtin_policy_registry_exposes_canonical_names_aliases_and_defaults():
-    assert POLICY_REGISTRY.names("write") == ("equal",)
+    assert POLICY_REGISTRY.names("write") == ("equal", "delta_link")
     assert POLICY_REGISTRY.names("objective") == (
         "fel_energy_guard",
         "zero_guard",
@@ -70,6 +71,13 @@ def test_factory_builders_delegate_to_registry_without_changing_policy_behavior(
     write_policy = build_write_policy("xiaosesan_symmetry", {"pvlinks": [(1, "TEST:LINK")]})
     assert isinstance(write_policy, EqualWritePolicy)
     assert write_policy.extra_links == [(1, "TEST:LINK")]
+
+    delta_policy = build_write_policy(
+        "delta_link",
+        {"links": [{"source_index": 0, "target_pv": "TEST:DELTA"}]},
+    )
+    assert isinstance(delta_policy, DeltaLinkWritePolicy)
+    assert delta_policy.rules[0].scale == 1.0
 
     fel_policy = build_objective_policy("fel_energy_guard")
     assert isinstance(fel_policy, FelEnergyGuardPolicy)

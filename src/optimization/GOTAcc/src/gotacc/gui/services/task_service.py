@@ -929,17 +929,17 @@ class TaskService:
     @staticmethod
     def _build_write_policy_kwargs(task: Dict[str, Any], variable_names: List[str]) -> Dict[str, Any]:
         machine = task.get("machine", {}) or {}
+        policy_name = str(machine.get("write_policy", "none")).strip().lower()
         rows = machine.get("write_links", []) or []
         pvlinks: List[tuple[int, str]] = []
+        delta_links: List[Dict[str, Any]] = []
         for row in rows:
             enabled_text = row.get("Enabled", "")
             if enabled_text and not TaskService._is_enabled(enabled_text):
                 continue
             src_text = str(row.get("Source Index", "")).strip()
             tgt_pv = str(row.get("Target PV", "")).strip()
-            if not tgt_pv:
-                continue
-            if src_text == "":
+            if not tgt_pv or not src_text:
                 continue
             try:
                 src_idx = int(src_text)
@@ -948,8 +948,22 @@ class TaskService:
                     src_idx = variable_names.index(src_text)
                 else:
                     raise ValueError(f"Invalid write link source: {src_text!r}")
-            pvlinks.append((src_idx, tgt_pv))
-        return {"pvlinks": pvlinks}
+            if src_idx < 0 or src_idx >= len(variable_names):
+                raise ValueError(f"Invalid write link source index: {src_idx}")
+            if policy_name == "delta_link":
+                scale_text = str(row.get("Scale", "")).strip()
+                tol_text = str(row.get("Readback Tol", "")).strip()
+                link: Dict[str, Any] = {
+                    "source_index": src_idx,
+                    "target_pv": tgt_pv,
+                    "target_readback_pv": str(row.get("Target Readback", "")).strip(),
+                    "scale": 1.0 if not scale_text else float(scale_text),
+                    "readback_tol": None if not tol_text else float(tol_text),
+                }
+                delta_links.append(link)
+            else:
+                pvlinks.append((src_idx, tgt_pv))
+        return {"links": delta_links} if policy_name == "delta_link" else {"pvlinks": pvlinks}
 
     @staticmethod
     def _build_objective_policy_specs(task: Dict[str, Any]) -> List[Dict[str, Any]]:

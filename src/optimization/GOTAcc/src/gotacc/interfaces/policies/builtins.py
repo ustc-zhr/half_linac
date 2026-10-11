@@ -4,6 +4,7 @@ from typing import Any, Mapping
 
 from gotacc.interfaces.epics import (
     BPMGuardConstraintPolicy,
+    DeltaLinkWritePolicy,
     EqualWritePolicy,
     FelEnergyGuardPolicy,
     ZeroGuardPolicy,
@@ -15,6 +16,10 @@ from .sample_guard import SampleGuardConstraintPolicy, SampleGuardObjectivePolic
 
 def _build_equal_write(kwargs: Mapping[str, Any]) -> EqualWritePolicy:
     return EqualWritePolicy(extra_links=kwargs["pvlinks"])
+
+
+def _build_delta_link_write(kwargs: Mapping[str, Any]) -> DeltaLinkWritePolicy:
+    return DeltaLinkWritePolicy(links=kwargs["links"])
 
 
 def _build_fel_energy_guard(kwargs: Mapping[str, Any]) -> FelEnergyGuardPolicy:
@@ -107,6 +112,16 @@ POLICY_REGISTRY.register(
         default_kwargs={"pvlinks": None},
         factory=_build_equal_write,
         description="Write selected knob values to additional linked PVs.",
+    )
+)
+
+POLICY_REGISTRY.register(
+    PolicyDefinition(
+        name="delta_link",
+        kind="write",
+        default_kwargs={"links": []},
+        factory=_build_delta_link_write,
+        description="Keep linked PV changes proportional to source knob changes.",
     )
 )
 
