@@ -32,6 +32,10 @@ class PhaseEnergyScanLog:
         "search_low_mev",
         "search_high_mev",
         "matched_energy_mev",
+        "energy_setpoint_mev",
+        "residual_energy_mev",
+        "measurement_mode",
+        "center_lock_applied",
         "center_offset_mm",
         "brightness",
         "valid_frames",
@@ -124,7 +128,7 @@ class PhaseEnergyScanLog:
             r_squared=fit.get("r_squared"),
         )
         payload = {
-            "schema_version": "phase_energy_scan_v1",
+            "schema_version": "phase_energy_scan_v2",
             "created_at": self._timestamp(),
             **self.metadata,
             **dict(result),

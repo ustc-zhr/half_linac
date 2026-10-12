@@ -1216,9 +1216,18 @@ def _validate_basic_app_support(
             raise MachineProfileError(
                 f"{defaults_location}.measurement.beam_presence values are invalid."
             )
-        for key in ("max_correction_step_mev", "center_tolerance_mm"):
+        for key in (
+            "max_correction_step_mev",
+            "center_lock_trigger_mm",
+            "center_tolerance_mm",
+        ):
             if _expect_finite_number(center_lock.get(key), f"{defaults_location}.center_lock.{key}") <= 0:
                 raise MachineProfileError(f"{defaults_location}.center_lock.{key} must be positive.")
+        if float(center_lock["center_lock_trigger_mm"]) < float(center_lock["center_tolerance_mm"]):
+            raise MachineProfileError(
+                f"{defaults_location}.center_lock.center_lock_trigger_mm must be greater "
+                "than or equal to center_tolerance_mm."
+            )
         if _expect_int(center_lock.get("max_iterations"), f"{defaults_location}.center_lock.max_iterations") < 1:
             raise MachineProfileError(f"{defaults_location}.center_lock.max_iterations must be at least 1.")
         return

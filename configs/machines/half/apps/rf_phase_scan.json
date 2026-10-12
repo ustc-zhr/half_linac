@@ -59,6 +59,7 @@
       },
       "center_lock": {
         "strategy": "secant_dispersion",
+        "center_lock_trigger_mm": 10.0,
         "center_tolerance_mm": 0.2,
         "max_iterations": 6,
         "max_correction_step_mev": 20

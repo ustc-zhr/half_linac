@@ -71,6 +71,7 @@ class RFPhaseEnergyMatcher:
         beam_presence_sigma=6.0,
         beam_presence_min_area_px=50,
         x_reference_mm=0,
+        center_lock_trigger_mm=None,
         center_tolerance_mm=0.2,
         max_iterations=6,
         max_correction_step_mev=25,
@@ -107,6 +108,11 @@ class RFPhaseEnergyMatcher:
         self.profile_fit_method = str(profile_fit_method)
         self.min_fit_r_squared = float(min_fit_r_squared)
         self.x_reference_mm = float(x_reference_mm)
+        self.center_lock_trigger_mm = (
+            None
+            if center_lock_trigger_mm is None
+            else float(center_lock_trigger_mm)
+        )
         self.center_tolerance_mm = float(center_tolerance_mm)
         self.max_iterations = int(max_iterations)
         self.max_correction_step_mev = float(max_correction_step_mev)
@@ -125,6 +131,17 @@ class RFPhaseEnergyMatcher:
             raise ValueError("Sampling and settle intervals must not be negative.")
         if self.center_tolerance_mm <= 0 or self.max_correction_step_mev <= 0:
             raise ValueError("Center tolerance and maximum correction step must be positive.")
+        if self.center_lock_trigger_mm is not None:
+            if (
+                not np.isfinite(self.center_lock_trigger_mm)
+                or self.center_lock_trigger_mm <= 0
+            ):
+                raise ValueError("Center-lock trigger must be finite and positive.")
+            if self.center_lock_trigger_mm < self.center_tolerance_mm:
+                raise ValueError(
+                    "Center-lock trigger must be greater than or equal to the final "
+                    "center tolerance."
+                )
         if self.max_iterations < 1:
             raise ValueError("Maximum energy-match iterations must be at least one.")
         if not 0 <= self.min_fit_r_squared <= 1:
@@ -244,6 +261,47 @@ class RFPhaseEnergyMatcher:
         )
         return float(measurement["energy"] + correction)
 
+    def beam_energy_from_offset(self, energy, offset_mm):
+        """Infer beam energy from the coordinated setpoint and screen offset."""
+        return float(
+            float(energy)
+            * (1.0 + float(offset_mm) * 1e-3 / self.design_eta_m)
+        )
+
+    def _accept_position_measurement(self, seed):
+        setpoint = float(seed["energy"])
+        offset_mm = float(seed["offset_mm"])
+        inferred_energy = self.beam_energy_from_offset(setpoint, offset_mm)
+        self.center_lock_result = {
+            "seed_energy": setpoint,
+            "final_energy": setpoint,
+            "inferred_energy_mev": inferred_energy,
+            "residual_energy_mev": inferred_energy - setpoint,
+            "final_offset_mm": offset_mm,
+            "brightness": float(seed["brightness"]),
+            "valid_frames": int(seed["valid_frames"]),
+            "measurements": 1,
+            "fit_method": seed["fit_method"],
+            "fit_r_squared": seed["fit_r_squared"],
+            "center_lock_applied": False,
+            "measurement_mode": "position_inference",
+        }
+        self._report(
+            "position_inference",
+            setpoint,
+            True,
+            **self.center_lock_result,
+        )
+        return setpoint
+
+    def _match_or_infer(self, seed, low, high):
+        if (
+            self.center_lock_trigger_mm is not None
+            and abs(float(seed["offset_mm"])) <= self.center_lock_trigger_mm
+        ):
+            return self._accept_position_measurement(seed)
+        return self._track_center(seed, low, high)
+
     def _reacquire(self, low, high, center, steps):
         candidates = []
         self._report(
@@ -306,6 +364,8 @@ class RFPhaseEnergyMatcher:
             "measurements": len(measurements),
             "fit_method": verified["fit_method"],
             "fit_r_squared": verified["fit_r_squared"],
+            "center_lock_applied": True,
+            "measurement_mode": "center_lock",
         }
         return float(verified["energy"])
 
@@ -358,7 +418,7 @@ class RFPhaseEnergyMatcher:
                 None,
                 self.last_message or "No valid beam profile was found for center lock.",
             )
-        matched = self._track_center(seed, low, high)
+        matched = self._match_or_infer(seed, low, high)
         if matched is None:
             return StageResult(
                 False,
@@ -417,7 +477,7 @@ class RFPhaseEnergyMatcher:
                     self.last_message = "No valid beam profile was found in the Energy Match window."
                     raise RuntimeError(self.last_message)
                 if pipeline_has(self.pipeline, CENTER_LOCK):
-                    matched = self._track_center(seed, low, high)
+                    matched = self._match_or_infer(seed, low, high)
                 else:
                     matched = float(seed["energy"])
                     self._report("final", matched, True, **seed)

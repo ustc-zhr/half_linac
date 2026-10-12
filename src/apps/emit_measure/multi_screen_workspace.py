@@ -61,8 +61,10 @@ from half_linac.src.apps.emit_measure.mplwidget import MplWidget
 from half_linac.src.apps.emit_measure.sample_selection import configure_sample_selection
 from half_linac.src.shared.machine_profile import (
     build_model_backend,
+    build_model_snapshot,
     get_emit_multi_screen_preset,
     make_runtime_run_id,
+    model_snapshot_lattice_overrides,
     resolve_app_runtime_paths,
     resolve_channel,
     resolve_element_image_geometry,
@@ -785,15 +787,23 @@ class MultiScreenWorkspace(QWidget):
             return
         self._set_state("Preparing")
         try:
+            reference = self.reference_combo.currentText().strip()
             backend = build_model_backend(
                 self.app_context,
                 energy_mev=self.energy_spin.value(),
                 line_name=self.model_line_edit.currentText().strip() or None,
             )
+            model_snapshot = self._build_live_model_snapshot(
+                backend,
+                reference,
+                screens,
+            )
+            lattice_overrides = model_snapshot_lattice_overrides(model_snapshot)
             optics = build_multi_screen_optics(
                 backend,
-                self.reference_combo.currentText().strip(),
+                reference,
                 screens,
+                lattice_overrides=lattice_overrides,
             )
             observability = assess_multi_screen_observability(optics)
             self.session = MultiScreenMeasurementSession.create(
@@ -804,9 +814,16 @@ class MultiScreenWorkspace(QWidget):
                 energy_mev=self.energy_spin.value(),
                 optics=optics,
                 target_samples_per_screen=self.samples_spin.value(),
+                model_snapshot=model_snapshot,
+            )
+            snapshot_source = (
+                str(model_snapshot.get("source", "live")).upper()
+                if model_snapshot is not None
+                else "NO K1 OVERRIDES"
             )
             self.diagnostic_label.setText(
-                f"Optics: {observability.status.upper()} · X rank {observability.x.rank}/3, "
+                f"Optics: {observability.status.upper()} · {snapshot_source} · "
+                f"X rank {observability.x.rank}/3, "
                 f"cond {observability.x.condition_number:.3g}; "
                 f"Y rank {observability.y.rank}/3, cond {observability.y.condition_number:.3g}"
             )
@@ -825,6 +842,26 @@ class MultiScreenWorkspace(QWidget):
         except Exception as exc:
             self.session = None
             self._set_state("Invalid", str(exc))
+
+    def _build_live_model_snapshot(self, backend, reference, screens):
+        fields = {
+            (str(element["NAME"]), "K1")
+            for screen in screens
+            if screen != reference
+            for element in backend.get_line_elements(reference, screen)
+            if str(element.get("TYPE", "")).upper() == "QUAD"
+            and "K1" in element
+        }
+        if not fields:
+            return None
+        snapshot = build_model_snapshot(
+            self.app_context,
+            tuple(sorted(fields)),
+        )
+        metadata = snapshot.as_metadata()
+        if model_snapshot_lattice_overrides(metadata) is None:
+            raise RuntimeError("Live model snapshot has no usable lattice overrides")
+        return metadata
 
     def add_manual_sample(self) -> None:
         if self.session is None:

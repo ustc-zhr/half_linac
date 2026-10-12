@@ -295,6 +295,7 @@ class MultiScreenMeasurementSession:
     schema: str = "emit_multi_screen_v1"
     beam_width_method: str = "Gaussian fit"
     fit_vmin: float | None = None
+    model_snapshot: Mapping[str, object] | None = None
     image_settings_by_screen: Mapping[str, Mapping[str, object]] = field(
         default_factory=dict
     )
@@ -310,6 +311,7 @@ class MultiScreenMeasurementSession:
         energy_mev: float | None,
         optics: MultiScreenOptics,
         target_samples_per_screen: int,
+        model_snapshot: Mapping[str, object] | None = None,
     ) -> "MultiScreenMeasurementSession":
         return cls(
             machine=str(machine),
@@ -323,6 +325,9 @@ class MultiScreenMeasurementSession:
                 target_samples_per_screen,
             ),
             created_at=datetime.now(timezone.utc).isoformat(),
+            model_snapshot=(
+                None if model_snapshot is None else dict(model_snapshot)
+            ),
         )
 
     def add_sample(self, sample: BeamSizeSample) -> "MultiScreenMeasurementSession":
@@ -359,6 +364,7 @@ def measurement_archive_payload(
         "preset": session.preset,
         "model_line": session.model_line,
         "energy_mev": session.energy_mev,
+        "model_snapshot": session.model_snapshot,
         "reference_element": session.optics.reference_element,
         "observation_elements": list(session.optics.observation_elements),
         "transport_matrices": [matrix_payload(matrix) for matrix in session.optics.transfer_matrices],
@@ -453,6 +459,9 @@ def load_multi_screen_archive(path: Path | str) -> MultiScreenMeasurementSession
         for screen, settings in raw_image_settings.items()
         if str(screen) in elements and isinstance(settings, dict)
     }
+    raw_model_snapshot = payload.get("model_snapshot")
+    if raw_model_snapshot is not None and not isinstance(raw_model_snapshot, dict):
+        raise ValueError("archive model_snapshot must be an object or null")
     samples = payload.get("samples", ())
     if not isinstance(samples, list):
         raise ValueError("archive samples must be a list")
@@ -488,6 +497,9 @@ def load_multi_screen_archive(path: Path | str) -> MultiScreenMeasurementSession
         created_at=str(payload.get("created_at", "")),
         beam_width_method=str(payload.get("beam_width_method", "Gaussian fit")),
         fit_vmin=payload.get("fit_vmin"),
+        model_snapshot=(
+            None if raw_model_snapshot is None else dict(raw_model_snapshot)
+        ),
         image_settings_by_screen=image_settings_by_screen,
     )
 

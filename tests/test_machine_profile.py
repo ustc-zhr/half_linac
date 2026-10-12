@@ -2721,6 +2721,24 @@ class MachineProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(MachineProfileError, "design_model_eta_m"):
             _validate_energy_spectrum_workflow(profile, workflow)
 
+    def test_half_rf_phase_scan_has_separate_center_lock_thresholds(self):
+        profile = load_profile("half")
+        workflow = get_workflow(profile, "rf_phase_scan")
+        center_lock = workflow["energy_match_defaults"]["stages"]["center_lock"]
+
+        self.assertEqual(center_lock["center_lock_trigger_mm"], 10.0)
+        self.assertEqual(center_lock["center_tolerance_mm"], 0.2)
+
+    def test_half_rf_phase_scan_rejects_trigger_below_final_tolerance(self):
+        profile = load_profile("half")
+        workflow = deepcopy(get_workflow(profile, "rf_phase_scan"))
+        center_lock = workflow["energy_match_defaults"]["stages"]["center_lock"]
+        center_lock["center_lock_trigger_mm"] = 0.1
+        profile.workflows["rf_phase_scan"] = workflow
+
+        with self.assertRaisesRegex(MachineProfileError, "center_lock_trigger_mm"):
+            _validate_basic_app_support(profile, "rf_phase_scan", "real")
+
     def test_half_rf_phase_scan_rejects_invalid_tracking_windows(self):
         profile = load_profile("half")
         workflow = deepcopy(get_workflow(profile, "rf_phase_scan"))

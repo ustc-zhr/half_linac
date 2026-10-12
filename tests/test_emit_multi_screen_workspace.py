@@ -35,6 +35,25 @@ class _Backend:
         return matrix
 
 
+class _LiveBackend(_Backend):
+    line_name = "ALL_MAIN"
+
+    def __init__(self):
+        self.map_calls = []
+
+    def get_line_elements(self, _source, target, **_kwargs):
+        if target == "PRF09":
+            return (
+                {"NAME": "QT03", "TYPE": "QUAD", "K1": "-1.0"},
+                {"NAME": "QT04", "TYPE": "QUAD", "K1": "1.0"},
+            )
+        return ({"NAME": "D1", "TYPE": "DRIF", "L": "1.0"},)
+
+    def get_map(self, source, target, **kwargs):
+        self.map_calls.append((source, target, kwargs))
+        return super().get_map(source, target, **kwargs)
+
+
 class MultiScreenWorkspaceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -280,6 +299,70 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         workspace.energy_spin.setValue(workspace.energy_spin.value() + 1.0)
         self.assertIsNone(workspace.session)
         self.assertEqual(workspace.state, "Configuring")
+
+    def test_prepare_uses_and_archives_live_model_snapshot(self):
+        workspace = MultiScreenWorkspace(
+            self.context,
+            image_reader=lambda _screen: (1.0e-3, 1.0e-3),
+        )
+        self.addCleanup(workspace.stop)
+        self.addCleanup(workspace.close)
+        backend = _LiveBackend()
+        metadata = {
+            "source": "live_from_vm",
+            "fields": [
+                {
+                    "element_id": "QT03",
+                    "field_name": "K1",
+                    "value": -1.25,
+                },
+                {
+                    "element_id": "QT04",
+                    "field_name": "K1",
+                    "value": 0.75,
+                },
+            ],
+        }
+        snapshot = SimpleNamespace(as_metadata=lambda: metadata)
+
+        with patch(
+            "half_linac.src.apps.emit_measure.multi_screen_workspace.build_model_backend",
+            return_value=backend,
+        ), patch(
+            "half_linac.src.apps.emit_measure.multi_screen_workspace.build_model_snapshot",
+            return_value=snapshot,
+        ) as build_snapshot:
+            workspace.prepare_measurement()
+
+        build_snapshot.assert_called_once_with(
+            self.context,
+            (("QT03", "K1"), ("QT04", "K1")),
+        )
+        self.assertEqual(workspace.session.model_snapshot, metadata)
+        self.assertIn("LIVE_FROM_VM", workspace.diagnostic_label.text())
+        expected_overrides = {
+            "QT03": {"K1": -1.25},
+            "QT04": {"K1": 0.75},
+        }
+        self.assertEqual(len(backend.map_calls), 3)
+        for _source, _target, kwargs in backend.map_calls:
+            self.assertEqual(kwargs["lattice_overrides"], expected_overrides)
+
+    def test_drift_only_optics_does_not_require_a_model_snapshot(self):
+        workspace = self._workspace(np.zeros((20, 20), dtype=float))
+        backend = _LiveBackend()
+
+        with patch(
+            "half_linac.src.apps.emit_measure.multi_screen_workspace.build_model_snapshot"
+        ) as build_snapshot:
+            metadata = workspace._build_live_model_snapshot(
+                backend,
+                "PRF06",
+                ("PRF06", "PRF07", "PRF08"),
+            )
+
+        self.assertIsNone(metadata)
+        build_snapshot.assert_not_called()
 
     def _complete_workspace(self):
         workspace = self._workspace(np.zeros((20, 20)))

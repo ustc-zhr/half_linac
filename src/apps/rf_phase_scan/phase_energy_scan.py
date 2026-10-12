@@ -63,6 +63,10 @@ class EnergyMatchResult:
     ok: bool
     status: str
     energy_mev: float | None = None
+    energy_setpoint_mev: float | None = None
+    residual_energy_mev: float | None = None
+    measurement_mode: str | None = None
+    center_lock_applied: bool | None = None
     message: str | None = None
     center_offset_mm: float | None = None
     brightness: float | None = None
@@ -89,6 +93,10 @@ class PhaseScanPoint:
     search_low_mev: float
     search_high_mev: float
     matched_energy_mev: float | None = None
+    energy_setpoint_mev: float | None = None
+    residual_energy_mev: float | None = None
+    measurement_mode: str | None = None
+    center_lock_applied: bool | None = None
     center_offset_mm: float | None = None
     brightness: float | None = None
     valid_frames: int | None = None
@@ -420,6 +428,10 @@ class PhaseEnergyScanner:
                         if match.ok and match.energy_mev is not None
                         else None
                     ),
+                    energy_setpoint_mev=match.energy_setpoint_mev,
+                    residual_energy_mev=match.residual_energy_mev,
+                    measurement_mode=match.measurement_mode,
+                    center_lock_applied=match.center_lock_applied,
                     center_offset_mm=match.center_offset_mm,
                     brightness=match.brightness,
                     valid_frames=match.valid_frames,

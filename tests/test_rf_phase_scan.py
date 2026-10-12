@@ -323,3 +323,45 @@ def test_dispersion_prediction_limits_single_correction_step():
     matcher.max_correction_step_mev = 5.0
 
     assert matcher._predicted_energy({"energy": 2200.0, "offset_mm": 30.0}) == 2205.0
+
+
+def test_center_lock_trigger_uses_position_inference_inside_threshold():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.center_lock_trigger_mm = 10.0
+    matcher.design_eta_m = 0.75
+    matcher.progress_callback = None
+    matcher.center_lock_result = None
+    matcher._track_center = lambda _seed, _low, _high: pytest.fail(
+        "Center lock should not run inside the trigger threshold."
+    )
+    seed = {
+        "energy": 2200.0,
+        "offset_mm": 3.0,
+        "brightness": 42.0,
+        "valid_frames": 3,
+        "fit_method": "Gauss fit",
+        "fit_r_squared": 0.98,
+    }
+
+    setpoint = matcher._match_or_infer(seed, 2150.0, 2250.0)
+
+    assert setpoint == 2200.0
+    assert matcher.center_lock_result["center_lock_applied"] is False
+    assert matcher.center_lock_result["measurement_mode"] == "position_inference"
+    assert matcher.center_lock_result["inferred_energy_mev"] == 2208.8
+    assert matcher.center_lock_result["residual_energy_mev"] == pytest.approx(8.8)
+
+
+def test_center_lock_trigger_runs_lock_outside_threshold():
+    matcher = object.__new__(RFPhaseEnergyMatcher)
+    matcher.center_lock_trigger_mm = 10.0
+    calls = []
+    matcher._track_center = lambda seed, low, high: (
+        calls.append((seed, low, high)) or 2195.0
+    )
+    seed = {"energy": 2200.0, "offset_mm": 10.1}
+
+    matched = matcher._match_or_infer(seed, 2150.0, 2250.0)
+
+    assert matched == 2195.0
+    assert calls == [(seed, 2150.0, 2250.0)]

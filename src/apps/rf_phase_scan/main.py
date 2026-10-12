@@ -205,6 +205,7 @@ def _factory(*, image_pv, image_shape, pixel_width_mm, bend_pv, scan, progress, 
         beam_presence_sigma=float(scan.get("beam_presence_sigma", 6.0)),
         beam_presence_min_area_px=int(scan.get("beam_presence_min_area_px", 50)),
         x_reference_mm=float(scan.get("x_reference_mm", 0.0)),
+        center_lock_trigger_mm=scan.get("center_lock_trigger_mm"),
         center_tolerance_mm=float(scan.get("center_tolerance_mm", 0.2)),
         max_iterations=int(scan.get("max_iterations", 6)),
         max_correction_step_mev=float(scan.get("max_correction_step_mev", 25)),
@@ -315,23 +316,44 @@ class ScanThread(QThread):
                 return EnergyMatchResult(False, "CANCELLED", message="Point measurement cancelled.")
             if measurement is None:
                 return EnergyMatchResult(
-                    False, "MEASUREMENT_FAILED", energy_mev=float(best),
+                    False, "MEASUREMENT_FAILED",
+                    energy_setpoint_mev=float(best),
                     message=f"Point measurement did not retain the required {min_valid}/{samples} valid frames.",
                     valid_frames=0,
                 )
+            energy_setpoint = float(best)
+            center_offset_mm = (
+                float(measurement["center_mm"])
+                - float(scan.get("x_reference_mm", 0.0))
+            )
+            beam_energy = tuner.beam_energy_from_offset(
+                energy_setpoint, center_offset_mm
+            )
+            residual_energy = beam_energy - energy_setpoint
+            measurement_mode = str(
+                info.get("measurement_mode", "position_inference")
+            )
+            center_lock_applied = bool(info.get("center_lock_applied", False))
             self.diagnostic.emit(
                 measurement["raw_image"],
-                float(best),
+                energy_setpoint,
                 {
                     "valid_frames": int(measurement["valid_frames"]),
                     "total_frames": samples,
                     "fit_r_squared": measurement["fit_r_squared"],
+                    "beam_energy_mev": beam_energy,
+                    "measurement_mode": measurement_mode,
+                    "center_lock_applied": center_lock_applied,
                 },
             )
             return EnergyMatchResult(
-                ok=True, status=tuner.get_last_status(), energy_mev=float(best),
+                ok=True, status=tuner.get_last_status(), energy_mev=beam_energy,
+                energy_setpoint_mev=energy_setpoint,
+                residual_energy_mev=residual_energy,
+                measurement_mode=measurement_mode,
+                center_lock_applied=center_lock_applied,
                 message=tuner.get_last_message(),
-                center_offset_mm=float(measurement["center_mm"]) - float(scan.get("x_reference_mm", 0.0)),
+                center_offset_mm=center_offset_mm,
                 brightness=float(measurement["brightness"]),
                 valid_frames=int(measurement["valid_frames"]),
                 fit_method=str(measurement["fit_method"]),
@@ -616,7 +638,19 @@ class RFPhaseScanWindow(QMainWindow):
         self.auto_tune_min_fit_r_squared.setDecimals(2)
         self.auto_tune_min_fit_r_squared.setSingleStep(0.05)
         self.auto_tune_min_fit_r_squared.setValue(self.min_fit_r_squared)
-        self.auto_tune_center_tolerance = self._spin(float(auto_center_lock["center_tolerance_mm"]), 0.01, 10)
+        self.auto_tune_lock_trigger = self._spin(
+            float(auto_center_lock.get("center_lock_trigger_mm", 10.0)), 0.01, 100
+        )
+        self.auto_tune_center_tolerance = self._spin(
+            float(auto_center_lock["center_tolerance_mm"]), 0.01, 10
+        )
+        self.auto_tune_lock_trigger.setToolTip(
+            "Start physical center lock only when the fitted center exceeds this "
+            "offset; otherwise infer beam energy from dispersion."
+        )
+        self.auto_tune_center_tolerance.setToolTip(
+            "Required final center error after physical center lock."
+        )
         self.auto_tune_max_offset = self._spin(float(auto_center_lock["max_correction_step_mev"]), 0.01, 1000)
         self.auto_tune_fine_steps = QSpinBox()
         self.auto_tune_fine_steps.setRange(1, 100)
@@ -874,6 +908,7 @@ class RFPhaseScanWindow(QMainWindow):
         self.auto_tune_max_offset.setSuffix(" MeV")
         self.auto_tune_settle.setSuffix(" s")
         self.auto_tune_frame_interval.setSuffix(" s")
+        self.auto_tune_lock_trigger.setSuffix(" mm")
         self.auto_tune_center_tolerance.setSuffix(" mm")
         for widget in (self.tracking, self.fallback):
             widget.setSuffix(" MeV")
@@ -957,7 +992,8 @@ class RFPhaseScanWindow(QMainWindow):
         add_group(
             "Center Tracking",
             (
-                ("Center tolerance", self.auto_tune_center_tolerance),
+                ("Center-lock trigger", self.auto_tune_lock_trigger),
+                ("Final lock tolerance", self.auto_tune_center_tolerance),
                 ("Center-lock iterations", self.auto_tune_fine_steps),
                 ("Center-lock correction limit", self.auto_tune_max_offset),
                 ("Profile fit", self.auto_tune_fit_method),
@@ -987,6 +1023,7 @@ class RFPhaseScanWindow(QMainWindow):
             "verification_min_valid_frames": self.auto_tune_verification_min_valid.value(),
             "frame_interval_s": self.auto_tune_frame_interval.value(),
             "min_fit_r_squared": self.auto_tune_min_fit_r_squared.value(),
+            "center_lock_trigger_mm": self.auto_tune_lock_trigger.value(),
             "center_tolerance_mm": self.auto_tune_center_tolerance.value(),
             "max_correction_step_mev": self.auto_tune_max_offset.value(),
             "profile_fit_method": "Gauss fit",
@@ -1006,6 +1043,7 @@ class RFPhaseScanWindow(QMainWindow):
             (self.auto_tune_verification_min_valid, "verification_min_valid_frames"),
             (self.auto_tune_frame_interval, "frame_interval_s"),
             (self.auto_tune_min_fit_r_squared, "min_fit_r_squared"),
+            (self.auto_tune_lock_trigger, "center_lock_trigger_mm"),
             (self.auto_tune_center_tolerance, "center_tolerance_mm"),
             (self.auto_tune_max_offset, "max_correction_step_mev"),
         )
@@ -1025,6 +1063,10 @@ class RFPhaseScanWindow(QMainWindow):
             raise ValueError("Minimum valid frames cannot exceed Fine/center frames.")
         if values["verification_min_valid_frames"] > values["verification_frame_samples"]:
             raise ValueError("Verification minimum cannot exceed verification frames.")
+        if values["center_lock_trigger_mm"] < values["center_tolerance_mm"]:
+            raise ValueError(
+                "Center-lock trigger cannot be smaller than final lock tolerance."
+            )
 
     def _show_auto_tune_settings(self):
         if self.thread is not None:
@@ -1047,14 +1089,15 @@ class RFPhaseScanWindow(QMainWindow):
 
     def _update_auto_tune_settings_summary(self):
         pipeline_label = (
-            "brightness peak + center lock"
+            "brightness peak first · infer position or center lock"
             if self.initial_brightness_search.isChecked()
-            else "center lock first · brightness fallback"
+            else "position inference · center lock on trigger · brightness fallback"
         )
         self.auto_tune_settings_summary.setText(
             f"{pipeline_label} · {self.auto_tune_coarse_steps.value()} candidate energy pts · "
             f"step <= {self.auto_tune_max_offset.value():g} MeV · "
-            f"tol {self.auto_tune_center_tolerance.value():g} mm · "
+            f"trigger {self.auto_tune_lock_trigger.value():g} mm · "
+            f"final tol {self.auto_tune_center_tolerance.value():g} mm · "
             f"R2 >= {self.auto_tune_min_fit_r_squared.value():.2f}"
         )
 
@@ -1418,9 +1461,16 @@ class RFPhaseScanWindow(QMainWindow):
                 if valid_frames is not None and total_frames is not None
                 else ""
             )
+            reference_text = (
+                f"Nominal reference {float(reference_energy_mev):.2f} MeV"
+                if reference_is_nominal
+                else (
+                    f"Beam {energy_center:.2f} MeV  |  "
+                    f"setpoint {float(reference_energy_mev):.2f} MeV"
+                )
+            )
             self.spectrum_summary.setText(
-                f"{'Nominal' if reference_is_nominal else 'Matched'} "
-                f"{float(reference_energy_mev):.2f} MeV  |  "
+                f"{reference_text}  |  "
                 f"dx {center_offset_mm:+.3f} mm{frames_text}  |  "
                 f"R2 {fit_quality}  |  Spread {spread_percent:.3f}%"
             )
@@ -1512,7 +1562,7 @@ class RFPhaseScanWindow(QMainWindow):
         axes.set_xlabel(
             "Phase (deg)" if self.active_phase_mode == "absolute" else "Phase offset (deg)"
         )
-        axes.set_ylabel("Matched energy (MeV)")
+        axes.set_ylabel("Measured beam energy (MeV)")
         axes.grid(True, color=palette["grid"], linewidth=0.7, alpha=0.7)
         if failed:
             legend = axes.legend(frameon=False, fontsize=8, loc="best")

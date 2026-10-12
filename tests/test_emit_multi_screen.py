@@ -147,6 +147,12 @@ class MultiScreenOpticsTests(unittest.TestCase):
             energy_mev=2200.0,
             optics=optics,
             target_samples_per_screen=1,
+            model_snapshot={
+                "source": "live_from_vm",
+                "fields": [
+                    {"element_id": "Q1", "field_name": "K1", "value": 2.0}
+                ],
+            },
         ).add_sample(BeamSizeSample("S1", 1e-3, 2e-3, source="manual", quality={"roi": "full"}))
         session = session.add_sample(BeamSizeSample("S1", None, None, enabled=False, quality={"rejected": True}))
         with TemporaryDirectory() as directory:
@@ -159,6 +165,8 @@ class MultiScreenOpticsTests(unittest.TestCase):
         self.assertFalse(loaded.acquisition.samples[1].enabled)
         self.assertIsNone(loaded.acquisition.samples[1].sigma_x_m)
         self.assertEqual(loaded.machine, "half")
+        self.assertEqual(loaded.model_snapshot["source"], "live_from_vm")
+        self.assertEqual(loaded.model_snapshot["fields"][0]["value"], 2.0)
         self.assertEqual(loaded.acquisition.samples[0].source, "manual")
         self.assertEqual(loaded.acquisition.samples[0].quality["roi"], "full")
 
