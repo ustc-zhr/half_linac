@@ -339,7 +339,10 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
             (("QT03", "K1"), ("QT04", "K1")),
         )
         self.assertEqual(workspace.session.model_snapshot, metadata)
-        self.assertIn("LIVE_FROM_VM", workspace.diagnostic_label.text())
+        optics_diagnostics = workspace._format_optics_diagnostics()
+        self.assertIn("LIVE_FROM_VM", optics_diagnostics)
+        self.assertIn("QT03.K1=-1.25", optics_diagnostics)
+        self.assertIn("QT04.K1=0.75", optics_diagnostics)
         expected_overrides = {
             "QT03": {"K1": -1.25},
             "QT04": {"K1": 0.75},
@@ -372,6 +375,26 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         for screen, sx, sy in zip(optics.observation_elements, x, y):
             workspace._accept_sample(screen, sx, sy, "test")
         return workspace
+
+    def test_diagnostics_button_keeps_key_information_out_of_main_results(self):
+        workspace = self._complete_workspace()
+        self.assertEqual(workspace.diagnostics_button.text(), "Diagnostics…")
+        self.assertFalse(hasattr(workspace, "diagnostic_label"))
+
+        screen_text = workspace._format_screen_diagnostics()
+        self.assertIn("PRF06: σx", screen_text)
+        self.assertIn("1/1 active", screen_text)
+
+        self.assertEqual(
+            workspace._format_reconstruction_diagnostics(),
+            "No reconstruction available.",
+        )
+        with patch.object(workspace, "_write_runtime_archives", return_value=None):
+            workspace.reconstruct()
+        reconstruction_text = workspace._format_reconstruction_diagnostics()
+        self.assertIn("X: VALID", reconstruction_text)
+        self.assertIn("ε uncertainty", reconstruction_text)
+        self.assertIn("max variance residual", reconstruction_text)
 
     def test_exclude_restore_and_replacement_invalidate_result(self):
         workspace = self._complete_workspace()

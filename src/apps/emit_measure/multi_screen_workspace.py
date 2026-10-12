@@ -473,20 +473,28 @@ class MultiScreenWorkspace(QWidget):
         results_outer = QVBoxLayout(results_box)
         results_outer.setContentsMargins(10, 10, 10, 10)
         results_outer.setSpacing(8)
+        results_header = QHBoxLayout()
+        results_header.setContentsMargins(0, 0, 0, 0)
         results_title = QLabel("Measurement Results", results_box)
         results_title.setObjectName("panelTitle")
-        results_outer.addWidget(results_title)
+        results_header.addWidget(results_title)
+        results_header.addStretch(1)
+        self.diagnostics_button = QPushButton("Diagnostics…", results_box)
+        self.diagnostics_button.setProperty("compact", True)
+        self.diagnostics_button.setToolTip(
+            "Show optics, screen and reconstruction diagnostics."
+        )
+        self.diagnostics_button.clicked.connect(self._show_diagnostics)
+        results_header.addWidget(self.diagnostics_button)
+        results_outer.addLayout(results_header)
         results_layout = QGridLayout()
         results_layout.setVerticalSpacing(8)
         self.status_label = QLabel("Configuring", results_box)
         self.status_label.setWordWrap(True)
         self.status_label.setObjectName("multiScreenStatus")
-        self.diagnostic_label = QLabel("Optics: no model prepared", results_box)
-        self.diagnostic_label.setWordWrap(True)
         self.results_label = QLabel("No reconstruction", results_box)
         self.results_label.setWordWrap(True)
         results_layout.addWidget(self.status_label, 0, 0, 1, 5)
-        results_layout.addWidget(self.diagnostic_label, 1, 0, 1, 5)
         self.result_value_labels = {
             plane: [QLabel("--", results_box) for _ in range(4)]
             for plane in ("X", "Y")
@@ -771,7 +779,6 @@ class MultiScreenWorkspace(QWidget):
         self.session = None
         self.reconstruction = None
         self._refresh_samples_table()
-        self.diagnostic_label.setText("Optics: no model prepared")
         self.results_label.setText("No reconstruction")
         self._reset_result_metrics()
         self.image_fit_label.setText("--")
@@ -815,17 +822,6 @@ class MultiScreenWorkspace(QWidget):
                 optics=optics,
                 target_samples_per_screen=self.samples_spin.value(),
                 model_snapshot=model_snapshot,
-            )
-            snapshot_source = (
-                str(model_snapshot.get("source", "live")).upper()
-                if model_snapshot is not None
-                else "NO K1 OVERRIDES"
-            )
-            self.diagnostic_label.setText(
-                f"Optics: {observability.status.upper()} · {snapshot_source} · "
-                f"X rank {observability.x.rank}/3, "
-                f"cond {observability.x.condition_number:.3g}; "
-                f"Y rank {observability.y.rank}/3, cond {observability.y.condition_number:.3g}"
             )
             self.session = replace(
                 self.session,
@@ -1750,6 +1746,141 @@ class MultiScreenWorkspace(QWidget):
             values[2].setText("--" if plane.beta_m is None else f"{plane.beta_m:.4g}")
             values[3].setText("--" if plane.alpha is None else f"{plane.alpha:.4g}")
 
+    def _show_diagnostics(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Multi-Screen Diagnostics")
+        dialog.setMinimumWidth(560)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 12)
+        layout.setSpacing(10)
+        for title, text in (
+            ("Optics", self._format_optics_diagnostics()),
+            ("Screen Data", self._format_screen_diagnostics()),
+            ("Reconstruction", self._format_reconstruction_diagnostics()),
+        ):
+            title_label = QLabel(title, dialog)
+            title_label.setObjectName("panelTitle")
+            layout.addWidget(title_label)
+            value_label = QLabel(text, dialog)
+            value_label.setProperty("role", "field")
+            value_label.setWordWrap(True)
+            value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            layout.addWidget(value_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+
+    def _format_optics_diagnostics(self) -> str:
+        if self.session is None:
+            return "No optics prepared."
+
+        optics = self.session.optics
+        observability = assess_multi_screen_observability(optics)
+        snapshot = self.session.model_snapshot
+        lines = []
+        if isinstance(snapshot, Mapping):
+            source = str(snapshot.get("source", "live")).upper()
+            created_at = str(snapshot.get("created_at", "")).strip()
+            source_text = source + (f" · {created_at}" if created_at else "")
+            if self._archive_review:
+                source_text = "ARCHIVED · " + source_text
+            lines.append(f"Source: {source_text}")
+            strengths = []
+            fields = snapshot.get("fields", ())
+            if isinstance(fields, (list, tuple)):
+                for field in fields:
+                    if not isinstance(field, Mapping):
+                        continue
+                    element = str(field.get("element_id", "")).strip()
+                    name = str(field.get("field_name", "")).strip()
+                    value = field.get("value")
+                    if element and name and isinstance(value, (int, float)):
+                        strengths.append(f"{element}.{name}={float(value):.6g}")
+            if strengths:
+                lines.append("Model strengths: " + " · ".join(strengths))
+        else:
+            source = "ARCHIVED MODEL" if self._archive_review else "MODEL LATTICE"
+            lines.append(f"Source: {source} · no K1 override on selected paths")
+
+        lines.append(
+            f"Quality: {observability.status.upper()} · "
+            f"X rank {observability.x.rank}/3, cond {observability.x.condition_number:.3g} · "
+            f"Y rank {observability.y.rank}/3, cond {observability.y.condition_number:.3g}"
+        )
+        return "\n".join(lines)
+
+    def _format_screen_diagnostics(self) -> str:
+        if self.session is None:
+            return "No measurement prepared."
+
+        acquisition = self.session.acquisition
+        lines = []
+        for screen in acquisition.observation_elements:
+            recorded = [
+                sample for sample in acquisition.samples if sample.screen == screen
+            ]
+            active = [sample for sample in recorded if sample.enabled]
+            if not active:
+                lines.append(f"{screen}: no active samples · {len(recorded)} recorded")
+                continue
+            sigma_x = float(np.mean([sample.sigma_x_m for sample in active])) * 1.0e3
+            sigma_y = float(np.mean([sample.sigma_y_m for sample in active])) * 1.0e3
+            statuses = {
+                f"{(sample.quality or {}).get('x_status', '--')}/"
+                f"{(sample.quality or {}).get('y_status', '--')}"
+                for sample in active
+            }
+            quality = next(iter(statuses)) if len(statuses) == 1 else "mixed"
+            lines.append(
+                f"{screen}: σx {sigma_x:.4g} mm · σy {sigma_y:.4g} mm · "
+                f"{len(active)}/{len(recorded)} active · quality {quality}"
+            )
+        return "\n".join(lines)
+
+    def _format_reconstruction_diagnostics(self) -> str:
+        if self.reconstruction is None:
+            return "No reconstruction available."
+
+        lines = []
+        for name, plane in (("X", self.reconstruction.x), ("Y", self.reconstruction.y)):
+            parts = [f"{name}: {plane.status.upper()}"]
+            emit = plane.geometric_emittance_m_rad
+            uncertainty = plane.geometric_emittance_standard_deviation_m_rad
+            if emit is not None and emit > 0.0 and uncertainty is not None:
+                parts.append(f"ε uncertainty {100.0 * uncertainty / emit:.3g}%")
+            else:
+                parts.append("ε uncertainty unavailable")
+
+            relative_residuals = []
+            if self.session is not None and plane.residuals_m2:
+                try:
+                    data = self.session.acquisition.aggregate(require_target=False)
+                    sizes = data.rms_x_m if name == "X" else data.rms_y_m
+                    relative_residuals = [
+                        abs(residual) / (size * size)
+                        for residual, size in zip(plane.residuals_m2, sizes)
+                        if size > 0.0
+                    ]
+                except ValueError:
+                    pass
+            if relative_residuals:
+                parts.append(
+                    f"max variance residual {100.0 * max(relative_residuals):.3g}%"
+                )
+            else:
+                parts.append("residual unavailable")
+            if plane.reduced_chi_squared is not None:
+                parts.append(f"χ²ν {plane.reduced_chi_squared:.3g}")
+            lines.append(" · ".join(parts))
+            if plane.warnings:
+                lines.append(f"{name} note: " + " ".join(plane.warnings))
+            elif not plane.valid and plane.message:
+                lines.append(f"{name} note: {plane.message}")
+        return "\n".join(lines)
+
     def _format_results(self, result) -> str:
         lines = []
         if self.session is not None:
@@ -1834,9 +1965,6 @@ class MultiScreenWorkspace(QWidget):
                 else None
             )
             self._load_session_controls()
-            self.diagnostic_label.setText(
-                f"Optics: archived transfer matrices · Reference {self.session.optics.reference_element}"
-            )
             self._refresh_samples_table()
             if self.reconstruction is not None:
                 self._update_result_metrics(self.reconstruction)
