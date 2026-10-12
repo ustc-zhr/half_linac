@@ -195,6 +195,75 @@ class WidthMethodTests(unittest.TestCase):
         w._update_scan_run_controls()
         self.assertTrue(w.beam_width_method_combo.isEnabled())
 
+    def test_quad_scan_diagnostics_buttons_show_key_existing_information(self):
+        w = self.window
+        self.assertEqual(w.quad_scan_diagnostics_button.text(), 'Diagnostics…')
+        self.assertEqual(w.quad_scan_diagnostics_button_y.text(), 'Diagnostics…')
+
+        w._append_scan_point(-1.0, 2.0, 1.0)
+        w._append_scan_point(0.0, 1.0, 2.0)
+        w._append_scan_point(1.0, 2.0, 3.0)
+        w.loaded_scan_metadata = {
+            'quad': 'QT03',
+            'flag': 'PRF09',
+            'model_line': 'ALL_MAIN',
+            'model_snapshot': {
+                'source': 'live_from_vm',
+                'created_at': '2026-10-12T10:00:00+08:00',
+                'fields': [
+                    {'element_id': 'QT03', 'field_name': 'K1', 'value': -1.25},
+                ],
+            },
+            'point_quality': [
+                {
+                    'k1': -1.0,
+                    'x': {'status': 'usable', 'usable': True},
+                    'y': {'status': 'usable', 'usable': True},
+                },
+                {
+                    'k1': 0.0,
+                    'x': {'status': 'clipped', 'usable': False},
+                    'y': {'status': 'usable', 'usable': True},
+                },
+            ],
+        }
+        w.latest_emit_fit_summary = {
+            'method': 'leastSquares',
+            'status': 'partial',
+            'xplane': {
+                'status': 'valid',
+                'condition_number': 12.0,
+                'residual_rms': 0.02,
+                'fit_selection': {'points_used': 3, 'points_total': 3},
+            },
+            'yplane': {
+                'status': 'non_physical',
+                'condition_number': 20.0,
+                'residual_rms': 0.03,
+            },
+        }
+
+        sections = dict(w._quad_scan_diagnostics_sections())
+        self.assertIn('3/3 active samples', sections['Scan Coverage'])
+        self.assertIn('X: sampled minimum interior', sections['Scan Coverage'])
+        self.assertIn('Y: sampled minimum at scan edge', sections['Scan Coverage'])
+        self.assertIn('Worst recorded quality: X · Beam image clipped', sections['Data Quality'])
+        self.assertIn('X: Valid · fit points 3/3 · cond 12', sections['Fit Trust'])
+        self.assertIn('ε uncertainty / χ²ν: unavailable', sections['Fit Trust'])
+        self.assertIn('LIVE_FROM_VM', sections['Model Optics'])
+        self.assertIn('QT03.K1=-1.25', sections['Model Optics'])
+
+        with patch.object(main.QDialog, 'exec_', return_value=0) as execute:
+            w.quad_scan_diagnostics_button.click()
+            w.quad_scan_diagnostics_button_y.click()
+        self.assertEqual(execute.call_count, 2)
+
+    def test_optimization_header_button_uses_compact_height(self):
+        button = self.window.optimization_button
+        button.ensurePolished()
+        self.assertTrue(button.property('headerAction'))
+        self.assertLessEqual(button.sizeHint().height(), main.HEADER_ACTION_HEIGHT)
+
 
 if __name__ == '__main__':
     unittest.main()

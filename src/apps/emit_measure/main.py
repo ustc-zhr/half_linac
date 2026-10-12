@@ -38,6 +38,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFrame,
     QGridLayout,
@@ -755,6 +756,12 @@ QPushButton[compact="true"] {{
     font-size: 11px;
 }}
 
+QPushButton[headerAction="true"] {{
+    padding: 2px 12px;
+    min-height: 24px;
+    max-height: 24px;
+}}
+
 QLineEdit, QComboBox, QTextEdit {{
     background-color: {input_bg};
     border: 1px solid {input_border};
@@ -1336,6 +1343,7 @@ class myWindow(QWidget,Ui_Form):
 
         self.optimization_dialog = None
         self.optimization_button = QPushButton("Emittance Optimization", panel)
+        self.optimization_button.setProperty("headerAction", True)
         self.optimization_button.setVisible(self.machine_profile.machine.id == "half")
         self.optimization_button.clicked.connect(self._show_optimization)
         header_layout.addWidget(self.optimization_button)
@@ -2036,6 +2044,15 @@ class myWindow(QWidget,Ui_Form):
         self.layoutWidget.setParent(self.widget_5)
         self.layoutWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.gridLayout_3.setVerticalSpacing(6)
+        self.quad_scan_diagnostics_button = QPushButton("Diagnostics…", self.layoutWidget)
+        self.quad_scan_diagnostics_button.setProperty("compact", True)
+        self.quad_scan_diagnostics_button.setToolTip(
+            "Show scan coverage, data quality, fit and live-optics diagnostics."
+        )
+        self.quad_scan_diagnostics_button.clicked.connect(
+            self._show_quad_scan_diagnostics
+        )
+        self.gridLayout_3.addWidget(self.quad_scan_diagnostics_button, 0, 3)
         layout.addWidget(self.layoutWidget)
 
     def _rebuild_twiss_control_panel(self):
@@ -2132,6 +2149,18 @@ class myWindow(QWidget,Ui_Form):
         self.layoutWidget_4.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.gridLayout_6.setVerticalSpacing(6)
         self.gridLayout_6.addWidget(self.lineEdit_37, 6, 1, 1, 2)
+        self.quad_scan_diagnostics_button_y = QPushButton(
+            "Diagnostics…",
+            self.layoutWidget_4,
+        )
+        self.quad_scan_diagnostics_button_y.setProperty("compact", True)
+        self.quad_scan_diagnostics_button_y.setToolTip(
+            "Show scan coverage, data quality, fit and live-optics diagnostics."
+        )
+        self.quad_scan_diagnostics_button_y.clicked.connect(
+            self._show_quad_scan_diagnostics
+        )
+        self.gridLayout_6.addWidget(self.quad_scan_diagnostics_button_y, 0, 3)
         layout.addWidget(self.layoutWidget_4)
         self.widget_7.hide()
 
@@ -2821,6 +2850,195 @@ class myWindow(QWidget,Ui_Form):
             tone,
             "\n".join(diagnostic_lines) or None,
         )
+
+    def _show_quad_scan_diagnostics(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Quad Scan Diagnostics")
+        dialog.setMinimumWidth(580)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 12)
+        layout.setSpacing(10)
+        for title, text in self._quad_scan_diagnostics_sections():
+            title_label = QLabel(title, dialog)
+            title_label.setObjectName("panelTitle")
+            layout.addWidget(title_label)
+            value_label = QLabel(text, dialog)
+            value_label.setProperty("role", "field")
+            value_label.setWordWrap(True)
+            value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            layout.addWidget(value_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+
+    def _quad_scan_diagnostics_sections(self):
+        return (
+            ("Scan Coverage", self._format_quad_scan_coverage()),
+            ("Data Quality", self._format_quad_scan_data_quality()),
+            ("Fit Trust", self._format_quad_scan_fit_trust()),
+            ("Model Optics", self._format_quad_scan_model_optics()),
+        )
+
+    def _current_quad_scan_metadata(self):
+        for metadata in (self.pending_scan_metadata, self.loaded_scan_metadata):
+            if isinstance(metadata, Mapping):
+                return metadata
+        return {}
+
+    def _format_quad_scan_coverage(self):
+        active, total = self._scan_points_counts()
+        points = self._enabled_scan_points()
+        if not points:
+            return f"{active}/{total} active samples · no usable K₁ coverage"
+
+        by_k1 = defaultdict(lambda: [[], []])
+        for k1, sigx, sigy in points:
+            by_k1[float(k1)][0].append(float(sigx))
+            by_k1[float(k1)][1].append(float(sigy))
+        k1_values = sorted(by_k1)
+        lines = [
+            f"{active}/{total} active samples · {len(k1_values)} unique K₁ · "
+            f"range {k1_values[0]:.6g} to {k1_values[-1]:.6g} m⁻²"
+        ]
+        summary = self.latest_emit_fit_summary or {}
+        for label, plane_key, value_index in (
+            ("X", "xplane", 0),
+            ("Y", "yplane", 1),
+        ):
+            plane = summary.get(plane_key, {}) if isinstance(summary, Mapping) else {}
+            message = str(_read_result_field(plane, "coverage_message", "") or "").strip()
+            if message:
+                lines.append(f"{label}: {_display_diagnostic_message(message)}")
+                continue
+            means = [float(np.mean(by_k1[k1][value_index])) for k1 in k1_values]
+            minimum_index = int(np.argmin(means))
+            location = (
+                "interior (bracketed by sampled K₁)"
+                if 0 < minimum_index < len(k1_values) - 1
+                else "at scan edge"
+            )
+            lines.append(
+                f"{label}: sampled minimum {location} at K₁={k1_values[minimum_index]:.6g} m⁻²"
+            )
+        return "\n".join(lines)
+
+    def _format_quad_scan_data_quality(self):
+        active, total = self._scan_points_counts()
+        excluded = total - active
+        metadata = self._current_quad_scan_metadata()
+        entries = metadata.get("point_quality")
+        if not isinstance(entries, list) or not entries:
+            return (
+                f"Operator-excluded samples: {excluded} · "
+                "recorded image-quality details unavailable"
+            )
+
+        lines = [f"Operator-excluded samples: {excluded}"]
+        worst = None
+        priority = {
+            "usable": 0,
+            "containment_warning": 1,
+            "poor_fit": 2,
+            "underresolved": 3,
+            "clipped": 4,
+            "low_signal": 5,
+            "empty_window": 6,
+        }
+        for label, plane_key in (("X", "x"), ("Y", "y")):
+            usable = 0
+            for entry in entries:
+                quality = entry.get(plane_key, {}) if isinstance(entry, Mapping) else {}
+                status = str(_read_result_field(quality, "status", "unknown"))
+                is_usable = bool(
+                    _read_result_field(
+                        quality,
+                        "usable",
+                        status in {"usable", "containment_warning"},
+                    )
+                )
+                usable += int(is_usable)
+                score = priority.get(status, 2)
+                if worst is None or score > worst[0]:
+                    k1 = _finite_float_or_none(_read_result_field(entry, "k1"))
+                    worst = (score, label, status, k1)
+            lines.append(f"{label}: {usable}/{len(entries)} image fits usable")
+        if worst is not None and worst[0] > 0:
+            k1_text = "" if worst[3] is None else f" at K₁={worst[3]:.6g} m⁻²"
+            lines.append(
+                f"Worst recorded quality: {worst[1]} · "
+                f"{_display_fit_status(worst[2])}{k1_text}"
+            )
+        else:
+            lines.append("No recorded image-quality warning")
+        return "\n".join(lines)
+
+    def _format_quad_scan_fit_trust(self):
+        summary = self.latest_emit_fit_summary
+        if not isinstance(summary, Mapping):
+            return "No Quad Scan fit available."
+
+        lines = [
+            f"{_display_fit_method(summary.get('method', 'fit'))} · "
+            f"{_display_fit_status(summary.get('quality_status', summary.get('status')))}"
+        ]
+        for label, plane_key in (("X", "xplane"), ("Y", "yplane")):
+            plane = summary.get(plane_key, {})
+            status = _read_result_field(
+                plane,
+                "validation_status",
+                _read_result_field(plane, "status", "unknown"),
+            )
+            parts = [f"{label}: {_display_fit_status(status)}"]
+            selection = _read_result_field(plane, "fit_selection")
+            if isinstance(selection, Mapping):
+                used = selection.get("points_used")
+                total = selection.get("points_total")
+                if used is not None and total is not None:
+                    parts.append(f"fit points {used}/{total}")
+            condition = _finite_float_or_none(_read_result_field(plane, "condition_number"))
+            residual = _finite_float_or_none(_read_result_field(plane, "residual_rms"))
+            if condition is not None:
+                parts.append(f"cond {condition:.3g}")
+            if residual is not None:
+                parts.append(f"residual RMS {residual:.3g} mm²")
+            lines.append(" · ".join(parts))
+        lines.append(
+            "ε uncertainty / χ²ν: unavailable (scan archive has no per-point size errors)"
+        )
+        return "\n".join(lines)
+
+    def _format_quad_scan_model_optics(self):
+        metadata = self._current_quad_scan_metadata()
+        snapshot = metadata.get("model_snapshot")
+        if not isinstance(snapshot, Mapping):
+            return "No model snapshot available."
+
+        source = str(snapshot.get("source", "unknown")).upper()
+        created_at = str(snapshot.get("created_at", "")).strip()
+        quad = str(metadata.get("quad", self.comboBox.currentText()) or "--")
+        flag = str(metadata.get("flag", self.comboBox_4.currentText()) or "--")
+        line_name = str(metadata.get("model_line", "") or "--")
+        lines = [
+            f"{source}" + (f" · {created_at}" if created_at else ""),
+            f"{line_name} · {quad} → {flag}",
+        ]
+        strengths = []
+        fields = snapshot.get("fields", ())
+        if isinstance(fields, (list, tuple)):
+            for field in fields:
+                if not isinstance(field, Mapping):
+                    continue
+                element = str(field.get("element_id", "")).strip()
+                name = str(field.get("field_name", "")).strip()
+                value = _finite_float_or_none(field.get("value"))
+                if element and name and value is not None:
+                    strengths.append(f"{element}.{name}={value:.6g}")
+        if strengths:
+            lines.append("Model strengths: " + " · ".join(strengths))
+        return "\n".join(lines)
 
     @staticmethod
     def _format_twiss_plane_label(plane):
