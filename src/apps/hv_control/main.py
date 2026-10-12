@@ -59,7 +59,6 @@ class HvControlWindow(QMainWindow):
         self.status_labels = {}
         self.enable_buttons = {}
         self.batch_enable_buttons = {}
-        self.set_buttons = {}
         self.operation_labels = {}
         self.dirty_targets = set()
         self._active_operation_names = set()
@@ -133,16 +132,15 @@ class HvControlWindow(QMainWindow):
         select_cell_label = QLabel(mod.name, select_cell); select_cell_label.setStyleSheet("font-weight:700;"); select_layout.addWidget(select_cell_label); select_layout.addStretch(1)
         self.table.setCellWidget(row, 0, select_cell); self.selection_boxes[mod.name] = select
         set_spin = QDoubleSpinBox(self.table); set_spin.setAlignment(Qt.AlignLeft | Qt.AlignVCenter); set_spin.setRange(self.runtime.low, self.runtime.high); set_spin.setDecimals(1); set_spin.setSuffix(f" {self.runtime.unit}"); set_spin.setKeyboardTracking(False); set_spin.setEnabled(True); self.table.setCellWidget(row, 1, set_spin)
-        for col in (2, 5): self.table.setItem(row, col, QTableWidgetItem("--"))
+        for col in (2, 5, 6): self.table.setItem(row, col, QTableWidgetItem("--"))
         for field, col in (("enable_1",3),("enable_2",4)):
             cell = QWidget(self.table); layout = QHBoxLayout(cell); layout.setContentsMargins(8,3,8,3); layout.setSpacing(6)
             label = QLabel("--", cell); label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter); button = QPushButton("ON", cell); button.setObjectName("enableToggleButton"); button.setFixedSize(82, 26); button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed); button.setEnabled(False); button.clicked.connect(lambda _=False, n=mod.name, f=field: self._toggle_enable(n, f))
             layout.addWidget(label, 1); layout.addWidget(button, 0); self.table.setCellWidget(row, col, cell); self.status_labels[(mod.name, field)] = label; self.enable_buttons[(mod.name, field)] = button
-        operation_cell = QWidget(self.table); operation_layout = QHBoxLayout(operation_cell); operation_layout.setContentsMargins(8,3,8,3); operation_layout.setSpacing(6)
-        operation_label = QLabel("--", operation_cell); apply_button = QPushButton("Apply", operation_cell); apply_button.setObjectName("enableToggleButton"); apply_button.setFixedSize(82, 26); apply_button.setEnabled(False); apply_button.clicked.connect(lambda _=False, n=mod.name: self._apply_one(n))
-        operation_layout.addWidget(operation_label, 1); operation_layout.addWidget(apply_button, 0); self.table.setCellWidget(row, 6, operation_cell); self.operation_labels[mod.name] = operation_label; self.set_buttons[mod.name] = apply_button
         set_spin.valueChanged.connect(lambda value, n=mod.name: self._set_target(n, value))
+        set_spin.lineEdit().returnPressed.connect(lambda n=mod.name: self._apply_one(n))
         self.values[(mod.name, "target_widget")] = set_spin
+        self.operation_labels[mod.name] = self.table.item(row, 6)
 
     def _selected_names(self):
         return [name for name, box in self.selection_boxes.items() if box.isChecked()]
@@ -232,10 +230,10 @@ class HvControlWindow(QMainWindow):
         )
 
     def _refresh_voltage_controls(self, name):
-        self.values[(name, "target_widget")].setEnabled(self.worker is None)
+        widget = self.values[(name, "target_widget")]
+        widget.setEnabled(self.worker is None)
         can_apply = self.connected.get((name, "voltage_set"), False) and self._can_write()
-        self.set_buttons[name].setEnabled(can_apply)
-        self.set_buttons[name].setToolTip("Apply this row's HV setpoint" if can_apply else "HV setpoint PV must be connected on a writable backend")
+        widget.setToolTip("Press Enter to apply this row's HV setpoint" if can_apply else "You can edit this value, but applying requires a connected PV on a writable backend")
 
     def _refresh_batch_enable(self, field):
         names = self._selected_names()
@@ -274,9 +272,16 @@ class HvControlWindow(QMainWindow):
         self._start_worker(operations, "write")
 
     def _apply_one(self, name):
-        mod = next(mod for mod in self.runtime.modulators if mod.name == name)
-        value = self.values[(name, "target_widget")].value()
+        widget = self.values[(name, "target_widget")]
+        widget.interpretText()
+        value = widget.value()
         self.values[(name, "target")] = value
+        self.dirty_targets.add(name)
+        self.operation_labels[name].setText("Pending")
+        if not self.connected.get((name, "voltage_set"), False):
+            self.statusBar().showMessage(f"{name} HV setpoint PV is not connected")
+            return
+        mod = next(mod for mod in self.runtime.modulators if mod.name == name)
         self._start_worker([(name, "voltage_set", mod.voltage_set, value)], "write")
 
     def _read_back(self):
@@ -346,7 +351,7 @@ class HvControlWindow(QMainWindow):
         if not busy:
             self._selection_changed()
         if busy:
-            for button in (*self.batch_enable_buttons.values(), *self.enable_buttons.values(), *self.set_buttons.values()):
+            for button in (*self.batch_enable_buttons.values(), *self.enable_buttons.values()):
                 button.setEnabled(False)
             for mod in self.runtime.modulators:
                 self.values[(mod.name, "target_widget")].setEnabled(False)
