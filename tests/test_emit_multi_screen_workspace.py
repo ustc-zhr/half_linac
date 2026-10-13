@@ -259,6 +259,27 @@ class MultiScreenWorkspaceTests(unittest.TestCase):
         workspace._set_image_colorbar_visible(False)
         self.assertEqual(len(workspace.image_widget.fig.axes), 1)
 
+    def test_display_dialog_matches_quad_scan_and_is_reused(self):
+        workspace = self._workspace(np.zeros((20, 20)))
+        workspace.beam_image_vmin = 0.25
+        workspace.beam_image_vmax = 2.5
+
+        workspace._show_display_dialog()
+        dialog = workspace.beam_image_display_dialog
+
+        self.assertEqual(dialog.windowTitle(), "PRF Image Display")
+        self.assertGreaterEqual(dialog.minimumWidth(), 300)
+        self.assertEqual(workspace.beam_image_log_checkbox.text(), "Log intensity")
+        self.assertEqual(
+            workspace.beam_image_colorbar_checkbox.text(), "Show colorbar"
+        )
+        self.assertEqual(workspace.beam_image_vmin_edit.text(), "0.25")
+        self.assertEqual(workspace.beam_image_vmax_edit.text(), "2.5")
+
+        workspace._show_display_dialog()
+        self.assertIs(workspace.beam_image_display_dialog, dialog)
+        dialog.hide()
+
     def test_invalid_fit_is_displayed_but_not_accepted(self):
         image = np.zeros((20, 20), dtype=float)
         workspace = self._workspace(image)

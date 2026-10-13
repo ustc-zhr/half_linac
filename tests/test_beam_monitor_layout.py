@@ -83,9 +83,28 @@ class BeamMonitorLayoutTests(unittest.TestCase):
             self.assertTrue(window.controls_card.isHidden())
 
             window._show_display_settings_dialog()
+            self.assertTrue(
+                window.display_settings_dialog.isAncestorOf(
+                    window.log_intensity_checkbox
+                )
+            )
+            self.assertFalse(window.log_intensity_checkbox.isChecked())
+            window.log_intensity_checkbox.setChecked(True)
+            self.assertTrue(window.log_intensity_enabled)
             self.assertFalse(window.show_colorbar_checkbox.isChecked())
+            self.assertFalse(window.fit_intensity_checkbox.isChecked())
+            window.fit_intensity_checkbox.setChecked(True)
+            self.assertFalse(window.fit_intensity_checkbox.isChecked())
+            self.assertFalse(window.fit_uses_vmin)
+            window.lineEdit_4.setText("1.5")
+            window.fit_intensity_checkbox.setChecked(True)
+            self.assertTrue(window.fit_intensity_checkbox.isChecked())
+            self.assertTrue(window.fit_uses_vmin)
             window.show_colorbar_checkbox.setChecked(True)
             self.assertTrue(window.show_colorbar_enabled)
+            window._reset_intensity_limits()
+            self.assertFalse(window.fit_intensity_checkbox.isChecked())
+            self.assertFalse(window.fit_uses_vmin)
             window.display_settings_dialog.hide()
 
             window.settings_toggle_button.click()
@@ -99,6 +118,40 @@ class BeamMonitorLayoutTests(unittest.TestCase):
             self.assertTrue(window.settings_content.isHidden())
             self.assertTrue(window.controls_card.isHidden())
             self.assertEqual(window.settings_toggle_button.arrowType(), Qt.RightArrow)
+        finally:
+            window.close()
+
+    def test_enabled_fit_uses_display_vmin_for_analysis(self):
+        with patch.dict(
+            os.environ,
+            {"HALFLINAC_MACHINE": "half", "HALFLINAC_CONTROL_BACKEND": "vm"},
+        ), patch.object(beam_monitor_main.myWindow, "plot_beamprofile"), patch.object(
+            beam_monitor_main, "PV", _FakePV
+        ), patch.object(beam_monitor_main, "caget", return_value=None):
+            window = beam_monitor_main.myWindow()
+
+        try:
+            window.timer.stop()
+            window._show_display_settings_dialog()
+            window.lineEdit_4.setText("2.5")
+            window.fit_intensity_checkbox.setChecked(True)
+            window.pixel = (2, 2)
+            window.extent = (-1.0, 1.0, -1.0, 1.0)
+            window.xlim = window.extent[:2]
+            window.ylim = window.extent[2:]
+            sentinel = RuntimeError("analysis reached")
+
+            with patch.object(
+                window, "_configure_active_channels", return_value=True
+            ), patch.object(window, "_read_size_pv"), patch.object(
+                window, "_latest_image_frame", return_value=[0.0, 1.0, 2.0, 3.0]
+            ), patch.object(
+                beam_monitor_main, "analyze_beam_image", side_effect=sentinel
+            ) as analyze:
+                with self.assertRaisesRegex(RuntimeError, "analysis reached"):
+                    window.plot_beamprofile()
+
+            self.assertEqual(analyze.call_args.kwargs["fit_vmin"], 2.5)
         finally:
             window.close()
 

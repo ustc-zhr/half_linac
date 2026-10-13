@@ -549,6 +549,8 @@ class myWindow(QWidget, Ui_Form):
         self.background_dialog = None
         self.background_preview = None
         self.display_settings_dialog = None
+        self.fit_intensity_checkbox = None
+        self.fit_uses_vmin = False
         self.log_intensity_enabled = False
         self.show_colorbar_enabled = False
         self._image_display_warning = None
@@ -838,7 +840,9 @@ class myWindow(QWidget, Ui_Form):
         self.background_button = button("Manage…", self.settings_content)
         self.background_button.setObjectName("backgroundButton")
         self.display_settings_button = button("Display settings…", self.settings_content)
-        self.display_settings_button.setToolTip("Set colormap and intensity limits.")
+        self.display_settings_button.setToolTip(
+            "Set colormap, intensity limits, and display options."
+        )
         self.reset_view_button = button("Full image", self.settings_content)
         self.reset_view_button.setObjectName("fullImageButton")
         self.reset_view_button.setToolTip("Restore the full physical image extent for the selected flag.")
@@ -852,6 +856,7 @@ class myWindow(QWidget, Ui_Form):
         self.comboBox_2.setCurrentText(DEFAULT_BEAM_IMAGE_COLORMAP)
         self.log_intensity_checkbox = QCheckBox("Log intensity", self.settings_content)
         self.log_intensity_checkbox.setToolTip("Change image colors without changing profile analysis.")
+        self.log_intensity_checkbox.hide()
         for widget in (self.label_2, self.comboBox_2,
                        self.label_3, self.label_4, self.lineEdit_3, self.lineEdit_4,
                        self.pushButton_3, self.lineEdit_7, self.lineEdit_8,
@@ -866,7 +871,7 @@ class myWindow(QWidget, Ui_Form):
         self.control_groups = (
             (group(self.settings_content, self.label, self.lineEdit),
              group(self.settings_content, self.label_9, self.lineEdit_9),
-             group(self.settings_content, self.log_intensity_checkbox, self.display_settings_button)),
+             group(self.settings_content, self.display_settings_button)),
             (group(self.settings_content, label("Method", self.settings_content),
                    self.profile_method_combo),
              group(self.settings_content, label("ROI:", self.settings_content),
@@ -906,6 +911,11 @@ class myWindow(QWidget, Ui_Form):
             self.comboBox_2.show()
             layout.addLayout(display_row)
 
+            self.log_intensity_checkbox.setParent(dialog)
+            self.log_intensity_checkbox.setChecked(self.log_intensity_enabled)
+            self.log_intensity_checkbox.show()
+            layout.addWidget(self.log_intensity_checkbox)
+
             self.show_colorbar_checkbox = QCheckBox("Show colorbar", dialog)
             self.show_colorbar_checkbox.setChecked(self.show_colorbar_enabled)
             self.show_colorbar_checkbox.setToolTip(
@@ -936,6 +946,17 @@ class myWindow(QWidget, Ui_Form):
             form.setColumnStretch(1, 1)
             layout.addLayout(form)
 
+            self.fit_intensity_checkbox = QCheckBox("Use vmin for fit", dialog)
+            self.fit_intensity_checkbox.setChecked(self.fit_uses_vmin)
+            self.fit_intensity_checkbox.setToolTip(
+                "Remove pixels below Display vmin from projections before fitting. "
+                "vmax only changes image colors."
+            )
+            self.fit_intensity_checkbox.toggled.connect(
+                self._set_fit_uses_vmin
+            )
+            layout.addWidget(self.fit_intensity_checkbox)
+
             actions = QHBoxLayout()
             reset_button = QPushButton("Reset Auto", dialog)
             apply_button = QPushButton("Apply", dialog)
@@ -961,7 +982,29 @@ class myWindow(QWidget, Ui_Form):
     def _reset_intensity_limits(self):
         self.lineEdit_4.clear()
         self.lineEdit_3.clear()
+        self._disable_fit_vmin()
         self.plot_beamprofile()
+
+    def _disable_fit_vmin(self):
+        self.fit_uses_vmin = False
+        if self.fit_intensity_checkbox is not None:
+            blocked = self.fit_intensity_checkbox.blockSignals(True)
+            self.fit_intensity_checkbox.setChecked(False)
+            self.fit_intensity_checkbox.blockSignals(blocked)
+
+    def _set_fit_uses_vmin(self, enabled):
+        if enabled:
+            vmin, _vmax = self._resolve_intensity_limits()
+            if vmin is None:
+                self._disable_fit_vmin()
+                self._set_profile_status(
+                    "Set vmin before using it for fit", "warning"
+                )
+                self._refresh_status()
+                return
+        self.fit_uses_vmin = bool(enabled)
+        if self._pv_available:
+            self.plot_beamprofile()
 
     def _set_log_intensity_enabled(self, enabled):
         self.log_intensity_enabled = bool(enabled)
@@ -2086,6 +2129,10 @@ class myWindow(QWidget, Ui_Form):
                 "Camera exposure changed; background subtraction has been disabled."
             )
 
+        vmin, vmax = self._resolve_intensity_limits()
+        if self.fit_uses_vmin and vmin is None:
+            self._disable_fit_vmin()
+
         try:
             active_roi = self.roi_control.active_roi()
             analysis_extent = (
@@ -2107,6 +2154,7 @@ class myWindow(QWidget, Ui_Form):
                 ylim=analysis_ylim,
                 method=self.profile_method_combo.currentText(),
                 roi=active_roi,
+                fit_vmin=vmin if self.fit_uses_vmin else None,
             )
         except BackgroundStoreError as exc:
             self.subtract_background_enabled = False
@@ -2124,7 +2172,6 @@ class myWindow(QWidget, Ui_Form):
 
         display_data = raw_data if active_roi is not None else data
         display_extent = self.extent if active_roi is not None else analysis_extent
-        vmin, vmax = self._resolve_intensity_limits()
         display_data, vnorm, display_warning = resolve_image_display_scale(
             display_data,
             logarithmic=self.log_intensity_enabled,
@@ -2138,6 +2185,7 @@ class myWindow(QWidget, Ui_Form):
             if vmin is not None or vmax is not None:
                 self.lineEdit_4.clear()
                 self.lineEdit_3.clear()
+                self._disable_fit_vmin()
         self._image_display_warning = display_warning
         self.h = self.widget.axes.imshow(
             display_data,
@@ -2155,8 +2203,9 @@ class myWindow(QWidget, Ui_Form):
 
         profile_method = self.profile_method_combo.currentText()
         background_marker = " • BG" if self.subtract_background_enabled else ""
+        fit_vmin_marker = " • vmin fit" if self.fit_uses_vmin else ""
         self.widget.axes.set_title(
-            f"{self.tmppv} • {profile_method}{background_marker}",
+            f"{self.tmppv} • {profile_method}{background_marker}{fit_vmin_marker}",
             color=self._palette()["plot_text"],
             fontsize=11,
             fontweight="bold",

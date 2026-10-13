@@ -138,6 +138,12 @@ class MultiScreenWorkspace(QWidget):
         self._background_screen = None
         self._background_metadata = {}
         self.background_dialog = None
+        self.beam_image_display_dialog = None
+        self.beam_image_colormap_combo = None
+        self.beam_image_vmin_edit = None
+        self.beam_image_vmax_edit = None
+        self.beam_image_log_checkbox = None
+        self.beam_image_colorbar_checkbox = None
         self.roi_control = None
         self._roi_screen = None
         self.roi_dialog = None
@@ -340,7 +346,7 @@ class MultiScreenWorkspace(QWidget):
         self.beam_image_background_checkbox.hide()
         self.beam_image_background_checkbox.setToolTip("Background subtraction is available through the Scan image workflow.")
         self.beam_image_background_checkbox.toggled.connect(self._background_toggled)
-        self.beam_image_display_button = QPushButton("Display...", image_box)
+        self.beam_image_display_button = QPushButton("Display…", image_box)
         self.beam_image_display_button.setProperty("compact", True)
         self.beam_image_display_button.clicked.connect(self._show_display_dialog)
         self.width_method_combo = QComboBox(image_box)
@@ -595,6 +601,7 @@ class MultiScreenWorkspace(QWidget):
         self.fit_intensity_checkbox.blockSignals(True)
         self.fit_intensity_checkbox.setChecked(self.fit_uses_vmin)
         self.fit_intensity_checkbox.blockSignals(False)
+        self._sync_display_dialog_controls()
         self._image_settings_screen = screen
         self._save_image_settings_for_screen(screen)
 
@@ -1377,49 +1384,106 @@ class MultiScreenWorkspace(QWidget):
         self.beam_background_status_label.setText(self.background_status)
 
     def _show_display_dialog(self) -> None:
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Image Display")
-        layout = QVBoxLayout(dialog)
-        form = QGridLayout()
-        edits = []
-        for row, label, value in (
-            (2, "vmin", self.beam_image_vmin),
-            (3, "vmax", self.beam_image_vmax),
-        ):
-            edit = QLineEdit(dialog)
-            edit.setPlaceholderText("Auto")
-            edit.setText("" if value is None else f"{value:g}")
-            form.addWidget(QLabel(label, dialog), row, 0)
-            form.addWidget(edit, row, 1)
-            edits.append(edit)
-        for edit in edits:
-            edit.textChanged.connect(
-                lambda _text: self._set_image_limits(*edits, refit=False)
+        if self.beam_image_display_dialog is None:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("PRF Image Display")
+            dialog.setMinimumWidth(300)
+            layout = QVBoxLayout(dialog)
+
+            settings = QGridLayout()
+            settings.setHorizontalSpacing(10)
+            settings.setVerticalSpacing(10)
+            colormap_label = QLabel("Colormap", dialog)
+            colormap_label.setProperty("role", "field")
+            self.beam_image_colormap_combo = QComboBox(dialog)
+            self.beam_image_colormap_combo.addItems(BEAM_IMAGE_COLORMAPS)
+            self.beam_image_colormap_combo.currentTextChanged.connect(
+                self._set_image_colormap
             )
-            edit.editingFinished.connect(lambda: self._set_image_limits(*edits))
-        form.addWidget(QLabel("Colormap"), 0, 0)
-        cmap = QComboBox(dialog)
-        cmap.addItems(BEAM_IMAGE_COLORMAPS)
-        cmap.setCurrentText(self.beam_image_colormap)
-        cmap.currentTextChanged.connect(self._set_image_colormap)
-        form.addWidget(cmap, 0, 1)
-        log = QCheckBox("Logarithmic intensity", dialog)
-        log.setChecked(self.beam_image_logarithmic)
-        log.toggled.connect(self._set_image_logarithmic)
-        form.addWidget(log, 1, 0, 1, 2)
-        colorbar = QCheckBox("Show colorbar", dialog)
-        colorbar.setChecked(self.beam_image_show_colorbar)
-        colorbar.setToolTip(
-            "Show the current image intensity scale beside the screen image."
+            settings.addWidget(colormap_label, 0, 0)
+            settings.addWidget(self.beam_image_colormap_combo, 0, 1)
+
+            self.beam_image_vmin_edit = QLineEdit(dialog)
+            self.beam_image_vmax_edit = QLineEdit(dialog)
+            for row, label, edit in (
+                (1, "vmin", self.beam_image_vmin_edit),
+                (2, "vmax", self.beam_image_vmax_edit),
+            ):
+                edit.setPlaceholderText("Auto")
+                edit.textChanged.connect(
+                    lambda _text: self._set_image_limits(
+                        self.beam_image_vmin_edit,
+                        self.beam_image_vmax_edit,
+                        refit=False,
+                    )
+                )
+                edit.editingFinished.connect(
+                    lambda: self._set_image_limits(
+                        self.beam_image_vmin_edit,
+                        self.beam_image_vmax_edit,
+                    )
+                )
+                settings.addWidget(QLabel(label, dialog), row, 0)
+                settings.addWidget(edit, row, 1)
+            settings.setColumnStretch(1, 1)
+            layout.addLayout(settings)
+
+            self.beam_image_log_checkbox = QCheckBox("Log intensity", dialog)
+            self.beam_image_log_checkbox.setToolTip(
+                "Use logarithmic image colors without changing profile analysis."
+            )
+            self.beam_image_log_checkbox.toggled.connect(
+                self._set_image_logarithmic
+            )
+            layout.addWidget(self.beam_image_log_checkbox)
+
+            self.beam_image_colorbar_checkbox = QCheckBox(
+                "Show colorbar", dialog
+            )
+            self.beam_image_colorbar_checkbox.setToolTip(
+                "Show the current image intensity scale beside the PRF image."
+            )
+            self.beam_image_colorbar_checkbox.toggled.connect(
+                self._set_image_colorbar_visible
+            )
+            layout.addWidget(self.beam_image_colorbar_checkbox)
+
+            close_button = QPushButton("Close", dialog)
+            close_button.setProperty("compact", True)
+            close_button.clicked.connect(dialog.hide)
+            layout.addWidget(close_button)
+            self.beam_image_display_dialog = dialog
+
+        self._sync_display_dialog_controls()
+        self.beam_image_display_dialog.show()
+        self.beam_image_display_dialog.raise_()
+        self.beam_image_display_dialog.activateWindow()
+
+    def _sync_display_dialog_controls(self) -> None:
+        if self.beam_image_display_dialog is None:
+            return
+        controls = (
+            (self.beam_image_colormap_combo, self.beam_image_colormap),
+            (
+                self.beam_image_vmin_edit,
+                "" if self.beam_image_vmin is None else f"{self.beam_image_vmin:g}",
+            ),
+            (
+                self.beam_image_vmax_edit,
+                "" if self.beam_image_vmax is None else f"{self.beam_image_vmax:g}",
+            ),
+            (self.beam_image_log_checkbox, self.beam_image_logarithmic),
+            (self.beam_image_colorbar_checkbox, self.beam_image_show_colorbar),
         )
-        colorbar.toggled.connect(self._set_image_colorbar_visible)
-        form.addWidget(colorbar, 4, 0, 1, 2)
-        layout.addLayout(form)
-        close = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
-        close.rejected.connect(dialog.reject)
-        close.accepted.connect(dialog.accept)
-        layout.addWidget(close)
-        dialog.exec_()
+        for control, value in controls:
+            blocked = control.blockSignals(True)
+            if isinstance(control, QComboBox):
+                control.setCurrentText(value)
+            elif isinstance(control, QLineEdit):
+                control.setText(value)
+            else:
+                control.setChecked(value)
+            control.blockSignals(blocked)
 
     def _set_image_limits(self, minimum_edit, maximum_edit, *, refit=True):
         try:
