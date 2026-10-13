@@ -82,6 +82,16 @@ class BeamMonitorLayoutTests(unittest.TestCase):
             self.assertTrue(window.settings_content.isHidden())
             self.assertTrue(window.controls_card.isHidden())
 
+            window._show_background_dialog()
+            self.assertIs(
+                window.background_subtract_checkbox.parentWidget(),
+                window.background_dialog,
+            )
+            self.assertIn(
+                "Apply background", window.background_subtract_checkbox.text()
+            )
+            window.background_dialog.hide()
+
             window._show_display_settings_dialog()
             self.assertTrue(
                 window.display_settings_dialog.isAncestorOf(

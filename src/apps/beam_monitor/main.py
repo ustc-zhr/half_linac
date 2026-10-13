@@ -831,11 +831,14 @@ class myWindow(QWidget, Ui_Form):
         self._sync_monitor_toggle_button()
         self.roi_status_label = label("Full image", self.settings_content)
         self.roi_button = button("Edit…", self.settings_content)
-        self.background_subtract_checkbox = QCheckBox("Subtract background", self.settings_content)
+        self.background_subtract_checkbox = QCheckBox(
+            "Apply background subtraction", self.settings_content
+        )
         self.background_subtract_checkbox.setObjectName("subtractBackgroundCheckBox")
         self.background_subtract_checkbox.setToolTip(
             "Subtract the current flag's saved background before display and analysis."
         )
+        self.background_subtract_checkbox.hide()
         self.background_status_label = label("No background loaded", self.settings_content)
         self.background_button = button("Manage…", self.settings_content)
         self.background_button.setObjectName("backgroundButton")
@@ -876,9 +879,8 @@ class myWindow(QWidget, Ui_Form):
                    self.profile_method_combo),
              group(self.settings_content, label("ROI:", self.settings_content),
                    self.roi_status_label, self.roi_button),
-             group(self.settings_content, self.background_subtract_checkbox,
-                   self.background_button),
-             group(self.settings_content, self.background_status_label)),
+             group(self.settings_content, label("BG:", self.settings_content),
+                   self.background_status_label, self.background_button)),
         )
         self.compact_control_grid = QGridLayout()
         self.compact_control_grid.setHorizontalSpacing(18)
@@ -1354,6 +1356,10 @@ class myWindow(QWidget, Ui_Form):
         self.background_dialog_status_label.setProperty("role", "field")
         self.background_dialog_status_label.setWordWrap(True)
         outer.addWidget(self.background_dialog_status_label)
+
+        self.background_subtract_checkbox.setParent(dialog)
+        self.background_subtract_checkbox.show()
+        outer.addWidget(self.background_subtract_checkbox)
 
         action_row = QHBoxLayout()
         action_row.setSpacing(8)
