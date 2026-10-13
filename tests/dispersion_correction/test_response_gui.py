@@ -20,6 +20,11 @@ def test_measure_save_reload_and_start_with_saved_response(tmp_path, monkeypatch
     assert window.measure_q_response_button.isVisibleTo(window)
     assert window.measure_q_response_button.isEnabled()
     assert window.run_button.isEnabled()
+    assert window.workflow_hint_label.isHidden()
+    assert window.workflow_state_label.isVisibleTo(window)
+    assert window.workflow_summary_label.isVisibleTo(window)
+    assert window.workflow_state_label.toolTip() == window.workflow_hint_label.text()
+    assert window.saved_response_status.isHidden()
 
     def measure(task):
         assert task == "response"
@@ -35,6 +40,7 @@ def test_measure_save_reload_and_start_with_saved_response(tmp_path, monkeypatch
     monkeypatch.setattr(window, "_start_task", measure)
     window.measure_q_response_button.click()
     assert "Q response saved" in window.saved_response_status.text()
+    assert window.saved_response_status.isVisibleTo(window)
     assert window.correction_recommendation is None
     assert window.recommendation_dialog.isHidden()
     paths = list(tmp_path.glob("q_response_*.json"))

@@ -1743,6 +1743,7 @@ class MainWindow(QMainWindow):
         self.workflow_hint_label = QLabel()
         self.workflow_hint_label.setObjectName("workflowHint")
         self.workflow_hint_label.setWordWrap(True)
+        self.workflow_hint_label.hide()
         online_layout.addWidget(self.workflow_hint_label)
         self.workflow_summary_label = QLabel()
         self.workflow_summary_label.setObjectName("workflowSummary")
@@ -1797,9 +1798,10 @@ class MainWindow(QMainWindow):
         self.response_details_button.clicked.connect(self._show_response_details)
         workflow_secondary_actions.addWidget(self.response_details_button)
         online_layout.addLayout(workflow_secondary_actions)
-        self.saved_response_status = QLabel("Q responses are saved automatically after measurement.")
+        self.saved_response_status = QLabel()
         self.saved_response_status.setWordWrap(True)
         self.saved_response_status.setProperty("muted", "true")
+        self.saved_response_status.hide()
         online_layout.addWidget(self.saved_response_status)
 
         # These operation-specific buttons remain as internal state holders for the
@@ -5383,6 +5385,7 @@ class MainWindow(QMainWindow):
             f"Q response saved · {record.created_at[:19]} · {record.config['section']['display_name']}"
         )
         self.saved_response_status.setToolTip(path)
+        self.saved_response_status.show()
         if record.snapshot.device_values:
             self._last_known_quadrupole_values = dict(record.snapshot.device_values)
 
@@ -6590,6 +6593,9 @@ class MainWindow(QMainWindow):
             self.workflow_hint_label.setText(
                 "Wait for the current operation to finish or use Abort when available."
             )
+            self.workflow_state_label.setToolTip(
+                "Wait for the current operation to finish or use Abort when available."
+            )
             self.next_action_button.setToolTip(
                 "Wait for the current operation to finish or use Abort."
             )
@@ -6616,6 +6622,7 @@ class MainWindow(QMainWindow):
         )
         self.next_action_button.setToolTip(hint)
         self.workflow_state_label.setText(state_text)
+        self.workflow_state_label.setToolTip(hint)
         self.workflow_hint_label.setText(hint)
 
     def _update_measurement_action(self, running: bool, task: str) -> None:
@@ -6809,7 +6816,10 @@ class MainWindow(QMainWindow):
             and automatic_visible
         )
         self.measure_q_response_button.setVisible(correction_enabled)
-        self.saved_response_status.setVisible(correction_enabled)
+        self.saved_response_status.setVisible(
+            correction_enabled
+            and bool(self.saved_response_status.text().strip())
+        )
         self.measure_q_response_button.setEnabled(
             not running and operation_allowed and automatic_connection_ready and correction_enabled
         )
