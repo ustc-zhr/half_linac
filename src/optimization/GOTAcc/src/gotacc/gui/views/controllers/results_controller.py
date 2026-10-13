@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QTreeWidgetItem,
@@ -56,6 +57,7 @@ class ResultsController:
         tree.header().setStretchLastSection(True)
         self._ensure_archive_controls()
         self._ensure_pareto_solution_controls()
+        self._apply_optimizer_score_labels()
         self.populate_results_tree()
         self.update_results_summary_table()
         self.refresh_result_source()
@@ -65,7 +67,11 @@ class ResultsController:
             return
         layout = self.window.ui.verticalLayout_runList
         actions = QHBoxLayout()
-        refresh = QPushButton("Refresh", self.window.ui.groupBox_runList)
+        refresh = QPushButton(self.window.ui.groupBox_runList)
+        refresh.setIcon(self.window.style().standardIcon(QStyle.SP_BrowserReload))
+        refresh.setProperty("iconOnly", True)
+        refresh.setFixedWidth(28)
+        refresh.setAccessibleName("Refresh archived runs")
         load = QPushButton("Load Run", self.window.ui.groupBox_runList)
         open_dir = QPushButton("Open Folder", self.window.ui.groupBox_runList)
         for button in (refresh, load, open_dir):
@@ -218,6 +224,32 @@ class ResultsController:
         self.window.ui.tableWidget_paretoSelectionDetail = detail
         self.window.ui.pushButton_writeSelectedPareto = button
 
+    def _apply_optimizer_score_labels(self) -> None:
+        """Make it explicit that displayed objective values are optimizer-space scores."""
+        tables_and_columns = (
+            (getattr(self.window.run_ui, "tableWidget_recent", None), 4),
+            (getattr(self.window.ui, "tableWidget_recentEvaluations", None), 4),
+            (getattr(self.window.ui, "tableWidget_history", None), 2),
+            (getattr(self.window.ui, "tableWidget_paretoSolutions", None), 2),
+        )
+        tooltip = (
+            "Optimizer-space value. Objective labels show the configured direction "
+            "and weight; hover the Best label for the exact transformation."
+        )
+        for table, column in tables_and_columns:
+            if table is None or column >= table.columnCount():
+                continue
+            item = table.horizontalHeaderItem(column)
+            if item is None:
+                item = QTableWidgetItem()
+                table.setHorizontalHeaderItem(column, item)
+            item.setText("Optimizer Score")
+            item.setToolTip(tooltip)
+
+        history_group = getattr(self.window.run_ui, "groupBox_table", None)
+        if history_group is not None:
+            history_group.setTitle("Evaluation History · Optimizer Scores")
+
     def reset_plot_data(self) -> None:
         state = self.window.state
         objective_type = self.window.task_ui.comboBox_objectiveType.currentText().strip().lower()
@@ -292,15 +324,15 @@ class ResultsController:
         xs = list(range(1, len(state.objective_history) + 1))
         objective_label = self.objective_labels(1)[0]
         if title == "Objective History":
-            title = f"{objective_label} History"
+            title = f"{objective_label} · Optimizer Score History"
         elif title == "Convergence":
-            title = f"{objective_label} Convergence"
+            title = f"{objective_label} · Optimizer Score Convergence"
         ax.plot(xs, state.objective_history, label=objective_label)
         if state.best_history:
             ax.plot(xs, state.best_history, label="best-so-far")
         ax.set_title(title)
         ax.set_xlabel("Evaluation")
-        ax.set_ylabel(objective_label)
+        ax.set_ylabel(f"Optimizer Score · {objective_label}")
         ax.grid(True, alpha=0.3)
         ax.legend()
         canvas.apply_theme_to_axes(ax)
@@ -354,8 +386,8 @@ class ResultsController:
             )
         ax.set_title(title)
         objective_labels = self.objective_labels(2)
-        ax.set_xlabel(objective_labels[0])
-        ax.set_ylabel(objective_labels[1])
+        ax.set_xlabel(f"Optimizer Score · {objective_labels[0]}")
+        ax.set_ylabel(f"Optimizer Score · {objective_labels[1]}")
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
         canvas.apply_theme_to_axes(ax)
@@ -403,6 +435,7 @@ class ResultsController:
         count: int,
         *,
         include_direction: bool = True,
+        include_weight: bool = True,
         task: dict[str, Any] | None = None,
     ) -> list[str]:
         current = task or self.window.state.latest_task_snapshot or self.view.current_task()
@@ -421,12 +454,23 @@ class ResultsController:
                     name = f"{name} ↑"
                 elif direction.startswith("min"):
                     name = f"{name} ↓"
+            if include_weight:
+                weight = self._format_objective_weight(row.get("Weight", 1.0))
+                name = f"{name} · w={weight}"
             labels.append(name)
             if len(labels) >= count:
                 break
         while len(labels) < count:
             labels.append(f"f{len(labels)}")
         return labels
+
+    @staticmethod
+    def _format_objective_weight(value: Any) -> str:
+        try:
+            weight = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        return f"{weight:.6g}"
 
     def format_objective_values(
         self,
@@ -442,9 +486,7 @@ class ResultsController:
         sequence = list(values) if isinstance(values, (list, tuple)) else [values]
         if not sequence:
             return "--"
-        labels = self.objective_labels(
-            len(sequence), include_direction=False, task=task
-        )
+        labels = self.objective_labels(len(sequence), task=task)
         formatted = []
         for label, value in zip(labels, sequence):
             try:
@@ -459,7 +501,12 @@ class ResultsController:
     ) -> str:
         current = task or self.window.state.latest_task_snapshot or self.view.current_task()
         online = str(current.get("mode", "")).strip().lower() == "online epics"
-        labels = self.objective_labels(count, include_direction=False, task=current)
+        labels = self.objective_labels(
+            count,
+            include_direction=False,
+            include_weight=False,
+            task=current,
+        )
         details: list[str] = []
         label_index = 0
         for row in current.get("objectives", []) or []:
@@ -473,6 +520,8 @@ class ResultsController:
                 else "minimize" if direction.startswith("min")
                 else "unspecified direction"
             )
+            direction_factor = "-1" if direction.startswith("min") else "+1"
+            weight_text = self._format_objective_weight(row.get("Weight", 1.0))
             if online:
                 math_op = str(row.get("Math", "mean")).strip().lower() or "mean"
                 try:
@@ -486,10 +535,15 @@ class ResultsController:
                 )
                 details.append(
                     f"{labels[label_index]}: {aggregation} over {samples} sample(s); "
-                    f"{direction_text}."
+                    f"{direction_text}; weight={weight_text}; optimizer score = "
+                    f"{direction_factor} × {weight_text} × aggregated objective."
                 )
             else:
-                details.append(f"{labels[label_index]}: {direction_text}.")
+                details.append(
+                    f"{labels[label_index]}: {direction_text}; configured weight={weight_text}. "
+                    f"Offline benchmark optimizer score = {direction_factor} × benchmark objective; "
+                    "the configured weight is not applied by the offline backend."
+                )
             label_index += 1
         return "\n".join(details)
 
@@ -647,9 +701,9 @@ class ResultsController:
             else self.format_objective_values(objective)
         )
         objective_field = (
-            "Objectives"
+            "Optimizer Scores"
             if isinstance(objective, (list, tuple)) and len(objective) > 1
-            else "Objective"
+            else "Optimizer Score"
         )
         constraints = record.get("constraint_values")
         if constraints is None:
@@ -907,7 +961,7 @@ class ResultsController:
         rows = [
             ("Selected Pareto", str(solution.get("index", "--"))),
             ("Feasible", "yes" if solution.get("feasible", True) else "no"),
-            ("Objectives", self.format_objective_values(solution.get("y", []))),
+            ("Optimizer Scores", self.format_objective_values(solution.get("y", []))),
             ("Constraints", self._format_vector("c", solution.get("constraints", []))),
             ("Point", self.summarize_x_values(solution.get("x", {}))),
         ]
@@ -1006,7 +1060,7 @@ class ResultsController:
         best_label = (
             "Hypervolume"
             if state.objective_dim > 1
-            else f"Best {self.objective_labels(1, include_direction=False)[0]}"
+            else f"Best Optimizer Score · {self.objective_labels(1)[0]}"
         )
         summary.addChild(
             QTreeWidgetItem(
@@ -1061,7 +1115,7 @@ class ResultsController:
             latest_eval.addChild(
                 QTreeWidgetItem(
                     [
-                        "Objective",
+                        "Optimizer Score",
                         self.format_objective_values(latest_objective),
                     ]
                 )
@@ -1137,7 +1191,7 @@ class ResultsController:
         best_label = (
             "Hypervolume"
             if state.objective_dim > 1
-            else f"Best {self.objective_labels(1, include_direction=False)[0]}"
+            else f"Best Optimizer Score · {self.objective_labels(1)[0]}"
         )
         rows.append(
             (best_label, "--" if state.run.best_value is None else f"{state.run.best_value:.6f}")

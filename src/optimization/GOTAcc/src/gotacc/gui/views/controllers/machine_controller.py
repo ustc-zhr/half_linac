@@ -89,13 +89,13 @@ class MachineController:
 
     def _configure_simple_connection_panel(self) -> None:
         ui = self.window.machine_ui
-        ui.label_status.setText("EPICS")
+        ui.label_status.setVisible(False)
         ui.label_caAddress.setVisible(False)
         ui.lineEdit_caAddress.setVisible(False)
         ui.checkBox_autoConnect.setVisible(False)
         ui.pushButton_connect.setVisible(False)
         ui.pushButton_disconnect.setVisible(False)
-        ui.pushButton_test.setText("Check")
+        ui.pushButton_test.setText("EPICS Check")
         ui.pushButton_test.setToolTip("Read the first configured EPICS PV for the current online task.")
         ui.pushButton_test.setProperty("inlineAction", True)
         ui.pushButton_test.setFixedHeight(24)
@@ -106,7 +106,7 @@ class MachineController:
         ui.label_statusValue.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         ui.label_timeout.setToolTip("Maximum wait time for GUI EPICS PV reads.")
         ui.doubleSpinBox_timeout.setToolTip(
-            "Used by Check, current-knob reads and PV Monitor; it does not control PV writes."
+            "Used by EPICS Check, current-knob reads and PV Monitor; it does not control PV writes."
         )
         ui.doubleSpinBox_timeout.setMaximumWidth(160)
 
@@ -118,15 +118,12 @@ class MachineController:
         ui.horizontalLayout_machineHeader = header_row
         for widget in (
             ui.label_machineTitle,
-            ui.label_status,
             ui.label_statusValue,
             ui.pushButton_test,
         ):
             widget.setParent(ui.frame_machineHero)
-        ui.label_status.setProperty("role", "title")
         header_row.addWidget(ui.label_machineTitle)
         header_row.addSpacing(10)
-        header_row.addWidget(ui.label_status, 0, Qt.AlignVCenter)
         header_row.addWidget(ui.label_statusValue, 0, Qt.AlignVCenter)
         header_row.addWidget(ui.pushButton_test, 0, Qt.AlignVCenter)
         header_row.addStretch(1)

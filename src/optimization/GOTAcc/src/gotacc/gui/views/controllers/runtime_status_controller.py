@@ -27,10 +27,8 @@ class RuntimeStatusController:
             best_title = "Hypervolume"
             best_tooltip = "Dominated objective-space volume for the current Pareto front."
         else:
-            objective_label = self.window.results_controller.objective_labels(
-                1, include_direction=False, task=task
-            )[0]
-            best_title = f"Best {objective_label}"
+            objective_label = self.window.results_controller.objective_labels(1, task=task)[0]
+            best_title = f"Best Optimizer Score · {objective_label}"
             best_tooltip = self.window.results_controller.objective_sampling_tooltip(
                 1, task=task
             )
@@ -242,16 +240,14 @@ class RuntimeStatusController:
         objective_index = self.window.run_ui.tabWidget_plots.indexOf(self.window.run_ui.tab_obj)
         if objective_index >= 0:
             self.window.run_ui.tabWidget_plots.setTabText(
-                objective_index, "Hypervolume" if is_multi_objective else "Objective"
+                objective_index, "Hypervolume" if is_multi_objective else "Optimizer Score"
             )
         if is_multi_objective:
             best_title = "Hypervolume"
             best_tooltip = "Dominated objective-space volume for the current Pareto front."
         else:
-            objective_label = self.window.results_controller.objective_labels(
-                1, include_direction=False, task=display_task
-            )[0]
-            best_title = f"Best {objective_label}"
+            objective_label = self.window.results_controller.objective_labels(1, task=display_task)[0]
+            best_title = f"Best Optimizer Score · {objective_label}"
             best_tooltip = self.window.results_controller.objective_sampling_tooltip(
                 1, task=display_task
             )

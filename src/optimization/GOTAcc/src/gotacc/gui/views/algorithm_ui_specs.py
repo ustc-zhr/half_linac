@@ -27,7 +27,7 @@ PARAMETER_UI_SPECS: dict[str, ParameterUiSpec] = {
     "evals_per_gen": ParameterUiSpec("Evaluations per Generation", "Basic", minimum=1),
     "n_generations": ParameterUiSpec("Generation Limit", "Basic", minimum=0),
     "acq_mode": ParameterUiSpec("Acquisition Mode", "Basic"),
-    "ref_point": ParameterUiSpec("Reference Point", "Basic"),
+    "ref_point": ParameterUiSpec("Optimizer-space Reference Point", "Basic"),
     "archive_size": ParameterUiSpec("Archive Size", "Basic", minimum=1),
     "kernel_type": ParameterUiSpec("Kernel", choices=("matern", "rbf")),
     "gp_restarts": ParameterUiSpec("GP Fit Restarts", minimum=0),

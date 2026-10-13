@@ -829,12 +829,32 @@ class MainWindow(QMainWindow):
         self.task_ui.frame_variablesToolbar.setMaximumHeight(34)
 
     def _configure_run_readiness_actions(self) -> None:
-        self.ui.pushButton_preview.setToolTip("Preview the complete TaskConfig before validation or start.")
+        preview = self.ui.pushButton_preview
+        summary = self.task_ui.label_builderSummary
+        self.ui.gridLayout_runActions.removeWidget(preview)
+        self.task_ui.verticalLayout_builderHero.removeWidget(summary)
+
+        summary_actions = QHBoxLayout()
+        summary_actions.setObjectName("horizontalLayout_builderSummaryActions")
+        summary_actions.setContentsMargins(0, 0, 0, 0)
+        summary_actions.setSpacing(12)
+        summary_actions.addWidget(summary, 1)
+        summary_actions.addWidget(preview, 0, Qt.AlignRight | Qt.AlignVCenter)
+        self.task_ui.verticalLayout_builderHero.insertLayout(1, summary_actions)
+        self.task_ui.horizontalLayout_builderSummaryActions = summary_actions
+
+        preview.setToolTip("Preview the complete TaskConfig before validation or start.")
+        preview.setProperty("runControl", False)
+        preview.setProperty("inlineAction", True)
+        preview.setFixedHeight(24)
+        preview.setFixedWidth(100)
+        preview.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
         self.ui.label_validationStatus.setProperty("tone", "subtle")
+        self.ui.gridLayout_runActions.addWidget(self.ui.pushButton_validateTask, 1, 0, 1, 2)
         self.ui.gridLayout_runActions.setColumnStretch(0, 1)
         self.ui.gridLayout_runActions.setColumnStretch(1, 1)
         for button in (
-            self.ui.pushButton_preview,
             self.ui.pushButton_validateTask,
             self.ui.pushButton_startRun,
             self.ui.pushButton_stopRun,
@@ -880,6 +900,8 @@ class MainWindow(QMainWindow):
     def _configure_run_workspace_layout(self) -> None:
         self.run_ui.splitter_main.setOrientation(Qt.Vertical)
         self.run_ui.splitter_main.setChildrenCollapsible(False)
+        self.run_ui.splitter_main.setCollapsible(0, False)
+        self.run_ui.splitter_main.setCollapsible(1, True)
         self.run_ui.splitter_main.setStretchFactor(0, 3)
         self.run_ui.splitter_main.setStretchFactor(1, 2)
 

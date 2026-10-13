@@ -637,6 +637,10 @@ QPushButton[compact="true"] {
     font-size: 11px;
 }
 
+QPushButton[compact="true"][iconOnly="true"] {
+    padding: 3px;
+}
+
 QPushButton[runControl="true"] {
     padding: 3px 2px;
     min-height: 22px;

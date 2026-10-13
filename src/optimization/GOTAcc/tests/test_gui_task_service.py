@@ -165,6 +165,49 @@ def test_offline_benchmark_templates_include_complete_task_rows():
     assert len(TaskService.offline_benchmark_template("dtlz2")["variables"]) == 3
 
 
+@pytest.mark.parametrize(
+    "direction",
+    [None, "", "min", "MAXIMIZE", " maximize ", "minimise"],
+)
+def test_objective_direction_validation_rejects_noncanonical_values(
+    tmp_path,
+    direction,
+):
+    task = _offline_task(tmp_path)
+    task["objectives"][0]["Direction"] = direction
+
+    valid, errors = TaskService.validate_task_data(task)
+
+    assert not valid
+    assert any("invalid Direction" in error for error in errors)
+    with pytest.raises(ValueError, match="invalid Direction"):
+        TaskService.build_task_config(task)
+
+
+def test_objective_direction_validation_requires_explicit_value(tmp_path):
+    task = _offline_task(tmp_path)
+    task["objectives"][0].pop("Direction")
+
+    valid, errors = TaskService.validate_task_data(task)
+
+    assert not valid
+    assert any("invalid Direction" in error for error in errors)
+    with pytest.raises(ValueError, match="invalid Direction"):
+        TaskService.build_task_config(task)
+
+
+def test_minimize_direction_is_converted_to_maximize_convention(tmp_path):
+    task = _offline_task(tmp_path)
+    task["objectives"][0]["Direction"] = "minimize"
+
+    valid, errors = TaskService.validate_task_data(task)
+    cfg = TaskService.build_task_config(task)
+    value = float(np.asarray(cfg.backend.kwargs["func"](np.asarray([1.0]))).reshape(-1)[0])
+
+    assert valid, errors
+    assert value == pytest.approx(1.0)
+
+
 def test_offline_benchmark_selection_autofills_tables_without_overwriting_loaded_project(
     monkeypatch,
     tmp_path,
@@ -200,6 +243,56 @@ def test_offline_benchmark_selection_autofills_tables_without_overwriting_loaded
     assert restored["test_function"] == "zdt2"
     assert restored["variables"][0]["Name"] == "custom_x"
     assert restored["objectives"][0]["Name"] == "custom_f"
+    window.close()
+
+
+def test_objective_direction_uses_restricted_combo_and_round_trips(monkeypatch, tmp_path):
+    pytest.importorskip("PyQt5")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+
+    from PyQt5.QtWidgets import QApplication, QComboBox
+
+    import gotacc.gui.main  # noqa: F401 - configures Qt runtime paths
+    from gotacc.gui.views.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    task = _offline_task(tmp_path)
+    task["objectives"][0].update(
+        {"Direction": "minimize", "Samples": "1", "Math": "mean"}
+    )
+
+    window.task_builder_controller.apply_task_payload(task, goto_builder=False)
+    app.processEvents()
+
+    table = window.task_ui.tableWidget_objectives
+    headers = [
+        table.horizontalHeaderItem(column).text()
+        for column in range(table.columnCount())
+    ]
+    direction_column = headers.index("Direction")
+    combo = table.cellWidget(0, direction_column)
+    assert isinstance(combo, QComboBox)
+    assert [combo.itemText(index) for index in range(combo.count())] == [
+        "maximize",
+        "minimize",
+    ]
+    assert combo.currentText() == "minimize"
+
+    combo.setCurrentText("maximize")
+    app.processEvents()
+    assert window._current_task()["objectives"][0]["Direction"] == "maximize"
+
+    task["objectives"][0]["Direction"] = "unsupported"
+    with pytest.raises(ValueError, match="invalid Direction"):
+        window.task_builder_controller.apply_task_payload(task, goto_builder=False)
+    app.processEvents()
+    assert table.cellWidget(0, direction_column).currentText() == "maximize"
+    assert window._current_task()["objectives"][0]["Direction"] == "maximize"
+
+    window.task_builder_controller.add_task_table_row("objectives")
+    app.processEvents()
+    assert table.cellWidget(1, direction_column).currentText() == "maximize"
     window.close()
 
 
@@ -634,9 +727,23 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         preview_button = window.ui.pushButton_preview
         assert preview_button.text() == "Preview Task"
         assert window.ui.label_validationStatus.text() == "Not validated"
-        assert preview_button.parent() is window.ui.groupBox_runActions
+        assert preview_button.parent() is window.task_ui.frame_builderHero
         assert window.ui.label_validationStatus.parent() is window.ui.groupBox_runActions
-        assert preview_button.isVisible()
+        assert not preview_button.isHidden()
+        assert preview_button.property("inlineAction") is True
+        assert preview_button.property("runControl") is False
+        assert preview_button.size().width() == 100
+        assert preview_button.size().height() == 24
+        assert (
+            window.task_ui.horizontalLayout_builderSummaryActions.indexOf(
+                window.task_ui.label_builderSummary
+            )
+            == 0
+        )
+        assert (
+            window.task_ui.horizontalLayout_builderSummaryActions.indexOf(preview_button)
+            == 1
+        )
 
         preview_dialogs = []
         export_requests = []
@@ -689,13 +796,13 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.label_cardAlgorithmValue.text() == "Offline benchmark"
         assert window.ui.label_cardAlgorithmValue.property("tone") == "success"
         run_action_buttons = [
-            window.ui.pushButton_preview,
             window.ui.pushButton_validateTask,
             window.ui.pushButton_startRun,
             window.ui.pushButton_stopRun,
         ]
         assert len({button.height() for button in run_action_buttons}) == 1
-        assert len({button.width() for button in run_action_buttons}) == 1
+        assert window.ui.pushButton_startRun.width() == window.ui.pushButton_stopRun.width()
+        assert window.ui.pushButton_validateTask.width() > window.ui.pushButton_startRun.width()
         assert all(button.property("compact") is True for button in run_action_buttons)
         assert all(button.property("runControl") is True for button in run_action_buttons)
         assert all(
@@ -709,16 +816,15 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         status_index = window.ui.gridLayout_runActions.indexOf(window.ui.label_validationStatus)
         assert window.ui.gridLayout_runActions.getItemPosition(status_index) == (0, 0, 1, 2)
         preview_index = window.ui.gridLayout_runActions.indexOf(window.ui.pushButton_preview)
-        assert window.ui.gridLayout_runActions.getItemPosition(preview_index) == (1, 0, 1, 1)
+        assert preview_index == -1
         validate_index = window.ui.gridLayout_runActions.indexOf(window.ui.pushButton_validateTask)
-        assert window.ui.gridLayout_runActions.getItemPosition(validate_index) == (1, 1, 1, 1)
+        assert window.ui.gridLayout_runActions.getItemPosition(validate_index) == (1, 0, 1, 2)
         stop_index = window.ui.gridLayout_runActions.indexOf(window.ui.pushButton_stopRun)
         assert window.ui.gridLayout_runActions.getItemPosition(stop_index) == (2, 1, 1, 1)
         assert window.machine_ui.groupBox_connection.isHidden()
         assert window.machine_ui.splitter_top.isHidden()
         assert window.machine_ui.label_machineTitle.parent() is window.machine_ui.frame_machineHero
-        assert window.machine_ui.label_status.parent() is window.machine_ui.frame_machineHero
-        assert window.machine_ui.label_status.text() == "EPICS"
+        assert window.machine_ui.label_status.isHidden()
         assert window.machine_ui.label_statusValue.parent() is window.machine_ui.frame_machineHero
         assert window.machine_ui.label_statusValue.text() == "Not checked"
         assert window.machine_ui.pushButton_test.parent() is window.machine_ui.frame_machineHero
@@ -727,7 +833,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert not window.machine_ui.checkBox_autoConnect.isVisible()
         assert not window.machine_ui.pushButton_connect.isVisible()
         assert not window.machine_ui.pushButton_disconnect.isVisible()
-        assert window.machine_ui.pushButton_test.text() == "Check"
+        assert window.machine_ui.pushButton_test.text() == "EPICS Check"
         assert window.machine_ui.label_timeout.text() == "PV Read Timeout [s]"
         assert window.machine_ui.label_timeout.parent() is window.machine_ui.groupBox_guard
         assert window.machine_ui.doubleSpinBox_timeout.parent() is window.machine_ui.groupBox_guard
@@ -951,6 +1057,12 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.run_ui.splitter_main.orientation() == Qt.Vertical
         assert window.run_ui.splitter_runRight.orientation() == Qt.Horizontal
         assert not window.run_ui.splitter_main.childrenCollapsible()
+        assert not window.run_ui.splitter_main.isCollapsible(0)
+        assert window.run_ui.splitter_main.isCollapsible(1)
+        window.run_ui.splitter_main.setSizes([1, 0])
+        app.processEvents()
+        assert window.run_ui.splitter_main.sizes()[1] == 0
+        window.run_ui.splitter_main.setSizes([430, 240])
         assert not window.run_ui.splitter_runRight.childrenCollapsible()
         assert window.run_ui.tabWidget_plots.documentMode()
         assert window.run_ui.frame_obj.property("plotHost") is True
@@ -969,10 +1081,17 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         ):
             assert button.property("compact") is True
             assert button.height() <= 30
+        refresh_archives = window.ui.pushButton_refreshRunArchives
+        assert refresh_archives.text() == ""
+        assert not refresh_archives.icon().isNull()
+        assert refresh_archives.property("iconOnly") is True
+        assert refresh_archives.width() == 28
+        assert refresh_archives.accessibleName() == "Refresh archived runs"
+        assert "Refresh archived runs" in refresh_archives.toolTip()
         assert window.ui.groupBox_convergencePlot.title() == ""
         assert window.ui.groupBox_convergencePlot.property("plotPanel") is True
         assert window.ui.frame_plotConvergence.property("plotHost") is True
-        assert window.run_ui.groupBox_table.title() == "Evaluation History"
+        assert window.run_ui.groupBox_table.title() == "Evaluation History · Optimizer Scores"
         assert window.run_ui.pushButton_setSelectedEvaluation.text() == "Set Selected to Machine"
         assert not window.run_ui.pushButton_setSelectedEvaluation.isEnabled()
         assert window.ui.widget_resultsTables.isHidden()
@@ -1044,14 +1163,14 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.tableWidget_paretoSolutions.rowCount() == 2
         assert (
             window.ui.tableWidget_paretoSolutions.item(0, 2).text()
-            == "f1 = -0.2, f2 = -1.4"
+            == "f1 ↑ · w=1 = -0.2, f2 ↑ · w=1 = -1.4"
         )
         window.ui.tableWidget_paretoSolutions.selectRow(1)
         assert window.ui.tableWidget_paretoSelectionDetail.item(0, 1).text() == "1"
         assert window.ui.tableWidget_paretoSelectionDetail.item(1, 1).text() == "no"
         assert (
             window.ui.tableWidget_paretoSelectionDetail.item(2, 1).text()
-            == "f1 = -0.5, f2 = -0.8"
+            == "f1 ↑ · w=1 = -0.5, f2 ↑ · w=1 = -0.8"
         )
 
         archived_task = TaskService.create_run_archive(multi_task)
@@ -1136,9 +1255,14 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         window.state.objective_dim = 1
         window.runtime_status_controller.sync_run_workspace(window.state.latest_task_snapshot)
         window.runtime_status_controller.update_runtime_labels()
-        assert window.run_ui.label_bestTitle.text() == "Best sphere"
-        assert window.run_ui.label_bestTitle.toolTip() == "sphere: maximize."
-        assert window.run_ui.tabWidget_plots.tabText(objective_tab) == "Objective"
+        assert (
+            window.run_ui.label_bestTitle.text()
+            == "Best Optimizer Score · sphere ↑ · w=1"
+        )
+        tooltip = window.run_ui.label_bestTitle.toolTip()
+        assert "sphere: maximize; configured weight=1" in tooltip
+        assert "weight is not applied by the offline backend" in tooltip
+        assert window.run_ui.tabWidget_plots.tabText(objective_tab) == "Optimizer Score"
         window.state.run.phase = "Running"
         window.runtime_status_controller.set_run_phase("Running")
         assert window.label_workspace_run.text() == "Running"

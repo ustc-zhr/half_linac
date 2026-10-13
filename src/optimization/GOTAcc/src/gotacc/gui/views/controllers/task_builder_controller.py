@@ -32,7 +32,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from ..main_window import MainWindow
 
 try:
-    from ...services.task_service import TaskService
+    from ...services.task_service import OBJECTIVE_DIRECTIONS, TaskService
     from ..algorithm_ui_specs import parameter_ui_spec
     from ..tool_dialogs import AlgorithmDetailDialog
     from ..tool_dialogs import BoundsToolsDialog
@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - local script fallback
     for path in (GUI_ROOT, GUI_ROOT / "services", GUI_ROOT / "views"):
         if str(path) not in sys.path:
             sys.path.insert(0, str(path))
-    from task_service import TaskService
+    from task_service import OBJECTIVE_DIRECTIONS, TaskService
     from algorithm_ui_specs import parameter_ui_spec
     from tool_dialogs import AlgorithmDetailDialog
     from tool_dialogs import BoundsToolsDialog
@@ -108,7 +108,10 @@ PARAM_NOTES = {
     "tol": "RCDS relative convergence tolerance.",
     "maxIt": "RCDS maximum direction-set iterations.",
     "maximize": "Maximize the objective when true; minimize when false.",
-    "ref_point": "Reference point as JSON array.",
+    "ref_point": (
+        "Optimizer-space reference point as a JSON array. Values are passed directly; "
+        "the GUI does not convert physical objective values."
+    ),
     "pop_size": "Population size.",
     "n_generations": "Generation count. Budget is still clipped by Max Evaluations.",
     "evals_per_gen": "MGGPO true evaluations selected from each generated offspring pool.",
@@ -927,11 +930,63 @@ class TaskBuilderController:
         state = "Recommended" if custom_count == 0 else f"{custom_count} custom"
         summary_label.setText(f"{algorithm_key} · {state}")
 
+    def _reference_point_optimizer_space_note(self) -> str:
+        base = PARAM_NOTES["ref_point"]
+        try:
+            task = self.view.current_task()
+        except Exception:
+            return base
+
+        objectives = TaskService._enabled_rows(task.get("objectives", []))
+        if not objectives:
+            return base
+
+        online = str(task.get("mode", "")).strip().lower() == "online epics"
+        lines = [
+            base,
+            "Each component must be worse than feasible optimizer scores for hypervolume.",
+            "",
+            "Current task conversion:",
+        ]
+        for index, row in enumerate(objectives):
+            name = str(row.get("Name", "")).strip() or f"f{index}"
+            direction = str(row.get("Direction", "")).strip().lower()
+            factor = "-1" if direction == "minimize" else "+1"
+            arrow = "↓" if direction == "minimize" else "↑"
+            try:
+                weight = float(row.get("Weight", 1.0) or 1.0)
+                weight_text = f"{weight:.6g}"
+            except (TypeError, ValueError):
+                weight_text = str(row.get("Weight", "")) or "invalid"
+
+            if online:
+                formula = (
+                    f"r_optimizer[{index}] = {factor} × {weight_text} × "
+                    f"r_physical[{index}]"
+                )
+                lines.append(f"{name} {arrow} · w={weight_text}: {formula}")
+            else:
+                formula = f"r_optimizer[{index}] = {factor} × r_physical[{index}]"
+                lines.append(
+                    f"{name} {arrow}: {formula}; configured w={weight_text} is not applied offline."
+                )
+        return "\n".join(lines)
+
+    def _algorithm_detail_specs_with_context(
+        self, specs: list[tuple[str, str, str, str]]
+    ) -> list[tuple[str, str, str, str]]:
+        reference_note = self._reference_point_optimizer_space_note()
+        return [
+            (name, default, dtype, reference_note if name == "ref_point" else note)
+            for name, default, dtype, note in specs
+        ]
+
     def open_algorithm_detail_dialog(self) -> None:
         algorithm_key, specs = self._recommended_param_specs(
             self.window.task_ui.comboBox_algorithm.currentText(),
             self.dynamic_table_records(),
         )
+        specs = self._algorithm_detail_specs_with_context(specs)
         dialog = AlgorithmDetailDialog(
             algorithm=algorithm_key,
             specs=specs,
@@ -1067,6 +1122,35 @@ class TaskBuilderController:
                 table.setCellWidget(row, math_col, combo)
                 if current_item is None:
                     table.setItem(row, math_col, QTableWidgetItem(combo.currentText()))
+                else:
+                    current_item.setText(combo.currentText())
+        finally:
+            table.blockSignals(old_state)
+
+    def _install_objective_direction_widgets(self, table) -> None:
+        if table is not self.window.task_ui.tableWidget_objectives:
+            return
+        headers = self.table_headers(table)
+        if "Direction" not in headers:
+            return
+        direction_col = headers.index("Direction")
+        old_state = table.blockSignals(True)
+        try:
+            for row in range(table.rowCount()):
+                current_item = table.item(row, direction_col)
+                current_value = TaskService.validate_objective_direction(
+                    current_item.text() if current_item is not None else None,
+                    row_index=row,
+                )
+                combo = QComboBox(table)
+                combo.addItems(list(OBJECTIVE_DIRECTIONS))
+                combo.setCurrentText(current_value)
+                combo.currentTextChanged.connect(
+                    lambda *_args: self.refresh_task_preview()
+                )
+                table.setCellWidget(row, direction_col, combo)
+                if current_item is None:
+                    table.setItem(row, direction_col, QTableWidgetItem(combo.currentText()))
                 else:
                     current_item.setText(combo.currentText())
         finally:
@@ -1548,6 +1632,7 @@ class TaskBuilderController:
                     table.setItem(row, col, QTableWidgetItem(str(value)))
         finally:
             table.blockSignals(old_state)
+        self._install_objective_direction_widgets(table)
         self._install_objective_math_widgets(table)
         self.refresh_write_link_editors()
         self.refresh_task_table_empty_states()
@@ -1592,6 +1677,7 @@ class TaskBuilderController:
         table.insertRow(row)
         for column, value in enumerate(defaults):
             table.setItem(row, column, QTableWidgetItem(value))
+        self._install_objective_direction_widgets(table)
         self._install_objective_math_widgets(table)
         table.selectRow(row)
         table.setCurrentCell(row, 1)
@@ -1653,6 +1739,7 @@ class TaskBuilderController:
         source_label: str | None = None,
         goto_builder: bool = True,
     ) -> None:
+        TaskService.validate_objective_directions(task.get("objectives", []))
         self.window._suppress_autofill = True
         try:
             self.window.task_ui.lineEdit_taskName.setText(str(task.get("task_name", "untitled_task")))

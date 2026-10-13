@@ -71,7 +71,12 @@ class RunResultsPresenter:
             ["Run", self.window.task_ui.lineEdit_taskName.text().strip() or "untitled_task"],
         )
         self.view.set_table_row(inspector, 1, ["Point", x_text])
-        self.view.set_table_row(inspector, 2, ["Objective", objective_text])
+        objective_field = (
+            "Optimizer Scores"
+            if isinstance(objective, (list, tuple)) and len(objective) > 1
+            else "Optimizer Score"
+        )
+        self.view.set_table_row(inspector, 2, [objective_field, objective_text])
         self.view.set_table_row(
             inspector,
             3,

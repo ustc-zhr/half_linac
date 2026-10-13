@@ -126,6 +126,8 @@ MULTI_OBJECTIVE_FUNCTIONS: dict[str, Callable[[np.ndarray, int], np.ndarray]] = 
     "dtlz2": _dtlz2_vectorized,
 }
 
+OBJECTIVE_DIRECTIONS = ("maximize", "minimize")
+
 
 def _benchmark_variables(
     count: int,
@@ -439,18 +441,49 @@ class TaskService:
         return copy.deepcopy(OFFLINE_BENCHMARK_TEMPLATES[normalized])
 
     @staticmethod
+    def validate_objective_direction(
+        direction: Any,
+        *,
+        objective_name: str = "",
+        row_index: int | None = None,
+    ) -> str:
+        text = "" if direction is None else str(direction)
+        if text in OBJECTIVE_DIRECTIONS:
+            return text
+
+        if objective_name:
+            target = f"Objective {objective_name!r}"
+        elif row_index is not None:
+            target = f"Objective row {row_index + 1}"
+        else:
+            target = "Objective"
+        raise ValueError(
+            f"{target} has invalid Direction {text!r}. "
+            "Expected exactly maximize or minimize."
+        )
+
+    @staticmethod
+    def validate_objective_directions(objectives: List[Dict[str, Any]]) -> None:
+        for index, row in enumerate(objectives):
+            if not isinstance(row, Mapping):
+                raise ValueError(f"Objective row {index + 1} must be an object.")
+            TaskService.validate_objective_direction(
+                row.get("Direction"),
+                objective_name=str(row.get("Name", "")).strip(),
+                row_index=index,
+            )
+
+    @staticmethod
     def _direction_multiplier(direction: Any) -> float:
-        text = str(direction or "").strip().lower()
-        if text in {"min", "minimize", "minimization", "minimise"}:
-            return -1.0
-        return 1.0
+        text = TaskService.validate_objective_direction(direction)
+        return -1.0 if text == "minimize" else 1.0
 
     @staticmethod
     def _objective_direction_multipliers(objectives: List[Dict[str, Any]]) -> np.ndarray:
         if not objectives:
             return np.asarray([1.0], dtype=float)
         multipliers = [
-            TaskService._direction_multiplier(row.get("Direction", "maximize"))
+            TaskService._direction_multiplier(row.get("Direction"))
             for row in objectives
         ]
         return np.asarray(multipliers, dtype=float)
@@ -1248,6 +1281,10 @@ class TaskService:
             errors.append("At least one enabled variable is required.")
 
         objectives = task.get("objectives", [])
+        try:
+            TaskService.validate_objective_directions(objectives)
+        except ValueError as exc:
+            errors.append(str(exc))
         enabled_objectives = TaskService._enabled_rows(objectives)
         if not enabled_objectives:
             errors.append("At least one enabled objective is required.")
@@ -1818,7 +1855,9 @@ class TaskService:
         if not variables:
             raise ValueError("No enabled variables found.")
 
-        objectives = TaskService._enabled_rows(task.get("objectives", []))
+        objective_rows = task.get("objectives", [])
+        TaskService.validate_objective_directions(objective_rows)
+        objectives = TaskService._enabled_rows(objective_rows)
         if not objectives:
             raise ValueError("No enabled objectives found.")
 
