@@ -14,6 +14,7 @@ import numpy as np
 
 from half_linac.src.apps.power_source_timing.epics_client import (
     BatchWriteWorker,
+    SnapshotWorker,
     WaveformMonitor,
     WaveformSnapshot,
 )
@@ -377,6 +378,160 @@ class WaveformMonitorTests(unittest.TestCase):
             old_callback(value=np.array([99.0]), timestamp=99.0)
             self.assertIsNone(monitor.snapshots()["llrf"].value)
         monitor.close()
+
+
+class TimingSnapshotTests(unittest.TestCase):
+    def setUp(self):
+        with patch.dict(
+            os.environ,
+            {
+                "HALF_LINAC_MACHINE_ID": "half",
+                "HALF_LINAC_CONTROL_BACKEND": "real",
+            },
+        ):
+            self.runtime = load_timing_runtime()
+
+    def test_snapshot_roundtrip_contains_all_delay_width_aos_only(self):
+        import tempfile
+        from pathlib import Path
+
+        from half_linac.src.apps.power_source_timing.snapshot import (
+            load_snapshot,
+            make_snapshot,
+            save_snapshot,
+            targets,
+            validate_snapshot,
+        )
+
+        entries = targets(self.runtime)
+        values = [index + 0.25 for index in range(len(entries))]
+        data = make_snapshot(self.runtime, values)
+
+        self.assertEqual(len(entries), 164)
+        self.assertEqual(
+            {row["quantity"] for row in data["parameters"]},
+            {"delay", "width"},
+        )
+        self.assertNotIn("enable", {row["quantity"] for row in data["parameters"]})
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "timing.json"
+            save_snapshot(path, data)
+            restored = load_snapshot(path)
+
+        self.assertEqual(restored, data)
+        self.assertEqual(validate_snapshot(self.runtime, restored), values)
+
+    def test_invalid_snapshot_is_rejected_before_epics_access(self):
+        from half_linac.src.apps.power_source_timing.snapshot import (
+            make_snapshot,
+            targets,
+        )
+
+        data = make_snapshot(self.runtime, [1.25] * len(targets(self.runtime)))
+        data["parameters"][0]["pv"] = "OTHER:PV"
+        worker = SnapshotWorker(self.runtime, data=data)
+        with patch(
+            "half_linac.src.apps.power_source_timing.epics_client.epics.PV"
+        ) as pv, patch(
+            "half_linac.src.apps.power_source_timing.epics_client.epics.ca.use_initial_context"
+        ) as use_context:
+            worker.run()
+
+        self.assertFalse(worker.success)
+        pv.assert_not_called()
+        use_context.assert_not_called()
+
+    def test_snapshot_worker_saves_and_restores_every_timing_ao(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from half_linac.src.apps.power_source_timing.snapshot import (
+            load_snapshot,
+            targets,
+        )
+
+        entries = targets(self.runtime)
+        created = []
+
+        def factory(_name, **_kwargs):
+            pv = MagicMock()
+            pv.wait_for_connection.return_value = True
+            pv.put.return_value = 1
+            pv.get.return_value = 2.5
+            created.append(pv)
+            return pv
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "timing.json"
+            save_worker = SnapshotWorker(self.runtime, path=str(path))
+            with patch(
+                "half_linac.src.apps.power_source_timing.epics_client.epics.PV",
+                side_effect=factory,
+            ), patch(
+                "half_linac.src.apps.power_source_timing.epics_client.epics.ca.use_initial_context"
+            ):
+                save_worker.run()
+            data = load_snapshot(path)
+
+        self.assertTrue(save_worker.success)
+        self.assertEqual(len(created), len(entries))
+        self.assertTrue(all(not pv.put.called for pv in created))
+
+        created.clear()
+        restore_worker = SnapshotWorker(self.runtime, data=data)
+        with patch(
+            "half_linac.src.apps.power_source_timing.epics_client.epics.PV",
+            side_effect=factory,
+        ), patch(
+            "half_linac.src.apps.power_source_timing.epics_client.epics.ca.use_initial_context"
+        ):
+            restore_worker.run()
+
+        self.assertTrue(restore_worker.success)
+        self.assertEqual(len(created), len(entries))
+        self.assertTrue(all(pv.put.call_count == 1 for pv in created))
+
+    def test_snapshot_controls_lock_and_cancel_cleanly(self):
+        from unittest.mock import MagicMock
+
+        from PyQt5.QtWidgets import QFileDialog
+
+        app = QApplication.instance() or QApplication([])
+        with patch(
+            "half_linac.src.apps.power_source_timing.main.GroupMonitor.bind",
+            return_value=None,
+        ), patch(
+            "half_linac.src.apps.power_source_timing.waveform_view.WaveformMonitor.bind",
+            return_value=None,
+        ):
+            window = TimingWindow(self.runtime)
+            try:
+                with patch.object(
+                    QFileDialog, "getSaveFileName", return_value=("", "")
+                ), patch.object(window, "_start_snapshot") as start:
+                    window._save_snapshot()
+                    start.assert_not_called()
+
+                worker = MagicMock(success=True, message="Saved timing parameters")
+                window._snapshot_worker = worker
+                window._snapshot_lock()
+                self.assertFalse(window.save_button.isEnabled())
+                self.assertFalse(window.restore_button.isEnabled())
+                self.assertFalse(any(button.isEnabled() for button in window.group_buttons.values()))
+
+                event = MagicMock()
+                window.closeEvent(event)
+                event.ignore.assert_called_once()
+
+                window._snapshot_finished()
+                self.assertIsNone(window._snapshot_worker)
+                self.assertTrue(window.save_button.isEnabled())
+                self.assertTrue(window.restore_button.isEnabled())
+                self.assertTrue(all(button.isEnabled() for button in window.group_buttons.values()))
+            finally:
+                window.close()
 
 
 class TimingWindowSmokeTests(unittest.TestCase):

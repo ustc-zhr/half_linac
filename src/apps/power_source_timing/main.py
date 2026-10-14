@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 _ROOT = next(
@@ -22,6 +23,7 @@ from PyQt5.QtWidgets import (
     QButtonGroup,
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -40,6 +42,7 @@ from PyQt5.QtWidgets import (
 from half_linac.src.apps.power_source_timing.epics_client import (
     BatchWriteWorker,
     GroupMonitor,
+    SnapshotWorker,
 )
 from half_linac.src.apps.power_source_timing.model import (
     DEVICES,
@@ -125,6 +128,8 @@ QHeaderView::section {{ background: {palette['panel']}; }}
 QStatusBar {{ background: {palette['panel']}; color: {palette['muted']}; }}
 QSplitter::handle {{ background: {palette['border']}; height: 3px; }}
 QFrame#timingGroupSeparator {{ background: {palette['border']}; border: none; }}
+QFileDialog QToolButton {{ padding: 0; min-width: 24px; max-width: 24px;
+  min-height: 24px; max-height: 24px; }}
 """
 
 
@@ -184,6 +189,8 @@ class TimingWindow(QMainWindow):
         self.external_resync_keys: set[ValueKey] = set()
         self._adjustments_suspended = False
         self._worker: BatchWriteWorker | None = None
+        self._snapshot_worker: SnapshotWorker | None = None
+        self._snapshot_dialog = False
         self._batch_results: dict[ValueKey, bool] = {}
         self._batch_error = ""
         self.monitor = GroupMonitor(self)
@@ -216,6 +223,14 @@ class TimingWindow(QMainWindow):
         title_box.addWidget(title)
         heading.addLayout(title_box)
         heading.addStretch(1)
+        self.save_button = QPushButton("Save", root)
+        self.restore_button = QPushButton("Restore", root)
+        self.save_button.setToolTip("Save all RF timing delay and width AO values")
+        self.restore_button.setToolTip("Restore all RF timing delay and width AO values")
+        self.save_button.clicked.connect(self._save_snapshot)
+        self.restore_button.clicked.connect(self._restore_snapshot)
+        heading.addWidget(self.save_button)
+        heading.addWidget(self.restore_button)
         heading.addWidget(
             RuntimeContextWidget(
                 machine_id=self.runtime.context.machine.id,
@@ -505,7 +520,7 @@ class TimingWindow(QMainWindow):
         return label
 
     def _select_group(self, element_id: str) -> None:
-        if self.queue.busy or self.queue.pending:
+        if self.queue.busy or self.queue.pending or self._snapshot_busy():
             return
         group = self.groups[element_id]
         self.current_group = group
@@ -635,6 +650,7 @@ class TimingWindow(QMainWindow):
             spin.setEnabled(
                 key in self.values.target
                 and self.connected.get((device, f"{quantity}_set"), False)
+                and not self._snapshot_busy()
             )
             set_label.setText(self._format_value(self.values.setpoint.get(key)))
             read_label.setText(self._format_value(self.values.readback.get(key)))
@@ -689,7 +705,7 @@ class TimingWindow(QMainWindow):
         )
 
     def _refresh_adjustment_controls(self) -> None:
-        if self._adjustments_suspended:
+        if self._adjustments_suspended or self._snapshot_busy():
             for button in self.adjust_buttons:
                 button.setEnabled(False)
             return
@@ -786,7 +802,7 @@ class TimingWindow(QMainWindow):
             button,
             text="Enabled" if actual else "Disabled",
             checked=actual,
-            enabled=True,
+            enabled=not self._snapshot_busy(),
             state="enabled" if actual else "disabled",
             tooltip=(
                 "Click to disable the timing trigger. This does not switch off the "
@@ -992,8 +1008,145 @@ class TimingWindow(QMainWindow):
             self.statusBar().showMessage("Write complete; waiting for readback")
 
     def _set_group_selection_enabled(self, enabled: bool) -> None:
+        enabled = enabled and not self._snapshot_busy()
         for button in self.group_buttons.values():
             button.setEnabled(enabled)
+        self.save_button.setEnabled(enabled)
+        self.restore_button.setEnabled(enabled)
+
+    def _snapshot_busy(self) -> bool:
+        return self._snapshot_dialog or self._snapshot_worker is not None
+
+    def _snapshot_lock(self) -> None:
+        idle = (
+            not self._snapshot_busy()
+            and self._worker is None
+            and not self.queue.busy
+            and not self.queue.pending
+        )
+        self._set_group_selection_enabled(idle)
+        for device in DEVICES:
+            self._refresh_row(device)
+
+    def _snapshot_directory(self) -> Path:
+        directory = Path(__file__).resolve().parent / "runtime" / "snapshots"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def _save_snapshot(self) -> None:
+        if (
+            self._worker is not None
+            or self.queue.busy
+            or self.queue.pending
+            or self._snapshot_busy()
+        ):
+            return
+        self._snapshot_dialog = True
+        self._snapshot_lock()
+        try:
+            try:
+                directory = self._snapshot_directory()
+            except OSError as exc:
+                QMessageBox.warning(self, "RF Timing Snapshot Directory", str(exc))
+                return
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save all RF timing AO parameters",
+                str(
+                    directory
+                    / datetime.now().strftime(
+                        "rf_timing_settings_%Y%m%d_%H%M%S.json"
+                    )
+                ),
+                "JSON files (*.json)",
+            )
+            if path:
+                self._start_snapshot(path=path)
+        finally:
+            self._snapshot_dialog = False
+            self._snapshot_lock()
+
+    def _restore_snapshot(self) -> None:
+        from half_linac.src.apps.power_source_timing.snapshot import (
+            load_snapshot,
+            validate_snapshot,
+        )
+
+        if (
+            self._worker is not None
+            or self.queue.busy
+            or self.queue.pending
+            or self._snapshot_busy()
+        ):
+            return
+        self._snapshot_dialog = True
+        self._snapshot_lock()
+        try:
+            try:
+                directory = self._snapshot_directory()
+            except OSError as exc:
+                QMessageBox.warning(self, "RF Timing Snapshot Directory", str(exc))
+                return
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Restore all RF timing AO parameters",
+                str(directory),
+                "JSON files (*.json)",
+            )
+            if not path:
+                return
+            try:
+                data = load_snapshot(path)
+                values = validate_snapshot(self.runtime, data)
+            except Exception as exc:
+                QMessageBox.warning(self, "Invalid RF Timing Snapshot", str(exc))
+                return
+            answer = QMessageBox.question(
+                self,
+                "Restore RF timing AO parameters",
+                f"Machine: {data['machine']} / {data['backend']}\n"
+                f"Saved: {data['saved_at']}\n\n"
+                f"Restore {len(values)} delay/width AO parameters across "
+                f"{len(self.runtime.groups)} power-source groups?\n\n"
+                "Trigger enable states will not be changed.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer == QMessageBox.Yes:
+                self._start_snapshot(data=data)
+        finally:
+            self._snapshot_dialog = False
+            self._snapshot_lock()
+
+    def _start_snapshot(self, *, path=None, data=None) -> None:
+        worker = SnapshotWorker(self.runtime, path=path, data=data, parent=self)
+        self._snapshot_worker = worker
+        worker.progress.connect(self.statusBar().showMessage)
+        worker.finished.connect(self._snapshot_finished)
+        self._snapshot_lock()
+        worker.start()
+
+    def _snapshot_finished(self) -> None:
+        worker = self._snapshot_worker
+        if worker is None:
+            return
+        self._snapshot_worker = None
+        if self.current_group is not None:
+            self._select_group(self.current_group.element_id)
+        self._snapshot_lock()
+        self.statusBar().showMessage(
+            worker.message if worker.success else "RF timing snapshot operation failed"
+        )
+        if not worker.success:
+            dialog = QMessageBox(
+                QMessageBox.Warning,
+                "RF Timing Snapshot Failed",
+                worker.message.split("\n\n", 1)[0],
+                parent=self,
+            )
+            dialog.setDetailedText(worker.message)
+            dialog.exec_()
+        worker.deleteLater()
 
     def _stop_auto_repeat(self) -> None:
         self._adjustments_suspended = True
@@ -1006,6 +1159,12 @@ class TimingWindow(QMainWindow):
         self._refresh_adjustment_controls()
 
     def closeEvent(self, event) -> None:
+        if self._snapshot_busy():
+            self.statusBar().showMessage(
+                "Wait for the snapshot operation to finish before closing"
+            )
+            event.ignore()
+            return
         self.monitor.close()
         self.waveform_view.close()
         if self._worker is not None and self._worker.isRunning():

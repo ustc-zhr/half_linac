@@ -199,3 +199,93 @@ class BatchWriteWorker(QThread):
             results = {key: False for key in keys}
             error = str(exc)
         self.completed.emit(results, error)
+
+
+class SnapshotWorker(QThread):
+    progress = pyqtSignal(str)
+
+    def __init__(self, runtime, path=None, data=None, parent=None):
+        super().__init__(parent)
+        self.runtime = runtime
+        self.path = path
+        self.data = data
+        self.success = False
+        self.message = ""
+
+    def run(self) -> None:
+        import math
+
+        from .snapshot import make_snapshot, save_snapshot, targets, validate_snapshot
+
+        entries = targets(self.runtime)
+        completed = []
+        current = "Snapshot validation"
+        attempted = False
+        index = -1
+        restoring = self.data is not None
+        try:
+            values = validate_snapshot(self.runtime, self.data) if restoring else []
+            epics.ca.use_initial_context()
+            for index, (group, device, quantity, pv_name) in enumerate(entries):
+                current = f"{group} {device.upper()} {quantity} ({pv_name})"
+                attempted = False
+                action = "Restoring" if restoring else "Reading"
+                self.progress.emit(
+                    f"{action} {index + 1}/{len(entries)}: "
+                    f"{group} {device.upper()} {quantity}"
+                )
+                if self.isInterruptionRequested():
+                    raise RuntimeError("Operation interrupted")
+                pv = epics.PV(pv_name, auto_monitor=False)
+                try:
+                    if not pv.wait_for_connection(timeout=3):
+                        raise RuntimeError("AO connection timed out")
+                    if restoring:
+                        attempted = True
+                        if pv.put(values[index], wait=True, timeout=5) != 1:
+                            raise RuntimeError("AO write did not complete")
+                    actual = pv.get(use_monitor=False, timeout=3)
+                    if actual is None or not math.isfinite(float(actual)):
+                        raise RuntimeError(
+                            "AO read failed or returned a non-finite value"
+                        )
+                    if restoring:
+                        if not math.isclose(
+                            float(actual),
+                            values[index],
+                            rel_tol=1.0e-9,
+                            abs_tol=self.runtime.readback_tolerance_us,
+                        ):
+                            raise RuntimeError(
+                                "AO verification failed: "
+                                f"expected {values[index]:.12g}, got {actual}"
+                            )
+                    else:
+                        values.append(float(actual))
+                finally:
+                    pv.disconnect()
+                completed.append(current)
+            if not restoring:
+                current = "Saving snapshot file"
+                save_snapshot(self.path, make_snapshot(self.runtime, values))
+            self.success = True
+            action = "Restored" if restoring else "Saved"
+            suffix = f" to {self.path}" if self.path else ""
+            self.message = f"{action} {len(entries)} timing AO parameters{suffix}"
+        except Exception as exc:
+            uncertain = (
+                "\nThe current write may have taken effect; its result is not confirmed."
+                if attempted
+                else ""
+            )
+            remaining = [
+                f"{group} {device.upper()} {quantity}"
+                for group, device, quantity, _pv in entries[index + 1 :]
+            ]
+            self.message = (
+                f"Failed: {current}\n{exc}{uncertain}\n\n"
+                f"Completed ({len(completed)}):\n"
+                + ("\n".join(completed) or "None")
+                + "\n\nNot executed:\n"
+                + ("\n".join(remaining) or "None")
+            )
