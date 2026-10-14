@@ -34,15 +34,16 @@ def stylesheet(p):
     return f'''QMainWindow, QWidget {{ background:{p["window"]}; color:{p["text"]}; font-family:"IBM Plex Sans","Segoe UI",sans-serif; font-size:12px; }}
 QFrame#panel {{ background:{p["panel"]}; border:1px solid {p["border"]}; border-radius:8px; }}
 QLabel {{ background:transparent; }} QLabel#subtitle, QLabel#sectionLabel {{ color:{p["muted"]}; }} QHeaderView::section {{ background:{p["panel"]}; color:{p["muted"]}; padding:8px 10px; border:0; border-bottom:1px solid {p["border"]}; font-weight:600; }}
-QPushButton, QToolButton, QDoubleSpinBox {{ background:{p["input"]}; color:{p["text"]}; border:1px solid {p["border"]}; border-radius:6px; min-height:30px; padding:2px 10px; }}
+QPushButton, QDoubleSpinBox {{ background:{p["input"]}; color:{p["text"]}; border:1px solid {p["border"]}; border-radius:6px; min-height:30px; padding:2px 10px; }}
 QPushButton#toolbarAction {{ font-weight:700; }}
+QToolButton#themeToggleButton {{ background:{p["input"]}; color:{p["text"]}; border:1px solid {p["border"]}; border-radius:6px; padding:0; min-width:32px; max-width:32px; min-height:32px; max-height:32px; font-size:14px; font-weight:700; }}
 QPushButton#enableToggleButton {{ min-height:22px; padding:0 6px; }}
 QCheckBox#selectionCheck {{ spacing:7px; font-weight:700; color:{p["text"]}; }}
 QCheckBox#selectionCheck::indicator {{ width:18px; height:18px; border-radius:4px; border:1px solid {p["border"]}; background:{p["input"]}; }}
 QCheckBox#selectionCheck::indicator:hover {{ border-color:{p["accent"]}; }}
 QCheckBox#selectionCheck::indicator:checked {{ background:{p["accent"]}; border-color:{p["accent"]}; }}
 QCheckBox#selectionCheck::indicator:indeterminate {{ background:{p["accent"]}; border-color:{p["accent"]}; }}
-QPushButton:hover, QToolButton:hover, QDoubleSpinBox:focus {{ border-color:{p["accent"]}; }} QPushButton:disabled {{ color:{p["muted"]}; }}
+QPushButton:hover, QDoubleSpinBox:focus, QToolButton#themeToggleButton:hover {{ border-color:{p["accent"]}; }} QPushButton:disabled {{ color:{p["muted"]}; }}
 QTableWidget {{ background:{p["input"]}; alternate-background-color:{p["panel"]}; gridline-color:{p["border"]}; border:1px solid {p["border"]}; selection-background-color:{p["panel"]}; }}
 QTableWidget::item {{ padding:4px 8px; }}
 QStatusBar {{ background:{p["panel"]}; color:{p["muted"]}; }}'''
@@ -89,7 +90,7 @@ class HvControlWindow(QMainWindow):
         self.save_button.clicked.connect(self._save); self.restore_button.clicked.connect(self._restore)
         heading.addWidget(self.save_button); heading.addWidget(self.restore_button)
         heading.addWidget(RuntimeContextWidget(machine_id=self.runtime.context.machine.id, machine_display_name=self.runtime.context.machine.display_name, control_backend=self.runtime.context.control_backend.name, parent=root))
-        self.theme_button = QToolButton(root); self.theme_button.setFixedSize(32, 32); self.theme_button.clicked.connect(self._toggle_theme); heading.addWidget(self.theme_button)
+        self.theme_button = QToolButton(root); self.theme_button.setObjectName("themeToggleButton"); self.theme_button.setFixedSize(32, 32); self.theme_button.clicked.connect(self._toggle_theme); heading.addWidget(self.theme_button)
         outer.addLayout(heading)
 
         controls = QFrame(root); controls.setObjectName("panel"); row = QHBoxLayout(controls); row.setContentsMargins(12,10,12,10); row.setSpacing(7)
