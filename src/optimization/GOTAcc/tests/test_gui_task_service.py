@@ -1112,6 +1112,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.groupBox_evalHistory.isHidden()
         assert window.ui.pushButton_writeSelectedPareto.text() == "Write Selected to Machine"
         assert window.ui.pushButton_writeSelectedPareto.property("machineWrite") is True
+        assert not window.ui.tableWidget_paretoSolutions.wordWrap()
         assert not hasattr(window.ui, "tableWidget_paretoSelectionDetail")
         assert window.ui.label_paretoSolutionsHint.isHidden()
         assert window.label_results_source_task.text() == "No run"

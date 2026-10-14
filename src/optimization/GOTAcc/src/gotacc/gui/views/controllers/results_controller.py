@@ -183,6 +183,7 @@ class ResultsController:
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
         table.setSelectionMode(QAbstractItemView.SingleSelection)
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setWordWrap(False)
         table.itemSelectionChanged.connect(self.on_pareto_solution_selection_changed)
         table.setMinimumHeight(180)
         header = table.horizontalHeader()
