@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import sys
+from datetime import datetime
 from pathlib import Path
 
 _ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "repo_bootstrap.py").is_file())
@@ -367,7 +368,7 @@ class HvControlWindow(QMainWindow):
         path = Path(__file__).resolve().parent / "runtime" / "snapshots"; path.mkdir(parents=True, exist_ok=True); return path
 
     def _save(self):
-        directory = self._snapshot_dir(); path, _ = QFileDialog.getSaveFileName(self, "Save HV settings", str(directory / "hv_settings.json"), "JSON files (*.json)")
+        directory = self._snapshot_dir(); path, _ = QFileDialog.getSaveFileName(self, "Save HV settings", str(directory / datetime.now().strftime("hv_settings_%Y%m%d_%H%M%S.json")), "JSON files (*.json)")
         if not path: return
         ops = [(m.name, "voltage_set", m.voltage_set, None) for m in self.runtime.modulators]
         self._start_worker(ops, "save", {"file":path,"machine":self.runtime.context.machine.id,"backend":self.runtime.context.control_backend.name})
