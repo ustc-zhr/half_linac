@@ -1112,7 +1112,7 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
         assert window.ui.groupBox_evalHistory.isHidden()
         assert window.ui.pushButton_writeSelectedPareto.text() == "Write Selected to Machine"
         assert window.ui.pushButton_writeSelectedPareto.property("machineWrite") is True
-        assert window.ui.tableWidget_paretoSelectionDetail.columnCount() == 2
+        assert not hasattr(window.ui, "tableWidget_paretoSelectionDetail")
         assert window.ui.label_paretoSolutionsHint.isHidden()
         assert window.label_results_source_task.text() == "No run"
         assert window.label_results_source_outcome.text() == "--"
@@ -1160,16 +1160,30 @@ def test_gui_main_window_offscreen_smoke(monkeypatch, tmp_path):
             }
         )
         assert window.ui.tabWidget_resultsViews.currentWidget() is window.ui.tab_pareto
+        pareto_splitter = window.ui.splitter_paretoResults
+        assert pareto_splitter.orientation() == Qt.Vertical
+        assert not pareto_splitter.childrenCollapsible()
+        assert not pareto_splitter.isCollapsible(0)
+        assert pareto_splitter.isCollapsible(1)
+        assert pareto_splitter.handleWidth() == 6
+        pareto_splitter.setSizes([420, 0])
+        app.processEvents()
+        assert pareto_splitter.sizes()[1] == 0
+        pareto_splitter.setSizes([420, 240])
         assert window.ui.tableWidget_paretoSolutions.rowCount() == 2
         assert (
             window.ui.tableWidget_paretoSolutions.item(0, 2).text()
             == "f1 ↑ · w=1 = -0.2, f2 ↑ · w=1 = -1.4"
         )
         window.ui.tableWidget_paretoSolutions.selectRow(1)
-        assert window.ui.tableWidget_paretoSelectionDetail.item(0, 1).text() == "1"
-        assert window.ui.tableWidget_paretoSelectionDetail.item(1, 1).text() == "no"
+        assert window.ui.tableWidget_solutionInspector.item(0, 1).text() == "1"
+        assert window.ui.tableWidget_solutionInspector.item(1, 1).text() == "no"
         assert (
-            window.ui.tableWidget_paretoSelectionDetail.item(2, 1).text()
+            window.ui.tableWidget_solutionInspector.item(2, 1).text()
+            == "f1 ↑ · w=1 = -0.5, f2 ↑ · w=1 = -0.8"
+        )
+        assert (
+            window.ui.tableWidget_paretoSolutions.item(1, 2).toolTip()
             == "f1 ↑ · w=1 = -0.5, f2 ↑ · w=1 = -0.8"
         )
 

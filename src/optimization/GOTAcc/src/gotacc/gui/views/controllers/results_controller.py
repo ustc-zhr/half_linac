@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QSplitter,
     QStyle,
     QTableWidget,
     QTableWidgetItem,
@@ -191,20 +192,7 @@ class ResultsController:
         table.setColumnWidth(1, 78)
         for column in range(2, 5):
             header.setSectionResizeMode(column, QHeaderView.Stretch)
-        content = QHBoxLayout()
-        content.addWidget(table, 3)
-
-        detail = QTableWidget(group)
-        detail.setObjectName("tableWidget_paretoSelectionDetail")
-        detail.setColumnCount(2)
-        detail.setHorizontalHeaderLabels(["Selected Field", "Value"])
-        detail.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        detail.setSelectionMode(QAbstractItemView.NoSelection)
-        detail.setMinimumWidth(240)
-        detail.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        detail.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        content.addWidget(detail, 2)
-        group_layout.addLayout(content)
+        group_layout.addWidget(table)
 
         actions = QHBoxLayout()
         button = QPushButton("Write Selected to Machine", group)
@@ -217,11 +205,24 @@ class ResultsController:
         actions.addWidget(button)
         group_layout.addLayout(actions)
 
-        layout.addWidget(group)
+        plot_frame = self.window.ui.frame_plotParetoFinal
+        layout.removeWidget(plot_frame)
+        splitter = QSplitter(Qt.Vertical, self.window.ui.tab_pareto)
+        splitter.setObjectName("splitter_paretoResults")
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(6)
+        splitter.addWidget(plot_frame)
+        splitter.addWidget(group)
+        splitter.setCollapsible(0, False)
+        splitter.setCollapsible(1, True)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+        splitter.setSizes([420, 240])
+        layout.addWidget(splitter)
+        self.window.ui.splitter_paretoResults = splitter
         self.window.ui.groupBox_paretoSolutions = group
         self.window.ui.label_paretoSolutionsHint = hint
         self.window.ui.tableWidget_paretoSolutions = table
-        self.window.ui.tableWidget_paretoSelectionDetail = detail
         self.window.ui.pushButton_writeSelectedPareto = button
 
     def _apply_optimizer_score_labels(self) -> None:
@@ -921,6 +922,8 @@ class ResultsController:
                 ]
                 for col, value in enumerate(values):
                     item = QTableWidgetItem(value)
+                    if col >= 2:
+                        item.setToolTip(value)
                     if col == 0:
                         item.setTextAlignment(Qt.AlignCenter)
                         item.setData(Qt.UserRole, int(solution.get("index", row)))
@@ -965,17 +968,14 @@ class ResultsController:
             ("Constraints", self._format_vector("c", solution.get("constraints", []))),
             ("Point", self.summarize_x_values(solution.get("x", {}))),
         ]
-        for inspector in (
-            getattr(self.window.ui, "tableWidget_solutionInspector", None),
-            getattr(self.window.ui, "tableWidget_paretoSelectionDetail", None),
-        ):
-            if not self.view.qobj_alive(inspector):
-                continue
-            inspector.setRowCount(0)
-            for field, value in rows:
-                row = inspector.rowCount()
-                inspector.insertRow(row)
-                self.view.set_table_row(inspector, row, [field, value])
+        inspector = getattr(self.window.ui, "tableWidget_solutionInspector", None)
+        if not self.view.qobj_alive(inspector):
+            return
+        inspector.setRowCount(0)
+        for field, value in rows:
+            row = inspector.rowCount()
+            inspector.insertRow(row)
+            self.view.set_table_row(inspector, row, [field, value])
 
     def _sync_pareto_write_button(self) -> None:
         button = getattr(self.window.ui, "pushButton_writeSelectedPareto", None)
