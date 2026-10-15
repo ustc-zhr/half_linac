@@ -14,13 +14,13 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HALF_LINAC_ROOT = REPO_ROOT.parent / "half_linac"
-DEFAULT_OUTPUT = REPO_ROOT / "configs" / "half_real_pvlist.json"
+DEFAULT_OUTPUT = REPO_ROOT / "configs" / "half_pvlist.json"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Sync configs/half_real_pvlist.json from "
+            "Sync configs/half_pvlist.json from "
             "half_linac/configs/machines/half machine and real backend files."
         )
     )

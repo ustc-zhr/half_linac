@@ -4,7 +4,7 @@
 
 当前默认文件是 [irfel_pvlist.json](irfel_pvlist.json)。GUI 启动时会优先自动加载这个文件名，对应逻辑在 [main_window.py](../src/jitter_analysis/gui/main_window.py)。如果你在 `configs/` 里新增了其他 JSON 文件，也可以在 GUI 中手动加载。
 
-真机 HALF Linac 使用 [half_real_pvlist.json](half_real_pvlist.json)。其 PV 名称和磁铁/HV 限值来自 `half_linac/configs/machines/half/machine.json` 与 `control_backends/real.json`；原始相机图像数组不在默认列表中，保留了束斑尺寸、曝光时间等标量诊断量。
+真机 HALF Linac 使用 [half_pvlist.json](half_pvlist.json)。其 PV 名称和磁铁/HV 限值来自 `half_linac/configs/machines/half/machine.json` 与 `control_backends/real.json`；原始相机图像数组不在默认列表中，保留了束斑尺寸、曝光时间等标量诊断量。
 
 ## 同步 HALF 真机 PV 配置
 
@@ -14,7 +14,7 @@
 python scripts/sync_half_real_pvlist.py
 ```
 
-脚本默认读取相邻目录 `../half_linac/configs/machines/half/machine.json` 和 `../half_linac/configs/machines/half/control_backends/real.json`，并更新 [half_real_pvlist.json](half_real_pvlist.json)。如果两个仓库不在默认相邻位置，可以显式指定：
+脚本默认读取相邻目录 `../half_linac/configs/machines/half/machine.json` 和 `../half_linac/configs/machines/half/control_backends/real.json`，并更新 [half_pvlist.json](half_pvlist.json)。如果两个仓库不在默认相邻位置，可以显式指定：
 
 ```bash
 python scripts/sync_half_real_pvlist.py --half-linac-root /path/to/half_linac
