@@ -1156,15 +1156,26 @@ class TaskBuilderController:
         finally:
             table.blockSignals(old_state)
 
-    def _current_write_link_variable_names(self) -> list[str]:
-        rows = TaskService.table_to_records(self.window.task_ui.tableWidget_variables)
-        enabled_rows = TaskService._enabled_rows(rows)
-        names: list[str] = []
-        for row in enabled_rows:
+    def _current_write_link_knob_specs(self) -> dict[str, dict[str, str]]:
+        rows = TaskService.table_to_records(self.window.machine_ui.tableWidget_mapping)
+        specs: dict[str, dict[str, str]] = {}
+        for row in rows:
+            if str(row.get("Role", "")).strip().lower() != "knob":
+                continue
             name = str(row.get("Name", "")).strip()
-            if name:
-                names.append(name)
-        return names
+            pv = str(row.get("PV Name", "")).strip()
+            if name and pv:
+                specs[name] = {
+                    "pv": pv,
+                    "readback": str(row.get("Readback", "")).strip() or pv,
+                }
+        return specs
+
+    def _current_write_link_knob_names(self) -> list[str]:
+        return list(self._current_write_link_knob_specs())
+
+    def _current_write_link_variable_names(self) -> list[str]:
+        return self._current_write_link_knob_names()
 
     @staticmethod
     def _normalize_write_link_source_value(value: str, variable_names: list[str]) -> str:
@@ -1185,10 +1196,10 @@ class TaskBuilderController:
         if table is not self.window.machine_ui.tableWidget_writeLinks:
             return
         headers = self.table_headers(table)
-        if "Source Index" not in headers:
+        if "Source Knob" not in headers:
             return
-        source_col = headers.index("Source Index")
-        variable_names = self._current_write_link_variable_names()
+        source_col = headers.index("Source Knob")
+        knob_names = self._current_write_link_knob_names()
         old_state = table.blockSignals(True)
         try:
             for row in range(table.rowCount()):
@@ -1198,10 +1209,10 @@ class TaskBuilderController:
                 else:
                     current_item = table.item(row, source_col)
                     current_value = current_item.text().strip() if current_item is not None else ""
-                normalized_value = self._normalize_write_link_source_value(current_value, variable_names)
+                normalized_value = self._normalize_write_link_source_value(current_value, knob_names)
                 combo = QComboBox(table)
                 combo.addItem("")
-                for name in variable_names:
+                for name in knob_names:
                     combo.addItem(name)
                 if normalized_value and combo.findText(normalized_value, Qt.MatchFixedString) < 0:
                     combo.addItem(normalized_value)
@@ -1214,6 +1225,89 @@ class TaskBuilderController:
                     table.setItem(row, source_col, item)
                 else:
                     item.setText(combo.currentText())
+        finally:
+            table.blockSignals(old_state)
+
+    def _sync_write_link_target_row(self, table, row: int, target_name: str) -> None:
+        headers = self.table_headers(table)
+        if "Target PV" not in headers or "Target Readback" not in headers:
+            return
+        specs = self._current_write_link_knob_specs()
+        spec = specs.get(str(target_name).strip())
+        values = {
+            "Target PV": spec["pv"] if spec else "",
+            "Target Readback": spec["readback"] if spec else "",
+        }
+        for header, value in values.items():
+            col = headers.index(header)
+            item = table.item(row, col)
+            if item is None:
+                item = QTableWidgetItem()
+                table.setItem(row, col, item)
+            item.setText(value)
+            item.setToolTip(value)
+
+    def _on_write_link_target_changed(self, row: int, target_name: str) -> None:
+        table = self.window.machine_ui.tableWidget_writeLinks
+        self._sync_write_link_target_row(table, row, target_name)
+        self.refresh_task_preview()
+
+    def _install_write_link_target_widgets(self, table) -> None:
+        if table is not self.window.machine_ui.tableWidget_writeLinks:
+            return
+        headers = self.table_headers(table)
+        if "Target Knob" not in headers:
+            return
+        target_col = headers.index("Target Knob")
+        delta_link = (
+            self.window.machine_ui.comboBox_policy.currentText().strip().lower()
+            == "delta_link"
+        )
+        table.setColumnHidden(target_col, not delta_link)
+        for header in ("Target PV", "Target Readback"):
+            if header in headers:
+                table.setColumnHidden(headers.index(header), delta_link)
+        if not delta_link:
+            for row in range(table.rowCount()):
+                table.removeCellWidget(row, target_col)
+            return
+
+        specs = self._current_write_link_knob_specs()
+        knob_names = list(specs)
+        old_state = table.blockSignals(True)
+        try:
+            for row in range(table.rowCount()):
+                existing_widget = table.cellWidget(row, target_col)
+                if existing_widget is not None and hasattr(existing_widget, "currentText"):
+                    current_value = str(existing_widget.currentText()).strip()
+                else:
+                    current_item = table.item(row, target_col)
+                    current_value = current_item.text().strip() if current_item is not None else ""
+                combo = QComboBox(table)
+                combo.addItem("")
+                combo.addItems(knob_names)
+                if current_value and combo.findText(current_value, Qt.MatchFixedString) < 0:
+                    combo.addItem(current_value)
+                combo.setCurrentText(current_value)
+                if current_value in specs:
+                    spec = specs[current_value]
+                    combo.setToolTip(
+                        "Setpoint: {}\nReadback: {}".format(spec["pv"], spec["readback"])
+                    )
+                combo.currentTextChanged.connect(
+                    lambda text, link_row=row: self._on_write_link_target_changed(
+                        link_row, text
+                    )
+                )
+                table.setCellWidget(row, target_col, combo)
+                item = table.item(row, target_col)
+                if item is None:
+                    item = QTableWidgetItem(current_value)
+                    table.setItem(row, target_col, item)
+                else:
+                    item.setText(current_value)
+                if current_value:
+                    self._sync_write_link_target_row(table, row, current_value)
         finally:
             table.blockSignals(old_state)
 
@@ -1258,6 +1352,7 @@ class TaskBuilderController:
     def refresh_write_link_editors(self) -> None:
         table = self.window.machine_ui.tableWidget_writeLinks
         self._install_write_link_source_widgets(table)
+        self._install_write_link_target_widgets(table)
         self._install_write_link_enabled_widgets(table)
 
     def init_bounds_tool(self) -> None:
@@ -1823,9 +1918,16 @@ class TaskBuilderController:
             self.window.machine_ui.tableWidget_mapping,
             machine.get("mapping", []),
         )
+        write_links = []
+        for raw_row in machine.get("write_links", []) or []:
+            row = dict(raw_row)
+            row["Source Knob"] = str(
+                row.get("Source Knob", "") or row.get("Source Index", "")
+            ).strip()
+            write_links.append(row)
         self.fill_table_from_records(
             self.window.machine_ui.tableWidget_writeLinks,
-            machine.get("write_links", []),
+            write_links,
         )
         self.window._load_policy_presets(machine)
         self.window._load_policy_bindings(machine)
@@ -1957,11 +2059,16 @@ class TaskBuilderController:
         self.update_algorithm_guidance(task)
         self._update_algorithm_detail_summary(task.get("algorithm"))
         self.set_algorithm_overrides_expanded(self._algorithm_overrides_expanded)
-        enabled_variables = len(TaskService._enabled_rows(task.get("variables", [])))
+        selected_variables = TaskService._enabled_rows(task.get("variables", []))
+        optimizer_variables = TaskService.optimizer_variables(task, selected_variables)
+        follower_count = len(selected_variables) - len(optimizer_variables)
+        variable_summary = f"{len(optimizer_variables)} optimizer variable(s)"
+        if follower_count:
+            variable_summary += f" + {follower_count} follower(s)"
         enabled_objectives = len(TaskService._enabled_rows(task.get("objectives", [])))
         enabled_constraints = len(TaskService._enabled_rows(task.get("constraints", [])))
         self.window.task_ui.label_builderSummary.setText(
-            f"{task['objective_type']} · {enabled_variables} variable(s) · {enabled_objectives} objective(s) · "
+            f"{task['objective_type']} · {variable_summary} · {enabled_objectives} objective(s) · "
             f"{enabled_constraints} constraint(s) · budget {int(task.get('max_evaluations', 0) or 0)}"
         )
         self.window.ui.label_statusTaskValue.setText(task["task_name"])

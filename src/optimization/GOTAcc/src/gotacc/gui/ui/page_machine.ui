@@ -339,7 +339,7 @@
          </item>
         </layout>
        </item>
-       <item><widget class="QTableWidget" name="tableWidget_writeLinks"><column><property name="text"><string>Source Index</string></property></column><column><property name="text"><string>Target PV</string></property></column><column><property name="text"><string>Target Readback</string></property></column><column><property name="text"><string>Scale</string></property></column><column><property name="text"><string>Readback Tol</string></property></column><column><property name="text"><string>Enabled</string></property></column></widget></item>
+       <item><widget class="QTableWidget" name="tableWidget_writeLinks"><column><property name="text"><string>Source Knob</string></property></column><column><property name="text"><string>Target Knob</string></property></column><column><property name="text"><string>Target PV</string></property></column><column><property name="text"><string>Target Readback</string></property></column><column><property name="text"><string>Scale</string></property></column><column><property name="text"><string>Readback Tol</string></property></column><column><property name="text"><string>Enabled</string></property></column></widget></item>
       </layout>
      </widget>
     </widget>

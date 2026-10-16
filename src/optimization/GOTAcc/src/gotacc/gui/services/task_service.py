@@ -960,42 +960,141 @@ class TaskService:
         return result
 
     @staticmethod
+    def _write_link_source(row: Mapping[str, Any]) -> str:
+        return str(row.get("Source Knob", "") or row.get("Source Index", "")).strip()
+
+    @staticmethod
+    def _write_link_target_knob(row: Mapping[str, Any]) -> str:
+        return str(row.get("Target Knob", "")).strip()
+
+    @staticmethod
+    def _knob_mapping(task: Mapping[str, Any]) -> Dict[str, Dict[str, str]]:
+        result: Dict[str, Dict[str, str]] = {}
+        machine = task.get("machine", {}) or {}
+        for row in machine.get("mapping", []) or []:
+            if str(row.get("Role", "")).strip().lower() != "knob":
+                continue
+            name = str(row.get("Name", "")).strip()
+            pv = str(row.get("PV Name", "")).strip()
+            if name and pv:
+                result[name] = {
+                    "pv": pv,
+                    "readback": str(row.get("Readback", "")).strip() or pv,
+                }
+        return result
+
+    @staticmethod
+    def _delta_link_target_knob_names(task: Mapping[str, Any]) -> List[str]:
+        machine = task.get("machine", {}) or {}
+        if str(machine.get("write_policy", "none")).strip().lower() != "delta_link":
+            return []
+        result: List[str] = []
+        for row in machine.get("write_links", []) or []:
+            enabled_text = row.get("Enabled", "")
+            if enabled_text and not TaskService._is_enabled(enabled_text):
+                continue
+            name = TaskService._write_link_target_knob(row)
+            if name and name not in result:
+                result.append(name)
+        return result
+
+    @staticmethod
+    def optimizer_variables(
+        task: Mapping[str, Any],
+        variables: List[Dict[str, Any]] | None = None,
+    ) -> List[Dict[str, Any]]:
+        selected = (
+            list(variables)
+            if variables is not None
+            else TaskService._enabled_rows(task.get("variables", []))
+        )
+        if str(task.get("mode", "")).strip().lower() != "online epics":
+            return selected
+        followers = set(TaskService._delta_link_target_knob_names(task))
+        return [
+            row
+            for row in selected
+            if str(row.get("Name", "")).strip() not in followers
+        ]
+
+    @staticmethod
     def _build_write_policy_kwargs(task: Dict[str, Any], variable_names: List[str]) -> Dict[str, Any]:
         machine = task.get("machine", {}) or {}
         policy_name = str(machine.get("write_policy", "none")).strip().lower()
         rows = machine.get("write_links", []) or []
         pvlinks: List[tuple[int, str]] = []
         delta_links: List[Dict[str, Any]] = []
+        selected_variable_names = [
+            str(row.get("Name", "")).strip()
+            for row in TaskService._enabled_rows(task.get("variables", []))
+        ]
+        knob_mapping = TaskService._knob_mapping(task)
+        target_knob_names = set(TaskService._delta_link_target_knob_names(task))
+        used_targets: set[str] = set()
         for row in rows:
             enabled_text = row.get("Enabled", "")
             if enabled_text and not TaskService._is_enabled(enabled_text):
                 continue
-            src_text = str(row.get("Source Index", "")).strip()
-            tgt_pv = str(row.get("Target PV", "")).strip()
-            if not tgt_pv or not src_text:
-                continue
-            try:
-                src_idx = int(src_text)
-            except ValueError:
-                if src_text in variable_names:
-                    src_idx = variable_names.index(src_text)
-                else:
-                    raise ValueError(f"Invalid write link source: {src_text!r}")
-            if src_idx < 0 or src_idx >= len(variable_names):
-                raise ValueError(f"Invalid write link source index: {src_idx}")
+            src_text = TaskService._write_link_source(row)
             if policy_name == "delta_link":
+                target_knob = TaskService._write_link_target_knob(row)
+                if not src_text and not target_knob:
+                    continue
+                if not src_text or not target_knob:
+                    raise ValueError(
+                        "Each enabled delta_link row requires both Source Knob and Target Knob."
+                    )
+                if src_text not in selected_variable_names:
+                    raise ValueError(f"Invalid delta_link source knob: {src_text!r}")
+                if target_knob not in knob_mapping:
+                    raise ValueError(
+                        f"delta_link target knob {target_knob!r} is not present in PV Mapping."
+                    )
+                if target_knob not in selected_variable_names:
+                    raise ValueError(
+                        f"delta_link target knob {target_knob!r} is not selected in Task Builder."
+                    )
+                if src_text == target_knob:
+                    raise ValueError("delta_link source and target knobs must be different.")
+                if src_text in target_knob_names:
+                    raise ValueError(
+                        f"delta_link source knob {src_text!r} is also configured as a target follower."
+                    )
+                if target_knob in used_targets:
+                    raise ValueError(
+                        f"delta_link target knob {target_knob!r} is configured more than once."
+                    )
+                used_targets.add(target_knob)
+                if src_text not in variable_names:
+                    raise ValueError(f"Invalid delta_link source knob: {src_text!r}")
+                src_idx = variable_names.index(src_text)
+                target_spec = knob_mapping[target_knob]
                 scale_text = str(row.get("Scale", "")).strip()
                 tol_text = str(row.get("Readback Tol", "")).strip()
                 link: Dict[str, Any] = {
                     "source_index": src_idx,
-                    "target_pv": tgt_pv,
-                    "target_readback_pv": str(row.get("Target Readback", "")).strip(),
+                    "target_pv": target_spec["pv"],
+                    "target_readback_pv": target_spec["readback"],
                     "scale": 1.0 if not scale_text else float(scale_text),
                     "readback_tol": None if not tol_text else float(tol_text),
                 }
                 delta_links.append(link)
             else:
+                tgt_pv = str(row.get("Target PV", "")).strip()
+                if not tgt_pv or not src_text:
+                    continue
+                try:
+                    src_idx = int(src_text)
+                except ValueError:
+                    if src_text in variable_names:
+                        src_idx = variable_names.index(src_text)
+                    else:
+                        raise ValueError(f"Invalid write link source: {src_text!r}")
+                if src_idx < 0 or src_idx >= len(variable_names):
+                    raise ValueError(f"Invalid write link source index: {src_idx}")
                 pvlinks.append((src_idx, tgt_pv))
+        if policy_name == "delta_link" and not delta_links:
+            raise ValueError("delta_link requires at least one enabled write link.")
         return {"links": delta_links} if policy_name == "delta_link" else {"pvlinks": pvlinks}
 
     @staticmethod
@@ -1279,6 +1378,7 @@ class TaskService:
         enabled_variables = TaskService._enabled_rows(variables)
         if not enabled_variables:
             errors.append("At least one enabled variable is required.")
+        optimizer_variables = TaskService.optimizer_variables(task, enabled_variables)
 
         objectives = task.get("objectives", [])
         try:
@@ -1349,7 +1449,7 @@ class TaskService:
             except Exception as exc:
                 errors.append(str(exc))
 
-        for idx, row in enumerate(enabled_variables, start=1):
+        for idx, row in enumerate(optimizer_variables, start=1):
             try:
                 lower = float(row.get("Lower", ""))
                 upper = float(row.get("Upper", ""))
@@ -1363,6 +1463,10 @@ class TaskService:
                 errors.append(f"Variable row {idx} initial value is out of bounds.")
 
         if mode.lower() == "online epics":
+            if not optimizer_variables:
+                errors.append(
+                    "delta_link must leave at least one independent optimizer knob."
+                )
             mapping_rows = [
                 row
                 for row in (task.get("machine", {}).get("mapping", []) or [])
@@ -1421,7 +1525,7 @@ class TaskService:
                     )
 
             try:
-                TaskService._resolve_online_knob_pvs(task, enabled_variables)
+                TaskService._resolve_online_knob_pvs(task, optimizer_variables)
             except Exception as exc:
                 errors.append(str(exc))
             try:
@@ -1461,6 +1565,15 @@ class TaskService:
                 errors.append(
                     f"Unsupported write policy for current GUI flow: {write_policy!r}"
                 )
+            elif write_policy != "none":
+                try:
+                    variable_names = [
+                        str(row.get("Name", "")).strip()
+                        for row in optimizer_variables
+                    ]
+                    TaskService._build_write_policy_kwargs(task, variable_names)
+                except Exception as exc:
+                    errors.append(str(exc))
 
             machine = task.get("machine", {}) or {}
             if "policy_bindings" in machine:
@@ -1851,9 +1964,12 @@ class TaskService:
             raise ValueError(f"Unsupported objective type {objective_type_text!r}.")
 
         mode = mode_text.lower()
-        variables = TaskService._enabled_rows(task.get("variables", []))
-        if not variables:
+        selected_variables = TaskService._enabled_rows(task.get("variables", []))
+        if not selected_variables:
             raise ValueError("No enabled variables found.")
+        variables = TaskService.optimizer_variables(task, selected_variables)
+        if not variables:
+            raise ValueError("delta_link must leave at least one independent optimizer knob.")
 
         objective_rows = task.get("objectives", [])
         TaskService.validate_objective_directions(objective_rows)
@@ -1968,7 +2084,7 @@ class TaskService:
         plain = TaskService._plain_data(task_cfg.to_dict())
         if not isinstance(plain, dict):  # pragma: no cover - TaskConfig always serializes to dict
             raise TypeError("Normalized task identity must be a dictionary.")
-        variables = TaskService._enabled_rows(task_copy.get("variables", []))
+        variables = TaskService.optimizer_variables(task_copy)
         machine = task_copy.get("machine", {}) or {}
         plain["gui_run_contract"] = {
             "initial_values": [float(row.get("Initial", 0.0)) for row in variables],

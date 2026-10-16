@@ -634,11 +634,7 @@ class ResultsController:
 
     def _variable_trajectory_metadata(self, count: int) -> list[dict[str, Any]]:
         task = self.window.state.latest_task_snapshot or self.view.current_task()
-        rows = [
-            row
-            for row in TaskService._enabled_rows(task.get("variables", []) or [])
-            if isinstance(row, dict)
-        ]
+        rows = TaskService.optimizer_variables(task)
         fallback_names = self._current_variable_names(count)
         metadata: list[dict[str, Any]] = []
         for index in range(count):
@@ -817,18 +813,12 @@ class ResultsController:
             canvas.draw_idle()
 
     def _current_variable_names(self, count: int) -> list[str]:
-        table = getattr(self.window.task_ui, "tableWidget_variables", None)
-        names: list[str] = []
-        if table is not None:
-            for row in range(table.rowCount()):
-                enabled_item = table.item(row, 0)
-                enabled = enabled_item is None or enabled_item.text().strip().lower() not in {"n", "no", "false", "0"}
-                name_item = table.item(row, 1)
-                name = name_item.text().strip() if name_item is not None else ""
-                if enabled and name:
-                    names.append(name)
-                if len(names) >= count:
-                    break
+        task = self.window.state.latest_task_snapshot or self.view.current_task()
+        names = [
+            str(row.get("Name", "")).strip()
+            for row in TaskService.optimizer_variables(task)
+            if str(row.get("Name", "")).strip()
+        ][:count]
         while len(names) < count:
             names.append(f"x{len(names)}")
         return names[:count]

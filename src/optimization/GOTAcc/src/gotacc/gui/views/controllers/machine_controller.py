@@ -1783,6 +1783,7 @@ class MachineController:
 
     def log_machine_policy_change(self, text: str) -> None:
         self.view.log_console(f"Write policy changed to: {text}")
+        self.window.task_builder_controller.refresh_write_link_editors()
         self.refresh_machine_summary()
 
     def log_objective_policy_change(self, text: str) -> None:

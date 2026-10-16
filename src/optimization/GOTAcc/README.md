@@ -212,6 +212,14 @@ Policy. `equal` copies a source knob value to linked PVs. `delta_link` captures
 source and target baselines at run initialization and applies
 `target = target_initial + scale * (source - source_initial)`. For example:
 
+In the GUI, a `delta_link` row selects both `Source Knob` and `Target Knob`
+from the knob signals already selected in PV Mapping. The target setpoint and
+readback PVs are resolved from that mapping automatically. A target knob becomes
+a follower: it remains visible in the task and machine mapping, but is excluded
+from the optimizer dimensions and is written only by the delta-link policy.
+Source and target must differ, and each target can appear in only one enabled
+link.
+
 ```python
 "write_policy": "delta_link",
 "write_policy_kwargs": {

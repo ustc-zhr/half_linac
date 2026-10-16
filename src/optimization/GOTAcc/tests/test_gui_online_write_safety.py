@@ -363,12 +363,29 @@ def test_archived_delta_link_set_best_restores_state_and_previews_derived_value(
     import gotacc.gui.views.controllers.run_controller as run_controller_module
 
     task = _online_task(tmp_path)
+    task["variables"].append(
+        {
+            "Enable": "Yes",
+            "Name": "FOLLOW",
+            "Lower": "-20",
+            "Upper": "20",
+            "Initial": "10",
+        }
+    )
+    task["machine"]["mapping"].insert(
+        1,
+        {
+            "Role": "knob",
+            "Name": "FOLLOW",
+            "PV Name": "TEST:FOLLOW:SET",
+            "Readback": "TEST:FOLLOW:RB",
+        },
+    )
     task["machine"]["write_policy"] = "delta_link"
     task["machine"]["write_links"] = [
         {
-            "Source Index": "Q1",
-            "Target PV": "TEST:FOLLOW:SET",
-            "Target Readback": "TEST:FOLLOW:RB",
+            "Source Knob": "Q1",
+            "Target Knob": "FOLLOW",
             "Scale": "1.0",
             "Readback Tol": "0.01",
             "Enabled": "True",

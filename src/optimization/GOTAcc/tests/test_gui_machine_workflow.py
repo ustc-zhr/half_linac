@@ -882,14 +882,47 @@ def test_bounds_tool_previews_exact_plan_before_apply(tmp_path, window, monkeypa
         dialog.close()
 
 
+def test_delta_link_editors_select_mapped_knobs_and_resolve_pvs(tmp_path, window):
+    task = _online_task(tmp_path)
+    task["machine"]["write_policy"] = "delta_link"
+    task["machine"]["write_links"] = [
+        {
+            "Source Knob": "Q1",
+            "Target Knob": "Q2",
+            "Scale": "1.0",
+            "Readback Tol": "",
+            "Enabled": "True",
+        }
+    ]
+
+    window._apply_task_payload(task, goto_builder=False)
+    table = window.machine_ui.tableWidget_writeLinks
+    headers = window.task_builder_controller.table_headers(table)
+    source_col = headers.index("Source Knob")
+    target_col = headers.index("Target Knob")
+    source_combo = table.cellWidget(0, source_col)
+    target_combo = table.cellWidget(0, target_col)
+
+    assert source_combo.currentText() == "Q1"
+    assert target_combo.currentText() == "Q2"
+    assert {source_combo.itemText(i) for i in range(source_combo.count())} >= {"Q1", "Q2"}
+    assert {target_combo.itemText(i) for i in range(target_combo.count())} >= {"Q1", "Q2"}
+    assert not table.isColumnHidden(target_col)
+    assert table.isColumnHidden(headers.index("Target PV"))
+    assert table.isColumnHidden(headers.index("Target Readback"))
+
+    row = TaskService.table_to_records(table)[0]
+    assert row["Target PV"] == "TEST:Q2:SET"
+    assert row["Target Readback"] == "TEST:Q2:RB"
+
+
 def test_delta_link_gui_rows_build_declarative_policy_kwargs(tmp_path):
     task = _online_task(tmp_path)
     task["machine"]["write_policy"] = "delta_link"
     task["machine"]["write_links"] = [
         {
-            "Source Index": "Q1",
-            "Target PV": "TEST:FOLLOW:SET",
-            "Target Readback": "TEST:FOLLOW:RB",
+            "Source Knob": "Q1",
+            "Target Knob": "Q2",
             "Scale": "-2.5",
             "Readback Tol": "0.03",
             "Enabled": "True",
@@ -897,13 +930,16 @@ def test_delta_link_gui_rows_build_declarative_policy_kwargs(tmp_path):
     ]
 
     task_cfg = TaskService.build_task_config(task)
-    kwargs = task_cfg.backend.kwargs["write_policy_kwargs"]
-    assert kwargs == {
+    kwargs = task_cfg.backend.kwargs
+    assert kwargs["variable_names"] == ["Q1"]
+    assert kwargs["knobs_pvnames"] == ["TEST:Q1:SET"]
+    assert task_cfg.backend.bounds == [[-1.0, 1.0]]
+    assert kwargs["write_policy_kwargs"] == {
         "links": [
             {
                 "source_index": 0,
-                "target_pv": "TEST:FOLLOW:SET",
-                "target_readback_pv": "TEST:FOLLOW:RB",
+                "target_pv": "TEST:Q2:SET",
+                "target_readback_pv": "TEST:Q2:RB",
                 "scale": -2.5,
                 "readback_tol": 0.03,
             }

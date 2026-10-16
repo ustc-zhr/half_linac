@@ -1356,7 +1356,8 @@ class MainWindow(QMainWindow):
             "Policy Action",
         ]
         write_headers = [
-            "Source Index",
+            "Source Knob",
+            "Target Knob",
             "Target PV",
             "Target Readback",
             "Scale",
@@ -1639,11 +1640,11 @@ class MainWindow(QMainWindow):
         table.removeRow(row)
 
     def _add_write_link_row(self) -> None:
-        variable_names = self.task_builder_controller._current_write_link_variable_names()
-        default_source = variable_names[0] if variable_names else ""
+        knob_names = self.task_builder_controller._current_write_link_knob_names()
+        default_source = knob_names[0] if knob_names else ""
         row = self._add_table_row(
             self.machine_ui.tableWidget_writeLinks,
-            [default_source, "", "", "1.0", "", "True"],
+            [default_source, "", "", "", "1.0", "", "True"],
         )
         self.task_builder_controller.refresh_write_link_editors()
         self.machine_ui.tableWidget_writeLinks.selectRow(row)
@@ -1658,7 +1659,7 @@ class MainWindow(QMainWindow):
         for row in rows:
             table.removeRow(row)
         if table.rowCount() == 0:
-            self._add_table_row(table, ["", "", "", "1.0", "", "True"])
+            self._add_table_row(table, ["", "", "", "", "1.0", "", "True"])
         self.task_builder_controller.refresh_write_link_editors()
         self._refresh_task_preview()
 
